@@ -1,0 +1,1 @@
+ALTER TABLE "games" ADD COLUMN "early_access" boolean DEFAULT false NOT NULL;

@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decided Matches — Dashboard — Community Lineup — Raid Ledger Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Cinzel', 'serif'],
+          },
+          colors: {
+            backdrop: '#020617',
+            surface: '#0f172a',
+            panel: '#1e293b',
+            overlay: '#334155',
+            faint: '#475569',
+            dim: '#64748b',
+            muted: '#94a3b8',
+            secondary: '#cbd5e1',
+            foreground: '#ffffff',
+            edge: '#334155',
+            'edge-strong': '#475569',
+            'edge-subtle': '#1e293b',
+            gold: '#fbbf24',
+            silver: '#9ca3af',
+            bronze: '#d97706',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #020617; color: #ffffff; font-family: 'Inter', system-ui, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Cover art gradient placeholders */
+    .cover-lethal { background: linear-gradient(135deg, #1a2e1a 0%, #2d4a2d 50%, #1a3a1a 100%); }
+    .cover-deeprock { background: linear-gradient(135deg, #2d1a0a 0%, #4a3520 50%, #3a2a1a 100%); }
+    .cover-phasmo { background: linear-gradient(135deg, #1a1a2e 0%, #2d2d4a 50%, #1a1a3a 100%); }
+    .cover-valheim { background: linear-gradient(135deg, #0a2d2d 0%, #204a4a 50%, #1a3a3a 100%); }
+    .cover-gtfo { background: linear-gradient(135deg, #2e1a1a 0%, #4a2d2d 50%, #3a1a1a 100%); }
+    .cover-elden { background: linear-gradient(135deg, #2e2e0a 0%, #4a4a20 50%, #3a3a1a 100%); }
+
+    /* Mobile toggle */
+    .view-btn.active { background: #1e293b; color: #10b981; border-color: #10b981; }
+    .view-btn { background: transparent; color: #94a3b8; border-color: #334155; }
+
+    /* Vote bar animation */
+    .vote-bar-fill { transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+    /* Threshold marker */
+    .threshold-marker {
+      position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fbbf24;
+    }
+    .threshold-marker::after {
+      content: '35%'; position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+      font-size: 9px; color: #fbbf24; white-space: nowrap; font-weight: 600;
+    }
+
+    /* Matrix hover effects */
+    .matrix-cell { transition: background-color 0.15s, transform 0.1s; }
+    .matrix-cell:hover { transform: scale(1.2); }
+    .matrix-row:hover { background-color: rgba(30, 41, 59, 0.5); }
+    .matrix-col-highlight { transition: background-color 0.15s; }
+
+    /* Table row hover */
+    .match-row { transition: background-color 0.15s; cursor: pointer; }
+    .match-row:hover { background-color: rgba(30, 41, 59, 0.4); }
+
+    /* Expand/collapse animation */
+    .detail-panel {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+      opacity: 0;
+    }
+    .detail-panel.expanded {
+      max-height: 400px; opacity: 1; transition: max-height 0.4s ease-in, opacity 0.3s ease-in;
+    }
+
+    /* Chevron rotation */
+    .chevron { transition: transform 0.2s ease; }
+    .chevron.rotated { transform: rotate(180deg); }
+
+    /* Avatar tooltip */
+    .avatar-item { transition: transform 0.15s; cursor: pointer; position: relative; }
+    .avatar-item:hover { transform: scale(1.15); z-index: 10; }
+    .avatar-item .avatar-tooltip {
+      position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      background: #1e293b; border: 1px solid #475569; border-radius: 6px;
+      padding: 2px 8px; font-size: 11px; white-space: nowrap;
+      opacity: 0; pointer-events: none; transition: opacity 0.15s;
+      margin-bottom: 4px; color: #cbd5e1;
+    }
+    .avatar-item:hover .avatar-tooltip { opacity: 1; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- NAV BAR -->
+  <nav class="sticky top-0 z-50 bg-backdrop/95 backdrop-blur border-b border-edge">
+    <div class="max-w-6xl mx-auto px-4 flex items-center gap-6 h-12">
+      <span class="text-xs text-dim font-medium uppercase tracking-wider whitespace-nowrap">Dashboard &middot; Decided Matches</span>
+      <div class="ml-auto flex gap-2">
+        <button onclick="toggleMobile()" class="view-btn border rounded-md px-3 py-1 text-xs font-medium transition-all" id="mobile-toggle">Mobile</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div id="app-container" class="max-w-6xl mx-auto transition-all duration-300">
+
+    <!-- HEADER -->
+    <header class="border-b border-edge px-4 py-3">
+      <div class="flex items-center gap-3 mb-1">
+        <button class="text-muted hover:text-foreground transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <h1 class="font-display text-lg font-semibold">Matches</h1>
+        <span class="bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2.5 py-1 rounded-full border border-emerald-500/30">Decided</span>
+      </div>
+      <p class="text-muted text-sm ml-8">Voting closed Thu, Mar 26 &middot; 8 of 12 voted</p>
+    </header>
+
+    <div class="p-4 space-y-4">
+
+      <!-- ================ PLAYER OVERLAP MATRIX ================ -->
+      <div class="bg-surface border border-edge rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+            <h3 class="text-secondary text-sm font-semibold">Player Overlap Matrix</h3>
+          </div>
+          <span class="text-dim text-[11px]">6 matched voters &middot; 2 voters only picked games already at capacity</span>
+        </div>
+
+        <!-- Matrix grid — scrollable on mobile -->
+        <div class="overflow-x-auto scrollbar-hide">
+          <table class="w-full min-w-[480px]">
+            <!-- Column headers: games -->
+            <thead>
+              <tr>
+                <th class="w-28 text-left"></th>
+                <th class="text-center px-2 pb-2 w-16">
+                  <div class="flex flex-col items-center gap-1">
+                    <div class="w-6 h-6 rounded cover-lethal flex items-center justify-center text-[7px] font-bold flex-shrink-0">LC</div>
+                    <span class="text-[10px] text-muted font-medium">Lethal</span>
+                  </div>
+                </th>
+                <th class="text-center px-2 pb-2 w-16">
+                  <div class="flex flex-col items-center gap-1">
+                    <div class="w-6 h-6 rounded cover-deeprock flex items-center justify-center text-[7px] font-bold flex-shrink-0">DR</div>
+                    <span class="text-[10px] text-muted font-medium">Deep Rock</span>
+                  </div>
+                </th>
+                <th class="text-center px-2 pb-2 w-16">
+                  <div class="flex flex-col items-center gap-1">
+                    <div class="w-6 h-6 rounded cover-phasmo flex items-center justify-center text-[7px] font-bold flex-shrink-0">PH</div>
+                    <span class="text-[10px] text-muted font-medium">Phasmo</span>
+                  </div>
+                </th>
+                <th class="text-center px-2 pb-2 w-16">
+                  <div class="flex flex-col items-center gap-1">
+                    <div class="w-6 h-6 rounded cover-valheim flex items-center justify-center text-[7px] font-bold flex-shrink-0">VH</div>
+                    <span class="text-[10px] text-muted font-medium">Valheim</span>
+                  </div>
+                </th>
+                <th class="text-center px-2 pb-2 w-16">
+                  <div class="flex flex-col items-center gap-1">
+                    <div class="w-6 h-6 rounded cover-gtfo flex items-center justify-center text-[7px] font-bold flex-shrink-0">GT</div>
+                    <span class="text-[10px] text-muted font-medium">GTFO</span>
+                  </div>
+                </th>
+                <th class="text-center px-2 pb-2 w-12">
+                  <span class="text-[10px] text-dim font-semibold uppercase tracking-wider">Total</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Vex -->
+              <tr class="matrix-row border-t border-edge-subtle">
+                <td class="py-1.5 pr-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[8px] font-bold flex-shrink-0">Vx</div>
+                    <span class="text-secondary text-xs font-medium">Vex</span>
+                  </div>
+                </td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Vex voted for Lethal"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Vex voted for Deep Rock"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><span class="text-muted text-xs font-semibold">2</span></td>
+              </tr>
+              <!-- Roknua -->
+              <tr class="matrix-row border-t border-edge-subtle">
+                <td class="py-1.5 pr-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold flex-shrink-0">Rk</div>
+                    <span class="text-secondary text-xs font-medium">Roknua</span>
+                  </div>
+                </td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Roknua voted for Lethal"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Roknua voted for Deep Rock"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><span class="text-muted text-xs font-semibold">2</span></td>
+              </tr>
+              <!-- Zeph -->
+              <tr class="matrix-row border-t border-edge-subtle">
+                <td class="py-1.5 pr-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold flex-shrink-0">Zp</div>
+                    <span class="text-secondary text-xs font-medium">Zeph</span>
+                  </div>
+                </td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Zeph voted for Lethal"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Zeph voted for Phasmo"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><span class="text-muted text-xs font-semibold">2</span></td>
+              </tr>
+              <!-- Lux -->
+              <tr class="matrix-row border-t border-edge-subtle">
+                <td class="py-1.5 pr-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold flex-shrink-0">Lx</div>
+                    <span class="text-secondary text-xs font-medium">Lux</span>
+                  </div>
+                </td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Lux voted for Lethal"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Lux voted for Deep Rock"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Lux voted for Valheim"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><span class="text-foreground text-xs font-bold">3</span></td>
+              </tr>
+              <!-- Ash -->
+              <tr class="matrix-row border-t border-edge-subtle">
+                <td class="py-1.5 pr-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold flex-shrink-0">As</div>
+                    <span class="text-secondary text-xs font-medium">Ash</span>
+                  </div>
+                </td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Ash voted for Lethal"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Ash voted for Phasmo"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Ash voted for Valheim"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><span class="text-foreground text-xs font-bold">3</span></td>
+              </tr>
+              <!-- Kira -->
+              <tr class="matrix-row border-t border-edge-subtle">
+                <td class="py-1.5 pr-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full bg-pink-600 flex items-center justify-center text-[8px] font-bold flex-shrink-0">Kr</div>
+                    <span class="text-secondary text-xs font-medium">Kira</span>
+                  </div>
+                </td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Kira voted for Deep Rock"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Kira voted for Phasmo"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-edge border border-faint/30 mx-auto"></div></td>
+                <td class="text-center py-1.5"><div class="matrix-cell inline-flex w-4 h-4 rounded-full bg-emerald-500 mx-auto cursor-pointer" title="Kira voted for GTFO"></div></td>
+                <td class="text-center py-1.5"><span class="text-foreground text-xs font-bold">3</span></td>
+              </tr>
+              <!-- Totals row -->
+              <tr class="border-t border-edge">
+                <td class="py-2 pr-2">
+                  <span class="text-dim text-[10px] font-semibold uppercase tracking-wider">Votes</span>
+                </td>
+                <td class="text-center py-2"><span class="text-cyan-400 text-xs font-bold">5</span></td>
+                <td class="text-center py-2"><span class="text-cyan-400 text-xs font-bold">4</span></td>
+                <td class="text-center py-2"><span class="text-emerald-400 text-xs font-bold">3</span></td>
+                <td class="text-center py-2"><span class="text-amber-400 text-xs font-bold">2</span></td>
+                <td class="text-center py-2"><span class="text-dim text-xs font-bold">1</span></td>
+                <td class="text-center py-2"><span class="text-faint text-[10px]">15</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ================ MATCH THRESHOLD BAR ================ -->
+      <div class="bg-surface border border-edge rounded-xl px-4 py-3">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+            <span class="text-secondary text-sm font-medium">Threshold</span>
+          </div>
+          <span class="text-dim text-xs">3 games above &middot; 2 below</span>
+        </div>
+        <div class="relative h-2 bg-panel rounded-full overflow-visible">
+          <div class="absolute inset-y-0 left-0 rounded-full bg-emerald-500/30" style="width: 100%"></div>
+          <div class="threshold-marker" style="left: 35%"></div>
+          <!-- Game dots positioned by vote % -->
+          <div class="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-cyan-400 border border-cyan-300" style="left: calc(62.5% - 5px)" title="Lethal Company 62.5%"></div>
+          <div class="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-cyan-400 border border-cyan-300" style="left: calc(50% - 5px)" title="Deep Rock Galactic 50%"></div>
+          <div class="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-emerald-300" style="left: calc(37.5% - 5px)" title="Phasmophobia 37.5%"></div>
+          <div class="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-amber-400 border border-amber-300" style="left: calc(25% - 5px)" title="Valheim 25%"></div>
+          <div class="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-dim border border-faint" style="left: calc(12.5% - 5px)" title="GTFO 12.5%"></div>
+        </div>
+        <div class="flex justify-between mt-1.5">
+          <span class="text-[10px] text-dim">0%</span>
+          <span class="text-[10px] text-dim">100%</span>
+        </div>
+      </div>
+
+      <!-- ================ MATCH TABLE ================ -->
+      <div class="bg-surface border border-edge rounded-xl overflow-hidden">
+
+        <!-- Table header -->
+        <div class="grid grid-cols-[4px_80px_1fr_64px_80px_72px_64px_40px_32px] items-center px-3 py-2 border-b border-edge bg-panel/50 text-[10px] text-dim font-semibold uppercase tracking-wider">
+          <div></div>
+          <div>Status</div>
+          <div>Game</div>
+          <div class="text-center">Fit</div>
+          <div class="text-center">Voters</div>
+          <div class="text-center">Votes</div>
+          <div class="text-center">Owns</div>
+          <div class="text-center">Action</div>
+          <div></div>
+        </div>
+
+        <!-- ROW 1 — Lethal Company (expanded) -->
+        <div>
+          <div class="match-row grid grid-cols-[4px_80px_1fr_64px_80px_72px_64px_40px_32px] items-center px-3 h-12 border-b border-edge-subtle" onclick="toggleRow('lethal')">
+            <!-- Accent -->
+            <div class="w-[3px] h-8 rounded-full bg-cyan-400 -ml-1"></div>
+            <!-- Status pill -->
+            <div>
+              <span class="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-cyan-500/30">Scheduling</span>
+            </div>
+            <!-- Game -->
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-6 h-6 rounded flex-shrink-0 cover-lethal flex items-center justify-center text-[7px] font-bold">LC</div>
+              <span class="text-foreground text-sm font-medium truncate">Lethal Company</span>
+            </div>
+            <!-- Fit -->
+            <div class="text-center">
+              <span class="text-amber-400 text-xs font-semibold">5/4</span>
+            </div>
+            <!-- Voters (stacked avatars) -->
+            <div class="flex items-center justify-center">
+              <div class="flex -space-x-1.5">
+                <div class="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[5]">V</div>
+                <div class="w-4 h-4 rounded-full bg-emerald-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[4]">R</div>
+                <div class="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[3]">Z</div>
+              </div>
+              <span class="text-dim text-[10px] ml-1">+2</span>
+            </div>
+            <!-- Votes -->
+            <div class="flex items-center justify-center gap-1.5">
+              <div class="w-8 h-1.5 bg-panel rounded-full overflow-hidden">
+                <div class="h-full bg-cyan-400 rounded-full vote-bar-fill" style="width: 62.5%"></div>
+              </div>
+              <span class="text-cyan-400 text-[10px] font-semibold">62.5%</span>
+            </div>
+            <!-- Ownership -->
+            <div class="text-center">
+              <span class="text-emerald-400 text-[11px] font-medium">11/12</span>
+            </div>
+            <!-- Action -->
+            <div class="flex justify-center">
+              <button class="w-7 h-7 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 flex items-center justify-center transition-colors" onclick="event.stopPropagation()">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </button>
+            </div>
+            <!-- Chevron -->
+            <div class="flex justify-center">
+              <svg id="chevron-lethal" class="w-4 h-4 text-dim chevron rotated" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+          </div>
+
+          <!-- Expanded detail panel -->
+          <div id="panel-lethal" class="detail-panel expanded border-b border-edge-subtle bg-panel/20">
+            <div class="px-4 py-3 ml-1 border-l-2 border-cyan-400/30 mx-3">
+              <!-- Player list -->
+              <div class="mb-3">
+                <div class="text-dim text-[10px] font-semibold uppercase tracking-wider mb-2">Assigned Players (5/4 capacity)</div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="avatar-item w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-[8px] font-bold">Vx</div>
+                      <span class="text-secondary text-xs">Vex</span>
+                      <span class="text-dim text-[10px]">&middot; also in Deep Rock</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="avatar-item w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold">Rk</div>
+                      <span class="text-secondary text-xs">Roknua</span>
+                      <span class="text-dim text-[10px]">&middot; also in Deep Rock</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="avatar-item w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold">Zp</div>
+                      <span class="text-secondary text-xs">Zeph</span>
+                      <span class="text-dim text-[10px]">&middot; also in Phasmo</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="avatar-item w-6 h-6 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">Lx</div>
+                      <span class="text-secondary text-xs">Lux</span>
+                      <span class="text-dim text-[10px]">&middot; also in Deep Rock, Valheim</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="avatar-item w-6 h-6 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">As</div>
+                      <span class="text-secondary text-xs">Ash</span>
+                      <span class="text-dim text-[10px]">&middot; also in Phasmo, Valheim</span>
+                    </div>
+                    <span class="text-amber-400 text-[10px]">Needs ($9.99)</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Warning -->
+              <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5 flex items-center gap-2 mb-3">
+                <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <span class="text-amber-400 text-[11px] font-medium">1 on bench &mdash; game supports 4 players but 5 voted. Lowest-overlap player benched.</span>
+              </div>
+              <!-- Ownership summary + action -->
+              <div class="flex items-center justify-between">
+                <span class="text-muted text-[11px]">11 own &middot; Ash needs it ($9.99)</span>
+                <button class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium rounded-lg px-4 py-1.5 transition-colors flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 2 — Deep Rock Galactic (collapsed) -->
+        <div>
+          <div class="match-row grid grid-cols-[4px_80px_1fr_64px_80px_72px_64px_40px_32px] items-center px-3 h-12 border-b border-edge-subtle" onclick="toggleRow('deeprock')">
+            <div class="w-[3px] h-8 rounded-full bg-cyan-400 -ml-1"></div>
+            <div>
+              <span class="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-cyan-500/30">Scheduling</span>
+            </div>
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-6 h-6 rounded flex-shrink-0 cover-deeprock flex items-center justify-center text-[7px] font-bold">DR</div>
+              <span class="text-foreground text-sm font-medium truncate">Deep Rock Galactic</span>
+              <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">Perfect fit</span>
+            </div>
+            <div class="text-center">
+              <span class="text-emerald-400 text-xs font-semibold flex items-center justify-center gap-0.5">4/4 <span class="text-gold text-[10px]">&#9733;</span></span>
+            </div>
+            <div class="flex items-center justify-center">
+              <div class="flex -space-x-1.5">
+                <div class="w-4 h-4 rounded-full bg-emerald-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[5]">R</div>
+                <div class="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[4]">V</div>
+                <div class="w-4 h-4 rounded-full bg-pink-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[3]">K</div>
+              </div>
+              <span class="text-dim text-[10px] ml-1">+1</span>
+            </div>
+            <div class="flex items-center justify-center gap-1.5">
+              <div class="w-8 h-1.5 bg-panel rounded-full overflow-hidden">
+                <div class="h-full bg-cyan-400 rounded-full vote-bar-fill" style="width: 50%"></div>
+              </div>
+              <span class="text-cyan-400 text-[10px] font-semibold">50%</span>
+            </div>
+            <div class="text-center">
+              <span class="text-emerald-400 text-[11px] font-medium">10/12</span>
+            </div>
+            <div class="flex justify-center">
+              <button class="w-7 h-7 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 flex items-center justify-center transition-colors" onclick="event.stopPropagation()">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </button>
+            </div>
+            <div class="flex justify-center">
+              <svg id="chevron-deeprock" class="w-4 h-4 text-dim chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+          </div>
+
+          <div id="panel-deeprock" class="detail-panel border-b border-edge-subtle bg-panel/20">
+            <div class="px-4 py-3 ml-1 border-l-2 border-cyan-400/30 mx-3">
+              <div class="mb-3">
+                <div class="text-dim text-[10px] font-semibold uppercase tracking-wider mb-2">Assigned Players (4/4 capacity)</div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold">Rk</div>
+                      <span class="text-secondary text-xs">Roknua</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-[8px] font-bold">Vx</div>
+                      <span class="text-secondary text-xs">Vex</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-pink-600 flex items-center justify-center text-[8px] font-bold">Kr</div>
+                      <span class="text-secondary text-xs">Kira</span>
+                      <span class="text-dim text-[10px]">&middot; also in Phasmo, GTFO</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">Lx</div>
+                      <span class="text-secondary text-xs">Lux</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal, Valheim</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-muted text-[11px]">10 own &middot; $14.99 <span class="text-emerald-400">(-50%)</span> for 2</span>
+                <button class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium rounded-lg px-4 py-1.5 transition-colors flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 3 — Phasmophobia (expanded) -->
+        <div>
+          <div class="match-row grid grid-cols-[4px_80px_1fr_64px_80px_72px_64px_40px_32px] items-center px-3 h-12 border-b border-edge-subtle" onclick="toggleRow('phasmo')">
+            <div class="w-[3px] h-8 rounded-full bg-emerald-500 -ml-1"></div>
+            <div>
+              <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30">Ready</span>
+            </div>
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-6 h-6 rounded flex-shrink-0 cover-phasmo flex items-center justify-center text-[7px] font-bold">PH</div>
+              <span class="text-foreground text-sm font-medium truncate">Phasmophobia</span>
+            </div>
+            <div class="text-center">
+              <span class="text-emerald-400 text-xs font-semibold">3/4</span>
+            </div>
+            <div class="flex items-center justify-center">
+              <div class="flex -space-x-1.5">
+                <div class="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[5]">Z</div>
+                <div class="w-4 h-4 rounded-full bg-amber-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[4]">A</div>
+                <div class="w-4 h-4 rounded-full bg-pink-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[3]">K</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-center gap-1.5">
+              <div class="w-8 h-1.5 bg-panel rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 rounded-full vote-bar-fill" style="width: 37.5%"></div>
+              </div>
+              <span class="text-emerald-400 text-[10px] font-semibold">37.5%</span>
+            </div>
+            <div class="text-center">
+              <span class="text-emerald-400 text-[11px] font-medium">9/12</span>
+            </div>
+            <div class="flex justify-center">
+              <button class="w-7 h-7 rounded-md bg-emerald-600/20 hover:bg-emerald-600/40 flex items-center justify-center transition-colors" onclick="event.stopPropagation()">
+                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </button>
+            </div>
+            <div class="flex justify-center">
+              <svg id="chevron-phasmo" class="w-4 h-4 text-dim chevron rotated" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+          </div>
+
+          <div id="panel-phasmo" class="detail-panel expanded border-b border-edge-subtle bg-panel/20">
+            <div class="px-4 py-3 ml-1 border-l-2 border-emerald-500/30 mx-3">
+              <div class="mb-3">
+                <div class="text-dim text-[10px] font-semibold uppercase tracking-wider mb-2">Assigned Players (3/4 capacity)</div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold">Zp</div>
+                      <span class="text-secondary text-xs">Zeph</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">As</div>
+                      <span class="text-secondary text-xs">Ash</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal, Valheim</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-pink-600 flex items-center justify-center text-[8px] font-bold">Kr</div>
+                      <span class="text-secondary text-xs">Kira</span>
+                      <span class="text-dim text-[10px]">&middot; also in Deep Rock, GTFO</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Bandwagon slot -->
+              <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5 flex items-center gap-2 mb-3">
+                <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                <span class="text-emerald-400 text-[11px] font-medium">+1 slot open for full lobby</span>
+                <button class="ml-auto bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium rounded px-2.5 py-1 transition-colors" onclick="event.stopPropagation()">Join</button>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-muted text-[11px]">9 own &middot; all assigned players own it</span>
+                <button class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg px-4 py-1.5 transition-colors flex items-center gap-1.5" onclick="event.stopPropagation()">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 4 — Valheim (collapsed, amber tint) -->
+        <div>
+          <div class="match-row grid grid-cols-[4px_80px_1fr_64px_80px_72px_64px_40px_32px] items-center px-3 h-12 border-b border-edge-subtle bg-amber-500/[0.03]" onclick="toggleRow('valheim')">
+            <div class="w-[3px] h-8 rounded-full bg-amber-400 -ml-1"></div>
+            <div>
+              <span class="bg-amber-500/20 text-amber-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-amber-500/30 whitespace-nowrap">Needs Interest</span>
+            </div>
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-6 h-6 rounded flex-shrink-0 cover-valheim flex items-center justify-center text-[7px] font-bold">VH</div>
+              <span class="text-foreground text-sm font-medium truncate">Valheim</span>
+            </div>
+            <div class="text-center">
+              <span class="text-amber-400 text-xs font-semibold">2/10</span>
+            </div>
+            <div class="flex items-center justify-center">
+              <div class="flex -space-x-1.5">
+                <div class="w-4 h-4 rounded-full bg-rose-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[5]">L</div>
+                <div class="w-4 h-4 rounded-full bg-amber-600 flex items-center justify-center text-[6px] font-bold border border-surface z-[4]">A</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-center gap-1.5">
+              <div class="w-8 h-1.5 bg-panel rounded-full overflow-hidden">
+                <div class="h-full bg-amber-400 rounded-full vote-bar-fill" style="width: 25%"></div>
+              </div>
+              <span class="text-amber-400 text-[10px] font-semibold">25%</span>
+            </div>
+            <div class="text-center">
+              <span class="text-muted text-[11px] font-medium">7/12</span>
+            </div>
+            <div class="flex justify-center">
+              <button class="w-7 h-7 rounded-md bg-amber-600/20 hover:bg-amber-600/40 flex items-center justify-center transition-colors" onclick="event.stopPropagation()">
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </button>
+            </div>
+            <div class="flex justify-center">
+              <svg id="chevron-valheim" class="w-4 h-4 text-dim chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+          </div>
+
+          <div id="panel-valheim" class="detail-panel border-b border-edge-subtle bg-amber-500/[0.02]">
+            <div class="px-4 py-3 ml-1 border-l-2 border-amber-400/30 mx-3">
+              <div class="mb-3">
+                <div class="text-dim text-[10px] font-semibold uppercase tracking-wider mb-2">Interested Players (2/10 capacity)</div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">Lx</div>
+                      <span class="text-secondary text-xs">Lux</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal, Deep Rock</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">As</div>
+                      <span class="text-secondary text-xs">Ash</span>
+                      <span class="text-dim text-[10px]">&middot; also in Lethal, Phasmo</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5 flex items-center gap-2 mb-3">
+                <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+                <span class="text-amber-400 text-[11px] font-medium">8 more could join &mdash; rally your crew!</span>
+                <button class="ml-auto bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-medium rounded px-2.5 py-1 transition-colors" onclick="event.stopPropagation()">I'm interested</button>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-muted text-[11px]">7 own &middot; below threshold, needs more interest to advance</span>
+                <button class="bg-panel hover:bg-overlay text-amber-400 hover:text-amber-300 text-xs font-medium rounded-lg px-4 py-1.5 border border-amber-500/30 transition-colors flex items-center gap-1.5" onclick="event.stopPropagation()">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                  Advance
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 5 — GTFO (collapsed, dimmed) -->
+        <div>
+          <div class="match-row grid grid-cols-[4px_80px_1fr_64px_80px_72px_64px_40px_32px] items-center px-3 h-12 border-b border-edge-subtle opacity-60" onclick="toggleRow('gtfo')">
+            <div class="w-[3px] h-8 rounded-full bg-dim -ml-1"></div>
+            <div>
+              <span class="bg-faint/20 text-dim text-[10px] font-semibold px-2 py-0.5 rounded-full border border-faint/30">Suggested</span>
+            </div>
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-6 h-6 rounded flex-shrink-0 cover-gtfo flex items-center justify-center text-[7px] font-bold">GT</div>
+              <span class="text-muted text-sm font-medium truncate">GTFO</span>
+            </div>
+            <div class="text-center">
+              <span class="text-dim text-xs font-semibold">1/4</span>
+            </div>
+            <div class="flex items-center justify-center">
+              <div class="flex -space-x-1.5">
+                <div class="w-4 h-4 rounded-full bg-pink-600 flex items-center justify-center text-[6px] font-bold border border-surface">K</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-center gap-1.5">
+              <div class="w-8 h-1.5 bg-panel rounded-full overflow-hidden">
+                <div class="h-full bg-dim rounded-full vote-bar-fill" style="width: 12.5%"></div>
+              </div>
+              <span class="text-dim text-[10px] font-semibold">12.5%</span>
+            </div>
+            <div class="text-center">
+              <span class="text-dim text-[11px] font-medium">5/12</span>
+            </div>
+            <div class="flex justify-center">
+              <button disabled class="w-7 h-7 rounded-md bg-panel flex items-center justify-center opacity-40 cursor-not-allowed" onclick="event.stopPropagation()">
+                <svg class="w-3.5 h-3.5 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </button>
+            </div>
+            <div class="flex justify-center">
+              <svg id="chevron-gtfo" class="w-4 h-4 text-dim chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+          </div>
+
+          <div id="panel-gtfo" class="detail-panel border-b border-edge-subtle bg-panel/10">
+            <div class="px-4 py-3 ml-1 border-l-2 border-dim/30 mx-3 opacity-60">
+              <div class="mb-3">
+                <div class="text-dim text-[10px] font-semibold uppercase tracking-wider mb-2">Interested Players (1/4 capacity)</div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-6 h-6 rounded-full bg-pink-600 flex items-center justify-center text-[8px] font-bold">Kr</div>
+                      <span class="text-secondary text-xs">Kira</span>
+                      <span class="text-dim text-[10px]">&middot; also in Deep Rock, Phasmo</span>
+                    </div>
+                    <span class="text-emerald-400 text-[10px]">Owns</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-dim text-[11px]">5 own &middot; insufficient interest to form match</span>
+                <button disabled class="bg-panel text-dim text-xs font-medium rounded-lg px-4 py-1.5 border border-edge cursor-not-allowed opacity-50 flex items-center gap-1.5" onclick="event.stopPropagation()">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                  Advance
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================ SUMMARY FOOTER ================ -->
+      <div class="bg-surface border border-edge rounded-xl p-4">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-secondary text-xs font-medium">Carried forward:</span>
+              <span class="bg-panel text-secondary text-[11px] font-medium rounded px-2 py-0.5 border border-edge">Valheim <span class="text-amber-400">(2)</span></span>
+              <span class="bg-panel text-muted text-[11px] font-medium rounded px-2 py-0.5 border border-edge">GTFO <span class="text-dim">(1)</span></span>
+              <span class="bg-panel text-muted text-[11px] font-medium rounded px-2 py-0.5 border border-edge">Elden Ring <span class="text-dim">(0)</span></span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="bg-panel hover:bg-overlay text-muted hover:text-foreground text-xs font-medium rounded-lg px-3 py-1.5 border border-edge transition-colors flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+              Archive
+            </button>
+            <button class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 hover:text-amber-300 text-xs font-medium rounded-lg px-3 py-1.5 border border-amber-500/30 transition-colors flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Advance All
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MOBILE BOTTOM TAB BAR -->
+  <div id="bottom-bar" class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-edge hidden z-40">
+    <div class="flex justify-around py-2 max-w-md mx-auto">
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span class="text-[10px] text-muted">Calendar</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span class="text-[10px] text-muted">Events</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1 border-t-2 border-emerald-500">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="text-[10px] text-emerald-400 font-medium">Games</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-[10px] text-muted">Players</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let isMobile = false;
+
+    function toggleMobile() {
+      isMobile = !isMobile;
+      const container = document.getElementById('app-container');
+      const toggle = document.getElementById('mobile-toggle');
+      const bottomBar = document.getElementById('bottom-bar');
+
+      if (isMobile) {
+        container.className = 'max-w-[390px] mx-auto border-x border-edge min-h-screen transition-all duration-300';
+        toggle.classList.add('active');
+        bottomBar.classList.remove('hidden');
+      } else {
+        container.className = 'max-w-6xl mx-auto transition-all duration-300';
+        toggle.classList.remove('active');
+        bottomBar.classList.add('hidden');
+      }
+    }
+
+    function toggleRow(id) {
+      const panel = document.getElementById('panel-' + id);
+      const chevron = document.getElementById('chevron-' + id);
+
+      if (panel.classList.contains('expanded')) {
+        panel.classList.remove('expanded');
+        chevron.classList.remove('rotated');
+      } else {
+        panel.classList.add('expanded');
+        chevron.classList.add('rotated');
+      }
+    }
+  </script>
+
+</body>
+</html>

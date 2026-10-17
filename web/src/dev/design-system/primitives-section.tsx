@@ -1,0 +1,191 @@
+/**
+ * Primitive inventory for /dev/design-system (ROK-1539) — the flat pieces:
+ * badges, chips (toggle + removable), buttons, inputs, empty and loading states. Overlays and
+ * containers live in `overlays-section.tsx` so both files stay small.
+ *
+ * Every example mounts the REAL component from `web/src/components/ui` (or
+ * reproduces the exact class string where the real one is position-fixed).
+ * If an example here stops matching production, production changed and this
+ * page is the early warning.
+ */
+import { useState, type JSX } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Button } from '../../components/ui/button';
+import { LoadingSpinner } from '../../components/ui/loading-spinner';
+import { NewBadge } from '../../components/ui/new-badge';
+import { RoleBadge } from '../../components/ui/role-badge';
+import { StatusChip } from '../../components/ui/status-chip';
+import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
+import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
+import { Section, StateFrame, StateGrid } from './design-system-bits';
+import { TabRowDemo } from './tab-row-demo';
+
+/** Chip geometry per docs/design-system.md §4.3 (its /games adopters were retired by ROK-1659). */
+const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
+const CHIP_ON = 'bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20';
+const CHIP_OFF = 'bg-panel border border-edge text-secondary hover:bg-overlay';
+/** Removable selection chip per §4.3 — the class string of event-create-content-browser.tsx::SelectedChips (ROK-1654). */
+const REMOVABLE_CHIP = 'inline-flex items-center gap-2 pl-3 min-h-[44px] rounded-full bg-success/10 border border-success/30 text-sm font-medium text-success';
+const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
+
+function BadgeStates(): JSX.Element {
+    return (
+        <>
+            <StateFrame label="Badges — default">
+                <RoleBadge role="admin" />
+                <RoleBadge role="operator" />
+                <NewBadge visible />
+            </StateFrame>
+            <StateFrame label="Badges — empty" note="RoleBadge renders nothing for member; NewBadge nothing when visible={false}.">
+                <RoleBadge role="member" />
+                <NewBadge visible={false} />
+                <span className="text-xs text-dim">(both render null)</span>
+            </StateFrame>
+            <StateFrame label="Count badge" note="filter-panel.tsx::FilterBadge — never rendered at zero.">
+                <span className="relative inline-flex px-3 py-2 text-sm text-muted border border-edge rounded-lg">
+                    Trigger
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-success rounded-full">7</span>
+                </span>
+            </StateFrame>
+        </>
+    );
+}
+
+/** A span pill, not a button: its only control is the real 44px ghost iconOnly Button named 'Remove <name>'. */
+function RemovableChipDemo(): JSX.Element {
+    const [picks, setPicks] = useState(DEMO_PICKS);
+    return (
+        <StateFrame label="Removable chip — selection" note="success tokens; no aria-pressed; the flush Remove button is the only control. Remove both to see Reset.">
+            {picks.map((pick) => (
+                <span key={pick.name} className={REMOVABLE_CHIP}>
+                    {pick.name}
+                    <span className="text-xs text-muted">{pick.levels}</span>
+                    <Button variant="ghost" iconOnly aria-label={`Remove ${pick.name}`} onClick={() => setPicks((p) => p.filter((x) => x.name !== pick.name))}>
+                        <XMarkIcon className="w-4 h-4" aria-hidden="true" />
+                    </Button>
+                </span>
+            ))}
+            {picks.length === 0 && <Button variant="secondary" size="sm" onClick={() => setPicks(DEMO_PICKS)}>Reset</Button>}
+        </StateFrame>
+    );
+}
+
+function ChipStates(): JSX.Element {
+    return (
+        <>
+            <StateFrame label="Filter chip — off / on" note="aria-pressed on a <button type='button'>; 44px target.">
+                <button type="button" aria-pressed={false} className={`${CHIP_BASE} ${CHIP_OFF}`}>4 players</button>
+                <button type="button" aria-pressed className={`${CHIP_BASE} ${CHIP_ON}`}>3 players</button>
+            </StateFrame>
+            <StateFrame label="Filter chip — disabled">
+                <button type="button" disabled className={`${CHIP_BASE} ${CHIP_OFF} opacity-50 cursor-not-allowed`}>2 own</button>
+            </StateFrame>
+            <StateFrame label="Filter chip — hover" note="Hover the live chips above; hover is a token swap, not a shadow.">
+                <span className={`${CHIP_BASE} bg-overlay border border-edge text-secondary`}>hover fill = bg-overlay</span>
+            </StateFrame>
+            <RemovableChipDemo />
+        </>
+    );
+}
+
+/** Read-only §4.21 status chip — the four tones (ROK-1776). */
+function StatusChipStates(): JSX.Element {
+    return (
+        <StateFrame label="Status chip — read-only tones" note="StatusChip (§4.21): title required; event page adds 'checked N min ago'.">
+            <StatusChip tone="success" title="Valheim Main: Online">Server online</StatusChip>
+            <StatusChip tone="warning" title="Valheim Main: Starting">Server starting</StatusChip>
+            <StatusChip tone="danger" title="Alpha: Online, Beta: Offline">1 of 2 servers offline</StatusChip>
+            <StatusChip tone="neutral" title="Valheim Main: Unknown">Server status unknown</StatusChip>
+        </StateFrame>
+    );
+}
+
+const BTN_PRIMARY = 'px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors';
+const BTN_SECONDARY = 'px-3 py-2 rounded-lg text-sm font-medium bg-panel border border-edge text-secondary hover:bg-overlay transition-colors';
+const BTN_DANGER = 'px-3 py-2 rounded-lg text-sm font-medium bg-red-600/20 border border-red-500/40 text-red-300 hover:bg-red-600/30 transition-colors';
+
+function ButtonStates(): JSX.Element {
+    return (
+        <>
+            <StateFrame label="Buttons — default" note="Global CSS scales :active to 0.97; do not add your own press state.">
+                <button type="button" className={BTN_PRIMARY}>Primary</button>
+                <button type="button" className={BTN_SECONDARY}>Secondary</button>
+                <button type="button" className={BTN_DANGER}>Destructive</button>
+            </StateFrame>
+            <StateFrame label="Buttons — disabled">
+                <button type="button" disabled className={`${BTN_PRIMARY} disabled:opacity-50`}>Primary</button>
+                <button type="button" disabled className={`${BTN_SECONDARY} disabled:opacity-50`}>Secondary</button>
+            </StateFrame>
+            <StateFrame label="Buttons — loading" note="Keep the label; swap the icon. Never collapse the button's width.">
+                <button type="button" disabled className={`${BTN_PRIMARY} disabled:opacity-70 inline-flex items-center gap-2`}>
+                    <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                    Saving…
+                </button>
+            </StateFrame>
+        </>
+    );
+}
+
+const INPUT_CLS = 'min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground placeholder:text-dim w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+
+function InputStates(): JSX.Element {
+    return (
+        <>
+            <StateFrame label="Text input — default / disabled" note="text-base is deliberate: 16px stops iOS Safari zooming on focus.">
+                <input className={INPUT_CLS} placeholder="Search games…" readOnly />
+                <input className={`${INPUT_CLS} opacity-50`} placeholder="Disabled" disabled />
+            </StateFrame>
+            <StateFrame label="Slider + checkbox" note="Numeric readout is font-mono; label is font-medium; 44px row.">
+                <label className="flex items-center gap-3 text-base text-foreground min-h-[44px] w-full">
+                    <span className="whitespace-nowrap font-medium">Min owners</span>
+                    <input type="range" min={0} max={15} defaultValue={4} className="flex-1 h-11 accent-emerald-500" />
+                    <span className="text-sm font-mono w-6 text-right text-foreground">4</span>
+                </label>
+                <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
+                    <input type="checkbox" defaultChecked className="w-5 h-5 accent-emerald-500" />
+                    <span className="font-medium">Co-op for our group size</span>
+                </label>
+            </StateFrame>
+            <StateFrame label="ModalSearchInput" note="Delegates to SearchInput (ROK-1647) — new code uses SearchInput directly.">
+                <ModalSearchInput label="Search games" value="" onChange={() => undefined} />
+            </StateFrame>
+        </>
+    );
+}
+
+function EmptyAndLoading(): JSX.Element {
+    return (
+        <>
+            <StateFrame label="Empty — page/section">
+                <div className="w-full"><LineupEmptyState /></div>
+            </StateFrame>
+            <StateFrame label="Empty — inside a modal">
+                <div className="w-full"><ModalEmptyState /></div>
+            </StateFrame>
+            <StateFrame label="Loading — route Suspense fallback">
+                <div className="w-full"><LoadingSpinner /></div>
+            </StateFrame>
+        </>
+    );
+}
+
+/** Flat primitives in default / hover / disabled / loading / empty states. */
+export function PrimitivesSection(): JSX.Element {
+    return (
+        <Section
+            id="primitives"
+            title="Primitives — badges, chips, buttons, inputs, states"
+            blurb="The flat pieces, each in the states it actually ships in. Mock data only; nothing here calls the API."
+        >
+            <StateGrid>
+                <BadgeStates />
+                <ChipStates />
+                <StatusChipStates />
+                <ButtonStates />
+                <InputStates />
+                <EmptyAndLoading />
+                <TabRowDemo />
+            </StateGrid>
+        </Section>
+    );
+}

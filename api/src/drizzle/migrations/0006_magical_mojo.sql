@@ -1,0 +1,3 @@
+ALTER TABLE "event_signups" ADD COLUMN "character_id" uuid;--> statement-breakpoint
+ALTER TABLE "event_signups" ADD COLUMN "confirmation_status" varchar(20) DEFAULT 'pending' NOT NULL;--> statement-breakpoint
+ALTER TABLE "event_signups" ADD CONSTRAINT "event_signups_character_id_characters_id_fk" FOREIGN KEY ("character_id") REFERENCES "public"."characters"("id") ON DELETE set null ON UPDATE no action;

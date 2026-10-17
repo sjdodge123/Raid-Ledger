@@ -1,0 +1,323 @@
+/**
+ * Multi-step interaction flow smoke tests.
+ * Tests end-to-end flows that involve multiple API calls + Discord output.
+ */
+import { readLastMessages } from '../../helpers/messages.js';
+import { pollForEmbed, pollForCondition } from '../../helpers/polling.js';
+import {
+  createEvent,
+  signup,
+  signupAs,
+  cancelSignup,
+  deleteEvent,
+  channelForTest,
+  channelForGame,
+  awaitProcessing,
+} from '../fixtures.js';
+import {
+  resolveConfiguredGame,
+  withThrowawayCharacter,
+} from '../configured-game.js';
+import type { SmokeTest, TestContext } from '../types.js';
+import { assertAtLeast } from './must.js';
+
+function mmoOverrides(ctx: TestContext) {
+  if (!ctx.mmoGameId) return {};
+  return {
+    gameId: ctx.mmoGameId,
+    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+  };
+}
+
+const botConnectivityCheck: SmokeTest = {
+  name: 'Bot is connected and responding',
+  category: 'flow',
+  async run(ctx) {
+    const status = await ctx.api.get<{ connected: boolean }>(
+      '/admin/settings/discord-bot',
+    );
+    if (!status.connected) {
+      throw new Error('Discord bot is not connected');
+    }
+  },
+};
+
+const signupCancelFlow: SmokeTest = {
+  name: 'Full signup -> cancel -> embed reflects both',
+  category: 'flow',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 0);
+    const ev = await createEvent(ctx.api, 'flow-signup-cancel', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      await pollForEmbed(
+        ch.channelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
+      await awaitProcessing(ctx.api);
+      await cancelSignup(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
+      await pollForEmbed(
+        ch.channelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const slotVacatedFlow: SmokeTest = {
+  name: 'Admin removes signup -> slot vacated flow triggered',
+  category: 'flow',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 1, 'Need demo users');
+    const ch = channelForTest(ctx, 1);
+    const ev = await createEvent(ctx.api, 'flow-vacated', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      // Wait for initial embed
+      await pollForEmbed(
+        ch.channelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      const res = await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await awaitProcessing(ctx.api);
+      // Admin removes the signup
+      const signupId = (res as { id?: number }).id;
+      if (signupId) {
+        await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
+      }
+      await awaitProcessing(ctx.api);
+      await pollForEmbed(
+        ch.channelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const benchPromotionFlow: SmokeTest = {
+  name: 'Bench player promoted when main slot vacates',
+  category: 'flow',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 3, 'Need 3+ demo users');
+    const ch = channelForTest(ctx, 2);
+    const ev = await createEvent(ctx.api, 'flow-bench-promote', {
+      maxAttendees: 2,
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
+    try {
+      // Wait for initial embed
+      await pollForEmbed(
+        ch.channelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      // Fill 2 main slots
+      const res1 = await signupAs(ctx.api, ev.id, users[0], ['dps']);
+      await signupAs(ctx.api, ev.id, users[1], ['dps']);
+      // 3rd goes to bench
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
+      // Remove first player — bench player should auto-promote (5-min delay)
+      const signupId = (res1 as { id?: number }).id;
+      if (signupId) {
+        await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
+      }
+      await awaitProcessing(ctx.api);
+      // Verify embed still exists and reflects roster change
+      await pollForEmbed(
+        ch.channelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const embedSyncBatchFlush: SmokeTest = {
+  name: 'Embed sync queue flushes within 10s',
+  category: 'flow',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 3);
+    const ev = await createEvent(ctx.api, 'flow-sync', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      // Use polling for initial embed (avoids waitForMessage race condition)
+      await pollForEmbed(
+        ch.channelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
+      await awaitProcessing(ctx.api);
+      await pollForEmbed(
+        ch.channelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const multiUserSignupFlow: SmokeTest = {
+  name: 'Multiple users sign up -> roster updates correctly',
+  category: 'flow',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 3, 'Need 3+ demo users');
+    const ch = channelForTest(ctx, 4);
+    const ev = await createEvent(ctx.api, 'flow-multi-signup', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      await pollForEmbed(
+        ch.channelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      // Rapid-fire 3 signups with different roles
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
+      const found = await pollForEmbed(
+        ch.channelId,
+        (m) => {
+          const embed = m.embeds.find((e) => e.title?.includes(ev.title));
+          if (!embed) return false;
+          // ROK-1460: the count lives on the chrome author line, not in a
+          // `ROSTER: n` description header.
+          const match = (embed.author ?? '').match(/(\d+) of (\d+)/);
+          return match?.[1] ? parseInt(match[1], 10) >= 3 : false;
+        },
+        ctx.config.timeoutMs,
+      );
+      const embed = found.embeds.find((e) => e.title?.includes(ev.title));
+      if (!embed) throw new Error('Embed not found');
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const eventDeleteCleansEmbed: SmokeTest = {
+  name: 'Event deletion removes embed from channel',
+  category: 'flow',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 5);
+    const ev = await createEvent(ctx.api, 'flow-delete', ch.gameId ? { gameId: ch.gameId } : {});
+    try {
+      await pollForEmbed(
+        ch.channelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      // Delete the event — embed should be removed from channel
+      await deleteEvent(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
+      // Poll for embed removal — let network/unexpected errors propagate naturally.
+      // Only catch the specific timeout error to produce a clear assertion message.
+      try {
+        await pollForCondition(
+          async () => {
+            const msgs = await readLastMessages(ch.channelId, 50);
+            const has = msgs.some((m) =>
+              m.embeds.some((e) => e.title?.includes(ev.title)),
+            );
+            return has ? null : true;
+          },
+          ctx.config.timeoutMs,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('pollForCondition timed out')) {
+          throw new Error('Embed still present after event deletion');
+        }
+        throw err; // re-throw network/unexpected errors as-is
+      }
+    } finally {
+      // Already deleted above
+    }
+  },
+};
+
+/**
+ * ROK-868: Verify character data persists on duplicate web signup.
+ * When the event creator (auto-signed-up without character) signs up again
+ * via web with a character selected, the character info must appear in
+ * the signup response and the roster endpoint.
+ *
+ * The assertion body, run against whichever game + character the test picked.
+ */
+async function assertCharacterOnDuplicateSignup(
+  ctx: TestContext,
+  gameId: number,
+  charId: string,
+  role: string,
+): Promise<void> {
+  const ev = await createEvent(ctx.api, 'flow-char-dup', {
+    gameId,
+    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
+  });
+  try {
+    await pollForEmbed(
+      channelForGame(ctx, gameId),
+      (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+      ctx.config.timeoutMs,
+    );
+    // Re-signup (duplicate path) with character + preferred role
+    const res = await signup(ctx.api, ev.id, {
+      characterId: charId,
+      preferredRoles: [role],
+    }) as { character?: { id?: string; name?: string } | null };
+    if (!res.character || !res.character.id) {
+      throw new Error(
+        `Expected character data in signup response, got: ${JSON.stringify(res.character)}`,
+      );
+    }
+    if (res.character.id !== charId) {
+      throw new Error(`Expected characterId=${charId}, got ${res.character.id}`);
+    }
+  } finally {
+    await deleteEvent(ctx.api, ev.id);
+  }
+}
+
+const characterOnDuplicateSignup: SmokeTest = {
+  name: 'ROK-868: character data preserved on duplicate web signup',
+  category: 'flow',
+  async run(ctx) {
+    if (ctx.testCharId && ctx.mmoGameId) {
+      const role = ctx.testCharRole ?? 'dps';
+      return assertCharacterOnDuplicateSignup(ctx, ctx.mmoGameId, ctx.testCharId, role);
+    }
+    // No admin character (CI, fresh fleet envs): use a test-local throwaway on
+    // a registry MMO game. Never written to ctx — see configured-game.ts.
+    const game = await resolveConfiguredGame(ctx, { hasRoles: true });
+    console.log(`    ROK-868: throwaway character on gameId=${game.id} ("${game.name}")`);
+    await withThrowawayCharacter(ctx.api, game.id, 'Smoke-868-', (char) =>
+      assertCharacterOnDuplicateSignup(ctx, game.id, char.id, char.role ?? 'dps'),
+    );
+  },
+};
+
+export const interactionFlowTests: SmokeTest[] = [
+  botConnectivityCheck,
+  signupCancelFlow,
+  slotVacatedFlow,
+  benchPromotionFlow,
+  embedSyncBatchFlush,
+  multiUserSignupFlow,
+  eventDeleteCleansEmbed,
+  characterOnDuplicateSignup,
+];

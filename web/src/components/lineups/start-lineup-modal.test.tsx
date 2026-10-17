@@ -1,0 +1,737 @@
+/**
+ * ROK-1063 — failing TDD tests for the StartLineupModal.
+ *
+ * Validates the new title + description fields on the "Start Community
+ * Lineup" modal:
+ *   - Title input is rendered, required, and pre-filled with
+ *     `Lineup — <current month year>` (no zero padding).
+ *   - Description textarea is rendered with a character counter that
+ *     updates as the user types and caps at 500.
+ *   - Submission without a title is blocked (mutation not called,
+ *     inline error shown).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { renderWithProviders } from '../../test/render-helpers';
+import { StartLineupModal } from './start-lineup-modal';
+import { PublicShareToggle } from './PublicShareToggle';
+
+vi.mock('../../hooks/use-lineups', () => ({
+    useCreateLineup: vi.fn(),
+}));
+
+vi.mock('../../hooks/use-postable-discord-channels', () => ({
+    usePostableDiscordChannels: vi.fn(),
+}));
+
+vi.mock('../../lib/api-client', () => ({
+    getPlayers: vi.fn(),
+}));
+
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual<typeof import('react-router-dom')>(
+        'react-router-dom',
+    );
+    return { ...actual, useNavigate: () => vi.fn() };
+});
+
+import { useCreateLineup } from '../../hooks/use-lineups';
+import { usePostableDiscordChannels } from '../../hooks/use-postable-discord-channels';
+import { getPlayers } from '../../lib/api-client';
+import { at } from '../../test/defined';
+
+const mutateAsync = vi.fn();
+
+function currentMonthYear(): string {
+    const now = new Date();
+    const month = now.toLocaleString('en-US', { month: 'long' });
+    return `${month} ${now.getFullYear()}`;
+}
+
+function mockChannels(
+    channels: { id: string; name: string }[],
+    overrides: Partial<ReturnType<typeof usePostableDiscordChannels>> = {},
+): void {
+    vi.mocked(usePostableDiscordChannels).mockReturnValue({
+        data: { data: channels },
+        isLoading: false,
+        isError: false,
+        error: null,
+        ...overrides,
+    } as unknown as ReturnType<typeof usePostableDiscordChannels>);
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    mutateAsync.mockResolvedValue({ id: 42 });
+    vi.mocked(useCreateLineup).mockReturnValue({
+        mutateAsync,
+        isPending: false,
+        isError: false,
+        error: null,
+    } as unknown as ReturnType<typeof useCreateLineup>);
+    mockChannels([
+        { id: '100000000000000001', name: 'general' },
+        { id: '100000000000000002', name: 'events' },
+    ]);
+    vi.mocked(getPlayers).mockResolvedValue({
+        data: [
+            { id: 10, username: 'alice', avatar: null, discordId: 'd-10' },
+            { id: 11, username: 'bob', avatar: null, discordId: null },
+        ],
+        meta: { total: 2, page: 1, pageSize: 20, hasMore: false },
+    } as unknown as Awaited<ReturnType<typeof getPlayers>>);
+});
+
+describe('StartLineupModal — title field', () => {
+    it('renders a title input prefilled with "Lineup — <Month YYYY>"', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const titleInput = screen.getByLabelText(/title/i) as HTMLInputElement;
+        expect(titleInput).toBeInTheDocument();
+        expect(titleInput.value).toBe(`Lineup — ${currentMonthYear()}`);
+    });
+
+    it('marks the title input as required', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const titleInput = screen.getByLabelText(/title/i) as HTMLInputElement;
+        expect(titleInput).toBeRequired();
+    });
+
+    it('blocks submission when title is cleared', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const titleInput = screen.getByLabelText(/title/i) as HTMLInputElement;
+        await user.clear(titleInput);
+
+        const createBtn = screen.getByRole('button', { name: /create lineup/i });
+        await user.click(createBtn);
+
+        expect(mutateAsync).not.toHaveBeenCalled();
+    });
+});
+
+describe('StartLineupModal — description field', () => {
+    it('renders a description textarea', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
+    });
+
+    it('shows a 500-character counter that updates as the user types', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Initial counter: 0 / 500
+        expect(screen.getByText(/0\s*\/\s*500/)).toBeInTheDocument();
+
+        const textarea = screen.getByLabelText(/description/i);
+        await user.type(textarea, 'Hello world');
+
+        // After typing 11 chars, counter reflects "11 / 500"
+        expect(screen.getByText(/11\s*\/\s*500/)).toBeInTheDocument();
+    });
+});
+
+describe('StartLineupModal — submits title + description', () => {
+    it('passes title and description to useCreateLineup.mutateAsync', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+
+        const titleInput = screen.getByLabelText(/title/i);
+        await user.clear(titleInput);
+        await user.type(titleInput, 'Co-op Night');
+
+        const textarea = screen.getByLabelText(/description/i);
+        await user.type(textarea, 'Casual co-op picks');
+
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            title: 'Co-op Night',
+            description: 'Casual co-op picks',
+        });
+    });
+});
+
+describe('StartLineupModal — channel override picker (ROK-1064)', () => {
+    it('renders the "Post embeds to" picker with community default option', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const label = screen.getByLabelText(/post embeds to/i);
+        expect(label).toBeInTheDocument();
+        expect(
+            screen.getByRole('option', { name: /use community default/i }),
+        ).toBeInTheDocument();
+    });
+
+    it('renders an option per postable channel returned by the hook', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.getByRole('option', { name: /#general/ })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /#events/ })).toBeInTheDocument();
+    });
+
+    it('omits channelOverrideId from submit when "Use community default" is selected', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(
+            'channelOverrideId' in at(mutateAsync.mock.calls, 0)[0],
+        ).toBe(false);
+    });
+
+    it('includes channelOverrideId on submit when a channel is selected', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const select = screen.getByLabelText(/post embeds to/i);
+        await user.selectOptions(select, '100000000000000002');
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            channelOverrideId: '100000000000000002',
+        });
+    });
+
+    it('hides the picker when the channels query errors', () => {
+        mockChannels([], { isError: true, isLoading: false });
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.queryByLabelText(/post embeds to/i)).toBeNull();
+    });
+});
+
+describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
+    it('renders a visibility toggle that defaults to public', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const publicBtn = screen.getByTestId('visibility-public');
+        const privateBtn = screen.getByTestId('visibility-private');
+        expect(publicBtn).toHaveAttribute('aria-checked', 'true');
+        expect(privateBtn).toHaveAttribute('aria-checked', 'false');
+        // ROK-1440: the picker is now shown on public too — on a public
+        // lineup it seeds known attendees rather than gating access. It used
+        // to be private-only, which is what this asserted before.
+        expect(
+            screen.getByTestId('invitee-multi-select'),
+        ).toBeInTheDocument();
+    });
+
+    it('reveals the invitee picker when switched to private', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        expect(
+            await screen.findByTestId('invitee-multi-select'),
+        ).toBeInTheDocument();
+    });
+
+    it('disables Create while private is selected and no invitees picked', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        const createBtn = screen.getByRole('button', { name: /create lineup/i });
+        expect(createBtn).toBeDisabled();
+    });
+
+    it('enables Create once at least one invitee is picked on private', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        const row = await screen.findByTestId('invitee-option-10');
+        await user.click(row);
+        const createBtn = screen.getByRole('button', { name: /create lineup/i });
+        expect(createBtn).not.toBeDisabled();
+    });
+
+    it('submits visibility + inviteeUserIds when a private lineup is created', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        const row = await screen.findByTestId('invitee-option-10');
+        await user.click(row);
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            visibility: 'private',
+            inviteeUserIds: [10],
+        });
+    });
+
+    it('omits visibility + inviteeUserIds when public with nobody picked', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        const body = at(mutateAsync.mock.calls, 0)[0];
+        // ROK-1440: `inviteeUserIds` is omitted because none were picked —
+        // NOT because the lineup is public. A public lineup with no explicit
+        // invites must send exactly the payload it always did.
+        expect('visibility' in body).toBe(false);
+        expect('inviteeUserIds' in body).toBe(false);
+    });
+
+    // ── ROK-1440: explicit invitees on PUBLIC lineups ──────────────
+
+    it('submits inviteeUserIds on a PUBLIC lineup without sending visibility', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Stay on the default public visibility and pick someone.
+        const row = await screen.findByTestId('invitee-option-10');
+        await user.click(row);
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        const body = at(mutateAsync.mock.calls, 0)[0];
+        expect(body.inviteeUserIds).toEqual([10]);
+        // Seeding invitees must NOT flip the lineup to private.
+        expect('visibility' in body).toBe(false);
+    });
+
+    it('keeps Create enabled on public with no invitees picked', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(
+            screen.getByRole('button', { name: /create lineup/i }),
+        ).not.toBeDisabled();
+    });
+
+    it('labels the picker as optional on public and required on private', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.getByText(/invite members \(optional\)/i)).toBeInTheDocument();
+        await user.click(screen.getByTestId('visibility-private'));
+        expect(await screen.findByText(/^Invitees$/)).toBeInTheDocument();
+    });
+});
+
+// ROK-1302 (operator review) — top-level: Title, Preset chooser, Description,
+// Visibility + audience. Match Threshold / Votes per Player / scheduling toggle
+// + channel / durations / tiebreaker live behind a "More options" expander.
+describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
+    it('renders the top-level controls by default', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Title + Preset chooser + Description + Visibility are top-level.
+        expect(screen.getByLabelText(/title/i)).toBeVisible();
+        expect(
+            screen.getByRole('radiogroup', { name: /lineup preset/i }),
+        ).toBeVisible();
+        expect(screen.getByLabelText(/description/i)).toBeVisible();
+        expect(screen.getByTestId('visibility-public')).toBeVisible();
+    });
+
+    it('keeps match-shape + scheduling behind a collapsed expander', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Match Threshold + scheduling toggle now live in the collapsed
+        // <details> → present in the DOM but not visible until expanded.
+        expect(screen.getByTestId('match-threshold')).not.toBeVisible();
+        expect(
+            screen.getByTestId('include-scheduling-phase'),
+        ).not.toBeVisible();
+        expect(screen.getByText(/more options/i)).toBeInTheDocument();
+    });
+
+    it('reveals match-shape + duration controls when "More options" is expanded', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        expect(screen.getByTestId('match-threshold')).toBeVisible();
+        expect(screen.getByTestId('votes-per-player')).toBeVisible();
+        expect(screen.getByTestId('building-duration')).toBeVisible();
+    });
+
+    it('include-scheduling toggle defaults to checked', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const toggle = screen.getByTestId(
+            'include-scheduling-phase',
+        ) as HTMLInputElement;
+        expect(toggle.checked).toBe(true);
+    });
+
+    it('sends includeSchedulingPhase=false when the toggle is unchecked', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Toggle now lives under "More options" — expand before interacting.
+        await user.click(screen.getByText(/more options/i));
+        await user.click(screen.getByTestId('include-scheduling-phase'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            includeSchedulingPhase: false,
+        });
+    });
+
+    // ROK-1441: the 15-min shape moved from "Tonight" onto the new "LAN"
+    // preset, and "Tonight" was redefined as same-day (5h a phase).
+    it('applies the LAN preset to match-shape + durations', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-lan'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        // LAN = 100% threshold / 3 votes / 0.25h building / 0.25h voting.
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            matchThreshold: 100,
+            votesPerPlayer: 3,
+            buildingDurationHours: 0.25,
+            votingDurationHours: 0.25,
+        });
+    });
+
+    it('applies the Tonight preset as a same-day 5h-a-phase shape', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-tonight'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            matchThreshold: 100,
+            votesPerPlayer: 3,
+            buildingDurationHours: 5,
+            votingDurationHours: 5,
+        });
+    });
+
+    it('keeps the duration slider hour-granular instead of snapping to days', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        // Dragging to 5 must submit 5 hours. Pre-ROK-1441 the track was
+        // day-granular and this same interaction submitted 5 * 24 = 120.
+        fireEvent.change(screen.getByTestId('building-duration'), {
+            target: { value: '5' },
+        });
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            buildingDurationHours: 5,
+        });
+    });
+
+    // ROK-1441 (Codex review): clamping on every keystroke made fractional
+    // entry impossible — "1." coerced back to 1, so the decimal point was
+    // eaten on re-render and the next digit landed as "15".
+    it('accepts a fractional duration typed one character at a time', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        const field = screen.getByTestId('building-duration-hours');
+        await user.clear(field);
+        await user.type(field, '1.5');
+        expect(field).toHaveValue(1.5);
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            buildingDurationHours: 1.5,
+        });
+    });
+
+    it('reaches the 30-day ceiling through the numeric hours field', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        fireEvent.change(screen.getByTestId('voting-duration-hours'), {
+            target: { value: '720' },
+        });
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            votingDurationHours: 720,
+        });
+    });
+
+    it('applies the Series preset values', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-series'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            matchThreshold: 20,
+            votesPerPlayer: 5,
+            buildingDurationHours: 96,
+            votingDurationHours: 72,
+        });
+    });
+});
+
+// ROK-1650 (lane C2): the preset cards stay the Button primitive with
+// role=radio (ruling 6); the scheduling toggle is a Checkbox; public share is a
+// Switch; the channel picker is a Field + Select; raw emerald → success tokens.
+describe('StartLineupModal — preset + scheduling primitives (ROK-1650)', () => {
+    function renderModal(): void {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+    }
+
+    it('preset cards are Button radios whose aria-checked follows the click', async () => {
+        const user = userEvent.setup();
+        renderModal();
+        const group = screen.getByRole('radiogroup', { name: /lineup preset/i });
+        const series = screen.getByTestId('preset-series');
+        expect(series).toHaveAttribute('role', 'radio');
+        expect(series).toHaveAttribute('aria-checked', 'false');
+        expect(series.querySelector('[data-button-label]')).not.toBeNull();
+        await user.click(series);
+        expect(series).toHaveAttribute('aria-checked', 'true');
+        expect(within(group).getAllByRole('radio', { checked: true })).toEqual([series]);
+    });
+
+    it('paints the presets, caption, caps note and More options with tokens, not raw emerald', () => {
+        renderModal();
+        const group = screen.getByRole('radiogroup', { name: /lineup preset/i });
+        expect(group.querySelector('[class*="emerald"]')).toBeNull();
+        expect(screen.getByText('Match shape').className).not.toMatch(/emerald/);
+        expect(screen.getByText('Player caps').className).not.toMatch(/emerald/);
+        const summary = screen.getByText(/more options/i).closest('summary');
+        expect(summary?.className).not.toMatch(/emerald/);
+    });
+
+    it('scheduling-phase toggle is a Checkbox named by its label and described by its hint', async () => {
+        const user = userEvent.setup();
+        renderModal();
+        await user.click(screen.getByText(/more options/i));
+        const box = screen.getByRole('checkbox', {
+            name: 'Include scheduling phase after game is decided',
+        });
+        expect(box).toBe(screen.getByTestId('include-scheduling-phase'));
+        expect(box).toHaveAccessibleDescription(
+            /no time-scheduling poll is created/i,
+        );
+    });
+
+});
+
+describe('StartLineupModal — share + channel primitives (ROK-1650)', () => {
+    function renderModal(): void {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+    }
+
+    it('public share is a Switch named "Public share link" that drives the submit', async () => {
+        const user = userEvent.setup();
+        renderModal();
+        const toggle = screen.getByRole('switch', { name: 'Public share link' });
+        expect(toggle).toBe(screen.getByTestId('public-share-switch'));
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-checked', 'false');
+        await user.click(screen.getByRole('button', { name: /create lineup/i }));
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+            publicShareEnabled: false,
+        });
+    });
+
+    it('channel picker is a Field whose hint describes the select', () => {
+        renderModal();
+        const select = screen.getByLabelText(/post embeds to/i);
+        expect(select).toBe(screen.getByTestId('lineup-channel-override-select'));
+        expect(select).toHaveAccessibleDescription(
+            /optional\. when set, every lineup embed posts to this channel/i,
+        );
+    });
+});
+
+describe('PublicShareToggle — Copy link (ROK-1650)', () => {
+    it('renders Copy link as the shared Button beside the switch', () => {
+        renderWithProviders(
+            <PublicShareToggle enabled={true} onChange={vi.fn()} slug="abc123" />,
+        );
+        const copy = screen.getByRole('button', { name: 'Copy public link' });
+        expect(copy).toBe(screen.getByTestId('public-share-copy'));
+        expect(copy.querySelector('[data-button-label]')).not.toBeNull();
+        expect(screen.getByRole('switch', { name: 'Public share link' })).toBeInTheDocument();
+    });
+
+    it('disables the switch and Copy link while a mutation is pending', () => {
+        const onChange = vi.fn();
+        renderWithProviders(
+            <PublicShareToggle enabled={true} onChange={onChange} slug="abc123" disabled />,
+        );
+        expect(screen.getByRole('switch', { name: 'Public share link' })).toBeDisabled();
+        expect(screen.getByTestId('public-share-copy')).toBeDisabled();
+    });
+});
+
+// ROK-1655 (lane D6b): every close path asks before discarding an edit
+// (Cancel too, ruling 4); the actions sit in the pinned footer; a pending
+// create is a loading Button (ruling 7). LineupBanner keeps the modal mounted,
+// so a reopen must start from fresh defaults.
+describe('StartLineupModal — dirty close guard (ROK-1655)', () => {
+    const confirm = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
+    const title = () => screen.getByLabelText(/title/i) as HTMLInputElement;
+    const footerButton = (name: RegExp) =>
+        within(screen.getByTestId('modal-footer')).getByRole('button', { name });
+
+    async function editTitle(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+        await user.clear(title());
+        await user.type(title(), 'Raid night');
+    }
+
+    it('asks before Escape discards an edited title; Keep editing keeps it', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await editTitle(user);
+        await user.keyboard('{Escape}');
+        expect(confirm()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+        expect(confirm()).not.toBeInTheDocument();
+        expect(title().value).toBe('Raid night');
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('guards the footer Cancel: an edited title asks first, Discard closes', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await editTitle(user);
+        await user.click(footerButton(/^cancel$/i));
+        expect(confirm()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        await user.click(screen.getByRole('button', { name: 'Discard' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes at once on Escape when nothing was edited', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await user.keyboard('{Escape}');
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirm()).not.toBeInTheDocument();
+    });
+
+    it('reopens clean at the defaults after a Discard (the banner keeps it mounted)', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        const { rerender } = renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await editTitle(user);
+        await user.keyboard('{Escape}');
+        await user.click(screen.getByRole('button', { name: 'Discard' }));
+        rerender(<StartLineupModal isOpen={false} onClose={onClose} />);
+        rerender(<StartLineupModal isOpen={true} onClose={onClose} />);
+        expect(title().value).toBe(`Lineup — ${currentMonthYear()}`);
+        await user.keyboard('{Escape}');
+        expect(confirm()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
+});
+
+describe('StartLineupModal — pinned footer actions (ROK-1655)', () => {
+    const confirm = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
+    const footerButton = (name: RegExp) =>
+        within(screen.getByTestId('modal-footer')).getByRole('button', { name });
+
+    it('puts Cancel and Create Lineup in the pinned modal footer', () => {
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={vi.fn()} />);
+        for (const name of [/^cancel$/i, /create lineup/i]) {
+            const button = screen.getByRole('button', { name });
+            expect(button.closest('[data-testid="modal-footer"]')).not.toBeNull();
+        }
+    });
+
+    it('a successful create closes without the confirm', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        const title = screen.getByLabelText(/title/i);
+        await user.clear(title);
+        await user.type(title, 'Raid night');
+        await user.click(footerButton(/create lineup/i));
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirm()).not.toBeInTheDocument();
+    });
+
+    // Ruling 7: equivalent to the old `disabled` + "Creating..." text.
+    it('a pending create keeps its name: aria-busy, aria-disabled, click swallowed', async () => {
+        vi.mocked(useCreateLineup).mockReturnValue({
+            mutateAsync, isPending: true, isError: false, error: null,
+        } as unknown as ReturnType<typeof useCreateLineup>);
+        const user = userEvent.setup();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={vi.fn()} />);
+        const submit = footerButton(/create lineup/i);
+        expect(submit).toHaveAttribute('aria-busy', 'true');
+        expect(submit).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.queryByText(/creating/i)).not.toBeInTheDocument();
+        await user.click(submit);
+        expect(mutateAsync).not.toHaveBeenCalled();
+    });
+});

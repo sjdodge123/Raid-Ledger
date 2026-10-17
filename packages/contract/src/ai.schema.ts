@@ -1,0 +1,99 @@
+import { z } from 'zod';
+
+/** Schema for the AI provider status response. */
+export const AiStatusSchema = z.object({
+    provider: z.string(),
+    providerName: z.string(),
+    available: z.boolean(),
+    currentModel: z.string().nullable(),
+    selfHosted: z.boolean(),
+    dockerStatus: z.enum(['running', 'stopped', 'unknown']),
+});
+
+export type AiStatusDto = z.infer<typeof AiStatusSchema>;
+
+/** Per-feature usage breakdown entry. */
+export const AiFeatureUsageSchema = z.object({
+    feature: z.string(),
+    count: z.number(),
+    avgLatencyMs: z.number(),
+});
+
+export type AiFeatureUsageDto = z.infer<typeof AiFeatureUsageSchema>;
+
+/** Schema for AI usage statistics. */
+export const AiUsageSchema = z.object({
+    totalRequests: z.number(),
+    requestsToday: z.number(),
+    avgLatencyMs: z.number(),
+    errorRate: z.number(),
+    byFeature: z.array(AiFeatureUsageSchema),
+});
+
+export type AiUsageDto = z.infer<typeof AiUsageSchema>;
+
+/** Schema for the AI test-connection response. */
+export const AiTestConnectionSchema = z.object({
+    success: z.boolean(),
+    message: z.string(),
+    latencyMs: z.number().optional(),
+});
+
+export type AiTestConnectionDto = z.infer<typeof AiTestConnectionSchema>;
+
+/** Schema for a single AI provider's info (multi-provider management). */
+export const AiProviderInfoSchema = z.object({
+    key: z.string(),
+    displayName: z.string(),
+    requiresApiKey: z.boolean(),
+    selfHosted: z.boolean(),
+    configured: z.boolean(),
+    available: z.boolean(),
+    active: z.boolean(),
+    setupInProgress: z.boolean().optional(),
+    setupStep: z.string().optional(),
+    error: z.string().optional(),
+});
+
+export type AiProviderInfoDto = z.infer<typeof AiProviderInfoSchema>;
+
+/** Schema for the Ollama Docker setup progress response. */
+export const AiOllamaSetupSchema = z.object({
+    step: z.enum([
+        'checking',
+        'pulling_image',
+        'starting',
+        'pulling_model',
+        'ready',
+        'error',
+    ]),
+    message: z.string(),
+    success: z.boolean(),
+});
+
+export type AiOllamaSetupDto = z.infer<typeof AiOllamaSetupSchema>;
+
+/**
+ * Schema for configuring a provider (API key, URL, model).
+ *
+ * ROK-1366: bounded + `.strict()`. The controller persists every field via
+ * `settings.set()`, so an unbounded or unknown key from inside an admin
+ * session corrupts the settings cache. `url` is fetched server-side by the
+ * Ollama provider, so it is restricted to absolute http(s) URLs.
+ */
+export const AiProviderConfigSchema = z
+    .object({
+        apiKey: z.string().max(512).optional(),
+        url: z
+            .string()
+            .max(2048)
+            .url()
+            .refine((value) => /^https?:\/\//i.test(value), {
+                message: 'url must be an absolute http(s) URL',
+            })
+            .optional(),
+        model: z.string().max(256).optional(),
+    })
+    .strict();
+
+export type AiProviderConfigDto = z.infer<typeof AiProviderConfigSchema>;

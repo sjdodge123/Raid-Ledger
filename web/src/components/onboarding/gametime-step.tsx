@@ -1,0 +1,73 @@
+import { useEffect, useRef } from 'react';
+import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
+import { AwayPanel } from '../features/game-time/away/AwayPanel';
+import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
+import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
+
+/**
+ * Step 4: When Do You Play? (ROK-219).
+ * Reuses GameTimeGrid, which since ROK-1426 edits availability as blocks with
+ * drag handles rather than painted cells — one path for mouse and finger, so
+ * there is no separate mobile editor. Auto-saves when the user navigates away
+ * via the wizard footer. The "I'm away" panel (ROK-1585) is one line from
+ * 1024px and stacked below, since the wizard also runs on phones.
+ */
+function useAutoSaveOnUnmount(save: () => void, isDirty: boolean) {
+    const saveRef = useRef(save);
+    const isDirtyRef = useRef(isDirty);
+    useEffect(() => {
+        saveRef.current = save;
+        isDirtyRef.current = isDirty;
+    });
+    useEffect(() => {
+        return () => {
+            if (isDirtyRef.current) saveRef.current();
+        };
+    }, []);
+}
+
+function GameTimeStepHeader() {
+    return (
+        <div className="text-center mb-2">
+            <h2 className="text-lg font-bold text-foreground">When Do You Play?</h2>
+            <p className="text-muted text-sm mt-1">Add blocks for the hours you&apos;re free, then drag their handles to adjust.</p>
+        </div>
+    );
+}
+
+function GameTimeStepLoading() {
+    return (
+        <div className="text-center py-8">
+            <div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-dim text-sm">Loading...</p>
+        </div>
+    );
+}
+
+function GameTimeStepGrid({ slots, handleChange, tzLabel }: {
+    slots: ReturnType<typeof useGameTimeEditor>['slots'];
+    handleChange: ReturnType<typeof useGameTimeEditor>['handleChange']; tzLabel: string;
+}) {
+    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[9, 2]} compact noStickyOffset />;
+}
+
+export function GameTimeStep() {
+    const { slots, isLoading, isDirty, handleChange, save, tzLabel } = useGameTimeEditor({ enabled: true });
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
+    useAutoSaveOnUnmount(save, isDirty);
+
+    return (
+        <div>
+            <GameTimeStepHeader />
+            <div className="max-w-2xl mx-auto">
+                {isLoading ? <GameTimeStepLoading /> : (
+                    <>
+                        <GameTimeStepGrid slots={slots} handleChange={handleChange} tzLabel={tzLabel} />
+                        <div className="mt-3"><AwayPanel layout={isDesktop ? 'inline' : 'stacked'} /></div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}

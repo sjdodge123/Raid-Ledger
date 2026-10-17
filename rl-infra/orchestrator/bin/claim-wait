@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# ROK-1331 M5a — claim-wait: single-shot claim then long-poll the lease queue.
+#
+# Pattern mirrors test-plan wait — inotifywait on the per-slot queue dir
+# unblocks the caller within ~1s of any change. On every change, re-run
+# `claim` (which is the only thing that knows how to atomically transition
+# from "head of queue" to "owns the slot"). Returns on grant OR timeout.
+#
+# Args: [--timeout SECONDS]  (5..3600, default 600), [--branch NAME]
+# Required env: RL_AGENT_ID
+set -uo pipefail
+source "$(dirname "$0")/_state.sh"
+
+TIMEOUT=600
+BRANCH=""
+REQUESTED_SLOT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --timeout) TIMEOUT="$2"; shift 2 ;;
+        --branch)  BRANCH="$2"; shift 2 ;;
+        --slot)    REQUESTED_SLOT="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+[[ "$TIMEOUT" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_timeout"}' >&2; exit 2; }
+(( TIMEOUT >= 5 && TIMEOUT <= 3600 )) || { echo '{"ok":false,"error":"timeout_out_of_range"}' >&2; exit 2; }
+[[ -z "${RL_AGENT_ID:-}" ]] && { echo '{"ok":false,"error":"missing_agent_id"}' >&2; exit 2; }
+
+CLAIM_BIN="$(dirname "$0")/claim"
+run_claim() {
+    local args=()
+    [[ -n "$BRANCH" ]] && args+=(--branch "$BRANCH")
+    # Forward --slot on EVERY poll so a slot-pinned wait stays pinned. Without
+    # this the re-claims drop the pin, grab whatever slot frees first, and leave
+    # the original queue entry on the requested slot — risking a double grant
+    # when it later frees (Codex P1, 2026-06-02).
+    [[ -n "$REQUESTED_SLOT" ]] && args+=(--slot "$REQUESTED_SLOT")
+    "$CLAIM_BIN" "${args[@]+"${args[@]}"}"
+}
+
+# Step 1 — single-shot claim. If granted, return immediately.
+FIRST=$(run_claim 2>/dev/null || true)
+GRANTED_SLOT=$(jq -r '.slot // empty' <<<"$FIRST" 2>/dev/null || echo "")
+if [[ -n "$GRANTED_SLOT" ]]; then
+    echo "$FIRST"
+    exit 0
+fi
+
+# A hard error from claim (e.g. invalid_slot from a bad --slot) must NOT enter
+# the long-poll — it would never resolve. Surface it and stop. Enqueued
+# responses (ok:true, no .slot) fall through to the poll below.
+FIRST_ERR=$(jq -r 'if (.ok == false) and (.error != null) then .error else empty end' <<<"$FIRST" 2>/dev/null || echo "")
+if [[ -n "$FIRST_ERR" ]]; then
+    echo "$FIRST"
+    exit 2
+fi
+
+# Step 2 — long-poll. Pre-flight: inotifywait must be installed.
+if ! command -v inotifywait >/dev/null 2>&1; then
+    jq -nc '{ok:false, error:"inotifywait_not_installed", operator_only:true, hint:"inotify-tools is missing on the rl-infra VM. This is operator-only to install (apt-get install -y inotify-tools); agents cannot self-remediate. File a ticket or message the operator."}'
+    exit 0
+fi
+
+STARTED_AT=$(date +%s)
+DEADLINE=$(( STARTED_AT + TIMEOUT ))
+LAST_RESULT="$FIRST"
+
+while true; do
+    NOW_EPOCH=$(date +%s)
+    REMAINING=$(( DEADLINE - NOW_EPOCH ))
+    (( REMAINING <= 0 )) && break
+
+    # Wait for any change in the lease-queue dir (slot file written, moved
+    # in, deleted by env-destroy). -t for the inner timeout, -e for the
+    # events that matter.
+    set +e
+    timeout "$REMAINING" inotifywait -q -e close_write,moved_to,delete \
+        --timeout "$REMAINING" "$RL_LEASE_QUEUE_DIR" >/dev/null 2>&1
+    set -e
+
+    # Re-attempt claim on each wake (or on timeout — we'll detect and exit
+    # below). The claim binary is idempotent + correctly handles "head of
+    # queue" → "holds the slot" via the precondition mutate.
+    LAST_RESULT=$(run_claim 2>/dev/null || true)
+    GRANTED_SLOT=$(jq -r '.slot // empty' <<<"$LAST_RESULT" 2>/dev/null || echo "")
+    if [[ -n "$GRANTED_SLOT" ]]; then
+        echo "$LAST_RESULT"
+        exit 0
+    fi
+done
+
+# Timed out — emit the last queued-shape response with wait_timed_out:true.
+WAITED=$(( $(date +%s) - STARTED_AT ))
+echo "$LAST_RESULT" | jq -c --argjson w "$WAITED" '. + {wait_timed_out:true, waited_seconds:$w}'

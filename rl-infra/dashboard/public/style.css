@@ -1,0 +1,1122 @@
+/* rl-fleet dashboard — mobile-first, dark-mode-by-default. */
+:root {
+  --bg: #0b1220;
+  --bg-elev: #131c2f;
+  --bg-elev-2: #1c2742;
+  --fg: #e5ecf5;
+  --fg-muted: #8b9bb4;
+  --accent: #5eb8ff;
+  --accent-2: #7fd8a3;
+  --danger: #ff6b8b;
+  --warn: #ffc55c;
+  --border: #243150;
+  --radius: 14px;
+  --gap: 12px;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+/* HTML's [hidden] attribute normally sets display:none, but ANY explicit
+   `display:` rule on the same element overrides it (CSS specificity wins
+   over the user-agent default). The tester route hides operator-header /
+   operator-main via .hidden=true; restore the expected semantics so the
+   tester surface is operator-chrome-free. */
+[hidden] { display: none !important; }
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: rgba(11, 18, 32, 0.85);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+h2 {
+  margin: 24px 16px 12px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+.muted { color: var(--fg-muted); font-weight: 400; }
+
+main { padding-bottom: 96px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+  padding: 0 16px;
+}
+/* ROK-1337 — mobile overflow guard. CSS Grid tracks default to min-content
+   sizing, so a long unbreakable task arg (e.g.
+   `rl_validate_ci bash /workspace/scripts/validate-ci.sh '--no-e2e'`)
+   forces the 1fr track wider than the viewport. `min-width: 0` lets the
+   track shrink and `overflow-wrap: anywhere` lets the offending string
+   wrap mid-token instead of pushing the card. */
+.grid > * { min-width: 0; }
+.card { overflow-wrap: anywhere; word-break: break-word; }
+@media (min-width: 640px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 960px) {
+  .grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.card {
+  display: block;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+.card.link:active {
+  background: var(--bg-elev-2);
+  transform: scale(0.985);
+}
+/* ROK-1337 — TESTS section entry cards on the operator dashboard. Brighter
+   accent border so testers see them first on fleet.gamernight.net. */
+.test-card { border-color: rgba(59, 130, 246, 0.35); }
+.test-card:hover { background: var(--bg-elev-2); border-color: rgba(59, 130, 246, 0.55); }
+.test-card .test-card-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.test-card .test-card-head .story-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12); color: var(--accent, #3b82f6);
+  font-size: 12px; font-weight: 600; text-decoration: none;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+.test-card .test-card-status {
+  margin-left: auto;
+  font-size: 12px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12); color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.test-card .test-card-status.ok {
+  background: rgba(16, 185, 129, 0.12); color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.test-card .goal { font-size: 16px; font-weight: 600; line-height: 1.3; }
+/* ROK-1575 — header above a slug that holds SEVERAL plan cards. A slug with
+   one plan gets no header at all, so the common case looks unchanged. */
+.test-slug-header {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 6px 0 -2px;
+}
+
+.test-card-meta { font-size: 12px; margin-top: 6px; }
+.card-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 6px;
+  font-size: 14px;
+}
+.card-row .key { color: var(--fg-muted); }
+.card-row .val { font-variant-numeric: tabular-nums; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.badge.idle  { background: rgba(139, 155, 180, 0.18); color: var(--fg-muted); }
+.badge.busy  { background: rgba(255, 197, 92, 0.20); color: var(--warn); }
+.badge.ready { background: rgba(127, 216, 163, 0.20); color: var(--accent-2); }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.actions a {
+  flex: 1 1 auto;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.actions a:active { background: rgba(94, 184, 255, 0.15); }
+.actions a.secondary {
+  flex: 0 0 auto;
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.empty {
+  grid-column: 1 / -1;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  margin: 0 16px;
+}
+
+.refresh-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 0 0 rgba(127, 216, 163, 0.6);
+}
+.refresh-indicator.pulse {
+  animation: pulse 0.6s ease-out;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(127, 216, 163, 0.8); }
+  100% { box-shadow: 0 0 0 18px rgba(127, 216, 163, 0); }
+}
+.refresh-indicator.error { background: var(--danger); }
+
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px max(env(safe-area-inset-bottom), 14px);
+  background: rgba(11, 18, 32, 0.9);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- Test plan section (per env card) ----- */
+.plan-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.plan-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.plan-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.35;
+  flex: 1 1 auto;
+  /* Long titles soft-wrap inside the card instead of clipping. */
+  overflow-wrap: anywhere;
+}
+.plan-steps { display: flex; flex-direction: column; gap: 6px; }
+
+/* Top-of-plan "clear form" affordance — always visible, large tap target on
+   mobile so the tester can wipe their local draft without scrolling to the
+   submit footer. Operator preference: manual reset, not auto-on-submit. */
+.plan-top-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 10px;
+}
+.btn-clear-form {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  cursor: pointer;
+  min-height: 40px;
+}
+.btn-clear-form:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--fg);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.btn-clear-form:active { transform: translateY(1px); }
+.plan-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+.plan-step.verdict-pass { background: rgba(127, 216, 163, 0.08); border-color: rgba(127, 216, 163, 0.4); }
+.plan-step.verdict-fail { background: rgba(255, 107, 107, 0.08); border-color: rgba(255, 107, 107, 0.4); }
+.plan-step.verdict-skip { background: rgba(255, 200, 100, 0.06); border-color: rgba(255, 200, 100, 0.3); }
+.plan-step.locked { opacity: 0.45; }
+.step-id {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  padding-top: 4px;
+  min-width: 28px;
+}
+.step-desc { flex: 1; min-width: 0; }
+/* ROK-1326 fix-6: long URL-encoded tokens (e.g. redirect_uri=https%3A%2F%2F...)
+   have no natural wrap boundaries; without `overflow-wrap: anywhere` they push
+   the card width past the viewport on mobile. `word-break: break-word` keeps
+   normal English wrapping, `overflow-wrap: anywhere` allows mid-token breaks
+   on long tokens. `.step-inline-link` is the auto-linkified URL anchor (also
+   fix-5) which has the same problem when the URL is long. */
+.step-text { font-size: 14px; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
+.step-expected {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-top: 4px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  /* Cap a single step's expected text so a paste-heavy step doesn't shove
+     siblings off-screen on mobile. Tester can scroll the inner block.
+     Bumped 7em -> 12em so iOS Safari's overflow scrollbar isn't hidden. */
+  max-height: 12em;
+  overflow-y: auto;
+}
+.step-inline-link { word-break: break-all; overflow-wrap: anywhere; }
+.step-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.step-buttons button {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg);
+  cursor: pointer;
+  font-weight: 600;
+  min-width: 64px;
+  touch-action: manipulation;
+}
+/* ROK-1336 #5 — sequential ordering means later-step verdict buttons are
+   disabled until the prior step has a draft. Old style was opacity:0.4 only,
+   which on dark backgrounds looks ~indistinguishable from the enabled state.
+   Stronger visuals + a lock icon prefix tell tap-happy testers "no, set the
+   one above first". The `title` attribute on the disabled button (set in
+   app.js) covers desktop hover; mobile relies on the visual signal alone. */
+.step-buttons button:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  filter: grayscale(80%);
+  pointer-events: none;
+}
+.step-buttons .btn-pass:disabled,
+.step-buttons .btn-fail:disabled,
+.step-buttons .btn-skip:disabled {
+  /* Solid-looking but obviously inert. Border + background flatten to a
+     neutral so they don't read as a colored verdict button. */
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
+}
+.step-buttons .btn-pass:disabled::before,
+.step-buttons .btn-fail:disabled::before,
+.step-buttons .btn-skip:disabled::before {
+  content: "🔒 ";
+  font-size: 0.85em;
+  margin-right: 2px;
+}
+/* Gate verdict-button hover on real pointers only. On touch devices,
+   :hover stays applied to the last-tapped element until you tap elsewhere
+   (sticky hover). With the hover fill at 0.2 alpha and the .selected fill
+   at 0.3 alpha, a double-tap toggle-off looked nearly identical to still-
+   selected because hover lingered after .selected was removed — the row
+   border + form lock said "unselected" but the button still looked picked. */
+@media (hover: hover) and (pointer: fine) {
+  .step-buttons .btn-pass:hover:not(:disabled) { background: rgba(127, 216, 163, 0.2); border-color: rgba(127, 216, 163, 0.6); }
+  .step-buttons .btn-fail:hover:not(:disabled) { background: rgba(255, 107, 107, 0.2); border-color: rgba(255, 107, 107, 0.6); }
+  .step-buttons .btn-skip:hover:not(:disabled) { background: rgba(255, 200, 100, 0.2); border-color: rgba(255, 200, 100, 0.6); }
+}
+.step-history {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+}
+.step-history span {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.step-history .hist-pass { color: #7fd8a3; }
+.step-history .hist-fail { color: #ff6b6b; }
+.step-history .hist-skip { color: #ffc864; }
+
+/* Per-step deep link — block-level button below the step description so the
+   tap target is unambiguous on mobile. Inline "↗" arrow read as decoration. */
+.step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  color: #5eb8ff;
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(94, 184, 255, 0.08);
+  border: 1px solid rgba(94, 184, 255, 0.35);
+}
+@media (hover: hover) and (pointer: fine) {
+  .step-link:hover {
+    background: rgba(94, 184, 255, 0.18);
+    border-color: rgba(94, 184, 255, 0.7);
+    color: #7fc8ff;
+  }
+}
+
+/* Reset button + pending-reset banner */
+.step-buttons .btn-reset {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(255, 200, 100, 0.08);
+  border-color: rgba(255, 200, 100, 0.3);
+  color: #ffc864;
+  min-width: 64px;
+  margin-top: 4px;
+}
+.step-buttons .btn-reset:hover:not(:disabled) {
+  background: rgba(255, 200, 100, 0.2);
+  border-color: rgba(255, 200, 100, 0.6);
+}
+.plan-step.reset-pending {
+  border-color: rgba(255, 200, 100, 0.6);
+  background: rgba(255, 200, 100, 0.04);
+}
+.step-reset-banner {
+  font-size: 12px;
+  color: #ffc864;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255, 200, 100, 0.1);
+  border-left: 3px solid #ffc864;
+}
+
+/* Selected verdict in the draft (before submit) */
+.step-buttons .btn-pass.selected {
+  background: rgba(127, 216, 163, 0.3);
+  border-color: rgba(127, 216, 163, 0.9);
+  box-shadow: 0 0 0 1px rgba(127, 216, 163, 0.6) inset;
+}
+.step-buttons .btn-fail.selected {
+  background: rgba(255, 107, 107, 0.3);
+  border-color: rgba(255, 107, 107, 0.9);
+  box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.6) inset;
+}
+.step-buttons .btn-skip.selected {
+  background: rgba(255, 200, 100, 0.3);
+  border-color: rgba(255, 200, 100, 0.9);
+  box-shadow: 0 0 0 1px rgba(255, 200, 100, 0.6) inset;
+}
+.plan-step.has-draft {
+  /* subtle indicator that this step has an unsent verdict */
+  border-left: 3px solid rgba(94, 184, 255, 0.6);
+}
+
+/* Submit / draft footer */
+.plan-footer {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(94, 184, 255, 0.04);
+  border: 1px solid rgba(94, 184, 255, 0.2);
+}
+.plan-footer-status {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-bottom: 8px;
+}
+.plan-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-submit {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 5px;
+  background: rgba(94, 184, 255, 0.2);
+  border: 1px solid rgba(94, 184, 255, 0.5);
+  color: #5eb8ff;
+  cursor: pointer;
+  flex: 1;
+}
+.btn-submit:hover:not(:disabled) {
+  background: rgba(94, 184, 255, 0.35);
+  border-color: rgba(94, 184, 255, 0.8);
+}
+.btn-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-clear-draft {
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.btn-clear-draft:hover { background: rgba(255, 255, 255, 0.1); }
+.plan-submissions {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+}
+.subs-label { color: var(--fg-muted); margin-bottom: 4px; }
+.subs-entry {
+  padding: 3px 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+
+/* Orphan plan styling (plan with no live env) */
+.orphans-header {
+  margin: 24px 0 12px;
+  font-size: 14px;
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+.card.orphan-plan { opacity: 0.85; }
+.card.orphan-plan .badge.stale {
+  background: rgba(255, 200, 100, 0.2);
+  color: #ffc864;
+}
+.orphan-note { font-size: 12px; color: var(--fg-muted); line-height: 1.4; }
+
+/* ----- Mobile-friendly overrides for test-plan UI ----- */
+/* Apple/Material recommend ≥44px touch targets. Default step buttons
+   were too small and stacked vertically — hard to thumb-tap on a phone. */
+
+.plan-step {
+  /* More breathing room on small screens; align items to top for clean
+     wrap when the description spans multiple lines. */
+  flex-wrap: wrap;
+}
+.step-buttons {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+.step-buttons button {
+  flex: 1 1 auto;
+  min-height: 44px;
+  min-width: 76px;
+  font-size: 14px;
+  padding: 10px 14px;
+}
+/* Reset button stays secondary — full width on its own row, smaller font */
+.step-buttons .btn-reset {
+  flex-basis: 100%;
+  min-height: 38px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Mobile: full-width Link-to-Test for an unambiguous tap target. Desktop
+   reverts to the auto-width pill inside the desktop @media block below. */
+.step-link {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  min-height: 44px;
+  font-size: 14px;
+  padding: 12px 16px;
+  margin-top: 10px;
+}
+
+/* Submit button — prominent on mobile */
+.btn-submit {
+  min-height: 48px;
+  font-size: 15px;
+  padding: 12px 18px;
+}
+.btn-clear-draft {
+  min-height: 48px;
+  padding: 12px 14px;
+}
+/* Make the top-of-plan clear-form button full-width + thumb-friendly on
+   phone-class viewports. Desktop keeps the right-aligned compact pill. */
+.plan-top-actions { justify-content: stretch; }
+.btn-clear-form {
+  width: 100%;
+  min-height: 48px;
+  font-size: 14px;
+  padding: 12px 16px;
+}
+
+/* On wider screens (≥640px), revert to the original vertical column layout
+   for compactness — desktop has the screen space for it. */
+@media (min-width: 640px) {
+  .plan-step { flex-wrap: nowrap; }
+  .step-buttons {
+    flex-direction: column;
+    width: auto;
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+  .step-buttons button {
+    flex: 0 0 auto;
+    min-height: 0;
+    min-width: 64px;
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  .step-buttons .btn-reset {
+    flex-basis: auto;
+    min-height: 0;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .step-link {
+    display: inline-flex;
+    width: auto;
+    min-height: 0;
+    font-size: 13px;
+    padding: 6px 12px;
+    margin-top: 8px;
+  }
+  .plan-top-actions { justify-content: flex-end; }
+  .btn-clear-form {
+    width: auto;
+    min-height: 0;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+}
+
+/* Auto-refresh paused (when a draft exists in localStorage) — distinct
+   from the green pulse + the red error state. */
+.refresh-indicator.paused {
+  background: #ffc864;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Comment button — distinct, low-emphasis visual treatment */
+.step-buttons .btn-comment {
+  flex-basis: 100%;
+  min-height: 38px;
+  font-size: 12px;
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border);
+  color: var(--fg-muted);
+}
+.step-buttons .btn-comment:hover {
+  background: rgba(94, 184, 255, 0.1);
+  color: #5eb8ff;
+  border-color: rgba(94, 184, 255, 0.4);
+}
+@media (min-width: 640px) {
+  .step-buttons .btn-comment {
+    flex-basis: auto;
+    min-height: 0;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+}
+
+/* ----- Comment modal ----- */
+.rl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  padding-bottom: max(env(safe-area-inset-bottom), 16px);
+}
+.rl-modal {
+  background: #0f1a2c;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rl-modal-title { margin: 0; font-size: 16px; font-weight: 600; }
+.rl-modal-sub { margin: 0; font-size: 12px; color: var(--fg-muted); line-height: 1.4; }
+.rl-modal-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+/* ROK-1336 #4 — askTesterNameModal() input. Single-line variant of
+   rl-modal-textarea; same aesthetic so it looks native to the existing
+   modal chrome. font-size 16px on the input prevents iOS Safari from
+   auto-zooming when the field is focused (Safari zooms anything <16px). */
+.rl-modal-input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+.rl-modal-filerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rl-modal-filebtn {
+  padding: 8px 14px;
+  border-radius: 5px;
+  background: rgba(94, 184, 255, 0.1);
+  border: 1px solid rgba(94, 184, 255, 0.4);
+  color: #5eb8ff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+}
+.rl-modal-filebtn:hover { background: rgba(94, 184, 255, 0.2); }
+.rl-modal-filename { font-size: 12px; color: var(--fg-muted); }
+.rl-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.rl-modal .btn-cancel,
+.rl-modal .btn-submit {
+  padding: 10px 18px;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.rl-modal .btn-cancel { background: rgba(255, 255, 255, 0.05); color: var(--fg-muted); }
+.rl-modal .btn-submit { background: rgba(94, 184, 255, 0.2); border-color: rgba(94, 184, 255, 0.5); color: #5eb8ff; }
+.rl-modal .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Pull-to-refresh indicator (custom, replaces native iOS behavior) */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(94, 184, 255, 0.25), rgba(94, 184, 255, 0.05));
+  color: #5eb8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 0.15s;
+  z-index: 999;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ROK-1331 M3 — per-slot task list (under each claimed slot's actions row). */
+.slot-tasks {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+.slot-tasks-empty {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  font-variant-numeric: tabular-nums;
+}
+.task-row.task-row-running { background: rgba(94, 184, 255, 0.08); }
+.task-row.task-row-succeeded,
+.task-row.task-row-failed,
+.task-row.task-row-cancelled { opacity: 0.55; }
+.task-row.task-row-failed .task-marker { color: var(--danger); }
+.task-row.task-row-cancelled .task-marker { color: var(--fg-muted); }
+.task-row.task-row-succeeded .task-marker { color: var(--accent-2); }
+.task-row.task-row-running .task-marker { color: var(--accent); }
+.task-tool {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-elapsed { color: var(--fg-muted); }
+
+/* ROK-1331 M5b — lease queue depth + claim TTL + pin badge */
+.lease-queue { color: #ffc864; font-variant-numeric: tabular-nums; font-weight: 600; }
+.claim-ttl { color: #5eb8ff; font-variant-numeric: tabular-nums; }
+.claim-ttl.expired { color: #ff6b6b; font-weight: 700; }
+.pin-badge { margin-left: 4px; font-size: 14px; line-height: 1; cursor: help; }
+
+/* ROK-1336 #4 follow-up — top-of-viewport toast for submit success/failure
+   feedback. Replaces the previous alert() popups (mobile-hostile) and the
+   previous silent-success (worse). 3s self-dismiss with a fade. */
+.rl-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  max-width: 90vw;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+.rl-toast-success { background: rgba(40, 100, 60, 0.95); border: 1px solid rgba(127, 216, 163, 0.7); }
+.rl-toast-error   { background: rgba(120, 30, 30, 0.95); border: 1px solid rgba(255, 107, 107, 0.7); }
+.rl-toast-warn    { background: rgba(120, 90, 20, 0.95); border: 1px solid rgba(255, 200, 100, 0.7); }
+.rl-toast-fade { opacity: 0; }
+
+/* ============================================================ */
+/* ROK-1337 — Tester page (multi-plan IA per wireframe).         */
+/* Mobile-first; phones see a single 414px-max column. Tokens    */
+/* are local-scoped under #tester-page so the operator route's   */
+/* existing palette is untouched.                                */
+/* ============================================================ */
+#tester-page {
+  --tp-bg: #0e1218;
+  --tp-surface: #161c25;
+  --tp-surface-2: #1f2733;
+  --tp-line: #232c39;
+  --tp-text: #e5ebf3;
+  --tp-text-2: #9aa6b8;
+  --tp-text-3: #6b7689;
+  --tp-amber: #f59e0b;
+  --tp-green: #10b981;
+  --tp-slate: #64748b;
+  --tp-gray: #475569;
+  --tp-accent: #3b82f6;
+  --tp-red: #ef4444;
+  --tp-radius: 10px;
+  --tp-radius-sm: 6px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 14px 80px;
+  background: var(--tp-bg);
+  color: var(--tp-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+#tester-page * { box-sizing: border-box; }
+#tester-page section { margin: 0; padding: 0; }
+
+/* Status pill */
+#tester-page .pill {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: var(--tp-radius);
+  font-size: 14px; font-weight: 500; margin-bottom: 16px;
+  border: 1px solid transparent;
+}
+#tester-page .pill .ico { font-size: 16px; }
+#tester-page .pill .refresh {
+  margin-left: auto; font-size: 13px; color: inherit;
+  text-decoration: underline; cursor: pointer; background: none;
+  border: 0; padding: 0; font: inherit;
+}
+#tester-page .pill-amber   { background: rgba(245, 158, 11, 0.10); color: var(--tp-amber); border-color: rgba(245, 158, 11, 0.25); }
+#tester-page .pill-slate   { background: rgba(100, 116, 139, 0.12); color: var(--tp-slate); border-color: rgba(100, 116, 139, 0.25); }
+#tester-page .pill-green   { background: rgba(16, 185, 129, 0.10); color: var(--tp-green); border-color: rgba(16, 185, 129, 0.25); }
+#tester-page .pill-gray    { background: rgba(71, 85, 105, 0.12); color: var(--tp-gray); border-color: rgba(71, 85, 105, 0.25); }
+#tester-page .pill-refresh { background: rgba(245, 158, 11, 0.10); color: var(--tp-amber); border-color: rgba(245, 158, 11, 0.25); }
+
+/* Section label */
+#tester-page .sec-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--tp-text-3); margin: 14px 4px 8px;
+}
+
+/* Plan card */
+#tester-page .card {
+  background: var(--tp-surface); border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius); padding: 14px; margin-bottom: 12px;
+}
+#tester-page .card-now  { border-color: rgba(59, 130, 246, 0.35); }
+#tester-page .card-also { padding: 12px 14px; cursor: pointer; }
+#tester-page .card-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+#tester-page .story-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12); color: var(--tp-accent);
+  font-size: 12px; font-weight: 600; text-decoration: none;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+#tester-page .story-chip:hover { background: rgba(59, 130, 246, 0.20); }
+#tester-page .goal {
+  font-size: 17px; font-weight: 600; color: var(--tp-text);
+  margin: 0; line-height: 1.3;
+}
+#tester-page .card-also .goal { font-size: 15px; }
+#tester-page .card-meta { font-size: 12px; color: var(--tp-text-3); margin-top: 6px; }
+
+/* Step row — whole row is clickable to expand (ROK-1337 follow-up). */
+#tester-page .step {
+  padding: 12px 0; border-top: 1px solid var(--tp-line);
+  cursor: pointer;
+}
+#tester-page .step:focus-visible {
+  outline: 2px solid var(--tp-accent); outline-offset: -2px;
+  border-radius: var(--tp-radius-sm);
+}
+#tester-page .step:hover { background: rgba(255, 255, 255, 0.015); }
+#tester-page .step.open { background: rgba(59, 130, 246, 0.04); }
+#tester-page .step:first-of-type { margin-top: 4px; }
+#tester-page .step-head { display: flex; align-items: flex-start; gap: 10px; }
+#tester-page .step-n {
+  color: var(--tp-text-3); font-size: 13px;
+  font-variant-numeric: tabular-nums; min-width: 20px;
+}
+#tester-page .step-body { flex: 1; min-width: 0; }
+#tester-page .step-desc { font-size: 14px; color: var(--tp-text); line-height: 1.4; }
+#tester-page .step-expected {
+  font-size: 12.5px; color: var(--tp-text-2); font-style: italic;
+  margin-top: 2px; padding-left: 8px; border-left: 2px solid var(--tp-line);
+}
+#tester-page .step-actions {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
+#tester-page .verdict {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 36px; height: 30px; padding: 0 8px;
+  border-radius: var(--tp-radius-sm); font-size: 12px; font-weight: 600;
+  background: var(--tp-surface-2); color: var(--tp-text-2);
+  border: 1px solid var(--tp-line); cursor: pointer; user-select: none;
+}
+#tester-page .verdict:focus-visible { outline: 2px solid var(--tp-accent); outline-offset: 2px; }
+#tester-page .verdict.pass.active { background: rgba(16, 185, 129, 0.15); color: var(--tp-green); border-color: rgba(16, 185, 129, 0.35); }
+#tester-page .verdict.fail.active { background: rgba(239, 68, 68, 0.15); color: var(--tp-red); border-color: rgba(239, 68, 68, 0.35); }
+#tester-page .verdict.skip.active { background: rgba(100, 116, 139, 0.20); color: var(--tp-slate); border-color: rgba(100, 116, 139, 0.35); }
+#tester-page .verdict[disabled] { opacity: 0.45; cursor: not-allowed; }
+#tester-page .step-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 36px; height: 30px; padding: 0 8px;
+  background: var(--tp-surface-2); color: var(--tp-text-2);
+  border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm);
+  font-size: 18px; line-height: 1; cursor: pointer; user-select: none;
+}
+#tester-page .step-toggle:hover { color: var(--tp-text); border-color: var(--tp-accent); }
+#tester-page .step-toggle:focus-visible { outline: 2px solid var(--tp-accent); outline-offset: 2px; }
+/* ROK-1337 follow-up — test URL is the primary CTA. Full-width labeled
+   button under the step description, prominent accent color so the eye
+   lands on it first. */
+#tester-page .step-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 44px; padding: 10px 14px;
+  margin-top: 10px;
+  background: var(--tp-accent); color: #fff;
+  border: 1px solid var(--tp-accent); border-radius: var(--tp-radius-sm);
+  text-decoration: none; font-size: 14px; font-weight: 600;
+  letter-spacing: 0.01em; user-select: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+#tester-page .step-link:hover { background: #2563eb; border-color: #2563eb; }
+#tester-page .step-link:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+#tester-page .step-link:active { transform: translateY(1px); }
+
+/* Drawer */
+#tester-page .drawer {
+  margin-top: 12px; padding: 12px;
+  background: var(--tp-surface-2); border-radius: var(--tp-radius-sm);
+  border: 1px solid var(--tp-line); display: grid; gap: 12px;
+}
+#tester-page .drawer-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--tp-text-3); margin: 0 0 6px;
+}
+#tester-page .drawer-textarea {
+  width: 100%; background: var(--tp-bg); color: var(--tp-text);
+  border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm);
+  padding: 8px 10px; font-family: inherit; font-size: 13px;
+  resize: vertical; min-height: 56px;
+}
+#tester-page .drawer-textarea::placeholder { color: var(--tp-text-3); }
+#tester-page .attach-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; flex-wrap: wrap;
+}
+#tester-page .attach-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--tp-text-2);
+  background: transparent; border: 1px dashed var(--tp-line);
+  border-radius: var(--tp-radius-sm); padding: 6px 10px; cursor: pointer;
+}
+#tester-page .thumb {
+  width: 44px; height: 44px; background: linear-gradient(135deg, #2a3447 0%, #1a2230 100%);
+  border-radius: var(--tp-radius-sm); border: 1px solid var(--tp-line);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--tp-text-3); font-size: 10px; overflow: hidden;
+}
+#tester-page .thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+#tester-page .reset-row {
+  display: flex; align-items: center; gap: 10px;
+  padding-top: 8px; border-top: 1px dashed var(--tp-line);
+}
+#tester-page .reset-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 10px; border-radius: var(--tp-radius-sm);
+  background: rgba(245, 158, 11, 0.08); color: var(--tp-amber);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 12px; cursor: pointer;
+}
+#tester-page .reset-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+#tester-page .reset-hint {
+  font-size: 11.5px; color: var(--tp-text-3); flex: 1; min-width: 0;
+}
+
+/* Also Active dot row */
+#tester-page .dot-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+#tester-page .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tp-line); }
+#tester-page .dot.pass { background: var(--tp-green); }
+#tester-page .dot.fail { background: var(--tp-red); }
+#tester-page .dot.skip { background: var(--tp-slate); }
+#tester-page .dot-meta { font-size: 12px; color: var(--tp-text-3); margin-left: 4px; }
+#tester-page .tap-hint { font-size: 12px; color: var(--tp-text-2); margin-top: 8px; }
+
+/* Submit footer (within card) */
+#tester-page .submit-bar {
+  margin-top: 14px; padding: 12px;
+  background: var(--tp-surface-2); border-radius: var(--tp-radius);
+  border: 1px solid var(--tp-line);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+#tester-page .submit-bar .label { font-size: 13px; color: var(--tp-text-2); }
+#tester-page .submit-bar .label strong { color: var(--tp-text); }
+#tester-page .submit-btn {
+  background: var(--tp-accent); color: white; border: 0;
+  border-radius: var(--tp-radius-sm); padding: 10px 16px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+#tester-page .submit-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* DONE TODAY — collapsed by default */
+#tester-page .done-section { margin-top: 14px; }
+#tester-page .done-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 4px; cursor: pointer; color: var(--tp-text-2);
+  font-size: 13px; font-weight: 500; border-top: 1px solid var(--tp-line);
+  background: none; border-left: 0; border-right: 0; border-bottom: 0;
+  width: 100%; text-align: left; font-family: inherit;
+}
+#tester-page .done-header .chev { font-size: 13px; color: var(--tp-text-3); }
+#tester-page .done-list { padding: 4px 0 0; }
+#tester-page .done-list[hidden] { display: none; }
+#tester-page .done-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 6px; font-size: 13px; color: var(--tp-text-2);
+  border-bottom: 1px solid var(--tp-line);
+}
+#tester-page .done-row:last-child { border-bottom: 0; }
+#tester-page .done-row .story-chip { font-size: 11px; padding: 1px 6px; }
+#tester-page .done-row .status-ok   { color: var(--tp-green); font-weight: 700; }
+#tester-page .done-row .status-fail { color: var(--tp-red); font-weight: 700; }
+#tester-page .done-row .counts { font-variant-numeric: tabular-nums; color: var(--tp-text-3); font-size: 12px; }
+#tester-page .done-row .when { color: var(--tp-text-3); font-size: 12px; margin-left: auto; }
+#tester-page .show-more {
+  display: block; text-align: center; padding: 8px;
+  color: var(--tp-accent); font-size: 12px; cursor: pointer;
+  background: none; border: 0; width: 100%; font-family: inherit;
+}
+
+/* Empty / loading copy */
+#tester-page .empty {
+  text-align: center; color: var(--tp-text-3);
+  padding: 24px 12px; font-size: 13px;
+}

@@ -1,0 +1,133 @@
+import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { DrizzleModule } from './drizzle/drizzle.module';
+import { ConfigModule } from '@nestjs/config';
+import { PerfLoggingInterceptor } from './common/perf-logging.interceptor';
+import { PerfMemoryMonitor } from './common/perf-memory-monitor';
+
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
+import { AdminModule } from './admin/admin.module';
+import { IgdbModule } from './igdb/igdb.module';
+import { EventsModule } from './events/events.module';
+import { CharactersModule } from './characters/characters.module';
+import { AvailabilityModule } from './availability/availability.module';
+import { RedisModule } from './redis/redis.module';
+import { SystemModule } from './system/system.module';
+import { SettingsModule } from './settings/settings.module';
+import { NotificationModule } from './notifications/notification.module';
+import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
+import { WowCommonModule } from './plugins/wow-common';
+import { GuildsCoreModule } from './guilds/guilds-core.module';
+import { DiscordModule } from './plugins/discord';
+import { PelicanModule } from './plugins/pelican';
+import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
+import { ValheimModule } from './plugins/valheim';
+import { RateLimitModule } from './throttler/throttler.module';
+import { QueueModule } from './queue/queue.module';
+import { RelayModule } from './relay/relay.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { VersionModule } from './version/version.module';
+import { DiscordBotModule } from './discord-bot/discord-bot.module';
+import { AdHocServerPresenceModule } from './discord-bot/ad-hoc-server-presence.module';
+import { AiChatModule } from './discord-bot/ai-chat/ai-chat.module';
+import { SentryModule } from '@sentry/nestjs/setup';
+import { SentryEnvModule } from './sentry/sentry-env.module';
+import { CronJobModule } from './cron-jobs/cron-job.module';
+import { BackupModule } from './backup/backup.module';
+import { EnrichmentsModule } from './enrichments/enrichments.module';
+import { SteamModule } from './steam/steam.module';
+import { ItadModule } from './itad/itad.module';
+import { CooptimusModule } from './cooptimus/cooptimus.module';
+import { LogsModule } from './logs/logs.module';
+import { AiModule } from './ai/ai.module';
+import { LineupsModule } from './lineups/lineups.module';
+import { SchedulingModule } from './lineups/scheduling/scheduling.module';
+import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.module';
+import { LfgModule } from './lfg/lfg.module';
+import { LfmEmbedModule } from './discord-bot/lfm/lfm-embed.module';
+import { LfgBoardModule } from './discord-bot/lfg-board/lfg-board.module';
+import { ThreadMirrorModule } from './discord-bot/thread-mirror/thread-mirror.module';
+import { TasteProfileModule } from './taste-profile/taste-profile.module';
+import { GameTasteModule } from './game-taste/game-taste.module';
+import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
+import { CommunityInsightsModule } from './community-insights/community-insights.module';
+import { SlowQueriesModule } from './slow-queries/slow-queries.module';
+import { CspReportModule } from './csp-report/csp-report.module';
+import { GamesLookupModule } from './games-lookup/games-lookup.module';
+import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
+import { API_ENV_FILE } from './sentry/telemetry-policy';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: API_ENV_FILE }),
+    EventEmitterModule.forRoot({ maxListeners: 50 }),
+    ScheduleModule.forRoot(),
+    RateLimitModule,
+    QueueModule,
+    DrizzleModule,
+    RedisModule,
+    PluginHostModule,
+    // ROK-466: CharactersModule MUST come before UsersModule so that
+    // GET /users/me/characters (specific) registers before
+    // GET /users/:id/characters (parameterized) in UsersController.
+    CharactersModule,
+    UsersModule,
+    AuthModule,
+    AdminModule,
+    IgdbModule,
+    EventsModule,
+    AvailabilityModule,
+    SystemModule,
+    SettingsModule,
+    NotificationModule,
+    EnrichmentsModule,
+    GuildsCoreModule,
+    WowCommonModule,
+    DiscordModule,
+    RelayModule,
+    FeedbackModule,
+    VersionModule,
+    DiscordBotModule,
+    AdHocServerPresenceModule,
+    AiChatModule,
+    SentryModule.forRoot(),
+    SentryEnvModule,
+    CronJobModule,
+    BackupModule,
+    SteamModule,
+    ItadModule,
+    CooptimusModule,
+    LogsModule,
+    AiModule,
+    PelicanModule,
+    ServerPresenceReaderModule,
+    ValheimModule,
+    SchedulingModule,
+    LineupsModule,
+    StandalonePollModule,
+    LfgModule,
+    LfmEmbedModule,
+    LfgBoardModule,
+    ThreadMirrorModule,
+    TasteProfileModule,
+    GameTasteModule,
+    DiscoveryCategoriesModule,
+    CommunityInsightsModule,
+    SlowQueriesModule,
+    CspReportModule,
+    GamesLookupModule,
+    CalendarSyncModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    { provide: APP_INTERCEPTOR, useClass: PerfLoggingInterceptor },
+    PerfMemoryMonitor,
+  ],
+})
+export class AppModule {}

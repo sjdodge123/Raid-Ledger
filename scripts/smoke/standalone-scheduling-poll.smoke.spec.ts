@@ -1,0 +1,844 @@
+/**
+ * Standalone Scheduling Poll smoke tests (ROK-977).
+ *
+ * Verifies the two UI entry points for standalone scheduling polls:
+ *   1. "Schedule a Game" button on the events page toolbar
+ *   2. "Poll for Best Time" in the reschedule modal
+ *
+ * Acceptance Criteria covered:
+ *   AC7:  Events page has "Schedule a Game" button visible to all members
+ *   AC8:  CreatePollModal: game picker + member picker
+ *   AC9:  After creating poll from events page, navigate to scheduling poll page
+ *   AC10: RescheduleModal "Poll for Best Time" creates standalone poll
+ *   AC11: After creating poll from reschedule, navigate to scheduling poll page
+ *   AC12: Existing scheduling poll page works for standalone polls
+ */
+import { test, expect } from './base';
+import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiDelete,
+    apiGet,
+    apiPatch,
+    apiPost,
+    pollForCondition,
+} from './api-helpers';
+import { leaderYesToggle, slotRowById } from './scheduling-poll-fixtures';
+
+/**
+ * On a phone layout the "confirm your game time" sheet UNMOUNTS the slot list
+ * (`SchedulingComposite.tsx`: `{!check.sheetVisible && <SchedulingSlotList/>}`),
+ * and it opens whenever the viewer's game time has never been confirmed — which
+ * is every fresh CI database until some OTHER spec happens to stamp it. That made
+ * these cases pass or fail by shard composition (ROK-1617: 12/12 red on [mobile]
+ * in one shard, green everywhere else). Confirm it server-side, up front.
+ */
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPatch(token, '/users/me/game-time/confirm', {});
+});
+
+/**
+ * ROK-1544: the member submit ritual is retired from the scheduling poll —
+ * a tap on a slot IS the vote (and the server stamps
+ * `scheduling_submitted_at` on the first one). These testids must never come
+ * back on this surface.
+ */
+const RETIRED_SUBMIT_TESTIDS = [
+    'sticky-hero-schedule-submit',
+    'sticky-hero-submit',
+    'schedule-submit',
+    'submit-bar',
+];
+
+/** Assert no member-submit affordance is rendered on the poll (ROK-1544). */
+async function expectNoSubmitAffordance(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    for (const testid of RETIRED_SUBMIT_TESTIDS) {
+        await expect(page.locator(`[data-testid="${testid}"]`)).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
+}
+
+/**
+ * ROK-1247: Poll the standalone scheduling poll endpoint until the server
+ * observes the freshly-created poll. The page's useQuery has a 15s
+ * staleTime — without this barrier the cached fetch from a sibling test
+ * can short-circuit the page render and the smoke assertions never see
+ * the standalone poll's UI.
+ */
+async function pollPollPageHasMatch(
+    token: string,
+    lineupId: number,
+    matchId: number,
+): Promise<unknown> {
+    return pollForCondition(
+        async () => {
+            const data = (await apiGet(
+                token,
+                `/lineups/${lineupId}/schedule/${matchId}`,
+            )) as { match?: unknown } | null;
+            return data?.match ? data : null;
+        },
+        {
+            timeoutMs: 15_000,
+            description: 'standalone scheduling poll endpoint',
+        },
+    );
+}
+
+/** Get a valid gameId from seeded data. */
+async function getFirstGameId(token: string): Promise<number> {
+    const res = await fetch(`${API_BASE}/games/configured`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch games: ${res.status}`);
+    const body = (await res.json()) as { data: { id: number }[] };
+    const first = body.data?.[0];
+    if (!first) throw new Error('No configured games');
+    return first.id;
+}
+
+/** Find an event that has a game (required for "Poll for Best Time" button). */
+async function getEventWithGame(token: string): Promise<number> {
+    const res = await fetch(`${API_BASE}/events?upcoming=true&limit=20`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch events: ${res.status}`);
+    const body = (await res.json()) as { data: { id: number; game?: { id: number } }[] };
+    const event = body.data.find((e) => e.game?.id);
+    if (!event) throw new Error('No seeded events with a game');
+    return event.id;
+}
+
+// ---------------------------------------------------------------------------
+// AC7: "Schedule a Game" button on events page
+// ---------------------------------------------------------------------------
+
+test.describe('Events page — Schedule a Game button', () => {
+    test('desktop: "Schedule a Game" button is visible on events page toolbar', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — mobile uses different toolbar layout',
+        );
+
+        await page.goto('/events');
+        await expect(
+            page.getByRole('heading', { name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // AC7: The "Schedule a Game" button should be visible in the events toolbar
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
+        await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('mobile: "Schedule a Game" button is visible on events page', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Mobile-only test — uses mobile toolbar selectors',
+        );
+
+        await page.goto('/events');
+        await expect(
+            page.getByRole('heading', { name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // AC7: On mobile, the "Schedule a Game" action should still be accessible
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
+        await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC8: CreatePollModal — game picker + member picker
+// ---------------------------------------------------------------------------
+
+test.describe('CreatePollModal — game and member picker', () => {
+    test('clicking "Schedule a Game" opens CreatePollModal with game picker', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — modal interaction differs on mobile',
+        );
+
+        await page.goto('/events');
+        await expect(
+            page.getByRole('heading', { name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Click the "Schedule a Game" button
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
+        await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
+        await scheduleBtn.click();
+
+        // AC8: CreatePollModal should open with a heading
+        const modal = page.locator('[role="dialog"]');
+        await expect(
+            modal.getByRole('heading', { name: /Schedule a Game|Create Scheduling Poll/i }),
+        ).toBeVisible({ timeout: 10_000 });
+
+        // AC8: Game picker (search input) should be visible
+        const gameSearch = modal.locator(
+            '[data-testid="game-search-input"]',
+        );
+        await expect(gameSearch).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('CreatePollModal has member picker for multi-select', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — modal interaction differs on mobile',
+        );
+
+        await page.goto('/events');
+        await expect(
+            page.getByRole('heading', { name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
+        await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
+        await scheduleBtn.click();
+
+        const modal = page.locator('[role="dialog"]');
+        await expect(modal).toBeVisible({ timeout: 10_000 });
+
+        // AC8: Member picker should be visible for multi-select
+        const memberPicker = modal.locator(
+            '[data-testid="member-picker"]',
+        );
+        await expect(memberPicker).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('game picker accepts input and shows search dropdown', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — modal interaction differs on mobile',
+        );
+
+        await page.goto('/events');
+        await expect(
+            page.getByRole('heading', { name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
+        await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
+        await scheduleBtn.click();
+
+        const modal = page.locator('[role="dialog"]');
+        await expect(modal).toBeVisible({ timeout: 10_000 });
+
+        // Type into game search — input should accept text
+        const gameSearch = modal.locator('[data-testid="game-search-input"]');
+        await gameSearch.fill('Warcraft');
+        await expect(gameSearch).toHaveValue('Warcraft');
+
+        // Search dropdown container should appear (results depend on IGDB availability)
+        const dropdown = modal.locator('[data-testid="game-search-results"]');
+        await expect(dropdown).toBeVisible({ timeout: 15_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC9: After creating poll from events page, navigate to scheduling poll page
+// ---------------------------------------------------------------------------
+
+test.describe('Events page poll creation navigates to scheduling poll', () => {
+    test('creating a standalone poll via API and navigating to it works', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — full flow',
+        );
+
+        // Create poll via API (avoids IGDB dependency in game search UI)
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        // ROK-1247: poll the API until the new standalone poll is observable
+        // before navigating, so the page's useQuery doesn't short-circuit
+        // on a cached empty fetch from a sibling test.
+        await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
+        // Navigate to the scheduling poll page
+        await page.goto(
+            `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+        );
+
+        // AC9: Poll page should render. ROK-1300 — the composite owns the body
+        // (no separate "Scheduling Poll" h1 for an active poll).
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC10 + AC11: RescheduleModal "Poll for Best Time" creates standalone poll
+// ---------------------------------------------------------------------------
+
+test.describe('Reschedule modal — Poll for Best Time', () => {
+    test('desktop: reschedule modal shows "Poll for Best Time" button', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            isPhoneLayout(testInfo),
+            'Desktop-only test — Reschedule button visible on desktop, behind overflow on mobile',
+        );
+
+        await navigateToFirstEvent(page, testInfo);
+
+        // Click Reschedule button
+        const rescheduleBtn = page.getByRole('button', { name: 'Reschedule' });
+        await expect(rescheduleBtn).toBeVisible({ timeout: 10_000 });
+        await rescheduleBtn.click();
+
+        // Modal should open
+        const modal = page.locator('[role="dialog"]');
+        await expect(
+            modal.getByRole('heading', { name: 'Reschedule Event' }),
+        ).toBeVisible({ timeout: 10_000 });
+
+        // AC10: "Poll for Best Time" button should be visible
+        const pollBtn = modal.getByRole('button', {
+            name: /Poll for Best Time/i,
+        });
+        await expect(pollBtn).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('mobile: reschedule modal shows "Poll for Best Time" button', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            !isMobile(testInfo),
+            'Mobile-only test',
+        );
+
+        await navigateToFirstEvent(page, testInfo);
+
+        // Open overflow menu on mobile
+        await expect(
+            page.getByRole('button', { name: 'More actions' }),
+        ).toBeVisible({ timeout: 10_000 });
+        await page.getByRole('button', { name: 'More actions' }).click();
+
+        // Click Reschedule in overflow
+        const rescheduleBtn = page.getByRole('button', { name: 'Reschedule' });
+        await expect(rescheduleBtn).toBeVisible({ timeout: 5_000 });
+        await rescheduleBtn.click();
+
+        // Modal/BottomSheet should open
+        const modal = page.locator('[role="dialog"]').filter({
+            hasText: 'Reschedule Event',
+        });
+        await expect(
+            modal.getByRole('heading', { name: 'Reschedule Event' }),
+        ).toBeVisible({ timeout: 10_000 });
+
+        // AC10: "Poll for Best Time" button should be visible
+        const pollBtn = modal.getByRole('button', {
+            name: /Poll for Best Time/i,
+        });
+        await expect(pollBtn).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('clicking "Poll for Best Time" navigates to scheduling poll page (not /events?tab=plans)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            isPhoneLayout(testInfo),
+            'Desktop-only test — full modal flow',
+        );
+
+        // Navigate to a specific event with a game — "Poll for Best Time"
+        // is disabled when the event has no gameId.
+        const token = await getAdminToken();
+        const eventId = await getEventWithGame(token);
+        await page.goto(`/events/${eventId}`);
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+
+        // Open reschedule modal
+        const rescheduleBtn = page.getByRole('button', { name: 'Reschedule' });
+        await expect(rescheduleBtn).toBeVisible({ timeout: 10_000 });
+        await rescheduleBtn.click();
+
+        const modal = page.locator('[role="dialog"]');
+        await expect(
+            modal.getByRole('heading', { name: 'Reschedule Event' }),
+        ).toBeVisible({ timeout: 10_000 });
+
+        // Click "Poll for Best Time"
+        const pollBtn = modal.getByRole('button', {
+            name: /Poll for Best Time/i,
+        });
+        await expect(pollBtn).toBeVisible({ timeout: 10_000 });
+        await pollBtn.click();
+
+        // AC11: Should navigate to the scheduling poll page — NOT /events?tab=plans
+        await page.waitForURL(
+            /\/community-lineup\/\d+\/schedule\/\d+/,
+            { timeout: 15_000 },
+        );
+
+        // Verify we are NOT on /events?tab=plans
+        const currentUrl = page.url();
+        expect(currentUrl).not.toContain('/events?tab=plans');
+        expect(currentUrl).toMatch(/\/community-lineup\/\d+\/schedule\/\d+/);
+
+        // Page should load without errors
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC12: Existing scheduling poll page works for standalone polls
+// ---------------------------------------------------------------------------
+
+test.describe('Standalone poll — scheduling poll page', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    test('standalone poll renders on the scheduling poll page with core UI elements', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — full flow',
+        );
+
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        // Create a standalone poll via the API endpoint
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+
+        // If the endpoint doesn't exist yet, this will fail (expected for TDD)
+        expect(createRes.status).toBe(201);
+
+        const poll = (await createRes.json()) as {
+            id: number;
+            lineupId: number;
+        };
+
+        try {
+            // ROK-1247: poll until the API surfaces the new standalone poll so
+            // the composite renders within the test window (useQuery would
+            // otherwise serve a stale empty cache for the lineup/match endpoint).
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
+            // Navigate to the scheduling poll page
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            // AC12 + ROK-1300: the composite body renders directly (no wizard).
+            const composite = page.locator('[data-testid="scheduling-composite"]');
+            await expect(composite).toBeVisible({ timeout: 15_000 });
+
+            // U2 game-ref banner replaces the legacy MatchContextCard.
+            await expect(
+                page.locator('[data-testid="scheduling-game-ref"]'),
+            ).toBeVisible({ timeout: 10_000 });
+
+            // ROK-1300: standalone composite — "started by you" hero badge
+            // and NO 4-phase progress ribbon.
+            await expect(
+                page.getByText(/Scheduling Poll · started by you/i),
+            ).toBeVisible({ timeout: 10_000 });
+            // ROK-1544: the sticky-toolbar member submit is GONE — the vote
+            // is the submit, so nothing on this page asks to confirm it.
+            await expectNoSubmitAffordance(page);
+            await expect(
+                page.getByRole('list', { name: /lineup progress/i }),
+            ).toHaveCount(0);
+
+            // ROK-1543: the suggest-slot picker moved behind the single
+            // "Find a better time" affordance — open it, then assert it.
+            await page
+                .locator('[data-testid="scheduling-find-better-time"]')
+                .click();
+            await expect(
+                page.locator('[data-testid="scheduling-better-time-body"]'),
+            ).toBeVisible({ timeout: 10_000 });
+            const dateTimeInput = page.locator(
+                'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
+            );
+            await expect(dateTimeInput).toBeVisible({ timeout: 10_000 });
+
+            // Page should not show errors
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+            );
+        } finally {
+            // Cleanup: delete the standalone poll lineup if possible
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
+    test('standalone poll: one tap withdraws the vote, one tap casts it again (ROK-1544)', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as {
+            id: number;
+            lineupId: number;
+        };
+
+        try {
+            // Suggesting auto-votes for the suggester, so the time starts
+            // voted — and, under ROK-1635 AC1, leading on the card.
+            const when = new Date();
+            when.setDate(when.getDate() + 2);
+            when.setHours(20, 0, 0, 0);
+            const suggested = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
+                { proposedTime: when.toISOString() },
+            );
+            const slotId: number | undefined =
+                suggested?.data?.id ?? suggested?.id;
+            expect(slotId).toBeTruthy();
+
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            // ROK-1635 AC1: this poll's ONLY time carries the suggester's
+            // auto-YES, so it leads and renders exactly once — on the card.
+            // It therefore has no ladder row in any stance here: dropping the
+            // vote leaves the poll with zero answers, which keeps its
+            // PROVISIONAL leader (`deriveSchedulingLeader`). Every tap the
+            // case is about lands on the card's ballot, the control that
+            // replaced the row, wired to the same ladder mutation.
+            const row = slotRowById(page, slotId as number);
+            const leaderVotes = page.locator(
+                '[data-testid="scheduling-leader-votes"]',
+            );
+            await expect(page.getByTestId('scheduling-leader-time')).toBeVisible(
+                { timeout: 15_000 },
+            );
+            await expect(row).toHaveCount(0);
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 15_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b1 of \d+/, {
+                timeout: 10_000,
+            });
+            await expectNoSubmitAffordance(page);
+
+            // ONE tap withdraws — the count moves with no submit step.
+            await leaderYesToggle(page).click();
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'false',
+                { timeout: 10_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b0 of \d+/, {
+                timeout: 10_000,
+            });
+            await expect(row).toHaveCount(0);
+
+            // ONE tap casts it again — still nothing to submit.
+            await leaderYesToggle(page).click();
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 10_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b1 of \d+/, {
+                timeout: 10_000,
+            });
+            await expectNoSubmitAffordance(page);
+
+            // Both taps were committed server-side without a submit press.
+            await page.reload();
+            await expect(leaderYesToggle(page)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+                { timeout: 15_000 },
+            );
+            await expect(leaderVotes).toContainText(/\b1 of \d+/, {
+                timeout: 15_000,
+            });
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-1217 — standalone poll deadline display
+// F-36: Standalone poll had no phase-level deadline countdown.
+// ---------------------------------------------------------------------------
+
+/**
+ * ROK-1545 (P1-3): a locked-in standalone poll answers "so when is it?" —
+ * the terminal banner names the ending (`data-poll-status="locked_in"`) and
+ * links to the event the lock-in created. Mirrors the from-match assertion in
+ * `scheduling-poll.smoke.spec.ts`, because the standalone flow renders the
+ * same composite from a different lineup shape.
+ */
+test.describe('Standalone poll — locked-in terminal banner (ROK-1545)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    test('a locked-in standalone poll shows the locked_in banner and an event link', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
+            // Suggest a slot (which auto-votes the suggester — create-event
+            // requires the caller to have voted) and lock it in.
+            const future = new Date(Date.now() + 7 * 86_400_000);
+            future.setMinutes(0, 0, 0);
+            const suggested = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/suggest`,
+                { proposedTime: future.toISOString() },
+            );
+            expect(suggested?.id).toBeTruthy();
+            const created = await apiPost(
+                token,
+                `/lineups/${poll.lineupId}/schedule/${poll.id}/create-event`,
+                { slotId: suggested.id },
+            );
+            expect(created?.eventId).toBeTruthy();
+
+            // The page must observe the lock-in before it renders (useQuery
+            // staleTime would otherwise serve the pre-lock-in payload).
+            await pollForCondition(
+                async () => {
+                    const data = (await apiGet(
+                        token,
+                        `/lineups/${poll.lineupId}/schedule/${poll.id}`,
+                    )) as { pollStatus?: string } | null;
+                    return data?.pollStatus === 'locked_in' ? data : null;
+                },
+                {
+                    timeoutMs: 15_000,
+                    description: 'the standalone poll to report pollStatus=locked_in',
+                },
+            );
+
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            const banner = page.locator('[data-testid="read-only-banner"]');
+            await expect(banner).toBeVisible({ timeout: 15_000 });
+            await expect(banner).toHaveAttribute(
+                'data-poll-status',
+                'locked_in',
+            );
+            const eventLink = banner.locator(
+                '[data-testid="terminal-event-link"]',
+            );
+            await expect(eventLink).toBeVisible({ timeout: 10_000 });
+            await expect(eventLink).toHaveAttribute(
+                'href',
+                `/events/${created.eventId}`,
+            );
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+});
+
+test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    test('renders the deadline banner when the poll has a phaseDeadline', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            isPhoneLayout(testInfo),
+            'Desktop-only — banner appearance is layout-equivalent across viewports',
+        );
+
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        // Create poll with a deadline ~48h away — within the "not soon" range.
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 48 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            // Skip wizard steps if they appear.
+            // ROK-1300: composite owns the body — wait for it directly.
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            // The deadline banner must be visible at the top of the page.
+            const banner = page.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(banner).toContainText(/Closes/i);
+            // 48h away is not "soon" — banner should not flag urgency.
+            await expect(banner).toHaveAttribute('data-soon', 'false');
+            await expect(banner).toHaveAttribute('data-expired', 'false');
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
+    test('the deadline rides inside the leader card, above the fold at 375px (ROK-1543)', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 48 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.setViewportSize({ width: 375, height: 667 });
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            // ROK-1543 AC1: ONE deadline, and it lives in the leader card so
+            // "what's winning / when does it close" is a single glance.
+            const card = page.locator('[data-testid="scheduling-leader-card"]');
+            await expect(card).toBeVisible({ timeout: 10_000 });
+            const banner = card.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(
+                page.locator('[data-testid="poll-deadline-banner"]'),
+            ).toHaveCount(1);
+
+            expect(await page.evaluate(() => window.scrollY)).toBe(0);
+            const box = await banner.boundingBox();
+            expect(box).not.toBeNull();
+            expect(box!.y + box!.height).toBeLessThanOrEqual(667);
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
+    test('flags the deadline as soon when less than 24h remain', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            isPhoneLayout(testInfo),
+            'Desktop-only — banner appearance is layout-equivalent across viewports',
+        );
+
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        // Create poll with a deadline ~6h away — inside the soon-threshold.
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 6 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            // ROK-1300: composite owns the body — wait for it directly.
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+
+            const banner = page.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(banner).toHaveAttribute('data-soon', 'true');
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+});

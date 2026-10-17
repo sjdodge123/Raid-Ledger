@@ -1,0 +1,296 @@
+/**
+ * ROK-1453 AC3 — the events-page aggregate banner.
+ *
+ * TDD: `./lfg-summary-banner` does not exist yet, so this file fails at
+ * import. That is the intended pre-implementation failure.
+ *
+ * Contract pinned here (spec §Files → `lfg-summary-banner.tsx`, D6, as amended
+ * by ROK-1478 AC3 — the banner now has TWO branches):
+ *   • the count comes from `GET /lfg` (one row per game with a live intent) —
+ *     driven through MSW, so the component may read it through whichever hook
+ *     the implementer wires;
+ *   • 0 rows → renders NOTHING. No zero-height placeholder, because the events
+ *     banner stack is already scrolled past on mobile
+ *     (`game-detail.smoke.spec.ts:20-38`);
+ *   • exactly 1 row → names that game, describes the group with the SAME
+ *     sentence the card badge uses (`lfg-chip-copy.ts`, D4), CTA `Join →`, and
+ *     links straight at `/lfg/{gameSlug}`. This SUPERSEDES the original
+ *     `1 game has players looking` copy, which is now unreachable;
+ *   • 2+ rows → unchanged: `N games have players looking`, CTA
+ *     `Browse them →`, linking at the filtered Library view `/games?lfg=1`;
+ *   • `data-testid="lfg-summary-banner-cta"` carries the CTA on its own so the
+ *     smoke specs can branch without substring-matching the whole banner.
+ */
+import { describe, it, expect, beforeEach } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import { axe } from 'vitest-axe';
+import { server } from '../../test/mocks/server';
+import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
+import { buildLfgGroupSummary } from '../../test/factories/lfg';
+import type { LfgGroupSummaryFixture } from '../../test/factories/lfg';
+import { renderWithProviders } from '../../test/render-helpers';
+import { LfgSummaryBanner } from './lfg-summary-banner';
+import { setAccessToken } from '../../lib/api/access-token-store';
+
+/** N distinct groups — the banner only counts rows, so ids are enough. */
+function groups(n: number) {
+    return Array.from({ length: n }, (_, i) =>
+        buildLfgGroupSummary({
+            gameId: i + 1,
+            gameName: `Game ${i + 1}`,
+            gameSlug: `game-${i + 1}`,
+        }),
+    );
+}
+
+function renderBanner(count: number) {
+    server.use(lfgGroupsHandler(groups(count)));
+    return renderWithProviders(<LfgSummaryBanner />, {
+        initialEntries: ['/events'],
+    });
+}
+
+beforeEach(() => {
+    // `GET /lfg` is jwt-gated, so the query is `enabled: !!token`.
+    setAccessToken('test-token');
+});
+
+describe('LfgSummaryBanner', () => {
+    it('renders nothing when no game has a live intent', async () => {
+        renderBanner(0);
+
+        // Give the query a chance to resolve before asserting absence.
+        await waitFor(() => {
+            expect(
+                screen.queryByTestId('lfg-summary-banner'),
+            ).not.toBeInTheDocument();
+        });
+        expect(screen.queryByText(/players looking/i)).not.toBeInTheDocument();
+    });
+
+    it('names the single game instead of counting it (ROK-1478 AC3)', async () => {
+        // RETARGETED, not deleted. This case used to pin the aggregate copy
+        // `1 game has players looking` for a one-game community. ROK-1478 AC3
+        // replaces that dead end — the banner now names the game and links
+        // straight at its group page — so the case is re-pointed at the copy
+        // that ships and additionally asserts the superseded sentence is gone.
+        renderBanner(1);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveTextContent('Game 1');
+        expect(banner).not.toHaveTextContent('1 game has players looking');
+    });
+
+    it('uses the plural for more than one game', async () => {
+        renderBanner(3);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveTextContent('3 games have players looking');
+        expect(banner).not.toHaveTextContent('3 game has');
+    });
+
+    it('links to the filtered Library view', async () => {
+        renderBanner(2);
+
+        await screen.findByTestId('lfg-summary-banner');
+        const link = screen.getByRole('link', { name: /players looking/i });
+        expect(link).toHaveAttribute('href', '/games?lfg=1');
+    });
+
+    it('shares the box metrics of the sibling event banners', async () => {
+        // Operator walk: the banner is a full-bleed strip like
+        // `SchedulingBanner` / `StandalonePollBanner` (all three render OUTSIDE
+        // the page's `max-w-7xl` container — `events-page.tsx:110-114`), so it
+        // has to carry their exact box classes. It also must not push its CTA
+        // to the far edge with `justify-between`, which is what made a
+        // wide-screen banner read as two disconnected fragments.
+        renderBanner(2);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        for (const cls of ['mx-4', 'mb-4', 'p-4', 'rounded-xl']) {
+            expect(banner.className).toContain(cls);
+        }
+        expect(banner.className).not.toContain('justify-between');
+    });
+
+    it('has no accessibility violations', async () => {
+        const { container } = renderBanner(2);
+
+        await screen.findByTestId('lfg-summary-banner');
+        expect(await axe(container)).toHaveNoViolations();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1478 AC3 — a two-click path from the events page to a group.
+//
+// With exactly one game looking, `/games?lfg=1` was a pointless middle step:
+// the filtered Library showed one tile whose badge went where the banner could
+// have gone directly. The banner now names that game and links at it. The 2+
+// branch is deliberately untouched and is the regression net below.
+// ---------------------------------------------------------------------------
+
+/** One group, overridable — the single-game branch is the whole AC. */
+function renderOne(overrides: Partial<LfgGroupSummaryFixture> = {}) {
+    server.use(
+        lfgGroupsHandler([
+            buildLfgGroupSummary({
+                gameId: 42,
+                gameName: 'Hellcard',
+                gameSlug: 'hellcard',
+                activeCount: 1,
+                state: 'lfg',
+                viabilityThreshold: null,
+                ...overrides,
+            }),
+        ]),
+    );
+    return renderWithProviders(<LfgSummaryBanner />, {
+        initialEntries: ['/events'],
+    });
+}
+
+describe('LfgSummaryBanner — exactly one game (ROK-1478 AC3)', () => {
+    it('links straight to that game\'s group page', async () => {
+        renderOne();
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveAttribute('href', '/lfg/hellcard');
+    });
+
+    it('names the game, describes the group and says Join', async () => {
+        renderOne();
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        const text = (banner.textContent ?? '').replace(/\s+/g, ' ').trim();
+        expect(text).toContain('Hellcard');
+        expect(text).toContain('1 looking · needs 1 more');
+        expect(text).toContain('Join →');
+        expect(text).not.toContain('players looking');
+    });
+
+    it('derives "needs 3 more" from the shared chip copy, not a hardcoded 1', async () => {
+        renderOne({ viabilityThreshold: 4 });
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveTextContent('needs 3 more');
+    });
+
+    it('reads "N looking to play" for a group that is already viable (A4)', async () => {
+        renderOne({ activeCount: 5, state: 'lfm', viabilityThreshold: 4 });
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        const text = (banner.textContent ?? '').replace(/\s+/g, ' ').trim();
+        expect(text).toContain('5 looking to play');
+        expect(text).not.toContain('needs');
+    });
+});
+
+describe('LfgSummaryBanner — two or more games stay aggregate (ROK-1478 AC3)', () => {
+    it('keeps the aggregate copy and the filtered-Library link', async () => {
+        // Regression net for the branch this story does NOT change — it is
+        // what `lfg-chips.smoke.spec.ts:288-302` exercises in CI.
+        renderBanner(2);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveAttribute('href', '/games?lfg=1');
+        expect(banner).toHaveTextContent('2 games have players looking');
+        expect(banner).toHaveTextContent('Browse them →');
+        expect(banner).not.toHaveTextContent('Join →');
+    });
+});
+
+describe('LfgSummaryBanner — accessibility of the single-game branch', () => {
+    it('has no accessibility violations', async () => {
+        // The 2+ branch is covered above; this is the markup ROK-1478 added.
+        const { container } = renderOne();
+
+        await screen.findByTestId('lfg-summary-banner');
+        expect(await axe(container)).toHaveNoViolations();
+    });
+});
+
+/**
+ * N groups, the first `withNow` of which carry one `now` player each — so the
+ * PLAYER total and the GAME total are deliberately different numbers and an
+ * implementation that printed the wrong one cannot pass by coincidence.
+ */
+function renderBannerWithNow(count: number, withNow: number[]) {
+    const rows: LfgGroupSummaryFixture[] = Array.from(
+        { length: count },
+        (_, i) =>
+            buildLfgGroupSummary({
+                gameId: i + 1,
+                gameName: `Game ${i + 1}`,
+                gameSlug: `game-${i + 1}`,
+                activeCount: 1 + (withNow[i] ?? 0),
+                nowCount: withNow[i] ?? 0,
+            }),
+    );
+    server.use(lfgGroupsHandler(rows));
+    return renderWithProviders(<LfgSummaryBanner />, {
+        initialEntries: ['/events'],
+    });
+}
+
+describe('LfgSummaryBanner — the now line (ROK-1479 A9)', () => {
+    it('counts PLAYERS across every group, not games', async () => {
+        // Three games, two of which have now players — 3 players over 2 games.
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const nowLine = await screen.findByTestId('lfg-summary-banner-now');
+        expect(nowLine).toHaveTextContent('🔥 3 want to play now');
+    });
+
+    it('leaves the existing games line untouched beside it', async () => {
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        // A9: the weekly line keeps counting GAMES and is not edited.
+        expect(banner).toHaveTextContent('3 games have players looking');
+        expect(banner).toHaveTextContent('Browse them →');
+        expect(banner).toHaveAttribute('href', '/games?lfg=1');
+    });
+
+    it('renders no now line when nobody wants to play right now', async () => {
+        renderBannerWithNow(3, [0, 0, 0]);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        expect(banner).toHaveTextContent('3 games have players looking');
+        expect(
+            screen.queryByTestId('lfg-summary-banner-now'),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText(/want to play now/)).not.toBeInTheDocument();
+    });
+
+    it('gives the now line its own line under the games line', async () => {
+        renderBannerWithNow(3, [2, 1, 0]);
+
+        const cta = await screen.findByTestId('lfg-summary-banner-cta');
+        const now = await screen.findByTestId('lfg-summary-banner-now');
+        // The defect this pins: the now text used to be a third item INSIDE
+        // the headline's `flex flex-wrap items-baseline` row, so on a wide
+        // viewport it rendered between the headline and its own call to
+        // action rather than as the second line the spec describes.
+        expect(
+            cta.parentElement?.contains(now),
+            'the now line is still inside the headline row, so it renders inline between the headline and the CTA',
+        ).toBe(false);
+        expect(
+            now.compareDocumentPosition(cta) &
+                Node.DOCUMENT_POSITION_PRECEDING,
+            'the now line should follow the headline row, not precede it',
+        ).toBeTruthy();
+    });
+
+    it('carries the now line on the single-game branch too', async () => {
+        renderBannerWithNow(1, [2]);
+
+        const nowLine = await screen.findByTestId('lfg-summary-banner-now');
+        expect(nowLine).toHaveTextContent('🔥 2 want to play now');
+        expect(await screen.findByTestId('lfg-summary-banner')).toHaveAttribute(
+            'href',
+            '/lfg/game-1',
+        );
+    });
+});

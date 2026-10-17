@@ -1,0 +1,299 @@
+/**
+ * Action orchestration helpers extracted from LineupsService (ROK-1065).
+ * Kept separate so lineups.service.ts stays under the 300-line ESLint ceiling.
+ *
+ * Each helper is a direct 1:1 extraction of a service method body — the
+ * service remains the public entry point for tests/controllers.
+ */
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  CreateLineupDto,
+  LineupDetailResponseDto,
+  NominateGameDto,
+} from '@raid-ledger/contract';
+import * as schema from '../drizzle/schema';
+import type { ActivityLogService } from '../activity-log/activity-log.service';
+import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from './queue/lineup-phase-schedule.helpers';
+import type { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import type { LineupNotificationService } from './lineup-notification.service';
+import { defined } from '../common/defined.helpers';
+import { findLineupById } from './lineups-query.helpers';
+import { assertUserCanParticipate } from './lineups-eligibility.helpers';
+import { insertLineup } from './lineups-lifecycle.helpers';
+import { buildDetailResponse } from './lineups-response.helpers';
+import {
+  validateNominationCap,
+  validateGameExists,
+  insertNomination,
+} from './lineups-nomination.helpers';
+import {
+  hasDurationParams,
+  buildOverrides,
+  computeInitialDeadline,
+} from './lineups-phase.helpers';
+import { logNomination } from './lineups-activity.helpers';
+import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
+import { carryOverFromLastDecided } from './lineups-carryover.helpers';
+import { armNominationTargetOnCreate } from './quorum/nomination-target.helpers';
+import {
+  fireLineupCreated,
+  fireCreatedEmbedRefresh,
+  fireNominationMilestone,
+  fireNominationRemoved,
+} from './lineups-notify-hooks.helpers';
+import {
+  findEntry,
+  validateRemoval,
+  deleteEntry,
+} from './lineups-removal.helpers';
+import type { CallerIdentity } from './lineups.service';
+
+type Db = PostgresJsDatabase<typeof schema>;
+type ResolveChannelName = (channelId: string) => string | null;
+
+export interface CreateLineupDeps {
+  db: Db;
+  activityLog: ActivityLogService;
+  phaseQueue: LineupPhaseQueueService;
+  steamNudge: LineupSteamNudgeService;
+  lineupNotifications: LineupNotificationService;
+  logger: Logger;
+  resolveChannelName: ResolveChannelName;
+}
+
+/**
+ * Create a new lineup (ROK-1065).
+ * Multiple lineups may be active simultaneously post-ROK-1065. Steam nudges
+ * and carryover only fire for public lineups since private lineups have a
+ * scoped participant roster.
+ */
+export async function runCreateLineup(
+  deps: CreateLineupDeps,
+  dto: CreateLineupDto,
+  userId: number,
+): Promise<LineupDetailResponseDto> {
+  const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
+  const phaseDeadline = computeInitialDeadline(dto);
+
+  const row = defined(
+    (await insertLineup(deps.db, dto, userId, phaseDeadline, overrides))[0],
+    'inserted lineup row',
+  );
+  await deps.activityLog.log('lineup', row.id, 'lineup_created', userId);
+  if (row.visibility === 'public') {
+    void deps.steamNudge.nudgeUnlinkedMembers(row.id);
+    await carryOverFromLastDecided(deps.db, row.id);
+  }
+  // ROK-1444: arm the early-advance rising edge AFTER carry-over, so a lineup
+  // seeded above its target starts unarmed and advances by deadline instead of
+  // firing on the first mutation.
+  await armNominationTargetOnCreate(deps.db, row);
+
+  const delayMs = phaseDeadline.getTime() - Date.now();
+  // ROK-1512: best-effort — the lineup row already exists; a 500 here would
+  // make the client re-create it. Sentry has the failure; boot rehydration
+  // re-derives the job from `phase_deadline`.
+  await scheduleTransitionBestEffort(
+    deps.phaseQueue,
+    row.id,
+    'voting',
+    delayMs,
+    'createLineup',
+  );
+
+  fireLineupCreated(deps.lineupNotifications, deps.logger, {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? null,
+    ...(dto.targetDate ? { targetDate: new Date(dto.targetDate) } : {}),
+    // ROK-1461: the created embed's author line closes on this deadline.
+    phaseDeadline,
+    channelOverrideId: row.channelOverrideId ?? null,
+    visibility: row.visibility,
+  });
+
+  return buildDetailResponse(
+    deps.db,
+    row.id,
+    undefined,
+    deps.resolveChannelName,
+  );
+}
+
+export interface VoteDeps {
+  db: Db;
+  activityLog: ActivityLogService;
+  resolveChannelName: ResolveChannelName;
+}
+
+/** Toggle a vote for a game in a lineup (ROK-936). */
+/**
+ * ROK-1374: a tie hold closes the vote. The deadline (or a completed quorum)
+ * found a joint top and parked the lineup on the hold; only the creator's
+ * pick, the expiry sweep or an operator revert moves it. The row stays in
+ * `voting` for the whole hold — a pick records an intent, it does not decide
+ * (Q2) — so the status check cannot see it, and a vote accepted here would
+ * dissolve the tie underneath an open card and a live Discord embed
+ * (operator test, 2026-09-05). A pick does not reopen the vote either: the
+ * grace window is the undo window, not a second round.
+ */
+export function assertVoteOpen(lineup: {
+  tieDetectedAt: Date | null;
+  tieExpiredAt: Date | null;
+}): void {
+  if (lineup.tieDetectedAt !== null && lineup.tieExpiredAt === null) {
+    throw new ConflictException('VOTING_CLOSED_ON_TIE');
+  }
+}
+
+export async function runToggleVote(
+  deps: VoteDeps,
+  lineupId: number,
+  gameId: number,
+  userId: number,
+  callerRole: string | undefined,
+): Promise<LineupDetailResponseDto> {
+  const [lineup] = await findLineupById(deps.db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (lineup.status !== 'voting') {
+    throw new BadRequestException('Voting is only allowed in voting status');
+  }
+  assertVoteOpen(lineup);
+  await assertUserCanParticipate(deps.db, lineup, {
+    id: userId,
+    ...(callerRole !== undefined ? { role: callerRole } : {}),
+  });
+  const action = await toggleVoteHelper(
+    deps.db,
+    lineupId,
+    userId,
+    gameId,
+    lineup.maxVotesPerPlayer ?? 3,
+  );
+  await deps.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
+    gameId,
+    action,
+  });
+  return buildDetailResponse(
+    deps.db,
+    lineupId,
+    userId,
+    deps.resolveChannelName,
+  );
+}
+
+export interface NominateDeps {
+  db: Db;
+  activityLog: ActivityLogService;
+  lineupNotifications: LineupNotificationService;
+  logger: Logger;
+  resolveChannelName: ResolveChannelName;
+  /**
+   * ROK-1444: runs after the entry lands and BEFORE the detail response is
+   * built. The service passes cache invalidation + `maybeAutoAdvance` here, so
+   * a nomination that crosses the early-advance target returns the phase it
+   * caused rather than the one it started in.
+   */
+  afterMutate?: () => Promise<void>;
+}
+
+export interface RemoveNominationDeps {
+  db: Db;
+  activityLog: ActivityLogService;
+  lineupNotifications: LineupNotificationService;
+  logger: Logger;
+}
+
+/** Remove a nomination during the building phase. */
+export async function runRemoveNomination(
+  deps: RemoveNominationDeps,
+  lineupId: number,
+  gameId: number,
+  caller: CallerIdentity,
+): Promise<void> {
+  const [lineup] = await findLineupById(deps.db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (lineup.status !== 'building') {
+    throw new BadRequestException('Can only remove during building');
+  }
+
+  const entry = await findEntry(deps.db, lineupId, gameId);
+  validateRemoval(entry, caller);
+  await deleteEntry(deps.db, lineupId, gameId);
+  await deps.activityLog.log(
+    'lineup',
+    lineupId,
+    'nomination_removed',
+    caller.id,
+    { gameId },
+  );
+
+  fireNominationRemoved(
+    deps.lineupNotifications,
+    deps.logger,
+    deps.db,
+    lineupId,
+    gameId,
+    entry,
+    caller,
+  );
+  // ROK-1461: a removal moves the count too — re-render the created card.
+  fireCreatedEmbedRefresh(deps.lineupNotifications, deps.logger, lineupId);
+}
+
+/**
+ * Nominate a game into a lineup.
+ *
+ * ROK-1444 (Codex P2): the detail response is built only after `afterMutate`
+ * has run. A nomination can now cross the early-advance target, so building it
+ * first would report `building` for a lineup that just flipped to `voting`
+ * (grace 0), or omit the freshly claimed `pendingAdvanceAt` (default grace) —
+ * the client that caused the transition would be the last to hear about it.
+ */
+export async function runNominate(
+  deps: NominateDeps,
+  lineupId: number,
+  dto: NominateGameDto,
+  userId: number,
+  callerRole: string | undefined,
+): Promise<LineupDetailResponseDto> {
+  const [lineup] = await findLineupById(deps.db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (lineup.status !== 'building')
+    throw new BadRequestException('Lineup is not in building status');
+  await assertUserCanParticipate(deps.db, lineup, {
+    id: userId,
+    ...(callerRole !== undefined ? { role: callerRole } : {}),
+  });
+
+  await validateNominationCap(deps.db, lineup);
+  await validateGameExists(deps.db, dto.gameId);
+  // ROK-1444: `insertNomination` ratchets `nomination_cap_peak` itself.
+  await insertNomination(deps.db, lineupId, dto, userId);
+  await logNomination(deps.db, deps.activityLog, lineupId, dto, userId);
+
+  fireNominationMilestone(
+    deps.lineupNotifications,
+    deps.logger,
+    deps.db,
+    lineupId,
+  );
+  // ROK-1461: the count changed — re-render the created card in place so its
+  // progress line matches reality between milestone posts.
+  fireCreatedEmbedRefresh(deps.lineupNotifications, deps.logger, lineupId);
+
+  await deps.afterMutate?.();
+  return buildDetailResponse(
+    deps.db,
+    lineupId,
+    undefined,
+    deps.resolveChannelName,
+  );
+}

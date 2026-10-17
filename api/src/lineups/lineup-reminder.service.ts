@@ -1,0 +1,340 @@
+/**
+ * Cron-driven reminder service for Community Lineup
+ * (ROK-932 / ROK-1117 / ROK-1126).
+ *
+ * Sends nomination reminders (24h + 1h before building deadline),
+ * vote reminders (24h + 1h before voting deadline), scheduling
+ * reminders (24h + 1h before decided phase end), and tiebreaker
+ * reminders (24h + 1h before round deadline). Recipient resolution
+ * for nominate / vote / schedule is delegated to
+ * `resolveLineupReminderTargets`, which applies the public/private +
+ * already-participated filter.
+ */
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { parseTimestampUtc } from '../drizzle/timestamp-utils';
+import * as schema from '../drizzle/schema';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
+import { DEDUP_TTL } from './lineup-notification.constants';
+import {
+  findActiveTiebreakersWithDeadline,
+  resolveReminderTargets,
+  classifyThreshold,
+  buildTiebreakerReminderMessage,
+  type ActiveTiebreakerRow,
+} from './lineup-tiebreaker-reminder.helpers';
+import { escalateOverdueTiebreakers } from './tiebreaker/tie-escalation.helpers';
+import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
+import {
+  sendVoteReminder,
+  sendSchedulingReminder,
+  sendNominationReminder,
+} from './lineup-reminder-dispatch.helpers';
+
+interface ReminderLineup {
+  id: number;
+  status: string;
+  phaseDeadline: Date | string | null;
+  votingDeadline?: Date | string | null;
+}
+
+interface SchedulingMatchRef {
+  lineupId: number;
+  matchId: number;
+}
+
+const MS_PER_HOUR = 3600_000;
+
+@Injectable()
+export class LineupReminderService {
+  private readonly logger = new Logger(LineupReminderService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly notificationService: NotificationService,
+    private readonly dedupService: NotificationDedupService,
+    private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
+  ) {}
+
+  /** Send vote reminders for active voting lineups (24h + 1h windows). */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkVoteReminders',
+  })
+  async checkVoteReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkVoteReminders',
+      () => this.runVoteReminders(),
+    );
+  }
+
+  /** Send scheduling reminders for active decided lineups (24h + 1h windows). */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkSchedulingReminders',
+  })
+  async checkSchedulingReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkSchedulingReminders',
+      () => this.runSchedulingReminders(),
+    );
+  }
+
+  /** Send nomination reminders for active building lineups (ROK-1126). */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkNominationReminders',
+  })
+  async checkNominationReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkNominationReminders',
+      () => this.runNominationReminders(),
+    );
+  }
+
+  /** Send tiebreaker reminders for active tiebreakers approaching round deadline. */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkTiebreakerReminders',
+  })
+  async checkTiebreakerReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkTiebreakerReminders',
+      () => this.runTiebreakerReminders(),
+    );
+  }
+
+  // ─── Inner runners (wrapped by executeWithTracking) ──────────
+
+  private async runVoteReminders(): Promise<void> {
+    const lineups = await this.getVotingLineups();
+    for (const lineup of lineups) {
+      await this.processVoteReminder(lineup);
+    }
+  }
+
+  private async runSchedulingReminders(): Promise<void> {
+    const lineups = await this.getDecidedLineups();
+    for (const lineup of lineups) {
+      await this.processSchedulingReminder(lineup);
+    }
+  }
+
+  private async runNominationReminders(): Promise<void> {
+    const lineups = await this.getBuildingLineups();
+    for (const lineup of lineups) {
+      await this.processNominationReminder(lineup);
+    }
+  }
+
+  private async runTiebreakerReminders(): Promise<void> {
+    // ROK-1374 (D14): strictly additive to the pre-existing 24h/1h reminders —
+    // a failure loading the overdue set must not take that pass down with it.
+    try {
+      await this.escalateOverdueTiebreakers();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Tiebreaker escalation pass failed: ${msg}`);
+    }
+    const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
+    for (const tb of tiebreakers) {
+      try {
+        await this.processTiebreakerReminder(tb);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Tiebreaker reminder failed for tb ${tb.tiebreakerId} (lineup ${tb.lineupId}): ${msg}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * ROK-1374 (D14/AC17): a round deadline that has already passed escalates —
+   * DM the creator + operators — and never resolves. It runs before the 24h/1h
+   * pass because `findActiveTiebreakersWithDeadline` filters those rows out
+   * entirely, so this is the only place they are seen at all.
+   */
+  private async escalateOverdueTiebreakers(): Promise<void> {
+    await escalateOverdueTiebreakers({
+      db: this.db,
+      notifications: this.notificationService,
+      dedup: this.dedupService,
+      getClientUrl: () => this.settingsService.getClientUrl(),
+      logger: this.logger,
+    });
+  }
+
+  // ─── Per-lineup processors ───────────────────────────────────
+
+  private async processVoteReminder(lineup: ReminderLineup): Promise<void> {
+    const deadline = lineup.phaseDeadline ?? lineup.votingDeadline;
+    if (!deadline) return;
+    const window = this.classifyWindow(deadline);
+    if (!window) return;
+    const userIds = await resolveLineupReminderTargets(
+      this.db,
+      lineup.id,
+      'vote',
+    );
+    for (const userId of userIds) {
+      await sendVoteReminder(this.deps(), lineup.id, userId, window);
+    }
+  }
+
+  private async processSchedulingReminder(
+    lineup: ReminderLineup,
+  ): Promise<void> {
+    if (!lineup.phaseDeadline) return;
+    const window = this.classifyWindow(lineup.phaseDeadline);
+    if (!window) return;
+    const matches = await this.getSchedulingMatches(lineup.id);
+    for (const match of matches) {
+      const userIds = await resolveLineupReminderTargets(
+        this.db,
+        lineup.id,
+        'schedule',
+        match.matchId,
+      );
+      for (const userId of userIds) {
+        await sendSchedulingReminder(
+          this.deps(),
+          match.lineupId,
+          match.matchId,
+          userId,
+          window,
+        );
+      }
+    }
+  }
+
+  private async processNominationReminder(
+    lineup: ReminderLineup,
+  ): Promise<void> {
+    if (!lineup.phaseDeadline) return;
+    const window = this.classifyWindow(lineup.phaseDeadline);
+    if (!window) return;
+    const userIds = await resolveLineupReminderTargets(
+      this.db,
+      lineup.id,
+      'nominate',
+    );
+    for (const userId of userIds) {
+      await sendNominationReminder(this.deps(), lineup.id, userId, window);
+    }
+  }
+
+  private async processTiebreakerReminder(
+    tb: ActiveTiebreakerRow,
+  ): Promise<void> {
+    const threshold = classifyThreshold(this.hoursUntil(tb.roundDeadline));
+    if (!threshold) return;
+    const userIds = await resolveReminderTargets(this.db, tb);
+
+    // The DM body depends only on (tiebreaker, threshold), never on the
+    // recipient, so build it at most once per tick instead of re-querying the
+    // tied games for every user (ROK-1151 item 7). Built lazily so a tick where
+    // everyone is already deduped still costs zero queries, as before.
+    let message: string | null = null;
+    for (const userId of userIds) {
+      const key = `tiebreaker-reminder:${tb.tiebreakerId}:${threshold}:${userId}`;
+      if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) continue;
+      message ??= await this.buildTiebreakerMessage(tb, threshold);
+      await this.dispatchTiebreakerReminder(tb, userId, threshold, message);
+    }
+  }
+
+  // ─── DM dispatch ─────────────────────────────────────────────
+
+  private deps() {
+    return {
+      notificationService: this.notificationService,
+      dedupService: this.dedupService,
+    };
+  }
+
+  private async buildTiebreakerMessage(
+    tb: ActiveTiebreakerRow,
+    threshold: '24h' | '1h',
+  ): Promise<string> {
+    const clientUrl = await this.settingsService.getClientUrl();
+    return buildTiebreakerReminderMessage(this.db, tb, threshold, clientUrl);
+  }
+
+  private async dispatchTiebreakerReminder(
+    tb: ActiveTiebreakerRow,
+    userId: number,
+    threshold: '24h' | '1h',
+    message: string,
+  ): Promise<void> {
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Tiebreaker Reminder',
+      message,
+      payload: {
+        subtype: 'lineup_tiebreaker_reminder',
+        lineupId: tb.lineupId,
+        tiebreakerId: tb.tiebreakerId,
+        mode: tb.mode,
+        threshold,
+      },
+    });
+  }
+
+  // ─── Utilities ───────────────────────────────────────────────
+
+  private hoursUntil(deadline: Date | string): number {
+    return (parseTimestampUtc(deadline).getTime() - Date.now()) / MS_PER_HOUR;
+  }
+
+  private classifyWindow(deadline: Date | string): '24h' | '1h' | null {
+    const hoursLeft = this.hoursUntil(deadline);
+    if (hoursLeft <= 0 || hoursLeft > 24) return null;
+    return hoursLeft <= 1 ? '1h' : '24h';
+  }
+
+  // ─── DB queries ──────────────────────────────────────────────
+
+  private async getVotingLineups(): Promise<ReminderLineup[]> {
+    return (await this.db.execute(sql`
+      SELECT id, status, phase_deadline AS "phaseDeadline",
+             phase_deadline AS "votingDeadline"
+      FROM community_lineups
+      WHERE status = 'voting'
+    `)) as unknown as ReminderLineup[];
+  }
+
+  private async getDecidedLineups(): Promise<ReminderLineup[]> {
+    return (await this.db.execute(sql`
+      SELECT id, status, phase_deadline AS "phaseDeadline"
+      FROM community_lineups
+      WHERE status = 'decided'
+        AND (phase_duration_override IS NULL OR phase_duration_override->>'standalone' IS NULL)
+    `)) as unknown as ReminderLineup[];
+  }
+
+  private async getBuildingLineups(): Promise<ReminderLineup[]> {
+    return (await this.db.execute(sql`
+      SELECT id, status, phase_deadline AS "phaseDeadline"
+      FROM community_lineups
+      WHERE status = 'building'
+        AND phase_deadline IS NOT NULL
+    `)) as unknown as ReminderLineup[];
+  }
+
+  private async getSchedulingMatches(
+    lineupId: number,
+  ): Promise<SchedulingMatchRef[]> {
+    return (await this.db.execute(sql`
+      SELECT lineup_id AS "lineupId", id AS "matchId"
+      FROM community_lineup_matches
+      WHERE lineup_id = ${lineupId}
+        AND status = 'scheduling'
+    `)) as unknown as SchedulingMatchRef[];
+  }
+}

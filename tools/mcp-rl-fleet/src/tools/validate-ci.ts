@@ -1,0 +1,301 @@
+// rl_validate_ci — run validate-ci.sh inside the agent's claimed runner.
+//
+// ROK-1331 M2 — default-async via M1's task-start primitive.
+//   wait:false (default) → dispatch task, return {task_id, log_url, started_at}
+//   wait:true            → dispatch task then chain to task.executeWait
+//
+// ROK-1362: executeWait now hard-caps each blocking wait at 120s. wait:true
+// therefore returns either a terminal status (if the run finished within 120s)
+// OR a still_running progress snapshot — the caller re-polls (rl_task_status /
+// rl_task_wait) to keep watching. No path blocks the MCP channel beyond 120s.
+//
+// Bug C: the wrapped script is invoked via `bash <script>` so Mutagen's
+// one-way-replica exec-bit stripping doesn't break execution.
+
+import { randomBytes } from 'node:crypto';
+import {
+  deriveAgentId,
+  getSshTarget,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
+import { execFileP, ensureRunnerGit, resolveSlot } from './runner-git.js';
+import { seedEnvAdminPassword } from './env-admin-seed.js';
+import {
+  checkE2eSpecs,
+  envForSlug,
+  resolveInnerEnv,
+  sanitizeBaseUrl,
+  slugFromBaseUrl,
+  type E2eScope,
+} from './validate-ci-target.js';
+import * as task from './task.js';
+import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
+import { resolveWorktreeShortSha, resolveWorktreeSurfaceHash } from './worktree-sha.js';
+import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
+import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
+
+// Re-exported so `rl_validate_ci`'s target helpers stay importable from this
+// module (and its spec) after the ROK-1466 W1 split kept it under 300 lines.
+export {
+  checkE2eSpecs,
+  E2E_SPEC_PATTERN,
+  MAX_E2E_SPECS,
+  envForSlug,
+  resolveInnerEnv,
+  sanitizeBaseUrl,
+  slugFromBaseUrl,
+} from './validate-ci-target.js';
+export type { E2eScope } from './validate-ci-target.js';
+
+export const TOOL_NAME = 'rl_validate_ci';
+export const TOOL_DESCRIPTION =
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1565: e2e_scope ('auto' | 'all' | 'none', default auto) sizes the Playwright tier — auto runs ONLY the specs scripts/smoke/scope-specs.sh maps your branch diff to (the whole suite when it prints ALL), 'all' forces the full desktop+mobile suite, 'none' skips it. ROK-1792: e2e_specs (≤20 repo-relative paths, each scripts/smoke/<name>.spec.ts) runs EXACTLY those specs on desktop + mobile, forwarded as E2E_SPECS — the CLAUDE.md gate is args:['--only-e2e'] + e2e_specs:[<the branch's new/changed specs>] + against_env_slug + base_url (slot URL); it bypasses the changed-files gate, FAILs (never skips) on a down env, writes the playwright-tier sentinel on PASS, and is rejected with e2e_scope other than 'auto' and with --static / --no-e2e. A green --static run is now enough to write the pre-push sentinel (results carry gate_verified / gate_sentinel / gate_tier), so a web branch does NOT need a Playwright tier before you push. TDB:1452: timeout_seconds (the watchdog budget) defaults to 5400 for fleet:true / --only-e2e / --with-e2e and for an un-narrowed full run (no args, --full, --no-e2e), and to 1800 once --static / --only-unit / --only-integration narrows it; a run the watchdog kills ends failed with script_exit_code 143 and exit_reason set.";
+
+export interface ValidateCiParams {
+  /** Extra args to pass to validate-ci.sh. */
+  args?: string[];
+  /** Same worktree_path used at rl_claim / rl_claim_wait time. */
+  worktree_path?: string;
+  /** Slug of a spun fleet env. e2e steps target http://rl-env-<slug>-allinone. */
+  against_env_slug?: string;
+  /** Soft timeout for the wrapped command. Defaults to 5400 (90 min) for a
+   *  --fleet / --only-e2e / --with-e2e run AND for an un-narrowed full run (no
+   *  args, --full, --no-e2e — the script default is the full pipeline); 1800
+   *  (30 min) once --static / --only-unit / --only-integration narrows it.
+   *  TDB:1452. */
+  timeout_seconds?: number;
+  /** ROK-1331: default false (async). When true, chains to one ≤120s rl_task_wait. */
+  wait?: boolean;
+  /** Wait budget when wait:true. Capped at 120s (ROK-1362). */
+  wait_timeout_seconds?: number;
+  /** ROK-1467: forwards --only-integration (sharded integration suite only). */
+  only_integration?: boolean;
+  /** ROK-1467: forwards --only-unit (unit step only). */
+  only_unit?: boolean;
+  /** ROK-1467: forwards --no-coverage (jest/vitest without coverage, 3 GB heap). */
+  no_coverage?: boolean;
+  /**
+   * ROK-1470 admission weight. Omitted → derived from the resolved args: every
+   * mode that runs a suite (default/full, --only-unit, --only-integration,
+   * --only-e2e, --with-e2e) is `heavy`; a --static-only run is `light`.
+   */
+  weight?: TaskWeight;
+  /** ROK-1466: forwards --fleet — the whole gate in one dispatch. Needs a target. */
+  fleet?: boolean;
+  /** ROK-1466: explicit e2e target, exported as BASE_URL / API_URL / HEALTH_URL. */
+  base_url?: string;
+  /**
+   * ROK-1466 W1: admin password for the target env. Only needed when the
+   * target is NOT an `rl-env-<slug>-allinone` host (whose password this tool
+   * re-seeds itself). Without it global setup logs in with the literal
+   * 'password' and 401s.
+   */
+  admin_password?: string;
+  /**
+   * ROK-1565: how much of the Playwright suite to run, forwarded as E2E_SCOPE.
+   * `auto` (default) = only the specs scope-specs.sh maps the branch diff to;
+   * `all` = the full desktop+mobile suite; `none` = skip the tier.
+   */
+  e2e_scope?: E2eScope;
+  /**
+   * ROK-1792: run exactly these smoke specs (desktop + mobile), forwarded as
+   * E2E_SPECS. Mutually exclusive with e2e_scope other than `auto`.
+   */
+  e2e_specs?: string[];
+}
+
+/**
+ * Map the ROK-1467 boolean convenience params onto validate-ci.sh flags,
+ * appended after any raw `args`. A flag already present in `args` is not
+ * duplicated — the script would accept it twice, but a doubled flag in the
+ * task log reads like a bug.
+ */
+export function resolveArgs(params: ValidateCiParams): string[] {
+  const args = [...(params.args ?? [])];
+  const flags: Array<[boolean | undefined, string]> = [
+    [params.fleet, '--fleet'],
+    [params.only_integration, '--only-integration'],
+    [params.only_unit, '--only-unit'],
+    [params.no_coverage, '--no-coverage'],
+  ];
+  for (const [enabled, flag] of flags) {
+    if (enabled === true && !args.includes(flag)) args.push(flag);
+  }
+  return args;
+}
+
+export interface ValidateCiAsyncResult {
+  ok: boolean;
+  task_id?: string | undefined;
+  log_url?: string | undefined;
+  log_path?: string | undefined;
+  started_at?: string | undefined;
+  mcp_runtime_status?: string | undefined;
+  slot?: number | undefined;
+  /** ROK-1470 admission weight the run was dispatched with. */
+  weight?: TaskWeight | undefined;
+  error?: string | undefined;
+  stderr?: string | undefined;
+  message?: string | undefined;
+}
+
+const FLEET_DOMAIN = process.env.RL_FLEET_DOMAIN ?? 'fleet.gamernight.net';
+
+/** 12-char task_id matching `[a-z0-9]{8,32}`. */
+function newTaskId(): string {
+  return randomBytes(6).toString('hex');
+}
+
+export async function execute(
+  params: ValidateCiParams,
+): Promise<ValidateCiAsyncResult | task.ExecuteWaitResult | task.StillRunningResult> {
+  const { user: sshUser, host: sshHost } = await getSshTarget();
+  const agentId = deriveAgentId(params.worktree_path);
+  const wait = params.wait ?? false;
+  const waitTimeoutS = params.wait_timeout_seconds ?? 120;
+
+  // Defensive re-scaffold — non-fatal.
+  await ensureRunnerGit(sshUser, sshHost, agentId, params.worktree_path).catch(
+    (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[rl_validate_ci] ensureRunnerGit failed (non-fatal): ${msg}`);
+    },
+  );
+
+  const slot = await resolveSlot(sshUser, sshHost, agentId);
+
+  // Build the inner command. Bug C: bash <script> instead of bare path.
+  const extraArgs = resolveArgs(params).map((a) => shellQuote(a)).join(' ');
+
+  // Explicit base_url wins over the slug-derived hostname, so an agent can
+  // point the gate at a slot subdomain (or any already-deployed env) without
+  // owning the slug.
+  let baseUrl: string | undefined;
+  try {
+    if (params.base_url) baseUrl = sanitizeBaseUrl(params.base_url);
+  } catch (err) {
+    return { ok: false, error: 'invalid_base_url', message: String(err) };
+  }
+  if (!baseUrl && params.against_env_slug) baseUrl = envForSlug(params.against_env_slug);
+
+  // Fail at the MCP boundary rather than after a ~10s dispatch: --fleet with no
+  // target exits 2 inside the runner, which the caller would only discover by
+  // polling a task that was doomed before it started.
+  if (params.fleet && !baseUrl) {
+    return {
+      ok: false,
+      error: 'fleet_requires_base_url',
+      message:
+        'fleet:true needs a target — pass base_url (e.g. http://rl-env-<slug>-allinone) or against_env_slug.',
+    };
+  }
+
+  // ROK-1792: refuse a spec list validate-ci.sh would exit 2 on.
+  const specsError = checkE2eSpecs(params.e2e_specs, params.e2e_scope, resolveArgs(params));
+  if (specsError) return { ok: false, error: 'invalid_e2e_specs', message: specsError };
+
+  // ROK-1368 + ROK-1466 W1: re-seed + thread the env's admin password so
+  // Playwright global-setup authenticates (else it 401s on the literal
+  // 'password'). An explicit admin_password wins; otherwise seed for whatever
+  // slug we can name — `against_env_slug` OR one recovered from a base_url of
+  // the form http://rl-env-<slug>-allinone, which is exactly what the
+  // documented fleet:true flow passes.
+  const seedSlug =
+    params.against_env_slug ?? (baseUrl ? slugFromBaseUrl(baseUrl) : null);
+  const adminPw =
+    params.admin_password ??
+    (seedSlug ? await seedEnvAdminPassword(sshUser, sshHost, seedSlug) : null);
+  const innerEnv = resolveInnerEnv({
+    baseUrl,
+    adminPassword: adminPw,
+    e2eScope: params.e2e_scope,
+    e2eSpecs: params.e2e_specs,
+  });
+  // Bug D: validate-ci.sh lives inside the runner container at /workspace —
+  // task-start runs its target on the HOST, so route through
+  // run-on-runner-with-heartbeat (docker exec + M5b progress lines).
+  const innerCmd =
+    `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
+  const targetCmd =
+    `/srv/rl-infra/orchestrator/bin/run-on-runner-with-heartbeat ` +
+    `-- bash -c ${shellQuote(innerCmd)}`;
+
+  const taskId = newTaskId();
+  const slotFlag = slot !== null ? `--slot ${slot} ` : '';
+  // Pass timeout_seconds through to task-start so the watchdog kills a hung run.
+  // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
+  // --static / --only-unit / --only-integration runs to 1800s.
+  const timeoutS = resolveValidateCiTimeout(resolveArgs(params), params.timeout_seconds);
+  const timeoutFlag = `--timeout-seconds ${timeoutS} `;
+  // ROK-1470: heavy runs wait on host MemAvailable inside task-start before the
+  // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.
+  const weight = resolveValidateCiWeight(resolveArgs(params), params.weight);
+  const remote =
+    `RL_AGENT_ID=${shellQuote(agentId)} ` +
+    `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
+    `--tool rl_validate_ci ${slotFlag}${weightFlag(weight)}${timeoutFlag}` +
+    `-- ${targetCmd}`;
+
+  let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
+  try {
+    const { stdout } = await execFileP(
+      'ssh',
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remote],
+      { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 },
+    );
+    try {
+      dispatch = JSON.parse(stdout.trim()) as typeof dispatch;
+    } catch {
+      const last = stdout.trim().split('\n').pop();
+      if (last) {
+        try {
+          dispatch = JSON.parse(last) as typeof dispatch;
+        } catch {
+          /* falls through */
+        }
+      }
+    }
+  } catch (err) {
+    const e = err as Error & { stderr?: string; code?: number };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    return { ok: false, error: 'task_start_failed', stderr };
+  }
+
+  const finalTaskId = dispatch.task_id ?? taskId;
+  const startedAt = dispatch.started_at ?? new Date().toISOString();
+  // Operator ruling 2026-09-12: remember WHICH worktree HEAD this run covers.
+  // Resolved now, laptop-side — the pre-push sentinel must never be written
+  // for a sha other than the one that was synced for this task, and the
+  // worktree can advance while the run is in flight.
+  // ROK-1566: record the web-SURFACE hash alongside the sha — the sentinel is
+  // keyed to what Playwright verified, not to a commit id a docs-only
+  // follow-up can invalidate.
+  recordTaskSha(
+    finalTaskId,
+    await resolveWorktreeShortSha(params.worktree_path),
+    shaMapPath(),
+    await resolveWorktreeSurfaceHash(params.worktree_path),
+  );
+  const logUrl = `https://${FLEET_DOMAIN}/api/tasks/${finalTaskId}/log`;
+
+  if (!wait) {
+    return {
+      ok: true,
+      task_id: finalTaskId,
+      log_url: logUrl,
+      log_path: dispatch.log_path ?? `/srv/rl-infra/state/tasks/${finalTaskId}.log`,
+      started_at: startedAt,
+      mcp_runtime_status: 'running',
+      slot: slot ?? undefined,
+      weight,
+    };
+  }
+
+  // wait:true — chain through ONE ≤120s executeWait. Returns terminal status OR
+  // a still_running snapshot (ROK-1362); the caller re-polls to keep watching.
+  return task.executeWait({ task_id: finalTaskId, timeout_seconds: waitTimeoutS });
+}

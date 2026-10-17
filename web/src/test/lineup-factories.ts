@@ -1,0 +1,106 @@
+/**
+ * Test factories for Community Lineup data (ROK-935).
+ * Produces mock DTOs matching the contract schema shapes.
+ */
+import type {
+    LineupBannerResponseDto,
+    LineupDetailResponseDto,
+    LineupEntryResponseDto,
+} from '@raid-ledger/contract';
+
+/** Create a mock lineup banner response. */
+export function createMockBanner(
+    overrides: Partial<LineupBannerResponseDto> = {},
+): LineupBannerResponseDto {
+    return {
+        id: 1,
+        title: 'Test Lineup',
+        description: null,
+        status: 'building',
+        targetDate: '2026-03-28',
+        entryCount: 3,
+        totalVoters: 5,
+        totalMembers: 10,
+        // ROK-1348: eligible voter pool — public lineups mirror totalMembers.
+        votingEligibleCount: 10,
+        decidedGameName: null,
+        entries: [
+            { gameId: 1, gameName: 'Valheim', gameCoverUrl: '/cover1.jpg', ownerCount: 6, voteCount: 3 },
+            { gameId: 2, gameName: 'Elden Ring', gameCoverUrl: '/cover2.jpg', ownerCount: 4, voteCount: 2 },
+        ],
+        // ROK-1065: visibility surfaced in the banner response.
+        visibility: 'public',
+        ...overrides,
+    } as LineupBannerResponseDto;
+}
+
+/** Create a mock lineup entry response. */
+export function createMockEntry(
+    overrides: Partial<LineupEntryResponseDto> = {},
+): LineupEntryResponseDto {
+    return {
+        id: 1,
+        gameId: 42,
+        gameName: 'Valheim',
+        gameCoverUrl: '/cover.jpg',
+        nominatedBy: { id: 1, displayName: 'TestUser' },
+        note: null,
+        carriedOver: false,
+        voteCount: 3,
+        starCount: null,
+        createdAt: '2026-03-20T00:00:00Z',
+        ownerCount: 6,
+        totalMembers: 10,
+        nonOwnerCount: 4,
+        wishlistCount: 2,
+        itadCurrentPrice: 14.99,
+        itadCurrentCut: 25,
+        itadCurrentShop: 'Steam',
+        itadCurrentUrl: 'https://store.steampowered.com/app/892970',
+        playerCount: null,
+        ...overrides,
+    };
+}
+
+/** Create a mock lineup detail response. */
+export function createMockLineupDetail(
+    overrides: Partial<LineupDetailResponseDto> = {},
+): LineupDetailResponseDto {
+    return {
+        id: 1,
+        title: 'Test Lineup',
+        description: null,
+        status: 'building',
+        targetDate: '2026-03-28',
+        decidedGameId: null,
+        decidedGameName: null,
+        linkedEventId: null,
+        createdBy: { id: 1, displayName: 'Admin' },
+        votingDeadline: null,
+        maxVotesPerPlayer: 3,
+        entries: [createMockEntry()],
+        totalVoters: 5,
+        totalMembers: 10,
+        // ROK-1298: voter pool denominator for Sv voting bars.
+        votingEligibleCount: 10,
+        createdAt: '2026-03-20T00:00:00Z',
+        updatedAt: '2026-03-20T00:00:00Z',
+        // ROK-1064: optional Discord channel override fields.
+        channelOverrideId: null,
+        channelOverrideName: null,
+        // ROK-1065: visibility + invitees.
+        visibility: 'public',
+        invitees: [],
+        // ROK-1067: public-share toggle + slug.
+        publicShareEnabled: true,
+        publicSlug: 'aBcDeFgHiJ12',
+        // ROK-1302: scheduling phase enabled by default (pre-migration parity).
+        includeSchedulingPhase: true,
+        // ROK-1296: per-viewer submission timestamps for the U4 SubmitBar.
+        viewerSubmissions: {
+            nominationsSubmittedAt: null,
+            votesSubmittedAt: null,
+        },
+        ...overrides,
+    } as LineupDetailResponseDto;
+}

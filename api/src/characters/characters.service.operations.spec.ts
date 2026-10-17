@@ -1,0 +1,533 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ImportWowCharacterSchema } from '@raid-ledger/contract';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { CharactersService } from './characters.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { EnrichmentsService } from '../enrichments/enrichments.service';
+
+/** Single `.from().where().limit()` select returning `rows`. */
+function selectOnce(rows: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      where: jest
+        .fn()
+        .mockReturnValue({ limit: jest.fn().mockResolvedValue(rows) }),
+    }),
+  };
+}
+
+/**
+ * Helper: build a mock tx.select that handles two sequential calls:
+ *   1st call → duplicate claim check → .from().where().limit(1) → claimRows
+ *   2nd call → charCount            → .from().where()           → countRows
+ */
+function mockTxSelectDualCall(claimRows: unknown[], countRows: unknown[]) {
+  const fn = jest.fn();
+  // 1st call: duplicate claim check (.where().limit())
+  fn.mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockResolvedValue(claimRows),
+      }),
+    }),
+  });
+  // 2nd call: charCount (where resolves directly)
+  fn.mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(countRows),
+    }),
+  });
+  return fn;
+}
+
+describe('CharactersService — operations', () => {
+  let service: CharactersService;
+  let mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
+  let mockPluginRegistry: {
+    getAdaptersForExtensionPoint: jest.Mock;
+  };
+
+  const mockGame = {
+    id: 1,
+    slug: 'world-of-warcraft',
+    name: 'World of Warcraft',
+    hasRoles: true,
+    hasSpecs: true,
+  };
+
+  const mockCharacter = {
+    id: 'char-uuid-1',
+    userId: 1,
+    gameId: 1,
+    name: 'Thrall',
+    realm: 'Area 52',
+    class: 'Shaman',
+    spec: 'Enhancement',
+    role: 'dps',
+    roleOverride: null,
+    isMain: true,
+    itemLevel: 480,
+    externalId: null,
+    avatarUrl: null,
+    renderUrl: null,
+    level: 80,
+    race: 'Orc',
+    faction: 'horde',
+    lastSyncedAt: null,
+    profileUrl: null,
+    region: null,
+    gameVariant: null,
+    equipment: null,
+    displayOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockAltCharacter = {
+    ...mockCharacter,
+    id: 'char-uuid-2',
+    name: 'Jaina',
+    class: 'Mage',
+    spec: 'Frost',
+    isMain: false,
+    displayOrder: 1,
+  };
+
+  function setupMockDbChains() {
+    mockDb.select.mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([mockCharacter]),
+          orderBy: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockAltCharacter]),
+          }),
+        }),
+        orderBy: jest.fn().mockResolvedValue([mockCharacter, mockAltCharacter]),
+      }),
+    });
+    mockDb.insert.mockReturnValue({
+      values: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockCharacter]),
+      }),
+    });
+    mockDb.update.mockReturnValue({
+      set: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockCharacter]),
+        }),
+      }),
+    });
+    mockDb.delete.mockReturnValue({
+      where: jest.fn().mockResolvedValue(undefined),
+    });
+  }
+
+  function setupTransactionMock() {
+    mockDb.transaction.mockImplementation(
+      (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+        const tx = {
+          select: mockTxSelectDualCall([], [{ charCount: 1 }]),
+          update: jest.fn().mockReturnValue({
+            set: jest.fn().mockReturnValue({
+              where: jest.fn().mockReturnValue({
+                returning: jest
+                  .fn()
+                  .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+              }),
+            }),
+          }),
+          insert: jest.fn().mockReturnValue({
+            values: jest.fn().mockReturnValue({
+              returning: jest.fn().mockResolvedValue([mockCharacter]),
+            }),
+          }),
+        };
+        return callback(tx);
+      },
+    );
+  }
+
+  beforeEach(async () => {
+    mockDb = {
+      select: jest.fn(),
+      insert: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      transaction: jest.fn(),
+    };
+    mockPluginRegistry = {
+      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
+    };
+
+    setupMockDbChains();
+    setupTransactionMock();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CharactersService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: EnrichmentsService,
+          useValue: {
+            getEnrichmentsForEntity: jest.fn().mockResolvedValue([]),
+            enqueueCharacterEnrichments: jest.fn().mockResolvedValue(0),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<CharactersService>(CharactersService);
+  });
+
+  describe('delete', () => {
+    it('should delete a non-main character when main still exists', async () => {
+      // findOne returns the alt character
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ ...mockAltCharacter, userId: 1 }]),
+          }),
+        }),
+      });
+
+      // Remaining characters query — main still exists
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+          }),
+        }),
+      });
+
+      await service.delete(1, 'char-uuid-2');
+      expect(mockDb.delete).toHaveBeenCalled();
+      // Main still exists, so no update needed
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    // ROK-206: Deleting main auto-promotes lowest-order alt
+    it('should auto-promote lowest-order alt when main is deleted', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+          }),
+        }),
+      });
+
+      // Remaining characters — alt exists but none is main
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([{ ...mockAltCharacter, isMain: false }]),
+          }),
+        }),
+      });
+
+      await service.delete(1, 'char-uuid-1');
+      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    // ROK-206: Deleting main with no alts does not fail
+    it('should handle deleting main when no alts remain', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+          }),
+        }),
+      });
+
+      // No remaining characters
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      await service.delete(1, 'char-uuid-1');
+      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    // ROK-206: Deleting non-main when only 1 character remains should auto-main the last one
+    it('should auto-main the last remaining character after deleting a non-main', async () => {
+      // findOne returns the alt (non-main) that's being deleted
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { ...mockAltCharacter, userId: 1, isMain: false },
+              ]),
+          }),
+        }),
+      });
+
+      // After deletion, only one character remains and it has no main
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([{ ...mockCharacter, isMain: false }]),
+          }),
+        }),
+      });
+
+      await service.delete(1, 'char-uuid-2');
+      expect(mockDb.delete).toHaveBeenCalled();
+      // Should auto-promote the last remaining character
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('setMain', () => {
+    it('should set character as main and demote existing main', async () => {
+      const result = await service.setMain(1, 'char-uuid-2');
+      expect(result.isMain).toBe(true);
+      expect(mockDb.transaction).toHaveBeenCalled();
+    });
+  });
+
+  describe('importExternal', () => {
+    // ROK-1563: WoW: Forever variant. The Blizzard namespace is a placeholder
+    // until ROK-1562's probe finds the real one, so an import MUST surface the
+    // API's 404 as the ordinary "character not found" error — never crash, and
+    // never silently fall back to retail data.
+    describe('wow_forever variant (ROK-1563)', () => {
+      it('accepts wow_forever as a gameVariant on the import DTO (AC1)', () => {
+        const parsed = ImportWowCharacterSchema.parse({
+          name: 'Thrall',
+          realm: 'area-52',
+          region: 'us',
+          gameVariant: 'wow_forever',
+        });
+        expect(parsed.gameVariant).toBe('wow_forever');
+      });
+
+      it('surfaces a Blizzard 404 as NotFoundException (AC3)', async () => {
+        const mockAdapter = {
+          resolveGameSlugs: jest
+            .fn()
+            .mockReturnValue(['world-of-warcraft-forever']),
+          fetchProfile: jest
+            .fn()
+            .mockRejectedValue(
+              new NotFoundException('Character not found on Blizzard armory'),
+            ),
+          fetchSpecialization: jest.fn(),
+          fetchEquipment: jest.fn(),
+        };
+        mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
+          new Map([['wow', mockAdapter]]),
+        );
+        mockDb.select.mockReturnValueOnce(selectOnce([{ id: 1 }]));
+        mockDb.select.mockReturnValueOnce(
+          selectOnce([
+            {
+              id: 99,
+              slug: 'world-of-warcraft-forever',
+              apiNamespacePrefix: 'classicforever',
+            },
+          ]),
+        );
+
+        await expect(
+          service.importExternal(1, {
+            name: 'Thrall',
+            realm: 'area-52',
+            region: 'us',
+            gameVariant: 'wow_forever',
+            isMain: false,
+          }),
+        ).rejects.toThrow(NotFoundException);
+        // No retail fallback: the Forever namespace prefix was the one used.
+        expect(mockAdapter.fetchProfile).toHaveBeenCalledWith(
+          'Thrall',
+          'area-52',
+          'us',
+          'classicforever',
+        );
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should throw NotFoundException when no adapter found', async () => {
+      mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
+        new Map(),
+      );
+
+      await expect(
+        service.importExternal(1, {
+          name: 'Thrall',
+          realm: 'area-52',
+          region: 'us',
+          gameVariant: 'retail',
+          isMain: false,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    // ROK-578: Merge imported data into existing local character on conflict
+    function setupMergeConflictMocks() {
+      const mockAdapter = {
+        resolveGameSlugs: jest.fn().mockReturnValue(['world-of-warcraft']),
+        fetchProfile: jest.fn().mockResolvedValue({
+          name: 'Thrall',
+          realm: 'Area 52',
+          class: 'Shaman',
+          spec: 'Enhancement',
+          role: 'dps',
+          itemLevel: 500,
+          avatarUrl: 'https://render.worldofwarcraft.com/thrall.jpg',
+          renderUrl: 'https://render.worldofwarcraft.com/thrall-render.jpg',
+          level: 80,
+          race: 'Orc',
+          faction: 'horde',
+          profileUrl:
+            'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
+        }),
+        fetchSpecialization: jest.fn().mockResolvedValue({
+          spec: 'Enhancement',
+          role: 'dps',
+          talents: { loadouts: [] },
+        }),
+        fetchEquipment: jest.fn().mockResolvedValue({ slots: [] }),
+      };
+      mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
+        new Map([['wow', mockAdapter]]),
+      );
+
+      // User exists + Game lookup
+      const selectOnce = (rows: unknown[]) => ({
+        from: jest.fn().mockReturnValue({
+          where: jest
+            .fn()
+            .mockReturnValue({ limit: jest.fn().mockResolvedValue(rows) }),
+        }),
+      });
+      mockDb.select.mockReturnValueOnce(selectOnce([{ id: 1 }]));
+      mockDb.select.mockReturnValueOnce(selectOnce([mockGame]));
+
+      // Transaction throws unique violation (simulates duplicate)
+      mockDb.transaction.mockImplementationOnce(
+        (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+          const tx = {
+            select: mockTxSelectDualCall([], [{ charCount: 1 }]),
+            insert: jest.fn().mockReturnValue({
+              values: jest.fn().mockReturnValue({
+                returning: jest
+                  .fn()
+                  .mockRejectedValue(new Error('unique_user_game_character')),
+              }),
+            }),
+          };
+          return callback(tx);
+        },
+      );
+
+      // mergeIntoExisting: find existing local + update returns merged
+      const existingLocal = {
+        ...mockCharacter,
+        externalId: null,
+        region: null,
+        gameVariant: null,
+        lastSyncedAt: null,
+      };
+      mockDb.select.mockReturnValueOnce(selectOnce([existingLocal]));
+
+      const mergedCharacter = {
+        ...mockCharacter,
+        itemLevel: 500,
+        avatarUrl: 'https://render.worldofwarcraft.com/thrall.jpg',
+        renderUrl: 'https://render.worldofwarcraft.com/thrall-render.jpg',
+        region: 'us',
+        gameVariant: 'retail',
+        lastSyncedAt: new Date(),
+        profileUrl:
+          'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
+        equipment: { slots: [] },
+        talents: { loadouts: [] },
+      };
+      mockDb.update.mockReturnValueOnce({
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([mergedCharacter]),
+          }),
+        }),
+      });
+    }
+
+    it('should merge imported data into existing local character instead of throwing 409', async () => {
+      setupMergeConflictMocks();
+
+      const result = await service.importExternal(1, {
+        name: 'Thrall',
+        realm: 'area-52',
+        region: 'us',
+        gameVariant: 'retail',
+        isMain: false,
+      });
+
+      expect(result.itemLevel).toBe(500);
+      expect(result.avatarUrl).toBe(
+        'https://render.worldofwarcraft.com/thrall.jpg',
+      );
+      expect(result.region).toBe('us');
+      expect(result.gameVariant).toBe('retail');
+      expect(result.equipment).toEqual({ slots: [] });
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return a character when found and owned', async () => {
+      const result = await service.findOne(1, 'char-uuid-1');
+
+      expect(result).toMatchObject({
+        id: expect.any(String),
+        name: 'Thrall',
+      });
+    });
+
+    it('should throw NotFoundException when character not found', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      await expect(service.findOne(1, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ForbiddenException when not owned by user', async () => {
+      await expect(service.findOne(999, 'char-uuid-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+});

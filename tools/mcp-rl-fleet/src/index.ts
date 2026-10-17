@@ -1,0 +1,584 @@
+// mcp-rl-fleet — MCP server exposing rl-infra fleet operations to agents.
+//
+// The server always forces RL_PROXMOX_USER=rl-agent and RL_OPERATOR=0 so
+// agents can never accidentally execute as the privileged operator user.
+// See ../../rl-infra/README.md for the fleet architecture.
+//
+// TS2589 mitigation (ROK-1331 M2): Each tool's param shape is assigned to
+// a typed `Record<string, z.ZodTypeAny>` const before being passed to
+// server.tool(). This short-circuits the SDK's deep inference of nested
+// `.regex().min().max().optional()` chains via `ShapeOutput<Args>` that
+// otherwise produces TS2589 ("Type instantiation is excessively deep").
+
+// eslint-disable-next-line max-lines
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+
+import { worktreePathSchema } from './exec.js';
+import { TASK_ID_RE, WAIT_CAP_TEACHING_MESSAGE } from './tools/task-schemas.js';
+import * as claim from './tools/claim.js';
+import * as release from './tools/release.js';
+import * as status from './tools/status.js';
+import * as envSpin from './tools/env-spin.js';
+import * as envDestroy from './tools/env-destroy.js';
+import * as envList from './tools/env-list.js';
+import * as runOnRunner from './tools/run-on-runner.js';
+import * as validateCi from './tools/validate-ci.js';
+import * as dbUrl from './tools/db-url.js';
+import * as logsUrl from './tools/logs-url.js';
+import * as envSync from './tools/env-sync.js';
+import * as envCloneProd from './tools/env-clone-prod.js';
+import * as envBuildImage from './tools/env-build-image.js';
+import * as envDeploy from './tools/env-deploy.js';
+import * as forceRelease from './tools/force-release.js';
+import * as forceResync from './tools/force-resync.js';
+import * as testPlan from './tools/test-plan.js';
+import * as task from './tools/task.js';
+import * as taskInspect from './tools/task-inspect.js';
+import * as taskLogs from './tools/task-logs.js';
+import * as infraLogs from './tools/infra-logs.js';
+import * as envInspect from './tools/env-inspect.js';
+import * as envSigninLink from './tools/env-signin-link.js';
+import * as dbQuery from './tools/db-query.js';
+import * as lease from './tools/lease.js';
+import * as fleetHealth from './tools/fleet-health.js';
+import * as fleetPrune from './tools/fleet-prune.js';
+
+// 0.5.0 — ROK-1338 PR-2: interactive MCP tools (rl_task_logs, rl_env_inspect,
+//   rl_db_query) + execFileP dedup into exec.ts.
+// 0.4.0 — ROK-1331 M7: rl_fleet_health agent-side monitor tool.
+// 0.3.0 — ROK-1331 M5a: lease queue + claim duration + pin/unpin.
+const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.5.0' });
+
+const jsonResult = (data: unknown) => ({
+  content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+});
+
+type Shape = Record<string, z.ZodTypeAny>;
+
+/**
+ * Wrapper for server.tool that boxes the schema argument as `any` so the SDK's
+ * `Args extends ZodRawShapeCompat` generic doesn't deeply infer each schema's
+ * output type. Without this, TS2589 ("Type instantiation is excessively deep")
+ * fires on tool registrations whose param shape contains many nested
+ * `.regex().min().max().optional()` chains. The runtime cost is nil — the SDK
+ * still validates via the schema at call time.
+ */
+const registerTool = (
+  name: string,
+  description: string,
+  paramsSchema: Shape,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  cb: (p: any) => Promise<{ content: Array<{ type: 'text'; text: string }> }>,
+): void => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (server.tool as any)(name, description, paramsSchema, cb);
+};
+
+// Shared zod fragments (declared once to keep deep inference bounded).
+const slugSchema = z
+  .string()
+  .regex(/^[a-z0-9-]+$/, 'slug must match [a-z0-9-]+')
+  .min(1)
+  .max(63);
+// ROK-1362: widened to accept the `local-` namespace (laptop tasks: rl_env_deploy
+// / rl_env_clone_prod / rl_env_spin) alongside VM task ids.
+// ROK-1567: single-sourced from task-schemas.ts — the CLI validates against the same one.
+const taskIdSchema = z.string().regex(TASK_ID_RE);
+// ROK-1362: every blocking wait caps at 120s (no MCP call holds the channel
+// longer). On cap-expiry the tool returns a still_running progress snapshot.
+const waitFragment: Shape = {
+  wait: z.boolean().optional(),
+  wait_timeout_seconds: z.number().int().min(5).max(120).default(120),
+};
+
+const claimSchema: Shape = {
+  branch: z.string().optional(),
+  worktree_path: worktreePathSchema,
+  wait: z.boolean().optional(),
+  wait_timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  poll_interval_seconds: z.number().int().min(2).max(60).optional(),
+  slot: z.number().int().min(1).max(64).optional(),
+};
+registerTool(claim.TOOL_NAME, claim.TOOL_DESCRIPTION, claimSchema, async (p) =>
+  jsonResult(await claim.execute(p as claim.ClaimParams)),
+);
+
+const releaseSchema: Shape = {
+  worktree_path: worktreePathSchema,
+  // ROK-1331 M5a — preserve_envs defaults to true for agents (the wrapper's
+  // .execute() applies the default). Pass false to force the legacy destroy
+  // path (operator behavior).
+  preserve_envs: z.boolean().optional(),
+};
+registerTool(release.TOOL_NAME, release.TOOL_DESCRIPTION, releaseSchema, async (p) =>
+  jsonResult(await release.execute(p as release.ReleaseParams)),
+);
+
+registerTool(status.TOOL_NAME, status.TOOL_DESCRIPTION, {} as Shape, async () =>
+  jsonResult(await status.execute()),
+);
+
+// A3-B P4 — credential opt-in. The fleet admin@local password used to ride
+// along in every env-spin / deploy-task read, so it entered an agent's context
+// unbidden. It is now withheld unless the caller asks for it here.
+const includeCredentialsSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    'Return the env admin@local password (admin_password) instead of just ' +
+      'admin_password_available. Default false — ask ONLY if you must ' +
+      'authenticate as admin yourself; rl_validate_ci({against_env_slug}) ' +
+      'seeds and threads it for you.',
+  );
+
+const envSpinSchema: Shape = {
+  slug: slugSchema,
+  image: z.string().optional(),
+  ttl_hours: z.number().int().min(1).max(168).optional(),
+  worktree_path: worktreePathSchema,
+  // Accepted for back-compat; the password is read via rl_task_status
+  // include_credentials:true now that the spin is async, and a caller that sets
+  // it gets a credentials_hint naming that route.
+  include_credentials: includeCredentialsSchema,
+  ...waitFragment,
+};
+registerTool(envSpin.TOOL_NAME, envSpin.TOOL_DESCRIPTION, envSpinSchema, async (p) =>
+  jsonResult(await envSpin.execute(p as envSpin.EnvSpinParams)),
+);
+
+const envDestroySchema: Shape = {
+  slug: slugSchema,
+  force: z.boolean().optional(),
+  worktree_path: worktreePathSchema,
+};
+registerTool(envDestroy.TOOL_NAME, envDestroy.TOOL_DESCRIPTION, envDestroySchema, async (p) =>
+  jsonResult(await envDestroy.execute(p as envDestroy.EnvDestroyParams)),
+);
+
+registerTool(envList.TOOL_NAME, envList.TOOL_DESCRIPTION, {} as Shape, async () =>
+  jsonResult(await envList.execute()),
+);
+
+// ROK-1470 — admission weight. Heavy tasks wait until the VM has
+// RL_HEAVY_TASK_MIN_FREE_MB free before launching; light tasks never wait.
+// Omitted → derived per tool (see src/tools/task-weight.ts).
+const weightSchema = z.enum(['heavy', 'light']).optional();
+
+const runOnRunnerSchema: Shape = {
+  command: z.string().min(1),
+  worktree_path: worktreePathSchema,
+  timeout_seconds: z.number().int().min(1).max(7200).optional(),
+  weight: weightSchema,
+};
+registerTool(runOnRunner.TOOL_NAME, runOnRunner.TOOL_DESCRIPTION, runOnRunnerSchema, async (p) =>
+  jsonResult(await runOnRunner.execute(p as runOnRunner.RunOnRunnerParams)),
+);
+
+const validateCiSchema: Shape = {
+  args: z.array(z.string()).optional(),
+  worktree_path: worktreePathSchema,
+  against_env_slug: slugSchema.optional(),
+  timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  // ROK-1467 — booleans that map onto validate-ci.sh's narrowing flags. The
+  // script rejects conflicting --only-* combinations with exit 2.
+  only_integration: z.boolean().optional(),
+  only_unit: z.boolean().optional(),
+  no_coverage: z.boolean().optional(),
+  weight: weightSchema,
+  // ROK-1466 — one-call fleet gate. `fleet` requires a target: base_url (any
+  // http(s) URL) or against_env_slug. Rejected at the boundary when absent.
+  fleet: z.boolean().optional(),
+  base_url: z.string().url().optional(),
+  // ROK-1466 W1 — only needed when base_url is NOT an rl-env-<slug>-allinone
+  // host; those have their admin password re-seeded and threaded automatically.
+  admin_password: z.string().min(1).optional(),
+  // ROK-1565 — how much of the Playwright tier to run. Forwarded as E2E_SCOPE.
+  e2e_scope: z.enum(['auto', 'all', 'none']).optional(),
+  // ROK-1792 — explicit spec list, forwarded as E2E_SPECS. Exclusive with a
+  // non-auto e2e_scope (checked in execute; a Shape cannot cross-refine).
+  e2e_specs: z
+    .array(z.string().regex(validateCi.E2E_SPEC_PATTERN))
+    .max(validateCi.MAX_E2E_SPECS)
+    .optional(),
+  ...waitFragment,
+};
+registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>
+  jsonResult(await validateCi.execute(p as validateCi.ValidateCiParams)),
+);
+
+const dbUrlSchema: Shape = { slug: slugSchema };
+registerTool(dbUrl.TOOL_NAME, dbUrl.TOOL_DESCRIPTION, dbUrlSchema, async (p) =>
+  jsonResult(await dbUrl.execute(p as dbUrl.DbUrlParams)),
+);
+
+const logsUrlSchema: Shape = {
+  query: z.string().optional(),
+  since: z.string().optional(),
+};
+registerTool(logsUrl.TOOL_NAME, logsUrl.TOOL_DESCRIPTION, logsUrlSchema, async (p) =>
+  jsonResult(await logsUrl.execute(p as logsUrl.LogsUrlParams)),
+);
+
+const envSyncSchema: Shape = {
+  slug: slugSchema,
+  mode: z.enum(['settings', 'full']).optional(),
+  timeout_seconds: z.number().int().min(30).max(7200).optional(),
+};
+registerTool(envSync.TOOL_NAME, envSync.TOOL_DESCRIPTION, envSyncSchema, async (p) =>
+  jsonResult(await envSync.execute(p as envSync.EnvSyncParams)),
+);
+
+const envCloneProdSchema: Shape = {
+  slug: slugSchema,
+  skip_local_refresh: z.boolean().optional(),
+  timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  ...waitFragment,
+};
+registerTool(envCloneProd.TOOL_NAME, envCloneProd.TOOL_DESCRIPTION, envCloneProdSchema, async (p) =>
+  jsonResult(await envCloneProd.execute(p as envCloneProd.EnvCloneProdParams)),
+);
+
+const envBuildImageSchema: Shape = {
+  tag: z.string().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(63),
+  no_push: z.boolean().optional(),
+  worktree_path: worktreePathSchema,
+  timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  weight: weightSchema,
+  ...waitFragment,
+};
+registerTool(envBuildImage.TOOL_NAME, envBuildImage.TOOL_DESCRIPTION, envBuildImageSchema, async (p) =>
+  jsonResult(await envBuildImage.execute(p as envBuildImage.BuildImageParams)),
+);
+
+const envDeploySchema: Shape = {
+  slug: slugSchema,
+  branch: z.string().optional(),
+  worktree_path: worktreePathSchema,
+  skip_sync: z.boolean().optional(),
+  skip_build: z.boolean().optional(),
+  clone_prod: z.boolean().optional(),
+  clone_prod_skip_local_refresh: z.boolean().optional(),
+  // Build-step (VM-side) watchdog budget. NOT a blocking wait on this call.
+  timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  // ROK-1362: async-by-default. wait:false → {task_id} fast; wait:true blocks
+  // ≤120s on the laptop task then returns terminal status or a still_running snapshot.
+  ...waitFragment,
+};
+registerTool(envDeploy.TOOL_NAME, envDeploy.TOOL_DESCRIPTION, envDeploySchema, async (p) =>
+  jsonResult(await envDeploy.execute(p as envDeploy.EnvDeployParams)),
+);
+
+const forceReleaseSchema: Shape = {
+  slot: z.number().int().min(1).max(64),
+  reason: z.string().min(1).max(500),
+  no_destroy: z.boolean().optional(),
+};
+registerTool(forceRelease.TOOL_NAME, forceRelease.TOOL_DESCRIPTION, forceReleaseSchema, async (p) =>
+  jsonResult(await forceRelease.execute(p as forceRelease.ForceReleaseParams)),
+);
+
+const forceResyncSchema: Shape = {
+  worktree_path: worktreePathSchema,
+};
+registerTool(forceResync.TOOL_NAME, forceResync.TOOL_DESCRIPTION, forceResyncSchema, async (p) =>
+  jsonResult(await forceResync.execute(p as forceResync.ForceResyncParams)),
+);
+
+// ----- Test plans -----
+// ROK-1337 — plan_id is minted server-side (mcp-tool-side) with format
+// `YYYY-MM-DD-HHmm-XXXX` (UTC, 4 hex). Status/wait/clear take an OPTIONAL
+// plan_id to scope to a single plan; without it they target the slug as a
+// whole (list / aggregate-wait / wipe-the-directory).
+const planIdSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}-\d{4}-[0-9a-f]{4}$/, {
+    message: 'plan_id must match YYYY-MM-DD-HHmm-XXXX (e.g. 2026-05-21-1530-7f3a)',
+  });
+
+const testPlanCreateSchema: Shape = {
+  slug: slugSchema,
+  // 3-7 words. We split on whitespace, count non-empty tokens, and reject
+  // anything outside [3, 7]. Caller-visible error message lives in test-plan.ts
+  // as defense-in-depth — the Zod boundary just gates the shape.
+  goal: z.string().min(1).max(120).refine(
+    (s) => {
+      const n = s.trim().split(/\s+/).filter(Boolean).length;
+      return n >= 3 && n <= 7;
+    },
+    { message: 'goal must be 3-7 words (e.g. "Validate Discord OAuth flow")' },
+  ),
+  // Linear story ID — renders as a deep-link chip on the dashboard.
+  story_id: z.string().regex(/^ROK-\d+$/, {
+    message: 'story_id must match /^ROK-\\d+$/ (e.g. "ROK-1331")',
+  }),
+  title: z.string().max(200).optional(),
+  steps: z
+    .array(
+      z.object({
+        description: z.string().min(1).max(500),
+        expected: z.string().max(500).optional(),
+        category: z.string().max(50).optional(),
+        test_url: z.string().url().max(500).optional(),
+        reset_hint: z.string().max(300).optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+  created_by: z.string().max(200).optional(),
+};
+registerTool(testPlan.CREATE_TOOL, testPlan.CREATE_DESC, testPlanCreateSchema, async (p) =>
+  jsonResult(await testPlan.executeCreate(p as Parameters<typeof testPlan.executeCreate>[0])),
+);
+
+// ROK-1657 — include_comments is valid only with plan_id (the executors
+// return include_comments_requires_plan_id otherwise). Default false: the
+// read carries comment metadata only, never bodies.
+const includeCommentsSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    'Default false (safe: no comment bodies). true = plain-text tester comments, plan_id only; disposable sub-agent lanes only, never an orchestrating/Lead session.',
+  );
+const testPlanStatusSchema: Shape = {
+  slug: slugSchema,
+  plan_id: planIdSchema.optional(),
+  include_comments: includeCommentsSchema,
+};
+registerTool(testPlan.STATUS_TOOL, testPlan.STATUS_DESC, testPlanStatusSchema, async (p) =>
+  jsonResult(await testPlan.executeStatus(p as Parameters<typeof testPlan.executeStatus>[0])),
+);
+
+const testPlanWaitSchema: Shape = {
+  slug: slugSchema,
+  plan_id: planIdSchema.optional(),
+  timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  include_comments: includeCommentsSchema,
+};
+registerTool(testPlan.WAIT_TOOL, testPlan.WAIT_DESC, testPlanWaitSchema, async (p) =>
+  jsonResult(await testPlan.executeWait(p as Parameters<typeof testPlan.executeWait>[0])),
+);
+
+const testPlanClearSchema: Shape = {
+  slug: slugSchema,
+  plan_id: planIdSchema.optional(),
+};
+registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, async (p) =>
+  jsonResult(await testPlan.executeClear(p as Parameters<typeof testPlan.executeClear>[0])),
+);
+
+// ----- Task tools (ROK-1331 M2) -----
+const TASK_STATUS_DESC =
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod / rl_env_spin). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy or spin task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. Secrets are redacted out of `cmd`, `args_summary` and `env` values in every mode — ROK-1534 widened that from the env admin password to the whole `*PASSWORD`/`*TOKEN`/`*SECRET` class, and extended it to rl_task_inspect and rl_task_list, which previously returned the orchestrator record verbatim. `log_tail` is still NOT redacted (a terminal read returns it in full). ROK-1568: an image-build task sitting in `running` may be parked on DISK, not memory — admission_state:'waiting_disk' means it is below RL_BUILD_MIN_FREE_GB (20 GB) and has triggered one prune ladder pass; failure_reason:'disk_pressure' (exit 76, vs 75 for the memory admission_timeout) means the pressure never cleared. Check rl_status host.disk_free_gb and run rl_fleet_prune.";
+const taskStatusSchema: Shape = {
+  task_id: taskIdSchema,
+  log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
+  include_credentials: includeCredentialsSchema,
+  // ROK-1567: progress-only projection. Omit it and you get the right default.
+  brief: z
+    .boolean()
+    .optional()
+    .describe(
+      'Return the progress-only projection (no cmd/env/cwd/log_path/log_url/log_tail). ' +
+        'Defaults to true while the task is non-terminal and false once terminal — pass ' +
+        'brief:false to force the full forensic payload on a running task.',
+    ),
+};
+registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
+  jsonResult(await task.executeStatus(p as task.ExecuteStatusParams)),
+);
+
+const TASK_WAIT_DESC =
+  "Block until a task reaches a terminal state OR 120s elapses — whichever first (ROK-1362: every wait HARD-CAPS at 120s; the old hour-long blind wait is gone). VM tasks long-poll via inotifywait; laptop `local-...` tasks via fs.watch. Terminal → same shape as rl_task_status. Cap reached with the task still running → {ok:false, status:'still_running', task_id, tool, current_step, steps[], log_tail (~6KB), elapsed_s, waited_s, poll_again_hint} — a PROGRESS SNAPSHOT you narrate to the operator, then re-call with the SAME task_id to keep waiting (each call is a fresh snapshot). To walk away, use the README background push-notify pattern (a backgrounded `rl ... wait` Bash call), never a blocking MCP wait. Also returns {error:'inotifywait_not_installed', operator_only:true} (VM missing inotify-tools) or {error:'ssh_denied'|'ssh_unreachable', hint} on transport failure.";
+const taskWaitSchema: Shape = {
+  task_id: taskIdSchema,
+  // ROK-1362: schema-level cap with a TEACHING message — the message IS the
+  // migration path for agents habituated to 1800s blind waits.
+  timeout_seconds: z
+    .number()
+    .int()
+    .min(5)
+    .max(120, { message: WAIT_CAP_TEACHING_MESSAGE })
+    .default(120),
+  log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
+  include_credentials: includeCredentialsSchema,
+};
+registerTool('rl_task_wait', TASK_WAIT_DESC, taskWaitSchema, async (p) =>
+  jsonResult(await task.executeWait(p as task.ExecuteWaitParams)),
+);
+
+const TASK_CANCEL_DESC =
+  "Signal a running task to exit gracefully (SIGTERM, fallback SIGKILL after 10s on the orchestrator side). Updates task JSON to mcp_runtime_status='cancelled'. Idempotent: returns ok:true even if the task already finished. `reason` is recorded in the task JSON for audit.";
+const taskCancelSchema: Shape = {
+  task_id: taskIdSchema,
+  reason: z.string().min(1).max(500),
+};
+registerTool('rl_task_cancel', TASK_CANCEL_DESC, taskCancelSchema, async (p) =>
+  jsonResult(await task.executeCancel(p as task.ExecuteCancelParams)),
+);
+
+const TASK_LIST_DESC =
+  "List recent tasks across all slots (paginated). For triage when an agent forgets a task_id OR for the fleet dashboard. Filter by slot or mcp_runtime_status. Returns an array of TaskStatusResult-shaped objects (without log_tail) sorted by started_at descending. ROK-1534: every row has secret-bearing assignments in `cmd` / `args_summary` and secret-named `env` keys (`*PASSWORD`, `*TOKEN`, `*SECRET`) masked to `***` — a list call is not a credential-delivery channel.";
+const taskListSchema: Shape = {
+  slot: z.number().int().min(1).max(64).optional(),
+  status: z
+    .enum([
+      'running',
+      'succeeded',
+      'failed',
+      'killed_buffer_overflow',
+      'killed_timeout',
+      'cancelled',
+    ])
+    .optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+};
+registerTool('rl_task_list', TASK_LIST_DESC, taskListSchema, async (p) =>
+  jsonResult(await task.executeList(p as task.ExecuteListParams)),
+);
+
+// ----- Task inspect (ROK-1338 PR-1) -----
+const taskInspectSchema: Shape = {
+  task_id: taskIdSchema,
+  include_credentials: includeCredentialsSchema,
+};
+registerTool(
+  taskInspect.TOOL_NAME,
+  taskInspect.TOOL_DESCRIPTION,
+  taskInspectSchema,
+  async (p) => jsonResult(await taskInspect.execute(p as taskInspect.ExecuteInspectParams)),
+);
+
+// ----- Infra logs (ROK-1338 PR-1) -----
+const infraLogsSchema: Shape = {
+  service: infraLogs.InfraServiceSchema,
+  tail: z.number().int().positive().max(5000).optional(),
+};
+registerTool(
+  infraLogs.TOOL_NAME,
+  infraLogs.TOOL_DESCRIPTION,
+  infraLogsSchema,
+  async (p) => jsonResult(await infraLogs.execute(p as infraLogs.InfraLogsParams)),
+);
+
+// ----- Task logs (ROK-1338 PR-2) -----
+const taskLogsSchema: Shape = {
+  task_id: taskIdSchema,
+  lines: z.number().int().positive().max(5000).optional(),
+  follow: z.boolean().optional(),
+  strip_ansi: z.boolean().optional(),
+};
+registerTool(
+  taskLogs.TOOL_NAME,
+  taskLogs.TOOL_DESCRIPTION,
+  taskLogsSchema,
+  async (p) => jsonResult(await taskLogs.execute(p as taskLogs.TaskLogsParams)),
+);
+
+// ----- Env inspect (ROK-1338 PR-2) -----
+const envInspectSchema: Shape = {
+  slug: slugSchema,
+  what: envInspect.EnvInspectTargetSchema,
+};
+registerTool(
+  envInspect.TOOL_NAME,
+  envInspect.TOOL_DESCRIPTION,
+  envInspectSchema,
+  async (p) => jsonResult(await envInspect.execute(p as envInspect.EnvInspectParams)),
+);
+
+// ----- Env sign-in link (agent browser verification, 2026-09-24) -----
+const envSigninLinkSchema: Shape = {
+  slug: slugSchema,
+  user_id: z.number().int().positive().optional(),
+  username: z.string().min(1).max(100).optional(),
+  path: z.string().min(1).max(2048).optional(),
+  worktree_path: worktreePathSchema,
+};
+registerTool(
+  envSigninLink.TOOL_NAME,
+  envSigninLink.TOOL_DESCRIPTION,
+  envSigninLinkSchema,
+  async (p) => jsonResult(await envSigninLink.execute(p as envSigninLink.SigninLinkParams)),
+);
+
+// ----- DB query (ROK-1338 PR-2 — architect-hardened, read-only v1) -----
+const dbQuerySchema: Shape = {
+  slug: slugSchema,
+  sql: z.string().min(1).max(10000),
+  read_only: z.literal(true).optional().default(true),
+};
+registerTool(
+  dbQuery.TOOL_NAME,
+  dbQuery.TOOL_DESCRIPTION,
+  dbQuerySchema,
+  async (p) => jsonResult(await dbQuery.execute(p as dbQuery.DbQueryParams)),
+);
+
+// ----- Lease tools (ROK-1331 M5a) -----
+const leaseStatusSchema: Shape = {
+  slot: z.number().int().positive().optional(),
+};
+registerTool(lease.STATUS_TOOL, lease.STATUS_DESC, leaseStatusSchema, async (p) =>
+  jsonResult(await lease.executeStatus(p as lease.LeaseStatusParams)),
+);
+
+const claimWaitSchema: Shape = {
+  timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  worktree_path: worktreePathSchema,
+  slot: z.number().int().min(1).max(64).optional(),
+};
+registerTool(lease.WAIT_TOOL, lease.WAIT_DESC, claimWaitSchema, async (p) =>
+  jsonResult(await lease.executeWait(p as lease.ClaimWaitParams)),
+);
+
+const extendSchema: Shape = {
+  hours: z.number().int().min(1).max(24).optional(),
+  worktree_path: worktreePathSchema,
+};
+registerTool(lease.EXTEND_TOOL, lease.EXTEND_DESC, extendSchema, async (p) =>
+  jsonResult(await lease.executeExtend(p as lease.ExtendParams)),
+);
+
+const envPinSchema: Shape = {
+  slug: slugSchema,
+  worktree_path: worktreePathSchema,
+};
+registerTool(lease.PIN_TOOL, lease.PIN_DESC, envPinSchema, async (p) =>
+  jsonResult(await lease.executePin(p as lease.PinParams)),
+);
+registerTool(lease.UNPIN_TOOL, lease.UNPIN_DESC, envPinSchema, async (p) =>
+  jsonResult(await lease.executeUnpin(p as lease.PinParams)),
+);
+
+// ----- Fleet health (ROK-1331 M7) -----
+const fleetHealthSchema: Shape = {
+  severity_threshold: z.enum(['warn', 'error']).optional(),
+};
+registerTool(fleetHealth.TOOL_NAME, fleetHealth.TOOL_DESC, fleetHealthSchema, async (p) =>
+  jsonResult(await fleetHealth.execute(p as fleetHealth.FleetHealthParams)),
+);
+
+// ROK-1568 — on-demand host disk reclaim (the gc-sweeper's ladder, run now).
+const fleetPruneSchema: Shape = {
+  dry_run: z
+    .boolean()
+    .optional()
+    .describe('List the rungs that WOULD run plus `docker system df` reclaimable numbers, without pruning.'),
+};
+registerTool(fleetPrune.TOOL_NAME, fleetPrune.TOOL_DESC, fleetPruneSchema, async (p) =>
+  jsonResult(await fleetPrune.execute(p as fleetPrune.FleetPruneParams)),
+);
+
+// CLI self-check: invoking with --self-check prints OK and exits 0 if the
+// imports + tool registrations didn't throw. Used by the mcp-env::mcp_health
+// tool to confirm this server can start.
+if (process.argv.includes('--self-check')) {
+  // eslint-disable-next-line no-console
+  console.log('mcp-rl-fleet OK');
+  process.exit(0);
+}
+
+const transport = new StdioServerTransport();
+await server.connect(transport);

@@ -1,0 +1,59 @@
+name: Mirror CI base images to GHCR
+
+# ROK-1352: Docker Hub anonymous pulls of the CI service-container images
+# (pgvector, redis) intermittently fail with "context deadline exceeded" /
+# rate-limiting, red-flagging PRs before any test runs. This job mirrors the
+# pinned images into GHCR (pulled by CI via GITHUB_TOKEN, no Docker Hub limit).
+# Runs weekly + on demand; the per-PR hot path then pulls only from GHCR.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: mirror-ci-images
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    env:
+      GHCR_NS: ghcr.io/${{ github.repository_owner }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror images (retry-with-backoff on Docker Hub pull)
+        run: |
+          set -euo pipefail
+          mirror() {
+            local upstream="$1" dest="$2"
+            local i
+            for i in 1 2 3 4 5; do
+              if docker pull "$upstream"; then
+                docker tag "$upstream" "$dest"
+                docker push "$dest"
+                echo "mirrored $upstream -> $dest"
+                return 0
+              fi
+              echo "pull failed ($upstream) attempt $i; backing off $((i*15))s"
+              sleep $((i*15))
+            done
+            echo "FATAL: could not mirror $upstream after retries" >&2
+            return 1
+          }
+          mirror pgvector/pgvector:pg16 "$GHCR_NS/rl-ci-pgvector:pg16"
+          mirror redis:alpine          "$GHCR_NS/rl-ci-redis:alpine"
+
+      - name: Summary
+        run: |
+          echo "### Mirrored images" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`$GHCR_NS/rl-ci-pgvector:pg16\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`$GHCR_NS/rl-ci-redis:alpine\`" >> "$GITHUB_STEP_SUMMARY"

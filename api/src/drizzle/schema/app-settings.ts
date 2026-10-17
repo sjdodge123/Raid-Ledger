@@ -1,0 +1,225 @@
+import { pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+
+/**
+ * Application settings table for storing encrypted credentials.
+ * Used for OAuth configuration (Discord, Blizzard, etc.) that can be
+ * updated via the admin UI without requiring container restarts.
+ */
+export const appSettings = pgTable('app_settings', {
+  id: serial('id').primaryKey(),
+  key: text('key').unique().notNull(),
+  encryptedValue: text('encrypted_value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/**
+ * Known setting keys for type safety
+ */
+export const SETTING_KEYS = {
+  DISCORD_CLIENT_ID: 'discord_client_id',
+  DISCORD_CLIENT_SECRET: 'discord_client_secret',
+  DISCORD_CALLBACK_URL: 'discord_callback_url',
+  IGDB_CLIENT_ID: 'igdb_client_id',
+  IGDB_CLIENT_SECRET: 'igdb_client_secret',
+  BLIZZARD_CLIENT_ID: 'blizzard_client_id',
+  BLIZZARD_CLIENT_SECRET: 'blizzard_client_secret',
+  DEMO_MODE: 'demo_mode',
+  RELAY_ENABLED: 'relay_enabled',
+  RELAY_URL: 'relay_url',
+  RELAY_INSTANCE_ID: 'relay_instance_id',
+  RELAY_TOKEN: 'relay_token',
+  COMMUNITY_NAME: 'community_name',
+  COMMUNITY_LOGO_PATH: 'community_logo_path',
+  /** ROK-1778: optional contact email for the public /privacy page. */
+  PRIVACY_CONTACT_EMAIL: 'privacy_contact_email',
+  /** Legacy (TDB:991): no reader or writer; kept so clearBranding deletes the stale row. */
+  COMMUNITY_ACCENT_COLOR: 'community_accent_color',
+  GITHUB_PAT: 'github_pat',
+  ONBOARDING_COMPLETED: 'onboarding_completed',
+  ONBOARDING_CURRENT_STEP: 'onboarding_current_step',
+  DEFAULT_TIMEZONE: 'default_timezone',
+  LATEST_VERSION: 'latest_version',
+  VERSION_CHECK_LAST_RUN: 'version_check_last_run',
+  UPDATE_AVAILABLE: 'update_available',
+  /** ROK-1242: html_url of the latest GitHub release; '' when no per-release URL. */
+  LATEST_RELEASE_URL: 'latest_release_url',
+  /** ROK-1475: count of `fix:` commits on main the running build lacks; '' = unknown. */
+  FIXES_AVAILABLE: 'fixes_available',
+  /** ROK-1475: short sha of main's head at the last successful build check. */
+  LATEST_COMMIT_SHA: 'latest_commit_sha',
+  /** ROK-1475: GitHub /compare URL for the fixes span; '' when up to date. */
+  FIXES_COMPARE_URL: 'fixes_compare_url',
+  /** ROK-1475: short running sha the stored fixes count was computed against. */
+  FIXES_COMPUTED_FOR_SHA: 'fixes_computed_for_sha',
+  DISCORD_BOT_TOKEN: 'discord_bot_token',
+  DISCORD_BOT_ENABLED: 'discord_bot_enabled',
+  DISCORD_BOT_DEFAULT_CHANNEL: 'discord_bot_default_channel',
+  IGDB_FILTER_ADULT: 'igdb_filter_adult',
+  DISCORD_BOT_SETUP_COMPLETED: 'discord_bot_setup_completed',
+  DISCORD_BOT_COMMUNITY_NAME: 'discord_bot_community_name',
+  DISCORD_BOT_TIMEZONE: 'discord_bot_timezone',
+  CLIENT_URL: 'client_url',
+  DISCORD_EMOJI_TANK: 'discord_emoji_tank',
+  DISCORD_EMOJI_HEALER: 'discord_emoji_healer',
+  DISCORD_EMOJI_DPS: 'discord_emoji_dps',
+  DISCORD_EMOJI_CLASS_WARRIOR: 'discord_emoji_class_warrior',
+  DISCORD_EMOJI_CLASS_PALADIN: 'discord_emoji_class_paladin',
+  DISCORD_EMOJI_CLASS_HUNTER: 'discord_emoji_class_hunter',
+  DISCORD_EMOJI_CLASS_ROGUE: 'discord_emoji_class_rogue',
+  DISCORD_EMOJI_CLASS_PRIEST: 'discord_emoji_class_priest',
+  DISCORD_EMOJI_CLASS_DEATHKNIGHT: 'discord_emoji_class_deathknight',
+  DISCORD_EMOJI_CLASS_SHAMAN: 'discord_emoji_class_shaman',
+  DISCORD_EMOJI_CLASS_MAGE: 'discord_emoji_class_mage',
+  DISCORD_EMOJI_CLASS_WARLOCK: 'discord_emoji_class_warlock',
+  DISCORD_EMOJI_CLASS_MONK: 'discord_emoji_class_monk',
+  DISCORD_EMOJI_CLASS_DRUID: 'discord_emoji_class_druid',
+  DISCORD_EMOJI_CLASS_DEMONHUNTER: 'discord_emoji_class_demonhunter',
+  DISCORD_EMOJI_CLASS_EVOKER: 'discord_emoji_class_evoker',
+  /** ROK-293: Whether ad-hoc voice channel events are enabled */
+  AD_HOC_EVENTS_ENABLED: 'ad_hoc_events_enabled',
+  /** ROK-1591: Calendar Sync master kill switch. Unset ⇒ off. */
+  CALENDAR_SYNC_ENABLED: 'calendar_sync_enabled',
+  /**
+   * ROK-1727: Wowhead item resolver kill switch. Unset ⇒ ON (D2 — the opposite
+   * of CALENDAR_SYNC_ENABLED); only the string 'false' turns it off.
+   */
+  WOWHEAD_RESOLVER_ENABLED: 'wowhead_resolver_enabled',
+  /** ROK-1591: Google OAuth client for Calendar Sync (secret encrypted at rest). */
+  CALENDAR_GOOGLE_CLIENT_ID: 'calendar_google_client_id',
+  CALENDAR_GOOGLE_CLIENT_SECRET: 'calendar_google_client_secret',
+  /** ROK-1591: Microsoft OAuth client for Calendar Sync (secret encrypted at rest). */
+  CALENDAR_MICROSOFT_CLIENT_ID: 'calendar_microsoft_client_id',
+  CALENDAR_MICROSOFT_CLIENT_SECRET: 'calendar_microsoft_client_secret',
+  /** ROK-1471: LFG forum-board master toggle (default off). */
+  LFG_BOARD_ENABLED: 'lfg_board_enabled',
+  /** ROK-1471: id of the bot-created LFG forum channel; unset until created. */
+  LFG_BOARD_CHANNEL_ID: 'lfg_board_channel_id',
+  /**
+   * ROK-1619: the emoji marking the press that forms the group — Unicode or a
+   * custom guild emoji (`name`, `:name:`, `<:name:id>`). Unset means 🎉.
+   */
+  LFG_NOW_INDICATOR_EMOJI: 'lfg_now_indicator_emoji',
+  /** ROK-1471: id of the board's "how this works" intro thread; posted once. */
+  LFG_BOARD_INTRO_THREAD_ID: 'lfg_board_intro_thread_id',
+  /** ROK-1740: channel holding the pinned "Join Raid Ledger" post; unset until posted. */
+  DISCORD_JOIN_POST_CHANNEL_ID: 'discord_join_post_channel_id',
+  /** ROK-1740: message id of the pinned "Join Raid Ledger" post; unset until posted. */
+  DISCORD_JOIN_POST_MESSAGE_ID: 'discord_join_post_message_id',
+  // 'lfg_composer_enabled' (ROK-1612) was retired by ROK-1658; a leftover row is ignored.
+  /** ROK-471: Default voice channel for Discord Scheduled Events */
+  DISCORD_BOT_DEFAULT_VOICE_CHANNEL: 'discord_bot_default_voice_channel',
+  /** ROK-490: Grace minutes for voice attendance classification */
+  VOICE_ATTENDANCE_GRACE_MINUTES: 'voice_attendance_grace_minutes',
+  /** ROK-576: Whether auto-extension of events based on voice activity is enabled */
+  EVENT_AUTO_EXTEND_ENABLED: 'event_auto_extend_enabled',
+  /** ROK-576: Minutes to extend per rolling increment */
+  EVENT_AUTO_EXTEND_INCREMENT_MINUTES: 'event_auto_extend_increment_minutes',
+  /** ROK-576: Maximum total overage minutes allowed */
+  EVENT_AUTO_EXTEND_MAX_OVERAGE_MINUTES:
+    'event_auto_extend_max_overage_minutes',
+  /** ROK-576: Minimum voice members required to trigger extension */
+  EVENT_AUTO_EXTEND_MIN_VOICE_MEMBERS: 'event_auto_extend_min_voice_members',
+  /** ROK-417: Steam Web API key for library/playtime sync */
+  STEAM_API_KEY: 'steam_api_key',
+  /** ROK-772: IsThereAnyDeal API key for deal/price tracking */
+  ITAD_API_KEY: 'itad_api_key',
+  /** ROK-1397: Co-Optimus allowlisted user-agent (permission-first — granted by the site) */
+  COOPTIMUS_USER_AGENT: 'cooptimus_user_agent',
+  /**
+   * ROK-1398: opt-in for Co-Optimus editorial prose ("The Co-Op Experience" +
+   * their description). Defaults OFF — the grant covers the co-op *facts*;
+   * prose is only redistributed once the operator explicitly enables it.
+   */
+  COOPTIMUS_PROSE_ENABLED: 'cooptimus_prose_enabled',
+  /** ROK-542: AI provider key (e.g. 'ollama') */
+  AI_PROVIDER: 'ai_provider',
+  /** ROK-542: AI model identifier */
+  AI_MODEL: 'ai_model',
+  /** ROK-542: Ollama instance URL */
+  AI_OLLAMA_URL: 'ai_ollama_url',
+  /** ROK-542: Whether AI chat feature is enabled */
+  AI_CHAT_ENABLED: 'ai_chat_enabled',
+  /** ROK-542: Whether AI dynamic categories feature is enabled */
+  AI_DYNAMIC_CATEGORIES_ENABLED: 'ai_dynamic_categories_enabled',
+  /** ROK-1114: Whether per-user AI nomination suggestions are enabled. */
+  AI_SUGGESTIONS_ENABLED: 'ai_suggestions_enabled',
+  /** ROK-542: OpenAI API key */
+  AI_OPENAI_API_KEY: 'ai_openai_api_key',
+  /** ROK-542: Claude (Anthropic) API key */
+  AI_CLAUDE_API_KEY: 'ai_claude_api_key',
+  /** ROK-542: Google (Gemini) API key */
+  AI_GOOGLE_API_KEY: 'ai_google_api_key',
+  /** ROK-840: Ollama Docker setup progress step */
+  AI_OLLAMA_SETUP_STEP: 'ai_ollama_setup_step',
+  /** ROK-840: Ollama Docker setup error message */
+  AI_OLLAMA_SETUP_ERROR: 'ai_ollama_setup_error',
+  /** ROK-932: Dedicated Discord channel for Community Lineup embeds */
+  DISCORD_BOT_LINEUP_CHANNEL: 'discord_bot_lineup_channel',
+  /** ROK-1118: Minimum distinct nominations required for building→voting auto-advance. */
+  LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS: 'lineup_auto_advance_min_nominations',
+  /** ROK-1118: Minimum nominations per voter required for building→voting auto-advance. */
+  LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER:
+    'lineup_auto_advance_min_nominations_per_voter',
+  /** ROK-1253: Pre-advance grace window (ms) — defaults 300000 (5 min). 0 = advance immediately. */
+  LINEUP_AUTO_ADVANCE_GRACE_MS: 'lineup_auto_advance_grace_ms',
+  /** ROK-1253: Pause TTL after manual phase revert (ms) — defaults 86400000 (24 h). */
+  LINEUP_AUTO_ADVANCE_PAUSE_TTL_MS: 'lineup_auto_advance_pause_ttl_ms',
+  /** ROK-950: Common Ground — weight on voter/game taste-vector cosine similarity. */
+  COMMON_GROUND_TASTE_WEIGHT: 'common_ground_taste_weight',
+  /** ROK-950: Common Ground — weight when a co-play partner owns the game. */
+  COMMON_GROUND_SOCIAL_WEIGHT: 'common_ground_social_weight',
+  /** ROK-950: Common Ground — weight when game intensity matches voter intensity bucket. */
+  COMMON_GROUND_INTENSITY_WEIGHT: 'common_ground_intensity_weight',
+  /** ROK-567: Blend alpha between LLM theme vector and community centroid (0..1). */
+  DYNAMIC_CATEGORIES_THEME_CENTROID_BLEND:
+    'dynamic_categories_theme_centroid_blend',
+  /** ROK-567: How many candidate games to pre-resolve per dynamic category. */
+  DYNAMIC_CATEGORIES_CANDIDATE_COUNT: 'dynamic_categories_candidate_count',
+  /** ROK-567: Skip weekly generation when pending suggestions exceed this count. */
+  DYNAMIC_CATEGORIES_MAX_PENDING: 'dynamic_categories_max_pending',
+  /** ROK-1099: Community Insights churn-risk threshold (percent 0-100). */
+  COMMUNITY_INSIGHTS_CHURN_THRESHOLD_PCT:
+    'community_insights_churn_threshold_pct',
+  /** ROK-1099: Churn baseline window (weeks). */
+  COMMUNITY_INSIGHTS_BASELINE_WEEKS: 'community_insights_baseline_weeks',
+  /** ROK-1099: Churn recent-activity window (weeks). */
+  COMMUNITY_INSIGHTS_RECENT_WEEKS: 'community_insights_recent_weeks',
+  /** ROK-1099: Community insights snapshot retention in days. */
+  COMMUNITY_INSIGHTS_SNAPSHOT_RETENTION_DAYS:
+    'community_insights_snapshot_retention_days',
+  /** ROK-1353: Refresh-token session length in days (default 60, range 1–365). */
+  SESSION_LENGTH_DAYS: 'session_length_days',
+  /** ROK-1352: Master toggle for ephemeral voice channels. */
+  EPHEMERAL_VOICE_ENABLED: 'ephemeral_voice_enabled',
+  /** ROK-1352: Force every managed event to use an ephemeral channel (never a
+   *  pre-existing/static channel). Requires EPHEMERAL_VOICE_ENABLED. Default off. */
+  EPHEMERAL_VOICE_FORCED: 'ephemeral_voice_forced',
+  /** ROK-1352: Parent category ID under which ephemeral channels are created. */
+  EPHEMERAL_VOICE_CATEGORY_ID: 'ephemeral_voice_category_id',
+  /** ROK-1352: Minutes before event start to create the channel (default 30). */
+  EPHEMERAL_VOICE_CREATE_BUFFER_MINUTES:
+    'ephemeral_voice_create_buffer_minutes',
+  /** ROK-1352: Minutes a channel must sit empty post-event before delete (default 30). */
+  EPHEMERAL_VOICE_IDLE_MINUTES: 'ephemeral_voice_idle_minutes',
+  /** ROK-1435: Master toggle for the weekly Discord digest. Unset ⇒ off. */
+  WEEKLY_DIGEST_ENABLED: 'weekly_digest_enabled',
+  /** ROK-1435: Digest channel; unset ⇒ DISCORD_BOT_DEFAULT_CHANNEL. */
+  WEEKLY_DIGEST_CHANNEL_ID: 'weekly_digest_channel_id',
+  /** ROK-1435: Day of week to post, '0' (Sun)–'6' (Sat). Default '1'. */
+  WEEKLY_DIGEST_DAY: 'weekly_digest_day',
+  /** ROK-1435: Hour to post, '0'–'23', community timezone. Default '9'. */
+  WEEKLY_DIGEST_HOUR: 'weekly_digest_hour',
+  /** ROK-1771: Spotlight rotation memory — JSON array of ≤4
+   *  `{ week: 'YYYY-Www', kind }`, newest first. Internal; no admin UI. */
+  WEEKLY_DIGEST_SPOTLIGHT_HISTORY: 'weekly_digest_spotlight_history',
+  /** ROK-121: Pelican panel base URL (admin-supplied; server-side fetch). */
+  PELICAN_PANEL_URL: 'pelican_panel_url',
+  /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */
+  PELICAN_CLIENT_API_KEY: 'pelican_client_api_key',
+  /** ROK-1786: JSON array of `PinnedAddon` shown on every guild page.
+   *  Unset ⇒ LedgerLink only (`readPinnedAddons`); `[]` ⇒ none. */
+  GUILD_PINNED_ADDONS: 'guild_pinned_addons',
+} as const;
+
+export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

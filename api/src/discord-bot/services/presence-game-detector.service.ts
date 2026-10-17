@@ -1,0 +1,375 @@
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { bestEffortInit } from '../../common/lifecycle.util';
+import { and, eq, ilike, sql } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { ActivityType, type GuildMember } from 'discord.js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { groupByGame, applyConsensus } from './presence-game-detector.helpers';
+import {
+  pickNormalizedTitleMatch,
+  TRIGRAM_CANDIDATE_LIMIT,
+} from './presence-game-match.helpers';
+
+/** TTL for manual /playing overrides (30 minutes). */
+const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
+
+/** TTL for game name resolution cache entries (10 minutes). */
+const GAME_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Minimum trigram similarity score for fuzzy game matching.
+ * Raised from 0.3 to 0.5 to prevent false positives (ROK-753).
+ * Example: "World of Warcraft Classic" was incorrectly matching
+ * "NBA 2K18: Early Tip-Off Edition" at the 0.3 threshold.
+ *
+ * The threshold is only a PREFILTER: "Revenge of the Titans" vs "Revenge of
+ * the Mage" scores 0.60 (ROK-1504). Rejection of same-prefix titles happens
+ * in `pickNormalizedTitleMatch`, which requires full-title equality under
+ * normalization.
+ */
+const TRIGRAM_SIMILARITY_THRESHOLD = 0.5;
+
+/** Result of game detection for a set of members. */
+export interface DetectedGameGroup {
+  gameId: number | null;
+  gameName: string;
+  memberIds: string[];
+}
+
+interface CachedGameEntry {
+  gameId: number | null;
+  gameName: string;
+  cachedAt: number;
+}
+
+interface ManualOverride {
+  gameName: string;
+  setAt: number;
+}
+
+/**
+ * PresenceGameDetector — detects which game(s) members are playing in a
+ * general-lobby voice channel via Discord Rich Presence.
+ *
+ * Game resolution pipeline:
+ * 1. Manual /playing overrides (highest priority)
+ * 2. discord_game_mappings table (admin overrides)
+ * 3. Exact match against games.name
+ * 4. Case-insensitive match (ILIKE) against games.name
+ * 5. Trigram candidates (top 5), accepted only on normalized full-title
+ *    equality (ROK-1504)
+ * 6. Fallback: "Untitled Gaming Session" with gameId: null
+ *
+ * Grouping (ROK-1445):
+ * - One group per detected game, each holding only its OWN members. The old
+ *   strict-majority collapse is gone — it attributed minority players' sessions
+ *   to the majority game.
+ * - Presence-null members are returned as at most one separate null group; they
+ *   are never folded into a game group.
+ * - The caller (`handleGeneralLobbyGroupDetection`) applies `minPlayers` to each
+ *   group individually.
+ */
+@Injectable()
+export class PresenceGameDetectorService implements OnModuleInit {
+  private readonly logger = new Logger(PresenceGameDetectorService.name);
+
+  /**
+   * Manual /playing overrides: discordUserId -> override.
+   *
+   * TODO: These in-memory Maps (manualOverrides, gameCache) are singletons that
+   * will diverge across replicas in a multi-instance deployment. When scaling
+   * beyond a single server, move to Redis or a shared DB-backed cache.
+   */
+  private manualOverrides = new Map<string, ManualOverride>();
+
+  /** Cache: activityName -> resolved game info */
+  private gameCache = new Map<string, CachedGameEntry>();
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    await bestEffortInit('PresenceGameDetector', this.logger, () =>
+      this.checkPgTrgm(),
+    );
+  }
+
+  /** Check whether the pg_trgm extension is available. */
+  private async checkPgTrgm(): Promise<void> {
+    const result = await this.db.execute(
+      sql`SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'`,
+    );
+    if (result.length === 0) {
+      this.logger.warn(
+        'pg_trgm extension is not installed — fuzzy game matching (trigram similarity) will be unavailable. ' +
+          'Install with: CREATE EXTENSION IF NOT EXISTS pg_trgm;',
+      );
+    } else {
+      this.logger.log(
+        'pg_trgm extension detected — fuzzy game matching enabled',
+      );
+    }
+  }
+
+  /**
+   * Set a manual game override for a user (via /playing command).
+   */
+  setManualOverride(discordUserId: string, gameName: string): void {
+    this.manualOverrides.set(discordUserId, {
+      gameName,
+      setAt: Date.now(),
+    });
+  }
+
+  /**
+   * Clear a manual override for a user.
+   */
+  clearManualOverride(discordUserId: string): void {
+    this.manualOverrides.delete(discordUserId);
+  }
+
+  /**
+   * Get the manual override for a user, if any and not expired.
+   */
+  getManualOverride(discordUserId: string): string | null {
+    const override = this.manualOverrides.get(discordUserId);
+    if (!override) return null;
+    if (Date.now() - override.setAt > MANUAL_OVERRIDE_TTL_MS) {
+      this.manualOverrides.delete(discordUserId);
+      return null;
+    }
+    return override.gameName;
+  }
+
+  /**
+   * Detect game(s) being played by a set of members in a general-lobby channel.
+   * Returns one or more game groups based on consensus logic.
+   */
+  async detectGames(members: GuildMember[]): Promise<DetectedGameGroup[]> {
+    if (members.length === 0) return [];
+
+    const memberActivities = this.collectActivities(members);
+    const gamesByMember = await this.resolveActivities(memberActivities);
+    const groups = groupByGame(gamesByMember);
+
+    return applyConsensus(groups, members);
+  }
+
+  /** Collect activity name (or manual override) per member. */
+  private collectActivities(
+    members: GuildMember[],
+  ): Map<string, string | null> {
+    const result = new Map<string, string | null>();
+    for (const member of members) {
+      const override = this.getManualOverride(member.id);
+      if (override) {
+        result.set(member.id, override);
+        continue;
+      }
+      const playing = member.presence?.activities?.find(
+        (a) => a.type === ActivityType.Playing,
+      );
+      result.set(member.id, playing?.name ?? null);
+    }
+    return result;
+  }
+
+  /** Resolve activity names to game info. */
+  private async resolveActivities(
+    activities: Map<string, string | null>,
+  ): Promise<Map<string, { gameId: number | null; gameName: string }>> {
+    const result = new Map<
+      string,
+      { gameId: number | null; gameName: string }
+    >();
+    for (const [memberId, name] of activities) {
+      if (!name) {
+        result.set(memberId, {
+          gameId: null,
+          gameName: 'Untitled Gaming Session',
+        });
+        continue;
+      }
+      result.set(memberId, await this.resolveGame(name));
+    }
+    return result;
+  }
+
+  /**
+   * Detect game for a single member joining a general-lobby channel.
+   * Returns the resolved game info.
+   */
+  async detectGameForMember(
+    member: GuildMember,
+  ): Promise<{ gameId: number | null; gameName: string }> {
+    // Check manual override first
+    const override = this.getManualOverride(member.id);
+    if (override) {
+      return this.resolveGame(override);
+    }
+
+    // Read Discord Rich Presence
+    const playingActivity = member.presence?.activities?.find(
+      (a) => a.type === ActivityType.Playing,
+    );
+
+    if (!playingActivity) {
+      const activitySummary = member.presence?.activities?.length
+        ? member.presence.activities
+            .map((a) => `${a.type}:${a.name}`)
+            .join(', ')
+        : 'no-presence';
+      this.logger.debug(
+        `No Playing activity for member ${member.id} (activities: [${activitySummary}])`,
+      );
+      return { gameId: null, gameName: 'Untitled Gaming Session' };
+    }
+
+    return this.resolveGame(playingActivity.name);
+  }
+
+  /**
+   * Resolve a Discord activity name to a game in the registry.
+   * Pipeline: manual mappings -> exact match -> case-insensitive match
+   */
+  async resolveGame(
+    activityName: string,
+  ): Promise<{ gameId: number | null; gameName: string }> {
+    const cached = this.gameCache.get(activityName);
+    if (cached && Date.now() - cached.cachedAt < GAME_CACHE_TTL_MS) {
+      return { gameId: cached.gameId, gameName: cached.gameName };
+    }
+
+    const result =
+      (await this.resolveViaMapping(activityName)) ??
+      (await this.resolveViaExactMatch(activityName)) ??
+      (await this.resolveViaIlike(activityName)) ??
+      (await this.resolveViaTrigram(activityName));
+
+    if (result) {
+      this.cacheGame(activityName, result.gameId, result.gameName);
+      return result;
+    }
+
+    this.logger.warn(
+      `Game detection fell through to null for "${activityName}"`,
+    );
+    this.cacheGame(activityName, null, activityName);
+    return { gameId: null, gameName: activityName };
+  }
+
+  /** Step 1: Check discord_game_mappings table (admin overrides). */
+  private async resolveViaMapping(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
+    const [mapping] = await this.db
+      .select({
+        gameId: schema.discordGameMappings.gameId,
+        gameName: schema.games.name,
+      })
+      .from(schema.discordGameMappings)
+      .innerJoin(
+        schema.games,
+        eq(schema.discordGameMappings.gameId, schema.games.id),
+      )
+      .where(eq(schema.discordGameMappings.discordActivityName, activityName))
+      .limit(1);
+    return mapping
+      ? { gameId: mapping.gameId, gameName: mapping.gameName }
+      : null;
+  }
+
+  /** Step 2: Exact match against games.name (excludes hidden/banned). */
+  private async resolveViaExactMatch(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
+    const [match] = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(
+        and(
+          eq(schema.games.name, activityName),
+          eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
+        ),
+      )
+      .limit(1);
+    return match ? { gameId: match.id, gameName: match.name } : null;
+  }
+
+  /** Step 3: Case-insensitive match (ILIKE, excludes hidden/banned). */
+  private async resolveViaIlike(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
+    const [match] = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(
+        and(
+          ilike(schema.games.name, activityName),
+          eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
+        ),
+      )
+      .limit(1);
+    return match ? { gameId: match.id, gameName: match.name } : null;
+  }
+
+  /**
+   * Step 4: Trigram similarity search (pg_trgm, excludes hidden/banned).
+   * Similarity only ranks candidates; a row is accepted only when its title
+   * equals the activity name under normalization (ROK-1504).
+   */
+  private async resolveViaTrigram(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
+    try {
+      const rows = await this.db
+        .select({ id: schema.games.id, name: schema.games.name })
+        .from(schema.games)
+        .where(
+          and(
+            sql`similarity(${schema.games.name}, ${activityName}) > ${TRIGRAM_SIMILARITY_THRESHOLD}`,
+            eq(schema.games.hidden, false),
+            eq(schema.games.banned, false),
+          ),
+        )
+        .orderBy(sql`similarity(${schema.games.name}, ${activityName}) DESC`)
+        .limit(TRIGRAM_CANDIDATE_LIMIT);
+      const match = pickNormalizedTitleMatch(activityName, rows);
+      if (match) {
+        this.logger.debug(`Fuzzy matched "${activityName}" -> "${match.name}"`);
+        return { gameId: match.id, gameName: match.name };
+      }
+      this.logRejectedCandidates(activityName, rows);
+    } catch {
+      this.logger.debug(`Trigram unavailable for "${activityName}"`);
+    }
+    return null;
+  }
+
+  private logRejectedCandidates(
+    activityName: string,
+    rows: { name: string }[],
+  ): void {
+    if (rows.length === 0) return;
+    this.logger.debug(
+      `Trigram candidates for "${activityName}" rejected by title guard: ${rows.map((r) => r.name).join(', ')}`,
+    );
+  }
+
+  private cacheGame(
+    activityName: string,
+    gameId: number | null,
+    gameName: string,
+  ): void {
+    this.gameCache.set(activityName, {
+      gameId,
+      gameName,
+      cachedAt: Date.now(),
+    });
+  }
+}

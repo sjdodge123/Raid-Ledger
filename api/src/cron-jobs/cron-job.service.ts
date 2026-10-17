@@ -1,0 +1,351 @@
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
+import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { PLUGIN_EVENTS } from '../plugins/plugin-host/plugin-manifest.interface';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import {
+  EXTENSION_POINTS,
+  type CronRegistrar,
+} from '../plugins/plugin-host/extension-points';
+import * as schema from '../drizzle/schema';
+import { CORE_JOB_METADATA, FLUSH_INTERVAL_MS } from './cron-job.constants';
+import {
+  computeNextRun,
+  upsertJob,
+  recordSkipped,
+  extractRegistryJobMeta,
+  recordSkippedTrigger,
+} from './cron-job.helpers';
+import { selectJobByName } from './cron-job.fk-recovery.helpers';
+import { CronRunBookkeeping } from './cron-job.bookkeeping';
+import { runHandlerTracked } from './cron-job.execution.helpers';
+import {
+  getCronJobSafe,
+  setPaused,
+  syncOnePluginRegistrar,
+  getExecutionHistory,
+  updateJobSchedule,
+  findPluginHandler,
+} from './cron-job.admin-helpers';
+
+type CronJobRow = typeof schema.cronJobs.$inferSelect;
+
+/**
+ * CronJobService — registry and execution tracking for all cron jobs (ROK-310).
+ */
+@Injectable()
+export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger = new Logger(CronJobService.name);
+  private readonly jobCache = new Map<string, CronJobRow>();
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
+  // ROK-1058: deferred sync timers, cancelled in onModuleDestroy.
+  private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
+  private pluginActivatedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly schedulerRegistry: SchedulerRegistry,
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
+  ) {
+    this.book = new CronRunBookkeeping(db, this.logger, this.reresolveJob);
+  }
+
+  /** Batched last_run_at + execution-row writes and prune counts (ROK-1380). */
+  private readonly book: CronRunBookkeeping;
+
+  onApplicationBootstrap() {
+    // Skip bootstrap timers when crons are disabled (integration tests).
+    // Without this gate the 2s setTimeout fires mid-suite and races with
+    // afterEach truncates / in-flight HTTP requests, surfacing as
+    // intermittent log spam ("Failed to sync cron jobs") next to the
+    // socket hang up flake the diagnostic at
+    // planning-artifacts/test-infra-diagnostic-layer-2-2026-05-08.md
+    // calls out (§3d). Production never sets CRON_DISABLED.
+    if (process.env.CRON_DISABLED === 'true') return;
+    this.bootstrapTimer = setTimeout(() => {
+      this.bootstrapTimer = null;
+      this.syncJobs().catch((err) =>
+        this.logger.error(`Failed to sync cron jobs: ${err}`),
+      );
+    }, 2_000);
+    this.flushInterval = setInterval(() => {
+      // Flush-then-refresh in the same tick (ROK-1328): flush first so we
+      // don't race the last-run buffer, then re-pull the cache so a deleted
+      // or newly-added cron_jobs row can't leave a stale `job.id` wedged in
+      // the cache forever (the dead FK → 23503 → Sentry-spam loop).
+      this.flushLastRunUpdates()
+        .catch((err) =>
+          this.logger.error(`Failed to flush last_run_at updates: ${err}`),
+        )
+        .finally(() => void this.refreshJobCache());
+    }, FLUSH_INTERVAL_MS);
+  }
+
+  async onModuleDestroy() {
+    if (this.bootstrapTimer) clearTimeout(this.bootstrapTimer);
+    if (this.pluginActivatedTimer) clearTimeout(this.pluginActivatedTimer);
+    if (this.flushInterval) clearInterval(this.flushInterval);
+    this.bootstrapTimer = null;
+    this.pluginActivatedTimer = null;
+    this.flushInterval = null;
+    await this.book.close();
+  }
+
+  @OnEvent(PLUGIN_EVENTS.ACTIVATED)
+  handlePluginActivated(): void {
+    if (this.pluginActivatedTimer) clearTimeout(this.pluginActivatedTimer);
+    this.pluginActivatedTimer = setTimeout(() => {
+      this.pluginActivatedTimer = null;
+      this.syncJobs().catch((err) =>
+        this.logger.error(
+          `Failed to sync cron jobs after plugin activation: ${err}`,
+        ),
+      );
+    }, 1_000);
+  }
+
+  /**
+   * `PluginRegistryService.install()` inserts the row already active and emits
+   * only INSTALLED, so a runtime install must sync its jobs into the admin
+   * table here too — otherwise they stay invisible until the next restart.
+   */
+  @OnEvent(PLUGIN_EVENTS.INSTALLED)
+  handlePluginInstalled(): void {
+    this.handlePluginActivated();
+  }
+
+  /** Sync all registered cron jobs into the DB. */
+  async syncJobs(): Promise<void> {
+    const syncedNames = new Set<string>();
+    await this.syncRegistryJobs(syncedNames);
+    await this.syncPluginJobs(syncedNames);
+    this.logger.log(`Cron job sync complete (${syncedNames.size} total)`);
+    await this.refreshJobCache();
+  }
+
+  /** Sync jobs from SchedulerRegistry. */
+  private async syncRegistryJobs(syncedNames: Set<string>): Promise<void> {
+    const jobs = this.schedulerRegistry.getCronJobs();
+    this.logger.log(`Syncing ${jobs.size} cron jobs from SchedulerRegistry`);
+    for (const [name, job] of jobs) {
+      const meta = extractRegistryJobMeta(name, job, this.logger);
+      if (!meta) continue;
+      await upsertJob(this.db, {
+        name,
+        ...meta,
+        nextRunAt: computeNextRun(meta.cronExpression),
+      });
+      syncedNames.add(name);
+    }
+  }
+
+  /** Sync jobs from plugin CronRegistrar adapters. */
+  private async syncPluginJobs(syncedNames: Set<string>): Promise<void> {
+    if (!this.pluginRegistry) return;
+    const registrars =
+      this.pluginRegistry.getAdaptersForExtensionPoint<CronRegistrar>(
+        EXTENSION_POINTS.CRON_REGISTRAR,
+      );
+    for (const [slug, reg] of registrars) {
+      await syncOnePluginRegistrar(
+        this.db,
+        slug,
+        reg,
+        syncedNames,
+        this.logger,
+      );
+    }
+  }
+
+  /**
+   * Populate the in-memory job cache from DB. Public so the periodic flush
+   * interval and tests can invoke it deterministically (ROK-1328). Resilient:
+   * a transient SELECT failure is logged, not thrown, so it can't kill the
+   * flush interval that calls it.
+   */
+  async refreshJobCache(): Promise<void> {
+    try {
+      const allJobs = await this.db.select().from(schema.cronJobs);
+      this.jobCache.clear();
+      for (const j of allJobs) this.jobCache.set(j.name, j);
+    } catch (err) {
+      this.logger.warn(`Failed to refresh cron job cache: ${err}`);
+    }
+  }
+
+  /**
+   * Re-resolve a job by name from the DB after a stale-cache FK violation
+   * (ROK-1328). Atomically invalidates + re-selects: drops the dead cache
+   * entry, re-SELECTs by name, and either re-caches the fresh row (new id) or
+   * leaves the entry deleted when the job is genuinely gone. Bound arrow so it
+   * can be passed as a callback into the DI-free record* helpers without
+   * importing the service (avoids the circular dep).
+   */
+  private reresolveJob = async (
+    jobName: string,
+  ): Promise<CronJobRow | null> => {
+    this.jobCache.delete(jobName);
+    const row = await selectJobByName(this.db, jobName);
+    if (row) this.jobCache.set(jobName, row);
+    return row;
+  };
+
+  // ─── Execution tracking ─────────────────────────────────────────
+
+  /** Execute a cron handler with tracking. */
+  async executeWithTracking(
+    jobName: string,
+    fn: () => Promise<void | boolean | { degraded: true }>,
+  ): Promise<void> {
+    const job = await this.resolveJob(jobName);
+    if (!job) {
+      await fn();
+      return;
+    }
+    if (job.paused) {
+      await recordSkipped(
+        this.db,
+        job,
+        jobName,
+        this.reresolveJob,
+        this.logger,
+      );
+      return;
+    }
+    await this.runTracked(job, jobName, fn);
+  }
+
+  /** Resolve a job from cache or DB. */
+  private async resolveJob(jobName: string): Promise<CronJobRow | null> {
+    const cached = this.jobCache.get(jobName);
+    if (cached) return cached;
+    const row = await selectJobByName(this.db, jobName);
+    if (row) this.jobCache.set(jobName, row);
+    return row;
+  }
+
+  /** Run tracked execution with timing, recording, and pruning. */
+  private async runTracked(
+    job: CronJobRow,
+    jobName: string,
+    fn: () => Promise<void | boolean | { degraded: true }>,
+  ): Promise<void> {
+    const wroteRow = await runHandlerTracked(
+      this.book.recordDeps,
+      job,
+      jobName,
+      fn,
+    );
+    // A queued row is counted when a flush writes it (ROK-1380).
+    if (wroteRow) await this.book.countWritten(job.id, 1);
+  }
+
+  // ─── Admin API methods ──────────────────────────────────────────
+
+  /**
+   * List all registered cron jobs, decorated with `usesAi` from
+   * CORE_JOB_METADATA so the admin panel can badge + filter AI-backed
+   * jobs without another round-trip.
+   */
+  async listJobs() {
+    const rows = await this.db
+      .select()
+      .from(schema.cronJobs)
+      .orderBy(schema.cronJobs.name);
+    return rows.map((row) => ({
+      ...row,
+      usesAi: CORE_JOB_METADATA[row.name]?.usesAi ?? false,
+    }));
+  }
+
+  /** Manually trigger a cron job by its DB id. */
+  async triggerJob(id: number): Promise<CronJobRow | null> {
+    const [job] = await this.db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, id))
+      .limit(1);
+    if (!job) return null;
+    await this.fireTrigger(job);
+    const [updated] = await this.db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, id))
+      .limit(1);
+    return updated ?? null;
+  }
+
+  /** Fire a triggered job (plugin or core). */
+  private async fireTrigger(job: CronJobRow): Promise<void> {
+    const cronJob = getCronJobSafe(this.schedulerRegistry, job.name);
+    if (!cronJob) {
+      await recordSkippedTrigger(this.db, job, this.logger);
+      return;
+    }
+    this.logger.log(`Manually triggering cron job: ${job.name}`);
+    const handler = findPluginHandler(job, this.pluginRegistry);
+    // "Run now" writes last_run_at immediately (ROK-1380). A mark left by a
+    // no-op/paused/failed manual run costs the next completed run one write.
+    // The mark is per job, not per run: a scheduled tick finishing while this
+    // run is still going consumes it, and this run then defers (≤5 min).
+    this.book.lastRun.markImmediate(job.name);
+    if (handler) {
+      await this.executeWithTracking(job.name, handler);
+    } else {
+      void cronJob.fireOnTick();
+    }
+  }
+
+  /** Get execution history for a specific job. */
+  async getExecutionHistory(jobId: number, limit = 50) {
+    return getExecutionHistory(this.db, jobId, limit);
+  }
+
+  /** Pause a cron job. Future executions will log "skipped". */
+  async pauseJob(id: number) {
+    const updated = await setPaused(this.db, id, true);
+    if (updated) this.jobCache.set(updated.name, updated);
+    return updated;
+  }
+
+  /** Resume a paused cron job. */
+  async resumeJob(id: number) {
+    const updated = await setPaused(this.db, id, false);
+    if (updated) this.jobCache.set(updated.name, updated);
+    return updated;
+  }
+
+  /** Update schedule (cron expression) for a job. */
+  async updateSchedule(id: number, cronExpression: string) {
+    const updated = await updateJobSchedule(
+      this.db,
+      this.schedulerRegistry,
+      id,
+      cronExpression,
+      this.logger,
+    );
+    if (!updated) return updated;
+    this.jobCache.set(updated.name, updated);
+    this.book.lastRun.reschedule(updated.id, updated.cronExpression);
+    return updated;
+  }
+
+  /**
+   * Flush queued execution rows (one multi-row INSERT) and pending
+   * last_run_at updates (one batched UPDATE) to the DB (ROK-1380).
+   */
+  async flushLastRunUpdates(): Promise<void> {
+    return this.book.flush();
+  }
+}

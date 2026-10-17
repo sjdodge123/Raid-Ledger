@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ROK-1331 M5a — env-pin: flag an env so the gc-sweeper's unhealthy-env
+# reaper skips it until the 24h-idle ceiling kicks in.
+#
+# Args: --slug <slug>
+# Required env: RL_AGENT_ID
+# Authz: caller must hold the env's slot's claim OR be operator (RL_PROXMOX_USER=rl).
+set -uo pipefail
+source "$(dirname "$0")/_state.sh"
+
+SLUG=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slug) SLUG="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+[[ -z "$SLUG" ]] && { jq -nc '{ok:false, error:"missing_slug"}'; exit 1; }
+[[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { jq -nc --arg s "$SLUG" '{ok:false, error:"invalid_slug", slug:$s}'; exit 1; }
+[[ -z "${RL_AGENT_ID:-}" ]] && { jq -nc '{ok:false, error:"missing_agent_id"}'; exit 1; }
+
+# Look up env in registry.
+ENV_ROW=$(state::query "$RL_ENVS_FILE" -c --arg slug "$SLUG" \
+    'first(.[] | select(.slug == $slug)) // null')
+if [[ -z "$ENV_ROW" || "$ENV_ROW" == "null" ]]; then
+    jq -nc --arg s "$SLUG" '{ok:false, error:"slug_not_found", slug:$s}'
+    exit 1
+fi
+ENV_SLOT=$(jq -r '.slot' <<<"$ENV_ROW")
+
+# Authz: holder of env_slot OR operator.
+IS_OPERATOR=0
+[[ "${RL_PROXMOX_USER:-}" == "rl" ]] && IS_OPERATOR=1
+CALLER_SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+if (( IS_OPERATOR != 1 )); then
+    if [[ -z "$CALLER_SLOT" || "$CALLER_SLOT" != "$ENV_SLOT" ]]; then
+        jq -nc --arg s "$SLUG" --argjson es "$ENV_SLOT" --argjson ys "$([[ -n "$CALLER_SLOT" ]] && echo "$CALLER_SLOT" || echo null)" \
+            '{ok:false, error:"unauthorized", slug:$s, env_slot:$es, your_slot:$ys}'
+        exit 1
+    fi
+fi
+
+env_registry::set_pinned "$SLUG" true
+
+audit::log env-pin ok "$(jq -nc --arg s "$SLUG" --argjson slot "$ENV_SLOT" --argjson op "$IS_OPERATOR" \
+    '{slug:$s, env_slot:$slot, by:(if $op == 1 then "operator" else "holder" end)}')"
+
+jq -nc --arg s "$SLUG" --argjson slot "$ENV_SLOT" '{ok:true, slug:$s, slot:$slot, pinned:true}'

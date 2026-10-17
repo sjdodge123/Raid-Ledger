@@ -1,0 +1,382 @@
+/**
+ * One-time DB cleanup for duplicate game rows.
+ * - ROK-1008: merges rows sharing the same steamAppId / igdbId.
+ * - ROK-1113: merges rows sharing the same normalized canonical name
+ *   (e.g., "Slay the Spire 2" vs "Slay the Spire II").
+ *
+ * Reassigns FK references to the winner row before deleting the losers.
+ */
+import { sql, eq } from 'drizzle-orm';
+import { Logger } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import type { SteamAppIdSource } from '../drizzle/schema';
+import {
+  reassignEventFks,
+  reassignLineupFks,
+  reassignMiscFks,
+  type Tx,
+} from './igdb-dedup-fk-reassign.helpers';
+import { collectBindingChannelIds } from './igdb-dedup-partial-index.helpers';
+import {
+  findDuplicateGroupsByNormalizedName,
+  pickNameGroupWinner,
+  type NameDuplicateGroup,
+} from './igdb-name-dedup.helpers';
+import { defined } from '../common/defined.helpers';
+
+const nameDedupLogger = new Logger('IgdbNameDedupCleanup');
+const dedupLogger = new Logger('IgdbDedupCleanup');
+
+/** A group of duplicate games with a designated winner and losers. */
+export interface DuplicateGroup {
+  winnerId: number;
+  loserIds: number[];
+}
+
+/** Find duplicate game rows grouped by steamAppId or igdbId. */
+export async function findDuplicateGames(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<DuplicateGroup[]> {
+  const steamDups = await findDupsBySteamAppId(db);
+  const igdbDups = await findDupsByIgdbId(db);
+  return deduplicateGroups([...steamDups, ...igdbDups]);
+}
+
+/**
+ * Merge and delete duplicate game rows in a transaction.
+ * `onBindingsChanged` receives, once per committed group, the channels whose
+ * bindings the merge rewrote.
+ */
+export async function mergeAndDeleteDuplicates(
+  db: PostgresJsDatabase<typeof schema>,
+  groups: DuplicateGroup[],
+  onBindingsChanged?: (channelIds: string[]) => void,
+): Promise<{ merged: number; errors: string[] }> {
+  let merged = 0;
+  const errors: string[] = [];
+
+  for (const group of groups) {
+    try {
+      const sink: string[] | undefined = onBindingsChanged ? [] : undefined;
+      await mergeGroup(db, group, sink);
+      merged++;
+      notifyBindingsChanged(onBindingsChanged, sink);
+    } catch (err) {
+      errors.push(`Group winner=${group.winnerId}: ${err}`);
+    }
+  }
+
+  return { merged, errors };
+}
+
+/** Find duplicates by steamAppId. */
+async function findDupsBySteamAppId(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<DuplicateGroup[]> {
+  const g = schema.games;
+  const rows = await db.execute(sql`
+    SELECT ${g.steamAppId} AS key_val, array_agg(${g.id}) AS ids,
+           array_agg(CASE WHEN ${g.itadGameId} IS NOT NULL THEN ${g.id} END) AS itad_ids,
+           array_agg(CASE WHEN ${g.igdbId} IS NOT NULL THEN ${g.id} END) AS igdb_ids
+    FROM ${g}
+    WHERE ${g.steamAppId} IS NOT NULL
+    GROUP BY ${g.steamAppId}
+    HAVING count(*) > 1
+  `);
+  return (rows as unknown as DupRow[]).map(buildGroupFromRow);
+}
+
+/** Find duplicates by igdbId. */
+async function findDupsByIgdbId(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<DuplicateGroup[]> {
+  const g = schema.games;
+  const rows = await db.execute(sql`
+    SELECT ${g.igdbId} AS key_val, array_agg(${g.id}) AS ids,
+           array_agg(CASE WHEN ${g.itadGameId} IS NOT NULL THEN ${g.id} END) AS itad_ids,
+           array_agg(CASE WHEN ${g.igdbId} IS NOT NULL THEN ${g.id} END) AS igdb_ids
+    FROM ${g}
+    WHERE ${g.igdbId} IS NOT NULL
+    GROUP BY ${g.igdbId}
+    HAVING count(*) > 1
+  `);
+  return (rows as unknown as DupRow[]).map(buildGroupFromRow);
+}
+
+interface DupRow {
+  key_val: number;
+  ids: number[] | string;
+  itad_ids: number[] | string;
+  igdb_ids: number[] | string;
+}
+
+/** Parse a PostgreSQL array value (may be a string or already an array). */
+function parsePgArray(val: number[] | string): number[] {
+  if (Array.isArray(val)) {
+    return val.filter((n): n is number => typeof n === 'number' && !isNaN(n));
+  }
+  if (typeof val !== 'string') return [];
+  return val
+    .replace(/[{}]/g, '')
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !isNaN(n));
+}
+
+/** Build a DuplicateGroup from a raw DB row. */
+function buildGroupFromRow(row: DupRow): DuplicateGroup {
+  const ids = parsePgArray(row.ids);
+  const itadIds = new Set(parsePgArray(row.itad_ids));
+  const igdbIds = new Set(parsePgArray(row.igdb_ids));
+  // Prefer game with both IGDB+ITAD, then IGDB only, then ITAD only
+  const winnerId =
+    ids.find((id) => igdbIds.has(id) && itadIds.has(id)) ??
+    ids.find((id) => igdbIds.has(id)) ??
+    ids.find((id) => itadIds.has(id)) ??
+    defined(ids[0], 'duplicate group first id');
+  const loserIds = ids.filter((id) => id !== winnerId);
+  return { winnerId, loserIds };
+}
+
+/** Deduplicate groups that may share the same winner. */
+function deduplicateGroups(groups: DuplicateGroup[]): DuplicateGroup[] {
+  const byWinner = new Map<number, Set<number>>();
+  for (const g of groups) {
+    const existing = byWinner.get(g.winnerId) ?? new Set<number>();
+    for (const id of g.loserIds) existing.add(id);
+    byWinner.set(g.winnerId, existing);
+  }
+  return Array.from(byWinner.entries()).map(([winnerId, loserSet]) => ({
+    winnerId,
+    loserIds: [...loserSet],
+  }));
+}
+
+/** Merge a single duplicate group: reassign FKs and delete losers. */
+async function mergeGroup(
+  db: PostgresJsDatabase<typeof schema>,
+  group: DuplicateGroup,
+  sink?: string[],
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const loserId of group.loserIds) {
+      await collectBindingChannelIds(tx, loserId, sink);
+      await reassignEventFks(tx, loserId, group.winnerId);
+      await reassignLineupFks(tx, loserId, group.winnerId);
+      await reassignMiscFks(tx, loserId, group.winnerId);
+      await tx.delete(schema.games).where(eq(schema.games.id, loserId));
+    }
+  });
+}
+
+/**
+ * Hand a COMMITTED group's rewritten channels to the listener. Runs only after
+ * the transaction resolved; a throwing listener is logged, never rethrown, so
+ * it cannot turn a committed merge into a reported error.
+ */
+function notifyBindingsChanged(
+  listener: ((channelIds: string[]) => void) | undefined,
+  channelIds: string[] | undefined,
+): void {
+  if (!listener || !channelIds?.length) return;
+  try {
+    listener([...new Set(channelIds)]);
+  } catch (err) {
+    dedupLogger.warn(`Binding-change listener failed: ${err}`);
+  }
+}
+
+// ─── ROK-1113: normalized-name cleanup ──────────────────────────────────────
+
+/** Per-group merge audit entry returned by the admin endpoint. */
+export interface NameMergeReport {
+  normalizedName: string;
+  winnerId: number;
+  loserIds: number[];
+}
+
+/** Result of a name-dedup cleanup run (commit mode). */
+export interface NameDedupCommitResult {
+  merged: number;
+  errors: string[];
+  report: NameMergeReport[];
+  skippedGroups: NameDuplicateGroup[];
+}
+
+/** Result of a name-dedup cleanup run (dry-run mode). */
+export interface NameDedupDryRunResult {
+  totalGroups: number;
+  totalLosers: number;
+  groups: NameMergeReport[];
+  skippedGroups: NameDuplicateGroup[];
+}
+
+/**
+ * Compute a dry-run report: which rows would merge and which groups would be
+ * skipped because of mixed igdbIds. Does not mutate the database.
+ */
+export async function dryRunNameDedup(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<NameDedupDryRunResult> {
+  const { groups, skipped } = await findDuplicateGroupsByNormalizedName(db);
+  const report = groups.map(buildMergeReport);
+  const totalLosers = report.reduce((acc, g) => acc + g.loserIds.length, 0);
+  return {
+    totalGroups: groups.length,
+    totalLosers,
+    groups: report,
+    skippedGroups: skipped,
+  };
+}
+
+/**
+ * Commit-mode cleanup: merges all eligible name-keyed duplicate groups, deleting
+ * losers. Idempotent — a second run on a clean DB returns `{ merged: 0 }`.
+ * `onBindingsChanged` behaves as in {@link mergeAndDeleteDuplicates}.
+ */
+export async function mergeNameDuplicates(
+  db: PostgresJsDatabase<typeof schema>,
+  onBindingsChanged?: (channelIds: string[]) => void,
+): Promise<NameDedupCommitResult> {
+  const { groups, skipped } = await findDuplicateGroupsByNormalizedName(db);
+  const report: NameMergeReport[] = [];
+  const errors: string[] = [];
+
+  for (const group of groups) {
+    try {
+      const sink: string[] | undefined = onBindingsChanged ? [] : undefined;
+      report.push(await mergeNameGroup(db, group, sink));
+      notifyBindingsChanged(onBindingsChanged, sink);
+    } catch (err) {
+      errors.push(`Group "${group.normalizedName}": ${err}`);
+    }
+  }
+
+  return { merged: report.length, errors, report, skippedGroups: skipped };
+}
+
+/** Merge a single name-keyed group. Picks winner, reassigns FKs, deletes losers. */
+async function mergeNameGroup(
+  db: PostgresJsDatabase<typeof schema>,
+  group: NameDuplicateGroup,
+  sink?: string[],
+): Promise<NameMergeReport> {
+  const winner = pickNameGroupWinner(group.rows);
+  const loserIds = group.rows
+    .filter((r) => r.id !== winner.id)
+    .map((r) => r.id);
+
+  await db.transaction(async (tx) => {
+    for (const loserId of loserIds) {
+      await collectBindingChannelIds(tx, loserId, sink);
+      const carry = await captureCarryColumns(tx, loserId);
+      await reassignEventFks(tx, loserId, winner.id);
+      await reassignLineupFks(tx, loserId, winner.id);
+      await reassignMiscFks(tx, loserId, winner.id);
+      await tx.delete(schema.games).where(eq(schema.games.id, loserId));
+      await applyCarryColumns(tx, winner.id, carry);
+    }
+  });
+
+  nameDedupLogger.log(
+    `Merged name group "${group.normalizedName}" — winner=${winner.id}, losers=[${loserIds.join(',')}]`,
+  );
+  return {
+    normalizedName: group.normalizedName,
+    winnerId: winner.id,
+    loserIds,
+  };
+}
+
+/**
+ * Columns a loser can donate to the winner before it is deleted.
+ *
+ * The merge previously dropped these on the floor: it repointed FKs and deleted
+ * the row without copying anything across, so merging an igdb-keyed winner with
+ * a steam/itad-keyed loser silently destroyed the Steam link and ITAD pricing
+ * id. The Steam badge vanished from the card and library matching stopped
+ * resolving the game until an unrelated discovery pass happened to re-attach it.
+ */
+interface CarryColumns {
+  steamAppId: number | null;
+  itadGameId: string | null;
+  coverUrl: string | null;
+  /** ROK-1680: rides with steamAppId only — never carried on its own. */
+  steamAppIdSource: SteamAppIdSource | null;
+}
+
+/** Read the loser's donatable columns while the row still exists. */
+async function captureCarryColumns(
+  tx: Tx,
+  loserId: number,
+): Promise<CarryColumns> {
+  const [row] = await tx
+    .select({
+      steamAppId: schema.games.steamAppId,
+      itadGameId: schema.games.itadGameId,
+      coverUrl: schema.games.coverUrl,
+      steamAppIdSource: schema.games.steamAppIdSource,
+    })
+    .from(schema.games)
+    .where(eq(schema.games.id, loserId))
+    .limit(1);
+  return (
+    row ?? {
+      steamAppId: null,
+      itadGameId: null,
+      coverUrl: null,
+      steamAppIdSource: null,
+    }
+  );
+}
+
+/**
+ * Fill NULL columns on the winner from the loser's values — never overwrite a
+ * value the winner already holds.
+ *
+ * MUST run AFTER the loser row is deleted: `steam_app_id` carries a partial
+ * UNIQUE index and `itad_game_id` a plain one, so writing them onto the winner
+ * while the loser still holds them collides (constraints are checked
+ * per-statement, not at commit).
+ */
+async function applyCarryColumns(
+  tx: Tx,
+  winnerId: number,
+  carry: CarryColumns,
+): Promise<void> {
+  const [winner] = await tx
+    .select({
+      steamAppId: schema.games.steamAppId,
+      itadGameId: schema.games.itadGameId,
+      coverUrl: schema.games.coverUrl,
+    })
+    .from(schema.games)
+    .where(eq(schema.games.id, winnerId))
+    .limit(1);
+  if (!winner) return;
+
+  const patch: Partial<CarryColumns> = {};
+  for (const key of ['steamAppId', 'itadGameId', 'coverUrl'] as const) {
+    if (winner[key] == null && carry[key] != null) {
+      Object.assign(patch, { [key]: carry[key] });
+    }
+  }
+  // ROK-1680: same UPDATE, so the reset trigger sees the source change too.
+  if (patch.steamAppId != null) patch.steamAppIdSource = carry.steamAppIdSource;
+  if (Object.keys(patch).length === 0) return;
+  await tx.update(schema.games).set(patch).where(eq(schema.games.id, winnerId));
+}
+
+/** Build a winner/losers report for a name-keyed group (no DB writes). */
+function buildMergeReport(group: NameDuplicateGroup): NameMergeReport {
+  const winner = pickNameGroupWinner(group.rows);
+  const loserIds = group.rows
+    .filter((r) => r.id !== winner.id)
+    .map((r) => r.id);
+  return {
+    normalizedName: group.normalizedName,
+    winnerId: winner.id,
+    loserIds,
+  };
+}

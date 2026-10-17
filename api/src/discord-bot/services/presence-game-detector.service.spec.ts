@@ -1,0 +1,570 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ActivityType } from 'discord.js';
+import { PresenceGameDetectorService } from './presence-game-detector.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+
+/** Build a minimal GuildMember-like object for testing. */
+function makeMember(
+  id: string,
+  activityName?: string,
+  activityType: ActivityType = ActivityType.Playing,
+): object {
+  return {
+    id,
+    presence: activityName
+      ? {
+          activities: [{ type: activityType, name: activityName }],
+        }
+      : null,
+  };
+}
+
+describe('PresenceGameDetectorService', () => {
+  let service: PresenceGameDetectorService;
+
+  // Use a custom mock to control .limit() return values per query step
+  let mockLimitFn: jest.Mock;
+  let mockExecuteFn: jest.Mock;
+  let mockDb: object;
+
+  beforeEach(async () => {
+    mockLimitFn = jest.fn();
+    mockExecuteFn = jest.fn().mockResolvedValue([{ '?column?': 1 }]);
+
+    // All select queries resolve through .limit()
+    const selectChain = {
+      from: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      limit: mockLimitFn,
+    };
+
+    mockDb = {
+      select: jest.fn().mockReturnValue(selectChain),
+      execute: mockExecuteFn,
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PresenceGameDetectorService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+      ],
+    }).compile();
+
+    service = module.get(PresenceGameDetectorService);
+  });
+
+  // ─── onModuleInit: pg_trgm check ─────────────────────────────────────────
+
+  describe('onModuleInit', () => {
+    it('logs success when pg_trgm extension is installed', async () => {
+      mockExecuteFn.mockResolvedValueOnce([{ '?column?': 1 }]);
+
+      const logSpy = jest.spyOn(service['logger'], 'log');
+      await service.onModuleInit();
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pg_trgm extension detected'),
+      );
+    });
+
+    it('logs warning when pg_trgm extension is not installed', async () => {
+      mockExecuteFn.mockResolvedValueOnce([]);
+
+      const warnSpy = jest.spyOn(service['logger'], 'warn');
+      await service.onModuleInit();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pg_trgm extension is not installed'),
+      );
+    });
+
+    it('logs error via bestEffortInit when pg_trgm check query fails', async () => {
+      mockExecuteFn.mockRejectedValueOnce(new Error('connection refused'));
+
+      const errorSpy = jest.spyOn(service['logger'], 'error');
+      await service.onModuleInit();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('PresenceGameDetector'),
+        expect.any(String),
+      );
+    });
+  });
+
+  // ─── Manual Override ───────────────────────────────────────────────────────
+
+  describe('setManualOverride / getManualOverride', () => {
+    it('returns the stored game name immediately after setting', () => {
+      service.setManualOverride('user-1', 'World of Warcraft');
+
+      expect(service.getManualOverride('user-1')).toBe('World of Warcraft');
+    });
+
+    it('returns null when no override has been set', () => {
+      expect(service.getManualOverride('unknown-user')).toBeNull();
+    });
+
+    it('returns null after the 30-minute TTL expires', () => {
+      jest.useFakeTimers();
+
+      service.setManualOverride('user-ttl', 'Fortnite');
+      expect(service.getManualOverride('user-ttl')).toBe('Fortnite');
+
+      // Advance past 30 minutes
+      jest.advanceTimersByTime(31 * 60 * 1000);
+
+      expect(service.getManualOverride('user-ttl')).toBeNull();
+
+      jest.useRealTimers();
+    });
+
+    it('is still valid just before the 30-minute mark', () => {
+      jest.useFakeTimers();
+
+      service.setManualOverride('user-almost', 'Minecraft');
+      jest.advanceTimersByTime(29 * 60 * 1000);
+
+      expect(service.getManualOverride('user-almost')).toBe('Minecraft');
+
+      jest.useRealTimers();
+    });
+  });
+
+  describe('clearManualOverride', () => {
+    it('removes an existing override', () => {
+      service.setManualOverride('user-clear', 'FFXIV');
+      service.clearManualOverride('user-clear');
+
+      expect(service.getManualOverride('user-clear')).toBeNull();
+    });
+
+    it('does not throw when clearing a non-existent override', () => {
+      expect(() => service.clearManualOverride('ghost-user')).not.toThrow();
+    });
+  });
+
+  // ─── resolveGame: game resolution pipeline ─────────────────────────────────
+
+  describe('resolveGame', () => {
+    it('resolves via discord_game_mappings (step 1)', async () => {
+      // Mapping lookup returns a match
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 10, gameName: 'WoW' }]);
+
+      const result = await service.resolveGame('World of Warcraft');
+
+      expect(result).toEqual({ gameId: 10, gameName: 'WoW' });
+    });
+
+    it('resolves via exact games.name match (step 2) when no mapping', async () => {
+      // Step 1: mapping lookup — no match
+      mockLimitFn.mockResolvedValueOnce([]);
+      // Step 2: exact match
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 20, name: 'Final Fantasy XIV' },
+      ]);
+
+      const result = await service.resolveGame('Final Fantasy XIV');
+
+      expect(result).toEqual({ gameId: 20, gameName: 'Final Fantasy XIV' });
+    });
+
+    it('resolves via ILIKE case-insensitive match (step 3)', async () => {
+      // Step 1: mapping — no match
+      mockLimitFn.mockResolvedValueOnce([]);
+      // Step 2: exact — no match
+      mockLimitFn.mockResolvedValueOnce([]);
+      // Step 3: ILIKE match
+      mockLimitFn.mockResolvedValueOnce([{ id: 30, name: 'Minecraft' }]);
+
+      const result = await service.resolveGame('MINECRAFT');
+
+      expect(result).toEqual({ gameId: 30, gameName: 'Minecraft' });
+    });
+
+    it('resolves via trigram similarity (step 4)', async () => {
+      // Step 1, 2, 3: no match (®/™ + roman numeral defeat exact and ILIKE)
+      mockLimitFn.mockResolvedValueOnce([]);
+      mockLimitFn.mockResolvedValueOnce([]);
+      mockLimitFn.mockResolvedValueOnce([]);
+      // Step 4: trigram candidate is the same title under normalization
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 40, name: 'Call of Duty: Modern Warfare 2' },
+      ]);
+
+      const result = await service.resolveGame(
+        'Call of Duty®: Modern Warfare® II',
+      );
+
+      expect(result).toEqual({
+        gameId: 40,
+        gameName: 'Call of Duty: Modern Warfare 2',
+      });
+    });
+
+    it('falls back to activityName with null gameId when no match at all', async () => {
+      // All steps: no match; trigram query also returns empty
+      mockLimitFn.mockResolvedValueOnce([]); // mapping
+      mockLimitFn.mockResolvedValueOnce([]); // exact
+      mockLimitFn.mockResolvedValueOnce([]); // ilike
+      mockLimitFn.mockResolvedValueOnce([]); // trigram
+
+      const result = await service.resolveGame('SomeObscureGame123');
+
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'SomeObscureGame123',
+      });
+    });
+
+    it('caches resolved games so the DB is only queried once', async () => {
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }]);
+
+      // First call hits DB
+      const first = await service.resolveGame('WoW');
+      // Second call should use cache — no new DB queries
+      const second = await service.resolveGame('WoW');
+
+      expect(first).toEqual(second);
+      // DB was only called once (for the first resolution)
+      expect(mockLimitFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('cache expires after 10 minutes', async () => {
+      jest.useFakeTimers();
+
+      mockLimitFn.mockResolvedValue([{ gameId: 1, gameName: 'WoW' }]);
+
+      await service.resolveGame('WoW');
+
+      // Advance past cache TTL
+      jest.advanceTimersByTime(11 * 60 * 1000);
+
+      await service.resolveGame('WoW');
+
+      // DB should have been called again after expiry
+      expect(mockLimitFn).toHaveBeenCalledTimes(2);
+
+      jest.useRealTimers();
+    });
+
+    it('falls back gracefully when pg_trgm extension throws', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping
+      mockLimitFn.mockResolvedValueOnce([]); // exact
+      mockLimitFn.mockResolvedValueOnce([]); // ilike
+      mockLimitFn.mockRejectedValueOnce(new Error('pg_trgm not installed'));
+
+      // Should not throw — returns activity name as fallback
+      const result = await service.resolveGame('SomeGame');
+
+      expect(result).toEqual({ gameId: null, gameName: 'SomeGame' });
+    });
+
+    // ROK-753: Regression — "World of Warcraft Classic" was being matched
+    // to "NBA 2K18: Early Tip-Off Edition" via a low-quality trigram match.
+    // The raised similarity threshold (0.5) now rejects this false positive.
+    it('does not match "World of Warcraft Classic" to an unrelated game (ROK-753)', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping — no match
+      mockLimitFn.mockResolvedValueOnce([]); // exact — no "World of Warcraft Classic" entry
+      mockLimitFn.mockResolvedValueOnce([]); // ilike — no case-insensitive match
+      mockLimitFn.mockResolvedValueOnce([]); // trigram — threshold rejects low-quality matches
+
+      const result = await service.resolveGame('World of Warcraft Classic');
+
+      // Should fall through to null, NOT match "NBA 2K18" or any unrelated game
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'World of Warcraft Classic',
+      });
+    });
+
+    // ROK-1504: Regression — "Revenge of the Titans" was attributed to the
+    // unrelated "Revenge of the Mage": pg_trgm scores the pair 0.60 (shared
+    // "revenge of the" trigrams) which clears the 0.5 threshold. Trigram is a
+    // prefilter only; acceptance requires normalized full-title equality.
+    it('does not match "Revenge of the Titans" to "Revenge of the Mage" via trigram (ROK-1504)', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping
+      mockLimitFn.mockResolvedValueOnce([]); // exact
+      mockLimitFn.mockResolvedValueOnce([]); // ilike
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 77, name: 'Revenge of the Mage' },
+      ]); // trigram top row
+
+      const result = await service.resolveGame('Revenge of the Titans');
+
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'Revenge of the Titans',
+      });
+
+      // The null outcome is cached under the activity name — the wrong game
+      // must not be served on the next presence/voice event either.
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 77, name: 'Revenge of the Mage' },
+      ]);
+      const again = await service.resolveGame('Revenge of the Titans');
+      expect(again).toEqual({
+        gameId: null,
+        gameName: 'Revenge of the Titans',
+      });
+    });
+
+    it('prefers the normalized-exact title among trigram candidates (ROK-1504)', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping
+      mockLimitFn.mockResolvedValueOnce([]); // exact
+      mockLimitFn.mockResolvedValueOnce([]); // ilike — ™ variant misses ILIKE
+      // trigram, similarity DESC: Mage scores higher than the ™ variant
+      mockLimitFn.mockResolvedValueOnce([
+        { id: 77, name: 'Revenge of the Mage' },
+        { id: 78, name: 'Revenge of the Titans™' },
+      ]);
+
+      const result = await service.resolveGame('Revenge of the Titans');
+
+      expect(result).toEqual({
+        gameId: 78,
+        gameName: 'Revenge of the Titans™',
+      });
+    });
+  });
+
+  // ─── detectGameForMember ────────────────────────────────────────────────────
+
+  describe('detectGameForMember', () => {
+    it('returns resolved game when member has a Playing activity', async () => {
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 5, gameName: 'WoW' }]);
+
+      const member = makeMember('user-1', 'World of Warcraft');
+      const result = await service.detectGameForMember(member as any);
+
+      expect(result).toMatchObject({ gameId: 5, gameName: 'WoW' });
+    });
+
+    it('returns Untitled Gaming Session when member has no activity', async () => {
+      const member = makeMember('user-1');
+      const result = await service.detectGameForMember(member as any);
+
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+    });
+
+    it('ignores non-Playing activity types', async () => {
+      const member = {
+        id: 'user-type',
+        presence: {
+          activities: [
+            { type: ActivityType.Streaming, name: 'Twitch Stream' },
+            { type: ActivityType.Listening, name: 'Spotify' },
+          ],
+        },
+      };
+
+      const result = await service.detectGameForMember(member as any);
+
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+    });
+
+    it('respects manual override over Rich Presence', async () => {
+      service.setManualOverride('user-override', 'Minecraft');
+
+      // resolveGame for 'Minecraft' → returns a matched game
+      mockLimitFn.mockResolvedValueOnce([
+        { gameId: 99, gameName: 'Minecraft' },
+      ]);
+
+      const member = makeMember('user-override', 'Fortnite'); // presence says Fortnite
+      const result = await service.detectGameForMember(member as any);
+
+      // Should use the manual override, not Fortnite from presence
+      expect(result).toMatchObject({ gameName: 'Minecraft' });
+    });
+
+    it('handles null presence gracefully', async () => {
+      const member = { id: 'user-null', presence: null };
+      const result = await service.detectGameForMember(member as any);
+
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+    });
+  });
+
+  // ─── detectGames: consensus algorithm ─────────────────────────────────────
+
+  describe('detectGames', () => {
+    it('returns empty array for empty members list', async () => {
+      const result = await service.detectGames([]);
+      expect(result).toEqual([]);
+    });
+
+    it('returns Untitled Gaming Session when all members have no activity', async () => {
+      const members = [makeMember('u1'), makeMember('u2')];
+      const result = await service.detectGames(members as any[]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+        memberIds: expect.arrayContaining(['u1', 'u2']),
+      });
+    });
+
+    // ROK-1445 changed this rule: a strict majority no longer absorbs the
+    // minority. It used to return ONE group carrying every member id, which
+    // silently attributed the Minecraft player's session to WoW. Each detected
+    // game now keeps its OWN members so the per-group `minPlayers` threshold
+    // can judge them independently. The assertion is strengthened, not
+    // weakened: it now pins the exact membership of both groups.
+    it('keeps the minority game as its own group even when one game has >50%', async () => {
+      // u1, u2 play WoW, u3 plays Minecraft → WoW has strict majority (2/3 > 50%)
+      // resolveGame calls: u1-WoW (mapping hit), u2-WoW (cache), u3-Minecraft (mapping)
+      mockLimitFn
+        .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }]) // u1 mapping
+        .mockResolvedValueOnce([{ gameId: 2, gameName: 'Minecraft' }]); // u3 mapping
+
+      const members = [
+        makeMember('u1', 'WoW'),
+        makeMember('u2', 'WoW'), // will use cache from u1
+        makeMember('u3', 'Minecraft'),
+      ];
+
+      const result = await service.detectGames(members as any[]);
+
+      expect(result).toHaveLength(2);
+      expect(result.find((g) => g.gameId === 1)).toMatchObject({
+        gameName: 'WoW',
+        memberIds: ['u1', 'u2'],
+      });
+      expect(result.find((g) => g.gameId === 2)).toMatchObject({
+        gameName: 'Minecraft',
+        memberIds: ['u3'],
+      });
+    });
+
+    it('splits into separate groups when no majority exists (3+ members)', async () => {
+      // 3 members: u1 WoW, u2 FFXIV, u3 Minecraft — no game has 50%+ (1/3 each)
+      mockLimitFn
+        .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }]) // u1
+        .mockResolvedValueOnce([{ gameId: 2, gameName: 'FFXIV' }]) // u2
+        .mockResolvedValueOnce([{ gameId: 3, gameName: 'Minecraft' }]); // u3
+
+      const members = [
+        makeMember('u1', 'WoW'),
+        makeMember('u2', 'FFXIV'),
+        makeMember('u3', 'Minecraft'),
+      ];
+
+      const result = await service.detectGames(members as any[]);
+
+      // No game has 50%+ — should split into 3 groups
+      expect(result.length).toBeGreaterThanOrEqual(2);
+      const gameIds = result.map((g) => g.gameId);
+      expect(gameIds).toContain(1);
+      expect(gameIds).toContain(2);
+      expect(gameIds).toContain(3);
+    });
+
+    // ROK-1445 reversed the null-folding for this path: a presence-null member
+    // must NOT be silently rostered onto the largest game group (they would be
+    // recorded as playing a game nobody knows they play). They are returned as
+    // their own null group; `allowJustChatting` decides downstream whether it
+    // becomes an event, under the same threshold.
+    it('returns no-game members as their own group instead of folding them in', async () => {
+      // u1,u2 → WoW; u3 → FFXIV; u4 → no game
+      mockLimitFn
+        .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }]) // u1
+        .mockResolvedValueOnce([{ gameId: 3, gameName: 'FFXIV' }]); // u3; u2 WoW cached
+
+      const members = [
+        makeMember('u1', 'WoW'),
+        makeMember('u2', 'WoW'),
+        makeMember('u3', 'FFXIV'),
+        makeMember('u4'), // no game
+      ];
+
+      const result = await service.detectGames(members as any[]);
+
+      const wowGroup = result.find((g) => g.gameId === 1);
+      expect(wowGroup).toBeDefined();
+      expect(wowGroup?.memberIds).toEqual(['u1', 'u2']);
+      expect(result.find((g) => g.gameId === 3)?.memberIds).toEqual(['u3']);
+      expect(result.find((g) => g.gameId === null)?.memberIds).toEqual(['u4']);
+    });
+
+    it('respects manual overrides during group detection', async () => {
+      service.setManualOverride('u1', 'Minecraft');
+      service.setManualOverride('u2', 'Minecraft');
+
+      // u1 + u2 manual override: Minecraft. u3 has no activity.
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 5, gameName: 'Minecraft' }]); // resolve 'Minecraft' for u1 (u2 cached)
+
+      const members = [
+        makeMember('u1', 'WoW'), // presence says WoW but manual override wins
+        makeMember('u2', 'WoW'), // presence says WoW but manual override wins
+        makeMember('u3'), // no game
+      ];
+
+      const result = await service.detectGames(members as any[]);
+
+      // u1+u2 have the Minecraft override (gameId 5); u3 is presence-null.
+      // ROK-1445: the override group holds exactly its own members and the null
+      // member stays separate rather than being folded in by majority.
+      expect(result.find((g) => g.gameId === 5)).toMatchObject({
+        gameName: 'Minecraft',
+        memberIds: ['u1', 'u2'],
+      });
+      expect(result.find((g) => g.gameId === null)?.memberIds).toEqual(['u3']);
+    });
+
+    it('splits when exactly 50% play the same game (no strict majority)', async () => {
+      // 2 members: u1 plays WoW, u2 plays FFXIV → each has 1/2 = 50%, no strict majority
+      mockLimitFn
+        .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }])
+        .mockResolvedValueOnce([{ gameId: 2, gameName: 'FFXIV' }]);
+
+      const members = [makeMember('u1', 'WoW'), makeMember('u2', 'FFXIV')];
+
+      const result = await service.detectGames(members as any[]);
+
+      // Neither game has >50% — should split into 2 groups
+      expect(result).toHaveLength(2);
+      const gameIds = result.map((g) => g.gameId);
+      expect(gameIds).toContain(1);
+      expect(gameIds).toContain(2);
+    });
+
+    it('majority check requires >50% AND a non-null gameId', async () => {
+      // Even if 100% of members have null gameId, it should return Untitled
+      // (not a "majority game" since gameId is null)
+      const members = [makeMember('u1'), makeMember('u2'), makeMember('u3')];
+
+      const result = await service.detectGames(members as any[]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+        memberIds: expect.arrayContaining(['u1', 'u2', 'u3']),
+      });
+    });
+
+    it('single member with game returns that game', async () => {
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 7, gameName: 'Dota 2' }]);
+
+      const members = [makeMember('u1', 'Dota 2')];
+      const result = await service.detectGames(members as any[]);
+
+      // 1 member, gameId not null → majority (1/1 = 100%)
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ gameId: 7, gameName: 'Dota 2' });
+      expect(result[0]?.memberIds).toContain('u1');
+    });
+  });
+});

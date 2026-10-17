@@ -1,0 +1,28 @@
+{
+  // Typechecks the vitest specs and src/test/** that tsconfig.app.json
+  // excludes. vitest transpiles without typechecking, so without this a type
+  // error in a spec or a drifted fixture would fail no gate.
+  // Gated: `npx tsc --noEmit -p web/tsconfig.test.json` runs in
+  // scripts/validate-ci.sh run_typecheck (web scope) and in the CI lint job's
+  // "Typecheck (web specs)" step. The spec error backlog was cleared to 0 on
+  // 2026-10-01, so any new error fails the PR. Specs inherit
+  // noUncheckedIndexedAccess from tsconfig.app.json (ROK-1161 phase 3), so
+  // unchecked index access in a spec is gated too; narrow it with the
+  // helpers in src/test/defined.ts. Specs also inherit
+  // exactOptionalPropertyTypes (ROK-1161 phase 5), so an explicit `undefined`
+  // written into an optional key in a spec is gated too; omit the key, use a
+  // conditional spread, or narrow the value with src/test/defined.ts.
+  // Deliberately NOT referenced from tsconfig.json: that would put it in
+  // `tsc -b`, i.e. the web build.
+  // vitest-axe 0.1.0's `extend-expect` augments the legacy global `Vi`
+  // namespace, which vitest 5 no longer reads, so listing it here would not
+  // type `toHaveNoViolations`; the `declare module 'vitest'` augmentation in
+  // src/test/vitest-axe.d.ts does that instead.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": ["vite/client", "vitest/globals", "node"]
+  },
+  "include": ["src"],
+  "exclude": []
+}

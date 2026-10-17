@@ -1,0 +1,801 @@
+/**
+ * Cron-Job Integration Tests (ROK-526)
+ *
+ * Verifies cron job execution tracking (completed/failed/skipped),
+ * execution history pruning, pause/resume, and schedule updates
+ * against a real PostgreSQL database.
+ *
+ * Uses service-level calls for executeWithTracking (no HTTP controller)
+ * and HTTP endpoints for admin CRUD (pause/resume/schedule).
+ */
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import {
+  truncateAllTables,
+  loginAsAdmin,
+  waitFor,
+} from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
+import { eq, desc } from 'drizzle-orm';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
+import { CronJobService } from './cron-job.service';
+import type { CronRunBookkeeping } from './cron-job.bookkeeping';
+import { at, nonEmpty } from '../common/testing/narrow';
+
+/** Insert a test cron job directly into DB and return its ID. */
+async function insertTestJob(
+  testApp: TestApp,
+  name: string,
+  overrides: Partial<typeof schema.cronJobs.$inferInsert> = {},
+): Promise<number> {
+  const [job] = nonEmpty(
+    await testApp.db
+      .insert(schema.cronJobs)
+      .values({
+        name,
+        source: 'core',
+        cronExpression: '0 * * * *', // every hour
+        paused: false,
+        ...overrides,
+      })
+      .returning(),
+    'job',
+  );
+  return job.id;
+}
+
+/** A schedule frequent enough that completed runs defer (ROK-1380). */
+const FIVE_MINUTE = { cronExpression: '*/5 * * * *' };
+
+type FakeTimersConfig = NonNullable<Parameters<typeof jest.useFakeTimers>[0]>;
+
+/** Fake only `Date`: timers, ticks and I/O stay real for the DB driver. */
+const PIN_DATE_ONLY: FakeTimersConfig = {
+  doNotFake: [
+    'hrtime',
+    'nextTick',
+    'performance',
+    'queueMicrotask',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'requestIdleCallback',
+    'cancelIdleCallback',
+    'setImmediate',
+    'clearImmediate',
+    'setInterval',
+    'clearInterval',
+    'setTimeout',
+    'clearTimeout',
+  ],
+};
+
+/** Read one cron job row by id. */
+async function readJob(testApp: TestApp, jobId: number) {
+  const [job] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, jobId))
+      .limit(1),
+    'cron job row',
+  );
+  return job;
+}
+
+/** Read a job's execution rows, newest first. */
+function readExecutions(testApp: TestApp, jobId: number) {
+  return testApp.db
+    .select()
+    .from(schema.cronJobExecutions)
+    .where(eq(schema.cronJobExecutions.cronJobId, jobId))
+    .orderBy(desc(schema.cronJobExecutions.startedAt));
+}
+
+function describeCronJob() {
+  let testApp: TestApp;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  // ===================================================================
+  // Execution Tracking (service-level)
+  // ===================================================================
+
+  function describeExecuteWithTracking() {
+    it('should record completed execution with timing', async () => {
+      const jobId = await insertTestJob(
+        testApp,
+        'test:completed-job',
+        FIVE_MINUTE,
+      );
+
+      const cronJobService = testApp.app.get(CronJobService);
+
+      // Execute a successful handler
+      await cronJobService.executeWithTracking(
+        'test:completed-job',
+        async () => {
+          // Simulate some work
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        },
+      );
+
+      // ROK-1380: a completed run hands its execution row AND last_run_at
+      // to the batched flusher, so nothing is written until a flush runs.
+      expect(await readExecutions(testApp, jobId)).toHaveLength(0);
+      const beforeFlush = await readJob(testApp, jobId);
+      expect(beforeFlush.lastRunAt).toBeNull();
+
+      await cronJobService.flushLastRunUpdates();
+
+      // Check execution was recorded
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId))
+        .orderBy(desc(schema.cronJobExecutions.startedAt));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0]?.status).toBe('completed');
+      expect(executions[0]?.durationMs).toBeGreaterThanOrEqual(0);
+      expect(at(executions, 0).finishedAt).toBeDefined();
+      expect(at(executions, 0).error).toBeNull();
+
+      const afterFlush = await readJob(testApp, jobId);
+      expect(afterFlush.lastRunAt).not.toBeNull();
+      expect(afterFlush.lastRunAt!.getTime()).toBe(
+        at(executions, 0).finishedAt!.getTime(),
+      );
+      expect(afterFlush.nextRunAt).not.toBeNull();
+    });
+
+    it('should record failed execution with error message', async () => {
+      const jobId = await insertTestJob(testApp, 'test:failed-job');
+
+      const cronJobService = testApp.app.get(CronJobService);
+
+      // Execute a handler that throws
+      await cronJobService.executeWithTracking('test:failed-job', () =>
+        Promise.reject(new Error('Simulated cron failure')),
+      );
+
+      // Check execution was recorded as failed
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0]?.status).toBe('failed');
+      expect(executions[0]?.error).toBe('Simulated cron failure');
+      expect(executions[0]?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should log skipped execution when job is paused', async () => {
+      const jobId = await insertTestJob(testApp, 'test:paused-job', {
+        paused: true,
+      });
+
+      const cronJobService = testApp.app.get(CronJobService);
+
+      let handlerRan = false;
+      await cronJobService.executeWithTracking('test:paused-job', () => {
+        handlerRan = true;
+        return Promise.resolve();
+      });
+
+      // Handler should NOT have run
+      expect(handlerRan).toBe(false);
+
+      // Execution should be recorded as skipped
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0]?.status).toBe('skipped');
+      expect(executions[0]?.durationMs).toBe(0);
+    });
+
+    it('should run handler directly when job is not yet synced to DB', async () => {
+      const cronJobService = testApp.app.get(CronJobService);
+
+      // Use a name that does NOT exist in the DB
+      let handlerRan = false;
+      await cronJobService.executeWithTracking('non-existent-job-name', () => {
+        handlerRan = true;
+        return Promise.resolve();
+      });
+
+      // Handler should still run (fallback behavior)
+      expect(handlerRan).toBe(true);
+    });
+  }
+  describe('executeWithTracking', () => describeExecuteWithTracking());
+
+  // ===================================================================
+  // No-op Tracking (ROK-1042)
+  // ===================================================================
+
+  function describeNoOpTracking() {
+    it('should NOT insert execution row for no-op runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:noop-silent');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:noop-silent', () =>
+        Promise.resolve(false),
+      );
+
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(0);
+    });
+
+    it('should NOT immediately update last_run_at for no-op runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:noop-no-update');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:noop-no-update', () =>
+        Promise.resolve(false),
+      );
+
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'cron job row',
+      );
+
+      // last_run_at should not have been written directly to DB
+      // (it may be queued by LastRunBuffer.queueLiveness for liveness)
+      expect(job.lastRunAt).toBeNull();
+    });
+
+    it('should queue liveness update when lastRunAt is stale', async () => {
+      const staleDate = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
+      const jobId = await insertTestJob(testApp, 'test:noop-liveness', {
+        lastRunAt: staleDate,
+      });
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:noop-liveness', () =>
+        Promise.resolve(false),
+      );
+
+      // Flush pending updates to write to DB
+      await cronJobService.flushLastRunUpdates();
+
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'cron job row',
+      );
+
+      // last_run_at should have been updated via liveness flush
+      expect(job.lastRunAt).not.toBeNull();
+      expect(job.lastRunAt!.getTime()).toBeGreaterThan(staleDate.getTime());
+    });
+
+    it('flushes multiple queued liveness updates in one cycle (ROK-1414)', async () => {
+      const staleDate = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
+      const specs = [
+        { name: 'test:batch-a', cronExpression: '0 * * * *' },
+        { name: 'test:batch-b', cronExpression: '*/15 * * * *' },
+        { name: 'test:batch-c', cronExpression: '0 0 * * *' },
+      ];
+      const ids: number[] = [];
+      for (const s of specs) {
+        ids.push(
+          await insertTestJob(testApp, s.name, {
+            lastRunAt: staleDate,
+            cronExpression: s.cronExpression,
+          }),
+        );
+      }
+      const cronJobService = testApp.app.get(CronJobService);
+
+      // Queue a liveness heartbeat for each job (no-op handlers, all stale).
+      for (const s of specs) {
+        await cronJobService.executeWithTracking(s.name, () =>
+          Promise.resolve(false),
+        );
+      }
+
+      // One flush cycle must persist ALL queued jobs correctly.
+      await cronJobService.flushLastRunUpdates();
+
+      const jobs = await testApp.db
+        .select()
+        .from(schema.cronJobs)
+        .where(eq(schema.cronJobs.source, 'core'));
+      const byId = new Map(jobs.map((j) => [j.id, j]));
+
+      for (const id of ids) {
+        const job = byId.get(id)!;
+        expect(job.lastRunAt).not.toBeNull();
+        expect(job.lastRunAt!.getTime()).toBeGreaterThan(staleDate.getTime());
+        // next_run_at is derived per-job from its own cron expression.
+        expect(job.nextRunAt).not.toBeNull();
+        expect(job.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+      }
+    });
+
+    it('should still fully track completed runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:completed-tracked');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking(
+        'test:completed-tracked',
+        async () => {
+          /* did real work */
+        },
+      );
+
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0]?.status).toBe('completed');
+    });
+
+    it('should still fully track failed runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:failed-tracked');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:failed-tracked', () =>
+        Promise.reject(new Error('Intentional failure')),
+      );
+
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0]?.status).toBe('failed');
+      expect(executions[0]?.error).toBe('Intentional failure');
+    });
+  }
+  describe('no-op tracking (ROK-1042)', () => describeNoOpTracking());
+
+  // ===================================================================
+  // last_run_at write deferral (ROK-1380)
+  // ===================================================================
+
+  function describeLastRunDeferral() {
+    it('degraded run defers its row and last_run_at until flush', async () => {
+      const jobId = await insertTestJob(
+        testApp,
+        'test:degraded-deferred',
+        FIVE_MINUTE,
+      );
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:degraded-deferred', () =>
+        Promise.resolve({ degraded: true as const }),
+      );
+
+      expect(await readExecutions(testApp, jobId)).toHaveLength(0);
+      expect((await readJob(testApp, jobId)).lastRunAt).toBeNull();
+
+      await cronJobService.flushLastRunUpdates();
+
+      const executions = await readExecutions(testApp, jobId);
+      expect(executions.map((e) => e.status)).toEqual(['degraded']);
+
+      const flushed = await readJob(testApp, jobId);
+      expect(flushed.lastRunAt).not.toBeNull();
+      expect(flushed.lastRunAt!.getTime()).toBe(
+        at(executions, 0).finishedAt!.getTime(),
+      );
+    });
+
+    it('failed run writes last_run_at immediately', async () => {
+      const jobId = await insertTestJob(testApp, 'test:failed-immediate');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:failed-immediate', () =>
+        Promise.reject(new Error('Immediate failure')),
+      );
+
+      const executions = await readExecutions(testApp, jobId);
+      expect(executions.map((e) => e.status)).toEqual(['failed']);
+      // No flush: a failure must reach the admin panel straight away.
+      const job = await readJob(testApp, jobId);
+      expect(job.lastRunAt).not.toBeNull();
+      expect(job.lastRunAt!.getTime()).toBe(
+        at(executions, 0).finishedAt!.getTime(),
+      );
+    });
+  }
+  describe('last_run_at deferral (ROK-1380)', () => describeLastRunDeferral());
+
+  function describeLastRunScheduleAndOrder() {
+    it('hourly job writes a completed run immediately', async () => {
+      const jobId = await insertTestJob(testApp, 'test:hourly-immediate');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:hourly-immediate', () =>
+        Promise.resolve(),
+      );
+
+      const [execution] = nonEmpty(
+        await readExecutions(testApp, jobId),
+        'execution',
+      );
+      expect(execution.status).toBe('completed');
+      // No flush: only schedules of 15 minutes or less defer.
+      const job = await readJob(testApp, jobId);
+      expect(job.lastRunAt?.getTime()).toBe(execution.finishedAt!.getTime());
+    });
+
+    it('flush keeps a newer failed run over an older deferred completed run', async () => {
+      const name = 'test:completed-then-failed';
+      const jobId = await insertTestJob(testApp, name, FIVE_MINUTE);
+      const cronJobService = testApp.app.get(CronJobService);
+
+      // Pin the clock so the failed run is a full second newer: two runs in
+      // the same millisecond made "newer" a tie the flush cannot order.
+      jest.useFakeTimers(PIN_DATE_ONLY);
+      try {
+        jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+        await cronJobService.executeWithTracking(name, () => Promise.resolve());
+        jest.setSystemTime(new Date('2026-01-01T00:00:01.000Z'));
+        await cronJobService.executeWithTracking(name, () =>
+          Promise.reject(new Error('Later failure')),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+      await cronJobService.flushLastRunUpdates();
+
+      const executions = await readExecutions(testApp, jobId);
+      const failed = executions.find((e) => e.status === 'failed')!;
+      const completed = executions.find((e) => e.status === 'completed')!;
+      expect(failed.finishedAt!.getTime()).toBeGreaterThan(
+        completed.finishedAt!.getTime(),
+      );
+
+      // The queued completed run must not roll the failure's write back.
+      const job = await readJob(testApp, jobId);
+      expect(job.lastRunAt?.getTime()).toBe(failed.finishedAt!.getTime());
+    });
+  }
+  describe('last_run_at schedule gate and ordering (ROK-1380)', () =>
+    describeLastRunScheduleAndOrder());
+
+  function describeTriggerLastRun() {
+    it('manual trigger of a core job writes last_run_at immediately', async () => {
+      const name = 'test:trigger-immediate';
+      // High-frequency, so only the trigger's mark forces the write.
+      const jobId = await insertTestJob(testApp, name, FIVE_MINUTE);
+      const cronJobService = testApp.app.get(CronJobService);
+      const scheduler = testApp.app.get(SchedulerRegistry, { strict: false });
+      let tickFinished = false;
+      // Never started: only the trigger's fireOnTick runs this job.
+      scheduler.addCronJob(
+        name,
+        new CronJob('0 0 1 1 *', async () => {
+          await cronJobService.executeWithTracking(name, () =>
+            Promise.resolve(),
+          );
+          tickFinished = true;
+        }),
+      );
+      try {
+        await cronJobService.triggerJob(jobId);
+        // The core path fires fireOnTick without awaiting it.
+        await waitFor(() => {
+          expect(tickFinished).toBe(true);
+          return Promise.resolve();
+        });
+
+        const executions = await readExecutions(testApp, jobId);
+        expect(executions.map((e) => e.status)).toEqual(['completed']);
+        // No flush: an admin "Run now" must show its result straight away.
+        const job = await readJob(testApp, jobId);
+        expect(job.lastRunAt).not.toBeNull();
+      } finally {
+        scheduler.deleteCronJob(name);
+      }
+    });
+  }
+  describe('manual trigger last_run_at (ROK-1380)', () =>
+    describeTriggerLastRun());
+
+  // ===================================================================
+  // Execution Pruning
+  // ===================================================================
+
+  function describeExecutionPruning() {
+    it('should keep last 50 executions and delete older ones', async () => {
+      const jobId = await insertTestJob(testApp, 'test:prunable-job');
+
+      // Insert 55 execution records directly
+      const execValues = [];
+      for (let i = 0; i < 55; i++) {
+        execValues.push({
+          cronJobId: jobId,
+          status: 'completed',
+          startedAt: new Date(Date.now() - (55 - i) * 60_000),
+          finishedAt: new Date(Date.now() - (55 - i) * 60_000 + 1000),
+          durationMs: 1000,
+        });
+      }
+      await testApp.db.insert(schema.cronJobExecutions).values(execValues);
+
+      // Pre-seed the execution counter to threshold - 1 so the next
+      // executeWithTracking call triggers pruning (pruning is periodic,
+      // not on every tick — ROK-607)
+      const cronJobService = testApp.app.get(CronJobService);
+      (
+        cronJobService as unknown as { book: CronRunBookkeeping }
+      ).book.executionCounts.set(jobId, 49);
+
+      await cronJobService.executeWithTracking(
+        'test:prunable-job',
+        async () => {
+          // no-op
+        },
+      );
+
+      // Wait briefly for the async prune to complete
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Count remaining executions (should be ~50)
+      const remaining = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      // 55 existing + 1 new = 56, pruning keeps 50
+      expect(remaining.length).toBeLessThanOrEqual(51);
+      expect(remaining.length).toBeGreaterThanOrEqual(50);
+    });
+
+    it('should NOT prune when execution count is below threshold', async () => {
+      const jobId = await insertTestJob(testApp, 'test:no-prune-job');
+
+      // Insert 55 execution records directly
+      const execValues = [];
+      for (let i = 0; i < 55; i++) {
+        execValues.push({
+          cronJobId: jobId,
+          status: 'completed',
+          startedAt: new Date(Date.now() - (55 - i) * 60_000),
+          finishedAt: new Date(Date.now() - (55 - i) * 60_000 + 1000),
+          durationMs: 1000,
+        });
+      }
+      await testApp.db.insert(schema.cronJobExecutions).values(execValues);
+
+      // Counter starts at 0 — pruning should NOT run on this execution
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking(
+        'test:no-prune-job',
+        async () => {
+          // no-op
+        },
+      );
+
+      // All 55 + 1 new executions should still exist (no pruning)
+      const remaining = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(remaining.length).toBe(56);
+    });
+  }
+  describe('execution pruning', () => describeExecutionPruning());
+
+  // ===================================================================
+  // Admin API — Pause/Resume (HTTP)
+  // ===================================================================
+
+  describe('pause and resume', () => {
+    it('should pause a cron job via admin API', async () => {
+      const jobId = await insertTestJob(testApp, 'test:pausable');
+
+      const pauseRes = await testApp.request
+        .patch(`/admin/cron-jobs/${jobId}/pause`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(pauseRes.status).toBe(200);
+      expect(pauseRes.body.paused).toBe(true);
+
+      // Verify in DB
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'job',
+      );
+
+      expect(job.paused).toBe(true);
+    });
+
+    it('should resume a paused cron job via admin API', async () => {
+      const jobId = await insertTestJob(testApp, 'test:resumable', {
+        paused: true,
+      });
+
+      const resumeRes = await testApp.request
+        .patch(`/admin/cron-jobs/${jobId}/resume`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(resumeRes.status).toBe(200);
+      expect(resumeRes.body.paused).toBe(false);
+    });
+  });
+
+  // ===================================================================
+  // Admin API — Schedule Update (HTTP)
+  // ===================================================================
+
+  describe('schedule update', () => {
+    it('should update cron expression and persist', async () => {
+      const jobId = await insertTestJob(testApp, 'test:reschedulable');
+
+      const updateRes = await testApp.request
+        .patch(`/admin/cron-jobs/${jobId}/schedule`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ cronExpression: '*/5 * * * *' }); // every 5 minutes
+
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.cronExpression).toBe('*/5 * * * *');
+
+      // Verify in DB
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'job',
+      );
+
+      expect(job.cronExpression).toBe('*/5 * * * *');
+    });
+
+    it('should reject invalid cron expression', async () => {
+      const jobId = await insertTestJob(testApp, 'test:invalid-cron');
+
+      const updateRes = await testApp.request
+        .patch(`/admin/cron-jobs/${jobId}/schedule`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ cronExpression: 'not-a-cron' });
+
+      expect(updateRes.status).toBe(400);
+    });
+  });
+
+  // ===================================================================
+  // Admin API — List and Execution History (HTTP)
+  // ===================================================================
+
+  function describeListAndHistory() {
+    it('should list all registered cron jobs', async () => {
+      await insertTestJob(testApp, 'test:listable-1');
+      await insertTestJob(testApp, 'test:listable-2');
+
+      const listRes = await testApp.request
+        .get('/admin/cron-jobs')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.length).toBeGreaterThanOrEqual(2);
+
+      const jobs = listRes.body as Array<{ name: string }>;
+      const names = jobs.map((j) => j.name);
+      expect(names).toContain('test:listable-1');
+      expect(names).toContain('test:listable-2');
+    });
+
+    it('should return execution history for a job', async () => {
+      const jobId = await insertTestJob(testApp, 'test:history-job');
+
+      // Insert some executions
+      await testApp.db.insert(schema.cronJobExecutions).values([
+        {
+          cronJobId: jobId,
+          status: 'completed',
+          startedAt: new Date(Date.now() - 120_000),
+          finishedAt: new Date(Date.now() - 119_000),
+          durationMs: 1000,
+        },
+        {
+          cronJobId: jobId,
+          status: 'failed',
+          startedAt: new Date(Date.now() - 60_000),
+          finishedAt: new Date(Date.now() - 59_000),
+          durationMs: 1000,
+          error: 'Test error',
+        },
+      ]);
+
+      const historyRes = await testApp.request
+        .get(`/admin/cron-jobs/${jobId}/executions`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(historyRes.status).toBe(200);
+      expect(historyRes.body.length).toBe(2);
+
+      // Most recent first
+      expect(historyRes.body[0].status).toBe('failed');
+      expect(historyRes.body[0].error).toBe('Test error');
+      expect(historyRes.body[1].status).toBe('completed');
+    });
+  }
+  describe('list and history', () => describeListAndHistory());
+
+  // ===================================================================
+  // Auth Guards
+  // ===================================================================
+
+  function describeAuthGuards() {
+    it('should require admin role for cron-job endpoints', async () => {
+      const res = await testApp.request.get('/admin/cron-jobs');
+      expect(res.status).toBe(401);
+    });
+
+    it('should reject non-admin users', async () => {
+      const bcrypt = await import('bcrypt');
+      const passwordHash = await bcrypt.hash('TestPassword123!', 4);
+
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'local:member@test.local',
+            username: 'member',
+            role: 'member',
+          })
+          .returning(),
+        'user',
+      );
+
+      await testApp.db.insert(schema.localCredentials).values({
+        email: 'member@test.local',
+        passwordHash,
+        userId: user.id,
+      });
+
+      const loginRes = await testApp.request
+        .post('/auth/local')
+        .send({ email: 'member@test.local', password: 'TestPassword123!' });
+
+      const memberToken = loginRes.body.access_token as string;
+
+      const res = await testApp.request
+        .get('/admin/cron-jobs')
+        .set('Authorization', `Bearer ${memberToken}`);
+
+      expect(res.status).toBe(403);
+    });
+  }
+  describe('auth guards', () => describeAuthGuards());
+}
+describe('Cron-Job (integration)', () => describeCronJob());

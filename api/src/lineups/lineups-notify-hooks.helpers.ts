@@ -1,0 +1,295 @@
+/**
+ * Fire-and-forget notification hook wrappers for lifecycle events (ROK-932).
+ * These are thin wrappers that catch errors and log them so that
+ * notifications never block the main flow.
+ */
+import { eq } from 'drizzle-orm';
+import type { Logger } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import type { LineupNotificationService } from './lineup-notification.service';
+import type { LineupInfo, MatchInfo } from './lineup-notification.service';
+import {
+  checkNominationMilestone,
+  getEntryDetails,
+} from './lineups-milestone.helpers';
+import { findNominatedGames, findGameName } from './lineups-query.helpers';
+import type { CallerIdentity } from './lineups.service';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Log and swallow notification errors. */
+function logError(logger: Logger, context: string): (err: unknown) => void {
+  return (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Notification failed (${context}): ${msg}`);
+  };
+}
+
+/** Fire lineup-created channel embed notification. */
+export function fireLineupCreated(
+  svc: LineupNotificationService,
+  logger: Logger,
+  lineup: LineupInfo,
+): void {
+  svc.notifyLineupCreated(lineup).catch(logError(logger, 'lineup-created'));
+}
+
+/**
+ * Fire an in-place embed refresh after metadata edit (ROK-1063).
+ * No-op when the lineup has no stored Discord message reference.
+ */
+export function fireLineupMetadataRefresh(
+  svc: LineupNotificationService,
+  logger: Logger,
+  lineup: LineupInfo,
+): void {
+  svc
+    .refreshCreatedEmbed(lineup)
+    .catch(logError(logger, 'lineup-metadata-refresh'));
+}
+
+/** Check and fire nomination milestone notification. */
+export function fireNominationMilestone(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  lineupId: number,
+): void {
+  loadLineupForHook(db, lineupId)
+    .then(async (row) => {
+      if (!row) return;
+      const result = await checkNominationMilestone(db, lineupId);
+      if (!result) return;
+      const entries = await getEntryDetails(db, lineupId);
+      // ROK-1513: the deadline is captured HERE, before `maybeAutoAdvance`
+      // can rewrite `phase_deadline` with the voting-phase one, and travels to
+      // both the channel embed and the private DM so they name the same time.
+      await svc.notifyNominationMilestone(lineupId, result.threshold, entries, {
+        id: row.id,
+        title: row.title,
+        visibility: row.visibility,
+        phaseDeadline: row.phaseDeadline,
+        nominationTargetPct: row.nominationTargetPct,
+      });
+    })
+    .catch(logError(logger, 'nomination-milestone'));
+}
+
+/**
+ * Re-render the lineup-created channel card in place (ROK-1461).
+ *
+ * Operator walk 2026-09-02: nominating a game changed nothing on the card —
+ * the only nomination-driven hook was the 25/50/100% MILESTONE, which posts a
+ * NEW embed and stays silent in between. Every count change now edits the
+ * stored created message so its `N of M nominations filled.` line is honest.
+ *
+ * Only the id is passed: `resolveCreatedCtx` re-reads the row (title,
+ * description, deadline) and the live counts, so a stale caller payload
+ * cannot write a stale card. A no-op when the lineup has no stored message.
+ *
+ * @param svc - The notification service that owns the Discord edit.
+ * @param logger - Warn sink; a Discord failure never breaks the mutation.
+ * @param lineupId - The lineup whose card should be refreshed.
+ */
+export function fireCreatedEmbedRefresh(
+  svc: LineupNotificationService,
+  logger: Logger,
+  lineupId: number,
+): void {
+  svc
+    .refreshCreatedEmbed({ id: lineupId })
+    .catch(logError(logger, 'created-embed-refresh'));
+}
+
+/** Fire voting-open notifications (channel embed + DMs). */
+export function fireVotingOpen(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  lineupId: number,
+  phaseDeadline: Date | null,
+): void {
+  loadLineupForHook(db, lineupId)
+    .then(async (row) => {
+      if (!row) return;
+      const games = await findNominatedGames(db, lineupId);
+      return svc.notifyVotingOpen(
+        {
+          id: lineupId,
+          title: row.title,
+          ...(phaseDeadline != null ? { votingDeadline: phaseDeadline } : {}),
+          visibility: row.visibility,
+        },
+        games,
+      );
+    })
+    .catch(logError(logger, 'voting-open'));
+}
+
+/** Load fields notify hooks need from the lineup row (ROK-1132). */
+async function loadLineupForHook(
+  db: Db,
+  lineupId: number,
+): Promise<{
+  id: number;
+  title: string;
+  visibility: 'public' | 'private';
+  includeSchedulingPhase: boolean;
+  phaseDeadline: Date | null;
+  nominationTargetPct: number | null;
+} | null> {
+  const [row] = await db
+    .select({
+      id: schema.communityLineups.id,
+      title: schema.communityLineups.title,
+      visibility: schema.communityLineups.visibility,
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
+      nominationTargetPct: schema.communityLineups.nominationTargetPct,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Fire decided-phase notifications (channel embed). */
+export function fireDecidedNotifications(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  lineupId: number,
+): void {
+  loadLineupForHook(db, lineupId)
+    .then(async (row) => {
+      if (!row) return;
+      const matches = await loadMatchesForNotification(db, lineupId);
+      if (matches.length === 0) return;
+      await svc.notifyMatchesFound(lineupId, matches, {
+        id: row.id,
+        title: row.title,
+        visibility: row.visibility,
+        // ROK-1302: opted-out lineups must not announce "ready to schedule".
+        includeSchedulingPhase: row.includeSchedulingPhase,
+      });
+    })
+    .catch(logError(logger, 'decided'));
+}
+
+/** Fire nomination-removed DM (operator removals only). */
+export function fireNominationRemoved(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  lineupId: number,
+  gameId: number,
+  entry: typeof schema.communityLineupEntries.$inferSelect,
+  caller: CallerIdentity,
+): void {
+  const isOperator = caller.role === 'operator' || caller.role === 'admin';
+  if (!isOperator || entry.nominatedBy === caller.id) return;
+
+  findGameName(db, gameId)
+    .then(([game]) => {
+      if (!game) return;
+      return svc.notifyNominationRemoved(
+        lineupId,
+        gameId,
+        game.name,
+        entry.nominatedBy,
+        'Operator',
+      );
+    })
+    .catch(logError(logger, 'nomination-removed'));
+}
+
+/** Fire scheduling-open channel embed + DMs for a promoted match. */
+export function fireSchedulingOpen(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  matchId: number,
+): void {
+  loadSingleMatch(db, matchId)
+    .then(async (match) => {
+      if (!match) return;
+      const lineup = await loadLineupForHook(db, match.lineupId);
+      await svc.notifySchedulingOpen(match, lineup ?? undefined);
+    })
+    .catch(logError(logger, 'scheduling-open'));
+}
+
+/** Fire event-created channel embed + DMs. */
+export function fireEventCreated(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  matchId: number,
+  eventDate: Date,
+  eventId?: number,
+): void {
+  loadSingleMatch(db, matchId)
+    .then(async (match) => {
+      if (!match) return;
+      const lineup = await loadLineupForHook(db, match.lineupId);
+      await svc.notifyEventCreated(
+        match,
+        eventDate,
+        eventId,
+        lineup ?? undefined,
+      );
+    })
+    .catch(logError(logger, 'event-created'));
+}
+
+// ─── Private: match loading queries ────────────────────────
+
+/** Load all matches for a lineup in notification format. */
+async function loadMatchesForNotification(
+  db: Db,
+  lineupId: number,
+): Promise<MatchInfo[]> {
+  const rows = await db
+    .select({
+      id: schema.communityLineupMatches.id,
+      lineupId: schema.communityLineupMatches.lineupId,
+      gameId: schema.communityLineupMatches.gameId,
+      gameName: schema.games.name,
+      status: schema.communityLineupMatches.status,
+      thresholdMet: schema.communityLineupMatches.thresholdMet,
+      voteCount: schema.communityLineupMatches.voteCount,
+    })
+    .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.games,
+      eq(schema.communityLineupMatches.gameId, schema.games.id),
+    )
+    .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+  return rows;
+}
+
+/** Load a single match for notification format. */
+async function loadSingleMatch(
+  db: Db,
+  matchId: number,
+): Promise<MatchInfo | null> {
+  const [row] = await db
+    .select({
+      id: schema.communityLineupMatches.id,
+      lineupId: schema.communityLineupMatches.lineupId,
+      gameId: schema.communityLineupMatches.gameId,
+      gameName: schema.games.name,
+      status: schema.communityLineupMatches.status,
+      thresholdMet: schema.communityLineupMatches.thresholdMet,
+      voteCount: schema.communityLineupMatches.voteCount,
+    })
+    .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.games,
+      eq(schema.communityLineupMatches.gameId, schema.games.id),
+    )
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  return row ?? null;
+}

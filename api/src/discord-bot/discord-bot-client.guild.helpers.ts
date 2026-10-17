@@ -1,0 +1,178 @@
+/**
+ * Guild member helpers for DiscordBotClientService.
+ * Extracted from discord-bot-client.service.ts for file size compliance (ROK-719).
+ */
+import { ChannelType, type Guild } from 'discord.js';
+import { isPerfEnabled, perfLog } from '../common/perf-logger';
+
+/** Search guild members by username query. */
+export async function searchGuildMembers(
+  guild: Guild | null,
+  query: string,
+): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
+  if (!guild) return [];
+
+  const start = isPerfEnabled() ? performance.now() : 0;
+  try {
+    const members = await guild.members.fetch({ query, limit: 10 });
+    if (start) {
+      perfLog('DISCORD', 'searchGuildMembers', performance.now() - start, {
+        query,
+      });
+    }
+    return members.map((m) => ({
+      discordId: m.user.id,
+      username: m.user.username,
+      avatar: m.user.avatar,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** List guild members (no query required). */
+export async function listGuildMembers(
+  guild: Guild | null,
+  limit = 25,
+): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
+  if (!guild) return [];
+
+  try {
+    const members = await guild.members.list({ limit });
+    return members
+      .filter((m) => !m.user.bot)
+      .map((m) => ({
+        discordId: m.user.id,
+        username: m.user.username,
+        avatar: m.user.avatar,
+      }))
+      .sort((a, b) => a.username.localeCompare(b.username));
+  } catch {
+    return [];
+  }
+}
+
+/** Check if a Discord user is in the guild (ROK-403). */
+export async function isGuildMember(
+  guild: Guild | null,
+  discordUserId: string,
+): Promise<boolean> {
+  if (!guild) return false;
+
+  try {
+    const member = await guild.members.fetch(discordUserId);
+    return !!member;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Kick a member from the guild (ROK-313). Best-effort: returns false when the
+ * member isn't in the guild, the id isn't a real Discord user, or the bot
+ * lacks Kick Members. Mirrors `isGuildMember`'s fetch-and-swallow shape.
+ */
+export async function kickGuildMember(
+  guild: Guild | null,
+  discordId: string,
+  reason?: string,
+): Promise<boolean> {
+  if (!guild) return false;
+  try {
+    const member = await guild.members.fetch(discordId);
+    await member.kick(reason ?? 'Removed by admin via Raid Ledger');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Discord user ID → global avatar hash (null = no avatar) (ROK-1714). */
+export type GuildMemberAvatars = Map<string, string | null>;
+
+/**
+ * Fetch every member of the guild and return a Map of Discord ID → GLOBAL
+ * avatar hash (ROK-1282, ROK-1714). Keys drive GuildReconciliationService's
+ * membership diff; values refresh `users.avatar`. Uses `m.user.avatar`, never
+ * the guild-specific `m.avatar` — the `/avatars/<userId>/<hash>` CDN path
+ * only serves global hashes. Returns null when the bot is disconnected
+ * (caller should treat as a no-op, not an error).
+ */
+export async function listAllGuildMemberAvatars(
+  guild: Guild | null,
+): Promise<GuildMemberAvatars | null> {
+  if (!guild) return null;
+  const members = await guild.members.fetch();
+  return new Map(members.map((m) => [m.user.id, m.user.avatar ?? null]));
+}
+
+/** ROK-1352: List category channels (parents for ephemeral voice channels). */
+export function listGuildCategories(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.type === ChannelType.GuildCategory)
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * List text channels from the guild: text + announcement only.
+ *
+ * ROK-1518: matched by type, not `isTextBased()`. In discord.js v14 a voice
+ * or stage channel is text-based too (it carries a text chat), so the old
+ * filter surfaced every voice channel — including the ⏰ ephemeral temp-voice
+ * channels the LFG "playing now" flow creates — in the admin text-channel
+ * picker. A voice channel's chat is not a bindable text channel.
+ */
+export function listGuildTextChannels(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter(
+      (ch) =>
+        ch.type === ChannelType.GuildText ||
+        ch.type === ChannelType.GuildAnnouncement,
+    )
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** List voice channels from the guild. */
+export function listGuildVoiceChannels(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.isVoiceBased() && !ch.isDMBased())
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * ROK-1471 D4: List forum channels from the guild.
+ *
+ * This CANNOT reuse `listGuildTextChannels`. discord.js's `isTextBased()`
+ * narrows to `TextBasedChannel`, a union that excludes `GuildForum` by
+ * construction — a forum posts through threads, not through itself. Reusing
+ * the text lister silently yields an empty forum dropdown and a "the bot
+ * can't see my forum" bug report, so the type is matched directly.
+ *
+ * NOT YET CALLED IN PRODUCTION. The admin forum-override picker is DEFERRED —
+ * no endpoint serves this list and Admin -> Discord -> Channels still composes
+ * its dropdown from the text + voice queries only. Until that ships, the only
+ * way to create an `lfg-board` binding is `/bind` in Discord, which
+ * `bind.resolvers.ts` handles. Kept rather than deleted because the picker is
+ * the intended D3a path and this is the non-obvious half of it (see above).
+ */
+export function listGuildForumChannels(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.type === ChannelType.GuildForum)
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

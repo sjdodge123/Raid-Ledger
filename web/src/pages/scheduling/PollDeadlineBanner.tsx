@@ -1,0 +1,70 @@
+/**
+ * Standalone scheduling poll deadline banner (ROK-1217 / F-36).
+ * Renders absolute + relative deadline. Switches to urgent styling
+ * when less than 24 hours remain. Returns null when no deadline set.
+ */
+import { useEffect, useState, type JSX } from 'react';
+import { format, formatDistanceToNow } from 'date-fns';
+
+interface Props {
+  /** Lineup phase deadline (ISO). Null/undefined when no deadline configured. */
+  phaseDeadline: string | null | undefined;
+}
+
+const SOON_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+// Bare weekday names are only unambiguous within the next 6 days — at 6-7
+// days out the deadline can share today's weekday name.
+const BARE_WEEKDAY_MS = 6 * 24 * 60 * 60 * 1000;
+
+function formatAbsolute(date: Date, now: number): string {
+  const dayPart = date.getTime() - now < BARE_WEEKDAY_MS ? format(date, 'EEEE') : format(date, 'EEE, MMM d');
+  return `Closes ${dayPart} at ${format(date, 'h:mm a')}`;
+}
+
+function formatRelative(date: Date): string {
+  return `in ${formatDistanceToNow(date)}`;
+}
+
+function urgencyClasses(soon: boolean, expired: boolean): string {
+  if (expired) {
+    // TDB:1770: /5, not the usual /10 — the banner renders nested in the
+    // leader card's bg-success/10, and danger/10 stacked on it put text-danger
+    // at 4.46:1 in default-light. /5 measures 4.9 light / 6.3 dark / 5.8 celestial there.
+    return 'border-danger/40 bg-danger/5 text-danger';
+  }
+  if (soon) {
+    return 'border-warning/40 bg-warning/10 text-warning';
+  }
+  return 'border-edge bg-panel/40 text-foreground';
+}
+
+export function PollDeadlineBanner({ phaseDeadline }: Props): JSX.Element | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!phaseDeadline) return;
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [phaseDeadline]);
+
+  if (!phaseDeadline) return null;
+  const date = new Date(phaseDeadline);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const remainingMs = date.getTime() - now;
+  const expired = remainingMs <= 0;
+  const soon = !expired && remainingMs < SOON_THRESHOLD_MS;
+  const absolute = formatAbsolute(date, now);
+  const relative = expired ? 'closed' : formatRelative(date);
+
+  return (
+    <div
+      data-testid="poll-deadline-banner"
+      data-soon={soon ? 'true' : 'false'}
+      data-expired={expired ? 'true' : 'false'}
+      className={`px-4 py-2.5 rounded-lg border text-sm flex items-center gap-2 ${urgencyClasses(soon, expired)}`}
+    >
+      <span className="font-medium">{absolute}</span>
+      <span className="text-xs">({relative})</span>
+    </div>
+  );
+}

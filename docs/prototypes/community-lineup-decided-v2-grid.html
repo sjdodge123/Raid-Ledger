@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decided Matches (Compact Grid) — Community Lineup — Raid Ledger Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Cinzel', 'serif'],
+          },
+          colors: {
+            backdrop: '#020617',
+            surface: '#0f172a',
+            panel: '#1e293b',
+            overlay: '#334155',
+            faint: '#475569',
+            dim: '#64748b',
+            muted: '#94a3b8',
+            secondary: '#cbd5e1',
+            foreground: '#ffffff',
+            edge: '#334155',
+            'edge-strong': '#475569',
+            'edge-subtle': '#1e293b',
+            gold: '#fbbf24',
+            silver: '#9ca3af',
+            bronze: '#d97706',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #020617; color: #ffffff; font-family: 'Inter', system-ui, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Cover art gradient placeholders */
+    .cover-lethal { background: linear-gradient(135deg, #1a2e1a 0%, #2d4a2d 50%, #1a3a1a 100%); }
+    .cover-deeprock { background: linear-gradient(135deg, #2d1a0a 0%, #4a3520 50%, #3a2a1a 100%); }
+    .cover-phasmo { background: linear-gradient(135deg, #1a1a2e 0%, #2d2d4a 50%, #1a1a3a 100%); }
+    .cover-valheim { background: linear-gradient(135deg, #0a2d2d 0%, #204a4a 50%, #1a3a3a 100%); }
+    .cover-gtfo { background: linear-gradient(135deg, #2e1a1a 0%, #4a2d2d 50%, #3a1a1a 100%); }
+    .cover-elden { background: linear-gradient(135deg, #2e2e0a 0%, #4a4a20 50%, #3a3a1a 100%); }
+
+    /* Grid card hover states */
+    .grid-card { transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s; cursor: pointer; }
+    .grid-card:hover { transform: translateY(-2px); }
+    .grid-card-cyan:hover { border-color: rgba(34, 211, 238, 0.4); box-shadow: 0 4px 24px rgba(34, 211, 238, 0.1); }
+    .grid-card-emerald:hover { border-color: rgba(16, 185, 129, 0.4); box-shadow: 0 4px 24px rgba(16, 185, 129, 0.1); }
+    .grid-card-amber:hover { border-color: rgba(251, 191, 36, 0.3); box-shadow: 0 4px 24px rgba(251, 191, 36, 0.06); }
+    .grid-card-dim:hover { border-color: rgba(100, 116, 139, 0.3); box-shadow: 0 4px 24px rgba(100, 116, 139, 0.05); }
+
+    /* Avatar tooltip */
+    .avatar-group .avatar-item { transition: transform 0.15s; cursor: pointer; position: relative; }
+    .avatar-group .avatar-item:hover { transform: scale(1.15); z-index: 10; }
+    .avatar-item .avatar-tooltip {
+      position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      background: #1e293b; border: 1px solid #475569; border-radius: 6px;
+      padding: 2px 8px; font-size: 11px; white-space: nowrap;
+      opacity: 0; pointer-events: none; transition: opacity 0.15s;
+      margin-bottom: 4px; color: #cbd5e1;
+    }
+    .avatar-item:hover .avatar-tooltip { opacity: 1; }
+
+    /* Mobile toggle */
+    .view-btn.active { background: #1e293b; color: #10b981; border-color: #10b981; }
+    .view-btn { background: transparent; color: #94a3b8; border-color: #334155; }
+
+    /* Bandwagon strip */
+    .bandwagon-strip { background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%); }
+    .bandwagon-strip-amber { background: linear-gradient(90deg, rgba(251, 191, 36, 0.08) 0%, rgba(217, 119, 6, 0.08) 100%); }
+
+    /* Carried forward chip scroll */
+    .chip-scroll { scroll-snap-type: x mandatory; }
+    .chip-scroll > * { scroll-snap-align: start; }
+  </style>
+</head>
+<body class="min-h-screen pb-20">
+
+  <!-- NAV BAR -->
+  <nav class="sticky top-0 z-50 bg-backdrop/95 backdrop-blur border-b border-edge">
+    <div class="max-w-6xl mx-auto px-4 flex items-center gap-6 h-12">
+      <span class="text-xs text-dim font-medium uppercase tracking-wider whitespace-nowrap">Decided Matches &mdash; Grid View</span>
+      <div class="ml-auto flex gap-2">
+        <button onclick="toggleMobile()" class="view-btn border rounded-md px-3 py-1 text-xs font-medium transition-all" id="mobile-toggle">Mobile</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div id="app-container" class="max-w-6xl mx-auto transition-all duration-300">
+
+    <!-- HEADER -->
+    <header class="border-b border-edge px-4 py-3">
+      <div class="flex items-center gap-3 mb-1">
+        <button class="text-muted hover:text-foreground transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <h1 class="font-display text-lg font-semibold">Matches</h1>
+        <span class="bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2.5 py-1 rounded-full border border-emerald-500/30">Decided</span>
+      </div>
+      <p class="text-muted text-sm ml-8">Voting closed Thu, Mar 26 &middot; 8 of 12 voted</p>
+    </header>
+
+    <div class="p-4 space-y-5">
+
+      <!-- COMPACT STATS STRIP -->
+      <div class="flex items-center gap-1.5 text-xs text-muted px-1">
+        <span class="text-emerald-400 font-semibold">3 ready</span>
+        <span class="text-faint">&middot;</span>
+        <span>5 games</span>
+        <span class="text-faint">&middot;</span>
+        <span>8 voters</span>
+        <span class="text-faint">&middot;</span>
+        <span class="text-gold font-medium">35% threshold</span>
+      </div>
+
+      <!-- ===== SECTION: READY TO SCHEDULE ===== -->
+      <section>
+        <div class="flex items-center gap-3 mb-3 px-1">
+          <div class="w-1 h-5 bg-cyan-400 rounded-full"></div>
+          <h2 class="text-secondary text-sm font-semibold uppercase tracking-wider">Ready to Schedule</h2>
+          <span class="text-dim text-xs">3 matches</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+
+          <!-- CARD: Lethal Company (Scheduling, oversubscribed) -->
+          <div class="grid-card grid-card-cyan bg-surface border border-edge rounded-xl overflow-hidden">
+            <!-- Cover art area -->
+            <div class="relative h-32 cover-lethal overflow-hidden">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+              <!-- Status badge top-left -->
+              <div class="absolute top-2 left-2">
+                <span class="bg-cyan-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">Scheduling</span>
+              </div>
+              <!-- Vote pill top-right -->
+              <div class="absolute top-2 right-2">
+                <span class="bg-black/60 text-cyan-300 text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm border border-cyan-500/30">62.5%</span>
+              </div>
+              <!-- Game name bottom -->
+              <div class="absolute bottom-2 left-2.5 right-2.5">
+                <div class="text-foreground font-bold text-sm leading-tight">Lethal Company</div>
+              </div>
+            </div>
+            <!-- Card body -->
+            <div class="p-3 space-y-2">
+              <!-- Match fit -->
+              <div class="flex items-center justify-between">
+                <span class="text-secondary text-xs font-medium">5/4 &mdash; <span class="text-amber-400">1 on bench</span></span>
+              </div>
+              <!-- Tags -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="bg-emerald-500/15 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/20">Co-op</span>
+                <span class="bg-blue-500/15 text-blue-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/20">4 players</span>
+              </div>
+              <!-- Ownership -->
+              <div class="text-[11px] text-muted">
+                <span class="text-emerald-400">11 own</span> &middot; $9.99 for 1
+              </div>
+              <!-- Player avatars -->
+              <div class="flex items-center gap-0.5 avatar-group">
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[8px] font-bold border border-surface">Vx</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">2</div>
+                  <span class="avatar-tooltip">Vex (2 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold border border-surface">Rk</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">2</div>
+                  <span class="avatar-tooltip">Roknua (2 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold border border-surface">Zp</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">2</div>
+                  <span class="avatar-tooltip">Zeph (2 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold border border-surface">Lx</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Lux (3 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold border border-surface">As</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Ash (3 matches)</span>
+                </div>
+              </div>
+              <!-- Action link -->
+              <div class="pt-1">
+                <a href="#" class="text-cyan-400 text-xs font-medium hover:text-cyan-300 transition-colors inline-flex items-center gap-1">
+                  Schedule
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: Deep Rock Galactic (Scheduling, perfect fit) -->
+          <div class="grid-card grid-card-cyan bg-surface border border-edge rounded-xl overflow-hidden">
+            <!-- Cover art area -->
+            <div class="relative h-32 cover-deeprock overflow-hidden">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+              <!-- Status badge top-left -->
+              <div class="absolute top-2 left-2">
+                <span class="bg-cyan-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">Scheduling</span>
+              </div>
+              <!-- Perfect fit badge below status -->
+              <div class="absolute top-7 left-2">
+                <span class="bg-emerald-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur-sm">Perfect fit</span>
+              </div>
+              <!-- Vote pill top-right -->
+              <div class="absolute top-2 right-2">
+                <span class="bg-black/60 text-cyan-300 text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm border border-cyan-500/30">50%</span>
+              </div>
+              <!-- Game name bottom -->
+              <div class="absolute bottom-2 left-2.5 right-2.5">
+                <div class="text-foreground font-bold text-sm leading-tight">Deep Rock Galactic</div>
+              </div>
+            </div>
+            <!-- Card body -->
+            <div class="p-3 space-y-2">
+              <!-- Match fit -->
+              <div class="flex items-center justify-between">
+                <span class="text-emerald-400 text-xs font-medium">4/4 &mdash; Perfect fit</span>
+              </div>
+              <!-- Tags -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="bg-emerald-500/15 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/20">Co-op</span>
+                <span class="bg-blue-500/15 text-blue-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/20">4 players</span>
+              </div>
+              <!-- Ownership -->
+              <div class="text-[11px] text-muted">
+                <span class="text-emerald-400">10 own</span> &middot; $14.99 <span class="text-emerald-400/70">(-50%)</span> for 2
+              </div>
+              <!-- Player avatars -->
+              <div class="flex items-center gap-0.5 avatar-group">
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold border border-surface">Rk</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">2</div>
+                  <span class="avatar-tooltip">Roknua (2 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[8px] font-bold border border-surface">Vx</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">2</div>
+                  <span class="avatar-tooltip">Vex (2 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-pink-600 flex items-center justify-center text-[8px] font-bold border border-surface">Kr</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Kira (3 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold border border-surface">Lx</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Lux (3 matches)</span>
+                </div>
+              </div>
+              <!-- Action link -->
+              <div class="pt-1">
+                <a href="#" class="text-cyan-400 text-xs font-medium hover:text-cyan-300 transition-colors inline-flex items-center gap-1">
+                  Schedule
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: Phasmophobia (Ready, +1 welcome) -->
+          <div class="grid-card grid-card-emerald bg-surface border border-edge rounded-xl overflow-hidden">
+            <!-- Cover art area -->
+            <div class="relative h-32 cover-phasmo overflow-hidden">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+              <!-- Status badge top-left -->
+              <div class="absolute top-2 left-2">
+                <span class="bg-emerald-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">Ready</span>
+              </div>
+              <!-- Vote pill top-right -->
+              <div class="absolute top-2 right-2">
+                <span class="bg-black/60 text-emerald-300 text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm border border-emerald-500/30">37.5%</span>
+              </div>
+              <!-- Game name bottom -->
+              <div class="absolute bottom-2 left-2.5 right-2.5">
+                <div class="text-foreground font-bold text-sm leading-tight">Phasmophobia</div>
+              </div>
+            </div>
+            <!-- Card body -->
+            <div class="p-3 space-y-2">
+              <!-- Match fit -->
+              <div class="flex items-center justify-between">
+                <span class="text-secondary text-xs font-medium">3/4 &mdash; <span class="text-emerald-400">+1 welcome</span></span>
+              </div>
+              <!-- Tags -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="bg-emerald-500/15 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/20">Co-op</span>
+                <span class="bg-blue-500/15 text-blue-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/20">4 players</span>
+              </div>
+              <!-- Ownership -->
+              <div class="text-[11px] text-muted">
+                <span class="text-emerald-400">9 own</span>
+              </div>
+              <!-- Player avatars -->
+              <div class="flex items-center gap-0.5 avatar-group">
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold border border-surface">Zp</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">2</div>
+                  <span class="avatar-tooltip">Zeph (2 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold border border-surface">As</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Ash (3 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-pink-600 flex items-center justify-center text-[8px] font-bold border border-surface">Kr</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Kira (3 matches)</span>
+                </div>
+                <!-- +1 slot -->
+                <div class="w-5 h-5 rounded-full border border-dashed border-emerald-500/50 flex items-center justify-center text-[9px] text-emerald-400/70">+</div>
+              </div>
+              <!-- Bandwagon strip -->
+              <div class="bandwagon-strip rounded-lg px-2.5 py-1.5 flex items-center justify-between border border-emerald-500/10">
+                <span class="text-emerald-400/80 text-[10px] font-medium">+1 needed</span>
+                <button class="text-emerald-400 text-[10px] font-semibold hover:text-emerald-300 transition-colors">I'm in</button>
+              </div>
+              <!-- Action link -->
+              <div class="pt-0.5">
+                <a href="#" class="text-cyan-400 text-xs font-medium hover:text-cyan-300 transition-colors inline-flex items-center gap-1">
+                  Schedule
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /grid -->
+      </section>
+
+      <!-- ===== SECTION: NEEDS MORE INTEREST ===== -->
+      <section>
+        <div class="flex items-center gap-3 mb-3 px-1">
+          <div class="w-1 h-5 bg-amber-400 rounded-full"></div>
+          <h2 class="text-secondary text-sm font-semibold uppercase tracking-wider">Needs More Interest</h2>
+          <span class="text-dim text-xs">2 matches</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+
+          <!-- CARD: Valheim (Needs Interest) -->
+          <div class="grid-card grid-card-amber bg-surface border border-edge rounded-xl overflow-hidden">
+            <!-- Cover art area (muted) -->
+            <div class="relative h-32 cover-valheim overflow-hidden opacity-80">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10"></div>
+              <!-- Status badge top-left -->
+              <div class="absolute top-2 left-2">
+                <span class="bg-amber-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">Needs Interest</span>
+              </div>
+              <!-- Vote pill top-right -->
+              <div class="absolute top-2 right-2">
+                <span class="bg-black/60 text-amber-300 text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm border border-amber-500/30">25%</span>
+              </div>
+              <!-- Game name bottom -->
+              <div class="absolute bottom-2 left-2.5 right-2.5">
+                <div class="text-foreground/90 font-bold text-sm leading-tight">Valheim</div>
+              </div>
+            </div>
+            <!-- Card body -->
+            <div class="p-3 space-y-2">
+              <!-- Match fit -->
+              <div class="flex items-center justify-between">
+                <span class="text-amber-400 text-xs font-medium">2/10 &mdash; Rally your crew!</span>
+              </div>
+              <!-- Tags -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="bg-emerald-500/15 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/20">Co-op</span>
+                <span class="bg-blue-500/15 text-blue-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/20">10 players</span>
+              </div>
+              <!-- Ownership -->
+              <div class="text-[11px] text-muted">
+                <span class="text-emerald-400">7 own</span>
+              </div>
+              <!-- Player avatars -->
+              <div class="flex items-center gap-0.5 avatar-group">
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold border border-surface">Lx</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Lux (3 matches)</span>
+                </div>
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold border border-surface">As</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Ash (3 matches)</span>
+                </div>
+              </div>
+              <!-- Bandwagon strip -->
+              <div class="bandwagon-strip-amber rounded-lg px-2.5 py-1.5 flex items-center justify-between border border-amber-500/10">
+                <span class="text-amber-400/80 text-[10px] font-medium">6 more could join</span>
+                <button class="text-amber-400 text-[10px] font-semibold hover:text-amber-300 transition-colors">I'm interested</button>
+              </div>
+              <!-- Operator override link -->
+              <div class="pt-0.5">
+                <a href="#" class="text-amber-400/70 text-[11px] font-medium hover:text-amber-300 transition-colors inline-flex items-center gap-1">
+                  Advance
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: GTFO (Suggested, low interest) -->
+          <div class="grid-card grid-card-dim bg-surface border border-edge rounded-xl overflow-hidden opacity-60">
+            <!-- Cover art area (dimmed) -->
+            <div class="relative h-32 cover-gtfo overflow-hidden">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20"></div>
+              <!-- Status badge top-left -->
+              <div class="absolute top-2 left-2">
+                <span class="bg-faint/80 text-muted text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">Suggested</span>
+              </div>
+              <!-- Vote pill top-right -->
+              <div class="absolute top-2 right-2">
+                <span class="bg-black/60 text-dim text-[11px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm border border-faint/30">12.5%</span>
+              </div>
+              <!-- Game name bottom -->
+              <div class="absolute bottom-2 left-2.5 right-2.5">
+                <div class="text-foreground/70 font-bold text-sm leading-tight">GTFO</div>
+              </div>
+            </div>
+            <!-- Card body -->
+            <div class="p-3 space-y-2">
+              <!-- Match fit -->
+              <div class="flex items-center justify-between">
+                <span class="text-dim text-xs font-medium">1/4 &mdash; Low interest</span>
+              </div>
+              <!-- Tags -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="bg-emerald-500/10 text-emerald-400/50 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/10">Co-op</span>
+                <span class="bg-blue-500/10 text-blue-400/50 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/10">4 players</span>
+              </div>
+              <!-- Ownership -->
+              <div class="text-[11px] text-dim">
+                <span class="text-emerald-400/50">5 own</span>
+              </div>
+              <!-- Player avatars -->
+              <div class="flex items-center gap-0.5 avatar-group">
+                <div class="avatar-item relative">
+                  <div class="w-5 h-5 rounded-full bg-pink-600/70 flex items-center justify-center text-[8px] font-bold border border-surface">Kr</div>
+                  <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-cyan-500/60 text-[6px] font-bold flex items-center justify-center border border-surface">3</div>
+                  <span class="avatar-tooltip">Kira (3 matches)</span>
+                </div>
+              </div>
+              <!-- Operator override link -->
+              <div class="pt-1">
+                <a href="#" class="text-dim text-[11px] font-medium hover:text-muted transition-colors inline-flex items-center gap-1">
+                  Advance
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /grid -->
+      </section>
+
+      <!-- ===== SECTION: NOT MATCHED ===== -->
+      <section>
+        <div class="flex items-center gap-3 mb-2 px-1">
+          <div class="w-1 h-5 bg-faint rounded-full"></div>
+          <h2 class="text-muted text-sm font-semibold uppercase tracking-wider">Not Matched</h2>
+        </div>
+
+        <!-- Inline row for Elden Ring -->
+        <div class="flex items-center gap-3 bg-surface border border-edge rounded-lg px-3 py-2.5">
+          <!-- Small thumbnail -->
+          <div class="w-10 h-10 rounded-lg flex-shrink-0 overflow-hidden relative cover-elden">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-secondary text-sm font-medium">Elden Ring</div>
+            <div class="text-dim text-[11px]">No votes &mdash; carried forward</div>
+          </div>
+          <svg class="w-4 h-4 text-faint flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </div>
+      </section>
+
+      <!-- ===== CARRIED FORWARD STRIP ===== -->
+      <section>
+        <div class="flex items-center gap-2 mb-2 px-1">
+          <svg class="w-3.5 h-3.5 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+          <span class="text-dim text-xs font-medium uppercase tracking-wider">Carried Forward</span>
+        </div>
+
+        <div class="flex gap-2 overflow-x-auto scrollbar-hide chip-scroll pb-1">
+          <!-- Valheim chip -->
+          <div class="flex items-center gap-2 bg-surface border border-edge rounded-full px-3 py-1.5 flex-shrink-0">
+            <div class="w-4 h-4 rounded cover-valheim flex-shrink-0"></div>
+            <span class="text-secondary text-xs font-medium whitespace-nowrap">Valheim</span>
+            <span class="text-amber-400 text-[10px] font-semibold">2 votes</span>
+          </div>
+          <!-- GTFO chip -->
+          <div class="flex items-center gap-2 bg-surface border border-edge rounded-full px-3 py-1.5 flex-shrink-0">
+            <div class="w-4 h-4 rounded cover-gtfo flex-shrink-0"></div>
+            <span class="text-secondary text-xs font-medium whitespace-nowrap">GTFO</span>
+            <span class="text-dim text-[10px] font-semibold">1 vote</span>
+          </div>
+          <!-- Elden Ring chip -->
+          <div class="flex items-center gap-2 bg-surface border border-edge rounded-full px-3 py-1.5 flex-shrink-0">
+            <div class="w-4 h-4 rounded cover-elden flex-shrink-0"></div>
+            <span class="text-secondary text-xs font-medium whitespace-nowrap">Elden Ring</span>
+            <span class="text-dim text-[10px] font-semibold">0 votes</span>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /p-4 space-y-5 -->
+  </div><!-- /app-container -->
+
+  <!-- OPERATOR BAR (sticky bottom) -->
+  <div class="fixed bottom-0 left-0 right-0 z-50 bg-panel/95 backdrop-blur border-t border-edge-strong">
+    <div id="operator-bar" class="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between transition-all duration-300">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-dim text-xs font-medium">Operator</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="bg-overlay hover:bg-faint text-muted hover:text-foreground text-xs font-medium px-3 py-1.5 rounded-lg border border-edge transition-colors">
+          Archive Lineup
+        </button>
+        <button class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-500/30 transition-colors">
+          Override: Advance All
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isMobile = false;
+
+    function toggleMobile() {
+      isMobile = !isMobile;
+      const container = document.getElementById('app-container');
+      const operatorBar = document.getElementById('operator-bar');
+      const btn = document.getElementById('mobile-toggle');
+
+      if (isMobile) {
+        container.style.maxWidth = '390px';
+        container.style.margin = '0 auto';
+        container.style.boxShadow = '0 0 0 1px #334155';
+        operatorBar.style.maxWidth = '390px';
+        operatorBar.style.margin = '0 auto';
+        btn.classList.add('active');
+      } else {
+        container.style.maxWidth = '';
+        container.style.margin = '';
+        container.style.boxShadow = '';
+        operatorBar.style.maxWidth = '';
+        operatorBar.style.margin = '';
+        btn.classList.remove('active');
+      }
+    }
+  </script>
+</body>
+</html>

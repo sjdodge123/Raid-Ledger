@@ -1,0 +1,100 @@
+/**
+ * Button — the one button API (ROK-1646, spike ROK-1644 §4.1, operator Q2/Q3).
+ *
+ * - Seven variants. The solid fills (`bg-emerald-600`, `bg-red-600`) stay raw
+ *   on purpose: `index.css` forces their label white on the light schemes by
+ *   those exact class names, and darkens the primary fill (+ its hover) to
+ *   emerald-700/800 there (ROK-1472; design-system.md §6.10). The three `*-soft`
+ *   variants share one shape — a `/10` token tint, token label, `/30` border,
+ *   `/20` hover — on `danger`, `warning` and `success`. Tint a button with a
+ *   variant, never with colour classes in `className` (no tailwind-merge here).
+ * - `type` defaults to "button", so a button inside a `<form>` never submits it
+ *   by accident.
+ * - `loading` sets `aria-busy` + `aria-disabled` — NOT native `disabled`, so a
+ *   focused button keeps focus — and swallows clicks (a double click fires
+ *   `onClick` once; a loading submit button never submits). It hides the label with `invisible`
+ *   (so the width never collapses) and overlays a small inline spinner. The
+ *   full-page `LoadingSpinner` is a route fallback and is the wrong size here.
+ * - Icon-only buttons must carry an `aria-label` — the type rejects one without.
+ * - `brandColor` is for runtime or brand data ONLY — a provider's own colour,
+ *   Discord #5865F2 — never a theme colour (themes use the variants). It
+ *   merges an inline `backgroundColor` into the caller's `style` (other keys
+ *   survive), replaces the variant's paint with a `text-foreground` label and
+ *   `hover:brightness-110` (the inline fill beats any `hover:bg-*`), and emits
+ *   `data-brand-fill` + `data-brand-label="light|dark"` — the label colour with
+ *   the higher WCAG contrast on the fill (`brandLabelFor`, ROK-1472), which
+ *   index.css paints on EVERY scheme. Loading, disabled, iconOnly and type are
+ *   unchanged.
+ * - `bare` (ROK-1774) is the escape hatch for an inline icon/glyph control in a
+ *   dense surface (a 16px calendar marker), where a 44px target would steal the
+ *   neighbouring clicks: a real `<button type="button">` with NO padding, min
+ *   size, radius, fill or border — the caller's `className` supplies all of it.
+ *   It keeps the token focus ring and the disabled treatment, and ignores
+ *   `size`, `iconOnly` and `brandColor` paint. It still needs an accessible name.
+ * - Link-styled actions stay `<Link>`; this is not a link. A real anchor that
+ *   must LOOK like a button (a `webcal:` / external-scheme hand-off, which a
+ *   router `<Link>` cannot express) takes `buttonClass({ variant, size })` (from
+ *   `button-classes.ts`) on its own `<a>` (ROK-1599).
+ */
+import { forwardRef, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
+import { buttonClass, type ButtonSize, type ButtonVariant } from './button-classes';
+
+export type { ButtonClassInputs, ButtonSize, ButtonVariant } from './button-classes';
+import { brandLabelFor } from '../../lib/brand-label';
+
+interface ButtonBaseProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
+    variant?: ButtonVariant | undefined;
+    size?: ButtonSize | undefined;
+    loading?: boolean | undefined;
+    /** Accessible name while `loading` (e.g. "Saving…"). Defaults to the label. */
+    loadingLabel?: string | undefined;
+    fullWidth?: boolean | undefined;
+    /** Runtime/brand fill ONLY (a provider colour, Discord #5865F2) — never a theme colour. */
+    brandColor?: string | undefined;
+}
+
+/** A labelled button, or an icon-only one that MUST be named by `aria-label`. */
+export type ButtonProps =
+    | (ButtonBaseProps & { iconOnly?: false | undefined; 'aria-label'?: string | undefined })
+    | (ButtonBaseProps & { iconOnly: true; 'aria-label': string });
+
+/** Private inline spinner — inherits the label colour. */
+function InlineSpinner(): ReactNode {
+    return (
+        <span aria-hidden className="absolute inset-0 flex items-center justify-center" data-testid="button-spinner">
+            <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        </span>
+    );
+}
+
+/** Merge the brand fill into the caller's style without dropping its other keys. */
+function brandStyle(style: CSSProperties | undefined, brandColor: string | undefined): CSSProperties | undefined {
+    return brandColor ? { ...style, backgroundColor: brandColor } : style;
+}
+
+/** The shared button. See the file header for the contract. */
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(props, ref) {
+    const { variant, size, loading = false, loadingLabel, fullWidth, iconOnly, className,
+        type = 'button', disabled, children, onClick, brandColor, style, ...rest } = props;
+    return (
+        <button
+            ref={ref}
+            type={type}
+            disabled={disabled}
+            aria-busy={loading || undefined}
+            aria-disabled={loading || undefined}
+            className={buttonClass({ variant, size, fullWidth, iconOnly, className, brandColor })}
+            style={brandStyle(style, brandColor)}
+            data-brand-fill={brandColor ? '' : undefined}
+            data-brand-label={brandColor ? brandLabelFor(brandColor) : undefined}
+            {...rest}
+            onClick={(e) => { if (loading) e.preventDefault(); else onClick?.(e); }}
+        >
+            <span data-button-label aria-hidden={loading || undefined} className={`inline-flex items-center gap-2 ${loading ? 'invisible' : ''}`}>
+                {children}
+            </span>
+            {loading && <span className="sr-only">{loadingLabel ?? children}</span>}
+            {loading && <InlineSpinner />}
+        </button>
+    );
+});

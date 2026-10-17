@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to API (in-runner)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "address": "127.0.0.1",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "/workspace",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "restart": true
+    },
+    {
+      "name": "Attach via Traefik (from laptop)",
+      "type": "node",
+      "request": "attach",
+      "websocketAddress": "ws://slot-1-debug.rl.lan/devtools/page/0",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "/workspace",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "restart": true
+    },
+    {
+      "name": "Debug Jest — current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "test", "--", "--inspect-brk", "--runInBand", "--watchAll=false", "${relativeFile}"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Debug Vitest — current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vitest", "run", "--inspect-brk", "--no-file-parallelism", "${relativeFile}"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    }
+  ]
+}

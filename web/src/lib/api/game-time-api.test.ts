@@ -1,0 +1,54 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { at } from '../../test/defined';
+
+const mockFetchApi = vi.fn();
+
+vi.mock('./fetch-api', () => ({
+    fetchApi: (...args: unknown[]) => mockFetchApi(...args),
+}));
+
+import { getMyGameTime, getGameTimeAbsences } from './game-time-api';
+
+describe('getMyGameTime', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockFetchApi.mockResolvedValue({ data: { slots: [], overrides: [], absences: [] } });
+    });
+
+    it('passes cache: no-cache to fetchApi to prevent stale browser cache', async () => {
+        await getMyGameTime();
+
+        expect(mockFetchApi).toHaveBeenCalledTimes(1);
+        const [, options] = at(mockFetchApi.mock.calls, 0);
+        expect(options).toEqual(expect.objectContaining({ cache: 'no-cache' }));
+    });
+
+    it('includes week param when provided', async () => {
+        await getMyGameTime('2026-03-09');
+
+        const [endpoint] = at(mockFetchApi.mock.calls, 0);
+        expect(endpoint).toContain('week=2026-03-09');
+    });
+
+    it('includes tzOffset in the query string', async () => {
+        await getMyGameTime(undefined, 300);
+
+        const [endpoint] = at(mockFetchApi.mock.calls, 0);
+        expect(endpoint).toContain('tzOffset=300');
+    });
+});
+
+describe('Regression: ROK-1427 — getGameTimeAbsences', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockFetchApi.mockResolvedValue({ data: [] });
+    });
+
+    it('sends the browser tzOffset so expiry is judged in the local day', async () => {
+        await getGameTimeAbsences();
+
+        const [endpoint] = at(mockFetchApi.mock.calls, 0);
+        expect(endpoint).toContain(`tzOffset=${new Date().getTimezoneOffset()}`);
+    });
+});

@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineup_matches" ADD COLUMN "cancellation_reason" text;

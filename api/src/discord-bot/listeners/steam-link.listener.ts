@@ -1,0 +1,379 @@
+/**
+ * Listener that detects Steam store URLs in Discord messages and prompts
+ * users to heart the game (ROK-966) or nominate it to the current
+ * Community Lineup (ROK-1081).
+ *
+ * Heart flow (no building lineup) — 3 buttons:
+ *   Interested / Not Interested / Always Auto-Interest
+ *
+ * Nomination flow (building lineup active) — 4 buttons:
+ *   Nominate / Just Heart It / Always Auto-Nominate / Dismiss
+ */
+import {
+  Injectable,
+  Inject,
+  Logger,
+  Optional,
+  type OnModuleDestroy,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { OnEvent } from '@nestjs/event-emitter';
+import {
+  Events,
+  ChannelType,
+  type Message,
+  type ButtonInteraction,
+  type Interaction,
+  type MessageCreateOptions,
+} from 'discord.js';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { ItadService } from '../../itad/itad.service';
+import { ITAD_INTERACTIVE_FETCH } from '../../itad/itad.constants';
+import { IgdbService } from '../../igdb/igdb.service';
+import { SettingsService } from '../../settings/settings.service';
+import { SETTING_KEYS } from '../../drizzle/schema';
+import { LineupsService } from '../../lineups/lineups.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { parseSteamAppIds } from './steam-link.helpers';
+import {
+  findGameBySteamAppId,
+  findLinkedRlUser,
+  hasExistingHeartInterest,
+  getAutoHeartSteamUrlsPref,
+  addDiscordInterest,
+  setAutoNominateSteamUrlsPref,
+  discoverGameBySteamAppId,
+  findActiveBuildingLineup,
+  isGameNominated,
+  getAutoNominateSteamUrlsPref,
+} from './steam-link-interest.helpers';
+import {
+  buildInterestButtonRow,
+  handleInterestButtonClick,
+} from './steam-link.listener.interest-flow';
+import {
+  buildNominationPrompt,
+  handleNominateButtonClick,
+  parseSteamNominateButtonId,
+  safeNominate,
+} from './steam-link.listener.nomination-flow';
+
+/** Dedup TTL in milliseconds. */
+const DEDUP_TTL_MS = 30_000;
+
+type Db = PostgresJsDatabase<typeof schema>;
+type Game = { id: number; name: string; igdbId: number | null };
+
+/**
+ * Detects Steam store URLs in Discord messages and prompts
+ * the user to heart or nominate the game on Raid Ledger.
+ */
+@Injectable()
+export class SteamLinkListener implements OnModuleDestroy {
+  private readonly logger = new Logger(SteamLinkListener.name);
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'steam link interest',
+  );
+  private readonly recentlyProcessed = new Map<string, number>();
+  private dedupCleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: Db,
+    private readonly clientService: DiscordBotClientService,
+    @Optional() private readonly itadService: ItadService,
+    @Optional() private readonly igdbService: IgdbService,
+    private readonly settingsService: SettingsService,
+    @Optional() private readonly moduleRef?: ModuleRef,
+  ) {
+    this.startDedupCleanup();
+  }
+
+  /**
+   * Lazily resolve LineupsService via ModuleRef to avoid an import-time
+   * cycle between DiscordBotModule <-> LineupsModule. Returns null when
+   * the service isn't registered (e.g. in isolated unit tests without
+   * the full module graph).
+   */
+  private getLineupsService(): LineupsService | null {
+    if (!this.moduleRef) return null;
+    try {
+      return this.moduleRef.get(LineupsService, { strict: false });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Periodically clean up expired dedup entries. */
+  private startDedupCleanup(): void {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      for (const [id, ts] of this.recentlyProcessed) {
+        if (now - ts > DEDUP_TTL_MS) this.recentlyProcessed.delete(id);
+      }
+    }, DEDUP_TTL_MS);
+    timer.unref();
+    this.dedupCleanupTimer = timer;
+  }
+
+  /**
+   * ROK-1527: clear the dedup sweeper on shutdown.
+   *
+   * The sweep callback is an arrow function, so it captures `this` — and
+   * `this` holds an injected `ModuleRef`, i.e. a handle on the entire Nest
+   * DI container. `unref()` stops the timer keeping the process alive, but
+   * it does NOT make it collectable: libuv still owns the handle, the handle
+   * owns the callback, and the callback owns the container. In the
+   * integration suite every `*.integration.spec.ts` boots its own AppModule,
+   * so without this hook each spec file left one whole DI graph pinned for
+   * the rest of the Jest process — a monotonic heap climb rather than a
+   * socket leak, which is why the ROK-1250 socket audit stayed green while
+   * the shard OOMed. Every sibling timer owner in `discord-bot/` already
+   * clears in a lifecycle hook; this class was the lone exception.
+   */
+  onModuleDestroy(): void {
+    if (this.dedupCleanupTimer) {
+      clearInterval(this.dedupCleanupTimer);
+      this.dedupCleanupTimer = null;
+    }
+    this.recentlyProcessed.clear();
+  }
+
+  /** Attach message + interaction listeners when the Discord bot connects. */
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  handleBotConnected(): void {
+    // Both gateway events go through ONE binding array so attach/detach cover
+    // them atomically — neither can be left orphaned without the other.
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding(Events.MessageCreate, (message: Message) => {
+        this.handleMessage(message).catch((err: unknown) => {
+          this.logger.error('Steam link listener error:', err);
+        });
+      }),
+      gatewayBinding('interactionCreate', (interaction: Interaction) => {
+        if (interaction.isButton()) {
+          this.handleButtonInteraction(interaction).catch((err: unknown) => {
+            this.logger.error('Steam interest button error:', err);
+          });
+        }
+      }),
+    ]);
+  }
+
+  /** Drop the handlers so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  handleBotDisconnected(): void {
+    this.binding.detach();
+  }
+
+  /** Process a messageCreate event for Steam URLs. */
+  private async handleMessage(message: Message): Promise<void> {
+    if (message.author.bot) return;
+    if (this.recentlyProcessed.has(message.id)) return;
+    this.recentlyProcessed.set(message.id, Date.now());
+    if (!message.guild) return;
+    if (!isGuildTextChannel(message.channel.type)) return;
+
+    const appIds = parseSteamAppIds(message.content);
+    if (appIds.length === 0) return;
+
+    for (const appId of appIds) {
+      await this.processSingleAppId(appId, message);
+    }
+  }
+
+  /** Handle a single Steam app ID from a message. */
+  private async processSingleAppId(
+    appId: number,
+    message: Message,
+  ): Promise<void> {
+    let game = await findGameBySteamAppId(this.db, appId);
+    if (!game) {
+      game = await this.discoverGame(appId);
+      if (!game) return;
+    }
+
+    if (!game.igdbId && this.igdbService) {
+      this.igdbService.enqueueReenrich(game.id).catch((err: unknown) => {
+        this.logger.warn(`Failed to enqueue re-enrichment: ${String(err)}`);
+      });
+    }
+
+    const user = await findLinkedRlUser(this.db, message.author.id);
+    if (!user) return;
+
+    const buildingLineup = await findActiveBuildingLineup(this.db);
+    if (buildingLineup) {
+      await this.dispatchNominationFlow(
+        message,
+        user.id,
+        game,
+        buildingLineup.id,
+      );
+    } else {
+      await this.dispatchInterestFlow(message, user.id, game);
+    }
+  }
+
+  /** Heart flow (ROK-966) — 3-button prompt when no building lineup exists. */
+  private async dispatchInterestFlow(
+    message: Message,
+    userId: number,
+    game: Game,
+  ): Promise<void> {
+    if (await hasExistingHeartInterest(this.db, userId, game.id)) {
+      await this.sendDmSafe(
+        message,
+        `You already have **${game.name}** hearted! 💜`,
+      );
+      return;
+    }
+    if (await getAutoHeartSteamUrlsPref(this.db, userId)) {
+      await addDiscordInterest(this.db, userId, game.id);
+      await this.sendDmSafe(message, `Auto-hearted **${game.name}**! 💜`);
+      return;
+    }
+    const row = buildInterestButtonRow(game.id);
+    await this.sendDmPayloadSafe(message, {
+      content: `Interested in **${game.name}** on Raid Ledger?`,
+      components: [row],
+    });
+  }
+
+  /** Nomination flow (ROK-1081) — 4-button prompt when a building lineup is active. */
+  private async dispatchNominationFlow(
+    message: Message,
+    userId: number,
+    game: Game,
+    lineupId: number,
+  ): Promise<void> {
+    if (await isGameNominated(this.db, lineupId, game.id)) {
+      await this.sendDmSafe(
+        message,
+        `**${game.name}** is already nominated for the current lineup.`,
+      );
+      return;
+    }
+    if (await getAutoNominateSteamUrlsPref(this.db, userId)) {
+      await this.autoNominate(message, userId, game, lineupId);
+      return;
+    }
+    await this.sendDmPayloadSafe(message, buildNominationPrompt(game));
+  }
+
+  /** Auto-nominate path: call LineupsService and DM the result. */
+  private async autoNominate(
+    message: Message,
+    userId: number,
+    game: Game,
+    lineupId: number,
+  ): Promise<void> {
+    const lineups = this.getLineupsService();
+    if (!lineups) {
+      await this.sendDmSafe(message, 'Auto-nominate is not available.');
+      return;
+    }
+    const copy = await safeNominate(
+      lineups,
+      lineupId,
+      game.id,
+      game.name,
+      userId,
+      `Auto-nominated **${game.name}** to the current lineup!`,
+    );
+    await this.sendDmSafe(message, copy);
+  }
+
+  /**
+   * Send any DM payload, swallowing and logging failures (ROK-1092 item 2).
+   *
+   * Both button prompts previously called `dm.send` bare, so a user with DMs
+   * closed threw out of the flow and into `handleMessage`'s catch instead of
+   * being logged as the routine, expected condition it is.
+   */
+  private async sendDmPayloadSafe(
+    message: Message,
+    payload: MessageCreateOptions,
+  ): Promise<void> {
+    try {
+      const dm = await message.author.createDM();
+      await dm.send(payload);
+    } catch (err: unknown) {
+      const detail =
+        err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.logger.warn(`Failed to send Steam interest DM: ${detail}`);
+    }
+  }
+
+  /** Send a plain-text DM, swallowing and logging failures. */
+  private async sendDmSafe(message: Message, content: string): Promise<void> {
+    await this.sendDmPayloadSafe(message, { content });
+  }
+
+  /** Discover and add a game via ITAD when it's not in the DB. */
+  private async discoverGame(appId: number): Promise<Game | null> {
+    if (!this.itadService) return null;
+    const adultFilter =
+      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
+      'true';
+    return discoverGameBySteamAppId(
+      {
+        db: this.db,
+        // Interactive: a user is waiting on the bot's reply to their link.
+        lookupBySteamAppId: (id) =>
+          this.itadService.lookupBySteamAppId(id, ITAD_INTERACTIVE_FETCH),
+        adultFilterEnabled: adultFilter,
+      },
+      appId,
+    );
+  }
+
+  /** Route button interactions to the heart or nominate handler. */
+  private async handleButtonInteraction(
+    interaction: ButtonInteraction,
+  ): Promise<void> {
+    const nom = parseSteamNominateButtonId(interaction.customId);
+    if (nom) {
+      await handleNominateButtonClick(
+        this.buildNominateDeps(),
+        interaction,
+        nom.action,
+        nom.gameId,
+      );
+      return;
+    }
+    await handleInterestButtonClick(this.db, interaction);
+  }
+
+  /** Build the deps object for the nomination button click handler. */
+  private buildNominateDeps() {
+    const lineupsService = this.getLineupsService();
+    return {
+      db: this.db,
+      ...(lineupsService ? { lineupsService } : {}),
+      findActiveBuildingLineupId: async () =>
+        (await findActiveBuildingLineup(this.db))?.id ?? null,
+      addInterest: (userId: number, gameId: number) =>
+        addDiscordInterest(this.db, userId, gameId),
+      findLinkedUser: (discordId: string) =>
+        findLinkedRlUser(this.db, discordId),
+      setAutoNominatePref: (userId: number, enabled: boolean) =>
+        setAutoNominateSteamUrlsPref(this.db, userId, enabled),
+    };
+  }
+}
+
+/** Check if a channel type is a guild text channel. */
+function isGuildTextChannel(type: ChannelType): boolean {
+  return (
+    type === ChannelType.GuildText || type === ChannelType.GuildAnnouncement
+  );
+}

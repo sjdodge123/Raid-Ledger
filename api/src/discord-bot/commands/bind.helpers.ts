@@ -1,0 +1,346 @@
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  type ChatInputCommandInteraction,
+} from 'discord.js';
+import { and, sql, ilike, eq, notInArray, isNull } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  ChannelType as BindingChannelType,
+  BindingPurpose,
+  ChannelBindingConfig,
+} from '@raid-ledger/contract';
+import type * as schemaType from '../../drizzle/schema';
+import * as schema from '../../drizzle/schema';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../embeds/embed-chrome.helpers';
+import {
+  COMMAND_REPLY_AUTHORS,
+  bindingTitle,
+  settingsFields,
+} from './command-reply-chrome.helpers';
+
+// Re-export autocomplete functions for backward compatibility
+export {
+  autocompleteGames,
+  autocompleteSeries,
+  autocompleteEvents,
+} from './bind.autocomplete';
+import { toEmbedGame } from '../services/embed-game.helpers';
+
+/**
+ * The other slot's current state for a series bind (ROK-1351).
+ * After a voice bind we surface the text announce slot, and vice versa, so the
+ * success embed shows the series' full dual-binding state. Null channelId means
+ * the other slot is unbound \u2014 its line is omitted.
+ */
+export interface OtherSlotState {
+  /** 'text' when reporting the announce slot, 'voice' for the host slot. */
+  channelType: 'text' | 'voice';
+  channelId: string | null;
+}
+
+/**
+ * Build the success embed for a channel binding.
+ *
+ * ROK-1462 D5/D6: slate `done` chrome, state in the author line, settings as
+ * inline fields. The description carries ONLY the two facts that are not
+ * settings — the ROK-1351 other-slot line and the replaced-binding warning —
+ * and is omitted entirely when neither applies.
+ *
+ * @param channelName - Bound channel's name, without the leading `#`.
+ * @param behavior - Resolved binding purpose.
+ * @param resolvedSeriesTitle - Series title when the bind is series-scoped.
+ * @param resolvedGameName - Game name when the bind is game-scoped.
+ * @param replacedChannelIds - Channels whose binding this one displaced.
+ * @param otherSlot - The sibling text/voice slot's state (ROK-1351).
+ * @param config - Stored binding config; defaults are rendered when absent.
+ * @returns The reply embed plus the admin-panel link row.
+ */
+export function buildBindSuccessEmbed(
+  channelName: string,
+  behavior: string,
+  resolvedSeriesTitle: string | null,
+  resolvedGameName: string | null,
+  replacedChannelIds: string[],
+  otherSlot: OtherSlotState | null = null,
+  config: ChannelBindingConfig | null = null,
+): { embed: ChannelEmbed; components: ActionRowBuilder<ButtonBuilder>[] } {
+  const purpose = behavior as BindingPurpose;
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.BIND_SAVED,
+  });
+  // AC2: `#channel → Purpose` owns the TITLE slot on every binding reply.
+  embed.setTitle(bindingTitle(channelName, purpose, resolvedGameName));
+  const description = buildBindDescription(replacedChannelIds, otherSlot);
+  if (description) embed.setDescription(description);
+  embed.addFields(
+    settingsFields({
+      channelName,
+      purpose,
+      config,
+      seriesTitle: resolvedSeriesTitle,
+      gameName: resolvedGameName,
+    }),
+  );
+  return { embed, components: buildAdminLinkComponents() };
+}
+
+/** Render the other slot's unchanged-state line, or null if unbound. */
+function buildOtherSlotLine(otherSlot: OtherSlotState | null): string | null {
+  if (!otherSlot?.channelId) return null;
+  const label =
+    otherSlot.channelType === 'voice' ? 'Voice host' : 'Announcements';
+  return `${label}: <#${otherSlot.channelId}> (unchanged)`;
+}
+
+/**
+ * The non-settings part of a bind reply: the sibling slot's state and the
+ * replaced-binding warning. Returns null when there is nothing to say.
+ */
+function buildBindDescription(
+  replacedIds: string[],
+  otherSlot: OtherSlotState | null = null,
+): string | null {
+  const lines = [
+    buildOtherSlotLine(otherSlot),
+    replacedIds.length > 0
+      ? `\u26A0\uFE0F Replaced previous binding from ${replacedIds.map((id) => `<#${id}>`).join(', ')}`
+      : null,
+  ].filter((line): line is string => line !== null);
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/** Build admin panel link button components. */
+function buildAdminLinkComponents(): ActionRowBuilder<ButtonBuilder>[] {
+  const components: ActionRowBuilder<ButtonBuilder>[] = [];
+  const clientUrl = process.env.CLIENT_URL ?? null;
+  if (clientUrl) {
+    components.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('Fine-Tune in Admin Panel')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${clientUrl}/admin/settings/integrations/channel-bindings`)
+          .setEmoji({ name: '\uD83D\uDD27' }),
+      ),
+    );
+  }
+  return components;
+}
+
+/**
+ * Build the success embed for an event binding update (ROK-1462 D5).
+ *
+ * @param eventTitle - The event whose override changed.
+ * @param changes - Human-readable change lines.
+ * @returns A slate `done` channel embed carrying the change list.
+ */
+export function buildEventBindEmbed(
+  eventTitle: string,
+  changes: string[],
+): ChannelEmbed {
+  const embed = createChannelEmbed({
+    state: 'done',
+    authorLine: COMMAND_REPLY_AUTHORS.EVENT_BIND_SAVED,
+  });
+  embed.setDescription(
+    [`**${eventTitle}** updated:`, ...changes.map((c) => `- ${c}`)].join('\n'),
+  );
+  return embed;
+}
+
+/**
+ * Fetch the actual signup count for an event (excluding declined/departed).
+ */
+export async function getSignupCount(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+): Promise<number> {
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        notInArray(schema.eventSignups.status, [
+          'declined',
+          'roached_out',
+          'departed',
+        ]),
+      ),
+    );
+  return result?.count ?? 0;
+}
+
+/**
+ * Build an event update payload for emission after bind changes.
+ */
+export async function buildEventUpdatePayload(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+): Promise<Record<string, unknown> | null> {
+  const [row] = await db
+    .select({ events: schema.events, games: schema.games })
+    .from(schema.events)
+    .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  if (!row) return null;
+  const signupCount = await getSignupCount(db, eventId);
+  return formatUpdatePayload(eventId, row, signupCount);
+}
+
+/** Format the raw event+game row into an update payload. */
+function formatUpdatePayload(
+  eventId: number,
+  row: {
+    events: typeof schema.events.$inferSelect;
+    games: typeof schema.games.$inferSelect | null;
+  },
+  signupCount: number,
+): Record<string, unknown> {
+  return {
+    eventId,
+    event: {
+      id: row.events.id,
+      title: row.events.title,
+      description: row.events.description,
+      startTime: row.events.duration[0].toISOString(),
+      endTime: row.events.duration[1].toISOString(),
+      signupCount,
+      maxAttendees: row.events.maxAttendees,
+      slotConfig: row.events.slotConfig,
+      game: toEmbedGame(row.games),
+    },
+    gameId: row.events.gameId ?? null,
+    recurrenceGroupId: row.events.recurrenceGroupId ?? null,
+    notificationChannelOverride: row.events.notificationChannelOverride ?? null,
+  };
+}
+
+/** Set a notification channel override on an event. */
+export async function setChannelOverride(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+  channelId: string,
+): Promise<void> {
+  await db
+    .update(schema.events)
+    .set({ notificationChannelOverride: channelId, updatedAt: new Date() })
+    .where(eq(schema.events.id, eventId));
+}
+
+/** Apply a game change to an event. Returns a description string or null. */
+export async function applyGameChange(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+  gameName: string,
+): Promise<{ change: string } | { error: string } | null> {
+  if (
+    gameName.toLowerCase() === 'none' ||
+    gameName.toLowerCase() === 'general'
+  ) {
+    await db
+      .update(schema.events)
+      .set({ gameId: null, updatedAt: new Date() })
+      .where(eq(schema.events.id, eventId));
+    return { change: 'Game removed (set to General)' };
+  }
+
+  const [gameMatch] = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.games)
+    .where(ilike(schema.games.name, gameName))
+    .limit(1);
+
+  if (!gameMatch) return { error: `Game "${gameName}" not found.` };
+
+  await db
+    .update(schema.events)
+    .set({ gameId: gameMatch.id, updatedAt: new Date() })
+    .where(eq(schema.events.id, eventId));
+  return { change: `Game reassigned to **${gameMatch.name}**` };
+}
+
+/**
+ * Whether a `/bind` should auto-derive the series' representative game.
+ *
+ * Voice binds must NOT derive a game: a variety series (e.g. gamernight, whose
+ * game changes each occurrence) would get locked to one arbitrary game
+ * (`findSeriesGame` is innerJoin + LIMIT 1, no ORDER BY), flipping the channel
+ * to game-voice-monitor and mislabeling every quick-play (ROK-1372). Leaving the
+ * game null makes a variety voice bind a general-lobby (presence auto-detect).
+ * Text/announce binds DO derive it (announcements route by game). An explicit
+ * `game:` option always wins and skips derivation. ROK-1471: a forum bind is
+ * the LFG board and derives nothing either.
+ */
+export function shouldDeriveSeriesGame(
+  bindingChannelType: BindingChannelType,
+  hasExplicitGame: boolean,
+): boolean {
+  return !hasExplicitGame && bindingChannelType === 'text';
+}
+
+/** Derives the game from the first event in a series (if any). */
+export async function findSeriesGame(
+  db: PostgresJsDatabase<typeof schemaType>,
+  recurrenceGroupId: string,
+): Promise<{ id: number; name: string } | null> {
+  const [row] = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.events)
+    .innerJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .where(eq(schema.events.recurrenceGroupId, recurrenceGroupId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Finds future event IDs in a recurrence group for re-syncing after bind. */
+export async function findSeriesEventIds(
+  db: PostgresJsDatabase<typeof schemaType>,
+  recurrenceGroupId: string,
+): Promise<number[]> {
+  const rows = await db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .where(
+      and(
+        eq(schema.events.recurrenceGroupId, recurrenceGroupId),
+        isNull(schema.events.cancelledAt),
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
+/** Apply channel and/or game changes to an event (ROK-959 extraction). */
+export async function applyEventChanges(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+  channelOption: ReturnType<
+    ChatInputCommandInteraction['options']['getChannel']
+  >,
+  gameName: string | null,
+  interaction: ChatInputCommandInteraction,
+): Promise<string[] | null> {
+  const changes: string[] = [];
+  if (channelOption) {
+    const ch = channelOption as { name?: string; id: string };
+    await setChannelOverride(db, eventId, channelOption.id);
+    changes.push(`Notification channel set to **#${ch.name ?? ch.id}**`);
+  }
+  if (gameName) {
+    const result = await applyGameChange(db, eventId, gameName);
+    if (!result) return changes;
+    if ('error' in result) {
+      await interaction.editReply(result.error);
+      return null;
+    }
+    changes.push(result.change);
+  }
+  return changes;
+}

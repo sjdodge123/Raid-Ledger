@@ -1,0 +1,87 @@
+/**
+ * Public types for the JourneyHero component (ROK-1294).
+ * `phase` is the primary input; `active` is an optional override.
+ */
+export type HeroTone = 'action' | 'waiting' | 'set';
+export type HeroActive = 0 | 1 | 2 | 3 | 4;
+export type JourneyPhase = 'nominating' | 'voting' | 'decided' | 'scheduling' | 'done';
+
+export interface UserActions {
+  /** nominations_submitted_at IS NOT NULL — ships in U4 (ROK-1296); pass `false` until then */
+  hasSubmittedNominations: boolean;
+  /** votes_submitted_at IS NOT NULL — ships in U4 (ROK-1296); pass `false` until then */
+  hasSubmittedVotes: boolean;
+  scheduledMatchCount: number;
+  totalMatchCount: number;
+}
+
+export interface GroupProgress {
+  nominationsSubmitted: number;
+  votesSubmitted: number;
+  totalVoters: number;
+}
+
+export interface LineupConfig {
+  nominationQuorum: number;
+  votingQuorum: number;
+  schedulingAgreementPct: number;
+  nominationDeadline?: Date;
+  votingDeadline?: Date;
+  schedulingDeadline?: Date;
+}
+
+export interface HeroState {
+  tone: HeroTone;
+  exitCondition?: string;
+  cue?: string;
+}
+
+export interface JourneyHeroProps {
+  /**
+   * The phase's ONE hero control (ROK-1585). Rendered in the headline row's
+   * right-hand cluster AFTER the `action` chip; the cluster is capped at 44% of
+   * the card from `lg` and wraps first. Scheduling passes the desktop
+   * "Manage poll ⋯" trigger here (undefined below `lg`).
+   */
+  headerAction?: import('react').ReactNode;
+  /**
+   * ROK-1346: optional element rendered in the headline row's right-hand
+   * controls cluster, BEFORE any `headerAction` (ROK-1585). Used for the
+   * lineup "Participants · N" roster button so it sits in the hero across every
+   * phase without crowding the ribbon or CTA. Coexists with `headerAction`.
+   */
+  action?: import('react').ReactNode;
+  /**
+   * ROK-1584 (H1-b): optional element rendered LAST inside the hero, full
+   * width — the phone "Manage poll ⋯" row that opens the poll's manage sheet.
+   * Sits below the cta/hint/cue lines so the card's reading order ends with
+   * the operator affordance.
+   */
+  manage?: import('react').ReactNode;
+  /** Primary input — drives `active` internally if `active` not supplied */
+  phase?: JourneyPhase;
+  /** Explicit override / Sx escape hatch — derived from `phase` when omitted */
+  active?: HeroActive;
+  badge: string;
+  task: string;
+  /**
+   * ROK-1323: now a ReactNode so the lineup composites can fold the title +
+   * "Started by…" meta (and an operator ⓘ hover) into the hero sub slot,
+   * making the hero the sole top-of-page surface.
+   */
+  sub?: import('react').ReactNode;
+  cta?: string | undefined;
+  /** Real button handler — wired by consumers. When omitted with `cta` set, button renders disabled. */
+  onCtaClick?: (() => void) | undefined;
+  hint?: string | undefined;
+  tone?: HeroTone;
+  exitCondition?: string | undefined;
+  cue?: string | undefined;
+  donePillLabel?: string | undefined;
+  noRibbon?: boolean;
+  /**
+   * ROK-1302: drop the trailing "Schedule" step from the phase ribbon for
+   * lineups that opted out of the scheduling phase (terminal at Decided).
+   */
+  hideSchedulePhase?: boolean;
+}

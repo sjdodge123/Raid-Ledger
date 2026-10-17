@@ -1,0 +1,222 @@
+/**
+ * Sentry instrumentation for the NestJS backend.
+ * MUST be imported FIRST in main.ts — before any other imports.
+ * ROK-306/ROK-1779: Maintainer telemetry — hardcoded DSN, ON by default (ROK-1838); ENABLE_TELEMETRY=false opts out (DISABLE_TELEMETRY=true still wins).
+ */
+import * as Sentry from '@sentry/nestjs';
+import { config as loadEnvFile } from 'dotenv';
+import * as os from 'os';
+import { scrubSecrets } from './sentry-scrub.helpers';
+import { scrubPii } from './sentry-pii.helpers';
+import {
+  API_ENV_FILE,
+  isProductionRuntime,
+  resolveBootTelemetry,
+} from './telemetry-policy';
+
+const SENTRY_DSN =
+  'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
+
+// ROK-1779: ConfigModule loads .env only once Nest boots — too late for this
+// gate. Load the same file now (dotenv never overrides a set variable, like
+// ConfigModule), so ENABLE_TELEMETRY set only in .env counts here too.
+loadEnvFile({ path: API_ENV_FILE, quiet: true });
+
+const isProduction = isProductionRuntime();
+// ROK-1838: the on-by-default policy lives in telemetry-policy.ts; the decision is
+// recorded there so GET /system/status serves exactly what this gate used.
+const telemetryDisabled = !resolveBootTelemetry();
+
+/** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
+const PII_HEADER_DENY = {
+  deny: ['forwarded', '-ip', 'remote-', 'via', '-user'],
+};
+const V10_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: { request: PII_HEADER_DENY, response: PII_HEADER_DENY },
+  httpBodies: [],
+  urlQueryParams: PII_HEADER_DENY,
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  graphQL: { document: false, variables: false },
+} satisfies Sentry.NodeOptions['dataCollection'];
+
+if (!telemetryDisabled && isProduction) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    // ROK-1329: default stays 'production' so the Synology NAS keeps reporting
+    // as prod with zero config change, but the rl-infra fleet (and any other
+    // non-prod deploy of the allinone image) can set SENTRY_ENVIRONMENT to land
+    // its events in a separate Sentry bucket instead of polluting the prod inbox.
+    environment: process.env.SENTRY_ENVIRONMENT ?? 'production',
+    tracesSampleRate: isProduction ? 0.1 : 1.0,
+    // Sentry v11 streams spans by default, which turns beforeSendTransaction
+    // into a no-op and would skip the ROK-1592 secret scrub below. Keep the
+    // v10 transaction model until the scrub moves to beforeSendSpan.
+    traceLifecycle: 'static',
+    // Sentry v11 dropped sendDefaultPii; an unset dataCollection now collects
+    // bodies, cookies and DB query data. This is the documented v10 baseline.
+    dataCollection: V10_DATA_COLLECTION,
+    // v11 defaults this to true; keep v10 issue grouping.
+    attachStacktrace: false,
+    beforeSend(event) {
+      // ROK-1365: drop synthetic CSP-report noise before anything else. The
+      // /csp-report controller captures real browser violations via
+      // captureMessage (tag source='csp_report', the report under
+      // extra.report). Curl-driven probes and scanners hit the endpoint with a
+      // hand-crafted `example.*` document-uri / `curl` UA — those used to
+      // create a prod Sentry issue on every probe. Match the report payload and
+      // drop; genuine violations (real document-uri) still report.
+      if (event.tags?.source === 'csp_report') {
+        const reportStr = JSON.stringify(
+          (event.extra as { report?: unknown } | undefined)?.report ?? '',
+        );
+        if (/example\.(com|org|net)|\bcurl\//i.test(reportStr)) {
+          return null;
+        }
+      }
+      const exceptionType = event.exception?.values?.[0]?.type;
+      const exceptionValue = event.exception?.values?.[0]?.value;
+      // Don't report rate-limit (ThrottlerException) events to Sentry
+      if (exceptionType === 'ThrottlerException') {
+        return null;
+      }
+      // Don't report transient Discord OAuth failures (ROK-668)
+      if (exceptionType === 'InternalOAuthError') {
+        return null;
+      }
+      // Don't report intentional 503s emitted by community-insights panels
+      // before the daily snapshot cron has run (ROK-1143). The endpoints are
+      // doing the right thing operationally — the dashboard renders an empty
+      // state — but the 503 status used to spam Sentry → GitHub on every
+      // pre-cron page-view.
+      if (
+        typeof exceptionValue === 'string' &&
+        exceptionValue.includes('no_snapshot_yet')
+      ) {
+        return null;
+      }
+      // ROK-1307: drop user-fixable Steam-sync 4xx noise. Manual
+      // `POST /auth/steam/sync` and `/auth/steam/sync-wishlist` raise
+      // BadRequestException for unlinked Steam or private profile.
+      // These are user-correctable conditions, NOT Sentry-worthy bugs.
+      // Match on value (not type) so legacy bare `Error` payloads from
+      // cron paths also drop.
+      //
+      // DO NOT add "Steam integration is not configured" here — that
+      // ServiceUnavailableException signals a real ops issue (admin
+      // forgot to set the Steam API key) and MUST stay visible in
+      // Sentry. Codex review of ROK-1307 flagged this regression.
+      if (
+        typeof exceptionValue === 'string' &&
+        /Steam account not linked|User has no linked Steam account|Steam profile is private/.test(
+          exceptionValue,
+        )
+      ) {
+        return null;
+      }
+      // ROK-1328: defense-in-depth — drop cron_jobs FK violations (23503).
+      // The primary fix self-heals CronJobService.jobCache (re-resolve the
+      // job by name + retry the insert once) so a stale cached job.id after a
+      // cron_jobs row deletion no longer re-throws the FK on every tick. This
+      // filter is the second line of defense: if any path ever re-throws the
+      // FK error, Sentry MUST still drop it so the ~2-events/min burst (1348
+      // events in 11h) can't come back. Match on VALUE (the constraint name)
+      // not type — the error reaches Sentry as a bare Error/PostgresError from
+      // the cron tick, with the constraint name embedded in the message.
+      if (
+        typeof exceptionValue === 'string' &&
+        /cron_job_executions_cron_job_id_fkey/.test(exceptionValue)
+      ) {
+        return null;
+      }
+      // ROK-1260/ROK-1354: defense-in-depth — drop DiscordAPIError
+      // 50278/50007/10013 events. The primary fix is in the processor (it
+      // catches these before Sentry's auto-instrumentation), but if anything
+      // ever re-throws them this filter ensures the noise can't come back.
+      //
+      // ROK-1354: discord.js v14 reports the Sentry `type` as the BRACKETED
+      // name `DiscordAPIError[<code>]` (e.g. `DiscordAPIError[50007]`), never
+      // the bare string — so ROK-1260's `=== 'DiscordAPIError'` gate never
+      // fired in prod. Match with `startsWith` (bare name still matches);
+      // extend the value regex with the 10013 "Unknown User" account-deleted
+      // case.
+      if (
+        typeof exceptionType === 'string' &&
+        exceptionType.startsWith('DiscordAPIError') &&
+        typeof exceptionValue === 'string' &&
+        /code 50278|code 50007|code 10013|no mutual guilds|Cannot send messages to this user|Unknown User/.test(
+          exceptionValue,
+        )
+      ) {
+        return null;
+      }
+      // ROK-1162: drop ConflictException from applyStatusUpdate race detection.
+      // NestJS surfaces ConflictException as HttpException 409; the 409 is
+      // already in HTTP access logs, and the race is correct behavior
+      // (ROK-1118), not a bug.
+      if (
+        exceptionType === 'HttpException' &&
+        typeof exceptionValue === 'string' &&
+        /status changed concurrently/.test(exceptionValue)
+      ) {
+        return null;
+      }
+      // ROK-1162: drop AbortError from cancelled fetches / IGDB stream
+      // cancellation. These are intentional client-side or stream-cleanup
+      // aborts, never a bug.
+      if (
+        exceptionType === 'AbortError' ||
+        (exceptionType === 'DOMException' &&
+          typeof exceptionValue === 'string' &&
+          /abort/i.test(exceptionValue))
+      ) {
+        return null;
+      }
+      // ROK-1162: fingerprint discord.js transient/network failures so
+      // they collapse into one inbox issue instead of N. discord.js v14
+      // retries internally; what reaches Sentry is retry exhaustion —
+      // worth visibility, but grouped.
+      //
+      // Word boundaries on `\b5\d\d\b` are load-bearing: Discord application
+      // error codes (50013 Missing Permissions, 50001 Missing Access, etc.)
+      // start with `500` as a numeric prefix. Without `\b`, `/5\d\d/` would
+      // mis-group those PERMANENT failures as transient network noise.
+      //
+      // ROK-1354: same dead `=== 'DiscordAPIError'` gate as the drop block —
+      // production's bracketed `DiscordAPIError[<code>]` type never matched, so
+      // transient 5xx/network failures never got the shared fingerprint. Use
+      // `startsWith`. The value regex is unchanged: the `\b5\d\d\b` word
+      // boundaries still exclude permanent codes (50013/50001), and the drop
+      // block above runs first so 50278/50007/10013 never reach here.
+      if (
+        typeof exceptionType === 'string' &&
+        exceptionType.startsWith('DiscordAPIError') &&
+        typeof exceptionValue === 'string' &&
+        /\b5\d\d\b|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|\bnetwork\b/i.test(
+          exceptionValue,
+        )
+      ) {
+        event.fingerprint = ['discord-api-transient'];
+      }
+      // ROK-1592: redact tokens/secrets last; ROK-1779: then personal data.
+      return scrubPii(scrubSecrets(event));
+    },
+    // ROK-1592: performance transactions (tracesSampleRate) carry request and
+    // span URLs too — e.g. the OAuth callback's `?code=…&state=…`.
+    beforeSendTransaction(event) {
+      return scrubPii(scrubSecrets(event));
+    },
+    // Filter out pg_catalog type introspection queries from the Postgres driver.
+    // These are normal driver behavior (OID-to-JS type mapping) and trigger
+    // false-positive N+1 detections in Sentry.
+    ignoreSpans: [/pg_catalog/],
+    initialScope: {
+      tags: {
+        deployment: os.hostname(),
+      },
+    },
+  });
+}

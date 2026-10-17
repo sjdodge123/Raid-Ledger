@@ -1,0 +1,33 @@
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi } from 'vitest';
+import { Footer } from './Footer';
+
+vi.mock('../../hooks/use-version', () => ({ useVersionInfo: () => ({ data: undefined }) }));
+
+/** The footer holds a router `Link` (ROK-1778), so it renders inside a router. */
+function renderFooter() {
+    return render(<MemoryRouter><Footer /></MemoryRouter>);
+}
+
+/**
+ * ROK-1661 (iPad plan 2026-09-23-2034-11b7, steps 2-4): a box-shadow is ink
+ * overflow, drawn only inside the document, so it could never reach the area
+ * Safari shows past the document's end. That area is the root canvas colour
+ * (`index.css`, guarded by `styles/root-canvas.guard.test.ts`); the footer
+ * paints nothing outside its own box.
+ */
+describe('Regression: ROK-1661 — the footer casts no run-out shadow', () => {
+    it('sets no inline box-shadow', () => {
+        const { container } = renderFooter();
+        const footer = container.querySelector('footer') as HTMLElement;
+        expect(footer.style.boxShadow).toBe('');
+    });
+});
+
+describe('ROK-1778 — the footer links the public privacy policy', () => {
+    it('has a Privacy link to /privacy', () => {
+        renderFooter();
+        expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy');
+    });
+});

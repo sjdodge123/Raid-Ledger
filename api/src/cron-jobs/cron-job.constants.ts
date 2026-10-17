@@ -1,0 +1,316 @@
+/**
+ * Constants and metadata for the CronJobService.
+ */
+
+/** Maximum execution history rows kept per job */
+export const MAX_EXECUTIONS_PER_JOB = 50;
+
+/** Run retention cleanup every N executions per job (reduces DB overhead) */
+export const PRUNE_EVERY_N_EXECUTIONS = 50;
+
+/** How often (ms) to flush cached last_run_at updates to the DB */
+export const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+/** Minimum interval (ms) between liveness heartbeat updates for no-op runs */
+export const NOOP_LIVENESS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Valid categories for cron jobs. Must match the `category` column values.
+ */
+export type CronCategory =
+  | 'Data Sync'
+  | 'Notifications'
+  | 'Events'
+  | 'Maintenance'
+  | 'Monitoring'
+  | 'Other';
+
+/**
+ * Human-readable descriptions for the core @Cron jobs.
+ * Keys match the NestJS SchedulerRegistry names (class.method format).
+ * `usesAi` flags jobs that issue LLM calls so the admin UI can badge + filter
+ * them at a glance (and so operators can reason about cron-path LLM spend).
+ */
+export interface CoreJobMetadata {
+  description: string;
+  category: CronCategory;
+  usesAi?: boolean;
+}
+
+export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
+  IgdbService_handleScheduledSync: {
+    description: 'Syncs game data from IGDB every 6 hours',
+    category: 'Data Sync',
+  },
+  EventReminderService_handleReminders: {
+    description:
+      'Checks for events within reminder windows and sends DM reminders every 60 seconds',
+    category: 'Notifications',
+  },
+  EventReminderService_handleDayOfReminders: {
+    description:
+      'Sends day-of reminder DMs for events starting today every 60 seconds',
+    category: 'Notifications',
+  },
+  RelayService_handleHeartbeat: {
+    description: 'Sends heartbeat to the Raid Ledger relay hub every hour',
+    category: 'Monitoring',
+  },
+  VersionCheckService_handleCron: {
+    description: 'Checks GitHub for new Raid Ledger releases daily',
+    category: 'Monitoring',
+  },
+  EmbedSchedulerService_handleScheduledEmbeds: {
+    description:
+      'Posts deferred Discord embeds for future series events approaching their lead-time window every 15 minutes',
+    category: 'Notifications',
+  },
+  SessionCleanupService_cleanupExpiredSessions: {
+    description: 'Deletes expired sessions daily at 3 AM',
+    category: 'Maintenance',
+  },
+  LfgExpiryService_expireIntents: {
+    description: 'Marks past-expiry LFG intents as expired every hour at :15',
+    category: 'Maintenance',
+  },
+  NotificationService_cleanupExpiredNotifications: {
+    description: 'Deletes expired notifications daily at 4 AM',
+    category: 'Maintenance',
+  },
+  GameActivityService_sweepStaleSessions: {
+    description:
+      'Closes game activity sessions older than 24h every 15 minutes',
+    category: 'Maintenance',
+  },
+  GameActivityService_dailyRollup: {
+    description:
+      'Aggregates closed game sessions into daily/weekly/monthly rollups at 5 AM',
+    category: 'Data Sync',
+  },
+  BackupService_dailyBackup: {
+    description:
+      'Creates a pg_dump backup and rotates backups older than 30 days',
+    category: 'Maintenance',
+  },
+  ScheduledEventService_startScheduledEvents: {
+    description:
+      'Auto-starts Discord scheduled events when their start time arrives every 60 seconds',
+    category: 'Events',
+  },
+  ScheduledEventService_completeScheduledEvents: {
+    description:
+      'Auto-completes Discord scheduled events past their end time every 5 minutes',
+    category: 'Events',
+  },
+  EventAutoExtendService_checkExtensions: {
+    description:
+      'Auto-extends scheduled events when voice channel activity persists past the end time every 60 seconds',
+    category: 'Events',
+  },
+  VoiceAttendanceService_classifyCompletedEvents: {
+    description:
+      'Classifies attendance for completed voice events every 60 seconds',
+    category: 'Events',
+  },
+  VoiceAttendanceService_snapshotOnEventStart: {
+    description:
+      'Snapshots voice channel occupants for recently started events every 60 seconds',
+    category: 'Events',
+  },
+  LiveNoShowService_checkNoShows: {
+    description:
+      'Detects no-show attendees during live events and sends reminder DMs (5 min) and creator escalation (15 min) every 60 seconds',
+    category: 'Notifications',
+  },
+  PostEventReminderService_handlePostEventReminders: {
+    description:
+      'Sends post-event feedback reminders after events end every 60 seconds',
+    category: 'Notifications',
+  },
+  PostEventFollowupService_handlePostEventFollowups: {
+    description:
+      'DMs organizers a follow-up prompt ~15min after a scheduled event ends, every 60 seconds',
+    category: 'Notifications',
+  },
+  RecruitmentReminderService_checkAndSendReminders: {
+    description:
+      'DMs unsigned game followers and posts channel "spots still available" bumps every 15 minutes. Suppresses both paths for events created less than RECRUITMENT_SHORT_NOTICE_HOURS (default 12) before they start.',
+    category: 'Notifications',
+  },
+  WeeklyDigestService_postDigest: {
+    description:
+      'Posts the weekly community digest to its Discord channel. Ticks hourly; posts once per ISO week at the configured day + hour (community timezone) when enabled.',
+    category: 'Notifications',
+  },
+  CalendarWriteReconcileCron_reconcile: {
+    description:
+      'Re-checks calendar copies of upcoming sign-ups nightly at 4 AM and removes copies of deleted or cancelled events',
+    category: 'Data Sync',
+  },
+  CalendarDisconnectSweepCron_sweep: {
+    description:
+      'Every 15 minutes, re-queues calendar disconnects stuck for over 15 minutes so stored calendar credentials are always removed',
+    category: 'Data Sync',
+  },
+  CalendarReadCron_sync: {
+    description:
+      'Every 15 minutes, queues a busy-time sync for each calendar connection that is due (30 minutes after its last sync, or after an error backoff) and prunes busy blocks that have ended',
+    category: 'Data Sync',
+  },
+  SteamSyncProcessor_scheduledSync: {
+    description: 'Syncs Steam library data for all linked users daily at 4 AM',
+    category: 'Data Sync',
+  },
+  ItadPriceSyncService_syncPricing: {
+    description: 'Syncs ITAD pricing data for all linked games every 4 hours',
+    category: 'Data Sync',
+  },
+  CooptimusSyncService_weeklySync: {
+    description:
+      'Syncs Co-Optimus co-op data for never-synced or stale games weekly (Mondays 06:20 UTC)',
+    category: 'Data Sync',
+  },
+  ScheduledEventReconciliation_reconcileMissing: {
+    description:
+      'Creates missing Discord scheduled events for future events every 15 minutes',
+    category: 'Events',
+  },
+  IntentTokenCleanupService_cleanupExpiredTokens: {
+    description:
+      'Purges consumed intent tokens older than 15 minutes every 5 minutes',
+    category: 'Maintenance',
+  },
+  RefreshTokenCleanupService_cleanupExpiredTokens: {
+    description: 'Deletes expired and revoked refresh-token rows daily at 3 AM',
+    category: 'Maintenance',
+  },
+  SchedulingThresholdService_checkThresholds: {
+    description:
+      'Notifies poll organizers when unique voter count reaches the minimum vote threshold every 5 minutes',
+    category: 'Notifications',
+  },
+  TasteProfileService_aggregateVectors: {
+    description:
+      'Aggregates signal data into per-user 7-axis taste vectors daily at 5:30 AM',
+    category: 'Data Sync',
+  },
+  TasteProfileService_buildCoPlayGraph: {
+    description:
+      'Rebuilds the player co-play graph from voice session overlaps and shared signups daily at 5:45 AM',
+    category: 'Data Sync',
+  },
+  TasteProfileService_weeklyIntensityRollup: {
+    description: 'Rolls up weekly play intensity snapshots Sundays at 6 AM',
+    category: 'Data Sync',
+  },
+  GameTasteService_aggregateGameVectors: {
+    description: 'Recomputes per-game taste vectors daily at 06:00 UTC.',
+    category: 'Data Sync',
+  },
+  DiscoveryCategoriesService_weeklyGenerate: {
+    description:
+      'Generates LLM-proposed dynamic discover categories and expires stale approved rows weekly on Sundays at midnight.',
+    category: 'Data Sync',
+    usesAi: true,
+  },
+  CommunityInsightsService_refreshSnapshot: {
+    description:
+      'Rebuilds the community insights snapshot (radar, engagement, churn, social graph, temporal, key insights) daily at 06:30 UTC',
+    category: 'Data Sync',
+  },
+  TieExpiryService_expireTieHolds: {
+    description:
+      'Archives community lineups whose tie hold ran out its week, undecided, daily at 05:40 UTC',
+    category: 'Maintenance',
+  },
+  LineupReminderService_checkTiebreakerReminders: {
+    description:
+      'DMs lineup tiebreaker participants 24h and 1h before round deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  LineupReminderService_checkVoteReminders: {
+    description:
+      'DMs lineup voters 24h and 1h before voting-phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  LineupReminderService_checkSchedulingReminders: {
+    description:
+      'DMs lineup match members 24h and 1h before decided/scheduling-phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  LineupReminderService_checkNominationReminders: {
+    description:
+      'DMs lineup nominators 24h and 1h before building-phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  StandalonePollReminderService_runReminders: {
+    description:
+      'DMs standalone scheduling poll non-voters 24h and 1h before phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  SchedulingPollNudgeService_runNudges: {
+    description:
+      'DMs members of an active scheduling poll every 24h until they vote on a still-future day. Skips polls whose phase deadline is within 24h (the deadline reminders own that window) and members added in the last 24h.',
+    category: 'Notifications',
+  },
+  SchedulingPollExpiryService_runSweep: {
+    description:
+      'Warns a scheduling poll creator once when their unlocked poll is within 12h of its deadline, then re-renders the cards of polls that just expired, every 5 minutes',
+    category: 'Notifications',
+  },
+  SlowQueriesCron_appendDigest: {
+    description:
+      'Reads pg_stat_statements every hour and appends a top-N digest to slow-queries.log',
+    category: 'Monitoring',
+  },
+  ActiveEventCacheService_refresh: {
+    description:
+      'Safety-net refresh of the in-memory active-event cache (recently-ended, active, upcoming) every 5 minutes',
+    category: 'Events',
+  },
+  AdHocReaperService_reapOrphans: {
+    description:
+      'Force-finalizes orphaned Quick Play (ad-hoc) events whose end time passed >30 min ago every 5 minutes',
+    category: 'Events',
+  },
+  GuildReconciliationService_reconcileGuildMembers: {
+    description:
+      'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC',
+    category: 'Maintenance',
+  },
+  GameRoleReconcileService_reconcile: {
+    description:
+      "Adds each linked game's Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC",
+    category: 'Maintenance',
+  },
+  EphemeralVoiceScheduler_scanCreateWindow: {
+    description:
+      'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds',
+    category: 'Events',
+  },
+  EphemeralVoiceScheduler_scanNameReconcile: {
+    description:
+      'Renames in-flight ephemeral voice channels and their Discord scheduled events to the current naming scheme when they drift, every 60 seconds (no-op once names match)',
+    category: 'Events',
+  },
+  EphemeralVoiceReaper_reapIdle: {
+    description:
+      'Safety-net: deletes empty ephemeral voice channels whose event ended more than the idle window ago every 5 minutes',
+    category: 'Events',
+  },
+  ChannelPresenceEmbedService_reapStale: {
+    description:
+      'Re-flushes every open lobby voice-channel presence message every 5 minutes so rooms that emptied and outlived their grace window are closed into a recap',
+    category: 'Events',
+  },
+  SchedulingUnanimousService_sweep: {
+    description:
+      "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes",
+    category: 'Notifications',
+  },
+  QuickPlayHealthService_checkQuickPlayHealth: {
+    description:
+      'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',
+    category: 'Monitoring',
+  },
+};

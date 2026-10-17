@@ -1,0 +1,333 @@
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Body,
+  Query,
+  Inject,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { AdminGuard } from '../auth/admin.guard';
+import { DiscordBotService } from './discord-bot.service';
+import { DiscordBotClientService } from './discord-bot-client.service';
+import { DiscordEmojiService } from './services/discord-emoji.service';
+import { SettingsService } from '../settings/settings.service';
+import { CharactersService } from '../characters/characters.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import {
+  DiscordBotConfigSchema,
+  DiscordBotTestConnectionSchema,
+  DiscordMemberCharactersQuerySchema,
+  DiscordBotSetDefaultChannelSchema,
+  DiscordBotSetVoiceChannelSchema,
+  DiscordBotSetAdHocStatusSchema,
+  type DiscordBotStatusResponse,
+  type DiscordBotTestResult,
+  type DiscordSetupStatus,
+  type CharacterDto,
+} from '@raid-ledger/contract';
+import { handleValidationError } from './validation.util';
+import { sendTestEmbed } from './discord-bot-settings.test-embed.helpers';
+
+@Controller('admin/settings/discord-bot')
+@UseGuards(AuthGuard('jwt'), AdminGuard)
+export class DiscordBotSettingsController {
+  private readonly logger = new Logger(DiscordBotSettingsController.name);
+
+  constructor(
+    private readonly discordBotService: DiscordBotService,
+    private readonly discordBotClientService: DiscordBotClientService,
+    private readonly discordEmojiService: DiscordEmojiService,
+    private readonly settingsService: SettingsService,
+    private readonly charactersService: CharactersService,
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+  ) {}
+
+  @Get()
+  async getStatus(): Promise<DiscordBotStatusResponse> {
+    return this.discordBotService.getStatus();
+  }
+
+  @Get('permissions')
+  checkPermissions(): {
+    allGranted: boolean;
+    permissions: { name: string; granted: boolean }[];
+  } {
+    return this.discordBotService.checkPermissions();
+  }
+
+  /**
+   * Manually trigger emoji sync. Useful for re-trying after permission
+   * changes without restarting the container.
+   */
+  @Post('sync-emojis')
+  @HttpCode(HttpStatus.OK)
+  async syncEmojis(): Promise<{ success: boolean; message: string }> {
+    if (!this.discordBotClientService.isConnected()) {
+      throw new BadRequestException(
+        'Discord bot must be connected to sync emojis',
+      );
+    }
+
+    try {
+      await this.discordEmojiService.syncAllEmojis();
+      const usingCustom = this.discordEmojiService.isUsingCustomEmojis();
+      return {
+        success: true,
+        message: usingCustom
+          ? 'Emoji sync completed — custom emojis active.'
+          : 'Emoji sync completed — still using Unicode fallback. Check container logs for details.',
+      };
+    } catch (error) {
+      this.logger.error(
+        'Manual emoji sync failed:',
+        error instanceof Error ? error.message : error,
+      );
+      return {
+        success: false,
+        message: `Emoji sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+
+  @Put()
+  @HttpCode(HttpStatus.OK)
+  async updateConfig(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const config = DiscordBotConfigSchema.parse(body);
+      await this.settingsService.setDiscordBotConfig(
+        config.botToken,
+        config.enabled,
+      );
+      this.logger.log('Discord bot configuration updated via admin UI');
+      // Trigger connection as a reliable fallback (no-op if already connecting)
+      this.discordBotService
+        .ensureConnected({ token: config.botToken, enabled: config.enabled })
+        .catch((err: unknown) => {
+          this.logger.error(
+            'Background bot connection failed:',
+            err instanceof Error ? err.message : err,
+          );
+        });
+      return { success: true, message: 'Configuration saved.' };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  @Post('test')
+  @HttpCode(HttpStatus.OK)
+  async testConnection(@Body() body: unknown): Promise<DiscordBotTestResult> {
+    try {
+      const dto = DiscordBotTestConnectionSchema.parse(body);
+      let token = dto.botToken;
+      if (!token) {
+        const config = await this.settingsService.getDiscordBotConfig();
+        if (!config)
+          return { success: false, message: 'No bot token configured' };
+        token = config.token;
+      }
+      return this.discordBotService.testToken(token);
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  @Post('clear')
+  @HttpCode(HttpStatus.OK)
+  async clearConfig(): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.clearDiscordBotConfig();
+    this.logger.log('Discord bot configuration cleared via admin UI');
+    return { success: true, message: 'Discord bot configuration cleared.' };
+  }
+
+  @Get('channels')
+  getChannels(): { id: string; name: string }[] {
+    return this.discordBotClientService.getTextChannels();
+  }
+
+  @Get('channel')
+  async getDefaultChannel(): Promise<{ channelId: string | null }> {
+    const channelId = await this.settingsService.getDiscordBotDefaultChannel();
+    return { channelId };
+  }
+
+  @Put('channel')
+  @HttpCode(HttpStatus.OK)
+  async setDefaultChannel(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const { channelId } = DiscordBotSetDefaultChannelSchema.parse(body);
+      await this.settingsService.setDiscordBotDefaultChannel(channelId);
+      this.logger.log('Discord bot default channel updated via admin UI');
+      return { success: true, message: 'Default channel updated.' };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * ROK-430: Aggregated setup completion status for the Discord Overview dashboard.
+   */
+  @Get('setup-status')
+  async getSetupStatus(): Promise<DiscordSetupStatus> {
+    return this.discordBotService.getSetupStatus();
+  }
+
+  /**
+   * ROK-430: Force disconnect + reconnect the bot.
+   */
+  @Post('reconnect')
+  @HttpCode(HttpStatus.OK)
+  async reconnect(): Promise<{ success: boolean; message: string }> {
+    const config = await this.settingsService.getDiscordBotConfig();
+    if (!config) {
+      throw new BadRequestException('No bot token configured');
+    }
+
+    try {
+      await this.discordBotClientService.disconnect();
+      await this.discordBotClientService.connect(config.token);
+      this.logger.log('Discord bot reconnected via admin UI');
+      return { success: true, message: 'Bot reconnected successfully.' };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Reconnect failed:', msg);
+      return { success: false, message: `Reconnect failed: ${msg}` };
+    }
+  }
+
+  /**
+   * ROK-430: Send a test embed to the default notification channel.
+   */
+  @Post('test-message')
+  @HttpCode(HttpStatus.OK)
+  async sendTestMessage(): Promise<{ success: boolean; message: string }> {
+    if (!this.discordBotClientService.isConnected()) {
+      throw new BadRequestException('Discord bot must be connected');
+    }
+    const channelId = await this.settingsService.getDiscordBotDefaultChannel();
+    if (!channelId) {
+      throw new BadRequestException(
+        'No default notification channel configured',
+      );
+    }
+    try {
+      const client = this.discordBotClientService;
+      await sendTestEmbed(this.settingsService, client, channelId);
+      this.logger.log('Test message sent via admin UI');
+      return {
+        success: true,
+        message: 'Test message sent to default channel.',
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Test message failed:', msg);
+      return { success: false, message: `Failed to send test message: ${msg}` };
+    }
+  }
+
+  /**
+   * ROK-292: Look up characters for a Discord user by their Discord ID and game.
+   * Used by the Invite modal to show character options (like the Discord signup flow).
+   */
+  @Get('members/characters')
+  async getMemberCharacters(
+    @Query() query: Record<string, string>,
+  ): Promise<CharacterDto[]> {
+    try {
+      const { discordId, gameId } =
+        DiscordMemberCharactersQuerySchema.parse(query);
+      const [linkedUser] = await this.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.discordId, discordId))
+        .limit(1);
+      if (!linkedUser) return [];
+      const result = await this.charactersService.findAllForUser(
+        linkedUser.id,
+        gameId,
+      );
+      return result.data;
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * ROK-471: List voice channels available in the guild.
+   */
+  @Get('voice-channels')
+  getVoiceChannels(): { id: string; name: string }[] {
+    return this.discordBotClientService.getVoiceChannels();
+  }
+
+  /**
+   * ROK-471: Get default voice channel for Discord Scheduled Events.
+   */
+  @Get('voice-channel')
+  async getDefaultVoiceChannel(): Promise<{ channelId: string | null }> {
+    const channelId =
+      await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    return { channelId };
+  }
+
+  /**
+   * ROK-471: Set default voice channel for Discord Scheduled Events.
+   */
+  @Put('voice-channel')
+  @HttpCode(HttpStatus.OK)
+  async setDefaultVoiceChannel(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const { channelId } = DiscordBotSetVoiceChannelSchema.parse(body);
+      await this.settingsService.setDiscordBotDefaultVoiceChannel(channelId);
+      this.logger.log('Default voice channel updated via admin UI');
+      return { success: true, message: 'Default voice channel updated.' };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * ROK-293: Get ad-hoc events enabled status.
+   */
+  @Get('ad-hoc')
+  async getAdHocStatus(): Promise<{ enabled: boolean }> {
+    const enabled = await this.settingsService.getAdHocEventsEnabled();
+    return { enabled };
+  }
+
+  /**
+   * ROK-293: Enable or disable ad-hoc events.
+   */
+  @Put('ad-hoc')
+  @HttpCode(HttpStatus.OK)
+  async setAdHocStatus(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const { enabled } = DiscordBotSetAdHocStatusSchema.parse(body);
+      await this.settingsService.setAdHocEventsEnabled(enabled);
+      const label = enabled ? 'enabled' : 'disabled';
+      this.logger.log(`Ad-hoc events ${label} via admin UI`);
+      return { success: true, message: `Ad-hoc events ${label}.` };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+}

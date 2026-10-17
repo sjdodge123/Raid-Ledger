@@ -1,0 +1,332 @@
+import { act, render, renderHook, screen } from '@testing-library/react';
+import { useRef } from 'react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { at } from '../test/defined';
+import { useFocusTrap } from './use-focus-trap';
+
+/**
+ * Creates a container div with the given HTML and appends it to document.body.
+ * Returns a cleanup function.
+ */
+function createContainer(html: string): HTMLDivElement {
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    return container;
+}
+
+describe('useFocusTrap', () => {
+    let container: HTMLDivElement;
+
+    afterEach(() => {
+        container?.remove();
+        document.body.innerHTML = '';
+    });
+
+    it('returns a ref object', () => {
+        const { result } = renderHook(() => useFocusTrap(false));
+        expect(result.current).toBeDefined();
+        expect(result.current).toHaveProperty('current');
+    });
+
+    it('does not add keydown listener when inactive', () => {
+        const addSpy = vi.spyOn(document, 'addEventListener');
+        renderHook(() => useFocusTrap(false));
+        const keydownCalls = addSpy.mock.calls.filter(([type]) => type === 'keydown');
+        expect(keydownCalls).toHaveLength(0);
+        addSpy.mockRestore();
+    });
+
+    it('adds keydown listener when active', () => {
+        const addSpy = vi.spyOn(document, 'addEventListener');
+        renderHook(() => useFocusTrap(true));
+        const keydownCalls = addSpy.mock.calls.filter(([type]) => type === 'keydown');
+        expect(keydownCalls.length).toBeGreaterThan(0);
+        addSpy.mockRestore();
+    });
+
+    it('removes keydown listener on unmount', () => {
+        const removeSpy = vi.spyOn(document, 'removeEventListener');
+        const { unmount } = renderHook(() => useFocusTrap(true));
+        unmount();
+        const keydownCalls = removeSpy.mock.calls.filter(([type]) => type === 'keydown');
+        expect(keydownCalls.length).toBeGreaterThan(0);
+        removeSpy.mockRestore();
+    });
+
+    it('removes keydown listener when deactivated', () => {
+        const removeSpy = vi.spyOn(document, 'removeEventListener');
+        const { rerender } = renderHook(({ active }) => useFocusTrap(active), {
+            initialProps: { active: true },
+        });
+        rerender({ active: false });
+        const keydownCalls = removeSpy.mock.calls.filter(([type]) => type === 'keydown');
+        expect(keydownCalls.length).toBeGreaterThan(0);
+        removeSpy.mockRestore();
+    });
+
+    function tabKeyCyclingGroup1() {
+it('cycles forward from last focusable element to first', () => {
+            container = createContainer(`
+                <button id="btn1">One</button>
+                <button id="btn2">Two</button>
+                <button id="btn3">Three</button>
+            `);
+
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+
+            // Attach ref to the container
+            Object.defineProperty(result.current, 'current', {
+                value: container,
+                writable: true,
+            });
+
+            // Make elements visible (jsdom sets offsetParent to null by default; mock it)
+            const buttons = Array.from(container.querySelectorAll('button'));
+            buttons.forEach((btn) => {
+                Object.defineProperty(btn, 'offsetParent', {
+                    value: document.body,
+                    configurable: true,
+                });
+            });
+
+            // Focus the last button
+            at(buttons, 2).focus();
+
+            // Press Tab on document — should wrap to first
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+            document.dispatchEvent(event);
+
+            expect(preventDefaultSpy).toHaveBeenCalled();
+        });
+
+    }
+
+    function tabKeyCyclingGroup2() {
+it('cycles backward from first focusable element to last on Shift+Tab', () => {
+            container = createContainer(`
+                <button id="btn1">One</button>
+                <button id="btn2">Two</button>
+                <button id="btn3">Three</button>
+            `);
+
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+            Object.defineProperty(result.current, 'current', {
+                value: container,
+                writable: true,
+            });
+
+            const buttons = Array.from(container.querySelectorAll('button'));
+            buttons.forEach((btn) => {
+                Object.defineProperty(btn, 'offsetParent', {
+                    value: document.body,
+                    configurable: true,
+                });
+            });
+
+            // Focus the first button
+            at(buttons, 0).focus();
+
+            // Press Shift+Tab — should wrap to last
+            const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true });
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+            document.dispatchEvent(event);
+
+            expect(preventDefaultSpy).toHaveBeenCalled();
+        });
+
+    }
+
+    function tabKeyCyclingGroup3() {
+it('prevents default and does nothing when container has no focusable elements', () => {
+            container = createContainer('<div>No buttons here</div>');
+
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+            Object.defineProperty(result.current, 'current', {
+                value: container,
+                writable: true,
+            });
+
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+            document.dispatchEvent(event);
+
+            expect(preventDefaultSpy).toHaveBeenCalled();
+        });
+
+    }
+
+    function tabKeyCyclingGroup4() {
+it('ignores keys other than Tab', () => {
+            container = createContainer('<button>One</button>');
+
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+            Object.defineProperty(result.current, 'current', {
+                value: container,
+                writable: true,
+            });
+
+            const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+            document.dispatchEvent(event);
+
+            expect(preventDefaultSpy).not.toHaveBeenCalled();
+        });
+
+it('ignores Tab when containerRef is null', () => {
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+            // ref.current remains null (not attached to any element)
+            expect(result.current.current).toBeNull();
+
+            // Should not throw
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
+            expect(() => document.dispatchEvent(event)).not.toThrow();
+        });
+
+    }
+
+    describe('Tab key cycling', () => {
+        tabKeyCyclingGroup1();
+        tabKeyCyclingGroup2();
+        tabKeyCyclingGroup3();
+        tabKeyCyclingGroup4();
+    });
+
+    describe('focus restoration on deactivation', () => {
+        it('stores the previously focused element before activation', () => {
+            const trigger = document.createElement('button');
+            trigger.textContent = 'Trigger';
+            document.body.appendChild(trigger);
+            trigger.focus();
+
+            // Verify focus is on trigger before the hook activates
+            expect(document.activeElement).toBe(trigger);
+
+            const { rerender, unmount } = renderHook(({ active }) => useFocusTrap(active), {
+                initialProps: { active: true },
+            });
+
+            // Deactivating the trap should restore focus to whatever was focused before
+            rerender({ active: false });
+
+            // Focus should be restored to the trigger
+            expect(document.activeElement).toBe(trigger);
+            unmount();
+            trigger.remove();
+        });
+
+        it('restores focus on unmount when active', () => {
+            const trigger = document.createElement('button');
+            trigger.textContent = 'Trigger';
+            document.body.appendChild(trigger);
+            trigger.focus();
+
+            const { unmount } = renderHook(() => useFocusTrap(true));
+
+            unmount();
+
+            // Focus should be restored to the trigger
+            expect(document.activeElement).toBe(trigger);
+            trigger.remove();
+        });
+    });
+
+    function focusableElementSelectorsGroup1() {
+it('includes buttons', () => {
+            container = createContainer('<button>Click me</button>');
+
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+            Object.defineProperty(result.current, 'current', {
+                value: container,
+                writable: true,
+            });
+
+            const btn = container.querySelector('button')!;
+            Object.defineProperty(btn, 'offsetParent', {
+                value: document.body,
+                configurable: true,
+            });
+
+            // Tab with no active element (currentIndex === -1) should not wrap
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
+            document.dispatchEvent(event);
+            // Should not throw; no assertion on focus since we just need coverage
+        });
+
+    }
+
+    function focusableElementSelectorsGroup2() {
+it('excludes disabled buttons', () => {
+            container = createContainer(`
+                <button disabled>Disabled</button>
+                <button id="active">Active</button>
+            `);
+
+            const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
+            Object.defineProperty(result.current, 'current', {
+                value: container,
+                writable: true,
+            });
+
+            const activeBtn = container.querySelector('#active') as HTMLButtonElement;
+            Object.defineProperty(activeBtn, 'offsetParent', {
+                value: document.body,
+                configurable: true,
+            });
+
+            // Focus active button (the only focusable one)
+            activeBtn.focus();
+
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+            document.dispatchEvent(event);
+
+            // Since active btn is both first and last, Tab from last should wrap to first — preventDefault called
+            expect(preventDefaultSpy).toHaveBeenCalled();
+        });
+
+    }
+
+    describe('focusable element selectors', () => {
+        focusableElementSelectorsGroup1();
+        focusableElementSelectorsGroup2();
+    });
+});
+
+describe('useFocusTrap — initial focus (ROK-1647)', () => {
+    function Dialog() {
+        const closeRef = useRef<HTMLButtonElement>(null);
+        const trapRef = useFocusTrap<HTMLDivElement>(true, closeRef);
+        return (
+            <div ref={trapRef}>
+                <button ref={closeRef}>Close</button>
+                <input aria-label="Game" />
+            </div>
+        );
+    }
+
+    function renderWithHeldFrame() {
+        let frame: FrameRequestCallback | undefined;
+        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frame = cb; return 1; });
+        render(<Dialog />);
+        raf.mockRestore();
+        return () => act(() => frame?.(0));
+    }
+
+    afterEach(() => { document.body.innerHTML = ''; });
+
+    it('moves focus to the initial element when focus is outside the dialog', () => {
+        const runFrame = renderWithHeldFrame();
+        runFrame();
+        expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    });
+
+    it('leaves focus on a field the user reached before the first frame', () => {
+        const runFrame = renderWithHeldFrame();
+        const input = screen.getByRole('textbox', { name: 'Game' });
+        act(() => input.focus()); // fill()/a fast typist lands before the rAF
+        runFrame();
+        expect(input, 'the trap must not blur a field focused inside the dialog').toHaveFocus();
+    });
+});

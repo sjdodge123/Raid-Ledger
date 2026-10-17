@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="rl-fleet">
+  <title>rl-infra fleet</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header id="operator-header">
+    <h1>rl-infra <span class="muted">fleet</span></h1>
+    <span class="refresh-indicator" id="refresh-indicator" title="last update"></span>
+  </header>
+
+  <!-- Operator view (default) — slots + envs grid. Hidden when the tester
+       route activates (URL carries ?slug=<name>). -->
+  <main id="operator-main">
+    <!-- ROK-1337 — tester discovery entry. Driven by /api/test-plans/summaries,
+         decoupled from env-registry so testers reaching fleet.gamernight.net
+         find their tests even when env-spin / env-registry are out of sync. -->
+    <section id="tests-section">
+      <h2>Tests <span id="tests-count" class="muted"></span></h2>
+      <div id="tests" class="grid"></div>
+    </section>
+
+    <section>
+      <h2>Slots</h2>
+      <div id="slots" class="grid"></div>
+    </section>
+
+    <section>
+      <h2>Test envs <span id="env-count" class="muted"></span></h2>
+      <div id="envs" class="grid"></div>
+    </section>
+
+    <!-- Infra section is operator-only (Traefik dashboard / Grafana / Registry
+         are NOT exposed externally for security). Hidden when this page is
+         accessed via an external hostname — JS adds .show-infra to <body>
+         only when on the LAN .rl.lan domain. -->
+    <section id="infra-section" style="display:none">
+      <h2>Infra <span class="muted">— LAN only</span></h2>
+      <div class="grid">
+        <a class="card link" href="http://traefik.rl.lan/dashboard/" target="_blank" rel="noopener">
+          <div class="card-title">Traefik</div>
+          <div class="muted">routing dashboard</div>
+        </a>
+        <a class="card link" href="http://grafana.rl.lan" target="_blank" rel="noopener">
+          <div class="card-title">Grafana</div>
+          <div class="muted">logs + dashboards</div>
+        </a>
+        <a class="card link" href="http://registry.rl.lan:5000/v2/_catalog" target="_blank" rel="noopener">
+          <div class="card-title">Registry</div>
+          <div class="muted">allinone images</div>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ROK-1337 — Tester route. Hidden by default; #tester-page becomes
+       visible only when app.js detects ?slug=<name> in location.search.
+       NO slug/slot/env identity in this chrome — the story chip + goal
+       are what the tester sees. -->
+  <main id="tester-page" hidden>
+    <div id="status-pill"></div>
+    <section id="now-section"></section>
+    <section id="also-section"></section>
+    <section id="done-section"></section>
+  </main>
+
+  <footer>
+    <span id="generated-at">—</span>
+    <span class="muted">·</span>
+    <span class="muted">tap the dot to refresh</span>
+  </footer>
+
+  <!-- ROK-1337 — tester-page modules. Loaded BEFORE app.js so app.js can
+       detect the tester route on init and dispatch to window.__rlTester.
+       Plain <script> tags (no `type=module`) keep the zero-build dashboard
+       posture; each file attaches to window.__rlTester. -->
+  <script src="/app/test-plan-state.js"></script>
+  <script src="/app/test-plan-render.js"></script>
+  <script src="/app/test-plan-submit.js"></script>
+  <script src="/app/test-plan-polling.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

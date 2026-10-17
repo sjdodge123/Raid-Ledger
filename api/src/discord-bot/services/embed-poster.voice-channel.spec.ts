@@ -1,0 +1,264 @@
+/**
+ * Tests that EmbedPosterService resolves and injects voiceChannelId into embed data (ROK-507).
+ */
+import { Test, TestingModule } from '@nestjs/testing';
+import { EmbedPosterService } from './embed-poster.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  DiscordEmbedFactory,
+  type EmbedEventData,
+} from './discord-embed.factory';
+import { ChannelResolverService } from './channel-resolver.service';
+import { SettingsService } from '../../settings/settings.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EMBED_STATES } from '../discord-bot.constants';
+import { at } from '../../common/testing/narrow';
+
+describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
+  let service: EmbedPosterService;
+  let embedFactory: jest.Mocked<DiscordEmbedFactory>;
+  let channelResolver: jest.Mocked<ChannelResolverService>;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
+
+  const mockMessage = { id: 'msg-123' };
+  const mockEmbed = new EmbedBuilder().setTitle('Test');
+  const mockRow = new ActionRowBuilder<ButtonBuilder>();
+
+  // ROK-1622: the post now derives its own lifecycle state from this window,
+  // so the fixture is relative — a hardcoded 2026 date would silently drift
+  // into COMPLETED and stop exercising the normal signup card.
+  const baseEvent: EmbedEventData = {
+    id: 42,
+    title: 'Raid Night',
+    startTime: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+    endTime: new Date(Date.now() + 8 * 3_600_000).toISOString(),
+    signupCount: 0,
+  };
+
+  const makeSelectChain = (rows: unknown[] = []) => {
+    const chain: Record<string, jest.Mock> & { then?: unknown } = {};
+    chain.from = jest.fn().mockReturnValue(chain);
+    chain.where = jest.fn().mockReturnValue(chain);
+    chain.limit = jest.fn().mockResolvedValue(rows);
+    chain.leftJoin = jest.fn().mockReturnValue(chain);
+    chain.innerJoin = jest.fn().mockReturnValue(chain);
+    chain.groupBy = jest.fn().mockResolvedValue([]);
+    chain.then = (
+      resolve: (v: unknown) => void,
+      reject: (e: unknown) => void,
+    ) => Promise.resolve(rows).then(resolve, reject);
+    return chain;
+  };
+
+  const makeInsertChain = () => {
+    const chain: Record<string, jest.Mock> = {};
+    chain.values = jest.fn().mockResolvedValue(undefined);
+    return chain;
+  };
+
+  function buildProvidersCore() {
+    return [
+      EmbedPosterService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          sendEmbed: jest.fn().mockResolvedValue(mockMessage),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventEmbed: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveChannelForEvent: jest.fn().mockResolvedValue('channel-abc'),
+          // ROK-1389: applyVoiceChannel now routes through the shared
+          // override-honoring entry.
+          resolveVoiceChannelHonoringOverride: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest
+            .fn()
+            .mockResolvedValue({ communityName: 'Test Guild' }),
+          getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+          getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
+    mockDb = {
+      // Default empty chain so unsequenced selects (e.g. the ROK-1352
+      // getEphemeralChannelId lookup) never throw; setupEmptyRoster's
+      // mockReturnValueOnce sequence still overrides for ordered cases.
+      select: jest.fn().mockReturnValue(makeSelectChain([])),
+      insert: jest.fn().mockReturnValue(makeInsertChain()),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: buildProviders(),
+    }).compile();
+
+    service = module.get(EmbedPosterService);
+    embedFactory = module.get(DiscordEmbedFactory);
+    channelResolver = module.get(ChannelResolverService);
+    clientService = module.get(DiscordBotClientService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const setupEmptyRoster = () => {
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([])) // ROK-1352: getEphemeralChannelId lookup (none)
+      .mockReturnValueOnce(makeSelectChain([])) // ROK-551: idempotency check (no existing embed)
+      .mockReturnValueOnce(makeSelectChain([])) // eventSignups
+      .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments
+  };
+
+  it('calls resolveVoiceChannelHonoringOverride with the provided gameId', async () => {
+    setupEmptyRoster();
+
+    await service.postEmbed(42, baseEvent, 7);
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(7, undefined, null, undefined);
+  });
+
+  it('sets voiceChannelId on enriched event data when resolver returns a channel', async () => {
+    setupEmptyRoster();
+
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+      'vc-555',
+    );
+
+    await service.postEmbed(42, baseEvent, 3);
+
+    expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceChannelId: 'vc-555' }),
+      expect.any(Object),
+      expect.objectContaining({ state: EMBED_STATES.POSTED }),
+    );
+  });
+
+  it('does NOT set voiceChannelId when resolver returns null', async () => {
+    setupEmptyRoster();
+
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(null);
+
+    await service.postEmbed(42, baseEvent, 3);
+
+    const eventDataArg = at(embedFactory.buildEventEmbed.mock.calls, 0)[0];
+    // voiceChannelId should not be present (undefined) since resolver returned null
+    expect(eventDataArg.voiceChannelId).toBeUndefined();
+  });
+
+  it('calls resolveVoiceChannelHonoringOverride with null when gameId is null', async () => {
+    setupEmptyRoster();
+
+    await service.postEmbed(42, baseEvent, null);
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(null, undefined, null, undefined);
+  });
+
+  it('calls resolveVoiceChannelHonoringOverride with undefined when gameId is not provided', async () => {
+    setupEmptyRoster();
+
+    await service.postEmbed(42, baseEvent);
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(undefined, undefined, null, undefined);
+  });
+
+  it('threads notificationChannelOverride through the honoring resolver (ROK-1389)', async () => {
+    setupEmptyRoster();
+    // A voice override is honored by the resolver → returned unchanged.
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+      'override-vc-123',
+    );
+
+    await service.postEmbed(42, baseEvent, 7, undefined, 'override-vc-123');
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(7, undefined, null, 'override-vc-123');
+    expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceChannelId: 'override-vc-123' }),
+      expect.any(Object),
+      expect.objectContaining({ state: EMBED_STATES.POSTED }),
+    );
+  });
+
+  it('does not resolve voice when bot is not connected', async () => {
+    clientService.isConnected.mockReturnValue(false);
+
+    const result = await service.postEmbed(42, baseEvent, 7);
+
+    expect(result).toBe(false);
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('does not resolve voice when channel resolution fails', async () => {
+    channelResolver.resolveChannelForEvent.mockResolvedValue(null);
+
+    const result = await service.postEmbed(42, baseEvent, 7);
+
+    expect(result).toBe(false);
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('returns true and sends embed with voice channel when configured', async () => {
+    setupEmptyRoster();
+
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+      'vc-999',
+    );
+
+    const result = await service.postEmbed(42, baseEvent, 5);
+
+    expect(result).toBe(true);
+    expect(clientService.sendEmbed).toHaveBeenCalled();
+    expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceChannelId: 'vc-999' }),
+      expect.any(Object),
+      expect.objectContaining({ state: EMBED_STATES.POSTED }),
+    );
+  });
+});

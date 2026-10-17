@@ -1,0 +1,110 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+    ignore:
+      # @nestjs/* majors arrive as ONE grouped PR spanning 11 packages — a
+      # framework major, not a routine bump. Dependabot never re-resolves the
+      # lockfile after opening the PR, so the grouped PR's `npm ci` desync is
+      # permanent and self-reproducing: #1062 accumulated 36 commits (35 of
+      # them `Merge branch 'main'`) and still failed install, and its
+      # replacement #1131 failed the same way at its very first commit
+      # (`Missing: @nestjs/common@12.0.1 from lock file`), so CI never got as
+      # far as a test. The path filter is not the gap: `api/package.json` and
+      # `package-lock.json` sit in its `api` and `web` filters (since #1073),
+      # so a deps-only diff does run unit + integration. Closed #1062 and #1131
+      # on 2026-09-09 because the desync cannot clear itself. NestJS 11 -> 12
+      # comes back as its own story with a `--full` gate; minor and patch
+      # nestjs updates still flow through the `nestjs` group below.
+      - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
+      # msw 3 is a breaking major for the web test harness: it removed
+      # `onUnhandledRequest` from server.listen options, which
+      # web/src/test/setup.ts uses (#1494 failed lint on TS2353). Migrating the
+      # MSW setup + handlers behind 2,800+ web tests is a story of its own
+      # (TECH-DEBT-BACKLOG 2026-10-07); closed #1494 on 2026-10-07 by operator
+      # ruling. Minor and patch msw 2.x updates still flow.
+      - dependency-name: "msw"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      # @vitest/coverage-v8 declares an exact-version peer dep on vitest
+      # (e.g. coverage-v8@4.1.5 requires vitest@4.1.5, not ^4.1.5). Keep
+      # vitest and every @vitest/* package in lockstep so a minor bump of
+      # one always pulls the matching version of the other in the same PR.
+      # Without this, a coverage-v8 bump alone breaks `vitest run --coverage`
+      # in CI (see ROK-1205 / PR #696).
+      vitest-suite:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/tools/test-bot"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 2
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "chore(deps,test-bot)"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      test-bot-dev:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
+      - "ci"
+    groups:
+      gh-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

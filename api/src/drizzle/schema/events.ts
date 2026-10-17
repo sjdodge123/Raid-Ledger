@@ -1,0 +1,178 @@
+import {
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  customType,
+  integer,
+  uuid,
+  jsonb,
+  boolean,
+  varchar,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { users } from './users';
+import { games } from './games';
+import { channelBindings } from './channel-bindings';
+import { guilds } from './guilds';
+
+// Define custom tsrange type
+export const tsrange = customType<{
+  data: [Date, Date];
+  driverData: string;
+}>({
+  dataType() {
+    return 'tsrange';
+  },
+  // Parsing from DB driver (string "[2026-01-01 10:00:00, 2026-01-01 11:00:00)") to JS Date tuple
+  fromDriver(value: string) {
+    if (!value || value === 'empty') return [new Date(0), new Date(0)];
+    // Basic parsing logic for Postgres range syntax
+    const matches = value.match(/[[(]([^,]+),([^,]+)[)\]]/);
+    if (!matches) return [new Date(0), new Date(0)];
+    // tsrange stores timestamps without timezone — toDriver sends UTC via toISOString(),
+    // so we must interpret them as UTC on read (append Z) to avoid local-timezone drift.
+    const [, lower, upper] = matches;
+    // Both groups are mandatory in the pattern, so a match always has them.
+    if (lower === undefined || upper === undefined) {
+      throw new Error(`Malformed tsrange value: ${value}`);
+    }
+    const raw1 = lower.replace(/"/g, '').trim();
+    const raw2 = upper.replace(/"/g, '').trim();
+    return [
+      new Date(raw1.endsWith('Z') ? raw1 : raw1 + 'Z'),
+      new Date(raw2.endsWith('Z') ? raw2 : raw2 + 'Z'),
+    ];
+  },
+  // Formatting JS Date tuple to DB driver string
+  toDriver(value: [Date, Date]) {
+    return `[${value[0].toISOString()},${value[1].toISOString()})`;
+  },
+});
+
+export const events = pgTable(
+  'events',
+  {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    /** ROK-400: Single FK to games.id (integer). Replaces legacy gameId (text) + registryGameId (uuid). */
+    gameId: integer('game_id').references(() => games.id),
+    creatorId: integer('creator_id')
+      .references(() => users.id)
+      .notNull(),
+    // Utilizing tsrange for efficient scheduling and overlap checks
+    duration: tsrange('duration').notNull(),
+    /** Per-event slot configuration override (jsonb). Falls back to genre-based detection if null. */
+    slotConfig: jsonb('slot_config'),
+    /** Maximum number of attendees. Null = unlimited. */
+    maxAttendees: integer('max_attendees'),
+    /** Whether benched players should be auto-promoted when a slot opens. Default true. */
+    autoUnbench: boolean('auto_unbench').default(true),
+    /** UUID linking recurring event instances together. Null for one-off events. */
+    recurrenceGroupId: uuid('recurrence_group_id'),
+    /** Stored recurrence rule (jsonb). E.g. { frequency: 'weekly', until: '...' } */
+    recurrenceRule: jsonb('recurrence_rule'),
+    /** Selected content instances from Blizzard API (e.g., specific dungeons/raids) */
+    contentInstances: jsonb('content_instances'),
+    /** Send DM reminder 15 minutes before event. Default true (ROK-126). */
+    reminder15min: boolean('reminder_15min').default(true).notNull(),
+    /** Send DM reminder 1 hour before event. Default true (ROK-126, ROK-489). */
+    reminder1hour: boolean('reminder_1hour').default(true).notNull(),
+    /** Send DM reminder 24 hours before event. Default true (ROK-126, ROK-489). */
+    reminder24hour: boolean('reminder_24hour').default(true).notNull(),
+    /** ROK-293: Whether this event was auto-created from voice channel activity */
+    isAdHoc: boolean('is_ad_hoc').default(false).notNull(),
+    /** ROK-293: Ad-hoc event lifecycle status. Null for scheduled events. */
+    adHocStatus: varchar('ad_hoc_status', { length: 20 }),
+    /** ROK-293: Channel binding that spawned this ad-hoc event */
+    channelBindingId: uuid('channel_binding_id').references(
+      () => channelBindings.id,
+      { onDelete: 'set null' },
+    ),
+    /** ROK-471: Discord Scheduled Event ID for server calendar visibility */
+    discordScheduledEventId: varchar('discord_scheduled_event_id', {
+      length: 255,
+    }),
+    /** ROK-490: Extended suppression window. When members remain in voice after
+     *  a scheduled event's original end time, this is set instead of mutating
+     *  `duration` so that attendance metrics stay based on the original schedule. */
+    extendedUntil: timestamp('extended_until'),
+    /** ROK-599: Per-event notification channel override (Discord channel ID).
+     *  When set, embeds for this event post to this channel instead of
+     *  the game/series/default channel. */
+    notificationChannelOverride: varchar('notification_channel_override', {
+      length: 255,
+    }),
+    /** ROK-1034: FK to community_lineup_matches.id when event is being rescheduled
+     *  via a scheduling poll. Non-null hides the event from calendars/queries.
+     *  Not using .references() to avoid circular import with community-lineup-matches. */
+    reschedulingPollId: integer('rescheduling_poll_id'),
+    /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
+    cancelledAt: timestamp('cancelled_at'),
+    /** Optional reason provided when the event was cancelled (ROK-374). */
+    cancellationReason: text('cancellation_reason'),
+    /** ROK-1332: When set, reconciliation cron skips this row until the timestamp
+     *  passes. Set to NOW()+1h when Discord's guild-wide 100-SE cap remains
+     *  saturated after GC sweep, so the cron stops retrying in a tight loop. */
+    scheduledEventReconcileBackoffUntil: timestamp(
+      'scheduled_event_reconcile_backoff_until',
+    ),
+    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global;
+     *  true = force on; false = force off (single-occurrence opt-out). */
+    ephemeralVoiceEnabled: boolean('ephemeral_voice_enabled'),
+    /** ROK-1352: Live ephemeral voice channel ID. Set on create, cleared on
+     *  destroy. Non-null marks the channel as the resolver Tier 0 target. */
+    ephemeralVoiceChannelId: text('ephemeral_voice_channel_id'),
+    /** ROK-1386: Lock the ephemeral voice channel to rostered members only.
+     *  null/false = open. Only meaningful when ephemeral voice is on. */
+    privateVoice: boolean('private_voice'),
+    /** ROK-1621: Event-level share invite code (8-char). Generating a share
+     *  link writes only this column — a pug_slots row is materialised when the
+     *  link is claimed, so copying a link never creates a roster occupant. */
+    inviteCode: varchar('invite_code', { length: 8 }),
+    /** ROK-1787: guild this event is tagged to (set by a guild editor).
+     *  Recurring instances each carry it; deleting the guild untags. */
+    guildId: integer('guild_id').references(() => guilds.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    // Performance indexes for common query patterns
+    index('idx_events_creator_id').on(table.creatorId),
+    index('idx_events_game_id').on(table.gameId),
+    // ROK-1787: guild page Raids tab reads events by guild.
+    index('idx_events_guild_id').on(table.guildId),
+    // ROK-293: Supports ad-hoc event lookup by binding + status
+    index('idx_events_ad_hoc_binding').on(
+      table.channelBindingId,
+      table.isAdHoc,
+    ),
+    // NOTE: Actual DB index is a partial index (WHERE recurrence_group_id IS NOT NULL)
+    // via migration 0083. Drizzle DSL doesn't support partial indexes natively.
+    index('idx_events_recurrence_group_id').on(table.recurrenceGroupId),
+    index('idx_events_cancelled_at').on(table.cancelledAt),
+    index('idx_events_discord_scheduled_event_id').on(
+      table.discordScheduledEventId,
+    ),
+    // ROK-1332: Actual DB index is partial (WHERE scheduled_event_reconcile_backoff_until
+    // IS NOT NULL) via migration 0145. Drizzle DSL doesn't support partial indexes natively.
+    index('idx_events_se_reconcile_backoff').on(
+      table.scheduledEventReconcileBackoffUntil,
+    ),
+    // ROK-1352: Scheduler/reaper scans filter on ephemeral_voice_channel_id,
+    // which is NULL for nearly every event — so this is a PARTIAL index. The
+    // schema, snapshot, and generated SQL all agree on the partial predicate.
+    index('idx_events_ephemeral_voice_channel_id')
+      .on(table.ephemeralVoiceChannelId)
+      .where(sql`${table.ephemeralVoiceChannelId} IS NOT NULL`),
+    // ROK-1621: invite codes are globally unique across events and pug slots.
+    uniqueIndex('unique_event_invite_code')
+      .on(table.inviteCode)
+      .where(sql`${table.inviteCode} IS NOT NULL`),
+  ],
+);

@@ -1,0 +1,161 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { AdminController } from './admin.controller';
+import { AdminSettingsController } from './settings.controller';
+import { AdminSessionController } from './admin-session.controller';
+import { AdminGamesController } from './settings-games.controller';
+import { BrandingController } from './branding.controller';
+import { DemoTestCoreController } from './demo-test-core.controller';
+import { DemoTestDeactivationController } from './demo-test-deactivation.controller';
+import { NotificationModule } from '../notifications/notification.module';
+import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
+import { DemoTestVoiceController } from './demo-test-voice.controller';
+import { DemoTestLfgController } from './demo-test-lfg.controller';
+import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
+import { DemoTestQuickPlayVoiceController } from './demo-test-quick-play-voice.controller';
+import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.controller';
+import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
+import { DemoTestSignupsController } from './demo-test-signups.controller';
+import { DemoTestGamesController } from './demo-test-games.controller';
+import { DemoTestLineupController } from './demo-test-lineup.controller';
+import { DemoTestAiSuggestionsController } from './demo-test-ai-suggestions.controller';
+import { DemoTestGraceController } from './demo-test-grace.controller';
+import { DemoTestVersionController } from './demo-test-version.controller';
+import { DemoTestResetController } from './demo-test-reset.controller';
+import { DemoTestFixtureUserController } from './demo-test-fixture-user.controller';
+import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
+import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
+import { DemoTestWeeklyDigestController } from './demo-test-weekly-digest.controller';
+import { DemoTestRenderDmEmbedController } from './demo-test-render-dm-embed.controller';
+import { DemoTestRenderPugInviteEmbedController } from './demo-test-render-pug-invite-embed.controller';
+import { DemoTestBackupController } from './demo-test-backup.controller';
+import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
+import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
+import { DemoTestGuildController } from './demo-test-guild.controller';
+import { DemoTestGuildDiscordController } from './demo-test-guild-discord.controller';
+import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
+import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
+import { DemoTestJoinPostController } from './demo-test-join-post.controller';
+import { SlashCommandTestController } from './slash-command-test.controller';
+import { ItadSettingsController } from './itad-settings.controller';
+import { CooptimusSettingsController } from './cooptimus-settings.controller';
+import { CooptimusModule } from '../cooptimus/cooptimus.module';
+import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
+import { OnboardingController } from './onboarding.controller';
+import { SettingsModule } from '../settings/settings.module';
+// ROK-1160 D9: DemoTestBackupController uses BackupService.getBackupFilePath as
+// its post-write self-check. BackupModule imports CronJobModule + SettingsModule
+// only — no path back to AdminModule — so a plain import is correct here.
+import { BackupModule } from '../backup/backup.module';
+// ROK-1475: DemoTestVersionController stamps the running sha on seeded fixes.
+// VersionModule imports only Settings + CronJob modules — no cycle.
+import { VersionModule } from '../version/version.module';
+import { AuthModule } from '../auth/auth.module';
+import { IgdbModule } from '../igdb/igdb.module';
+import { DemoDataService } from './demo-data.service';
+import { DemoTestService } from './demo-test.service';
+import { DemoTestResetService } from './demo-test-reset.service';
+import { DemoTestLineupService } from './demo-test-lineup.service';
+import { SlashCommandTestService } from './slash-command-test.service';
+import { LineupsModule } from '../lineups/lineups.module';
+import { StandalonePollModule } from '../lineups/standalone-poll/standalone-poll.module';
+import { SchedulingModule } from '../lineups/scheduling/scheduling.module';
+import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
+import { TasteProfileModule } from '../taste-profile/taste-profile.module';
+import { CommunityInsightsModule } from '../community-insights/community-insights.module';
+import { SlowQueriesModule } from '../slow-queries/slow-queries.module';
+import { AiChatTestController } from './ai-chat-test.controller';
+import { GamesDedupAuditController } from './games-dedup-audit.controller';
+import { GamesDedupAuditService } from './games-dedup-audit.service';
+import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { LfgModule } from '../lfg/lfg.module';
+import { UsersModule } from '../users/users.module';
+
+@Module({
+  imports: [
+    SettingsModule,
+    BackupModule,
+    VersionModule,
+    CooptimusModule,
+    AuthModule,
+    IgdbModule,
+    LineupsModule,
+    StandalonePollModule,
+    // ROK-1604: DemoTestStandalonePollController runs the poll expiry sweep.
+    // Only AppModule imports AdminModule, so this adds no import cycle.
+    SchedulingModule,
+    AiChatModule,
+    TasteProfileModule,
+    CommunityInsightsModule,
+    SlowQueriesModule,
+    forwardRef(() => NotificationModule),
+    // ROK-1347: AdminController injects DiscordBotClientService for the
+    // orphan-SE recovery endpoint. forwardRef guards the deep module cycle
+    // DiscordBotModule → NotificationModule → … → AdminModule.
+    forwardRef(() => DiscordBotModule),
+    // ROK-1455 D15: DemoTestLfgController presses the invite-decline button on
+    // a smoke user's behalf through LfgInviteService. forwardRef because
+    // LfgModule → NotificationModule → … → AdminModule is the same cycle.
+    forwardRef(() => LfgModule),
+    // DemoTestLfgNowVoiceController resolves a seeded user's Discord identity
+    // and hands UsersService to the listener's own LFG-now voice helpers.
+    // forwardRef: UsersModule → DiscordBotModule → … → AdminModule.
+    forwardRef(() => UsersModule),
+    // ROK-1788 L4: DemoTestGuildDiscordController registers fabricated
+    // channels in the mirror. forwardRef: ChannelMirrorModule → DiscordBotModule
+    // → … → AdminModule is the same cycle as above.
+    forwardRef(() => ChannelMirrorModule),
+    BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
+  ],
+  controllers: [
+    AdminController,
+    AdminSettingsController,
+    AdminSessionController,
+    AdminGamesController,
+    BrandingController,
+    DemoTestCoreController,
+    DemoTestDeactivationController,
+    DemoTestVoiceController,
+    DemoTestLfgController,
+    DemoTestLfgNowVoiceController,
+    DemoTestQuickPlayVoiceController,
+    DemoTestThreadMirrorController,
+    DemoTestScheduledEventsController,
+    DemoTestSignupsController,
+    DemoTestGamesController,
+    DemoTestLineupController,
+    DemoTestAiSuggestionsController,
+    DemoTestGraceController,
+    DemoTestVersionController,
+    DemoTestResetController,
+    DemoTestFixtureUserController,
+    DemoTestStandalonePollController,
+    DemoTestRecruitmentController,
+    DemoTestWeeklyDigestController,
+    DemoTestRenderDmEmbedController,
+    DemoTestRenderPugInviteEmbedController,
+    DemoTestBackupController,
+    DemoTestSignInLinkController,
+    DemoTestBrowserSessionController,
+    DemoTestGuildController,
+    DemoTestGuildDiscordController,
+    DemoTestGameRolesController,
+    DemoTestJoinPostController,
+    AiChatTestController,
+    SlashCommandTestController,
+    ItadSettingsController,
+    CooptimusSettingsController,
+    CommunityInsightsSettingsController,
+    OnboardingController,
+    GamesDedupAuditController,
+  ],
+  providers: [
+    DemoDataService,
+    DemoTestService,
+    DemoTestResetService,
+    DemoTestLineupService,
+    SlashCommandTestService,
+    GamesDedupAuditService,
+  ],
+})
+export class AdminModule {}

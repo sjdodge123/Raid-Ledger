@@ -1,0 +1,328 @@
+import { z } from 'zod';
+import { CharacterSchema } from './characters.schema.js';
+import { EventResponseSchema } from './events.schema.js';
+
+// ==========================================
+// User Role (ROK-272)
+// ==========================================
+
+/**
+ * User roles in the system.
+ * Hierarchy: admin > operator > member
+ */
+export const UserRoleSchema = z.enum(['member', 'operator', 'admin']);
+export type UserRole = z.infer<typeof UserRoleSchema>;
+
+// ==========================================
+// User Profile DTO (Public View)
+// ==========================================
+
+/**
+ * Public user profile data returned by GET /users/:id/profile
+ * This is the public-facing profile, intentionally limited to non-sensitive data.
+ */
+export const UserProfileSchema = z.object({
+    id: z.number().int(),
+    username: z.string(),
+    displayName: z.string().nullable().optional(),
+    avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
+    // ROK-1734 Q1: no `steamId` — owner-only, served by `GET /auth/me`.
+    // Q3: every viewer (anonymous included) gets the boolean instead.
+    steamLinked: z.boolean(),
+    customAvatarUrl: z.string().nullable().optional(),
+    role: UserRoleSchema.optional(),
+    onboardingCompletedAt: z.string().datetime().nullable().optional(),
+    createdAt: z.string().datetime(),
+    characters: z.array(CharacterSchema),
+});
+
+export type UserProfileDto = z.infer<typeof UserProfileSchema>;
+
+/**
+ * Response wrapper for user profile endpoint
+ */
+export const UserProfileResponseSchema = z.object({
+    data: UserProfileSchema,
+});
+
+export type UserProfileResponse = z.infer<typeof UserProfileResponseSchema>;
+
+// ==========================================
+// User Preview DTO (for lists, links)
+// ==========================================
+
+/**
+ * Minimal user info for embedding in other responses (e.g., event creator).
+ * Used by UserLink component.
+ */
+export const UserPreviewSchema = z.object({
+    id: z.number().int(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
+    /** True when the user has a linked Steam account (`users.steam_id IS NOT NULL`) — ROK-1530 TD-2. */
+    steamLinked: z.boolean(),
+});
+
+export type UserPreviewDto = z.infer<typeof UserPreviewSchema>;
+
+// ==========================================
+// Recent Player DTO (for new members section)
+// ==========================================
+
+/**
+ * User preview with createdAt, used for the "New Members" section on the Players page.
+ */
+export const RecentPlayerSchema = z.object({
+    id: z.number().int(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
+    createdAt: z.string().datetime(),
+});
+
+export type RecentPlayerDto = z.infer<typeof RecentPlayerSchema>;
+
+export const RecentPlayersResponseSchema = z.object({
+    data: z.array(RecentPlayerSchema),
+});
+
+export type RecentPlayersResponseDto = z.infer<typeof RecentPlayersResponseSchema>;
+
+// ==========================================
+// Players List Response (paginated)
+// ==========================================
+
+export const PlayersListResponseSchema = z.object({
+    data: z.array(UserPreviewSchema),
+    meta: z.object({
+        total: z.number().int(),
+        page: z.number().int(),
+        limit: z.number().int(),
+        hasMore: z.boolean(),
+    }),
+});
+
+export type PlayersListResponseDto = z.infer<typeof PlayersListResponseSchema>;
+
+// ==========================================
+// Game Interest Source & Play History Filters (ROK-821)
+// ==========================================
+
+/** Valid sources for game interest records. */
+export const GameInterestSourceValues = ['manual', 'discord', 'steam_library', 'steam_wishlist'] as const;
+export const GameInterestSourceSchema = z.enum(GameInterestSourceValues);
+export type GameInterestSource = z.infer<typeof GameInterestSourceSchema>;
+
+/** Filter options for play history. */
+export const PlayHistoryFilterSchema = z.enum(['played_recently', 'played_ever', 'any']);
+export type PlayHistoryFilter = z.infer<typeof PlayHistoryFilterSchema>;
+
+// ==========================================
+// Role Update DTO (Admin-only)
+// ==========================================
+
+/**
+ * Request to update a user's role. Admin-only.
+ * Cannot promote to admin - only member <-> operator.
+ */
+export const UpdateUserRoleSchema = z.object({
+    role: z.enum(['member', 'operator']),
+});
+
+export type UpdateUserRoleDto = z.infer<typeof UpdateUserRoleSchema>;
+
+// ==========================================
+// User Management List (Admin view)
+// ==========================================
+
+export const UserManagementSchema = z.object({
+    id: z.number().int(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable().optional(),
+    role: UserRoleSchema,
+    createdAt: z.string().datetime(),
+    deactivatedAt: z.string().datetime().nullable(),
+    discordId: z.string().nullable().optional(),
+    kickedAt: z.string().datetime().nullable().optional(),
+    bannedAt: z.string().datetime().nullable().optional(),
+});
+
+export type UserManagementDto = z.infer<typeof UserManagementSchema>;
+
+export const ReactivateUserResponseSchema = z.object({
+    data: UserManagementSchema,
+});
+
+export type ReactivateUserResponseDto = z.infer<typeof ReactivateUserResponseSchema>;
+
+export const UserManagementListResponseSchema = z.object({
+    data: z.array(UserManagementSchema),
+    meta: z.object({
+        total: z.number().int(),
+        page: z.number().int(),
+        limit: z.number().int(),
+        hasMore: z.boolean(),
+    }),
+});
+
+export type UserManagementListResponseDto = z.infer<typeof UserManagementListResponseSchema>;
+
+// ==========================================
+// Admin Moderation — Kick / Ban (ROK-313)
+// ==========================================
+
+/**
+ * Request body for POST /users/:id/kick (admin-only).
+ * Soft-removal: ends the session with a cooldown; data is preserved.
+ */
+export const KickUserSchema = z.object({
+    reason: z.string().max(500).optional(),
+    kickFromDiscord: z.boolean().optional().default(false),
+});
+export type KickUserDto = z.infer<typeof KickUserSchema>;
+
+/**
+ * Request body for POST /users/:id/ban (admin-only).
+ * Permanent lockout; optional wipeData runs the delete-cascade data wipe
+ * while keeping the users row.
+ */
+export const BanUserSchema = z.object({
+    reason: z.string().max(500).optional(),
+    wipeData: z.boolean().optional().default(false),
+    kickFromDiscord: z.boolean().optional().default(false),
+});
+export type BanUserDto = z.infer<typeof BanUserSchema>;
+
+/**
+ * Generic response for moderation actions (kick/unkick/ban/unban).
+ */
+export const ModerationActionResponseSchema = z.object({
+    success: z.boolean(),
+    message: z.string(),
+});
+export type ModerationActionResponseDto = z.infer<typeof ModerationActionResponseSchema>;
+
+/**
+ * A single admin moderation audit-log entry.
+ */
+export const AdminActionSchema = z.object({
+    id: z.number().int(),
+    action: z.enum(['kick', 'unkick', 'ban', 'unban', 'role_change']),
+    actorId: z.number().int().nullable(),
+    targetId: z.number().int().nullable(),
+    actorUsername: z.string().nullable().optional(),
+    targetUsername: z.string().nullable().optional(),
+    reason: z.string().nullable(),
+    metadata: z.string().nullable(),
+    createdAt: z.string().datetime(),
+});
+export type AdminActionDto = z.infer<typeof AdminActionSchema>;
+
+/**
+ * Paginated response for GET /users/:id/admin-actions.
+ */
+export const AdminActionsListResponseSchema = z.object({
+    data: z.array(AdminActionSchema),
+    meta: z.object({
+        total: z.number().int(),
+        page: z.number().int(),
+        limit: z.number().int(),
+        hasMore: z.boolean(),
+    }),
+});
+export type AdminActionsListResponseDto = z.infer<typeof AdminActionsListResponseSchema>;
+
+// ==========================================
+// FTE Onboarding (ROK-219)
+// ==========================================
+
+/**
+ * Schema for updating user profile (display name).
+ * Used by PATCH /users/me
+ */
+export const UpdateUserProfileSchema = z.object({
+    displayName: z.string().min(2).max(30),
+});
+
+export type UpdateUserProfileDto = z.infer<typeof UpdateUserProfileSchema>;
+
+/**
+ * Query schema for checking display name availability.
+ * GET /users/check-display-name?name=xyz
+ */
+export const CheckDisplayNameQuerySchema = z.object({
+    name: z.string().min(2).max(30),
+});
+
+export type CheckDisplayNameQueryDto = z.infer<typeof CheckDisplayNameQuerySchema>;
+
+/**
+ * Response for display name availability check.
+ */
+export const CheckDisplayNameResponseSchema = z.object({
+    available: z.boolean(),
+});
+
+export type CheckDisplayNameResponseDto = z.infer<typeof CheckDisplayNameResponseSchema>;
+
+/**
+ * Response for completing onboarding.
+ * POST /users/me/complete-onboarding
+ */
+export const CompleteOnboardingResponseSchema = z.object({
+    success: z.boolean(),
+    onboardingCompletedAt: z.string().datetime(),
+});
+
+export type CompleteOnboardingResponseDto = z.infer<typeof CompleteOnboardingResponseSchema>;
+
+// ==========================================
+// User Event Signups Response (ROK-299)
+// ==========================================
+
+/**
+ * Response for GET /users/:id/events/signups
+ * Returns upcoming events the user has signed up for.
+ */
+export const UserEventSignupsResponseSchema = z.object({
+    data: z.array(EventResponseSchema),
+    total: z.number().int(),
+});
+
+export type UserEventSignupsResponseDto = z.infer<typeof UserEventSignupsResponseSchema>;
+
+// ==========================================
+// Account Deletion (ROK-405)
+// ==========================================
+
+/**
+ * Request body for DELETE /users/me (self-delete).
+ * User must type their display name to confirm deletion.
+ */
+export const DeleteAccountSchema = z.object({
+    confirmName: z.string().min(1),
+});
+
+export type DeleteAccountDto = z.infer<typeof DeleteAccountSchema>;
+
+// ==========================================
+// Discord Membership Check (ROK-425)
+// ==========================================
+
+/**
+ * Response for GET /users/me/discord-membership
+ * Used by the Discord join banner to check if user is in the bot's guild.
+ */
+export const DiscordMembershipResponseSchema = z.object({
+    botConnected: z.boolean(),
+    guildName: z.string().optional(),
+    isMember: z.boolean().optional(),
+    inviteUrl: z.string().url().optional(),
+});
+
+export type DiscordMembershipResponseDto = z.infer<typeof DiscordMembershipResponseSchema>;

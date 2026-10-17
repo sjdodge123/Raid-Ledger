@@ -1,0 +1,85 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  UseGuards,
+  Request,
+  Header,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
+import { RateLimit } from '../throttler/rate-limit.decorator';
+import { InviteService } from './invite.service';
+import { OgMetaService } from './og-meta.service';
+import { InviteCodeClaimSchema } from '@raid-ledger/contract';
+import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
+import type { Request as ExpressRequest } from 'express';
+import type { AuthenticatedRequest } from '../auth/types';
+import { getRequestOrigin } from '../common/request-origin.helpers';
+
+/**
+ * Public + authenticated routes for magic invite links (ROK-263).
+ */
+@Controller('invite')
+export class InviteController {
+  constructor(
+    private readonly inviteService: InviteService,
+    private readonly ogMetaService: OgMetaService,
+  ) {}
+
+  /**
+   * Render OG meta tags for social media crawlers (ROK-393).
+   * Nginx proxies crawler requests from /i/:code to this endpoint.
+   * Must be registered before :code to avoid route shadowing.
+   */
+  @Get(':code/og')
+  @RateLimit('public')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Cache-Control', 'public, max-age=300')
+  async renderOgMeta(
+    @Param('code') code: string,
+    @Request() req: ExpressRequest,
+  ): Promise<string> {
+    return this.ogMetaService.renderInviteOgHtml(code, getRequestOrigin(req));
+  }
+
+  /**
+   * Resolve an invite code — public, no auth required.
+   * Returns event + slot context for the landing page.
+   * ROK-1631: throttled per IP, and it never mints a Discord server invite.
+   */
+  @Get(':code')
+  @RateLimit('public')
+  async resolveInvite(
+    @Param('code') code: string,
+  ): Promise<InviteCodeResolveResponseDto> {
+    return this.inviteService.resolveInvite(code);
+  }
+
+  /**
+   * Claim an invite code — requires authentication.
+   * Smart matching: existing members get normal signup, new users claim PUG slot.
+   * Optional role override allows user to select their preferred role (ROK-394).
+   */
+  @Post(':code/claim')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  async claimInvite(
+    @Param('code') code: string,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<{
+    type: 'signup' | 'claimed';
+    eventId: number;
+    discordServerInviteUrl?: string;
+  }> {
+    const dto = InviteCodeClaimSchema.parse(body ?? {});
+    return this.inviteService.claimInvite(
+      code,
+      req.user.id,
+      dto.role,
+      dto.characterId,
+    );
+  }
+}

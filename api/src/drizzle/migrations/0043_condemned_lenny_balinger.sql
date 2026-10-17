@@ -1,0 +1,1 @@
+ALTER TABLE "game_registry" ADD COLUMN "short_name" varchar(30);

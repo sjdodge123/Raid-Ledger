@@ -1,0 +1,131 @@
+import { useState, useCallback, useMemo } from 'react';
+import { useGameTime, useSaveGameTime, useSaveGameTimeOverrides } from './use-game-time';
+import type { GameTimeAbsence, GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
+import { toast } from '../lib/toast';
+import { useTimezoneStore } from '../stores/timezone-store';
+import { getTimezoneAbbr, getTimezoneOffsetMinutes } from '../lib/timezone-utils';
+
+export interface UseGameTimeEditorOptions {
+    enabled?: boolean;
+}
+
+export type GameTimePreset = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export interface UseGameTimeEditorReturn {
+    slots: GameTimeSlot[];
+    isLoading: boolean;
+    isDirty: boolean;
+    handleChange: (slots: GameTimeSlot[]) => void;
+    applyPreset: (dayOfWeek: number, preset: GameTimePreset) => void;
+    save: () => Promise<void>;
+    clear: () => void;
+    discard: () => void;
+    isSaving: boolean;
+    tzLabel: string;
+    overrides: Array<{ date: string; hour: number; status: string }>;
+    absences: GameTimeAbsence[];
+    /** Synced-calendar busy hours (ROK-1595 S2); empty when reading is off. */
+    calendarBusy: GameTimeCalendarBusy[];
+}
+
+const NO_BUSY: GameTimeCalendarBusy[] = [];
+
+const PRESET_HOUR_RANGES: Record<GameTimePreset, [number, number]> = {
+    morning: [6, 12],
+    afternoon: [12, 18],
+    evening: [18, 24],
+    night: [0, 6],
+};
+
+function isAvailableSlot(s: GameTimeSlot): boolean {
+    return s.status === 'available' || !s.status;
+}
+
+/** The editable template view: template slots only, commitments shown as plain availability. */
+function deriveDisplaySlots(
+    editSlots: GameTimeSlot[] | null,
+    gameTimeData: ReturnType<typeof useGameTime>['data'],
+): GameTimeSlot[] {
+    if (editSlots !== null) return editSlots;
+    if (!gameTimeData?.slots) return [];
+    return gameTimeData.slots
+        .filter((s: GameTimeSlot) => s.fromTemplate !== false)
+        .map((s: GameTimeSlot) => ({
+            dayOfWeek: s.dayOfWeek,
+            hour: s.hour,
+            status: (s.status === 'committed' || s.status === 'freed')
+                ? 'available'
+                : (s.status ?? 'available'),
+        }));
+}
+
+function togglePresetSlots(
+    current: GameTimeSlot[],
+    dayOfWeek: number,
+    rangeHours: number[],
+): GameTimeSlot[] {
+    const allActive = rangeHours.every((h) =>
+        current.some((s) => s.dayOfWeek === dayOfWeek && s.hour === h && isAvailableSlot(s)),
+    );
+
+    if (allActive) {
+        return current.filter(
+            (s) => !(s.dayOfWeek === dayOfWeek && rangeHours.includes(s.hour) && isAvailableSlot(s)),
+        );
+    }
+
+    const existingHours = new Set(
+        current.filter((s) => s.dayOfWeek === dayOfWeek && isAvailableSlot(s)).map((s) => s.hour),
+    );
+    const toAdd = rangeHours
+        .filter((h) => !existingHours.has(h))
+        .map((h) => ({ dayOfWeek, hour: h, status: 'available' as const }));
+    return [...current, ...toAdd];
+}
+
+function useGameTimeQueries(enabled: boolean) {
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
+
+    const { data: gameTimeData, isLoading } = useGameTime({ enabled, tzOffset });
+
+    const tzLabel = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
+
+    return { gameTimeData, isLoading, tzLabel };
+}
+
+function useSaveHandler(slots: GameTimeSlot[], saveGameTime: ReturnType<typeof useSaveGameTime>, setEditSlots: (v: GameTimeSlot[] | null) => void) {
+    return useCallback(async () => {
+        const templateSlots = slots.filter(isAvailableSlot).map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }));
+        try { await saveGameTime.mutateAsync(templateSlots); setEditSlots(null); toast.success('Game time saved'); }
+        catch { toast.error('Failed to save game time'); }
+    }, [slots, saveGameTime, setEditSlots]);
+}
+
+export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTimeEditorReturn {
+    const enabled = options?.enabled ?? true;
+
+    const { gameTimeData, isLoading, tzLabel } = useGameTimeQueries(enabled);
+    const saveGameTime = useSaveGameTime();
+    const saveOverrides = useSaveGameTimeOverrides();
+    const [editSlots, setEditSlots] = useState<GameTimeSlot[] | null>(null);
+
+    const slots = useMemo(() => deriveDisplaySlots(editSlots, gameTimeData), [editSlots, gameTimeData]);
+
+    const applyPreset = useCallback((dayOfWeek: number, preset: GameTimePreset) => {
+        const [start, end] = PRESET_HOUR_RANGES[preset];
+        setEditSlots(togglePresetSlots(editSlots ?? slots, dayOfWeek, Array.from({ length: end - start }, (_, i) => start + i)));
+    }, [editSlots, slots]);
+
+    const save = useSaveHandler(slots, saveGameTime, setEditSlots);
+
+    return {
+        slots, isLoading, isDirty: editSlots !== null,
+        handleChange: useCallback((newSlots: GameTimeSlot[]) => setEditSlots(newSlots), []),
+        applyPreset, save, clear: useCallback(() => setEditSlots([]), []), discard: useCallback(() => setEditSlots(null), []),
+        isSaving: saveGameTime.isPending || saveOverrides.isPending, tzLabel,
+        overrides: (gameTimeData?.overrides as Array<{ date: string; hour: number; status: string }>) ?? [],
+        absences: gameTimeData?.absences ?? [],
+        calendarBusy: gameTimeData?.calendarBusy ?? NO_BUSY,
+    };
+}

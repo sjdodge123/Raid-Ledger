@@ -1,0 +1,239 @@
+/**
+ * Lifecycle helpers extracted from LineupsService to stay
+ * under the 300-line file limit (ROK-932).
+ */
+import {
+  BadRequestException,
+  ConflictException,
+  type Logger,
+} from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import { clearLinkedEventsByLineup } from './standalone-poll/standalone-poll-query.helpers';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  CreateLineupDto,
+  UpdateLineupStatusDto,
+} from '@raid-ledger/contract';
+import * as schema from '../drizzle/schema';
+import type { LineupStatus } from '../drizzle/schema';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from './queue/lineup-phase-schedule.helpers';
+import { VALID_TRANSITIONS, VALID_REVERSIONS } from './lineups-query.helpers';
+import {
+  computeTransitionDeadline,
+  getNextPhase,
+  buildTransitionValues,
+  buildAdvanceStateUpdate,
+} from './lineups-phase.helpers';
+import { buildMatchesForLineup } from './lineups-matching.helpers';
+import {
+  fireMatchEnteredScheduling,
+  fireOrphanedPollCards,
+} from './lineups-scheduling-hook.helpers';
+import { addInvitees } from './lineups-invitees.helpers';
+import { insertWithSlugRetry } from './public-lineup-slug.helpers';
+import { extractErrorDetail } from '../common/pg-error.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Insert a new lineup row with phase scheduling fields (ROK-1065).
+ *
+ * ROK-1065 removed the "only one active lineup" 409 — multiple lineups may
+ * run concurrently. Private lineups seed their invitee roster inside the
+ * same transaction so the detail response is immediately consistent.
+ */
+export function insertLineup(
+  db: Db,
+  dto: CreateLineupDto,
+  userId: number,
+  phaseDeadline: Date | null,
+  overrides: Record<string, number | undefined> | null,
+) {
+  // ROK-1067: every lineup gets a unique URL-safe slug at creation. Private
+  // lineups still receive a slug (forced-disabled toggle below) so flipping
+  // visibility later wouldn't require backfilling a slug column.
+  const visibility = dto.visibility ?? 'public';
+  const publicShareEnabled =
+    visibility === 'private' ? false : (dto.publicShareEnabled ?? true);
+  return insertWithSlugRetry((slug) =>
+    db.transaction(async (tx) => {
+      const rows = await tx
+        .insert(schema.communityLineups)
+        .values({
+          title: dto.title,
+          description: dto.description ?? null,
+          createdBy: userId,
+          targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
+          phaseDeadline,
+          phaseDurationOverride: overrides,
+          matchThreshold: dto.matchThreshold ?? undefined,
+          maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
+          defaultTiebreakerMode: dto.defaultTiebreakerMode ?? undefined,
+          // ROK-1064: per-lineup Discord channel override (nullable).
+          channelOverrideId: dto.channelOverrideId ?? null,
+          // ROK-1065: visibility defaults to 'public' when not provided.
+          visibility,
+          // ROK-1067: public-share defaults true; forced false for private.
+          publicShareEnabled,
+          publicSlug: slug,
+          // ROK-1302: scheduling-phase opt-in; defaults true (existing behavior).
+          includeSchedulingPhase: dto.includeSchedulingPhase ?? true,
+          // ROK-1444: early-advance target (% of the nomination cap). Null
+          // keeps deadline-only advancement, which is the default.
+          nominationTargetPct: dto.nominationTargetPct ?? null,
+        })
+        .returning();
+      const [row] = rows;
+      if (row && dto.inviteeUserIds && dto.inviteeUserIds.length > 0) {
+        // ROK-1101 G2: at creation the lineup creator is the inviter.
+        await addInvitees(tx, row.id, dto.inviteeUserIds, row.createdBy);
+      }
+      return rows;
+    }),
+  );
+}
+
+/**
+ * Write the transition, conditional on the lineup still being in the status
+ * the caller snapshotted (ROK-1118).
+ *
+ * The `status` predicate is the whole point: two callers racing to close a
+ * quorum both compute the same `expectedPre` from their own snapshot, and only
+ * one UPDATE matches. The loser's `rowCount === 0` becomes the 409 — and,
+ * just as importantly, its `set(values)` never lands, so it cannot clobber the
+ * winner's row.
+ */
+async function runConditionalStatusUpdate(
+  db: Db,
+  id: number,
+  dto: UpdateLineupStatusDto,
+  lineup: typeof schema.communityLineups.$inferSelect,
+  phaseDeadline: Date | null,
+): Promise<void> {
+  const values = {
+    ...buildTransitionValues(dto, phaseDeadline),
+    // ROK-1253: merge advance-state column changes into the same atomic UPDATE
+    // so any racing grace job or quorum re-eval sees a consistent row.
+    ...buildAdvanceStateUpdate(lineup.status, dto.status),
+  };
+  const expectedPre = lineup.status;
+  const updated = await db
+    .update(schema.communityLineups)
+    .set(values)
+    .where(
+      and(
+        eq(schema.communityLineups.id, id),
+        eq(schema.communityLineups.status, expectedPre),
+      ),
+    )
+    .returning({ id: schema.communityLineups.id });
+  if (updated.length === 0) {
+    throw new ConflictException(
+      `Lineup ${id} status changed concurrently; expected '${expectedPre}'`,
+    );
+  }
+}
+
+/**
+ * Apply a status transition with phase scheduling.
+ *
+ * ROK-1118: the UPDATE is conditional on the lineup's current status to
+ * make concurrent auto-advance callers safe. If two voters race to close
+ * the quorum, both will compute `expectedPre = 'voting'` from their own
+ * snapshot, but only one UPDATE will match the row's actual status —
+ * the loser sees `rowCount === 0` and we throw `ConflictException`. The
+ * manual `PATCH /lineups/:id/status` path surfaces this as 409;
+ * `maybeAutoAdvance` swallows it.
+ */
+export async function applyStatusUpdate(
+  db: Db,
+  phaseQueue: LineupPhaseQueueService,
+  id: number,
+  dto: UpdateLineupStatusDto,
+  lineup: typeof schema.communityLineups.$inferSelect,
+  onEventsCleared?: (eventIds: number[]) => void,
+): Promise<Date | null> {
+  const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
+  await runConditionalStatusUpdate(db, id, dto, lineup, phaseDeadline);
+
+  const nextPhase = getNextPhase(dto.status);
+  if (nextPhase && phaseDeadline) {
+    // ROK-1512: best-effort — the status UPDATE above committed; a throw
+    // would skip the phase notifications that follow and, from inside a
+    // phase job, fail a job whose retry is a status no-op. Sentry has the
+    // failure; boot rehydration re-derives the job from the row.
+    await scheduleTransitionBestEffort(
+      phaseQueue,
+      id,
+      nextPhase,
+      phaseDeadline.getTime() - Date.now(),
+      'applyStatusUpdate',
+    );
+  }
+  // ROK-1253: any operator-driven transition supersedes a pending grace
+  // window — eagerly remove the BullMQ job so it cannot fire stale.
+  // Best-effort: the processor branch also re-checks the row's status
+  // and `auto_advance_paused_at`, so a lost race is safe.
+  await phaseQueue.cancelGraceAdvance(id);
+  if (dto.status === 'archived') {
+    // `?? []` — several specs mock the helper without a return value.
+    const clearedEventIds = (await clearLinkedEventsByLineup(db, id)) ?? [];
+    // ROK-1370: poll expiry/abort just cleared reschedulingPollId — hand the
+    // cleared events to the caller so the stuck RESCHEDULING embed heals.
+    if (clearedEventIds.length > 0) onEventsCleared?.(clearedEventIds);
+  }
+  // ROK-1363: return the freshly-computed deadline so callers (notably
+  // `runStatusTransition`) thread the NEW voting deadline into `fireVotingOpen`
+  // instead of the stale pre-update value off the loaded row.
+  return phaseDeadline;
+}
+
+/**
+ * Run the matching algorithm (never blocks the caller).
+ *
+ * ROK-1473: matches that land in `scheduling` status are announced through
+ * the shared hook once `buildMatchesForLineup`'s transaction has committed,
+ * so `SchedulingPollEmbedService` posts their Discord poll card. A matching
+ * failure announces nothing — there is no committed match to advertise.
+ * TDB:571: cards owned by matches the re-decide wiped go out for deletion
+ * the same way, after commit.
+ *
+ * @param db - Drizzle handle.
+ * @param lineupId - Lineup transitioning to 'decided'.
+ * @param logger - Caller's logger; matching failures are logged, not thrown.
+ * @param events - Application event bus carrying the scheduling hook.
+ */
+export async function runMatchingAlgorithm(
+  db: Db,
+  lineupId: number,
+  logger: Logger,
+  events: EventEmitter2,
+): Promise<void> {
+  try {
+    // `?? {}` — several specs mock the helper without a return value.
+    const { schedulingMatchIds = [], orphanedCards = [] } =
+      (await buildMatchesForLineup(db, lineupId)) ?? {};
+    fireOrphanedPollCards(events, orphanedCards);
+    fireMatchEnteredScheduling(events, schedulingMatchIds);
+  } catch (err: unknown) {
+    logger.error(
+      `Matching failed for lineup ${lineupId}: ${extractErrorDetail(err)}`,
+    );
+  }
+}
+
+/** Validate a status transition is legal. */
+export function validateTransition(
+  current: LineupStatus,
+  dto: UpdateLineupStatusDto,
+): void {
+  const isForward = VALID_TRANSITIONS[current] === dto.status;
+  const isReverse = VALID_REVERSIONS[current] === dto.status;
+  if (!isForward && !isReverse) {
+    throw new BadRequestException(
+      `Cannot transition from '${current}' to '${dto.status}'`,
+    );
+  }
+}

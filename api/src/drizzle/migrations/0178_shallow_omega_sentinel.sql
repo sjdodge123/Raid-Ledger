@@ -1,0 +1,18 @@
+-- ROK-1148 — composite index for getLastSuccessfulChatAt.
+--
+-- Serves `WHERE provider = ? AND success = true` aggregating `max(created_at)`.
+-- The two equality predicates lead so the trailing created_at stays ordered
+-- within the matched range, letting Postgres take the max from an index-only
+-- backward scan instead of the created_at index or a seq scan.
+--
+-- HAND-TRIMMED after `drizzle-kit generate` (sanctioned by CLAUDE.md for a
+-- known codegen bug; see TECH-DEBT-BACKLOG.md 2026-09-10). `0177_snapshot.json`
+-- was generated from a base predating 0176, so it carries no `lfg_invites` at
+-- all — codegen therefore re-emitted the whole of 0176 into this file:
+-- CREATE TABLE lfg_invites, its three FKs, its three indexes, and the
+-- channel_prefs default that 0176 already sets verbatim. Every one of those
+-- would fail with "already exists" on any database that has run 0176.
+-- Only the statement below belongs to this migration. The regenerated
+-- 0178_snapshot.json carries the full schema again, so branches cut from here
+-- no longer inherit the drift.
+CREATE INDEX "idx_ai_request_logs_provider_success_created_at" ON "ai_request_logs" USING btree ("provider","success","created_at");

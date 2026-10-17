@@ -1,0 +1,137 @@
+import { Injectable } from '@nestjs/common';
+import { BlizzardService } from './blizzard.service';
+import type {
+  CharacterSyncAdapter,
+  DisplayEquipmentRow,
+  DisplayLockoutsRow,
+  DisplayTalentsRow,
+} from '../plugin-host/extension-points';
+import type {
+  CharacterEquipmentDto,
+  CharacterLockoutsDto,
+  ForeverTalentsDto,
+} from '@raid-ledger/contract';
+import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
+import { ForeverDisplayTalentsService } from './forever-display-talents.service';
+import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
+import type {
+  ExternalCharacterProfile,
+  ExternalInferredSpecialization,
+  ExternalCharacterEquipment,
+  ExternalCharacterProfessions,
+} from '../plugin-host/extension-types';
+import { ALL_WOW_GAME_SLUGS } from './manifest';
+
+/**
+ * Adapter bridging CharacterSyncAdapter interface to BlizzardService.
+ * The `gameVariant` parameter now carries the game's apiNamespacePrefix
+ * (null for retail, e.g. 'classic1x', 'classicann').
+ */
+@Injectable()
+export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
+  readonly gameSlugs = ALL_WOW_GAME_SLUGS;
+
+  constructor(
+    private readonly blizzardService: BlizzardService,
+    private readonly foreverEquipment: ForeverDisplayEquipmentService,
+    private readonly foreverTalents: ForeverDisplayTalentsService,
+    private readonly foreverLockouts: ForeverDisplayLockoutsService,
+  ) {}
+
+  /** ROK-1727: Forever characters display their addon snapshot gear. */
+  resolveDisplayEquipment(
+    row: DisplayEquipmentRow,
+  ): Promise<CharacterEquipmentDto | undefined> {
+    return this.foreverEquipment.resolve(row);
+  }
+
+  /** ROK-1744: Forever talents from the LedgerLink snapshot. */
+  resolveDisplayTalents(
+    row: DisplayTalentsRow,
+  ): Promise<ForeverTalentsDto | undefined> {
+    return this.foreverTalents.resolve(row);
+  }
+
+  /** ROK-1743: Forever saved instances from the LedgerLink snapshot. */
+  resolveDisplayLockouts(
+    row: DisplayLockoutsRow,
+  ): Promise<CharacterLockoutsDto | undefined> {
+    return this.foreverLockouts.resolve(row);
+  }
+
+  /** @deprecated Game ID is now the lookup key; kept for interface compat. */
+  resolveGameSlugs(gameVariant?: string): string[] {
+    if (!gameVariant) return ALL_WOW_GAME_SLUGS;
+    return ALL_WOW_GAME_SLUGS;
+  }
+
+  async fetchProfile(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalCharacterProfile> {
+    return this.blizzardService.fetchCharacterProfile(
+      name,
+      realm,
+      region,
+      gameVariant ?? null,
+    );
+  }
+
+  async fetchSpecialization(
+    name: string,
+    realm: string,
+    region: string,
+    characterClass: string,
+    gameVariant?: string,
+  ): Promise<ExternalInferredSpecialization> {
+    return this.blizzardService.fetchCharacterSpecializations(
+      name,
+      realm,
+      region,
+      characterClass,
+      gameVariant ?? null,
+    );
+  }
+
+  async fetchEquipment(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalCharacterEquipment> {
+    const result = await this.blizzardService.fetchCharacterEquipment(
+      name,
+      realm,
+      region,
+      gameVariant ?? null,
+    );
+    return (
+      result ?? {
+        equippedItemLevel: null,
+        items: [],
+        syncedAt: new Date().toISOString(),
+      }
+    );
+  }
+
+  /**
+   * Thin pass-through: returns the service result as-is, including null
+   * (architect §3 — orchestrator's `if (professions !== null)` is the only
+   * source of "skip the column" behavior; do NOT fall back to empty arrays).
+   */
+  async fetchProfessions(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string | null,
+  ): Promise<ExternalCharacterProfessions | null> {
+    return this.blizzardService.fetchCharacterProfessions(
+      name,
+      realm,
+      region,
+      gameVariant ?? null,
+    );
+  }
+}

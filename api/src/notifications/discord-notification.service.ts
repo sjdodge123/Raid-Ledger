@@ -1,0 +1,388 @@
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import Redis from 'ioredis';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import * as schema from '../drizzle/schema';
+import type { NotificationType } from '../drizzle/schema/notification-preferences';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
+import { NotificationDedupService } from './notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
+import {
+  deactivateUserViaModuleRef,
+  isGuildMemberSeen,
+  type DeactivationGuard,
+  type DeactivationReason,
+} from './discord-notification-deactivate.helpers';
+import { resolveUserTimezone } from './timezone.helpers';
+import {
+  buildDiscordDisabledPrefs,
+  discordDisabledTypes,
+} from './notification-mapping.helpers';
+import {
+  DISCORD_NOTIFICATION_QUEUE,
+  RATE_LIMIT_WINDOW_MS,
+  MAX_CONSECUTIVE_FAILURES,
+  isDiscordSnowflake,
+  type DiscordNotificationJobData,
+} from './discord-notification.constants';
+import {
+  dispatchManyDiscordNotifications,
+  type DispatchManyInput,
+} from './discord-notification-batch.helpers';
+
+/**
+ * Service for dispatching Discord DM notifications (ROK-180).
+ *
+ * Responsibilities:
+ * - Check eligibility (Discord linked, preferences enabled, full member)
+ * - Enqueue notifications for background delivery
+ * - Rate limiting per user per type
+ * - Welcome DM on first Discord enable
+ * - Failure tracking and auto-disable
+ */
+@Injectable()
+export class DiscordNotificationService {
+  private readonly logger = new Logger(DiscordNotificationService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    @InjectQueue(DISCORD_NOTIFICATION_QUEUE) private queue: Queue,
+    private readonly clientService: DiscordBotClientService,
+    private readonly embedService: DiscordNotificationEmbedService,
+    private readonly dedupService: NotificationDedupService,
+    private readonly settingsService: SettingsService,
+    @Inject(REDIS_CLIENT)
+    private redis: Redis,
+    @Optional() private readonly moduleRef?: ModuleRef,
+  ) {}
+
+  /**
+   * Attempt to send a Discord notification for a user.
+   * Checks all preconditions (AC-2) and enqueues if eligible.
+   *
+   * @returns true if enqueued, false if skipped
+   */
+  async dispatch(input: {
+    notificationId: string;
+    userId: number;
+    type: NotificationType;
+    title: string;
+    message: string;
+    payload?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const discordId = await this.resolveDiscordId(input.userId);
+    if (!discordId) return false;
+    if (await this.isTypeDisabledForUser(input.userId, input.type))
+      return false;
+    if (!this.clientService.isConnected()) {
+      this.logger.debug('Discord bot not connected, skipping notification');
+      return false;
+    }
+    if (await this.isRateLimited(input)) return false;
+    await this.enqueueJob(input, discordId);
+    this.logger.log(
+      `Enqueued Discord notification for user ${input.userId} (${input.type})`,
+    );
+    return true;
+  }
+
+  /**
+   * Batch-dispatch Discord notifications (ROK-1043).
+   * See discord-notification-batch.helpers.ts for implementation.
+   */
+  async dispatchMany(inputs: DispatchManyInput[]): Promise<number> {
+    return dispatchManyDiscordNotifications(
+      this.db,
+      this.queue,
+      this.redis,
+      this.logger,
+      this.clientService.isConnected(),
+      inputs,
+    );
+  }
+
+  /**
+   * Resolve user's Discord ID, returning null if not linked OR if the
+   * user is deactivated (ROK-1260 AC-8 — deactivated users are skipped
+   * from every notification target query).
+   */
+  private async resolveDiscordId(userId: number): Promise<string | null> {
+    const [user] = await this.db
+      .select({
+        discordId: schema.users.discordId,
+        deactivatedAt: schema.users.deactivatedAt,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    if (!user?.discordId) {
+      this.logger.debug(
+        `User ${userId}: no Discord linked, skipping Discord notification`,
+      );
+      return null;
+    }
+    if (user.deactivatedAt != null) {
+      this.logger.debug(
+        `User ${userId}: deactivated, skipping Discord notification (ROK-1260)`,
+      );
+      return null;
+    }
+    if (!isDiscordSnowflake(user.discordId)) {
+      this.logger.debug(
+        `User ${userId}: discord_id "${user.discordId}" is not a Discord snowflake, skipping`,
+      );
+      return null;
+    }
+    return user.discordId;
+  }
+
+  /**
+   * Deactivate a user (ROK-1260): flip `deactivated_at` to NOW(),
+   * cancel every upcoming-event signup, write admin notification.
+   * Idempotent — safe to call multiple times for the same user.
+   *
+   * Cross-module deps are resolved via ModuleRef at call time to avoid
+   * a 3-way Notification↔Users↔Events circular DI graph at boot.
+   */
+  async deactivateUser(
+    userId: number,
+    reason: DeactivationReason = 'unknown',
+    guard: DeactivationGuard = {},
+  ): Promise<void> {
+    await deactivateUserViaModuleRef(
+      this.db,
+      this.logger,
+      this.moduleRef,
+      userId,
+      reason,
+      guard,
+    );
+  }
+
+  /** ROK-1749: has this user ever been seen in the guild roster? */
+  async isGuildMemberSeen(userId: number): Promise<boolean> {
+    return isGuildMemberSeen(this.db, userId);
+  }
+
+  /** Check if Discord channel is disabled for this notification type. */
+  private async isTypeDisabledForUser(
+    userId: number,
+    type: NotificationType,
+  ): Promise<boolean> {
+    const [prefs] = await this.db
+      .select()
+      .from(schema.userNotificationPreferences)
+      .where(eq(schema.userNotificationPreferences.userId, userId))
+      .limit(1);
+    // TDB:899 — resolve over the defaults (no row ⇒ defaults), like in-app.
+    if (discordDisabledTypes(prefs?.channelPrefs).has(type)) {
+      this.logger.debug(
+        `User ${userId}: Discord disabled for ${type}, skipping`,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /** Check rate limiting for this notification type + user. */
+  private async isRateLimited(input: {
+    userId: number;
+    type: NotificationType;
+    payload?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const subType =
+      (input.payload?.reminderWindow as string | undefined) ??
+      (input.payload?.subtype as string | undefined) ??
+      '';
+    const rateLimitKey = `discord-notif:rate:${input.userId}:${input.type}${subType ? `:${subType}` : ''}`;
+    const recentCount = await this.redis.get(rateLimitKey);
+    if (recentCount && parseInt(recentCount, 10) > 0) {
+      this.logger.debug(
+        `User ${input.userId}: rate limited for ${input.type}, skipping Discord DM`,
+      );
+      return true;
+    }
+    await this.redis.set(rateLimitKey, '1', 'PX', RATE_LIMIT_WINDOW_MS);
+    return false;
+  }
+
+  /** Enqueue the notification job for background delivery. */
+  private async enqueueJob(
+    input: {
+      notificationId: string;
+      userId: number;
+      type: NotificationType;
+      title: string;
+      message: string;
+      payload?: Record<string, unknown>;
+    },
+    discordId: string,
+  ): Promise<void> {
+    await this.queue.add(
+      'send-dm',
+      {
+        notificationId: input.notificationId,
+        userId: input.userId,
+        discordId,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        ...(input.payload !== undefined ? { payload: input.payload } : {}),
+      } satisfies DiscordNotificationJobData,
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
+  }
+
+  /**
+   * Send a welcome DM when a user enables Discord notifications for the first time (AC-1).
+   */
+  async sendWelcomeDM(userId: number): Promise<void> {
+    const [user] = await this.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+
+    if (!user?.discordId) return;
+
+    if (!this.clientService.isConnected()) {
+      this.logger.debug('Bot not connected, skipping welcome DM');
+      return;
+    }
+
+    // Check if we already sent a welcome DM (DB-backed dedup, null = no expiry)
+    const welcomeKey = `discord-notif:welcome:${userId}`;
+    const wasSent = await this.dedupService.checkAndMarkSent(welcomeKey, null);
+    if (wasSent) return;
+
+    try {
+      const branding = await this.settingsService.getBranding();
+      // ROK-1477 A2: no accent-colour override — the welcome DM is `announcing`.
+      const { embed, row } = await this.embedService.buildWelcomeEmbed(
+        branding.communityName ?? 'Raid Ledger',
+      );
+
+      await this.clientService.sendEmbedDM(user.discordId, embed, row);
+
+      this.logger.log(`Sent welcome DM to user ${userId}`);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to send welcome DM to user ${userId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Record a delivery failure and potentially auto-disable Discord (AC-6).
+   */
+  async recordFailure(userId: number): Promise<void> {
+    const failureKey = `discord-notif:failures:${userId}`;
+
+    const count = await this.redis.incr(failureKey);
+    // Set TTL on first failure only (fixed 24-hour window, not rolling).
+    // Counter resets after 24h regardless of subsequent failures within that window.
+    if (count === 1) {
+      await this.redis.expire(failureKey, 86400);
+    }
+
+    if (count >= MAX_CONSECUTIVE_FAILURES) {
+      this.logger.warn(
+        `User ${userId}: ${count} consecutive Discord failures, auto-disabling`,
+      );
+      await this.autoDisableDiscord(userId);
+      await this.redis.del(failureKey);
+    }
+  }
+
+  /**
+   * Reset failure count on successful delivery.
+   */
+  async resetFailures(userId: number): Promise<void> {
+    await this.redis.del(`discord-notif:failures:${userId}`);
+  }
+
+  /**
+   * Check whether a user has been deactivated (ROK-1260, Codex P2).
+   * Used by the processor to skip already-queued jobs after the first
+   * 50278 in a burst marks the user deactivated — prevents wasted
+   * Discord API calls for the remaining backlog.
+   */
+  async isUserDeactivated(userId: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ deactivatedAt: schema.users.deactivatedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return row?.deactivatedAt != null;
+  }
+
+  /**
+   * Resolve the recipient's IANA timezone for DM plaintext / push-preview
+   * rendering (ROK-1403). Chain: per-user pref → guild default → 'UTC'.
+   * Used by the processor to render any `<t:>` markup in the recipient's tz
+   * instead of the server process TZ (UTC in prod).
+   */
+  async resolveRecipientTimezone(userId: number): Promise<string> {
+    const defaultTz =
+      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
+    return resolveUserTimezone(this.db, userId, defaultTz);
+  }
+
+  /**
+   * Auto-disable Discord notifications for a user and send in-app notification (AC-6).
+   */
+  private async autoDisableDiscord(userId: number): Promise<void> {
+    await this.disableDiscordForAllTypes(userId);
+
+    // Create in-app notification about the issue
+    const { title, message } =
+      this.embedService.buildUnreachableNotificationMessage();
+
+    await this.db.insert(schema.notifications).values({
+      userId,
+      type: 'system',
+      title,
+      message,
+    });
+
+    this.logger.log(`Auto-disabled Discord notifications for user ${userId}`);
+  }
+
+  /**
+   * Store Discord OFF for every notification type (TDB:1956), keeping the
+   * user's inApp/push. With no row yet, upsert: getPreferences' lazy insert
+   * can race this write.
+   */
+  private async disableDiscordForAllTypes(userId: number): Promise<void> {
+    const table = schema.userNotificationPreferences;
+    const [prefs] = await this.db
+      .select()
+      .from(table)
+      .where(eq(table.userId, userId))
+      .limit(1);
+    const channelPrefs = buildDiscordDisabledPrefs(prefs?.channelPrefs);
+    if (prefs) {
+      await this.db
+        .update(table)
+        .set({ channelPrefs })
+        .where(eq(table.userId, userId));
+      return;
+    }
+    await this.db
+      .insert(table)
+      .values({ userId, channelPrefs })
+      .onConflictDoUpdate({ target: table.userId, set: { channelPrefs } });
+  }
+}

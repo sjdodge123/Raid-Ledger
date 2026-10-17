@@ -1,0 +1,278 @@
+/**
+ * Pure helper functions extracted from main.ts for testability.
+ * These configure CORS, helmet CSP, and validate environment settings.
+ */
+
+import type { INestApplication, LogLevel } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { Request, RequestHandler, Response, NextFunction } from 'express';
+import * as bodyParser from 'body-parser';
+
+// Descending severity. A threshold like 'log' enables itself plus everything
+// to its left (more severe), e.g. error+warn+log. Order matches the original
+// inline whitelist that used to live in main.ts so existing log-shipping
+// behavior is preserved.
+const LOG_LEVELS_DESCENDING: readonly LogLevel[] = [
+  'error',
+  'warn',
+  'log',
+  'debug',
+  'verbose',
+];
+
+export function parseLogLevel(value: string | undefined): LogLevel | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if ((LOG_LEVELS_DESCENDING as readonly string[]).includes(normalized)) {
+    return normalized as LogLevel;
+  }
+  return null;
+}
+
+export interface LogLevelEnv {
+  DEBUG?: string;
+  LOG_LEVEL?: string;
+  NODE_ENV?: string;
+}
+
+interface ConsoleLike {
+  warn: (msg: string) => void;
+}
+
+export function getLogLevels(
+  env: LogLevelEnv,
+  consoleLike: ConsoleLike = console,
+): LogLevel[] {
+  const rawLogLevel = env.LOG_LEVEL?.trim();
+  let threshold: LogLevel;
+  if (rawLogLevel) {
+    const parsed = parseLogLevel(rawLogLevel);
+    if (parsed) {
+      threshold = parsed;
+    } else {
+      consoleLike.warn(
+        `Invalid LOG_LEVEL="${rawLogLevel}" — falling back to "log". ` +
+          `Valid values: ${LOG_LEVELS_DESCENDING.join(', ')}`,
+      );
+      threshold = 'log';
+    }
+  } else if (env.DEBUG === 'true') {
+    threshold = 'debug';
+  } else if (env.NODE_ENV === 'development') {
+    threshold = 'debug';
+  } else {
+    threshold = 'log';
+  }
+  const endIdx = LOG_LEVELS_DESCENDING.indexOf(threshold);
+  return LOG_LEVELS_DESCENDING.slice(0, endIdx + 1);
+}
+
+interface LoggerLike {
+  warn: (message: string) => void;
+  error: (message: string) => void;
+}
+
+export const LOGGER_SELF_TEST_WARN_SENTINEL =
+  '[bootstrap-self-test] logger.warn channel active';
+export const LOGGER_SELF_TEST_ERROR_SENTINEL =
+  '[bootstrap-self-test] logger.error channel active';
+
+export function buildLoggerSelfTest(logger: LoggerLike): () => void {
+  return () => {
+    logger.warn(LOGGER_SELF_TEST_WARN_SENTINEL);
+    logger.error(LOGGER_SELF_TEST_ERROR_SENTINEL);
+  };
+}
+
+// Browsers POST CSP violation reports with content-type `application/csp-report`
+// (legacy) or `application/reports+json` (Reporting API). Nest's default
+// `application/json` parser ignores both, so register a dedicated parser first
+// to make `@Body()` resolve. ROK-1158.
+export const CSP_REPORT_CONTENT_TYPES = [
+  'application/csp-report',
+  'application/reports+json',
+];
+
+/**
+ * Install the CSP-violation-report body parser BEFORE Nest's default json
+ * parser.
+ *
+ * ROK-1365: body-parser runs `strict:true`, so a malformed/truncated report
+ * body throws a SyntaxError that Nest surfaces as HTTP 400. A CSP report
+ * endpoint must never 400 — browsers fire-and-forget these and curl-driven
+ * probes send garbage. Wrap the parser so a parse failure short-circuits to
+ * 204 instead of propagating. Valid bodies (and non-CSP content types) fall
+ * through to the controller, which also returns 204.
+ */
+export function installCspReportBodyParser(app: NestExpressApplication): void {
+  const parse = bodyParser.json({
+    type: CSP_REPORT_CONTENT_TYPES,
+    limit: '64kb',
+  });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    parse(req, res, (err: unknown) => {
+      if (err) {
+        res.status(204).end();
+        return;
+      }
+      next();
+    });
+  });
+}
+
+/** ROK-1313: JSON limit for POST /feedback (a 3.75 MB screenshot ≈ 5 MB base64). */
+export const FEEDBACK_JSON_BODY_LIMIT = '8mb';
+
+/**
+ * POST /feedback (Express also routes `/feedback/`) carrying a bearer token.
+ * Without one AuthGuard rejects the request anyway, so an anonymous client
+ * never gets to make the API buffer 8 MB — it stays on the 2 MB parser.
+ */
+function isFeedbackSubmit(req: Request): boolean {
+  if (req.method !== 'POST') return false;
+  if (req.path !== '/feedback' && req.path !== '/feedback/') return false;
+  return /^Bearer \S/i.test(req.headers.authorization ?? '');
+}
+
+/**
+ * Install a larger JSON body parser for POST /feedback only, BEFORE the
+ * global 2 MB parser: that one would answer every real screenshot with its
+ * own 413. body-parser skips a body already parsed here. The controller still
+ * enforces the contract's encoded-length cap (FEEDBACK_SCREENSHOT_MAX_BASE64_CHARS).
+ */
+export function installFeedbackBodyParser(app: {
+  use: (handler: RequestHandler) => unknown;
+}): void {
+  const parse = bodyParser.json({ limit: FEEDBACK_JSON_BODY_LIMIT });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (isFeedbackSubmit(req)) {
+      parse(req, res, next);
+      return;
+    }
+    next();
+  });
+}
+
+export interface HelmetOptions {
+  crossOriginResourcePolicy: { policy: 'cross-origin' };
+  contentSecurityPolicy: {
+    directives: Record<string, string[]>;
+  };
+}
+
+/**
+ * Validates CORS configuration for the current environment.
+ * - Production requires CORS_ORIGIN to be set
+ * - Production blocks wildcard (*)
+ * - Production notes (warn, never throws) that 'auto' is the same-origin
+ *   check of ROK-1732; the `[cors-auto] mode=` boot line from
+ *   `applyCorsPolicy` says whether mismatches are rejected or only logged.
+ */
+export function validateCorsConfig(
+  isProduction: boolean,
+  corsOrigin?: string,
+  logger: { warn: (msg: string) => void } = console,
+): void {
+  if (isProduction && !corsOrigin) {
+    throw new Error(
+      'CORS_ORIGIN environment variable must be set in production',
+    );
+  }
+  if (isProduction && corsOrigin === '*') {
+    throw new Error(
+      'CORS_ORIGIN=* is not allowed in production. Set a specific origin.',
+    );
+  }
+  if (isProduction && corsOrigin === 'auto') {
+    logger.warn(
+      'CORS_ORIGIN=auto checks that a request Origin matches its Host ' +
+        '(single-origin reverse-proxy deployments). The [cors-auto] mode line ' +
+        'says whether mismatches are rejected (enforce) or only logged (report).',
+    );
+  }
+}
+
+/**
+ * Builds helmet options with an explicit Content-Security-Policy.
+ * The API is primarily a JSON service, not an HTML host, so the CSP
+ * is restrictive by default to prevent abuse if HTML is ever served.
+ */
+export function buildHelmetOptions(): HelmetOptions {
+  return {
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  };
+}
+
+/**
+ * ROK-1665: trust every private hop, not a fixed hop count. Prod runs
+ * browser → Cloudflare → cloudflared → Docker bridge → nginx → Node, so a hop
+ * count of 1 resolved `req.ip` to the bridge (172.17.0.1) for every user and
+ * the throttler kept ONE bucket per handler for the whole site. proxy-addr
+ * walks X-Forwarded-For from the right, skips these trusted ranges and stops
+ * at the first public address — the real client — so a spoofed value on the
+ * left is never reached.
+ */
+export const DEFAULT_TRUST_PROXY = 'loopback, linklocal, uniquelocal';
+
+/**
+ * Resolves Express's `trust proxy` value from `TRUST_PROXY`: a whole number is
+ * a hop count, `true`/`false` (any case) are the Express booleans, anything
+ * else passes through in Express syntax (IPs, CIDRs or the named subnets,
+ * comma-separated). Unset or blank → the private subnets. The booleans must be
+ * mapped: Express compiles the STRING 'true' as an IP and throws at boot.
+ */
+export function resolveTrustProxy(
+  raw: string | undefined,
+): boolean | number | string {
+  const value = raw?.trim();
+  if (!value) return DEFAULT_TRUST_PROXY;
+  const lower = value.toLowerCase();
+  if (lower === 'true' || lower === 'false') return lower === 'true';
+  return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+/**
+ * Applies `resolveTrustProxy` in production only; dev sees no proxy. A value
+ * Express cannot compile (a typo such as `loopbak`) fails boot with a message
+ * that names the variable instead of a bare "invalid IP address".
+ */
+export function applyTrustProxy(
+  app: NestExpressApplication,
+  isProduction: boolean,
+  raw: string | undefined,
+): void {
+  if (!isProduction) return;
+  try {
+    app.set('trust proxy', resolveTrustProxy(raw));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid TRUST_PROXY "${raw?.trim()}": ${reason}`, {
+      cause: err,
+    });
+  }
+}
+
+/** The part of the Nest app `enableGracefulShutdown` touches. */
+export type ShutdownHookTarget = Pick<INestApplication, 'enableShutdownHooks'>;
+
+/**
+ * Run the Nest destroy/shutdown hooks (cron last_run_at flush, voice
+ * attendance flush, Discord disconnect) on SIGTERM/SIGINT (TDB:2085).
+ *
+ * Signals are explicit: the no-arg form also listens on SIGSEGV/SIGILL/
+ * SIGBUS/SIGFPE, which are unsafe as JS listeners. `useProcessExit` is
+ * load-bearing: the API runs as PID 1 under api/Dockerfile, where Nest's
+ * default re-kill is ignored and the never-closed postgres.js pool would keep
+ * the process alive until docker's SIGKILL. It also makes a SIGTERM exit 0
+ * instead of 143. No effect in the allinone image until supervisord forwards
+ * the signal to node (the allinone infra half of TDB:2085).
+ */
+export function enableGracefulShutdown(app: ShutdownHookTarget): void {
+  app.enableShutdownHooks(['SIGTERM', 'SIGINT'], { useProcessExit: true });
+}

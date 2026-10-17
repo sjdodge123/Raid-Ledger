@@ -1,0 +1,1829 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600;700&family=MedievalSharp&family=Uncial+Antiqua&display=swap');
+
+@import "tailwindcss";
+
+/* ============================================
+   Theme Tokens — ROK-224
+   Semantic design tokens for theme support.
+   Dark theme values defined here; ROK-124 will
+   add [data-theme="light"] overrides.
+
+   Mapping reference:
+     bg-slate-950 → bg-backdrop
+     bg-slate-900 → bg-surface
+     bg-slate-800 → bg-panel
+     bg-slate-700 → bg-overlay
+     bg-slate-600 → bg-faint
+     bg-slate-500 → bg-dim
+     bg-slate-400 → bg-muted
+     text-white   → text-foreground
+     text-slate-300 → text-secondary
+     text-slate-400 → text-muted
+     text-slate-500 → text-dim
+     text-slate-600 → text-faint
+     border-slate-800 → border-edge-subtle
+     border-slate-700 → border-edge
+     border-slate-600 → border-edge-strong
+     border-slate-500 → border-dim
+     placeholder-slate-500 → placeholder-dim
+     divide-slate-* → divide-edge
+   ============================================ */
+
+@theme {
+    /* Surfaces — backgrounds */
+    --color-backdrop: #020617;
+    /* slate-950 */
+    --color-surface: #0f172a;
+    /* slate-900 */
+    --color-panel: #1e293b;
+    /* slate-800 */
+    --color-overlay: #334155;
+    /* slate-700 */
+
+    /* Neutral scale — dual-purpose (text & bg) */
+    --color-faint: #475569;
+    /* slate-600 */
+    --color-dim: #8291a7;
+    /* slate, between 500 and 400: 5.57 surface / 4.57 panel (TDB:2050; slate-500 #64748b was 3.75 / 3.07) — overlay stays 3.23, accepted; still a visible step under muted — faint-decorative.guard.test.ts */
+    --color-muted: #94a3b8;
+    /* slate-400 */
+    --color-busy: #8b5cf6;
+    /* violet-500 — committed elsewhere (ROK-1584) */
+    --color-slot: #22d3ee;
+    /* cyan-400 — a poll slot someone proposed (ROK-1587/1588) */
+
+    /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
+       MEANING, not the hue. Dark family values match the Tailwind shades these
+       replaced — emerald-500 / amber-500 — except danger, lifted to red-400 so it
+       reads as text (TDB:1770 ruling). semantic-tokens.guard.test.ts measures all
+       three on every dark scheme's surface, panel and /10 tint. */
+    --color-success: #10b981;
+    /* emerald-500 — primary action, "free", "on", confirmed */
+    --color-warning: #f59e0b;
+    /* amber-500 — needs attention, partial agreement, admin */
+    --color-danger: #f87171;
+    /* red-400 — destructive, conflict, "few people free"; 5.29 panel, 6.45 surface, 4.62 /10 tint (red-500 #ef4444 was 3.89 / 4.74 / 3.56). White on a solid bg-danger is 2.77:1, so a solid label takes --color-status-solid-label */
+    --color-status-solid-label: #0f172a;
+    /* label on a solid bg-success / bg-warning / bg-danger + text-white (TDB:2052): 7.04 / 8.31 / 6.45:1 on the dark fills, where white is 2.54 / 2.15 / 2.77:1 */
+
+    --color-secondary: #cbd5e1;
+    /* slate-300 */
+    --color-foreground: #ffffff;
+    /* white */
+
+    /* Borders */
+    --color-edge: #334155;
+    /* slate-700 */
+    --color-edge-strong: #475569;
+    /* slate-600 */
+    --color-edge-subtle: #1e293b;
+    /* slate-800 */
+}
+
+/*
+ * Week-strip band with two tones (ROK-1584, design §2).
+ *
+ * A band whose hours disagree — amber at 8 PM, red at 10 PM — paints both,
+ * split by a sliver of the page surface so the disagreement is visible at 5px
+ * tall. The two heat colours arrive as `--bar-l` / `--bar-r` inline, because
+ * they come from the aggregate; the geometry lives here rather than in an
+ * inline `background` so jsdom and Tailwind both stay out of the way.
+ */
+.strip-bar-split {
+    background: linear-gradient(105deg,
+            var(--bar-l) 0 46%,
+            var(--color-surface) 46% 54%,
+            var(--bar-r) 54% 100%);
+}
+
+/* Game Time Grid inline-style tokens — dark defaults (ROK-124) */
+html {
+    --gt-widget-bg: rgba(30, 41, 59, 0.7);
+    --gt-widget-border: rgba(51, 65, 85, 0.6);
+    --gt-split-bg: rgba(30, 41, 59, 0.8);
+    --gt-hover-glow: rgba(148, 163, 184, 0.2);
+    --gt-proximity-line: 148, 163, 184;
+}
+
+/* Light theme overrides (ROK-124, contrast fixes ROK-464) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
+    --color-backdrop: #f8fafc;
+    --color-surface: #ffffff;
+    --color-panel: #f1f5f9;
+    --color-overlay: #e2e8f0;
+    --color-faint: #cbd5e1;
+    --color-dim: #5a697f;
+    /* slate, 35% toward muted: 5.58 surface, 5.10 panel, 4.53 overlay (#64748b was 4.76 / 4.34 / 3.86) — faint-decorative.guard.test.ts */
+    --color-muted: #475569;
+    --color-busy: #7c3aed;
+    --color-slot: #0e7490;
+    /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
+       semantic-tokens.guard.test.ts, which recomputes them from these values — warning
+       and danger are ALSO asserted on the panel, the JourneyHero card and their own
+       /10 tint over the panel (ROK-1586 fleet plan 2026-09-22-2005-3f02). */
+    --color-success: #065f46;
+    /* emerald-800 — 7.68:1; 7.01 panel, 6.02 /10 tint; every tinted light scheme clears AA on its own panel and /10 tint, worst celestial 5.69 / 4.91 (TDB:1793 ruling; emerald-700 #047857 was 4.38 on the tint and 4.06 / 3.59 on celestial) */
+    --color-warning: #92400e;
+    /* amber-800   — 7.09:1; 6.47 panel, 6.36 hero, 5.58 /10 tint (amber-700 #b45309 was 4.02 on the tint) */
+    --color-danger: #b91c1c;
+    /* red-700     — 6.47:1; 5.91 panel, 5.80 hero, 4.99 /10 tint (red-600 #dc2626 was 4.41 / 4.33 / 3.78) */
+    --color-status-solid-label: #ffffff;
+    /* white on the light status fills: 7.68 / 7.09 / 6.47:1 (TDB:2052) — every light scheme inherits it, with or without its own fill */
+    --color-secondary: #334155;
+    --color-foreground: #0f172a;
+    --color-edge: #cbd5e1;
+    --color-edge-strong: #94a3b8;
+    --color-edge-subtle: #e2e8f0;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(241, 245, 249, 0.9);
+    --gt-widget-border: rgba(203, 213, 225, 0.6);
+    --gt-split-bg: rgba(226, 232, 240, 0.4);
+    --gt-hover-glow: rgba(100, 116, 139, 0.15);
+    --gt-proximity-line: 100, 116, 139;
+}
+
+/* Space theme overrides (ROK-228) */
+[data-scheme="space"] {
+    --color-backdrop: #0a0a1a;
+    --color-surface: #12122a;
+    --color-panel: #1a1a3e;
+    --color-overlay: #252550;
+    --color-faint: #3d3d6b;
+    --color-dim: #6b6b9e;
+    --color-muted: #9898c8;
+    --color-secondary: #c0c0e0;
+    --color-foreground: #e8e8ff;
+    --color-edge: #2d2a66;
+    --color-edge-strong: #45408a;
+    --color-edge-subtle: #1e1a4a;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(26, 26, 62, 0.7);
+    --gt-widget-border: rgba(61, 61, 107, 0.6);
+    --gt-split-bg: rgba(26, 26, 62, 0.8);
+    --gt-hover-glow: rgba(152, 152, 200, 0.2);
+    --gt-proximity-line: 152, 152, 200;
+}
+
+/* Underwater theme overrides (ROK-296) */
+[data-scheme="underwater"] {
+    --color-backdrop: #091424;
+    --color-surface: #0c1b2f;
+    --color-panel: #11233b;
+    --color-overlay: #172e48;
+    --color-faint: #2a4a60;
+    --color-dim: #3d6480;
+    --color-muted: #6b8fa8;
+    --color-secondary: #9ab8cc;
+    --color-foreground: #c8dce8;
+    --color-edge: #2a4535;
+    --color-edge-strong: #3a5a48;
+    --color-edge-subtle: #1e3328;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(20, 40, 64, 0.7);
+    --gt-widget-border: rgba(42, 69, 53, 0.6);
+    --gt-split-bg: rgba(20, 40, 64, 0.8);
+    --gt-hover-glow: rgba(107, 143, 168, 0.2);
+    --gt-proximity-line: 107, 143, 168;
+
+    /* Nautical accent tokens */
+    --uw-bioluminescent: #22d3a0;
+    --uw-bioluminescent-bright: #2eedb5;
+    --uw-coral-red: #e04848;
+    --uw-lantern-brass: #d4a843;
+    --uw-wood-highlight: rgba(139, 105, 60, 0.15);
+}
+
+/* ============================================
+   Batch 1: Sky + Obsidian themes (ROK-638, ROK-644)
+   ============================================ */
+
+/* Sky light theme — soft sky blues, pure whites (ROK-638) */
+[data-scheme="sky"] {
+    --color-backdrop: #F0F4F8;
+    --color-surface: #FFFFFF;
+    --color-panel: #E8F0F7;
+    --color-overlay: #D8E8F4;
+    --color-faint: #C2D4E8;
+    --color-dim: #4E6E8B;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.35 surface / 4.64 panel (was #7B9AB5) — faint-decorative.guard.test.ts */
+    --color-muted: #4A6580;
+    --color-secondary: #2A4A64;
+    --color-foreground: #0D1F2D;
+    --color-edge: #C2D4E8;
+    --color-edge-strong: #A0BACE;
+    --color-edge-subtle: #D8E8F4;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(232, 240, 247, 0.9);
+    --gt-widget-border: rgba(194, 212, 232, 0.6);
+    --gt-split-bg: rgba(216, 232, 244, 0.4);
+    --gt-hover-glow: rgba(74, 101, 128, 0.15);
+    --gt-proximity-line: 74, 101, 128;
+}
+
+/* Obsidian dark theme — near-blacks, muted teal accent (ROK-644) */
+[data-scheme="obsidian"] {
+    --color-backdrop: #080808;
+    --color-surface: #111111;
+    --color-panel: #1C1C1E;
+    --color-overlay: #242426;
+    --color-faint: #3A3A3C;
+    --color-dim: #636366;
+    --color-muted: #8E8E93;
+    --color-secondary: #AEAEB2;
+    --color-foreground: #F2F2F7;
+    --color-edge: #2C2C2E;
+    --color-edge-strong: #3A3A3C;
+    --color-edge-subtle: #1C1C1E;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(28, 28, 30, 0.7);
+    --gt-widget-border: rgba(44, 44, 46, 0.6);
+    --gt-split-bg: rgba(28, 28, 30, 0.8);
+    --gt-hover-glow: rgba(142, 142, 147, 0.2);
+    --gt-proximity-line: 142, 142, 147;
+}
+
+/* ============================================
+   Batch 2: Dawn Raid + Ember Forge themes (ROK-635, ROK-639)
+   ============================================ */
+
+/* Dawn Raid light theme — warm sunrise ambers and golds (ROK-635) */
+[data-scheme="dawn"] {
+    --color-backdrop: #FFF8F0;
+    --color-surface: #FFF1E3;
+    --color-panel: #FFE8D0;
+    --color-overlay: #FDDBB8;
+    --color-faint: #E8C99A;
+    --color-dim: #8A6045;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 4.93 surface / 4.61 panel (was #B08060) — faint-decorative.guard.test.ts */
+    --color-muted: #7A5535;
+    --color-secondary: #4A2E18;
+    --color-foreground: #2D1F0F;
+    --color-edge: #E8C99A;
+    --color-edge-strong: #CCA87A;
+    --color-edge-subtle: #FDDBB8;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(255, 232, 208, 0.9);
+    --gt-widget-border: rgba(232, 201, 154, 0.6);
+    --gt-split-bg: rgba(253, 219, 184, 0.4);
+    --gt-hover-glow: rgba(122, 85, 53, 0.15);
+    --gt-proximity-line: 122, 85, 53;
+}
+
+/* Ember Forge dark theme — warm charcoals, molten orange accent (ROK-639) */
+[data-scheme="ember"] {
+    --color-backdrop: #121010;
+    --color-surface: #1E1917;
+    --color-panel: #2A211E;
+    --color-overlay: #382E28;
+    --color-faint: #4A3830;
+    --color-dim: #7A6058;
+    --color-muted: #A8887A;
+    --color-secondary: #C8A898;
+    --color-foreground: #F0E6DC;
+    --color-edge: #3D2E28;
+    --color-edge-strong: #5A4238;
+    --color-edge-subtle: #2A211E;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(42, 33, 30, 0.7);
+    --gt-widget-border: rgba(61, 46, 40, 0.6);
+    --gt-split-bg: rgba(42, 33, 30, 0.8);
+    --gt-hover-glow: rgba(168, 136, 122, 0.2);
+    --gt-proximity-line: 168, 136, 122;
+}
+
+/* ============================================
+   Batch 3: Holy + Arctic Night themes (ROK-636, ROK-642)
+   ============================================ */
+
+/* Holy / Stained Glass light theme — crisp whites, deep navy + gold (ROK-636) */
+[data-scheme="holy"] {
+    --color-backdrop: #F8F9FC;
+    --color-surface: #FFFFFF;
+    --color-panel: #EEF2FB;
+    --color-overlay: #E0E6F5;
+    --color-faint: #C8D3E8;
+    --color-dim: #576E93;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.18 surface / 4.62 panel (was #748AAD) — faint-decorative.guard.test.ts */
+    --color-muted: #4A5E82;
+    --color-secondary: #2A3A5A;
+    --color-foreground: #0F1A2E;
+    --color-edge: #C8D3E8;
+    --color-edge-strong: #A8BACC;
+    --color-edge-subtle: #E0E6F5;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(238, 242, 251, 0.9);
+    --gt-widget-border: rgba(200, 211, 232, 0.6);
+    --gt-split-bg: rgba(224, 230, 245, 0.4);
+    --gt-hover-glow: rgba(74, 94, 130, 0.15);
+    --gt-proximity-line: 74, 94, 130;
+}
+
+/* Arctic Night dark theme — deep blue-blacks, ice blue accent (ROK-642) */
+[data-scheme="arctic"] {
+    --color-backdrop: #080C12;
+    --color-surface: #0E1520;
+    --color-panel: #162030;
+    --color-overlay: #1E2E40;
+    --color-faint: #253A50;
+    --color-dim: #3A5A78;
+    --color-muted: #6A90B8;
+    --color-secondary: #98BAD8;
+    --color-foreground: #E0EEFF;
+    --color-edge: #1E3048;
+    --color-edge-strong: #2A4060;
+    --color-edge-subtle: #102035;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(22, 32, 48, 0.7);
+    --gt-widget-border: rgba(30, 48, 72, 0.6);
+    --gt-split-bg: rgba(22, 32, 48, 0.8);
+    --gt-hover-glow: rgba(106, 144, 184, 0.2);
+    --gt-proximity-line: 106, 144, 184;
+}
+
+/* ============================================
+   Batch 4: Celestial Chart + Blood Moon themes (ROK-637, ROK-641)
+   ============================================ */
+
+/* Celestial Chart light theme — warm ivory, deep navy + antique gold (ROK-637) */
+[data-scheme="celestial"] {
+    --color-backdrop: #F5F0E8;
+    --color-surface: #EDE8DC;
+    --color-panel: #E4DDD0;
+    --color-overlay: #D8D0C0;
+    --color-faint: #C0B098;
+    --color-dim: #6D5E4B;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.12 surface / 4.64 panel (was #8A7860) — faint-decorative.guard.test.ts */
+    --color-muted: #6A5840;
+    --color-danger: #991b1b;
+    /* TDB:1770: red-800, the end of the red-700 → red-800 line, for headroom (the lightest AA step #ad1c1c sat at 4.50 on the tint): 6.80 surface / 6.15 panel / 5.25 /10 tint (#b91c1c was 5.29 / 4.79 / 4.12); white on it 8.31 — semantic-tokens.guard.test.ts */
+    --color-secondary: #3D3560;
+    --color-foreground: #1A1A2E;
+    --color-edge: #B8A88A;
+    --color-edge-strong: #9A8870;
+    --color-edge-subtle: #D0C8B8;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(228, 221, 208, 0.9);
+    --gt-widget-border: rgba(184, 168, 138, 0.6);
+    --gt-split-bg: rgba(216, 208, 192, 0.4);
+    --gt-hover-glow: rgba(106, 88, 64, 0.15);
+    --gt-proximity-line: 106, 88, 64;
+}
+
+/* Blood Moon dark theme — deep burgundy-blacks, blood crimson accent (ROK-641) */
+[data-scheme="bloodmoon"] {
+    --color-backdrop: #0E0808;
+    --color-surface: #1A0E0E;
+    --color-panel: #241414;
+    --color-overlay: #301A1A;
+    --color-faint: #4A2020;
+    --color-dim: #7A4040;
+    --color-muted: #9E6060;
+    --color-secondary: #C89090;
+    --color-foreground: #F5E0E0;
+    --color-edge: #3D1A1A;
+    --color-edge-strong: #5A2A2A;
+    --color-edge-subtle: #241414;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(36, 20, 20, 0.7);
+    --gt-widget-border: rgba(61, 26, 26, 0.6);
+    --gt-split-bg: rgba(36, 20, 20, 0.8);
+    --gt-hover-glow: rgba(158, 96, 96, 0.2);
+    --gt-proximity-line: 158, 96, 96;
+}
+
+/* ============================================
+   Batch 5: Midnight Forest + Fel Green themes (ROK-640, ROK-643)
+   ============================================ */
+
+/* Midnight Forest dark theme — deep forest greens, bioluminescent teal (ROK-640) */
+[data-scheme="forest"] {
+    --color-backdrop: #0A0F0C;
+    --color-surface: #111A14;
+    --color-panel: #182B1C;
+    --color-overlay: #1E3822;
+    --color-faint: #284A30;
+    --color-dim: #3D6A48;
+    --color-muted: #6A9E72;
+    --color-secondary: #96C49E;
+    --color-foreground: #D8F0DD;
+    --color-edge: #1F3D25;
+    --color-edge-strong: #2E5A36;
+    --color-edge-subtle: #122018;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(24, 43, 28, 0.7);
+    --gt-widget-border: rgba(31, 61, 37, 0.6);
+    --gt-split-bg: rgba(24, 43, 28, 0.8);
+    --gt-hover-glow: rgba(106, 158, 114, 0.2);
+    --gt-proximity-line: 106, 158, 114;
+}
+
+/* Fel Green dark theme — near-black, electric fel green + corrupted purple (ROK-643) */
+[data-scheme="fel"] {
+    --color-backdrop: #0A0C0A;
+    --color-surface: #131613;
+    --color-panel: #1A201A;
+    --color-overlay: #203028;
+    --color-faint: #284030;
+    --color-dim: #3D6040;
+    --color-muted: #6A9060;
+    --color-secondary: #96C090;
+    --color-foreground: #D8F0D0;
+    --color-edge: #1F3020;
+    --color-edge-strong: #2C4830;
+    --color-edge-subtle: #121814;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(26, 32, 26, 0.7);
+    --gt-widget-border: rgba(31, 48, 32, 0.6);
+    --gt-split-bg: rgba(26, 32, 26, 0.8);
+    --gt-hover-glow: rgba(106, 144, 96, 0.2);
+    --gt-proximity-line: 106, 144, 96;
+}
+
+/* ============================================
+   UX Design System - Raid Ledger
+   Based on ux-design-specification.md
+   ============================================ */
+
+:root {
+    /* Class/Role Colors (MMO Standard) */
+    --color-tank: #C79C6E;
+    --color-healer: #F58CBA;
+    --color-dps-melee: #ABD473;
+    --color-dps-ranged: #3FC7EB;
+
+    /* Rarity Scale (Loot Colors) */
+    --color-legendary: #FF8000;
+    --color-epic: #A335EE;
+    --color-rare: #0070DD;
+    --color-uncommon: #1EFF00;
+    --color-poor: #9D9D9D;
+
+    /* Status Colors */
+    --color-ready: #22C55E;
+    --color-late: #EAB308;
+    --color-absent: #EF4444;
+
+    /* Glow Effects */
+    --glow-emerald: 0 0 20px rgba(16, 185, 129, 0.4);
+    --glow-indigo: 0 0 20px rgba(99, 102, 241, 0.4);
+    --glow-epic: 0 0 20px rgba(163, 53, 238, 0.4);
+}
+
+/* ============================================
+   Spring Animation System (ROK-341)
+   CSS-first spring physics using linear() timing.
+   Fallback to cubic-bezier for older browsers.
+   ============================================ */
+
+:root {
+    /* Fallback: cubic-bezier approximation of spring bounce */
+    --spring-smooth: cubic-bezier(0.25, 1.0, 0.5, 1.0);
+    --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1.0);
+}
+
+/* Modern browsers: true spring physics via linear() */
+@supports (transition-timing-function: linear(0, 1)) {
+    :root {
+        /* Smooth spring — gentle settle, no visible overshoot */
+        --spring-smooth: linear(0, 0.218 2.1%, 0.862 6.5%, 1.114 8.5%, 1.192 9.9%,
+                1.240 11.1%, 1.252 12.45%, 1.228 14.0%, 1.118 18.4%,
+                1.042 22.0%, 1.005 25.5%, 0.988 28.7%, 0.984 32.6%,
+                0.998 40.8%, 1.002 50.0%, 1);
+        /* Bouncy spring — visible overshoot for playful feel */
+        --spring-bounce: linear(0, 0.128 1.74%, 0.847 6.39%, 1.146 9.15%,
+                1.260 10.88%, 1.326 12.63%, 1.338 14.09%,
+                1.290 16.21%, 1.108 21.04%, 1.020 24.42%,
+                0.976 27.78%, 0.958 31.82%, 0.966 38.0%,
+                0.998 50.0%, 1);
+    }
+}
+
+/* Modal entrance: scale from 0.92 → slight overshoot → 1.0 */
+@keyframes modal-spring {
+    0% {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Drawer slide: translateX from -100% → slight overshoot → 0 */
+@keyframes drawer-slide {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+/* Button press spring — applies to interactive elements */
+button:active,
+a:active,
+[role="button"]:active {
+    transform: scale(0.97) !important;
+    transition: transform 120ms var(--spring-bounce) !important;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --spring-smooth: ease;
+        --spring-bounce: ease;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    button:active,
+    a:active,
+    [role="button"]:active {
+        transform: none !important;
+    }
+}
+
+/* ============================================
+   Accessibility — Focus Indicators (ROK-342)
+   Visible :focus-visible ring for keyboard users.
+   Uses emerald accent to match the design system.
+   ============================================ */
+
+*:focus-visible {
+    outline: 2px solid var(--color-success);
+    outline-offset: 2px;
+}
+
+/* Remove default outline when not using keyboard */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Screen-reader only utility */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Skip link — visible on focus for keyboard users (ROK-342) */
+.skip-link {
+    position: fixed;
+    top: -100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    padding: 0.75rem 1.5rem;
+    background-color: #10b981;
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 0 0 0.5rem 0.5rem;
+    text-decoration: none;
+    transition: top 150ms ease-in-out;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Base Styles */
+html {
+    color-scheme: dark;
+    background-color: var(--color-surface);
+}
+
+/* ROK-1661: a chromeless /p/* page has no footer and ends on --color-backdrop,
+   so there the canvas stays backdrop too, or the run-out shows a surface strip.
+   Layout.tsx sets the attribute while a chromeless page renders. */
+html[data-chromeless] {
+    background-color: var(--color-backdrop);
+}
+
+html:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
+    color-scheme: light;
+}
+
+html[data-scheme="space"] {
+    color-scheme: dark;
+}
+
+html[data-scheme="underwater"] {
+    color-scheme: dark;
+}
+
+/* ROK-1661: the root canvas is the footer's colour, and body stays transparent.
+   iPad Safari lets a page scroll or pan past the document's end (past its
+   scroll height or the layout viewport's edge), and WebKit fills that area with
+   one flat colour: html's background-color with body's blended over it
+   (background images don't count). A body colour would win there, so body sets
+   none and the area reads as --color-surface, flush with the footer. The Layout
+   shell (Layout.tsx) is the only element that paints --color-backdrop (a
+   chromeless page's canvas aside, html[data-chromeless] above).
+   No `min-height: 100vh` floor on body / #root either: iOS Safari's `vh` is the
+   LARGE viewport, so that floor always made a short page scroll by the
+   toolbar's height; the shell floors itself on the visible viewport instead. */
+body {
+    margin: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Typography - Display/Headers */
+.font-display {
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.02em;
+}
+
+/* Glassmorphism Card */
+.glass-card {
+    background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+    backdrop-filter: blur(12px);
+    border: 1px solid color-mix(in srgb, var(--color-muted) 10%, transparent);
+}
+
+.glass-card:hover {
+    border-color: color-mix(in srgb, var(--color-muted) 20%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+}
+
+/* Light mode glass-card: opaque with subtle shadow */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glass-card {
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glass-card:hover {
+    background: color-mix(in srgb, var(--color-surface) 95%, transparent);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   Light Mode — Status Color Contrast Fixes (ROK-464)
+   Dark-first Tailwind -300/-400 shades (~1.4-3:1 on white) repainted to
+   -600…-800 shades that clear WCAG AA on the surface, panel and chip tint.
+   Only active under :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]).
+   ============================================ */
+
+/* --- Text colors (ROK-464, re-measured ROK-1586) ---
+   Every repaint clears 4.5:1 on EVERY light scheme's surface, panel AND its own
+   -500/10 chip tint over that panel. The binding scheme is celestial (panel #e4ddd0);
+   ratios below that name no scheme are the shared light block's surface / panel / tint.
+   Guarded by web/src/styles/raw-hue-light.guard.test.ts. Prefer the tokens
+   (text-success / text-warning / text-danger) in new code. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-300 { color: #991b1b; }  /* red-800: worst 5.52 (celestial /10 tint) — red-700 is 4.29 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400 { color: #991b1b; }  /* red-800: worst 5.52 (celestial /10 tint) — red-700 is 4.29 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-300 { color: #92400e; }  /* amber-800 = light --color-warning: 7.09 / 6.47 / 6.02 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #92400e; }  /* amber-800 = light --color-warning: 7.09 / 6.47 / 6.02 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-400 { color: #854d0e; }  /* yellow-800: 6.85 / 6.25 / 5.88 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-500 { color: #854d0e; }  /* yellow-800: 6.85 / 6.25 / 5.88 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-400 { color: #166534; }  /* green-800: 7.13 / 6.51 / 6.01 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #166534; }  /* green-800: 7.13 / 6.51 / 6.01 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint) — emerald-700 is 3.76 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint) — emerald-700 is 3.76 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint); #047857 is 3.76 there (light success is #065f46 too, TDB:1793) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #6d28d9; }  /* violet-700: worst 4.73 (celestial tint) — violet-600 is 3.79 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-300 { color: #4338ca; }  /* indigo-700: worst 5.25 (celestial tint) — indigo-600 is 4.18 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4338ca; }  /* indigo-700: worst 5.25 (celestial tint) — indigo-600 is 4.18 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 (cyan-700 is 4.50 on the tint — no margin) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-teal-400 { color: #115e59; }  /* teal-800: worst 5.04 (celestial raw /15) — teal-700 is 3.64 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-gray-400 { color: #374151; }  /* gray-700: worst 6.18 (celestial, raw /20 chip) — gray-600 is 4.78 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-300 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-400 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
+
+/* Opacity variants of status text colors — same hue as the repaint above, alpha raised
+   to the AA floor on every light scheme (a /60 at .65 alpha was ~2.5:1 on celestial) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/80 { color: rgba(153, 27, 27, 0.9); }  /* red-800 @ .9: worst 4.76 — .87 is the AA floor on celestial */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/70 { color: rgba(153, 27, 27, 0.9); }  /* red-800 @ .9: worst 4.76 — .87 is the AA floor on celestial */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/60 { color: rgba(153, 27, 27, 0.9); }  /* red-800 @ .9: worst 4.76 — .87 is the AA floor on celestial */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/80 { color: rgba(146, 64, 14, 0.95); }  /* amber-800 @ .95: worst ≥4.51 — .94 is the AA floor on celestial */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/70 { color: rgba(146, 64, 14, 0.95); }  /* amber-800 @ .95: worst ≥4.51 — .94 is the AA floor on celestial */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/60 { color: rgba(146, 64, 14, 0.95); }  /* amber-800 @ .95: worst ≥4.51 — .94 is the AA floor on celestial */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-500\/80 { color: rgba(146, 64, 14, 0.95); }  /* amber-800 @ .95 */
+
+/* Hover state colors: in light mode, hover should darken (one step past the repaint) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-red-300:hover { color: #7f1d1d; }  /* red-900: worst 6.65 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-amber-300:hover { color: #78350f; }  /* amber-900 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-yellow-300:hover { color: #713f12; }  /* yellow-900 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-green-300:hover { color: #14532d; }  /* green-900 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-emerald-300:hover { color: #064e3b; }  /* emerald-900: worst 6.67 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-cyan-300:hover { color: #164e63; }  /* cyan-900 */
+
+/* --- Background tints: dark-mode-specific opacity tints need light-mode equivalents --- */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-950\/50 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-500\/10 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-500\/20 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/20 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/5 { background-color: rgba(254, 243, 199, 0.35); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/20 { background-color: rgba(254, 243, 199, 0.7); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/20 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/30 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/50 { background-color: rgba(167, 243, 208, 0.6); }   /* emerald-200 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/10 { background-color: rgba(220, 252, 231, 0.5); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/20 { background-color: rgba(220, 252, 231, 0.7); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/20 { background-color: rgba(254, 249, 195, 0.6); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-900\/30 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/15 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/25 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-indigo-500\/10 { background-color: rgba(224, 231, 255, 0.5); }    /* indigo-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/10 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/15 { background-color: rgba(207, 250, 254, 0.5); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/20 { background-color: rgba(207, 250, 254, 0.6); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-indigo-500\/15 { background-color: rgba(224, 231, 255, 0.6); }    /* indigo-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/15 { background-color: rgba(220, 252, 231, 0.6); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-teal-500\/15 { background-color: rgba(204, 251, 241, 0.6); }      /* teal-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-purple-500\/15 { background-color: rgba(243, 232, 255, 0.6); }    /* purple-100 */
+
+/* Hover backgrounds */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-950\/50:hover { background-color: rgba(254, 226, 226, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-500\/20:hover { background-color: rgba(254, 202, 202, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-500\/30:hover { background-color: rgba(254, 202, 202, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/30:hover { background-color: rgba(254, 202, 202, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/30:hover { background-color: rgba(253, 230, 138, 0.6); }  /* amber-200: a visible step over the /20 amber-100 base */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/10:hover { background-color: rgba(252, 211, 77, 0.5); }  /* amber-300: ≥1.04 step over every light panel AND surface; amber-100 is ~1.01 on light/holy (1.00 on the quest-log/dawn surfaces); amber-200 is 1.01 on the quest-log panel and celestial surface */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
+
+/* --- Border colors: dark-mode tinted borders need visible light equivalents --- */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-900 { border-color: #fca5a5; }             /* red-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/20 { border-color: rgba(252, 165, 165, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/30 { border-color: rgba(252, 165, 165, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-600\/50 { border-color: rgba(248, 113, 113, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-amber-500\/30 { border-color: rgba(252, 211, 77, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-amber-500\/40 { border-color: rgba(252, 211, 77, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-500\/30 { border-color: rgba(253, 224, 71, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-700\/40 { border-color: rgba(202, 138, 4, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-emerald-500\/30 { border-color: rgba(110, 231, 183, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-indigo-500\/30 { border-color: rgba(165, 180, 252, 0.5); }  /* indigo-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-teal-500\/30 { border-color: rgba(94, 234, 212, 0.5); }  /* teal-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-purple-500\/30 { border-color: rgba(216, 180, 254, 0.5); }  /* purple-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
+
+/* --- Badge overlay: preserve dark-theme colors for badges on cover images (ROK-493) ---
+   Badges overlaid on dark game-cover images must keep light text/bg regardless
+   of the active color scheme. The .badge-overlay class can be placed on a
+   parent container (the desktop card's cover) or directly on a badge that sits
+   on the art. Never on a badge over the themed surface — the mobile card's
+   chips are not on art (ROK-1472; badge-overlay-art-only.guard.test.ts).
+   The :is(.badge-overlay, .badge-overlay *) pattern matches both
+   cases with enough specificity to beat the light-mode overrides above,
+   so no !important is needed. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-emerald-500 { color: #10b981; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-yellow-500 { color: #eab308; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-indigo-300 { color: #a5b4fc; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-indigo-500\/30 { border-color: rgba(99, 102, 241, 0.3); }
+
+/* --- Keep-dark: raw text on a fixed dark panel ---
+   The WoW item fallback tooltip (plugins/wow/components/item-fallback-tooltip.tsx) sits on a
+   fixed bg-gray-900 (#111827) in every scheme, so its raw hues keep their dark shades there:
+   the light repaints above would be 1.72 (gray-700) / 2.49 (green-800) / 2.65 (blue-700) /
+   2.50 (violet-700) / 2.59 (yellow-800):1. Scoped by the dark ancestor, not .badge-overlay
+   (that class is for badges on cover art only — badge-overlay-art-only.guard.test.ts). */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-gray-400 { color: #9ca3af; }  /* gray-400: 6.99 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-green-400 { color: #4ade80; }  /* green-400: 10.18 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-blue-400 { color: #60a5fa; }  /* blue-400: 6.98 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-purple-400 { color: #c084fc; }  /* purple-400: 6.71 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-yellow-400 { color: #facc15; }  /* yellow-400: 11.58 on #111827 */
+
+/* --- Solid-color button text: force white on colored backgrounds ---
+   Button brandColor is NOT listed: its label is picked by contrast below. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(
+    .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
+    .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
+    .bg-\[\#5865F2\]
+).text-foreground {
+    --color-foreground: #ffffff;
+}
+
+/* --- Solid fills a white label cannot clear: force the dark label (ROK-1472) ---
+   cyan-600 #0092b8 is 3.62:1 under white, and each light scheme's own foreground
+   lands between 4.42 (dawn #2D1F0F) and 4.93 (default-light #0f172a). #0f172a
+   (the brand dark label) is 4.93 on it and 7.55 on cyan-500 #00b8db (hover, YouOwnBadge; white 2.37). */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.bg-cyan-600, .bg-cyan-500).text-foreground {
+    --color-foreground: #0f172a;
+}
+
+/* --- Solid status fills: the scheme's own label (TDB:2052, ruling 2026-10-08) ---
+   bg-success / bg-warning / bg-danger keep their token fill in both families (ROK-1472).
+   A raw text-white label clears AA on the light fills (#065f46 7.68:1, #92400e 7.09:1,
+   #b91c1c 6.47:1) but not on the dark ones (#10b981 2.54:1, #f59e0b 2.15:1, #f87171
+   2.77:1), so it paints --color-status-solid-label: #0f172a in @theme (7.04 / 8.31 /
+   6.45:1), #ffffff in the shared light block. A custom property resolves from the
+   NEAREST ancestor that sets it, so a scoped <div data-scheme="light"> under a dark root
+   (/dev/design-system side by side) pairs its light fills with white — no html coupling.
+   Unlayered, so it beats the text-white utility — brand-fill-forced-white.guard.test.ts. */
+:is(.bg-success, .bg-warning, .bg-danger).text-white {
+    color: var(--color-status-solid-label);
+}
+
+/* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---
+   emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
+   (the light --color-success until TDB:1793 moved that to #065f46) is 5.48:1. Its hover goes DARKER, emerald-800
+   #065f46 (7.68:1) — scoped to elements that also carry .bg-emerald-600, so other
+   hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins.
+   Unlayered, so these beat every @layer utilities variant: both skip a :disabled /
+   [aria-disabled="true"] element that carries its OWN disabled:bg-* / aria-disabled:bg-*
+   paint, so that paint wins; an opacity-only disabled or loading primary (Button's
+   DISABLED is disabled:opacity-50, `loading` sets aria-disabled) keeps this fill and fades. Every .bg-emerald-600 steps — badges, dots and toggle tracks too: the
+   darker green keeps or gains contrast on light surfaces. Hover is gated like
+   Tailwind v4's own hover: variant. Pressed: being unlayered, the base rule also
+   beat every active:bg-* utility, so a primary that asks for a pressed fill gets
+   emerald-900 #064e3b (9.72:1) — darker than both rest and hover, so the press
+   reads on touch and under a hovering pointer alike. Scoped to elements that
+   carry an active:bg-* class, like hover; not hover-gated, like Tailwind's active:. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) { background-color: #047857; }
+@media (hover: hover) {
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover { background-color: #065f46; }
+}
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600[class*="active:bg-"]:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):active { background-color: #064e3b; }
+
+/* --- Button brandColor label (ROK-1472, operator ruling 2026-10-04) ---
+   data-brand-label is brandLabelFor(fill) — whichever of white / #0f172a has the
+   higher WCAG contrast on the runtime fill (lib/brand-label.ts). EVERY scheme. */
+[data-brand-fill][data-brand-label="light"].text-foreground { --color-foreground: #ffffff; }
+[data-brand-fill][data-brand-label="dark"].text-foreground { --color-foreground: #0f172a; }
+
+/* --- Panel/card shadow for light mode panel-on-surface distinction ---
+ * In @layer components so Tailwind utilities (focus-visible:ring-*, shadow-*)
+ * win: unlayered, this box-shadow overrode every focus ring on a bg-panel
+ * field in the light schemes. */
+@layer components {
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel,
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel\/50,
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel\/80 {
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+}
+
+/* Space theme: glassmorphism with nebula tint (ROK-228) */
+[data-scheme="space"] .glass-card {
+    background: color-mix(in srgb, var(--color-surface) 65%, transparent);
+    backdrop-filter: blur(16px);
+    border-color: color-mix(in srgb, #8b5cf6 15%, transparent);
+    box-shadow:
+        0 0 1px rgba(139, 92, 246, 0.15),
+        inset 0 0 20px rgba(139, 92, 246, 0.03);
+}
+
+[data-scheme="space"] .glass-card:hover {
+    border-color: color-mix(in srgb, #8b5cf6 25%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 75%, transparent);
+    box-shadow:
+        0 0 2px rgba(139, 92, 246, 0.2),
+        inset 0 0 25px rgba(139, 92, 246, 0.05);
+}
+
+/* Glow Button Effects */
+.glow-emerald {
+    box-shadow: var(--glow-emerald);
+}
+
+.glow-emerald:hover {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+}
+
+.glow-indigo {
+    box-shadow: var(--glow-indigo);
+}
+
+.glow-indigo:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+/* Light mode: reduced glows */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-emerald {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-emerald:hover {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-indigo {
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-indigo:hover {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+/* Space theme: enhanced purple-cyan glows (ROK-228) */
+[data-scheme="space"] .glow-emerald {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.35), 0 0 40px rgba(139, 92, 246, 0.1);
+}
+
+[data-scheme="space"] .glow-emerald:hover {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.5), 0 0 50px rgba(139, 92, 246, 0.15);
+}
+
+[data-scheme="space"] .glow-indigo {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.35), 0 0 40px rgba(139, 92, 246, 0.15);
+}
+
+[data-scheme="space"] .glow-indigo:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5), 0 0 50px rgba(139, 92, 246, 0.2);
+}
+
+/* Role Badge Colors */
+.role-tank {
+    color: var(--color-tank);
+    border-color: var(--color-tank);
+}
+
+.role-healer {
+    color: var(--color-healer);
+    border-color: var(--color-healer);
+}
+
+.role-dps {
+    color: var(--color-dps-melee);
+    border-color: var(--color-dps-melee);
+}
+
+/* Rarity Badges */
+.rarity-legendary {
+    color: var(--color-legendary);
+    text-shadow: 0 0 10px var(--color-legendary);
+}
+
+.rarity-epic {
+    color: var(--color-epic);
+    text-shadow: 0 0 10px var(--color-epic);
+}
+
+.rarity-rare {
+    color: var(--color-rare);
+}
+
+/* Smooth transitions */
+* {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+}
+
+/* ============================================
+   Space Theme — Neon Border Effects (ROK-228)
+   Sci-fi inspired cyan/purple/magenta glow on
+   edges, panels, inputs, and interactive elements.
+   pointer-events: none on pseudo-elements.
+   ============================================ */
+
+[data-scheme="space"] {
+    --neon-cyan: rgba(56, 189, 248, 0.4);
+    --neon-purple: rgba(139, 92, 246, 0.35);
+    --neon-magenta: rgba(217, 70, 239, 0.3);
+}
+
+/* Panel / card neon border glow */
+[data-scheme="space"] .bg-surface,
+[data-scheme="space"] .glass-card {
+    box-shadow:
+        0 0 1px var(--neon-purple),
+        inset 0 0 15px rgba(139, 92, 246, 0.03);
+}
+
+/* Stronger glow on explicit bordered panels */
+[data-scheme="space"] .border-edge,
+[data-scheme="space"] .border-edge-subtle {
+    border-color: rgba(139, 92, 246, 0.25);
+}
+
+[data-scheme="space"] .border-edge-strong {
+    border-color: rgba(139, 92, 246, 0.35);
+}
+
+/* Rounded cards get a subtle outer neon glow */
+[data-scheme="space"] .rounded-xl {
+    box-shadow:
+        0 0 2px rgba(139, 92, 246, 0.2),
+        0 0 8px rgba(56, 189, 248, 0.06);
+}
+
+/* Primary action buttons: emerald with cyan accent */
+[data-scheme="space"] .bg-emerald-600 {
+    box-shadow:
+        0 0 12px rgba(16, 185, 129, 0.3),
+        0 0 20px rgba(56, 189, 248, 0.1);
+}
+
+[data-scheme="space"] .bg-emerald-600:hover {
+    box-shadow:
+        0 0 16px rgba(16, 185, 129, 0.45),
+        0 0 30px rgba(56, 189, 248, 0.15);
+}
+
+/* Indigo buttons: purple+magenta accent */
+[data-scheme="space"] .bg-indigo-600 {
+    box-shadow:
+        0 0 12px rgba(99, 102, 241, 0.3),
+        0 0 20px rgba(217, 70, 239, 0.1);
+}
+
+[data-scheme="space"] .bg-indigo-600:hover {
+    box-shadow:
+        0 0 16px rgba(99, 102, 241, 0.45),
+        0 0 30px rgba(217, 70, 239, 0.15);
+}
+
+/* Header bar */
+[data-scheme="space"] header {
+    border-bottom-color: rgba(139, 92, 246, 0.2);
+    box-shadow: 0 1px 8px rgba(139, 92, 246, 0.1);
+}
+
+/* Form inputs get a subtle neon focus ring */
+[data-scheme="space"] input:focus,
+[data-scheme="space"] select:focus,
+[data-scheme="space"] textarea:focus {
+    box-shadow:
+        0 0 0 2px rgba(139, 92, 246, 0.25),
+        0 0 8px rgba(56, 189, 248, 0.1);
+}
+
+/* Dividers / horizontal rules */
+[data-scheme="space"] hr,
+[data-scheme="space"] .divide-edge> :not(:first-child) {
+    border-color: rgba(139, 92, 246, 0.15);
+}
+
+/* Links: subtle cyan underline glow on hover */
+[data-scheme="space"] a:hover {
+    text-shadow: 0 0 6px rgba(56, 189, 248, 0.3);
+}
+
+/* Scrollbar — thin neon track */
+[data-scheme="space"] ::-webkit-scrollbar {
+    width: 6px;
+}
+
+[data-scheme="space"] ::-webkit-scrollbar-track {
+    background: rgba(10, 10, 26, 0.5);
+}
+
+[data-scheme="space"] ::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.3);
+    border-radius: 3px;
+}
+
+[data-scheme="space"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.5);
+}
+
+/* ============================================
+   Underwater Theme — Deep Sea Nautical (ROK-296)
+   Dark sub-theme with waterlogged wood borders,
+   bioluminescent accents, and a moody blue-green palette.
+   ============================================ */
+
+/* Nautical wood-grain borders — cards (bg-surface + border + rounded) */
+[data-scheme="underwater"] .bg-surface.border-edge.rounded-lg,
+[data-scheme="underwater"] .bg-surface.rounded-lg.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 8px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 1px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .bg-surface.border-edge.rounded-lg:hover,
+[data-scheme="underwater"] .bg-surface.rounded-lg.border:hover {
+    border-color: var(--color-edge-strong);
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 4px rgba(34, 211, 160, 0.12);
+}
+
+/* Premium/integration cards (bg-panel + rounded-xl) */
+[data-scheme="underwater"] .bg-panel\/50.rounded-xl.border,
+[data-scheme="underwater"] .bg-panel.rounded-xl.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 2px rgba(34, 211, 160, 0.1);
+}
+
+/* Modals — bg-surface + rounded-xl + border + shadow */
+[data-scheme="underwater"] .bg-surface.rounded-xl.border-edge,
+[data-scheme="underwater"] .bg-surface.rounded-xl.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 6px rgba(34, 211, 160, 0.08),
+        0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Modal header/footer dividers — wood grain */
+[data-scheme="underwater"] .border-b.border-edge,
+[data-scheme="underwater"] .border-t.border-edge {
+    border-color: var(--color-edge);
+}
+
+/* Glass cards */
+[data-scheme="underwater"] .glass-card {
+    border: 2px solid var(--color-edge);
+    border-radius: 8px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 1px rgba(34, 211, 160, 0.1);
+}
+
+/* Sidebar nav items — subtle wood border on active */
+[data-scheme="underwater"] .bg-emerald-500\/10.rounded-lg {
+    border: 1px solid var(--color-edge);
+    box-shadow: inset 0 1px 0 var(--uw-wood-highlight);
+}
+
+/* General: any bordered surface/panel gets the wood highlight */
+[data-scheme="underwater"] .bg-surface.border,
+[data-scheme="underwater"] .bg-panel.border {
+    border-color: var(--color-edge);
+    box-shadow: inset 0 1px 0 var(--uw-wood-highlight);
+}
+
+/* BottomSheet — wood border on top edge */
+[data-scheme="underwater"] .bg-surface.rounded-t-2xl {
+    border-top: 2px solid var(--color-edge);
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 -4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Rounded cards: subtle bioluminescent outer glow */
+[data-scheme="underwater"] .rounded-xl.border {
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 2px rgba(34, 211, 160, 0.1),
+        0 0 6px rgba(34, 211, 160, 0.04);
+}
+
+/* Primary buttons: bioluminescent teal glow */
+[data-scheme="underwater"] .bg-emerald-600 {
+    box-shadow:
+        0 0 12px rgba(34, 211, 160, 0.25),
+        0 0 20px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .bg-emerald-600:hover {
+    box-shadow:
+        0 0 16px rgba(34, 211, 160, 0.4),
+        0 0 30px rgba(34, 211, 160, 0.12);
+}
+
+/* Indigo buttons: deep sea purple accent */
+[data-scheme="underwater"] .bg-indigo-600 {
+    box-shadow:
+        0 0 12px rgba(99, 102, 241, 0.2),
+        0 0 20px rgba(34, 211, 160, 0.06);
+}
+
+[data-scheme="underwater"] .bg-indigo-600:hover {
+    box-shadow:
+        0 0 16px rgba(99, 102, 241, 0.35),
+        0 0 30px rgba(34, 211, 160, 0.1);
+}
+
+/* Header: waterlogged timber bottom border */
+[data-scheme="underwater"] header {
+    border-bottom-color: var(--color-edge);
+    box-shadow: 0 1px 6px rgba(34, 211, 160, 0.06);
+}
+
+/* Form inputs: bioluminescent focus glow */
+[data-scheme="underwater"] input:focus,
+[data-scheme="underwater"] select:focus,
+[data-scheme="underwater"] textarea:focus {
+    box-shadow:
+        0 0 0 2px rgba(34, 211, 160, 0.2),
+        0 0 8px rgba(34, 211, 160, 0.08);
+}
+
+/* Dividers */
+[data-scheme="underwater"] hr,
+[data-scheme="underwater"] .divide-edge> :not(:first-child) {
+    border-color: rgba(42, 69, 53, 0.4);
+}
+
+/* Links: subtle teal glow on hover */
+[data-scheme="underwater"] a:hover {
+    text-shadow: 0 0 6px rgba(34, 211, 160, 0.2);
+}
+
+/* Glow overrides — bioluminescent teal */
+[data-scheme="underwater"] .glow-emerald {
+    box-shadow: 0 0 20px rgba(34, 211, 160, 0.3), 0 0 40px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .glow-emerald:hover {
+    box-shadow: 0 0 30px rgba(34, 211, 160, 0.45), 0 0 50px rgba(34, 211, 160, 0.12);
+}
+
+[data-scheme="underwater"] .glow-indigo {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.25), 0 0 40px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .glow-indigo:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.4), 0 0 50px rgba(34, 211, 160, 0.12);
+}
+
+/* Scrollbar — waterlogged wood track */
+[data-scheme="underwater"] ::-webkit-scrollbar {
+    width: 6px;
+}
+
+[data-scheme="underwater"] ::-webkit-scrollbar-track {
+    background: rgba(12, 26, 46, 0.5);
+}
+
+[data-scheme="underwater"] ::-webkit-scrollbar-thumb {
+    background: rgba(42, 69, 53, 0.5);
+    border-radius: 3px;
+}
+
+[data-scheme="underwater"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(34, 211, 160, 0.4);
+}
+
+/* ============================================
+   Quest Log Theme — Parchment & Scroll (ROK-291)
+   Light sub-theme using data-variant="quest-log"
+   on top of data-scheme="light". Inherits all
+   existing :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) rules.
+   ============================================ */
+
+[data-variant="quest-log"] {
+    --color-backdrop: #f4e8c1;
+    --color-surface: #faf3e0;
+    --color-panel: #f0e4c8;
+    --color-overlay: #e8d8b0;
+    --color-faint: #c9b896;
+    --color-dim: #756247;   /* 5.28 surface / 4.63 panel (ROK-1472; was #a89070, 2.75 / 2.42) */
+    --color-muted: #685640; /* 6.33 surface / 5.56 panel (ROK-1472; was #8b7355, 4.05 / 3.55) */
+    --color-danger: #991b1b; /* TDB:1770: red-800 for headroom (lightest AA step #b51c1c sat at 4.51): 7.50 surface / 6.58 panel / 5.58 /10 tint (#b91c1c was 4.39 on the tint); white 8.31 */
+    --color-secondary: #5c4a32;
+    --color-foreground: #2c1810;
+    --color-edge: #d4c4a0;
+    --color-edge-strong: #c9b896;
+    --color-edge-subtle: #e8dcc0;
+    --gt-widget-bg: rgba(240, 228, 200, 0.9);
+    --gt-widget-border: rgba(201, 184, 150, 0.6);
+    --gt-split-bg: rgba(232, 216, 176, 0.4);
+    --gt-hover-glow: rgba(139, 115, 85, 0.15);
+    --gt-proximity-line: 139, 115, 85;
+    --ql-gold: #c9a84c;
+    --ql-gold-hover: #b8952f;
+    --ql-gold-glow: rgba(201, 168, 76, 0.3);
+    --ql-ink: #2c1810;
+    --ql-ink-secondary: #5c4a32;
+    --ql-parchment-edge: #c4a86c;
+    --ql-seal-red: #8b2020;
+}
+
+[data-variant="quest-log"] h1,
+[data-variant="quest-log"] h2,
+[data-variant="quest-log"] h3 {
+    font-family: 'Uncial Antiqua', 'Cinzel', serif;
+    color: var(--ql-ink);
+}
+
+[data-variant="quest-log"] .font-display {
+    font-family: 'Uncial Antiqua', 'Cinzel', serif;
+    letter-spacing: 0.03em;
+}
+
+[data-variant="quest-log"] body {
+    font-family: 'MedievalSharp', 'Cinzel', serif;
+    background-image:
+        /* Dark edge vignette — aged/burned parchment edges */
+        radial-gradient(ellipse at center, transparent 50%, rgba(139, 100, 50, 0.15) 100%),
+        /* Warm irregular stain patches */
+        radial-gradient(ellipse at 15% 30%, rgba(180, 140, 70, 0.18) 0%, transparent 40%),
+        radial-gradient(ellipse at 75% 15%, rgba(160, 120, 60, 0.12) 0%, transparent 35%),
+        radial-gradient(ellipse at 85% 70%, rgba(170, 130, 65, 0.15) 0%, transparent 45%),
+        radial-gradient(ellipse at 30% 80%, rgba(150, 115, 55, 0.10) 0%, transparent 40%),
+        radial-gradient(ellipse at 55% 45%, rgba(190, 155, 85, 0.08) 0%, transparent 50%),
+        /* Fine fiber/grain texture using repeating gradients */
+        repeating-linear-gradient(0deg,
+            transparent,
+            transparent 2px,
+            rgba(160, 120, 60, 0.03) 2px,
+            rgba(160, 120, 60, 0.03) 4px),
+        repeating-linear-gradient(90deg,
+            transparent,
+            transparent 3px,
+            rgba(140, 105, 50, 0.02) 3px,
+            rgba(140, 105, 50, 0.02) 5px),
+        /* Larger color variation — simulates uneven aging */
+        linear-gradient(160deg, rgba(210, 180, 120, 0.15) 0%, transparent 30%),
+        linear-gradient(340deg, rgba(190, 150, 80, 0.12) 70%, transparent 100%),
+        linear-gradient(200deg, transparent 40%, rgba(180, 145, 75, 0.10) 100%);
+    background-attachment: fixed;
+}
+
+/* Primary noise layer — coarse parchment grain */
+[data-variant="quest-log"] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.12;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    mix-blend-mode: multiply;
+}
+
+/* Secondary noise layer — finer detail grain */
+[data-variant="quest-log"] body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='turbulence' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)' opacity='1'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    mix-blend-mode: soft-light;
+}
+
+/* --- Cards: layered parchment pages with stacked-paper shadows --- */
+[data-variant="quest-log"] .glass-card {
+    background:
+        /* Subtle radial stain on card surface */
+        radial-gradient(ellipse at 30% 20%, rgba(210, 180, 120, 0.12) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, rgba(190, 155, 80, 0.08) 0%, transparent 50%),
+        /* Horizontal fiber lines */
+        repeating-linear-gradient(0deg,
+            transparent,
+            transparent 3px,
+            rgba(160, 130, 70, 0.025) 3px,
+            rgba(160, 130, 70, 0.025) 5px),
+        var(--color-surface);
+    backdrop-filter: none;
+    border: 2px solid var(--ql-parchment-edge);
+    border-radius: 2px;
+    position: relative;
+    box-shadow:
+        /* main warm drop shadow */
+        0 2px 8px rgba(92, 74, 50, 0.15),
+        /* inner top highlight (parchment sheen) */
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        /* stacked page layer 1 */
+        2px 2px 0 0 var(--color-panel),
+        2px 2px 0 1px var(--ql-parchment-edge),
+        /* stacked page layer 2 */
+        4px 4px 0 0 var(--color-edge-subtle),
+        4px 4px 0 1px rgba(196, 168, 108, 0.5);
+}
+
+[data-variant="quest-log"] .glass-card:hover {
+    background:
+        radial-gradient(ellipse at 30% 20%, rgba(210, 180, 120, 0.14) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, rgba(190, 155, 80, 0.10) 0%, transparent 50%),
+        repeating-linear-gradient(0deg,
+            transparent,
+            transparent 3px,
+            rgba(160, 130, 70, 0.025) 3px,
+            rgba(160, 130, 70, 0.025) 5px),
+        var(--color-surface);
+    border-color: var(--ql-gold);
+    box-shadow:
+        0 4px 14px rgba(92, 74, 50, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        2px 2px 0 0 var(--color-panel),
+        2px 2px 0 1px var(--ql-gold),
+        4px 4px 0 0 var(--color-edge-subtle),
+        4px 4px 0 1px rgba(201, 168, 76, 0.6);
+}
+
+/* Cards with bg-panel (IntegrationCard, admin cards) get the same parchment treatment.
+   Form controls carry bg-panel too (form-classes.ts) but are not cards: they keep the
+   quest-log input/select/textarea rules further down (fill, edge border, gold focus,
+   danger border when aria-invalid), which this rule's !important border would
+   otherwise override. The exclusion sits in :where() so it adds no specificity, and
+   later equal-weight rules such as .rounded-xl still win by source order. */
+[data-variant="quest-log"] .bg-panel\/50:where(:not(input, select, textarea)),
+[data-variant="quest-log"] [class*="bg-panel"]:where(:not(input, select, textarea)) {
+    background:
+        radial-gradient(ellipse at 40% 30%, rgba(200, 170, 110, 0.10) 0%, transparent 55%),
+        repeating-linear-gradient(0deg,
+            transparent,
+            transparent 3px,
+            rgba(160, 130, 70, 0.02) 3px,
+            rgba(160, 130, 70, 0.02) 5px),
+        var(--color-surface) !important;
+    border-color: var(--ql-parchment-edge) !important;
+    box-shadow:
+        0 2px 8px rgba(92, 74, 50, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+        2px 2px 0 0 var(--color-panel),
+        2px 2px 0 1px var(--ql-parchment-edge);
+}
+
+[data-variant="quest-log"] .rounded-xl {
+    border-radius: 4px;
+    box-shadow:
+        0 2px 6px rgba(92, 74, 50, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        2px 2px 0 0 var(--color-panel),
+        2px 2px 0 1px rgba(196, 168, 108, 0.4);
+}
+
+/* --- Buttons: fantasy embossed leather/gold aesthetic ---
+   Skips a disabled / aria-disabled button that carries its own disabled:bg-* /
+   aria-disabled:bg-* paint (the !important gold otherwise beats it and the button
+   reads as enabled); opacity-only disabled and loading primaries keep the gold. */
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) {
+    background: linear-gradient(180deg,
+            #d4b45c 0%,
+            var(--ql-gold) 40%,
+            var(--ql-gold-hover) 100%) !important;
+    color: var(--ql-ink) !important;
+    border: 1px solid #8b6914;
+    box-shadow:
+        /* outer warm glow */
+        0 2px 8px var(--ql-gold-glow),
+        /* bevel highlight (top) */
+        inset 0 1px 0 rgba(255, 230, 140, 0.6),
+        /* bevel shadow (bottom) */
+        inset 0 -1px 0 rgba(92, 64, 10, 0.3);
+    font-family: 'MedievalSharp', serif;
+    text-shadow: 0 1px 0 rgba(255, 230, 140, 0.4);
+    letter-spacing: 0.03em;
+}
+
+@media (hover: hover) {
+    [data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover {
+        background: linear-gradient(180deg,
+                #dfc066 0%,
+                #d4b45c 40%,
+                var(--ql-gold) 100%) !important;
+        box-shadow:
+            0 3px 12px rgba(201, 168, 76, 0.45),
+            inset 0 1px 0 rgba(255, 230, 140, 0.7),
+            inset 0 -1px 0 rgba(92, 64, 10, 0.25);
+    }
+}
+
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):active {
+    background: linear-gradient(180deg,
+            var(--ql-gold-hover) 0%,
+            var(--ql-gold) 100%) !important;
+    box-shadow:
+        inset 0 2px 3px rgba(92, 64, 10, 0.3),
+        0 1px 4px var(--ql-gold-glow);
+}
+
+/* Secondary / overlay buttons: leather-toned */
+[data-variant="quest-log"] button:not(.bg-emerald-600):not([class*="bg-red"]):not([class*="bg-indigo"]) {
+    font-family: 'MedievalSharp', serif;
+}
+
+/* Indigo buttons: wax-seal red tones */
+[data-variant="quest-log"] .bg-indigo-600 {
+    background: linear-gradient(180deg,
+            #a02828 0%,
+            var(--ql-seal-red) 50%,
+            #6b1515 100%) !important;
+    color: #faf3e0 !important;
+    border: 1px solid #5a1010;
+    box-shadow:
+        0 2px 8px rgba(139, 32, 32, 0.3),
+        inset 0 1px 0 rgba(255, 120, 120, 0.25),
+        inset 0 -1px 0 rgba(50, 10, 10, 0.3);
+    font-family: 'MedievalSharp', serif;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+}
+
+[data-variant="quest-log"] .bg-indigo-600:hover {
+    background: linear-gradient(180deg,
+            #b03030 0%,
+            #a02828 50%,
+            var(--ql-seal-red) 100%) !important;
+    box-shadow:
+        0 3px 12px rgba(139, 32, 32, 0.4),
+        inset 0 1px 0 rgba(255, 120, 120, 0.3),
+        inset 0 -1px 0 rgba(50, 10, 10, 0.25);
+}
+
+[data-variant="quest-log"] .bg-indigo-600:active {
+    background: linear-gradient(180deg,
+            var(--ql-seal-red) 0%,
+            #6b1515 100%) !important;
+    box-shadow:
+        inset 0 2px 3px rgba(50, 10, 10, 0.4),
+        0 1px 4px rgba(139, 32, 32, 0.2);
+}
+
+[data-variant="quest-log"] .text-emerald-500,
+[data-variant="quest-log"] .text-emerald-400 {
+    color: var(--ql-gold) !important;
+}
+
+[data-variant="quest-log"] .border-emerald-500 {
+    border-color: var(--ql-gold) !important;
+}
+
+[data-variant="quest-log"] .glow-emerald {
+    box-shadow: 0 0 10px rgba(201, 168, 76, 0.2);
+}
+
+[data-variant="quest-log"] .glow-emerald:hover {
+    box-shadow: 0 0 15px rgba(201, 168, 76, 0.3);
+}
+
+[data-variant="quest-log"] .glow-indigo {
+    box-shadow: 0 0 10px rgba(139, 32, 32, 0.15);
+}
+
+[data-variant="quest-log"] .glow-indigo:hover {
+    box-shadow: 0 0 15px rgba(139, 32, 32, 0.25);
+}
+
+[data-variant="quest-log"] header {
+    background: linear-gradient(180deg, rgba(196, 168, 108, 0.15) 0%, transparent 100%);
+    border-bottom: 2px solid var(--ql-parchment-edge) !important;
+    box-shadow: 0 2px 8px rgba(92, 74, 50, 0.1);
+}
+
+[data-variant="quest-log"] input,
+[data-variant="quest-log"] select,
+[data-variant="quest-log"] textarea {
+    font-family: 'MedievalSharp', serif;
+    background-color: rgba(250, 243, 224, 0.8);
+    border-color: var(--color-edge);
+}
+
+[data-variant="quest-log"] input:focus,
+[data-variant="quest-log"] select:focus,
+[data-variant="quest-log"] textarea:focus {
+    box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.25), 0 0 8px rgba(201, 168, 76, 0.1);
+    border-color: var(--ql-gold);
+}
+
+/* The two rules above are unlayered, so they beat Tailwind's layered
+   `aria-[invalid=true]:border-danger` (form-classes.ts). This one has the same
+   specificity as the :focus rule and comes after it, so an invalid control keeps
+   the danger border while focused too. */
+[data-variant="quest-log"] :is(input, select, textarea)[aria-invalid="true"] {
+    border-color: var(--color-danger);
+}
+
+/* --- Sidebar navigation: book table of contents --- */
+[data-variant="quest-log"] nav[aria-label*="navigation"],
+[data-variant="quest-log"] nav[aria-label*="settings"] {
+    font-family: 'MedievalSharp', serif;
+    background:
+        linear-gradient(90deg, rgba(196, 168, 108, 0.08) 0%, transparent 60%);
+    border-right: 2px solid var(--ql-parchment-edge);
+    padding-right: 0.75rem;
+}
+
+/* Chapter headings (section labels) — ornate book chapter feel */
+[data-variant="quest-log"] nav .text-xs.font-semibold.uppercase {
+    font-family: 'Uncial Antiqua', 'Cinzel', serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.7rem;
+    color: var(--ql-ink);
+    border-bottom: 1px solid var(--ql-parchment-edge);
+    padding-bottom: 0.35rem;
+}
+
+/* Nav entries — book TOC items with dot leaders */
+[data-variant="quest-log"] nav a {
+    border-left: none;
+    border-radius: 0 !important;
+    border-bottom: 1px dotted rgba(196, 168, 108, 0.35);
+    padding-left: 1rem;
+    position: relative;
+    transition: color 0.15s, background-color 0.15s;
+    background: transparent;
+}
+
+/* Indent marker — en-dash before each entry */
+[data-variant="quest-log"] nav a .truncate::before {
+    content: '\2013\00a0';
+    color: var(--ql-parchment-edge);
+    font-weight: normal;
+}
+
+[data-variant="quest-log"] nav a:hover {
+    text-shadow: none;
+    color: var(--ql-ink);
+    background: rgba(201, 168, 76, 0.08);
+    border-bottom-color: var(--ql-gold);
+}
+
+/* Active TOC entry — gold accent with warm highlight */
+[data-variant="quest-log"] nav a.text-emerald-400,
+[data-variant="quest-log"] nav a[class*="text-emerald-400"] {
+    color: var(--ql-ink) !important;
+    font-weight: 600;
+    background: rgba(201, 168, 76, 0.12) !important;
+    border-bottom: 1px solid var(--ql-gold);
+    border-left: 3px solid var(--ql-gold);
+    padding-left: calc(1rem - 3px);
+}
+
+/* Generic nav element fallback */
+[data-variant="quest-log"] nav {
+    font-family: 'MedievalSharp', serif;
+}
+
+[data-variant="quest-log"] hr {
+    border-color: var(--ql-parchment-edge);
+    border-style: dashed;
+}
+
+[data-variant="quest-log"] a:hover {
+    text-shadow: none;
+    color: var(--ql-gold-hover);
+}
+
+/* --- Collapsible sections: unfurling scrolls with scroll-cap decorations --- */
+[data-variant="quest-log"] details {
+    border: none;
+    border-left: 2px solid var(--ql-parchment-edge);
+    border-right: 2px solid var(--ql-parchment-edge);
+    border-radius: 0;
+    background: var(--color-surface);
+    overflow: visible;
+    position: relative;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+/* Top scroll-cap: rolled parchment edge */
+[data-variant="quest-log"] details::before {
+    content: '';
+    display: block;
+    position: relative;
+    height: 10px;
+    background: linear-gradient(180deg,
+            #c4a86c 0%,
+            #d4b87c 30%,
+            #e8d8b0 50%,
+            #d4b87c 70%,
+            #b89850 100%);
+    border: 1px solid #a08040;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    box-shadow:
+        0 2px 4px rgba(92, 74, 50, 0.2),
+        inset 0 1px 0 rgba(255, 240, 200, 0.5),
+        inset 0 -1px 0 rgba(92, 64, 10, 0.15);
+}
+
+/* Bottom scroll-cap: rolled parchment edge */
+[data-variant="quest-log"] details::after {
+    content: '';
+    display: block;
+    position: relative;
+    height: 10px;
+    background: linear-gradient(180deg,
+            #b89850 0%,
+            #d4b87c 30%,
+            #e8d8b0 50%,
+            #d4b87c 70%,
+            #c4a86c 100%);
+    border: 1px solid #a08040;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow:
+        0 2px 4px rgba(92, 74, 50, 0.15),
+        inset 0 1px 0 rgba(255, 240, 200, 0.3),
+        inset 0 -1px 0 rgba(92, 64, 10, 0.2);
+}
+
+/* Collapsed: compress the body to look like a rolled scroll */
+[data-variant="quest-log"] details:not([open]) {
+    background: linear-gradient(180deg,
+            var(--color-surface) 0%,
+            #ede0b8 50%,
+            var(--color-surface) 100%);
+}
+
+[data-variant="quest-log"] details>summary {
+    font-family: 'MedievalSharp', serif;
+    cursor: pointer;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(180deg,
+            rgba(232, 216, 176, 0.3) 0%,
+            transparent 100%);
+    border-bottom: 1px solid var(--color-edge);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    z-index: 1;
+}
+
+[data-variant="quest-log"] details>summary::-webkit-details-marker {
+    display: none;
+}
+
+[data-variant="quest-log"] details>summary::before {
+    content: '\25B6';
+    font-size: 0.7em;
+    color: var(--ql-gold);
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+[data-variant="quest-log"] details[open]>summary::before {
+    transform: rotate(90deg);
+}
+
+[data-variant="quest-log"] details[open]>summary {
+    border-bottom: 1px dashed var(--ql-parchment-edge);
+}
+
+/* Open scroll body: parchment interior */
+[data-variant="quest-log"] details[open] {
+    background: var(--color-surface);
+    box-shadow: 0 1px 6px rgba(92, 74, 50, 0.1);
+}
+
+[data-variant="quest-log"] ::-webkit-scrollbar {
+    width: 8px;
+}
+
+[data-variant="quest-log"] ::-webkit-scrollbar-track {
+    background: rgba(244, 232, 193, 0.5);
+}
+
+[data-variant="quest-log"] ::-webkit-scrollbar-thumb {
+    background: var(--ql-parchment-edge);
+    border-radius: 4px;
+}
+
+[data-variant="quest-log"] ::-webkit-scrollbar-thumb:hover {
+    background: var(--ql-gold);
+}
+
+[data-variant="quest-log"] .border-t-emerald-500 {
+    border-top-color: var(--ql-gold) !important;
+}
+
+/* Hourglass spin animation for phase countdown (ROK-946) */
+@keyframes hourglass-spin {
+    0%, 80% { transform: rotate(0deg); }
+    90% { transform: rotate(360deg); }
+    100% { transform: rotate(360deg); }
+}

@@ -1,0 +1,77 @@
+export type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
+
+/** Measured grid dimensions used by overlay positioning */
+export interface GridDims {
+    colWidth: number;
+    rowHeight: number;
+    headerHeight: number;
+    colStartLeft: number;
+}
+
+/** Preview block for showing where a specific event falls on the grid */
+export interface GameTimePreviewBlock {
+    dayOfWeek: number; // 0=Sun, 6=Sat
+    startHour: number;
+    endHour: number;
+    label?: string;
+    /** 'current' = dashed cyan (default), 'selected' = solid cyan (ROK-223, ROK-475) */
+    variant?: 'current' | 'selected';
+    // Rich fields (optional, for calendar-parity rendering inside the block)
+    title?: string;
+    gameName?: string;
+    gameSlug?: string;
+    coverUrl?: string | null;
+    description?: string | null;
+    creatorUsername?: string | null;
+    /** Game ID threaded through so RichEventBlock can resolve character avatars (ROK-1133) */
+    gameId?: number | null;
+    attendees?: Array<{
+        id: number;
+        username: string;
+        avatar: string | null;
+        customAvatarUrl?: string | null;
+        discordId?: string | null;
+        characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
+    }>;
+    attendeeCount?: number;
+}
+
+/**
+ * Per-cell heatmap lookup value (ROK-1560). `stale` / `unknown` are absent for
+ * aggregates without the freshness model (the events heatmap), which must render
+ * exactly as it did before.
+ */
+export interface HeatmapCellData {
+    available: number;
+    total: number;
+    stale?: number;
+    unknown?: number;
+    /** ROK-1584: templated members committed elsewhere at this hour. */
+    busy?: number;
+}
+
+export interface GameTimeGridProps {
+    slots: import('@raid-ledger/contract').GameTimeSlot[];
+    onChange?: ((slots: import('@raid-ledger/contract').GameTimeSlot[]) => void) | undefined;
+    readOnly?: boolean;
+    className?: string;
+    tzLabel?: string;
+    events?: import('@raid-ledger/contract').GameTimeEventBlock[];
+    previewBlocks?: GameTimePreviewBlock[] | undefined;
+    /** Visible hour range (default [0, 24]) — use [6, 24] in modals */
+    hourRange?: [number, number] | undefined;
+    /** ISO date string for the start of the displayed week (e.g., "2026-02-08") */
+    weekStart?: string;
+    /** Callback when a cell is clicked (ROK-223, used in reschedule modal) */
+    onCellClick?: (dayOfWeek: number, hour: number) => void;
+    /** Use full day names ("Sunday" instead of "Sun") — used for weekly template view */
+    fullDayNames?: boolean;
+    /** Compact mode — shorter cell height for space-constrained layouts (e.g. onboarding wizard) */
+    compact?: boolean;
+    /** Disable the top-16 sticky offset on day headers (use top-0). For use inside modals. */
+    noStickyOffset?: boolean;
+    /** Days of the displayed week the viewer is away (ROK-1585) — "· away" header, muted column. */
+    awayDays?: ReadonlySet<number>;
+    /** The viewer's synced-calendar busy hours (ROK-1595 S2) — the NP-1 band, drawn under nothing editable. */
+    calendarBusy?: readonly import('@raid-ledger/contract').GameTimeCalendarBusy[] | undefined;
+}

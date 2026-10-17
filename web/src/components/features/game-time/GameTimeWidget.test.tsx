@@ -1,0 +1,264 @@
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { GameTimeWidget } from './GameTimeWidget';
+import { stubGridLayout } from '../../../test/stub-grid-layout';
+
+// jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
+stubGridLayout();
+
+const useGameTimeEditorMock = vi.fn();
+vi.mock('../../../hooks/use-game-time-editor', () => ({
+    useGameTimeEditor: (options?: unknown) => useGameTimeEditorMock(options),
+}));
+
+function makeEditorData(overrides: Record<string, unknown> = {}) {
+    return {
+        slots: [],
+        isLoading: false,
+        isDirty: false,
+        handleChange: vi.fn(),
+        save: vi.fn(),
+        clear: vi.fn(),
+        discard: vi.fn(),
+        isSaving: false,
+        tzLabel: 'EST',
+        overrides: [],
+        absences: [],
+        calendarBusy: [],
+        ...overrides,
+    };
+}
+
+function mockEditorData(overrides: Record<string, unknown> = {}) {
+    useGameTimeEditorMock.mockReturnValue(makeEditorData(overrides));
+}
+
+beforeEach(() => {
+    useGameTimeEditorMock.mockReset();
+});
+
+function renderWidget(props: {
+    eventStart: string;
+    eventEnd: string;
+    eventTitle?: string;
+    gameName?: string;
+    attendees?: Array<{
+        id: number;
+        username: string;
+        avatar: string | null;
+        customAvatarUrl?: string | null;
+        discordId?: string | null;
+        characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
+    }>;
+    attendeeCount?: number;
+    gameId?: number;
+}) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+        <MemoryRouter>
+            <QueryClientProvider client={queryClient}>
+                <GameTimeWidget
+                    eventStartTime={props.eventStart}
+                    eventEndTime={props.eventEnd}
+                    eventTitle={props.eventTitle}
+                    gameName={props.gameName}
+                    gameId={props.gameId}
+                    attendees={props.attendees}
+                    attendeeCount={props.attendeeCount}
+                />
+            </QueryClientProvider>
+        </MemoryRouter>,
+    );
+}
+
+describe('GameTimeWidget — part 1', () => {
+    it('shows overlap message when template matches event hours', () => {
+        // 2026-02-09 is Monday. Slots use Sunday-first convention (0=Sun..6=Sat),
+        // matching JS Date.getDay() — so Monday = dayOfWeek=1. See ROK-1039.
+        mockEditorData({
+            slots: [
+                { dayOfWeek: 1, hour: 19, status: 'available' },
+                { dayOfWeek: 1, hour: 20, status: 'available' },
+            ],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        expect(screen.getByText('Inside Game Time')).toBeInTheDocument();
+    });
+
+    it('uses the single-week template editor', () => {
+        mockEditorData();
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        expect(useGameTimeEditorMock).toHaveBeenCalledWith({ enabled: true });
+    });
+
+    it('shows no-overlap message when template does not match', () => {
+        mockEditorData({
+            slots: [
+                { dayOfWeek: 5, hour: 10, status: 'available' },
+            ],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        expect(screen.getByText('Outside Game Time')).toBeInTheDocument();
+    });
+
+    it('click opens read-only modal with GameTimeGrid', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        expect(screen.getByText('My Game Time')).toBeInTheDocument();
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+    });
+
+    it('modal draws the viewer\'s own-calendar busy band (ROK-1595 AC 8)', () => {
+        mockEditorData({
+            // The band draws only inside game time (operator R5), so 8–10 PM is free.
+            slots: [19, 20, 21].map((hour) => ({ dayOfWeek: 1, hour, status: 'available' as const })),
+            calendarBusy: [{ dayOfWeek: 1, startHour: 20, endHour: 22, provider: 'google' }],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        expect(screen.getByTestId('calendar-busy-band-1-20')).toBeInTheDocument();
+        expect(screen.getByText('Busy · Google Calendar')).toBeInTheDocument();
+    });
+
+    it('modal shows a simple selected highlight for the current event', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        const previewBlock = screen.getByTestId('preview-block-1-19');
+        expect(previewBlock).toBeInTheDocument();
+        expect(previewBlock.style.border).toContain('solid');
+        expect(previewBlock).toHaveTextContent('');
+    });
+
+    it('modal shows event title inside the highlighted preview block AND in the detail card below', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({
+            eventStart: '2026-02-09T19:00:00',
+            eventEnd: '2026-02-09T22:00:00',
+            eventTitle: 'Raid Night',
+            gameName: 'World of Warcraft',
+        });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        // Preview block now renders a brief event summary (RichEventBlock) — matches reschedule modal pattern.
+        const previewBlock = screen.getByTestId('preview-block-1-19');
+        expect(previewBlock).toBeInTheDocument();
+        expect(previewBlock).toHaveTextContent('Raid Night');
+        expect(previewBlock).toHaveTextContent('World of Warcraft');
+
+        // Title also appears in the EventDetailCard below the grid → 2 matches total.
+        const titleMatches = screen.getAllByText('Raid Night');
+        expect(titleMatches.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('preview block resolves character avatars when gameId is threaded through (ROK-1133)', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({
+            eventStart: '2026-02-09T19:00:00',
+            eventEnd: '2026-02-09T22:00:00',
+            eventTitle: 'Raid Night',
+            gameName: 'World of Warcraft',
+            gameId: 5,
+            attendees: [
+                {
+                    id: 42,
+                    username: 'Astra',
+                    avatar: null,
+                    discordId: null,
+                    characters: [{ gameId: 5, avatarUrl: '/char.png' }],
+                },
+            ],
+            attendeeCount: 1,
+        });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        const previewBlock = screen.getByTestId('preview-block-1-19');
+        const charAvatar = previewBlock.querySelector('img[src*="/char.png"]');
+        expect(charAvatar).not.toBeNull();
+    });
+
+});
+
+describe('GameTimeWidget — part 2', () => {
+    // Was 'modal is read-only (cells are not paintable)'. The modal stopped being
+    // read-only in ROK-1426, and the assertion had gone vacuous either way: cells
+    // are no longer an edit surface for ANY grid, so painting one cannot fire
+    // onChange whatever the mode. What still holds is the half worth keeping --
+    // pressing a cell edits nothing. That the modal *is* editable via the block
+    // layer needs real layout, so it is covered by the Playwright smoke instead.
+    it('pressing a cell edits nothing — cells are not the edit surface', () => {
+        const handleChange = vi.fn();
+        mockEditorData({
+            slots: [],
+            handleChange,
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        fireEvent.pointerDown(screen.getByTestId('cell-2-18'));
+        fireEvent.pointerUp(screen.getByTestId('cell-2-18'));
+
+        expect(handleChange).not.toHaveBeenCalled();
+    });
+
+    it('modal links out to the profile panel for absences and presets', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        // Relabelled in the ROK-1426 follow-up: it used to say "Edit my game time",
+        // which competed with the now-editable grid directly beneath it.
+        const link = screen.getByText(/Absences and presets/);
+        expect(link).toBeInTheDocument();
+        expect(link.closest('a')).toHaveAttribute('href', '/profile/gaming');
+    });
+
+    it('modal uses compact grid sizing to match other game-time views', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        expect(screen.getByTestId('cell-2-18')).toHaveClass('h-4');
+    });
+
+});

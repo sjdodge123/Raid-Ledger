@@ -1,0 +1,350 @@
+/**
+ * ITAD pricing sync service (ROK-818).
+ * Periodically syncs pricing data from ITAD API into the games table.
+ */
+import {
+  Injectable,
+  Inject,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { isNotNull, and, lt, sql, inArray } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { ItadOverviewFetchError, ItadPriceService } from './itad-price.service';
+import { ItadService } from './itad.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
+import type { ItadOverviewGameEntry } from './itad-price.types';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
+import { enrichEarlyAccessPhase } from './itad-early-access-sync.helpers';
+import {
+  PRICING_BREAKER_THRESHOLD,
+  processPricingChunks,
+  type PricingChunkOutcome,
+  type PricingPhaseResult,
+} from './itad-price-sync.helpers';
+import { perfLog } from '../common/perf-logger';
+import { extractErrorDetail } from '../common/pg-error.helpers';
+
+/** Number of games to fetch from ITAD per batch request. */
+export const CHUNK_SIZE = 50;
+
+/** Delay (ms) before bootstrap sync fires. */
+const BOOTSTRAP_DELAY_MS = 30_000;
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Pricing fields extracted from an ITAD entry for DB persistence. */
+export interface ItadPricingData {
+  itadCurrentPrice: string | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  itadLowestPrice: string | null;
+  itadLowestCut: number | null;
+  itadPriceUpdatedAt: string;
+}
+
+/** Build the SET clause data from an ITAD entry. */
+export function buildUpdateData(
+  entry: ItadOverviewGameEntry,
+  now: Date,
+): ItadPricingData {
+  return {
+    itadCurrentPrice: entry.current?.price.amount.toFixed(2) ?? null,
+    itadCurrentCut: entry.current?.cut ?? null,
+    itadCurrentShop: entry.current?.shop.name ?? null,
+    itadCurrentUrl: entry.current?.url ?? null,
+    itadLowestPrice: entry.lowest?.price.amount.toFixed(2) ?? null,
+    itadLowestCut: entry.lowest?.cut ?? null,
+    itadPriceUpdatedAt: now.toISOString(),
+  };
+}
+
+/** Row shape for the bulk pricing UPDATE ... FROM VALUES. */
+type PricingRow = ItadPricingData & { id: number };
+
+/**
+ * Execute a single UPDATE ... FROM VALUES for all matched games.
+ * Uses COALESCE for lowest_* columns so null API responses don't
+ * overwrite existing historical data. Current_* columns are NOT
+ * coalesced -- null means no active deal (ROK-854).
+ */
+export async function executeBulkPricingUpdate(
+  db: Db,
+  rows: PricingRow[],
+): Promise<void> {
+  const frags = rows.map(
+    (r) =>
+      sql`(${r.id}::int, ${r.itadCurrentPrice}::numeric, ${r.itadCurrentCut}::int, ${r.itadCurrentShop}::text, ${r.itadCurrentUrl}::text, ${r.itadLowestPrice}::numeric, ${r.itadLowestCut}::int, ${r.itadPriceUpdatedAt}::timestamptz)`,
+  );
+  const valuesList = sql.join(frags, sql`, `);
+
+  await db.execute(sql`
+    UPDATE ${schema.games} AS g
+    SET
+      itad_current_price = v.current_price,
+      itad_current_cut = v.current_cut,
+      itad_current_shop = v.current_shop,
+      itad_current_url = v.current_url,
+      itad_lowest_price = COALESCE(v.lowest_price, g.itad_lowest_price),
+      itad_lowest_cut = COALESCE(v.lowest_cut, g.itad_lowest_cut),
+      itad_price_updated_at = v.updated_at
+    FROM (VALUES ${valuesList})
+      AS v(id, current_price, current_cut, current_shop, current_url, lowest_price, lowest_cut, updated_at)
+    WHERE g.id = v.id
+  `);
+}
+
+@Injectable()
+export class ItadPriceSyncService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
+  private readonly logger = new Logger(ItadPriceSyncService.name);
+  private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    @Inject(DrizzleAsyncProvider) private readonly db: Db,
+    private readonly itadPriceService: ItadPriceService,
+    private readonly itadService: ItadService,
+    private readonly cronJobService: CronJobService,
+  ) {}
+
+  /** Trigger initial pricing sync after startup delay. */
+  onApplicationBootstrap(): void {
+    this.bootstrapTimer = setTimeout(() => {
+      this.bootstrapTimer = null;
+      this.syncPricing().catch((err) =>
+        this.logger.error(`Bootstrap pricing sync failed: ${err}`),
+      );
+    }, BOOTSTRAP_DELAY_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.bootstrapTimer) clearTimeout(this.bootstrapTimer);
+    this.bootstrapTimer = null;
+  }
+
+  /**
+   * Cron: sync ITAD pricing every 4 hours, at :07 past the hour so the run
+   * does not share ITAD's rate window with top-of-the-hour jobs.
+   * waitForCompletion: a run that waits out long 429 pauses can outlast the
+   * 4h interval, and two overlapping runs would share one ITAD API key.
+   */
+  @Cron('7 */4 * * *', {
+    name: 'ItadPriceSyncService_syncPricing',
+    waitForCompletion: true,
+  })
+  async scheduledSync(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'ItadPriceSyncService_syncPricing',
+      () => this.syncPricing(),
+    );
+  }
+
+  /**
+   * Fetch ITAD pricing for all games with an itadGameId and persist to DB.
+   * Processes in chunks of 50. Logs errors per chunk and continues; chunks
+   * that failed are retried once at the end of the pricing phase. After
+   * PRICING_BREAKER_THRESHOLD consecutive exhausted overview fetches the
+   * pricing phase stops early and the earlyAccess phase is skipped; stale
+   * pricing is cleared either way.
+   * @returns false if no games need syncing (no-op),
+   *          { degraded: true } if any pricing or earlyAccess chunk failed
+   *          (ROK-1197, ROK-1103) or the breaker tripped.
+   */
+  async syncPricing(): Promise<void | false | { degraded: true }> {
+    const games = await this.queryGamesWithItadId();
+    if (games.length === 0) {
+      this.logger.log('No games with ITAD IDs — skipping pricing sync');
+      return false;
+    }
+
+    this.logger.log(`Syncing ITAD pricing for ${games.length} games`);
+    const chunks = this.chunkArray(games, CHUNK_SIZE);
+
+    const pricing = await processPricingChunks(chunks, (chunk) =>
+      this.processChunk(chunk),
+    );
+    const cleared = await this.clearStalePricing();
+    if (cleared > 0) {
+      this.logger.log(`Cleared stale pricing for ${cleared} games`);
+    }
+    this.logSyncSummary(pricing, games.length);
+    if (pricing.tripped) {
+      this.logger.warn('ITAD earlyAccess phase skipped: pricing stopped early');
+      return { degraded: true };
+    }
+
+    const earlyResult = await this.syncEarlyAccess(games);
+    // A pricing chunk that fails both passes must flag the run degraded
+    // too — not just earlyAccess failures (ROK-1103).
+    if (pricing.failed > 0 || earlyResult.failed > 0) return { degraded: true };
+  }
+
+  /**
+   * Sync ITAD pricing for a specific list of games (ROK-1047).
+   * Used by the on-demand processor to fetch missing prices triggered
+   * by `/games/pricing/batch` cache misses. Resolves itad IDs from the
+   * games table and runs a single chunked fetch + bulk update.
+   * Caller is responsible for batching to CHUNK_SIZE.
+   */
+  async syncSpecificGames(gameIds: number[]): Promise<void> {
+    if (gameIds.length === 0) return;
+    const rows = await this.queryItadIdsForGames(gameIds);
+    if (rows.length === 0) return;
+    await this.processChunk(rows);
+  }
+
+  /** Look up itad IDs for a specific set of games. */
+  private async queryItadIdsForGames(
+    gameIds: number[],
+  ): Promise<{ id: number; itadGameId: string }[]> {
+    const rows = await this.db
+      .select({ id: schema.games.id, itadGameId: schema.games.itadGameId })
+      .from(schema.games)
+      .where(
+        and(
+          isNotNull(schema.games.itadGameId),
+          inArray(schema.games.id, gameIds),
+        ),
+      );
+    return rows.filter(
+      (r): r is { id: number; itadGameId: string } => r.itadGameId !== null,
+    );
+  }
+
+  /** Query all games that have an itadGameId. */
+  private async queryGamesWithItadId(): Promise<
+    { id: number; itadGameId: string }[]
+  > {
+    const rows = await this.db
+      .select({ id: schema.games.id, itadGameId: schema.games.itadGameId })
+      .from(schema.games)
+      .where(isNotNull(schema.games.itadGameId));
+
+    return rows.filter(
+      (r): r is { id: number; itadGameId: string } => r.itadGameId !== null,
+    );
+  }
+
+  /** Process a single chunk: fetch pricing and update DB rows. */
+  private async processChunk(
+    chunk: { id: number; itadGameId: string }[],
+  ): Promise<PricingChunkOutcome> {
+    try {
+      const itadIds = chunk.map((g) => g.itadGameId);
+      // Background (price-sync cron): waits out a 429 pause.
+      const entries = await this.itadPriceService.getOverviewBatch(
+        itadIds,
+        ITAD_BACKGROUND_FETCH,
+      );
+      const entryMap = new Map(entries.map((e) => [e.id, e]));
+
+      await this.updateGamesWithPricing(chunk, entryMap);
+      this.logger.debug(`Updated pricing for chunk of ${chunk.length} games`);
+      return 'ok';
+    } catch (err) {
+      const detail = extractErrorDetail(err);
+      this.logger.error(`Failed to process ITAD pricing chunk: ${detail}`);
+      return err instanceof ItadOverviewFetchError ? 'exhausted' : 'failed';
+    }
+  }
+
+  /**
+   * Bulk-update game rows with ITAD pricing data.
+   * Uses a single UPDATE ... FROM VALUES instead of N individual queries.
+   */
+  private async updateGamesWithPricing(
+    chunk: { id: number; itadGameId: string }[],
+    entryMap: Map<string, ItadOverviewGameEntry>,
+  ): Promise<void> {
+    const now = new Date();
+    const matched = chunk.filter((g) => entryMap.has(g.itadGameId));
+    if (matched.length === 0) return;
+
+    const rows = matched.map((g) => {
+      const data = buildUpdateData(entryMap.get(g.itadGameId)!, now);
+      return { id: g.id, ...data };
+    });
+    await executeBulkPricingUpdate(this.db, rows);
+  }
+
+  /** Clear pricing columns for games not updated in STALE_PRICING_DAYS. */
+  async clearStalePricing(): Promise<number> {
+    const result = await this.db
+      .update(schema.games)
+      .set({
+        itadCurrentPrice: null,
+        itadCurrentCut: null,
+        itadCurrentShop: null,
+        itadCurrentUrl: null,
+        itadLowestPrice: null,
+        itadLowestCut: null,
+      })
+      .where(
+        and(
+          isNotNull(schema.games.itadGameId),
+          isNotNull(schema.games.itadCurrentPrice),
+          lt(schema.games.itadPriceUpdatedAt, sql`NOW() - INTERVAL '7 days'`),
+        ),
+      )
+      .returning({ id: schema.games.id });
+    return result.length;
+  }
+
+  /** Log pricing-phase completion summary at appropriate level (ROK-1197). */
+  private logSyncSummary(r: PricingPhaseResult, totalGames: number): void {
+    const stop = r.tripped
+      ? ` — stopped early after ${PRICING_BREAKER_THRESHOLD} consecutive failed overview fetches`
+      : '';
+    const msg = `ITAD pricing phase complete: ${r.succeeded} chunks succeeded, ${r.failed} failed, ${totalGames} games total (${r.retried} chunks retried at end of phase)${stop}`;
+    if (r.failed > 0) {
+      this.logger.warn(msg);
+    } else {
+      this.logger.log(msg);
+    }
+  }
+
+  /**
+   * Enrich games with earlyAccess status from ITAD game info (ROK-1197).
+   * Runs after pricing sync. Per-chunk calls run concurrently with a per-call
+   * timeout so a single hung upstream call cannot block the cron; games whose
+   * call failed are retried once in a tail pass. Emits its own PERF entry
+   * independent of the wrapper's run-total entry.
+   */
+  private async syncEarlyAccess(
+    games: { id: number; itadGameId: string }[],
+  ): Promise<{ updated: number; failed: number }> {
+    const startedAt = Date.now();
+    const total = await enrichEarlyAccessPhase(
+      this.db,
+      this.itadService,
+      this.chunkArray(games, CHUNK_SIZE),
+      (size, r) =>
+        this.logger.debug(
+          `Updated earlyAccess for chunk of ${size} games (${r.updated} succeeded, ${r.failed} failed)`,
+        ),
+    );
+    const durationMs = Date.now() - startedAt;
+    perfLog('CRON', 'ItadPriceSyncService_earlyAccess', durationMs, {
+      status: total.failed > 0 ? 'degraded' : 'completed',
+    });
+    const summary = `ITAD earlyAccess phase complete: ${total.updated} updated, ${total.failed} failed, ${games.length} games (${total.retried} retried in tail pass)`;
+    if (total.failed > 0) this.logger.warn(summary);
+    else this.logger.log(summary);
+    return total;
+  }
+
+  /** Split an array into chunks of the given size. */
+  private chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+      chunks.push(arr.slice(i, i + size));
+    }
+    return chunks;
+  }
+}

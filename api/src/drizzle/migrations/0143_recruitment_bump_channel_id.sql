@@ -1,0 +1,1 @@
+ALTER TABLE "discord_event_messages" ADD COLUMN "bump_channel_id" varchar(255);

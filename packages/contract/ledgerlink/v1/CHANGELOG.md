@@ -1,0 +1,113 @@
+# LedgerLink wire contract — changelog
+
+Newest first. Every entry states **additive** or **breaking** (see
+`CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
+
+## v1 — 2026-10-10 — Export clock window — **additive** (server acceptance rule)
+
+- **Wire format unchanged; stays v1** (operator ruling 2026-10-10, ROK-1756).
+  The server now rejects, with 422 `INVALID_PAYLOAD`, any export whose
+  `exportedAt` (or guild `data.snapshotAt`) is more than **1 day ahead of** or
+  more than **365 days behind** the server clock. Raid `pulls[]` timestamps get
+  only the 1-day future bound. LedgerLink stamps the current time, so only a
+  year-old re-paste or a badly wrong client clock is affected. The
+  user-facing message asks the user to check the computer's date and export
+  again. See `CONTRACT.md` §6.
+- Golden fixtures are unchanged. The conformance specs pin the server clock
+  (`testing/pin-export-clock.ts`), so the 2026-09-21 fixtures never age out.
+
+## v1 — 2026-10-10 — decoded gear name/quality from the raw link — **additive**
+
+- **Additive (stays v1). Wire format unchanged** — no `schema.json` change,
+  nothing new for the addon to emit (ROK-1760). Raid Ledger now reads the
+  item name (`|h[...]|h`, ≤ 128) and quality (`IQ<n>`, 0–7) out of the
+  existing raw gear `link` and keeps them as optional `name` / `quality` on
+  each decoded gear item, so a slot reads "Recruit's Shirt" before the
+  Wowhead resolver fills it in. The `char-*` and `mixed-char-*` golden
+  fixture `.json` files were regenerated (`api/scripts/gen-ledgerlink-fixtures.ts`)
+  to include the decoded `name`; the `.txt` pastes are unchanged.
+
+## v1 — 2026-10-10 — golden fixture correction — **no format change**
+
+- **Fixture only (stays v1).** `fixtures/char-forever-talents-named` (`.txt` +
+  `.json`) regenerated so every node's `tree`/`row`/`col` hint equals the
+  CONTRACT.md §3 rule applied to its own `posX`/`posY` (ROK-1758). No schema,
+  `schema.json` or Zod change; addon copies should re-sync the fixture pair.
+
+## v1 — 2026-10-09 — Forever character fields — **additive**
+
+- **Additive (stays v1).** New optional keys in the `char` section (ROK-1742):
+  `who.gender` (`"male"` | `"female"`; omit when `UnitSex` is unknown);
+  `talents.nodes[]` gains `name?` (≤ 64), `spellId?`, `maxRanks?` (1–255),
+  `tree?` (0–2), `row?` (0–9), `col?` (0–3) and the raw `posX?` / `posY?`;
+  `data.quests?` = `{ completed: questId[] ≤ 10 000, inProgress: [{ questId,
+  title? ≤ 128, objectives? ≤ 10: [{ text ≤ 128, done, have?, need? }] }] ≤ 35 }`.
+  Every new object is `.strict()`; an export without the new keys decodes
+  exactly as before.
+- **Server ships first.** The addon may emit these keys only after
+  re-syncing this `schema.json` (and the fixtures) into its pinned copy;
+  until then an older server rejects them as unknown keys.
+- New constants `ADDON_QUESTS_COMPLETED_MAX = 10 000`,
+  `ADDON_QUESTS_IN_PROGRESS_MAX = 35`, `ADDON_QUEST_OBJECTIVES_MAX = 10`.
+  `quests.completed` is the one array allowed past the 2000 structural cap.
+- Talent position rule: CONTRACT.md §3. Raw `posX` / `posY` are
+  authoritative; `tree` / `row` / `col` are the addon's derived hint, by the
+  published rule (cluster `posX` by ~2200 gaps → sub-tree; `col` / `row` =
+  rounded 600-unit steps from the cluster min / `posY` 2130), confirmed on
+  Warrior, Druid and Paladin (beta build 70291).
+- Fixtures: new valid `char-forever-quests` (`completed` at the 10 000 cap,
+  enchanted + socketed gear links), `char-forever-talents-named`; new
+  invalid `gender-unknown-value`, `quests-completed-over-cap` (10 001 ids).
+  Every existing fixture unchanged byte-for-byte. Server-side only: the
+  stored snapshot (schema 2) also keeps `enchantId` / `gemIds` parsed from
+  the gear link; the wire format is unaffected.
+- `quests.completedTruncated?: boolean` (absent = `false`): set by the addon
+  when `completed` was cut to `ADDON_QUESTS_COMPLETED_MAX` ids (first ids
+  ascending); kept in the stored snapshot. New valid fixture
+  `char-forever-quests-truncated` (3 ids + `completedTruncated: true`).
+
+## v1 — 2026-10-07 — two apply-time error codes — **additive**
+
+- **Additive (stays v1).** `AddonImportErrorCodeSchema` gains
+  `CHARACTER_CLAIMED` and `RULESET_REQUIRED` (both 422), returned only by the
+  new Raid Ledger "create a character from an export" route (ROK-1738).
+  Like the other apply-time codes (CONTRACT.md §7) they are checks against
+  the Raid Ledger account, never addon-format bugs. Token grammar, envelope,
+  payloads, fixtures and `schema.json` unchanged.
+
+## v1 — 2026-10-05 — mixed paste ("Export all") — **additive**
+
+- **Additive (stays v1).** One paste may now carry one `char`, one `guild`
+  export (unpaged or every page once) and one `raid` string together, any
+  order (ROK-1737, CONTRACT.md §5.1). Token grammar, envelope and every
+  payload unchanged; a single-section paste decodes exactly as before
+  (same result, same per-section sha256). The addon may adopt it at will.
+- New constants: `ADDON_IMPORT_MAX_TOKENS = 10` (whole paste),
+  `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS = 600`. `ADDON_IMPORT_MAX_PAGES`
+  stays 8 and now applies to one guild export's pages only.
+- Mixed paste is all-or-nothing; every section must share `who.guid`,
+  `client.region`, the realm-less exporter name, and an `exportedAt` within
+  600 s (`INVALID_PAYLOAD`); a duplicate section → `PAGES_INCOMPLETE`. The
+  character binding runs against every section. Still additive: these rules
+  only reject pastes that were rejected entirely before ROK-1737.
+- Fixtures: valid `.json` for a mixed paste is `{ sections: [...] }`
+  (CONTRACT.md §8). New valid: `mixed-char-raid`,
+  `mixed-char-guild3-raid-shuffled`; new invalid: `mixed-two-char`,
+  `mixed-guild-incomplete`, `mixed-different-exporters`,
+  `mixed-different-region`, `mixed-11-tokens`.
+  Every existing fixture unchanged byte-for-byte. `schema.json` unchanged.
+
+## v1 — 2026-10-05 (initial)
+
+- **Breaking (new contract).** First formal, versioned contract between Raid
+  Ledger and the LedgerLink addon (ROK-1724; operator ruling 2026-10-05:
+  Raid Ledger owns the format, LedgerLink conforms).
+- Envelope `!RL1!<section>[-<n>of<m>]!<base64(zlib(json))>`, sections
+  `char` / `guild` / `raid`; guild paging up to 8 pages / 2000 members.
+- Payload `schema: 1`; every object strict (unknown key rejects the string;
+  no `officerNote`); `client.region` numeric 1–5; ruleset spelled
+  `roleplaying`.
+- `schema.json` generated from `AddonExportSchema`; golden fixtures: 7 valid,
+  9 invalid.
+
+- 2026-10-05 v1 — fixture fix, additive: guild fixtures now include the exporter; wire format unchanged.

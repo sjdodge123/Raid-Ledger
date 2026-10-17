@@ -1,0 +1,46 @@
+{
+  "enabledPlugins": {
+    "devedup-rl@devedup-rl": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__linear__list_issues",
+      "mcp__linear__get_issue",
+      "mcp__linear__list_cycles",
+      "mcp__linear__list_projects",
+      "mcp__linear__list_teams",
+      "mcp__linear__list_issue_statuses",
+      "mcp__linear__list_issue_labels",
+      "mcp__linear__list_milestones",
+      "mcp__linear__list_comments",
+      "mcp__linear__get_team",
+      "mcp__linear__get_project",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__read_network_requests",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__find",
+      "mcp__mcp-env__story_status",
+      "mcp__mcp-env__env_check",
+      "mcp__mcp-env__env_service_status",
+      "mcp__mcp-env__mcp_health",
+      "Bash(./scripts/deploy_dev.sh --status:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // empty'); if ! echo \"$CMD\" | grep -qE '(^|[;&|]|&&)[[:space:]]*git[[:space:]]+push([[:space:]]|$)'; then echo '{\"continue\":true}'; exit 0; fi; HOOK_CWD=$(echo \"$INPUT\" | jq -r '.cwd // empty'); [ -n \"$HOOK_CWD\" ] && [ -d \"$HOOK_CWD\" ] && cd \"$HOOK_CWD\"; CD_TARGET=$(echo \"$CMD\" | grep -oE '(^|[;&|]|&&)[[:space:]]*cd[[:space:]]+[^;&|]+' | tail -1 | sed -E 's/^[;&|[:space:]]*cd[[:space:]]+//; s/[[:space:]]+$//'); [ -n \"$CD_TARGET\" ] && [ -d \"$CD_TARGET\" ] && cd \"$CD_TARGET\"; ROOT=$(git rev-parse --show-toplevel 2>/dev/null); GATE=\"$ROOT/scripts/smoke/push-gate.sh\"; [ -x \"$GATE\" ] || GATE=\"${CLAUDE_PROJECT_DIR:-}/scripts/smoke/push-gate.sh\"; if [ -x \"$GATE\" ]; then exec bash \"$GATE\"; fi; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Pre-push smoke gate script scripts/smoke/push-gate.sh is missing here (ROK-1566). Rebase this branch onto origin/main to pick it up, then retry the push.\"}}'",
+            "timeout": 10,
+            "statusMessage": "Checking smoke test verification..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,236 @@
+/**
+ * ROK-1464 — every user-facing string on the LFG group page.
+ *
+ * Kept in one module so the page's vocabulary ("Looking for group" vs
+ * "Looking for members", the reason chips, the two failure stories) can be
+ * reviewed as copy rather than hunted across six components.
+ */
+import type { LfgSuggestionReason } from '@raid-ledger/contract';
+
+export const LFG_COPY = {
+    join: "+1 · I'm in",
+    withdraw: 'Withdraw',
+    /**
+     * `POST /lfg/:id/convert` only flips intents of ACTIVE participants, so a
+     * viewer without one would create a poll and then fail the convert —
+     * leaving a permanent retry card and live intents behind.
+     */
+    findATimeNeedsIntent:
+        '+1 first — you have to be in the group to start its poll',
+    emptyState: "Nobody's looking for a group right now — be the first",
+    overlapTitle: "When everyone's free",
+    overlapNeedsTwo: 'Overlap appears once two people are in',
+    overlapEmpty: 'No shared window yet — the grid needs more hours in it',
+    historyTitle: 'Played here before',
+    /** Attendance WAS taken for this session and nobody turned up. */
+    nobodyAttended: 'nobody attended',
+    historyEmpty: 'No sessions logged for this game yet',
+    suggestionsTitle: 'Might want in',
+    suggestionsEmpty: 'Nobody else to suggest right now',
+    /**
+     * ROK-1535 — a read that FAILED says so. The panel gets `undefined` for a
+     * 429 / 401 / 500 / schema rejection exactly as it does for an empty list,
+     * and reporting "nobody" for a failure hides the outage behind a fact
+     * about the community that is not true.
+     */
+    suggestionsFailed: "Couldn't load suggestions — refresh to try again",
+    invite: 'Invite',
+    /** ROK-1455 — a live invite exists for this row (sent or declined; D7). */
+    invited: 'Invited',
+    /**
+     * Every recipient-scoped refusal (opted out, budget spent, declined,
+     * ineligible) renders this ONE neutral label — never the reason (D13).
+     */
+    inviteUnavailable: 'Not available',
+    /** Fallback for a 429 whose body carries no message; the server's wins. */
+    inviteCapped:
+        'This group has sent its invites for the day. Try again tomorrow.',
+    inviteFailed: 'Could not send the invite',
+    /**
+     * Links to the WHOLE game detail page (co-op attribution included), so it
+     * is not labelled as co-op-only — operator walk, 2026-09-02.
+     */
+    detailsLink: 'Details ↗',
+    notFoundTitle: "We couldn't find that game",
+    notFoundBody: 'The link may be stale, or the game was never added here.',
+    backToGames: 'Back to Games',
+    convertFailed:
+        'Poll created, but the group could not be marked as scheduled',
+    convertRetry: 'Retry',
+    openPoll: 'Open the poll',
+    suggestFailed:
+        'Poll created, but that time was not pre-filled — add it on the poll page',
+    findATimeFailed: 'Could not create the poll',
+    /**
+     * ROK-1479, retuned by ROK-1616 — the urgency choice. Raising a hand is a
+     * two-step click: pick the game, then say WHEN. The three labels are the
+     * ONLY vocabulary for it, so every surface that offers the choice reads
+     * them from here — `lfg-copy.guard.test.ts` fails the build if one drifts.
+     */
+    urgencyPrompt: 'When do you want to play?',
+    /** The original ROK-1451 intent: quiet, 7 days (ROK-1691; was 14). */
+    urgencyWeek: 'This week',
+    /**
+     * ROK-1616 — the on-demand horizon. Still a `now` intent on a half-hour
+     * TTL under the hood; the player is no longer shown the number, because a
+     * TTL is an implementation detail and two of them were a decision nobody
+     * wanted to make while hearting a game.
+     */
+    urgencyNow: 'Right now',
+    /** ROK-1619 AC6: the words that carry the spawn mark; the emoji only reinforces. */
+    urgencyNowStartsGroup: 'starts the group',
+    /**
+     * ROK-1616 — later today. Expires at 04:00 local the NEXT day, so a hand
+     * raised at teatime survives a session that runs past midnight. It took
+     * the retired `Right now · 1 hour` slot but means nothing like it.
+     */
+    urgencyTonight: 'Tonight',
+    /**
+     * ROK-1479 A7 — the strip above the avatar row listing the members who
+     * want to play RIGHT NOW, soonest to lapse first.
+     */
+    nowStripTitle: 'Right now',
+    /**
+     * ROK-1494 A7 — the playing-now state. Once a `now` group spawns its ad-hoc
+     * event the intents are CONVERTED, so `activeCount` is 0 and the page would
+     * otherwise read "Nobody's looking" while the group is mid-session (D9).
+     * Copy proposals — flagged to the operator in the PR body.
+     */
+    playingNowTitle: 'Playing now',
+    playingNowJoinVoice: 'Join voice',
+    playingNowOpenEvent: 'Open the event',
+    /**
+     * ROK-1483 — the LFG page's heading for the mirrored Discord thread.
+     *
+     * Only the heading lives here. The strings INSIDE the viewer (its empty
+     * state and its Discord link) are owned by `ThreadedChatViewer`'s own
+     * surface-agnostic vocabulary, because ROK-1484 mounts that component on
+     * a lineup and a poll where "LFG" would be wrong. Duplicating them here
+     * would give one on-screen sentence two sources of truth, only one of
+     * which renders — so do not re-add them.
+     */
+    conversationTitle: 'Conversation',
+    /**
+     * ROK-1573/1572/1571 — the hero + top bar (approved design copy).
+     */
+    startSchedulingPoll: 'Start a scheduling poll',
+    startPollHint: 'Everyone looking gets a Discord card and a vote on times.',
+    lockIn: 'Lock in this event',
+    lockInFailed: 'Could not create the event',
+    /**
+     * ROK-1613 — the on-demand start, beside the scheduling poll. Operator
+     * ruling: the button is ALWAYS on the page, and its semantics are INVITE,
+     * not silent enrolment ("I always want a start the event now button on the
+     * LFG page that invites all +1s").
+     */
+    startNow: 'Start playing now',
+    startNowFailed: 'Could not start the session',
+    /**
+     * ROK-1613 AC6 — the hero's refusal, shared by BOTH under-card actions.
+     *
+     * One caption now sits under two buttons, so it cannot name either one:
+     * `findATimeNeedsIntent` ends "to start its poll", which is the wrong
+     * sentence next to "Start playing now". The lock-in panel keeps the
+     * poll-specific wording, because there the line still gates one action.
+     */
+    heroNeedsIntent: '+1 first — you have to be in the group',
+    manage: 'Manage',
+    goBack: 'Go back',
+    badgeLooking: 'LOOKING FOR MEMBERS',
+    badgeFull: 'FULL GROUP',
+    badgeEventSet: 'EVENT SET',
+    eventSetPill: 'Event set',
+    copyLink: 'Copy link',
+    copyLinkLabel: 'Copy group link',
+    copyLinkSuccess: 'Link copied',
+    copyLinkFailed: 'Failed to copy link',
+} as const;
+
+/** Chip text for why a player was suggested. */
+export const REASON_CHIP: Record<LfgSuggestionReason, string> = {
+    played: 'played before',
+    owns: 'owns it',
+    hearted: 'hearted it',
+};
+
+/** One-line explanation under a suggestion, keyed by its strongest reason. */
+export const REASON_SUBTITLE: Record<LfgSuggestionReason, string> = {
+    played: 'Has played this with the group',
+    owns: 'Already has it in their library',
+    hearted: 'Hearted this game',
+};
+
+/** Below this much remaining, a countdown renders in whole seconds. */
+export const SECONDS_GRANULARITY_MS = 120_000;
+
+/**
+ * How long a `now` intent has left, in words (ROK-1479 A7/A8).
+ *
+ * Minutes are FLOORED, so the line reads "at least N minutes" and never
+ * promises time that is not there; under two minutes it switches to whole
+ * seconds, which is the point at which a minute figure stops being useful.
+ * A lapsed instant clamps to zero rather than going negative — the reads drop
+ * the member on the next fetch, and a "-3s left" chip in between is a bug the
+ * viewer can see.
+ *
+ * @param remainingMs - `expiresAt` minus the shared tick's `now`.
+ */
+export function expiresIn(remainingMs: number): string {
+    const remaining = Math.max(0, remainingMs);
+    if (remaining < SECONDS_GRANULARITY_MS) {
+        return `${Math.floor(remaining / 1_000)}s left`;
+    }
+    return `${Math.floor(remaining / 60_000)} min left`;
+}
+
+/**
+ * One chip of the "Right now" strip: who, and how long they are up for.
+ *
+ * @param name - The member's display name, or their username.
+ * @param remaining - The formatted countdown from {@link expiresIn}.
+ */
+export function nowChip(name: string, remaining: string): string {
+    return `🔥 ${name} · ${remaining}`;
+}
+
+/**
+ * The live head-count line of the playing-now card (ROK-1494 AC4).
+ *
+ * Reads the count off the EVENT's roster, so it counts voice joiners who never
+ * held an LFG intent — hence "in voice" rather than "looking".
+ *
+ * @param count - `playingNow.participantCount`, ad-hoc participants who have
+ *   not left.
+ */
+export function playingNowCount(count: number): string {
+    return `${count} in voice`;
+}
+
+/** `4 looking · 2 want to play now` — the now half drops at zero (hero). */
+export function heroHeadline(activeCount: number, nowCount: number): string {
+    const now = nowCount > 0 ? ` · ${nowCount} want to play now` : '';
+    return `${activeCount} looking${now}`;
+}
+
+/** `Needs 1 more for a full group` — only while short of the threshold. */
+export function heroSub(
+    activeCount: number,
+    viabilityThreshold: number | null,
+): string | undefined {
+    if (viabilityThreshold == null) return undefined;
+    const missing = viabilityThreshold - activeCount;
+    return missing > 0 ? `Needs ${missing} more for a full group` : undefined;
+}
+
+/**
+ * `Wed 8 PM · 3 signed up` — the event-set hero headline. The converted-event
+ * read carries only the start (`LfgConvertedEventDto`), so no end is shown.
+ */
+export function eventSetHeadline(startIso: string, signupCount: number): string {
+    const when = new Date(startIso).toLocaleString('en-US', {
+        weekday: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+    return `${when.replace(':00', '')} · ${signupCount} signed up`;
+}

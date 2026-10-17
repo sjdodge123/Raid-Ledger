@@ -1,0 +1,136 @@
+name: Publish images
+
+# Builds and pushes the tagged images, then creates the GitHub release (the
+# only release creator). Runs on a v* tag push made with your own credentials,
+# or on a workflow_dispatch against a tag ref — release.yml dispatches it that
+# way, because its GITHUB_TOKEN tag push does not fire push-event workflows.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Refuse a non-tag ref
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "::error::Publish images only runs on a v* tag ref (got $GITHUB_REF). Dispatch it with --ref vX.Y.Z."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # ROK-1475: the no-feature notice resolves the PREVIOUS v* tag with
+          # `git describe` from this tag's parent, which needs full history + tags.
+          fetch-depth: 0
+          fetch-tags: true
+
+      # ROK-1475 post-hoc notice. This tag already exists and may already be
+      # public, so the check is WARN-ONLY: `--mode warn` always exits 0, and
+      # continue-on-error covers even a git/usage error (exit 2). It must never
+      # deny an image to a tag someone already pushed.
+      - name: No-feature notice (warn only)
+        continue-on-error: true
+        run: |
+          # GitHub runs `run:` under `bash -e -o pipefail`, so letting the
+          # checker's exit status reach the shell would abort the step body
+          # mid-way — before the closing code fence — leaving a malformed job
+          # summary and swallowing stderr (which is where exit 2 explains
+          # itself). Capture stdout+stderr, then always render the whole block.
+          set +e
+          check_output="$(bash scripts/check-feat-since-tag.sh --ref "$GITHUB_REF_NAME" --mode warn 2>&1)"
+          check_rc=$?
+          set -e
+          echo "$check_output"
+          {
+            echo "### ROK-1475 feature check for \`$GITHUB_REF_NAME\` (exit $check_rc)"
+            echo ""
+            echo '```'
+            echo "$check_output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Warn-only by contract: this tag may already be public, so the notice
+          # never denies it an image.
+          exit 0
+
+      - name: Lowercase image name
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
+            type=sha,prefix=
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile.allinone
+          platforms: linux/amd64
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            APP_VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=allinone
+          cache-to: type=gha,mode=max,scope=allinone
+          push: true
+
+  release:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            ## Quick Deploy
+
+            ```bash
+            docker run -d -p 80:80 \
+              -v raid-ledger-data:/data \
+              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+
+            Check container logs for admin credentials. The `-v` mount ensures data persists across container updates (e.g. Watchtower).
+
+            **Reset admin password:**
+            ```bash
+            docker run -d -p 80:80 -e ADMIN_PASSWORD=mynewpassword \
+              -v raid-ledger-data:/data \
+              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+
+            See [README](https://github.com/${{ github.repository }}#readme) for full setup.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

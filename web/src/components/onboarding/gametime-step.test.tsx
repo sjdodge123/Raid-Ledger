@@ -1,0 +1,126 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GameTimeStep } from './gametime-step';
+
+const mockGameTimeEditor = {
+    slots: [],
+    isLoading: false,
+    isDirty: false,
+    handleChange: vi.fn(),
+    save: vi.fn(),
+    tzLabel: 'UTC',
+};
+
+vi.mock('../../hooks/use-game-time-editor', () => ({
+    useGameTimeEditor: vi.fn(() => mockGameTimeEditor),
+}));
+
+/** Captures the most recent props passed to GameTimeGrid */
+let capturedGridProps: Record<string, unknown> = {};
+
+vi.mock('../features/game-time/GameTimeGrid', () => ({
+    GameTimeGrid: (props: Record<string, unknown>) => {
+        capturedGridProps = props;
+        return <div data-testid="game-time-grid">GameTimeGrid</div>;
+    },
+}));
+
+let mockIsDesktop = false;
+vi.mock('../../hooks/use-media-query', () => ({
+    useMediaQuery: () => mockIsDesktop,
+}));
+
+vi.mock('../features/game-time/away/AwayPanel', () => ({
+    AwayPanel: ({ layout }: { layout: string }) => <div data-testid="away-panel" data-layout={layout} />,
+}));
+
+import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
+
+const mockUseGameTimeEditor = useGameTimeEditor as unknown as ReturnType<typeof vi.fn>;
+
+function createQueryClient() {
+    return new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+}
+
+function renderWithProviders(ui: React.ReactElement) {
+    return render(
+        <QueryClientProvider client={createQueryClient()}>
+            {ui}
+        </QueryClientProvider>
+    );
+}
+
+describe('GameTimeStep — rendering (ROK-1011)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        capturedGridProps = {};
+    });
+
+    it('always renders GameTimeGrid with compact mode', () => {
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
+    });
+
+    // ROK-1426 replaced drag-to-paint with blocks, so the instruction had to
+    // change with it. Still asserts real copy, and still fails if it goes stale
+    // again: "paint" must be gone, and the block wording must be present.
+    it('instructs the user to add blocks and drag the handles', () => {
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByText(/add blocks for the hours you're free/i)).toBeInTheDocument();
+        expect(screen.queryByText(/paint your weekly availability/i)).not.toBeInTheDocument();
+    });
+
+    it('renders the "When Do You Play?" heading', () => {
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByText(/when do you play\?/i)).toBeInTheDocument();
+    });
+
+    it('passes noStickyOffset to GameTimeGrid for FTE dialog without nav bar', () => {
+        renderWithProviders(<GameTimeStep />);
+        expect(capturedGridProps.noStickyOffset).toBe(true);
+    });
+});
+
+describe('GameTimeStep — loading', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('renders a loading spinner while data is loading', () => {
+        mockUseGameTimeEditor.mockReturnValue({
+            slots: [],
+            isLoading: true,
+            isDirty: false,
+            handleChange: vi.fn(),
+            save: vi.fn(),
+            tzLabel: 'UTC',
+        });
+
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByText(/loading/i)).toBeInTheDocument();
+        expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
+    });
+});
+
+describe('GameTimeStep — away panel (ROK-1585 AC7)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseGameTimeEditor.mockReturnValue(mockGameTimeEditor);
+    });
+
+    it('stacks the away panel below 1024px (the wizard runs on phones too)', () => {
+        mockIsDesktop = false;
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByTestId('away-panel')).toHaveAttribute('data-layout', 'stacked');
+    });
+
+    it('uses the one-line inline away panel from 1024px', () => {
+        mockIsDesktop = true;
+        renderWithProviders(<GameTimeStep />);
+        expect(screen.getByTestId('away-panel')).toHaveAttribute('data-layout', 'inline');
+    });
+});

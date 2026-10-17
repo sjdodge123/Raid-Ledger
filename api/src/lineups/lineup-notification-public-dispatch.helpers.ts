@@ -1,0 +1,278 @@
+/**
+ * Full-lifecycle orchestrators for the four notifications gated by
+ * visibility (ROK-1115). Each export wraps the shared shape:
+ *   1. Build a LineupInfo from lineupId + caller-provided overrides.
+ *   2. Short-circuit via the matching `route...IfPrivate` helper.
+ *   3. Resolve the embed context.
+ *   4. Post the channel embed + run any per-member DM fan-out.
+ *
+ * Extracted from LineupNotificationService to keep the orchestrator under
+ * the 300-line ESLint ceiling once the private-routing branches landed.
+ */
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import type { NotificationService } from '../notifications/notification.service';
+import type { NotificationDedupService } from '../notifications/notification-dedup.service';
+import type { SettingsService } from '../settings/settings.service';
+import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import type {
+  EmbedContext,
+  EmbedWithRow,
+  NominationEntry,
+} from './lineup-notification-embed.helpers';
+import { loadEffectiveNominationCapById } from './lineups-nomination-cap.helpers';
+import {
+  buildMilestoneEmbed,
+  buildDecidedEmbed,
+  buildEventCreatedEmbed,
+} from './lineup-notification-embed.helpers';
+import {
+  postChannelEmbed,
+  resolveEmbedCtx,
+  type DispatchDeps,
+} from './lineup-notification-dispatch.helpers';
+import {
+  fanOutMatchMemberDMs,
+  fanOutSchedulingDMs,
+  fanOutEventCreatedDMs,
+} from './lineup-notification-dm-batch.helpers';
+import { findMatchMemberUsers } from './lineup-notification-targets.helpers';
+import { loadDecisionReason } from './lineup-decision-reason.helpers';
+import { resolveEventRosterNames } from './lineup-notification-event-roster.helpers';
+import {
+  routeNominationMilestoneIfPrivate,
+  routeMatchesFoundIfPrivate,
+  routeSchedulingOpenIfPrivate,
+  routeEventCreatedIfPrivate,
+} from './lineup-notification-routing.helpers';
+import type { LineupInfo, MatchInfo } from './lineup-notification.service';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Composed deps the lifecycle orchestrators need. */
+export interface OrchestrationDeps {
+  db: Db;
+  notificationService: NotificationService;
+  dedupService: NotificationDedupService;
+  botClient: DiscordBotClientService;
+  settingsService: SettingsService;
+}
+
+/** Narrow the orchestration deps to what the dispatch helpers read. */
+export function dispatchDeps(deps: OrchestrationDeps): DispatchDeps {
+  const { db, settingsService, botClient, dedupService } = deps;
+  return { db, settingsService, botClient, dedupService };
+}
+
+type BuildFn = (
+  ctx: EmbedContext,
+) => Promise<EmbedWithRow | null> | EmbedWithRow | null;
+
+async function postEmbed(
+  deps: OrchestrationDeps,
+  dedupKey: string,
+  build: BuildFn,
+  ctx: EmbedContext,
+): Promise<void> {
+  await postChannelEmbed(dispatchDeps(deps), dedupKey, build, ctx);
+}
+
+/** AC-2: Milestone notification — gates on visibility, then posts embed. */
+export async function orchestrateMilestone(
+  deps: OrchestrationDeps,
+  lineupId: number,
+  threshold: number,
+  entries: NominationEntry[],
+  lineupInfo?: Partial<LineupInfo>,
+): Promise<void> {
+  const lineup: LineupInfo = { id: lineupId, ...lineupInfo };
+  const routedPrivate = await routeNominationMilestoneIfPrivate(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    lineup,
+    threshold,
+    entries.length,
+  );
+  if (routedPrivate) return;
+  // ROK-1461: the body reports `N of M nominations filled.` against the REAL
+  // effective cap, not the percentage threshold that triggered the post.
+  const ctx = await resolveEmbedCtx(
+    dispatchDeps(deps),
+    lineupId,
+    'nominations',
+    {
+      nominationCount: entries.length,
+      nominationCap: await loadEffectiveNominationCapById(deps.db, lineupId),
+      // ROK-1513: the hook's check-time deadline wins over the live row, so
+      // an early advance racing this post cannot print the VOTING deadline.
+      ...(lineup.phaseDeadline !== undefined
+        ? { phaseDeadline: lineup.phaseDeadline }
+        : {}),
+      ...(lineup.nominationTargetPct !== undefined
+        ? { nominationTargetPct: lineup.nominationTargetPct }
+        : {}),
+    },
+  );
+  await postEmbed(
+    deps,
+    `lineup-milestone:${lineupId}:${threshold}`,
+    () => buildMilestoneEmbed(ctx, threshold, entries),
+    ctx,
+  );
+}
+
+/** AC-5: Decided-tier notification — gates on visibility, then posts. */
+export async function orchestrateMatchesFound(
+  deps: OrchestrationDeps,
+  lineupId: number,
+  matches: MatchInfo[],
+  lineupInfo?: Partial<LineupInfo>,
+): Promise<void> {
+  const lineup: LineupInfo = { id: lineupId, ...lineupInfo };
+  // ROK-1474 (D10): the outcome states its own reasoning. Null for a clean
+  // win or an operator's hand-picked winner, and the card then says nothing.
+  // Loaded BEFORE the private short circuit: a private lineup gets DMs
+  // INSTEAD of the embed, so resolving it after the return left exactly the
+  // people who cannot see the channel card with no reasoning at all.
+  const decisionReason = await loadDecisionReason(deps.db, lineupId);
+  const routedPrivate = await routeMatchesFoundIfPrivate(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    lineup,
+    matches.length,
+    decisionReason,
+  );
+  if (routedPrivate) return;
+  // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
+  const schedulingEnabled = lineup.includeSchedulingPhase !== false;
+  const ctx = {
+    ...(await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided')),
+    schedulingEnabled,
+    decisionReason,
+  };
+  await postEmbed(
+    deps,
+    `lineup-decided:${lineupId}`,
+    () => buildDecidedEmbed(ctx, matches),
+    ctx,
+  );
+  await fanOutMatchMemberDMs(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    lineupId,
+    matches,
+    schedulingEnabled,
+  );
+}
+
+/**
+ * AC-8: Scheduling-open notification — gates on visibility, then DMs.
+ *
+ * The scheduling poll card (ROK-1473, posted by `fireMatchEnteredScheduling`
+ * on the same promote paths) is the only channel surface for a match entering
+ * scheduling (TDB:576). A separate channel notice raced the card and doubled
+ * up, so this posts no channel embed — it only routes private lineups and
+ * fans the per-member DMs out for public ones.
+ */
+export async function orchestrateSchedulingOpen(
+  deps: OrchestrationDeps,
+  match: MatchInfo,
+  lineupInfo?: Partial<LineupInfo>,
+): Promise<void> {
+  const lineup: LineupInfo = { id: match.lineupId, ...lineupInfo };
+  const routedPrivate = await routeSchedulingOpenIfPrivate(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    lineup,
+    match,
+  );
+  if (routedPrivate) return;
+  await fanOutSchedulingDMs(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    match,
+  );
+}
+
+/**
+ * Build the event-created embed builder bound to a match, ctx, and the names
+ * the card may print.
+ *
+ * ROK-1624: `rosterNames` is the event's roster, NOT the match group — see
+ * `resolveEventRosterNames`. The caller keeps the group in scope as
+ * `members`, so the still-unruled AC4 line ("5 of 12 from the group") is one
+ * extra argument from here.
+ */
+function eventCreatedBuilder(
+  match: MatchInfo,
+  ctx: EmbedContext,
+  eventDate: Date,
+  eventId: number | undefined,
+  rosterNames: string[],
+): BuildFn {
+  return () =>
+    buildEventCreatedEmbed(
+      ctx,
+      match.gameName,
+      match.gameId,
+      eventDate,
+      eventId,
+      rosterNames,
+    );
+}
+
+/** AC-10: Event-created notification — gates on visibility, then posts. */
+export async function orchestrateEventCreated(
+  deps: OrchestrationDeps,
+  match: MatchInfo,
+  eventDate: Date,
+  eventId: number | undefined,
+  lineupInfo?: Partial<LineupInfo>,
+): Promise<void> {
+  const lineup: LineupInfo = { id: match.lineupId, ...lineupInfo };
+  const defaultTimezone =
+    (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
+  const routedPrivate = await routeEventCreatedIfPrivate(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    lineup,
+    match,
+    eventDate,
+    eventId,
+    defaultTimezone,
+  );
+  if (routedPrivate) return;
+  const members = await findMatchMemberUsers(deps.db, match.id);
+  // ROK-1624: the card names the people ACTUALLY rostered on the event. The
+  // group (`members`) still gets the DM fan-out below — everyone who was in
+  // the match hears that a time was locked in — but announcing all of them as
+  // players advertised 12 for an event 5 of them were on.
+  const rosterNames = await resolveEventRosterNames(deps.db, eventId, members);
+  const ctx = await resolveEmbedCtx(
+    dispatchDeps(deps),
+    match.lineupId,
+    'decided',
+  );
+  await postEmbed(
+    deps,
+    `lineup-event:${match.id}`,
+    eventCreatedBuilder(match, ctx, eventDate, eventId, rosterNames),
+    ctx,
+  );
+  await fanOutEventCreatedDMs(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    match,
+    eventDate,
+    eventId,
+    members,
+    defaultTimezone,
+  );
+}

@@ -1,0 +1,181 @@
+/**
+ * Nomination card for the Community Lineup detail grid (ROK-935).
+ * Matches the Figma "Lineup Detail" card layout.
+ */
+import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
+import type { LineupEntryResponseDto } from '@raid-ledger/contract';
+import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { ConfirmationPill } from '../common/ConfirmationPill';
+import { GameBadgeRow, CarriedOverBadge } from '../games/game-badges';
+import { fromLineupEntry } from '../games/game-badges.helpers';
+import { GenreBadge, GradientOverlay, RatingBadge } from '../games/game-card-parts';
+import { GENRE_MAP } from '../../lib/game-utils';
+import { resolveEffectiveOnlineMax } from './coop-fit';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
+
+interface NominationCardProps {
+    entry: LineupEntryResponseDto;
+    onRemove: (gameId: number) => void;
+    /**
+     * ROK-1444: number of people actually IN this lineup. When the group grows
+     * past a nominated game's co-op capacity the card is flagged, so they can
+     * see which existing picks no longer fit before voting opens.
+     */
+    participantCount?: number | undefined;
+}
+
+/** Cover image with gradient, badges, title overlay. */
+function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
+    const rawRating = entry.aggregatedRating ?? entry.rating ?? null;
+    const rating = rawRating != null && rawRating > 0 ? rawRating : null;
+    return (
+        <div className="relative h-48 overflow-hidden">
+            {entry.gameCoverUrl ? (
+                <img src={entry.gameCoverUrl} alt={entry.gameName} className="w-full h-full object-cover"
+                    width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(entry.gameCoverUrl, '(max-width: 640px) 100vw, 320px')} />
+            ) : (
+                <div className="w-full h-full bg-zinc-800" />
+            )}
+            {/* ROK-1472: the shared art scrim — it stays dark on every scheme, so the white title reads over
+                the IMAGE. The old from-surface fade went white on light schemes (~1.1:1 under a white title). */}
+            <GradientOverlay />
+
+            {/* Top-left: carried over marker, now the shared badge. */}
+            {entry.carriedOver && (
+                <span className="absolute top-2 left-2">
+                    <CarriedOverBadge />
+                </span>
+            )}
+
+            {/* Top-right: same rating badge the other two surfaces render. */}
+            {rating != null && <RatingBadge rating={rating} />}
+
+            {/* Game title overlaid at bottom of cover */}
+            <h3 className="absolute bottom-2 left-2.5 right-2.5 text-sm font-semibold text-white truncate">
+                {entry.gameName}
+            </h3>
+        </div>
+    );
+}
+
+/**
+ * Cost context: "$9.99", "$9.99 (-50%)" or "$9.99 (-50%) for 3".
+ *
+ * ROK-1314 round 2: an earlier pass stripped the `(-50%)` from here on the
+ * grounds that the badge row already said `On Sale`. That was wrong and review
+ * caught it — with `price="label"` the row prints the CATEGORY only, so the
+ * magnitude vanished from the card entirely and a 50%-off nomination looked
+ * identical to a 1%-off one.
+ *
+ * The two are complementary, not duplicative: the badge says what KIND of deal
+ * it is in locked vocabulary, this says how big it is, what it costs, and how
+ * many people would have to buy it (`nonOwnerCount`) — the last of which no
+ * shared badge can express.
+ */
+function formatPrice(entry: LineupEntryResponseDto): string | null {
+    if (entry.itadCurrentPrice == null) return null;
+    const price = `$${entry.itadCurrentPrice.toFixed(2)}`;
+    const cut = (entry.itadCurrentCut ?? 0) > 0 ? ` (-${entry.itadCurrentCut}%)` : '';
+    const forCount = entry.nonOwnerCount > 0 ? ` for ${entry.nonOwnerCount}` : '';
+    return `${price}${cut}${forCount}`;
+}
+
+/** Card body: nominator + price on one line, optional note below. */
+function CardBody({ entry, canRemove, isMine, onRemove }: {
+    entry: LineupEntryResponseDto;
+    canRemove: boolean;
+    isMine: boolean;
+    onRemove: (id: number) => void;
+}): JSX.Element {
+    const priceText = formatPrice(entry);
+    const primaryGenre = entry.genres?.[0] != null
+        ? GENRE_MAP[entry.genres[0]] ?? null
+        : null;
+    return (
+        <div className="px-2.5 py-2">
+            {/* ROK-1314: the ONE shared badge strip, replacing the bespoke
+                ratio-coloured +N tally and the hardcoded sale span. The body
+                already prints the price figure, so the row keeps the locked
+                price vocabulary without repeating the number. */}
+            <div className="flex flex-wrap items-center gap-1 mb-1.5">
+                {primaryGenre && <GenreBadge label={primaryGenre} />}
+                <GameBadgeRow
+                    game={fromLineupEntry(entry)}
+                    variant="full"
+                    price="label"
+                />
+            </div>
+            <div className="flex items-center justify-between">
+                <span className="text-[11px] text-dim">
+                    by <span className="text-secondary">{entry.nominatedBy.displayName}</span>
+                </span>
+                {priceText && (
+                    <span className="text-[11px] text-success">{priceText}</span>
+                )}
+            </div>
+            {isMine && (
+                <div className="mt-1.5">
+                    <ConfirmationPill variant="text" size="sm">Your nomination</ConfirmationPill>
+                </div>
+            )}
+            {entry.note && (
+                <p className="text-[10px] text-dim italic mt-1 line-clamp-2">&ldquo;{entry.note}&rdquo;</p>
+            )}
+            {canRemove && (
+                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(entry.gameId); }}
+                    className="text-[10px] text-danger/60 hover:text-danger mt-1 transition-colors"
+                >Remove</button>
+            )}
+        </div>
+    );
+}
+
+/**
+ * ROK-1444: has the group outgrown this nomination?
+ *
+ * Reuses ROK-1400's rule verbatim so this card and the NominateModal search row
+ * can never disagree: strictly Co-Optimus-verified, online max only. A
+ * never-synced game resolves to null and is NOT flagged — an absent signal is
+ * honest, an invented one is not. Advisory only, exactly like the search-row
+ * warning: it never hides, disables or blocks anything ("soft filter, no hard
+ * gate").
+ */
+function rosterFit(
+    entry: LineupEntryResponseDto,
+    participantCount: number | undefined,
+): { tooSmall: boolean; max: number | null } {
+    const max = resolveEffectiveOnlineMax(entry.cooptimusOnlineMax);
+    return {
+        tooSmall: participantCount != null && max != null && max < participantCount,
+        max,
+    };
+}
+
+/** Single nomination card. */
+export function NominationCard({ entry, onRemove, participantCount }: NominationCardProps): JSX.Element {
+    const { user } = useAuth();
+    const isMine = !!user && entry.nominatedBy.id === user.id;
+    const canRemove = isMine || isOperatorOrAdmin(user);
+    const { tooSmall, max } = rosterFit(entry, participantCount);
+    const fitClass = tooSmall
+        ? 'border border-warning/70 ring-1 ring-warning/30 hover:border-warning'
+        : 'border border-edge hover:border-emerald-500/50';
+
+    return (
+        <Link
+            to={`/games/${entry.gameId}`}
+            data-testid={tooSmall ? 'nomination-card-too-small' : 'nomination-card'}
+            className={`block rounded-xl bg-surface overflow-hidden hover:shadow-lg transition-all ${fitClass}`}
+        >
+            <CardCover entry={entry} />
+            {tooSmall && (
+                <p data-testid="nomination-fit-warning" className="px-2.5 pt-1.5 text-[10px] font-medium text-warning">
+                    Fits {max} online · group is {participantCount}
+                </p>
+            )}
+            <CardBody entry={entry} canRemove={canRemove} isMine={isMine} onRemove={onRemove} />
+        </Link>
+    );
+}

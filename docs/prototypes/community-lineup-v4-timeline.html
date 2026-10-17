@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Lineup — Variation C: Timeline Flow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Cinzel', 'serif'],
+          },
+          colors: {
+            backdrop: '#020617',
+            surface: '#0f172a',
+            panel: '#1e293b',
+            overlay: '#334155',
+            faint: '#475569',
+            dim: '#64748b',
+            muted: '#94a3b8',
+            secondary: '#cbd5e1',
+            foreground: '#ffffff',
+            edge: '#334155',
+            'edge-strong': '#475569',
+            'edge-subtle': '#1e293b',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #020617; color: #ffffff; font-family: 'Inter', system-ui, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .tab-active { border-bottom: 2px solid #10b981; color: #10b981; }
+    .tab-inactive { border-bottom: 2px solid transparent; color: #94a3b8; }
+    .tab-inactive:hover { color: #cbd5e1; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    .view-btn.active { background: #1e293b; color: #10b981; border-color: #10b981; }
+    .view-btn { background: transparent; color: #94a3b8; border-color: #334155; }
+    /* Timeline connector line */
+    .tl-line { position: relative; }
+    .tl-line::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 32px;
+      bottom: 0;
+      width: 2px;
+      background: #334155;
+    }
+    .tl-line-done::before { background: #10b981; }
+    .tl-line-none::before { display: none; }
+    /* Stepper connector */
+    .step-connector {
+      height: 2px;
+      flex: 1;
+      background: #334155;
+      transition: background 0.3s;
+    }
+    .step-connector.done { background: #10b981; }
+    /* Drag handle styling */
+    .drag-handle { cursor: grab; }
+    .drag-handle:active { cursor: grabbing; }
+    /* Rank number badge */
+    .rank-badge {
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 9999px;
+      font-size: 11px; font-weight: 700;
+    }
+    /* Countdown digits */
+    .countdown-digit {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 10px;
+      min-width: 48px;
+      text-align: center;
+    }
+    .countdown-digit .num {
+      font-family: 'Inter', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1;
+    }
+    .countdown-digit .label {
+      font-size: 9px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+    }
+    /* Journey timeline final view */
+    .journey-node { position: relative; padding-left: 40px; }
+    .journey-node::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 32px;
+      bottom: -16px;
+      width: 2px;
+      background: #334155;
+    }
+    .journey-node:last-child::before { display: none; }
+    .journey-node.done::before { background: #10b981; }
+    .journey-dot {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      width: 16px; height: 16px;
+      border-radius: 9999px;
+      border: 2px solid #334155;
+      background: #0f172a;
+      z-index: 1;
+    }
+    .journey-dot.done {
+      background: #10b981;
+      border-color: #10b981;
+    }
+    .journey-dot.active {
+      border-color: #10b981;
+      background: #0f172a;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+    }
+    .journey-dot.winner {
+      width: 20px; height: 20px;
+      left: 6px; top: 6px;
+      background: #10b981;
+      border-color: #10b981;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25), 0 0 12px rgba(16, 185, 129, 0.3);
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- NAV TABS -->
+  <nav class="sticky top-0 z-50 bg-backdrop/95 backdrop-blur border-b border-edge">
+    <div class="max-w-6xl mx-auto px-4 flex items-center gap-6 h-12">
+      <span class="text-xs text-dim font-medium uppercase tracking-wider whitespace-nowrap">Var C: Timeline</span>
+      <button onclick="showView('games')" id="tab-games" class="tab-active text-sm font-medium pb-0.5 pt-1 px-1 transition-colors whitespace-nowrap">Games Page</button>
+      <button onclick="showView('detail')" id="tab-detail" class="tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors whitespace-nowrap">Lineup Detail</button>
+      <button onclick="showView('voting')" id="tab-voting" class="tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors whitespace-nowrap">Voting</button>
+      <button onclick="showView('decided')" id="tab-decided" class="tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors whitespace-nowrap">Decided</button>
+      <div class="ml-auto flex gap-2">
+        <button onclick="toggleMobile()" class="view-btn border rounded-md px-3 py-1 text-xs font-medium transition-all" id="mobile-toggle">Mobile</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div id="app-container" class="max-w-6xl mx-auto transition-all duration-300">
+
+    <!-- ============================================ -->
+    <!-- VIEW 1: GAMES PAGE — Horizontal Pipeline     -->
+    <!-- ============================================ -->
+    <div id="view-games" class="view-panel">
+
+      <header class="border-b border-edge px-4 py-3 flex items-center justify-between">
+        <h1 class="font-display text-lg font-semibold">Games</h1>
+        <div class="flex items-center gap-3">
+          <button class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </button>
+          <div class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold">SD</div>
+        </div>
+      </header>
+
+      <div class="p-4 space-y-6">
+
+        <!-- COMMUNITY LINEUP BANNER — Horizontal Stepper -->
+        <div class="bg-surface border border-edge rounded-xl overflow-hidden">
+          <!-- Top label -->
+          <div class="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+              <span class="text-emerald-400 text-xs font-semibold uppercase tracking-wider">Community Lineup</span>
+            </div>
+            <span class="text-dim text-xs">Fri, Mar 27</span>
+          </div>
+
+          <div class="p-4 pb-5">
+            <!-- Pipeline Stepper: Nominate -> Vote -> Play -->
+            <div class="flex items-center mb-5 px-2">
+              <!-- Step 1: Nominate (completed) -->
+              <div class="flex flex-col items-center flex-shrink-0">
+                <div class="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center mb-1.5">
+                  <svg class="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <span class="text-emerald-400 text-[11px] font-semibold">Nominate</span>
+                <span class="text-dim text-[10px]">6 games</span>
+              </div>
+
+              <div class="step-connector done mx-2"></div>
+
+              <!-- Step 2: Vote (active) -->
+              <div class="flex flex-col items-center flex-shrink-0">
+                <div class="w-9 h-9 rounded-full border-2 border-emerald-500 bg-emerald-500/15 flex items-center justify-center mb-1.5 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]">
+                  <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                </div>
+                <span class="text-emerald-400 text-[11px] font-semibold">Vote</span>
+                <span class="text-emerald-400 text-[10px]">8 / 12</span>
+              </div>
+
+              <div class="step-connector mx-2"></div>
+
+              <!-- Step 3: Play (pending) -->
+              <div class="flex flex-col items-center flex-shrink-0">
+                <div class="w-9 h-9 rounded-full border-2 border-edge bg-panel flex items-center justify-center mb-1.5">
+                  <svg class="w-4 h-4 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <span class="text-dim text-[11px] font-medium">Play</span>
+                <span class="text-dim text-[10px]">Mar 27</span>
+              </div>
+            </div>
+
+            <!-- Inline summary -->
+            <div class="flex items-center justify-between bg-panel/60 rounded-lg px-3 py-2.5 mb-4">
+              <div class="flex items-center gap-2 text-sm">
+                <span class="text-secondary font-medium">Voting open</span>
+                <span class="text-dim">&mdash;</span>
+                <span class="text-muted">closes <span class="text-amber-400 font-medium">Thu 6 PM</span></span>
+              </div>
+              <span class="text-muted text-xs">2 days left</span>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex gap-2">
+              <a href="#" onclick="showView('voting'); return false;" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg px-4 py-2.5 text-center transition-colors">
+                Cast Your Votes
+              </a>
+              <a href="#" onclick="showView('detail'); return false;" class="bg-panel hover:bg-overlay text-muted hover:text-foreground text-sm font-medium rounded-lg px-4 py-2.5 border border-edge transition-colors">
+                View Timeline
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- REST OF GAMES PAGE (simulated) -->
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Your Community Wants to Play</h3>
+          <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Monster Hunter</div>
+                <div class="text-[10px] text-muted">8 interested</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Helldivers 2</div>
+                <div class="text-[10px] text-muted">6 interested</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Ready or Not</div>
+                <div class="text-[10px] text-muted">5 interested</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Satisfactory</div>
+                <div class="text-[10px] text-muted">4 interested</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Community Wishlisted On Sale</h3>
+          <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute top-2 right-2 bg-emerald-500/90 text-[10px] font-bold px-1.5 py-0.5 rounded-md">-65%</div>
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Baldur's Gate 3</div>
+                <div class="text-[10px] text-emerald-400">$20.99</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute top-2 right-2 bg-emerald-500/90 text-[10px] font-bold px-1.5 py-0.5 rounded-md">-40%</div>
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Enshrouded</div>
+                <div class="text-[10px] text-emerald-400">$17.99</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- VIEW 2: LINEUP DETAIL — Activity Timeline    -->
+    <!-- ============================================ -->
+    <div id="view-detail" class="view-panel hidden">
+
+      <header class="border-b border-edge px-4 py-3">
+        <div class="flex items-center gap-3 mb-2">
+          <button onclick="showView('games')" class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 class="font-display text-lg font-semibold">Community Lineup</h1>
+          <span class="bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2.5 py-1 rounded-full border border-emerald-500/30">Building</span>
+        </div>
+        <p class="text-muted text-sm ml-8">For Friday, Mar 27 &middot; Started by <span class="text-secondary">Roknua</span></p>
+      </header>
+
+      <div class="p-4">
+        <!-- Two-column layout: timeline left, nominations right -->
+        <div class="flex gap-6">
+
+          <!-- LEFT: Activity Timeline / Feed -->
+          <div class="w-72 flex-shrink-0">
+            <h3 class="text-secondary font-semibold text-sm mb-4">Activity</h3>
+
+            <div class="space-y-0">
+              <!-- Timeline event: Lineup created -->
+              <div class="tl-line tl-line-done pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">Roknua</span> started the lineup</p>
+                    <p class="text-[11px] text-dim mt-0.5">Mon, Mar 23 &middot; 9:14 AM</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Timeline event: Nomination 1 -->
+              <div class="tl-line tl-line-done pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">Roknua</span> nominated <span class="text-foreground font-medium">Deep Rock Galactic</span></p>
+                    <p class="text-[11px] text-dim mt-0.5">Mon, Mar 23 &middot; 9:15 AM</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Timeline event: Nomination 2 -->
+              <div class="tl-line tl-line-done pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">Vex</span> nominated <span class="text-foreground font-medium">Lethal Company</span></p>
+                    <p class="text-xs text-dim italic mt-1">"We haven't played this in months, it's been updated!"</p>
+                    <p class="text-[11px] text-dim mt-0.5">Mon, Mar 23 &middot; 10:42 AM</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Timeline event: Nomination 3 -->
+              <div class="tl-line tl-line-done pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">Ash</span> nominated <span class="text-foreground font-medium">Elden Ring</span></p>
+                    <p class="text-[11px] text-dim mt-0.5">Mon, Mar 23 &middot; 11:30 AM</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Timeline event: Nomination 4 (carried over) -->
+              <div class="tl-line tl-line-done pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">GTFO</span> carried over</p>
+                    <p class="text-[11px] text-dim mt-0.5">Auto &middot; from Mar 13 lineup</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Timeline event: Nominations 5-6 -->
+              <div class="tl-line tl-line-done pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">Luna</span> nominated <span class="text-foreground font-medium">Phasmophobia</span></p>
+                    <p class="text-[11px] text-dim mt-0.5">Tue, Mar 24 &middot; 2:18 PM</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tl-line pb-5">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-secondary"><span class="text-foreground font-medium">Drake</span> nominated <span class="text-foreground font-medium">Valheim</span></p>
+                    <p class="text-[11px] text-dim mt-0.5">Tue, Mar 24 &middot; 8:45 PM</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Next step -->
+              <div class="tl-line-none pb-2">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-full border-2 border-emerald-500/50 bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                  </div>
+                  <div class="pt-1">
+                    <p class="text-sm text-emerald-400 font-medium">Ready to start voting</p>
+                    <button class="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium mt-1 transition-colors">Start Voting &rarr;</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: Nomination Cards -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-secondary font-semibold text-sm">Nominations <span class="text-dim font-normal">(6)</span></h3>
+              <div class="flex items-center gap-1 text-xs text-dim">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
+                Sorted by ownership
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <!-- Nomination 1: High ownership -->
+              <div class="bg-surface border border-edge rounded-xl p-3 hover:border-emerald-500/30 transition-colors cursor-pointer">
+                <div class="flex gap-3">
+                  <div class="w-14 h-18 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 class="text-foreground font-medium text-sm">Lethal Company</h4>
+                        <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Vex</span></p>
+                      </div>
+                      <div class="flex gap-1.5 flex-shrink-0">
+                        <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                        <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                      <div class="flex items-center gap-1.5">
+                        <div class="flex -space-x-1.5">
+                          <div class="w-5 h-5 rounded-full bg-emerald-700 border border-surface"></div>
+                          <div class="w-5 h-5 rounded-full bg-emerald-700 border border-surface"></div>
+                          <div class="w-5 h-5 rounded-full bg-emerald-700 border border-surface"></div>
+                        </div>
+                        <span class="text-emerald-400 text-xs font-medium">11 / 12 own</span>
+                      </div>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs">1 needs it &middot; <span class="text-emerald-400">$9.99</span></span>
+                    </div>
+                    <p class="text-dim text-xs mt-2 italic">"We haven't played this in months, it's been updated!"</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nomination 2 -->
+              <div class="bg-surface border border-edge rounded-xl p-3 hover:border-emerald-500/30 transition-colors cursor-pointer">
+                <div class="flex gap-3">
+                  <div class="w-14 h-18 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 class="text-foreground font-medium text-sm">Deep Rock Galactic</h4>
+                        <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Roknua</span></p>
+                      </div>
+                      <div class="flex gap-1.5 flex-shrink-0">
+                        <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                        <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                        <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">On Sale</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                      <div class="flex items-center gap-1.5">
+                        <div class="flex -space-x-1.5">
+                          <div class="w-5 h-5 rounded-full bg-emerald-700 border border-surface"></div>
+                          <div class="w-5 h-5 rounded-full bg-emerald-700 border border-surface"></div>
+                        </div>
+                        <span class="text-emerald-400 text-xs font-medium">10 / 12 own</span>
+                      </div>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs">2 need it &middot; <span class="text-emerald-400">$14.99</span> <span class="text-emerald-400 text-[10px]">(-50%)</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nomination 3: Phasmophobia -->
+              <div class="bg-surface border border-edge rounded-xl p-3 hover:border-emerald-500/30 transition-colors cursor-pointer">
+                <div class="flex gap-3">
+                  <div class="w-14 h-18 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 class="text-foreground font-medium text-sm">Phasmophobia</h4>
+                        <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Luna</span></p>
+                      </div>
+                      <div class="flex gap-1.5 flex-shrink-0">
+                        <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                        <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                      <span class="text-emerald-400 text-xs font-medium">9 / 12 own</span>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs">3 need it &middot; <span class="text-secondary">$13.99</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nomination 4: Valheim -->
+              <div class="bg-surface border border-edge rounded-xl p-3 hover:border-emerald-500/30 transition-colors cursor-pointer">
+                <div class="flex gap-3">
+                  <div class="w-14 h-18 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 class="text-foreground font-medium text-sm">Valheim</h4>
+                        <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Drake</span></p>
+                      </div>
+                      <div class="flex gap-1.5 flex-shrink-0">
+                        <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                        <span class="bg-purple-500/20 text-purple-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/30">10 players</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                      <span class="text-amber-400 text-xs font-medium">7 / 12 own</span>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs">5 need it &middot; <span class="text-secondary">$19.99</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nomination 5: GTFO (carried over) -->
+              <div class="bg-surface border border-edge rounded-xl p-3 hover:border-emerald-500/30 transition-colors cursor-pointer">
+                <div class="flex gap-3">
+                  <div class="w-14 h-18 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 class="text-foreground font-medium text-sm">GTFO</h4>
+                        <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Kira</span> <span class="text-faint">&middot; carried over</span></p>
+                      </div>
+                      <div class="flex gap-1.5 flex-shrink-0">
+                        <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                        <span class="bg-amber-500/20 text-amber-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-amber-500/30">Carried Over</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                      <span class="text-amber-400 text-xs font-medium">5 / 12 own</span>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs">7 need it &middot; <span class="text-emerald-400">$19.99</span> <span class="text-emerald-400 text-[10px]">(-50%)</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nomination 6: Elden Ring -->
+              <div class="bg-surface border border-edge rounded-xl p-3 hover:border-emerald-500/30 transition-colors cursor-pointer">
+                <div class="flex gap-3">
+                  <div class="w-14 h-18 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 class="text-foreground font-medium text-sm">Elden Ring</h4>
+                        <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Ash</span></p>
+                      </div>
+                      <div class="flex gap-1.5 flex-shrink-0">
+                        <span class="bg-purple-500/20 text-purple-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/30">RPG</span>
+                        <span class="bg-yellow-500/20 text-yellow-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-yellow-500/30">Early Access</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                      <span class="text-amber-400 text-xs font-medium">3 / 12 own</span>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs">5 wishlisted</span>
+                      <span class="text-dim text-[10px]">&middot;</span>
+                      <span class="text-muted text-xs"><span class="text-secondary">$59.99</span> full price</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Nominate button -->
+            <button class="mt-4 w-full bg-panel hover:bg-overlay border border-edge hover:border-emerald-500/30 text-muted hover:text-foreground text-sm font-medium rounded-xl py-3 transition-all flex items-center justify-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              Nominate a Game
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Mobile: stacked layout (hidden on desktop, shown via class swap) -->
+        <div class="hidden mt-6" id="detail-mobile-timeline">
+          <h3 class="text-secondary font-semibold text-sm mb-3">Recent Activity</h3>
+          <div class="bg-surface border border-edge rounded-xl p-3 space-y-3">
+            <div class="flex items-center gap-2 text-xs">
+              <div class="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+              </div>
+              <span class="text-secondary"><span class="text-foreground font-medium">Drake</span> nominated Valheim</span>
+              <span class="text-dim ml-auto text-[10px] whitespace-nowrap">8:45 PM</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <div class="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+              </div>
+              <span class="text-secondary"><span class="text-foreground font-medium">Luna</span> nominated Phasmophobia</span>
+              <span class="text-dim ml-auto text-[10px] whitespace-nowrap">2:18 PM</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <div class="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </div>
+              <span class="text-secondary"><span class="text-foreground font-medium">GTFO</span> carried over</span>
+              <span class="text-dim ml-auto text-[10px] whitespace-nowrap">auto</span>
+            </div>
+            <button class="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors">View full timeline &darr;</button>
+          </div>
+        </div>
+
+        <!-- Past Lineups -->
+        <div class="mt-6">
+          <h3 class="text-secondary font-semibold text-sm mb-3">Past Lineups</h3>
+          <div class="space-y-2">
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span class="text-sm text-foreground font-medium">Mar 20</span>
+                <span class="text-dim text-sm"> &mdash; Deep Rock Galactic</span>
+              </div>
+              <span class="text-dim text-xs">5 nominated &middot; 10 voted</span>
+            </div>
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span class="text-sm text-foreground font-medium">Mar 13</span>
+                <span class="text-dim text-sm"> &mdash; Phasmophobia</span>
+              </div>
+              <span class="text-dim text-xs">7 nominated &middot; 11 voted</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- VIEW 3: VOTING — Countdown + Ranked Stack    -->
+    <!-- ============================================ -->
+    <div id="view-voting" class="view-panel hidden">
+
+      <header class="border-b border-edge px-4 py-3">
+        <div class="flex items-center gap-3 mb-2">
+          <button onclick="showView('detail')" class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 class="font-display text-lg font-semibold">Rank Your Picks</h1>
+          <span class="bg-amber-500/20 text-amber-400 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-500/30">Voting</span>
+        </div>
+      </header>
+
+      <div class="p-4 space-y-5">
+
+        <!-- Countdown Timer (prominent) -->
+        <div class="bg-surface border border-edge rounded-xl p-5 text-center">
+          <p class="text-muted text-xs uppercase tracking-wider font-semibold mb-3">Voting closes in</p>
+          <div class="flex items-center justify-center gap-2 mb-3">
+            <div class="countdown-digit">
+              <div class="num">1</div>
+              <div class="label">Day</div>
+            </div>
+            <span class="text-dim text-xl font-light">:</span>
+            <div class="countdown-digit">
+              <div class="num">14</div>
+              <div class="label">Hrs</div>
+            </div>
+            <span class="text-dim text-xl font-light">:</span>
+            <div class="countdown-digit">
+              <div class="num">32</div>
+              <div class="label">Min</div>
+            </div>
+          </div>
+          <p class="text-dim text-xs">Thu, Mar 26 at 6:00 PM &middot; <span class="text-secondary">8 of 12</span> have voted</p>
+        </div>
+
+        <!-- Your ranking status -->
+        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-emerald-400 text-sm font-medium">Your top 3 picks submitted</span>
+          </div>
+          <button class="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors">Edit</button>
+        </div>
+
+        <!-- Instruction text -->
+        <div class="flex items-center gap-2 text-xs text-dim">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+          <span>Drag to reorder your picks. #1 gets 3 points, #2 gets 2 points, #3 gets 1 point.</span>
+        </div>
+
+        <!-- Ranked Stack: Your picks at top -->
+        <div class="space-y-2">
+          <h3 class="text-secondary font-semibold text-xs uppercase tracking-wider mb-1">Your Ranked Picks</h3>
+
+          <!-- Rank #1 -->
+          <div class="bg-surface border-2 border-emerald-500 rounded-xl p-3 relative group">
+            <div class="flex items-center gap-3">
+              <div class="drag-handle flex flex-col items-center gap-0.5 text-dim pr-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm6 0a2 2 0 10.001 4.001A2 2 0 0013 2zM7 8a2 2 0 10.001 4.001A2 2 0 007 8zm6 0a2 2 0 10.001 4.001A2 2 0 0013 8z"/></svg>
+              </div>
+              <div class="rank-badge bg-emerald-500 text-white">1</div>
+              <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-foreground font-medium text-sm">Lethal Company</h4>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-emerald-400 text-xs">11 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-xs">4p co-op</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-16 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full" style="width: 62%"></div>
+                  </div>
+                  <span class="text-emerald-400 text-xs font-medium w-10 text-right">5 votes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rank #2 -->
+          <div class="bg-surface border-2 border-emerald-500/60 rounded-xl p-3 relative group">
+            <div class="flex items-center gap-3">
+              <div class="drag-handle flex flex-col items-center gap-0.5 text-dim pr-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm6 0a2 2 0 10.001 4.001A2 2 0 0013 2zM7 8a2 2 0 10.001 4.001A2 2 0 007 8zm6 0a2 2 0 10.001 4.001A2 2 0 0013 8z"/></svg>
+              </div>
+              <div class="rank-badge bg-emerald-500/70 text-white">2</div>
+              <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-foreground font-medium text-sm">Deep Rock Galactic</h4>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-emerald-400 text-xs">10 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-xs">4p co-op</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-emerald-400 text-xs">-50%</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-16 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full" style="width: 50%"></div>
+                  </div>
+                  <span class="text-emerald-400 text-xs font-medium w-10 text-right">4 votes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rank #3 -->
+          <div class="bg-surface border-2 border-emerald-500/30 rounded-xl p-3 relative group">
+            <div class="flex items-center gap-3">
+              <div class="drag-handle flex flex-col items-center gap-0.5 text-dim pr-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm6 0a2 2 0 10.001 4.001A2 2 0 0013 2zM7 8a2 2 0 10.001 4.001A2 2 0 007 8zm6 0a2 2 0 10.001 4.001A2 2 0 0013 8z"/></svg>
+              </div>
+              <div class="rank-badge bg-emerald-500/40 text-emerald-300">3</div>
+              <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-foreground font-medium text-sm">Phasmophobia</h4>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-emerald-400 text-xs">9 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-xs">4p co-op</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-16 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full" style="width: 37%"></div>
+                  </div>
+                  <span class="text-muted text-xs w-10 text-right">3 votes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Separator -->
+        <div class="flex items-center gap-3">
+          <div class="h-px bg-edge flex-1"></div>
+          <span class="text-dim text-[10px] uppercase tracking-wider font-medium">Not ranked</span>
+          <div class="h-px bg-edge flex-1"></div>
+        </div>
+
+        <!-- Unranked cards (below the fold, muted) -->
+        <div class="space-y-2">
+
+          <div class="bg-surface border border-edge rounded-xl p-3 opacity-70 hover:opacity-100 transition-all cursor-pointer group relative">
+            <div class="flex items-center gap-3">
+              <div class="drag-handle flex flex-col items-center gap-0.5 text-dim pr-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm6 0a2 2 0 10.001 4.001A2 2 0 0013 2zM7 8a2 2 0 10.001 4.001A2 2 0 007 8zm6 0a2 2 0 10.001 4.001A2 2 0 0013 8z"/></svg>
+              </div>
+              <div class="rank-badge border-2 border-edge text-dim">&mdash;</div>
+              <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-secondary font-medium text-sm">Valheim</h4>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-amber-400 text-xs">7 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-xs">10p co-op</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-16 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-amber-500 rounded-full" style="width: 25%"></div>
+                  </div>
+                  <span class="text-muted text-xs w-10 text-right">2 votes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-edge rounded-xl p-3 opacity-70 hover:opacity-100 transition-all cursor-pointer group relative">
+            <div class="flex items-center gap-3">
+              <div class="drag-handle flex flex-col items-center gap-0.5 text-dim pr-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm6 0a2 2 0 10.001 4.001A2 2 0 0013 2zM7 8a2 2 0 10.001 4.001A2 2 0 007 8zm6 0a2 2 0 10.001 4.001A2 2 0 0013 8z"/></svg>
+              </div>
+              <div class="rank-badge border-2 border-edge text-dim">&mdash;</div>
+              <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-secondary font-medium text-sm">GTFO</h4>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-amber-400 text-xs">5 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-xs">4p co-op</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-emerald-400 text-xs">-50%</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-16 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-amber-500/60 rounded-full" style="width: 12%"></div>
+                  </div>
+                  <span class="text-muted text-xs w-10 text-right">1 vote</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-edge rounded-xl p-3 opacity-70 hover:opacity-100 transition-all cursor-pointer group relative">
+            <div class="flex items-center gap-3">
+              <div class="drag-handle flex flex-col items-center gap-0.5 text-dim pr-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm6 0a2 2 0 10.001 4.001A2 2 0 0013 2zM7 8a2 2 0 10.001 4.001A2 2 0 007 8zm6 0a2 2 0 10.001 4.001A2 2 0 0013 8z"/></svg>
+              </div>
+              <div class="rank-badge border-2 border-edge text-dim">&mdash;</div>
+              <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-secondary font-medium text-sm">Elden Ring</h4>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-red-400 text-xs">3 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-xs">RPG</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-secondary text-xs">$59.99</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-16 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-red-500/60 rounded-full" style="width: 12%"></div>
+                  </div>
+                  <span class="text-muted text-xs w-10 text-right">1 vote</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- VIEW 4: DECIDED — Full Journey Timeline      -->
+    <!-- ============================================ -->
+    <div id="view-decided" class="view-panel hidden">
+
+      <header class="border-b border-edge px-4 py-3">
+        <div class="flex items-center gap-3">
+          <button onclick="showView('games')" class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 class="font-display text-lg font-semibold">Community Lineup</h1>
+          <span class="bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2.5 py-1 rounded-full border border-emerald-500/30">Decided</span>
+        </div>
+      </header>
+
+      <div class="p-4 space-y-6">
+
+        <!-- Completed pipeline stepper -->
+        <div class="bg-surface border border-emerald-500/20 rounded-xl p-4">
+          <div class="flex items-center px-2">
+            <!-- Step 1: Nominate (done) -->
+            <div class="flex flex-col items-center flex-shrink-0">
+              <div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center mb-1">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              <span class="text-emerald-400 text-[10px] font-medium">Nominate</span>
+            </div>
+            <div class="step-connector done mx-2"></div>
+            <!-- Step 2: Vote (done) -->
+            <div class="flex flex-col items-center flex-shrink-0">
+              <div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center mb-1">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              <span class="text-emerald-400 text-[10px] font-medium">Vote</span>
+            </div>
+            <div class="step-connector done mx-2"></div>
+            <!-- Step 3: Play (done) -->
+            <div class="flex flex-col items-center flex-shrink-0">
+              <div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center mb-1">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              <span class="text-emerald-400 text-[10px] font-medium">Decided</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Full Journey Timeline -->
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-5">The Journey</h3>
+
+          <div class="space-y-4">
+            <!-- Journey node: Lineup opened -->
+            <div class="journey-node done">
+              <div class="journey-dot done"></div>
+              <div class="bg-surface border border-edge rounded-lg p-3">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm text-secondary"><span class="text-foreground font-medium">Nominations opened</span></p>
+                  <span class="text-dim text-[11px]">Mon, Mar 23</span>
+                </div>
+                <p class="text-xs text-dim mt-1">Started by Roknua for Friday, Mar 27</p>
+              </div>
+            </div>
+
+            <!-- Journey node: Games nominated -->
+            <div class="journey-node done">
+              <div class="journey-dot done"></div>
+              <div class="bg-surface border border-edge rounded-lg p-3">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm text-secondary"><span class="text-foreground font-medium">6 games nominated</span></p>
+                  <span class="text-dim text-[11px]">Mon-Tue</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  <span class="bg-panel text-secondary text-[11px] px-2 py-0.5 rounded-md border border-edge">Lethal Company</span>
+                  <span class="bg-panel text-secondary text-[11px] px-2 py-0.5 rounded-md border border-edge">Deep Rock Galactic</span>
+                  <span class="bg-panel text-secondary text-[11px] px-2 py-0.5 rounded-md border border-edge">Phasmophobia</span>
+                  <span class="bg-panel text-secondary text-[11px] px-2 py-0.5 rounded-md border border-edge">Valheim</span>
+                  <span class="bg-panel text-secondary text-[11px] px-2 py-0.5 rounded-md border border-edge">GTFO</span>
+                  <span class="bg-panel text-secondary text-[11px] px-2 py-0.5 rounded-md border border-edge">Elden Ring</span>
+                </div>
+                <p class="text-xs text-dim mt-2">4 members contributed &middot; 1 game carried over from Mar 13</p>
+              </div>
+            </div>
+
+            <!-- Journey node: Voting started -->
+            <div class="journey-node done">
+              <div class="journey-dot done"></div>
+              <div class="bg-surface border border-edge rounded-lg p-3">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm text-secondary"><span class="text-foreground font-medium">Voting opened</span></p>
+                  <span class="text-dim text-[11px]">Wed, Mar 25</span>
+                </div>
+                <p class="text-xs text-dim mt-1">Ranked choice &middot; Top 3 picks per member</p>
+              </div>
+            </div>
+
+            <!-- Journey node: Voting closed -->
+            <div class="journey-node done">
+              <div class="journey-dot done"></div>
+              <div class="bg-surface border border-edge rounded-lg p-3">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm text-secondary"><span class="text-foreground font-medium">Voting closed</span></p>
+                  <span class="text-dim text-[11px]">Thu, Mar 26 &middot; 6 PM</span>
+                </div>
+                <p class="text-xs text-dim mt-1">10 of 12 members voted</p>
+              </div>
+            </div>
+
+            <!-- Journey node: WINNER (destination) -->
+            <div class="journey-node">
+              <div class="journey-dot winner"></div>
+              <div class="bg-surface border border-emerald-500/40 rounded-xl p-4 shadow-[0_0_20px_rgba(16,185,129,0.08)]">
+                <div class="flex gap-4">
+                  <div class="w-20 h-26 rounded-lg bg-panel border border-edge flex-shrink-0 overflow-hidden"></div>
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 uppercase tracking-wider">Winner</span>
+                    </div>
+                    <h2 class="font-display text-xl font-bold text-foreground">Lethal Company</h2>
+                    <p class="text-muted text-sm mt-1">5 votes &middot; 11 of 12 own it</p>
+                    <div class="flex gap-1.5 mt-2">
+                      <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                      <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                    </div>
+                    <div class="flex gap-2 mt-4">
+                      <button class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                        Create Event
+                      </button>
+                      <button class="bg-panel hover:bg-overlay text-muted hover:text-foreground text-sm font-medium rounded-lg px-4 py-2 border border-edge transition-colors">
+                        Share to Discord
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Final Results Breakdown -->
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Final Results</h3>
+          <div class="space-y-2">
+
+            <div class="bg-surface border border-emerald-500/30 rounded-lg p-3 flex items-center gap-3">
+              <span class="text-emerald-400 font-bold text-sm w-5 text-center">1</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <span class="text-foreground text-sm font-medium">Lethal Company</span>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full" style="width: 62%"></div>
+                  </div>
+                  <span class="text-emerald-400 text-xs font-medium">5 votes</span>
+                </div>
+              </div>
+              <svg class="w-5 h-5 text-emerald-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            </div>
+
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3">
+              <span class="text-muted font-bold text-sm w-5 text-center">2</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <span class="text-secondary text-sm">Deep Rock Galactic</span>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-muted rounded-full" style="width: 50%"></div>
+                  </div>
+                  <span class="text-muted text-xs">4 votes</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3">
+              <span class="text-muted font-bold text-sm w-5 text-center">3</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <span class="text-secondary text-sm">Phasmophobia</span>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-muted rounded-full" style="width: 37%"></div>
+                  </div>
+                  <span class="text-muted text-xs">3 votes</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3 opacity-60">
+              <span class="text-dim font-bold text-sm w-5 text-center">4</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <span class="text-muted text-sm">Valheim</span>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-dim rounded-full" style="width: 25%"></div>
+                  </div>
+                  <span class="text-dim text-xs">2 votes</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3 opacity-60">
+              <span class="text-dim font-bold text-sm w-5 text-center">5</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <span class="text-muted text-sm">GTFO</span>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-dim rounded-full" style="width: 12%"></div>
+                  </div>
+                  <span class="text-dim text-xs">1 vote</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3 opacity-60">
+              <span class="text-dim font-bold text-sm w-5 text-center">6</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <span class="text-muted text-sm">Elden Ring</span>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-dim rounded-full" style="width: 12%"></div>
+                  </div>
+                  <span class="text-dim text-xs">1 vote</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Carry forward prompt -->
+        <div class="bg-surface border border-edge rounded-xl p-4">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            <div>
+              <h4 class="text-secondary text-sm font-medium">Carry forward to next week?</h4>
+              <p class="text-dim text-xs mt-1">5 unchosen games can be carried to the next lineup round.</p>
+              <div class="flex gap-2 mt-3">
+                <button class="bg-panel hover:bg-overlay text-secondary text-xs font-medium rounded-lg px-3 py-1.5 border border-edge transition-colors">Carry All</button>
+                <button class="text-dim text-xs hover:text-muted transition-colors px-3 py-1.5">Pick Individually</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MOBILE BOTTOM TAB BAR -->
+  <div id="bottom-bar" class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-edge hidden z-40">
+    <div class="flex justify-around py-2 max-w-md mx-auto">
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span class="text-[10px] text-muted">Calendar</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span class="text-[10px] text-muted">Events</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1 border-t-2 border-emerald-500">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="text-[10px] text-emerald-400 font-medium">Games</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-[10px] text-muted">Players</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let isMobile = false;
+
+    function showView(name) {
+      document.querySelectorAll('.view-panel').forEach(el => el.classList.add('hidden'));
+      document.getElementById('view-' + name).classList.remove('hidden');
+      document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.className = el.id === 'tab-' + name
+          ? 'tab-active text-sm font-medium pb-0.5 pt-1 px-1 transition-colors whitespace-nowrap'
+          : 'tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors whitespace-nowrap';
+      });
+      updateLayout();
+    }
+
+    function toggleMobile() {
+      isMobile = !isMobile;
+      const toggle = document.getElementById('mobile-toggle');
+      const bottomBar = document.getElementById('bottom-bar');
+
+      if (isMobile) {
+        toggle.classList.add('active');
+        bottomBar.classList.remove('hidden');
+      } else {
+        toggle.classList.remove('active');
+        bottomBar.classList.add('hidden');
+      }
+      updateLayout();
+    }
+
+    function updateLayout() {
+      const container = document.getElementById('app-container');
+      const detailTimeline = document.querySelector('#view-detail .flex.gap-6');
+      const mobileTimeline = document.getElementById('detail-mobile-timeline');
+
+      if (isMobile) {
+        container.className = 'max-w-[390px] mx-auto border-x border-edge min-h-screen transition-all duration-300';
+        // In mobile mode, switch detail view to stacked layout
+        if (detailTimeline) {
+          detailTimeline.classList.remove('flex', 'gap-6');
+          detailTimeline.classList.add('block');
+          // Hide the full left timeline on mobile
+          const leftTimeline = detailTimeline.querySelector('.w-72');
+          if (leftTimeline) leftTimeline.classList.add('hidden');
+        }
+        if (mobileTimeline) mobileTimeline.classList.remove('hidden');
+      } else {
+        container.className = 'max-w-6xl mx-auto transition-all duration-300';
+        if (detailTimeline) {
+          detailTimeline.classList.add('flex', 'gap-6');
+          detailTimeline.classList.remove('block');
+          const leftTimeline = detailTimeline.querySelector('.w-72');
+          if (leftTimeline) leftTimeline.classList.remove('hidden');
+        }
+        if (mobileTimeline) mobileTimeline.classList.add('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

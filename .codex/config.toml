@@ -1,0 +1,11 @@
+# Repo-level Codex CLI config (ROK-1468).
+#
+# `codex review` verifies its own findings by running jest/vitest inside the
+# worktree. Three concurrent reviews plus dev agents saturated the operator's
+# laptop RAM (2026-09-02). Every suite already runs on the rl-infra fleet; the
+# review's value is the diff read, so reviews run in a read-only sandbox with
+# no command approvals. `.claude/skills/security-review/SKILL.md` passes the
+# same two keys as `-c` overrides so a missing or ignored repo config cannot
+# silently re-enable execution — this file is the defence-in-depth layer.
+sandbox_mode = "read-only"
+approval_policy = "never"

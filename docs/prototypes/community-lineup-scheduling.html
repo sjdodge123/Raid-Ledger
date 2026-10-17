@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Lineup — Scheduling Poll — Raid Ledger Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Cinzel', 'serif'],
+          },
+          colors: {
+            backdrop: '#020617',
+            surface: '#0f172a',
+            panel: '#1e293b',
+            overlay: '#334155',
+            faint: '#475569',
+            dim: '#64748b',
+            muted: '#94a3b8',
+            secondary: '#cbd5e1',
+            foreground: '#ffffff',
+            edge: '#334155',
+            'edge-strong': '#475569',
+            'edge-subtle': '#1e293b',
+            gold: '#fbbf24',
+            silver: '#9ca3af',
+            bronze: '#d97706',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #020617; color: #ffffff; font-family: 'Inter', system-ui, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .view-btn.active { background: #1e293b; color: #10b981; border-color: #10b981; }
+    .view-btn { background: transparent; color: #94a3b8; border-color: #334155; }
+
+    /* Cover art gradient placeholders */
+    .cover-lethal { background: linear-gradient(135deg, #1a2e1a 0%, #2d4a2d 50%, #1a3a1a 100%); }
+    .cover-deeprock { background: linear-gradient(135deg, #2d1a0a 0%, #4a3520 50%, #3a2a1a 100%); }
+    .cover-phasmo { background: linear-gradient(135deg, #1a1a2e 0%, #2d2d4a 50%, #1a1a3a 100%); }
+
+    /* Slot card interactions */
+    .slot-card {
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+    .slot-card:hover {
+      background: #1e293b;
+      border-color: #475569;
+    }
+    .slot-card.voted {
+      border-left-color: #06b6d4;
+      background: rgba(6, 182, 212, 0.05);
+    }
+    .slot-card.voted:hover {
+      background: rgba(6, 182, 212, 0.08);
+    }
+    .slot-card.best {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .slot-card.best.voted {
+      border-left-color: #06b6d4;
+      background: rgba(6, 182, 212, 0.07);
+    }
+
+    /* Heatmap cell hover */
+    .heatmap-cell {
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .heatmap-cell:hover {
+      transform: scale(1.15);
+      z-index: 10;
+    }
+    .heatmap-cell .heatmap-tooltip {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      padding: 4px 8px;
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      font-size: 10px;
+      color: #cbd5e1;
+      pointer-events: none;
+      z-index: 20;
+      margin-bottom: 4px;
+    }
+    .heatmap-cell:hover .heatmap-tooltip { display: block; }
+
+    /* Overlap bar animation */
+    .overlap-bar {
+      transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    /* Pulse for best match badge */
+    @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    .pulse-soft { animation: pulse-soft 2.5s ease-in-out infinite; }
+
+    /* Suggested slot marker on heatmap */
+    .heatmap-marker {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      border: 1px solid #020617;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- NAV BAR -->
+  <nav class="sticky top-0 z-50 bg-backdrop/95 backdrop-blur border-b border-edge">
+    <div class="max-w-6xl mx-auto px-4 flex items-center gap-6 h-12">
+      <span class="text-xs text-dim font-medium uppercase tracking-wider whitespace-nowrap">Scheduling Poll</span>
+      <div class="ml-auto flex gap-2">
+        <button onclick="toggleMobile()" class="view-btn border rounded-md px-3 py-1 text-xs font-medium transition-all" id="mobile-toggle">Mobile</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div id="app-container" class="max-w-6xl mx-auto transition-all duration-300">
+    <div class="p-4 space-y-5">
+
+      <!-- ======================== -->
+      <!-- 1. HEADER -->
+      <!-- ======================== -->
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <button class="text-muted hover:text-foreground transition-colors flex-shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="font-display text-xl font-semibold">Schedule: Lethal Company</h1>
+            <span class="bg-cyan-500/20 text-cyan-400 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-cyan-500/30">Scheduling</span>
+          </div>
+        </div>
+        <p class="text-muted text-sm ml-8">Match group from Week of Mar 23 &middot; 5 players &middot; Vote on when to play</p>
+      </div>
+
+      <!-- ======================== -->
+      <!-- 2. MATCH CONTEXT CARD -->
+      <!-- ======================== -->
+      <div class="bg-surface border border-edge rounded-xl p-4">
+        <div class="flex items-start gap-3 mb-3">
+          <!-- Game thumbnail -->
+          <div class="w-12 h-16 rounded-lg cover-lethal flex-shrink-0 relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span class="text-foreground font-semibold text-sm">Lethal Company</span>
+              <span class="bg-panel text-muted text-[10px] font-medium px-1.5 py-0.5 rounded border border-edge">Co-op</span>
+              <span class="bg-panel text-muted text-[10px] font-medium px-1.5 py-0.5 rounded border border-edge">4p</span>
+            </div>
+            <p class="text-muted text-xs">5 players &middot; 4 max &mdash; 1 on bench</p>
+          </div>
+        </div>
+
+        <!-- Player avatars -->
+        <div class="flex items-center gap-3 mb-3 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <div class="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold">VX</div>
+            <span class="text-xs text-secondary">Vex</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-7 h-7 rounded-full bg-cyan-600 flex items-center justify-center text-[10px] font-bold ring-2 ring-cyan-400/40">RK</div>
+            <span class="text-xs text-cyan-400 font-medium">Roknua</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-[10px] font-bold">ZP</div>
+            <span class="text-xs text-secondary">Zeph</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-7 h-7 rounded-full bg-amber-600 flex items-center justify-center text-[10px] font-bold">LX</div>
+            <span class="text-xs text-secondary">Lux</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-7 h-7 rounded-full bg-rose-600 flex items-center justify-center text-[10px] font-bold">AS</div>
+            <span class="text-xs text-secondary">Ash</span>
+          </div>
+        </div>
+
+        <!-- Scheduling conflicts note -->
+        <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+          <div class="flex items-start gap-2">
+            <svg class="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p class="text-amber-400/90 text-[11px] leading-relaxed">Players in multiple matches: <span class="font-medium text-amber-300">Vex (2)</span>, <span class="font-medium text-amber-300">Roknua (2)</span>, <span class="font-medium text-amber-300">Lux (2)</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================== -->
+      <!-- 3. SUGGESTED TIMES -->
+      <!-- ======================== -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-foreground font-semibold text-sm">Suggested Times</h2>
+          <p class="text-dim text-xs">Based on group play-pattern analysis</p>
+        </div>
+        <p class="text-muted text-xs mb-3">Pick your preferred time (select up to 2) &middot; <span class="text-cyan-400 font-medium">3 of 5 have voted</span></p>
+
+        <div class="space-y-3">
+
+          <!-- SLOT A: Friday 8 PM (Best Match) — voted -->
+          <div class="slot-card best voted bg-surface border border-edge rounded-xl p-4" onclick="toggleVote(this, 'a')">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-foreground font-semibold text-sm">Friday 8:00 PM</span>
+                <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 pulse-soft">Best Match</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-cyan-400 text-xs font-medium">3 votes</span>
+                <svg class="w-4 h-4 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+            </div>
+
+            <!-- Overlap visualization bar -->
+            <div class="mb-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] text-dim w-16">7 PM</span>
+                <div class="flex-1 h-3 bg-panel rounded-full overflow-hidden relative">
+                  <div class="overlap-bar absolute inset-y-0 left-[10%] bg-emerald-500/30 rounded-full" style="width: 70%"></div>
+                  <div class="overlap-bar absolute inset-y-0 left-[15%] bg-emerald-500/50 rounded-full" style="width: 55%"></div>
+                  <div class="overlap-bar absolute inset-y-0 left-[20%] bg-emerald-500/80 rounded-full" style="width: 35%"></div>
+                </div>
+                <span class="text-[10px] text-dim w-16 text-right">11 PM</span>
+              </div>
+              <p class="text-emerald-400 text-[10px] ml-[72px]">4 of 5 typically online</p>
+            </div>
+
+            <!-- Player availability -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold">VX</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[8px] font-bold">RK</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-[8px] font-bold">ZP</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">LX</div>
+                <svg class="w-3 h-3 text-dim" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V9z" opacity="0.3"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">AS</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+            </div>
+
+            <!-- You voted indicator -->
+            <div class="mt-2 flex items-center gap-1.5">
+              <svg class="w-3 h-3 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              <span class="text-cyan-400 text-[10px] font-medium">You voted for this</span>
+            </div>
+          </div>
+
+          <!-- SLOT B: Saturday 3 PM -->
+          <div class="slot-card bg-surface border border-edge rounded-xl p-4" onclick="toggleVote(this, 'b')">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-foreground font-semibold text-sm">Saturday 3:00 PM</span>
+              </div>
+              <span class="text-muted text-xs">2 votes</span>
+            </div>
+
+            <!-- Overlap visualization bar -->
+            <div class="mb-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] text-dim w-16">1 PM</span>
+                <div class="flex-1 h-3 bg-panel rounded-full overflow-hidden relative">
+                  <div class="overlap-bar absolute inset-y-0 left-[15%] bg-emerald-500/25 rounded-full" style="width: 55%"></div>
+                  <div class="overlap-bar absolute inset-y-0 left-[25%] bg-emerald-500/45 rounded-full" style="width: 35%"></div>
+                </div>
+                <span class="text-[10px] text-dim w-16 text-right">6 PM</span>
+              </div>
+              <p class="text-muted text-[10px] ml-[72px]">3 of 5 typically online</p>
+            </div>
+
+            <!-- Player availability -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold">VX</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[8px] font-bold">RK</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-[8px] font-bold">ZP</div>
+                <svg class="w-3 h-3 text-dim" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V9z" opacity="0.3"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">LX</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">AS</div>
+                <svg class="w-3 h-3 text-dim" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V9z" opacity="0.3"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- SLOT C: Sunday 7 PM -->
+          <div class="slot-card bg-surface border border-edge rounded-xl p-4" onclick="toggleVote(this, 'c')">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-foreground font-semibold text-sm">Sunday 7:00 PM</span>
+              </div>
+              <span class="text-muted text-xs">1 vote</span>
+            </div>
+
+            <!-- Overlap visualization bar -->
+            <div class="mb-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] text-dim w-16">6 PM</span>
+                <div class="flex-1 h-3 bg-panel rounded-full overflow-hidden relative">
+                  <div class="overlap-bar absolute inset-y-0 left-[5%] bg-emerald-500/15 rounded-full" style="width: 80%"></div>
+                  <div class="overlap-bar absolute inset-y-0 left-[20%] bg-emerald-500/30 rounded-full" style="width: 40%"></div>
+                </div>
+                <span class="text-[10px] text-dim w-16 text-right">10 PM</span>
+              </div>
+              <p class="text-muted text-[10px] ml-[72px]">5 of 5 sometimes online</p>
+            </div>
+
+            <!-- Player availability -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold">VX</div>
+                <svg class="w-3 h-3 text-emerald-400/60" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[8px] font-bold">RK</div>
+                <svg class="w-3 h-3 text-emerald-400/60" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-[8px] font-bold">ZP</div>
+                <svg class="w-3 h-3 text-emerald-400/60" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">LX</div>
+                <svg class="w-3 h-3 text-emerald-400/60" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">AS</div>
+                <svg class="w-3 h-3 text-emerald-400/60" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- SLOT D: Thursday 9 PM (worst) -->
+          <div class="slot-card bg-surface border border-edge rounded-xl p-4 opacity-70" onclick="toggleVote(this, 'd')">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-foreground font-semibold text-sm">Thursday 9:00 PM</span>
+              </div>
+              <span class="text-dim text-xs">0 votes</span>
+            </div>
+
+            <!-- Overlap visualization bar -->
+            <div class="mb-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] text-dim w-16">8 PM</span>
+                <div class="flex-1 h-3 bg-panel rounded-full overflow-hidden relative">
+                  <div class="overlap-bar absolute inset-y-0 left-[10%] bg-emerald-500/15 rounded-full" style="width: 35%"></div>
+                </div>
+                <span class="text-[10px] text-dim w-16 text-right">11 PM</span>
+              </div>
+              <p class="text-dim text-[10px] ml-[72px]">2 of 5 typically online</p>
+            </div>
+
+            <!-- Player availability -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[8px] font-bold">VX</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[8px] font-bold">RK</div>
+                <svg class="w-3 h-3 text-dim" fill="currentColor" viewBox="0 0 24 24"><path d="M12 6a1 1 0 011 1v4.586l2.707 2.707a1 1 0 01-1.414 1.414l-3-3A1 1 0 0111 12V7a1 1 0 011-1z" opacity="0.3"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-[8px] font-bold">ZP</div>
+                <svg class="w-3 h-3 text-dim" fill="currentColor" viewBox="0 0 24 24"><path d="M12 6a1 1 0 011 1v4.586l2.707 2.707a1 1 0 01-1.414 1.414l-3-3A1 1 0 0111 12V7a1 1 0 011-1z" opacity="0.3"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-amber-600 flex items-center justify-center text-[8px] font-bold">LX</div>
+                <svg class="w-3 h-3 text-dim" fill="currentColor" viewBox="0 0 24 24"><path d="M12 6a1 1 0 011 1v4.586l2.707 2.707a1 1 0 01-1.414 1.414l-3-3A1 1 0 0111 12V7a1 1 0 011-1z" opacity="0.3"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <div class="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center text-[8px] font-bold">AS</div>
+                <svg class="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Suggest another time -->
+        <div class="mt-3 text-center">
+          <button class="text-cyan-400 text-xs hover:text-cyan-300 transition-colors font-medium">+ Suggest another time</button>
+        </div>
+      </div>
+
+      <!-- ======================== -->
+      <!-- 4. AVAILABILITY HEATMAP -->
+      <!-- ======================== -->
+      <div class="bg-surface border border-edge rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-foreground font-semibold text-sm">Group Availability Heatmap</h2>
+          <p class="text-dim text-[10px]">Darker = more players online</p>
+        </div>
+
+        <div class="overflow-x-auto scrollbar-hide">
+          <table class="w-full min-w-[320px]">
+            <thead>
+              <tr>
+                <th class="text-[10px] text-dim font-medium text-left pb-2 pr-2 w-16"></th>
+                <th class="text-[10px] text-muted font-medium text-center pb-2 w-10">Mon</th>
+                <th class="text-[10px] text-muted font-medium text-center pb-2 w-10">Tue</th>
+                <th class="text-[10px] text-muted font-medium text-center pb-2 w-10">Wed</th>
+                <th class="text-[10px] text-muted font-medium text-center pb-2 w-10">Thu</th>
+                <th class="text-[10px] text-foreground font-semibold text-center pb-2 w-10">Fri</th>
+                <th class="text-[10px] text-muted font-medium text-center pb-2 w-10">Sat</th>
+                <th class="text-[10px] text-muted font-medium text-center pb-2 w-10">Sun</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Afternoon row (12-5 PM) -->
+              <tr>
+                <td class="text-[10px] text-dim pr-2 py-1">Afternoon</td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/5 relative">
+                    <span class="heatmap-tooltip">Mon 12-5 PM: 0 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/10 relative">
+                    <span class="heatmap-tooltip">Tue 12-5 PM: 1 player</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/5 relative">
+                    <span class="heatmap-tooltip">Wed 12-5 PM: 0 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/5 relative">
+                    <span class="heatmap-tooltip">Thu 12-5 PM: 0 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/10 relative">
+                    <span class="heatmap-tooltip">Fri 12-5 PM: 1 player</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/30 relative">
+                    <span class="heatmap-tooltip">Sat 12-5 PM: 3 players</span>
+                    <div class="heatmap-marker bg-cyan-400"></div>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Sun 12-5 PM: 2 players</span>
+                  </div>
+                </td>
+              </tr>
+              <!-- Evening row (5-9 PM) -->
+              <tr>
+                <td class="text-[10px] text-dim pr-2 py-1">Evening</td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Mon 5-9 PM: 2 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/20 relative">
+                    <span class="heatmap-tooltip">Tue 5-9 PM: 2 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Wed 5-9 PM: 2 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Thu 5-9 PM: 2 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/60 border border-emerald-400/40 relative">
+                    <span class="heatmap-tooltip">Fri 5-9 PM: 4 players</span>
+                    <div class="heatmap-marker bg-emerald-400"></div>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/25 relative">
+                    <span class="heatmap-tooltip">Sat 5-9 PM: 3 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/40 relative">
+                    <span class="heatmap-tooltip">Sun 5-9 PM: 3 players</span>
+                    <div class="heatmap-marker bg-cyan-400"></div>
+                  </div>
+                </td>
+              </tr>
+              <!-- Night row (9 PM-1 AM) -->
+              <tr>
+                <td class="text-[10px] text-dim pr-2 py-1">Night</td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/10 relative">
+                    <span class="heatmap-tooltip">Mon 9 PM-1 AM: 1 player</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Tue 9 PM-1 AM: 2 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/10 relative">
+                    <span class="heatmap-tooltip">Wed 9 PM-1 AM: 1 player</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Thu 9 PM-1 AM: 2 players</span>
+                    <div class="heatmap-marker bg-faint"></div>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/45 relative">
+                    <span class="heatmap-tooltip">Fri 9 PM-1 AM: 4 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/20 relative">
+                    <span class="heatmap-tooltip">Sat 9 PM-1 AM: 2 players</span>
+                  </div>
+                </td>
+                <td class="p-0.5 text-center">
+                  <div class="heatmap-cell mx-auto w-8 h-6 rounded bg-emerald-500/15 relative">
+                    <span class="heatmap-tooltip">Sun 9 PM-1 AM: 1 player</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex items-center gap-3 mt-3 pt-3 border-t border-edge-subtle">
+          <span class="text-[10px] text-dim">Overlap:</span>
+          <div class="flex items-center gap-1">
+            <div class="w-4 h-3 rounded bg-emerald-500/10"></div>
+            <span class="text-[9px] text-dim">Low</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <div class="w-4 h-3 rounded bg-emerald-500/30"></div>
+            <span class="text-[9px] text-dim">Med</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <div class="w-4 h-3 rounded bg-emerald-500/60"></div>
+            <span class="text-[9px] text-dim">High</span>
+          </div>
+          <div class="ml-2 flex items-center gap-1">
+            <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+            <span class="text-[9px] text-dim">Best slot</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <div class="w-2 h-2 rounded-full bg-cyan-400"></div>
+            <span class="text-[9px] text-dim">Suggested</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================== -->
+      <!-- 5. BENCH MANAGEMENT -->
+      <!-- ======================== -->
+      <div class="bg-surface border border-edge rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <h2 class="text-foreground font-semibold text-sm">Bench Management</h2>
+        </div>
+
+        <p class="text-muted text-xs mb-3">This game supports <span class="text-foreground font-medium">4 players</span>. One player will be on the bench for each session.</p>
+
+        <!-- Bench preference -->
+        <div class="space-y-2 mb-4">
+          <p class="text-secondary text-xs font-medium">Bench preference (optional)</p>
+          <div class="grid grid-cols-1 gap-2">
+            <label class="flex items-center gap-3 bg-panel border border-edge rounded-lg px-3 py-2.5 cursor-pointer hover:border-edge-strong transition-colors">
+              <input type="checkbox" class="w-3.5 h-3.5 rounded border-edge bg-panel text-cyan-500 focus:ring-cyan-500/40 focus:ring-offset-0">
+              <div class="flex items-center gap-2 flex-1">
+                <div class="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[8px] font-bold">RK</div>
+                <span class="text-xs text-secondary">I can sit out for <span class="text-foreground font-medium">Fri 8 PM</span></span>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 bg-panel border border-edge rounded-lg px-3 py-2.5 cursor-pointer hover:border-edge-strong transition-colors">
+              <input type="checkbox" class="w-3.5 h-3.5 rounded border-edge bg-panel text-cyan-500 focus:ring-cyan-500/40 focus:ring-offset-0">
+              <div class="flex items-center gap-2 flex-1">
+                <div class="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[8px] font-bold">RK</div>
+                <span class="text-xs text-secondary">I can sit out for <span class="text-foreground font-medium">Sat 3 PM</span></span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Rotate bench toggle -->
+        <div class="flex items-center justify-between bg-panel border border-edge rounded-lg px-3 py-2.5">
+          <div>
+            <p class="text-secondary text-xs font-medium">Rotate bench</p>
+            <p class="text-dim text-[10px] mt-0.5">Automatically rotates who sits out across recurring sessions</p>
+          </div>
+          <button onclick="toggleBench(this)" class="relative w-10 h-5 rounded-full bg-overlay transition-colors flex-shrink-0" id="bench-toggle">
+            <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-foreground transition-transform" id="bench-knob"></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- ======================== -->
+      <!-- 6. CREATE EVENT -->
+      <!-- ======================== -->
+      <div class="bg-surface border border-emerald-500/30 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <h2 class="text-foreground font-semibold text-sm">Ready to lock it in?</h2>
+        </div>
+
+        <div class="bg-panel border border-edge rounded-lg px-3 py-2 mb-3 flex items-center gap-3">
+          <div class="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <div>
+            <p class="text-foreground text-xs font-medium">Leading: Friday 8:00 PM</p>
+            <p class="text-muted text-[10px]">3 votes &middot; Best overlap &middot; 4 of 5 typically online</p>
+          </div>
+        </div>
+
+        <button class="w-full bg-emerald-600 hover:bg-emerald-500 text-foreground text-sm font-semibold rounded-lg py-2.5 transition-colors mb-3">
+          Create Event for Friday 8 PM
+        </button>
+
+        <!-- Recurring options -->
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer" onclick="toggleRecurring()">
+            <input type="checkbox" class="w-3.5 h-3.5 rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40 focus:ring-offset-0" id="recurring-check">
+            <span class="text-secondary text-xs">Make this a recurring series (weekly)</span>
+          </label>
+          <div class="hidden pl-6" id="recurring-note">
+            <div class="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+              <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <p class="text-emerald-400/90 text-[10px]">Bench will rotate each week so everyone gets to play</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================== -->
+      <!-- 7. OTHER MATCHES -->
+      <!-- ======================== -->
+      <div class="bg-surface border border-edge rounded-xl p-4">
+        <h2 class="text-foreground font-semibold text-sm mb-3">Your Other Scheduling Polls</h2>
+        <div class="space-y-2">
+          <a href="#" class="flex items-center gap-3 bg-panel border border-edge rounded-lg px-3 py-2.5 hover:border-edge-strong transition-colors group">
+            <div class="w-10 h-12 rounded cover-deeprock flex-shrink-0 relative overflow-hidden">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="text-secondary text-xs font-medium group-hover:text-foreground transition-colors">Deep Rock Galactic</span>
+                <span class="bg-cyan-500/20 text-cyan-400 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-cyan-500/30">Scheduling</span>
+              </div>
+              <p class="text-dim text-[10px]">2 of 4 voted &middot; 4 players &middot; 4 max</p>
+            </div>
+            <svg class="w-4 h-4 text-dim group-hover:text-muted transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- Bottom spacer for mobile nav -->
+      <div class="h-16"></div>
+
+    </div>
+  </div>
+
+  <!-- MOBILE BOTTOM TAB BAR -->
+  <div id="bottom-bar" class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-edge hidden z-40">
+    <div class="flex justify-around py-2 max-w-md mx-auto">
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span class="text-[10px] text-muted">Calendar</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span class="text-[10px] text-muted">Events</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1 border-t-2 border-cyan-500">
+        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="text-[10px] text-cyan-400 font-medium">Games</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-[10px] text-muted">Players</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let isMobile = false;
+
+    // Track vote state — Roknua has voted for slot A
+    const votes = { a: true, b: false, c: false, d: false };
+    const maxVotes = 2;
+
+    function toggleMobile() {
+      isMobile = !isMobile;
+      const container = document.getElementById('app-container');
+      const toggle = document.getElementById('mobile-toggle');
+      const bottomBar = document.getElementById('bottom-bar');
+
+      if (isMobile) {
+        container.className = 'max-w-[390px] mx-auto border-x border-edge min-h-screen transition-all duration-300';
+        toggle.classList.add('active');
+        bottomBar.classList.remove('hidden');
+      } else {
+        container.className = 'max-w-6xl mx-auto transition-all duration-300';
+        toggle.classList.remove('active');
+        bottomBar.classList.add('hidden');
+      }
+    }
+
+    function toggleVote(el, slotId) {
+      const currentCount = Object.values(votes).filter(Boolean).length;
+
+      if (votes[slotId]) {
+        // Unvote
+        votes[slotId] = false;
+        el.classList.remove('voted');
+        // Remove "You voted" indicator if present
+        const indicator = el.querySelector('[data-vote-indicator]');
+        if (indicator) indicator.remove();
+      } else if (currentCount < maxVotes) {
+        // Vote
+        votes[slotId] = true;
+        el.classList.add('voted');
+        // Add "You voted" indicator
+        if (!el.querySelector('[data-vote-indicator]')) {
+          const div = document.createElement('div');
+          div.setAttribute('data-vote-indicator', '');
+          div.className = 'mt-2 flex items-center gap-1.5';
+          div.innerHTML = '<svg class="w-3 h-3 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg><span class="text-cyan-400 text-[10px] font-medium">You voted for this</span>';
+          el.appendChild(div);
+        }
+      }
+    }
+
+    function toggleBench(btn) {
+      const knob = document.getElementById('bench-knob');
+      const isOn = btn.classList.contains('bg-cyan-600');
+      if (isOn) {
+        btn.classList.remove('bg-cyan-600');
+        btn.classList.add('bg-overlay');
+        knob.style.transform = 'translateX(0)';
+      } else {
+        btn.classList.add('bg-cyan-600');
+        btn.classList.remove('bg-overlay');
+        knob.style.transform = 'translateX(20px)';
+      }
+    }
+
+    function toggleRecurring() {
+      const note = document.getElementById('recurring-note');
+      const check = document.getElementById('recurring-check');
+      // Delay slightly so checkbox state updates first
+      setTimeout(() => {
+        if (check.checked) {
+          note.classList.remove('hidden');
+        } else {
+          note.classList.add('hidden');
+        }
+      }, 0);
+    }
+  </script>
+
+</body>
+</html>

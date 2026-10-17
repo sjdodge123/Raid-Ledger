@@ -1,0 +1,267 @@
+# Design System — light / dark detail tables
+
+Companion to `docs/design-system.md`, which carries the rules; this file carries the
+per-shade and per-pattern detail for the **two colour families**. Split out so the main
+doc stays skimmable. Everything here is derived from `web/src/index.css` as it ships —
+line anchors are that file unless stated otherwise. The rendered version is
+`/dev/design-system` (DEMO_MODE only); its "Side by side" toggle shows every swatch below
+in both families at once.
+
+**The one-paragraph version.** Six of the fifteen schemes are light (`default-light`,
+`quest-log`, `sky`, `dawn`, `holy`, `celestial`). Tokens (`--color-*`) flip for free —
+including the accent tokens `--color-success` / `-warning` / `-danger` / `-busy` / `-slot`.
+Raw Tailwind accents do not — `index.css` repaints them for the light family: text bumps
+from a `-400` to a `-600`/`-700`, tinted fills collapse to a `-100` wash, borders to a
+`-300`. Two shades were never given an override and are unreadable on light (see the
+table). Solid accent fills keep their hue in both families, except the primary `bg-emerald-600`,
+which steps to emerald-700 on light (ROK-1472); a `Button brandColor` label is white or dark by
+contrast on every scheme.
+
+---
+
+## 1. Accent shade pairs
+
+**Accent tokens first.** These are not rewritten per class — the variable itself flips, so
+every utility and every opacity modifier follows. Declared in `@theme` (`:50-66`) and the shared light block (`:118-130`) only; contrast on `#ffffff` is recomputed by
+`web/src/styles/semantic-tokens.guard.test.ts`.
+
+| You write | Dark paints | Light paints | Anchor |
+|---|---|---|---|
+| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#065f46` emerald-800, 7.68:1 (7.01 panel, 6.02 own /10 tint; worst tinted scheme celestial 5.69 / 4.91 — TDB:1793; was `#047857`, 4.38 on its tint) | `:60` / `:124` |
+| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:62` / `:126` |
+| `bg-danger` / `text-danger` / `bg-danger/50` … | `#f87171` red-400, 5.29:1 on panel (6.45 surface, ≥4.62 own /10 tint on every dark scheme; red-500 `#ef4444` was 3.89 on panel — TDB:1770 ruling 2026-10-08). White on a solid dark `bg-danger` is 2.77:1, so a solid danger label takes `--color-status-solid-label` | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint); celestial (`:366`) and quest-log (`:1316`) declare red-800 `#991b1b` — 6.80 / 6.15 / 5.25 and 7.50 / 6.58 / 5.58 on their surface / panel / /10 tint; `#b91c1c` was 4.12 / 4.39 on those tints (TDB:1770) | `:64` / `:128` |
+| `text-white` on a solid `bg-success` / `bg-warning` / `bg-danger` | `--color-status-solid-label` `#0f172a`, 7.04 / 8.31 / 6.45:1 (white 2.54 / 2.15 / 2.77) | `#ffffff`, 7.68 / 7.09 / 6.47:1 | `:66` / `:130`, rule `:858-869` |
+| `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:118` |
+| `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:119` |
+
+`bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
+it is correct at any alpha in both families.
+
+**Raw hues.** You write ONE class. `:692-711` (text; `/60-/80` alphas `:715-721`, hovers
+`:724-729`), `:732-760` (fills; hovers `:763-773`), `:776-791` (borders) rewrite it under
+`:is([data-scheme="light"], [data-scheme="quest-log"], [data-scheme="sky"],
+[data-scheme="dawn"], [data-scheme="holy"], [data-scheme="celestial"])`. Contrast figures
+are the ones `index.css` records beside each rule; "worst" is the lowest across all six light
+schemes' surface, panel and `-500/10` tint (celestial binds).
+
+| You write | Dark paints | Light paints | Anchor |
+|---|---|---|---|
+| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#065f46` emerald-800, worst 5.27:1 (celestial tint) | `:700-701` |
+| `text-emerald-500` | `#10b981` | `#065f46` emerald-800 (`#047857` is 3.76:1 on the celestial tint) | `:702` |
+| `text-red-400` / `-300` | `#f87171` / `#fca5a5` | `#991b1b` red-800, worst 5.52:1 | `:692-693` |
+| `text-amber-400` / `-300` | `#fbbf24` / `#fcd34d` | `#92400e` amber-800 = warning, worst 5.0:1 | `:694-695` |
+| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#854d0e` yellow-800, worst 4.89:1 | `:696-697` |
+| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#166534` green-800, worst 4.97:1 | `:698-699` |
+| `text-purple-400` | `#c084fc` | `#6d28d9` violet-700, worst 4.73:1 | `:703` |
+| `text-indigo-400` / `-300` | `#818cf8` / `#a5b4fc` | `#4338ca` indigo-700, worst 5.25:1 | `:704-705` |
+| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:706-707` |
+| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:710-711` |
+| `text-teal-400` | `#2dd4bf` | `#115e59` teal-800, worst 5.04:1 (celestial; teal-700 is 3.64) | `:708` |
+| `text-gray-400` | `#9ca3af` | `#374151` gray-700, worst 6.18:1 (celestial, raw `/20` chip) — inside a fixed `bg-gray-900` panel `:834` keeps `#9ca3af` (6.99:1 on `#111827`; `:827-830` keep green / blue / purple / yellow-400 the same way) | `:709` |
+| `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:732-756` |
+| `bg-indigo-500/15` / `bg-green-500/15` / `bg-teal-500/15` / `bg-purple-500/15` (cron category chips) | the raw 15% hue | `<hue>-100` at 0.6 alpha | `:757-760` |
+| `bg-amber-500/5` | the raw 5% hue | `amber-100` at 0.35 alpha (a wash — its border carries the edge) | `:738` |
+| `bg-amber-500/15` / `bg-amber-500/20` fill (role badge, DemoDataCard badge, LFG "now" chip) | the raw 15% / 20% hue | `amber-100` at 0.6 / 0.7 alpha | `:739-740` |
+| `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:768-769` |
+| `hover:bg-amber-500/10` | the raw 10% hue | `amber-300` at 0.5 — a ≥1.04 step over every light panel and surface (`amber-100` is ~1.01 on light and holy, 1.00 on the quest-log and dawn surfaces; `amber-200` is 1.01 on the quest-log panel and celestial surface) | `:770` |
+| `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
+| `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha (indigo / teal / purple `/30` at `:787-789`) | `:776-791` |
+| `bg-gray-500/15` / `border-gray-500/30` (the "Other" cron chip) | the raw hue | **same, by design** — a `gray-100` wash is a 1.01 step on light and holy; raw gray-500 at 15% keeps 1.17–1.20 | — |
+| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:871-889`, design-system.md §6.10 |
+
+`web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
+`bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule — there are no listed
+exemptions — and pins `hover:bg-amber-500/10` as a ≥1.03 step over every light panel and surface. The same spec fails if a quest-log `!important`
+border rule reaches an `input`, `select` or `textarea`, which would hide the `aria-invalid` danger border.
+
+Only the hues listed at `:732-760` get the tint treatment — `red`, `amber`, `emerald`,
+`green`, `yellow`, `indigo`, `cyan`, plus `/15` for `indigo`, `green`, `teal` and `purple`
+(pinned by `web/src/pages/cron-jobs/cron-utils.test.ts`). A `bg-blue-500/10` or
+`bg-purple-500/10` surface has **no** light-family mapping; gray fills and borders stay raw.
+
+**Text on an accent fill.** Solid accent buttons keep their hue in both families, so the
+label would go near-black on light (`--color-foreground` is `#0f172a` there). `:840-848`
+forces `--color-foreground: #ffffff` for `.text-foreground` on `.bg-blue-600`,
+`.bg-indigo-600`, `.bg-emerald-600`, `.bg-purple-600`, `.bg-red-600`, `.bg-red-500`,
+`.bg-amber-600`, `.bg-violet-600` and Discord's `#5865F2`. Use `text-foreground` on a
+solid accent button — not `text-white`, which opts out of that rule's bookkeeping.
+**`Button brandColor` is not in that list** (ruling 2026-10-04, ROK-1472): it emits
+`data-brand-label="light|dark"` from `brandLabelFor` (`web/src/lib/brand-label.ts`) and `:892-896`
+paints white or `#0f172a` — whichever has the higher contrast on the runtime fill — on every scheme.
+**Exception — a token fill takes `text-white`:** `bg-success` (and any other token fill) is
+not in that list, so `text-foreground` on it goes `#0f172a` on light. Write `text-white`
+(`JourneyHero.tsx:163`), and keep solid *button* fills on the raw `bg-emerald-600` so the
+forced-white rule still applies (`JourneyHero.tsx:173-175`). That `text-white` is white on
+light only: `:858-869` paints `color: var(--color-status-solid-label)` on `.bg-success` /
+`.bg-warning` / `.bg-danger` + `.text-white` — `#0f172a` from `@theme`, `#ffffff` from the shared
+light block (TDB:2052, ruling 2026-10-08): white is 2.54 / 2.15 / 2.77:1 on dark `#10b981` /
+`#f59e0b` / `#f87171`, `#0f172a` is 7.04 / 8.31 / 6.45:1; light keeps white at 7.68 / 7.09 / 6.47:1.
+A custom property resolves from the nearest ancestor, so a scoped light subtree under a dark root keeps white. Guarded by `brand-fill-forced-white.guard.test.ts`.
+
+**Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
+on the theme surface, so the light family's contrast bumps are wrong there. Put
+`.badge-overlay` on the badge or its container and `:793-818` restores the DARK shades
+under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
+chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
+and `web/src/styles/badge-overlay-art-only.guard.test.ts`; the first also fails when a cover badge paints a light-repainted
+class with no restore here (the `SeriesBadge` indigo, the status badge's emerald / yellow `-500`).
+
+---
+
+## 2. Elevation
+
+- **Dark:** separation is the border (`border-edge`) plus the surface step `backdrop` →
+  `surface` → `panel`. `.glass-card` is translucent with `blur(12px)` (`:666-670`). No
+  shadow — a shadow on `#020617` is invisible.
+- **Light:** the surface steps are ~4% apart (`#ffffff` → `#f1f5f9`), so the light family
+  adds the shadow the dark family does not need: `.bg-panel` / `.bg-panel/50` /
+  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:898-908`), and `.glass-card` becomes
+  near-opaque — `color-mix(in srgb, var(--color-surface) 90%, transparent)` plus
+  `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:677-686`).
+- You get this by using `bg-panel` / `.glass-card`. A hand-rolled `shadow-lg` (20 uses in
+  `components/`) does not adapt and reads as a smudge on light.
+
+---
+
+## 3. Per-pattern detail
+
+Every block below splits a pattern into what flips and what does not. The rule of thumb:
+anything spelled as a token — the surface roles AND the accent tokens `success` /
+`warning` / `danger` / `busy` / `slot` (§1) — flips with the family at any alpha; anything
+spelled as a raw hue flips only if `index.css` hand-lists that exact class and alpha; and
+two things never flip by design — a solid accent button fill's hue (`bg-emerald-600`, label
+forced white; it only steps to emerald-700 on light, ROK-1472) and a data-driven inline alpha (`computeHeatmapBg`'s rgba).
+
+### Filtering (§4.1)
+
+Panel surface and mobile sheet are tokens, so they follow the family; the light family
+adds the panel shadow above. The count badge does not move: `bg-success` + `text-white`
+(`filter-count-badge.tsx::FilterCountBadge`, ROK-1659 — shared by the desktop
+`FilterPanelTrigger` and the phone/tablet `FilterFab`) is identical in both, which is
+intended — a solid accent fill stays solid in both families (§2.2 D-6) even though, unlike
+the raw `bg-emerald-500` it replaced, it is now a declared token. The Filters FAB's own
+surface (`bg-surface border-edge-strong`) is tokens too and flips with the family like any
+other panel-level surface.
+
+### Cards (§4.2)
+
+Frame is tokens (`bg-surface` / `border-edge` / hover `bg-overlay`) and flips. The artwork
+does not: `GradientOverlay`'s `from-black/80 to-transparent`
+(`components/games/game-card-parts.tsx:66`) stays dark in both families because it exists
+to make white title text legible over the *image*, not over the theme surface. Anything
+layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
+`text-dim` — `#8291a7` dark (5.57 surface / 4.57 panel, TDB:2050; slate-500 `#64748b` was 3.75 / 3.07), `#5a697f` light (the same slate, a step darker so it clears AA on
+the light panel and overlay; the tinted schemes' own dims — sky `#4E6E8B`, dawn `#8A6045`, holy `#576E93`,
+celestial `#6D5E4B`, quest-log `#756247` — clear AA on their own surface and panel, ROK-1472; quest-log's
+`--color-muted` moved with it to `#685640`, 6.33 surface / 5.56 panel) — so an image-less tile reads as the same quiet slate in
+either family.
+
+### Chips (§4.3)
+
+OFF is tokens and flips cleanly (`bg-panel` `#1e293b` → `#f1f5f9`, `text-secondary`
+`#cbd5e1` → `#334155`). ON is three raw amber classes and only two are remapped: the fill
+`bg-amber-500/10` → amber-100 at .5 (`:737`) and the border `border-amber-500/30` →
+amber-300 at .5 (`:781`). `text-amber-300` has **no** light override — only its `hover:`
+variant does (`:725`) — so the ON label stays `#fcd34d` on a near-white wash, ≈1.4:1. A
+chip's ON state is unreadable in all six light themes (design-system.md §6.9). Until it
+is fixed, a new ON-state label should use `text-amber-400`.
+
+### Modal / bottom sheet (§4.4)
+
+The dialog body is tokens; the scrim is a raw black alpha with no light-family override —
+`bg-black/60 backdrop-blur-sm` (`components/ui/modal.tsx:68`) and `bg-black/50`, no blur
+(`components/ui/bottom-sheet.tsx:105`). Identical dimming in both families, and heavier
+feeling on light where it dims a white page. Do not add a third alpha; the two that exist
+already disagree (design-system.md §6.11).
+
+### Banners (§4.7)
+
+Use the `-500/10` + `-500/30` pair and the light family rewrites both: an emerald banner
+is a 10% emerald wash on dark and an emerald-100 wash on light. Body copy should be
+`text-foreground` / `text-secondary` with only the icon or heading in the accent hue —
+`text-blue-400` body copy is ≈2.5:1 on white.
+
+### Forms, sliders, checkboxes (§4.11)
+
+- **Focus ring.** `focus:ring-2` (56 uses in `components/`) plus an emerald ring, unchanged
+  in both families. Measured: the SOLID `focus:ring-emerald-500` is the convention at 49
+  uses; `focus:ring-emerald-500/50` is a 7-use minority. Match the file you are in; both
+  read on `#0f172a` and on `#ffffff`, and `/50` is the softer of the two on light.
+- **Disabled.** `disabled:opacity-50` (71) + `disabled:cursor-not-allowed` (59) is the
+  pair, and opacity is family-agnostic. `disabled:bg-emerald-800` (12 uses) is not: it is
+  a dark green with no light override, so a disabled primary button is a heavy dark block
+  on a white page. Prefer `disabled:opacity-50` on the normal fill.
+- **Native controls.** `accent-emerald-500` sliders/checkboxes and UA widget chrome follow
+  `color-scheme`, which is set on `<html>` only (`:619-641`) — the one thing the scoped
+  side-by-side preview cannot show you. Check those at the root.
+
+### Count badges (§4.12)
+
+A solid-fill badge (`bg-emerald-500` + `text-white`) is deliberately identical in both
+families. An inline **tinted** count pill is not: use the `bg-<hue>-500/10` +
+`text-<hue>-400` pair so it picks up the light remap, and add `.badge-overlay` when the
+pill sits on cover art.
+
+### Journey hero (§4.13)
+
+Frame, badge and progress fill are tokens and flip: `border-success/30` / `border-edge` /
+`border-warning/30` by tone, `text-success` / `text-warning` badges, the `bg-success` progress fill
+over `bg-edge-subtle`, and the `bg-success text-white` ✓ disc (`text-white` is correct on a token fill —
+`text-foreground` would go dark on light). Two things do NOT flip: the inline CTA's `bg-emerald-600`
+(`JourneyHero.tsx:177`, beyond the light emerald-700 step of §1 — a deliberate keep — `index.css` forces its white label off that class name,
+§2.2 D-6), and the Manage shells (§4.14), which are pure surface tokens with no accent at all.
+
+### Week strip (§4.15)
+
+Every fill is a token — `BAND_FILL` / `GROUP_FILL` (`bg-success`, `bg-warning/70`, `bg-danger/50`,
+`bg-edge`) and the `bg-busy` cap — so both families repaint at any alpha. The two-tone split flips too:
+`GROUP_GRADIENT` is `var(--color-…)` through `color-mix(in oklab, …)`, and the sliver between the tones
+is `var(--color-surface)` (`index.css:88-93`), so the gap is page-coloured in both families. Nothing in
+the strip is a raw hue or a literal rgba.
+
+### Busy marker (§4.16)
+
+`before:bg-busy` edges and the `text-busy` clause flip with the family (`#8b5cf6` dark → `#7c3aed`
+light), as do `outline-slot` and `ring-success`. The heat fill UNDER the edge does not: it is
+`computeHeatmapBg`'s inline rgba (its alpha encodes the fresh share), identical in both families by
+design — the §2.2 exemption. The legend's "More people free" swatch uses the same rgba, so it matches
+the cells in either family.
+
+---
+
+## 4. What does NOT cascade below the root
+
+The light schemes declare their tokens on unqualified `[data-scheme=...]` selectors, so
+they apply to a nested `<div data-scheme="sky">` as well as to `<html>`. The dark values
+do not: they live on `@theme` (`:32`) and `html` (`:96`) with no `[data-scheme="dark"]`
+block, so a scoped dark wrapper inherits whatever the root is (design-system.md §6.8 —
+this is why `/dev/design-system` pins the root to `default-dark` while its side-by-side
+view is on rather than scoping the dark column). The accent tokens (`success` / `warning` /
+`danger` / `busy` / `slot`) live in the same two blocks, so they share that asymmetry: a
+scoped light wrapper repaints them, a scoped dark one does not.
+
+Root-only regardless of family — verify these at the root, never in a scoped preview:
+
+| What | Where | Consequence |
+|---|---|---|
+| `color-scheme: dark/light` | `:619-641` | Native form controls, scrollbars, UA widgets |
+| Page background | `body` `:633`, `#root` `:640` | A scoped column must paint its own `bg-backdrop` |
+| quest-log parchment | `[data-variant="quest-log"] body::before` `:1356`, `body::after` `:1369` | Scoped quest-log gets panels but no page texture |
+| Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
+
+---
+
+## 5. Measured type scale
+
+Frequency in `web/src/components`, with the page-level scale beside it (design-system.md
+§2.4 carries the rule).
+
+| Class | In components | Used for |
+|---|---|---|
+| `text-sm` | 636 | **Default.** Body, labels, buttons, list rows |
+| `text-xs` | 408 | Hints, metadata, badges, captions |
+| `text-lg` | 54 | Section / modal headings |
+| `text-base` | 22 | Mobile form inputs only (prevents iOS Safari zoom on focus) |
+| `text-xl` | 21 | Sub-page and card-group titles (43 uses in `pages/`) |
+| `text-2xl` | 17 | Hero numbers (11 in `pages/`) |
+| `text-3xl` | 0 | **Page `<h1>` only** — 14 uses, all in `web/src/pages/` |

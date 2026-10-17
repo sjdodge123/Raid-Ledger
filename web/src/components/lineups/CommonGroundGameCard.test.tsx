@@ -1,0 +1,377 @@
+/**
+ * Tests for CommonGroundGameCard (ROK-934).
+ * Validates badge rendering, cover image, and nominate button states.
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { CommonGroundGameDto } from '@raid-ledger/contract';
+import { CommonGroundGameCard } from './CommonGroundGameCard';
+
+function buildGame(overrides: Partial<CommonGroundGameDto> = {}): CommonGroundGameDto {
+    return {
+        gameId: 42,
+        gameName: 'Valheim',
+        slug: 'valheim',
+        coverUrl: 'https://images.igdb.com/cover.jpg',
+        ownerCount: 5,
+        wishlistCount: 2,
+        nonOwnerPrice: 19.99,
+        itadCurrentCut: 25,
+        itadCurrentShop: 'Steam',
+        itadCurrentUrl: 'https://store.steampowered.com/app/892970',
+        earlyAccess: false,
+        itadTags: ['survival', 'co-op'],
+        playerCount: { min: 1, max: 10 },
+        score: 85,
+        ...overrides,
+    };
+}
+
+describe('CommonGroundGameCard — rendering', () => {
+    it('renders game name', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('Valheim')).toBeInTheDocument();
+    });
+
+    it('renders cover image with alt text', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        const img = screen.getByAltText('Valheim');
+        expect(img).toBeInTheDocument();
+        expect(img).toHaveAttribute('src', 'https://images.igdb.com/cover.jpg');
+    });
+
+    it('renders placeholder when coverUrl is null', () => {
+        const { container } = render(
+            <CommonGroundGameCard
+                game={buildGame({ coverUrl: null })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        // Placeholder SVG should be present
+        expect(container.querySelector('svg')).toBeInTheDocument();
+    });
+});
+
+describe('CommonGroundGameCard — owner badge', () => {
+    it('shows owner count badge with correct count', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ ownerCount: 7 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('7 own')).toBeInTheDocument();
+    });
+
+    it('shows owner count of 0', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ ownerCount: 0 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('0 own')).toBeInTheDocument();
+    });
+});
+
+describe('CommonGroundGameCard — wishlist badge', () => {
+    it('shows wishlist badge when count > 0', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ wishlistCount: 3 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('3 wishlisted')).toBeInTheDocument();
+    });
+
+    it('hides wishlist badge when count is 0', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ wishlistCount: 0 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.queryByText(/wishlisted/)).not.toBeInTheDocument();
+    });
+});
+
+describe('CommonGroundGameCard — sale badge', () => {
+    it('shows sale badge with discount percentage when itadCurrentCut > 0', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ itadCurrentCut: 40, nonOwnerPrice: 11.99 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        // ROK-1314: locked vocabulary — the label is `On Sale`, the figure is appended.
+        expect(screen.getByText('On Sale · $11.99 (-40%)')).toBeInTheDocument();
+    });
+
+    it('shows discount without price when nonOwnerPrice is null', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ itadCurrentCut: 30, nonOwnerPrice: null })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        // ROK-1314: no price figure to append, so the locked label stands alone.
+        expect(screen.getByText('On Sale')).toBeInTheDocument();
+    });
+
+    it('shows plain price when itadCurrentCut is 0 and price is set', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ itadCurrentCut: 0, nonOwnerPrice: 29.99 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('$29.99')).toBeInTheDocument();
+    });
+
+    it('shows plain price when itadCurrentCut is null and price is set', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ itadCurrentCut: null, nonOwnerPrice: 14.99 })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('$14.99')).toBeInTheDocument();
+    });
+
+    it('hides sale badge when both cut and price are null', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ itadCurrentCut: null, nonOwnerPrice: null })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        // No sale or price badge at all
+        expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/-%/)).not.toBeInTheDocument();
+    });
+});
+
+describe('CommonGroundGameCard — early access badge', () => {
+    it('shows early access badge when earlyAccess is true', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ earlyAccess: true })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByText('Early Access')).toBeInTheDocument();
+    });
+
+    it('hides early access badge when earlyAccess is false', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ earlyAccess: false })}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.queryByText('Early Access')).not.toBeInTheDocument();
+    });
+});
+
+describe('CommonGroundGameCard — nominate button', () => {
+    it('shows "+ Nominate" button by default', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        expect(screen.getByRole('button', { name: '+ Nominate' })).toBeInTheDocument();
+    });
+
+    it('calls onNominate with gameId when clicked', async () => {
+        const user = userEvent.setup();
+        const onNominate = vi.fn();
+        render(
+            <CommonGroundGameCard
+                game={buildGame({ gameId: 99 })}
+                onNominate={onNominate}
+                isNominating={false}
+                atCap={false}
+            />,
+        );
+        await user.click(screen.getByRole('button', { name: '+ Nominate' }));
+        expect(onNominate).toHaveBeenCalledWith(99);
+        expect(onNominate).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows "Nomination cap reached" and is disabled when atCap is true', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={true}
+            />,
+        );
+        const button = screen.getByRole('button', { name: 'Nomination cap reached' });
+        expect(button).toBeDisabled();
+    });
+
+    // ROK-1349: view-only (non-invitee) is a distinct disabled reason from
+    // a genuine nomination cap and must render its own label.
+    it('shows "View only" and is disabled when viewOnly is true', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+                viewOnly={true}
+            />,
+        );
+        const button = screen.getByRole('button', { name: 'View only' });
+        expect(button).toBeDisabled();
+    });
+
+    // ROK-1349: viewOnly wins over atCap — a non-invitee should never see
+    // the cap message.
+    it('prefers the view-only label over the cap label when both are set', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={true}
+                viewOnly={true}
+            />,
+        );
+        expect(screen.getByRole('button', { name: 'View only' })).toBeDisabled();
+        expect(
+            screen.queryByRole('button', { name: 'Nomination cap reached' }),
+        ).toBeNull();
+    });
+
+    it('shows "Adding..." and is disabled when isNominating is true', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={true}
+                atCap={false}
+            />,
+        );
+        const button = screen.getByRole('button', { name: 'Adding...' });
+        expect(button).toBeDisabled();
+    });
+
+    it('does not call onNominate when button is disabled (atCap)', async () => {
+        const user = userEvent.setup();
+        const onNominate = vi.fn();
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={onNominate}
+                isNominating={false}
+                atCap={true}
+            />,
+        );
+        await user.click(screen.getByRole('button', { name: 'Nomination cap reached' }));
+        expect(onNominate).not.toHaveBeenCalled();
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// ROK-1314 "unify up" (operator decision 2026-09-01): the Common Ground tile
+// renders the SAME card chrome as the /games card — genre pill, cover rating
+// badge, rating/mode info bar. Before this, the badge row matched but the two
+// surfaces still read as different components.
+// ---------------------------------------------------------------------------
+
+/** Render with only the chrome fields varied; everything else is the baseline. */
+function renderCard(overrides: Partial<CommonGroundGameDto>) {
+    return render(
+        <CommonGroundGameCard
+            game={buildGame(overrides)}
+            onNominate={vi.fn()}
+            isNominating={false}
+            atCap={false}
+        />,
+    );
+}
+
+describe('CommonGroundGameCard — shared card chrome (ROK-1314)', () => {
+    it('renders the primary genre pill from the genres array', () => {
+        renderCard({ genres: [12] });
+        // 12 -> RPG in GENRE_MAP, the same mapping the /games card uses.
+        expect(screen.getByText('RPG')).toBeInTheDocument();
+    });
+
+    it('renders the cover rating badge, preferring aggregatedRating', () => {
+        renderCard({ rating: 70, aggregatedRating: 93 });
+        expect(screen.getByLabelText('Rating 93')).toBeInTheDocument();
+    });
+
+    it('falls back to rating when aggregatedRating is absent', () => {
+        renderCard({ rating: 81, aggregatedRating: null });
+        expect(screen.getByLabelText('Rating 81')).toBeInTheDocument();
+    });
+
+    it('renders no rating badge for an unrated game', () => {
+        renderCard({ rating: null, aggregatedRating: null });
+        expect(screen.queryByLabelText(/^Rating /)).not.toBeInTheDocument();
+    });
+
+    it('renders NO mode label — the InfoBar was deleted (ROK-1314)', () => {
+        // `MODE_MAP[gameModes[0]]` read "Single" for any game with a
+        // single-player component, which mislabelled multiplayer games on a
+        // page for picking something to play together. How a game is played is
+        // carried by the player-count badge and the co-op pill instead.
+        renderCard({ gameModes: [1], rating: 88 });
+        expect(screen.queryByText('Single')).not.toBeInTheDocument();
+    });
+
+    it('survives a stale payload carrying none of the chrome fields', () => {
+        const { container } = renderCard({});
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
+    });
+});

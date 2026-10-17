@@ -1,0 +1,318 @@
+/**
+ * Signup flow helpers for SignupsService.
+ * Contains insert, duplicate handling, auto-bench, and new signup logic.
+ * Extracted from signups.service.ts for file size compliance (ROK-719).
+ */
+import { eq, and, sql } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
+import type { CreateSignupDto } from '@raid-ledger/contract';
+import type {
+  Tx,
+  EventRow,
+  SignupRow,
+  SignupTxParams,
+} from './signups.service.types';
+import { hasDisplaceableTentative } from './signups-tentative-capacity.helpers';
+
+/** Shared MMO slot defaults used across capacity and roster-query helpers. */
+export const MMO_SLOT_DEFAULTS = {
+  tank: 2,
+  healer: 4,
+  dps: 14,
+  flex: 5,
+  bench: 0,
+} as const;
+
+/** Compute the total non-bench capacity from a slotConfig object. */
+export function computeSlotCapacity(
+  slotConfig: Record<string, unknown>,
+): number | null {
+  const type = slotConfig.type as string;
+  if (type === 'mmo') {
+    const tank = (slotConfig.tank as number) ?? MMO_SLOT_DEFAULTS.tank;
+    const healer = (slotConfig.healer as number) ?? MMO_SLOT_DEFAULTS.healer;
+    const dps = (slotConfig.dps as number) ?? MMO_SLOT_DEFAULTS.dps;
+    const flex = (slotConfig.flex as number) ?? MMO_SLOT_DEFAULTS.flex;
+    return tank + healer + dps + flex;
+  }
+  if (type === 'generic') {
+    return (slotConfig.player as number) ?? null;
+  }
+  return null;
+}
+
+export async function checkAutoBench(
+  tx: Tx,
+  eventRow: EventRow,
+  eventId: number,
+  dto?: CreateSignupDto,
+): Promise<boolean> {
+  if (dto?.slotRole === 'bench') return false;
+  const capacity = resolveEventCapacity(eventRow);
+  if (capacity === null) return false;
+  const [countRow] = await tx
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.eventSignups)
+    .innerJoin(
+      schema.rosterAssignments,
+      eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+    )
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        sql`${schema.rosterAssignments.role} != 'bench'`,
+      ),
+    );
+  const { count } = defined(countRow, 'signup count row');
+  return Number(count) >= capacity;
+}
+
+/**
+ * Auto-bench decision for the web/API signup flow (ROK-1729): a full roster
+ * benches the newcomer UNLESS it may bump a tentative occupant from a role it
+ * prefers — then allocation runs and ROK-459 displacement makes room.
+ * Callers without a dto (anonymous Discord, PUG invite) use checkAutoBench.
+ */
+export async function checkSignupAutoBench(
+  p: Pick<SignupTxParams, 'tx' | 'eventRow' | 'eventId' | 'userId' | 'dto'>,
+): Promise<boolean> {
+  const full = await checkAutoBench(p.tx, p.eventRow, p.eventId, p.dto);
+  if (!full || !p.dto) return full;
+  return !(await hasDisplaceableTentative(
+    p.tx,
+    p.eventRow,
+    p.eventId,
+    p.dto,
+    p.userId,
+  ));
+}
+
+/**
+ * Resolve the total non-bench capacity for an event.
+ * Prefers slotConfig (MMO/generic) over maxAttendees.
+ * Shared by: signup flow (auto-bench), notification relevance, departure-grace.
+ */
+export function resolveEventCapacity(
+  event: Pick<EventRow, 'slotConfig' | 'maxAttendees'>,
+): number | null {
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  if (slotConfig) return computeSlotCapacity(slotConfig);
+  return event.maxAttendees ?? null;
+}
+
+/**
+ * Insert a new signup row for a user.
+ * @param discordId - Optional Discord snowflake to populate discordUserId
+ *   on the signup row (ROK-985). Enables dual-identifier voice matching.
+ */
+export async function insertSignupRow(
+  tx: Tx,
+  eventId: number,
+  userId: number,
+  dto?: CreateSignupDto,
+  discordId?: string | null,
+) {
+  const hasCharacter = !!dto?.characterId;
+  return tx
+    .insert(schema.eventSignups)
+    .values({
+      eventId,
+      userId,
+      note: dto?.note ?? null,
+      characterId: dto?.characterId ?? null,
+      confirmationStatus: hasCharacter ? 'confirmed' : 'pending',
+      status: 'signed_up',
+      preferredRoles: dto?.preferredRoles ?? null,
+      ...(discordId ? { discordUserId: discordId } : {}),
+    })
+    .onConflictDoNothing({
+      target: [schema.eventSignups.eventId, schema.eventSignups.userId],
+    })
+    .returning();
+}
+
+/** Back-fill discordUserId on a signup that predates the user's Discord link (ROK-985). */
+export async function repairSignupDiscordId(
+  tx: Tx,
+  existing: typeof schema.eventSignups.$inferSelect,
+  user?: { discordId: string | null } | null,
+): Promise<void> {
+  if (existing.discordUserId || !user?.discordId) return;
+  // Guard: skip if another signup for this event already has this discordUserId
+  // (e.g., user also signed up anonymously via Discord bot)
+  const [conflict] = await tx
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, existing.eventId),
+        eq(schema.eventSignups.discordUserId, user.discordId),
+      ),
+    )
+    .limit(1);
+  if (conflict) return;
+  await tx
+    .update(schema.eventSignups)
+    .set({ discordUserId: user.discordId })
+    .where(eq(schema.eventSignups.id, existing.id));
+}
+
+export async function fetchExistingSignup(
+  tx: Tx,
+  eventId: number,
+  userId: number,
+) {
+  const [existing] = await tx
+    .select()
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, userId),
+      ),
+    )
+    .limit(1);
+  return existing;
+}
+
+export function isCancelledStatus(status: string): boolean {
+  return (
+    status === 'roached_out' || status === 'declined' || status === 'departed'
+  );
+}
+
+export function buildReactivationFields(
+  existing: SignupRow,
+  dto: CreateSignupDto | undefined,
+  hasCharacter: boolean,
+) {
+  return {
+    status: 'signed_up' as const,
+    confirmationStatus: hasCharacter
+      ? ('confirmed' as const)
+      : ('pending' as const),
+    note: dto?.note ?? existing.note,
+    characterId: dto?.characterId ?? null,
+    preferredRoles: dto?.preferredRoles ?? null,
+    attendanceStatus: null,
+    attendanceRecordedAt: null,
+    roachedOutAt: null,
+  };
+}
+
+/**
+ * Flip a departed/declined/roached-out signup back to signed_up (mutating
+ * `existing` in place). Returns true iff the row was reactivated, so callers
+ * can re-slot the member and emit SIGNUP_EVENTS.UPDATED (ROK-1769).
+ */
+export async function reactivateIfCancelled(
+  tx: Tx,
+  existing: SignupRow,
+  dto: CreateSignupDto | undefined,
+  hasCharacter: boolean,
+): Promise<boolean> {
+  if (!isCancelledStatus(existing.status)) return false;
+  const fields = buildReactivationFields(existing, dto, hasCharacter);
+  await tx
+    .update(schema.eventSignups)
+    .set(fields)
+    .where(eq(schema.eventSignups.id, existing.id));
+  Object.assign(existing, fields);
+  return true;
+}
+
+export async function updatePreferredRolesIfNeeded(
+  tx: Tx,
+  existing: SignupRow,
+  dto?: CreateSignupDto,
+): Promise<boolean> {
+  if (isCancelledStatus(existing.status)) return false;
+  if (!dto?.preferredRoles || dto.preferredRoles.length === 0) return false;
+  const oldRoles = existing.preferredRoles ?? [];
+  const sorted = [...dto.preferredRoles].sort();
+  const oldSorted = [...oldRoles].sort();
+  const same =
+    sorted.length === oldSorted.length &&
+    sorted.every((r, i) => r === oldSorted[i]);
+  if (same) return false;
+  await tx
+    .update(schema.eventSignups)
+    .set({ preferredRoles: dto.preferredRoles })
+    .where(eq(schema.eventSignups.id, existing.id));
+  existing.preferredRoles = dto.preferredRoles;
+  return true;
+}
+
+export function shouldUseAutoAllocation(
+  eventRow: EventRow,
+  signup: SignupRow,
+  dto: CreateSignupDto | undefined,
+  autoBench: boolean,
+): boolean {
+  const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+  if (slotConfig?.type !== 'mmo' || autoBench || dto?.slotRole === 'bench')
+    return false;
+  const hasPrefs = signup.preferredRoles && signup.preferredRoles.length > 0;
+  const hasSingleRole = !hasPrefs && !!dto?.slotRole;
+  return hasPrefs || hasSingleRole;
+}
+
+export function shouldUseAutoAllocationNew(
+  eventRow: EventRow,
+  dto: CreateSignupDto | undefined,
+  autoBench: boolean,
+): boolean {
+  const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+  if (slotConfig?.type !== 'mmo' || autoBench || dto?.slotRole === 'bench')
+    return false;
+  const hasPrefs = dto?.preferredRoles && dto.preferredRoles.length > 0;
+  const hasSingleRole = !hasPrefs && !!dto?.slotRole;
+  return hasPrefs || hasSingleRole;
+}
+
+export async function autoConfirmCreator(
+  tx: Tx,
+  eventRow: EventRow,
+  userId: number,
+  inserted: SignupRow,
+) {
+  if (
+    eventRow.creatorId !== userId ||
+    inserted.confirmationStatus === 'confirmed'
+  )
+    return;
+  await tx
+    .update(schema.eventSignups)
+    .set({ confirmationStatus: 'confirmed' })
+    .where(eq(schema.eventSignups.id, inserted.id));
+  inserted.confirmationStatus = 'confirmed';
+}
+
+export async function syncConfirmationStatus(tx: Tx, signup: SignupRow) {
+  const [refreshed] = await tx
+    .select({ confirmationStatus: schema.eventSignups.confirmationStatus })
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.id, signup.id))
+    .limit(1);
+  if (refreshed) signup.confirmationStatus = refreshed.confirmationStatus;
+}
+
+/**
+ * Update characterId and confirmationStatus on an existing signup
+ * when the DTO provides a different character than what's already stored.
+ * Prevents silent discard of character selection on duplicate web signups (ROK-868).
+ */
+export async function updateCharacterIfNeeded(
+  tx: Tx,
+  existing: SignupRow,
+  dto: CreateSignupDto | undefined,
+): Promise<void> {
+  if (!dto?.characterId || dto.characterId === existing.characterId) return;
+  await tx
+    .update(schema.eventSignups)
+    .set({ characterId: dto.characterId, confirmationStatus: 'confirmed' })
+    .where(eq(schema.eventSignups.id, existing.id));
+  existing.characterId = dto.characterId;
+  existing.confirmationStatus = 'confirmed';
+}

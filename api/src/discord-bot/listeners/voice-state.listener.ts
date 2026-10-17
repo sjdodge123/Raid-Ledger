@@ -1,0 +1,340 @@
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+  Optional,
+} from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  Events,
+  type GuildMember,
+  type Presence,
+  type VoiceState,
+} from 'discord.js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { AdHocEventService } from '../services/ad-hoc-event.service';
+import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
+import { ServerPresenceRosterService } from '../services/server-presence-roster.service';
+import { VoiceAttendanceService } from '../services/voice-attendance.service';
+import { DepartureGraceService } from '../services/departure-grace.service';
+import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { GameActivityService } from '../services/game-activity.service';
+import { UsersService } from '../../users/users.service';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { EphemeralVoiceIdleCoordinator } from '../services/ephemeral-voice-idle.coordinator';
+import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
+import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
+import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { CHANNEL_BINDING_EVENTS } from '../services/channel-binding-events';
+import {
+  DEBOUNCE_MS,
+  buildDiscordMember,
+  clearTimerMap,
+  resolveAllBindings,
+  type ResolvedBinding,
+} from './voice-state.helpers';
+import { type VoiceHandlerDeps } from './voice-state.handlers';
+import {
+  handleChannelJoin,
+  handlePresenceUpdate,
+  type JoinHandlerCtx,
+} from './voice-state-join-dispatch.handlers';
+import {
+  onceOnSuccess,
+  reportBindingHealth,
+  startBindingCacheSweep,
+  stopBindingCacheSweep,
+} from './voice-state-connect.helpers';
+import { runBotConnectRecovery } from './voice-state-connect-run.helpers';
+import { handleServerPresenceChanged } from './voice-state-server-presence.handlers';
+import {
+  SERVER_PRESENCE_EVENTS,
+  type ServerPresenceChangedPayload,
+} from '../../plugins/pelican/presence/server-presence.reader';
+import {
+  handleChannelLeave,
+  type TimerMaps,
+} from './voice-state-leave.handlers';
+
+/** Listens for Discord voiceStateUpdate and delegates ad-hoc event management. */
+@Injectable()
+export class VoiceStateListener implements OnApplicationShutdown {
+  private readonly logger = new Logger(VoiceStateListener.name);
+  private boundHandler: ((o: VoiceState, n: VoiceState) => void) | null = null;
+  private presenceHandler: ((o: Presence | null, n: Presence) => void) | null =
+    null;
+  private debounceTimers = new Map<string, NodeJS.Timeout>();
+  private cacheSweepTimer: ReturnType<typeof setInterval> | null = null;
+  private channelBindingCache = new Map<
+    string,
+    { cachedAt: number; value: ResolvedBinding[] }
+  >();
+  private channelMembers = new Map<string, Set<string>>();
+  private userChannelMap = new Map<string, string>();
+  private voiceGameTracker = new Map<
+    string,
+    { gameId: number; gameName: string; userId: number }
+  >();
+  private pendingRechecks = new Map<string, NodeJS.Timeout>();
+  private pendingSpawnTimers = new Map<string, NodeJS.Timeout>();
+  // TDB:175: once per process — retried on each READY until a report succeeds.
+  private readonly reportBindingHealthOnce = onceOnSuccess(() =>
+    reportBindingHealth({
+      db: this.db,
+      clientService: this.clientService,
+      channelBindingsService: this.channelBindingsService,
+      logger: this.logger,
+    }),
+  );
+
+  constructor(
+    private readonly clientService: DiscordBotClientService,
+    private readonly adHocEventService: AdHocEventService,
+    private readonly voiceAttendanceService: VoiceAttendanceService,
+    private readonly departureGraceService: DepartureGraceService,
+    private readonly channelBindingsService: ChannelBindingsService,
+    private readonly presenceDetector: PresenceGameDetectorService,
+    private readonly gameActivityService: GameActivityService,
+    private readonly usersService: UsersService,
+    private readonly adHocEventsGateway: AdHocEventsGateway,
+    private readonly channelPresence: ChannelPresenceEmbedService,
+    @Optional()
+    @Inject(EphemeralVoiceIdleCoordinator)
+    private readonly ephemeralIdle: EphemeralVoiceIdleCoordinator | null = null,
+    @Optional()
+    @Inject(EphemeralVoiceService)
+    private readonly ephemeralVoice: EphemeralVoiceService | null = null,
+    // ROK-1389: read-only binding-health WARN report at bot-ready. Optional so
+    // listener unit tests that build without the Drizzle provider simply skip it.
+    @Optional()
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema> | null = null,
+    // ROK-1494 A3: LFG-born events have no channel binding, so their ephemeral
+    // channel's joiners never reached the ad-hoc roster. Optional for the same
+    // reason `db` is — listener unit tests build without the full graph.
+    @Optional()
+    @Inject(AdHocParticipantService)
+    private readonly adHocParticipants: AdHocParticipantService | null = null,
+    // ROK-1801: game-server presence folded into lobby groups and thresholds.
+    @Optional()
+    @Inject(ServerPresenceRosterService)
+    private readonly serverRoster: ServerPresenceRosterService | null = null,
+  ) {}
+
+  private get deps(): VoiceHandlerDeps {
+    return {
+      logger: this.logger,
+      clientService: this.clientService,
+      adHocEventService: this.adHocEventService,
+      voiceAttendanceService: this.voiceAttendanceService,
+      departureGraceService: this.departureGraceService,
+      presenceDetector: this.presenceDetector,
+      gameActivityService: this.gameActivityService,
+      usersService: this.usersService,
+      adHocEventsGateway: this.adHocEventsGateway,
+      voiceGameTracker: this.voiceGameTracker,
+      userChannelMap: this.userChannelMap,
+      channelMembers: this.channelMembers,
+      channelPresence: this.channelPresence,
+      // ROK-1494 A3: the LFG-born roster route. Both are optional providers, so
+      // a listener built without them simply records nothing.
+      db: this.db,
+      adHocParticipantService: this.adHocParticipants,
+      serverRoster: this.serverRoster,
+    };
+  }
+
+  private get timers(): TimerMaps {
+    return {
+      pendingRechecks: this.pendingRechecks,
+      pendingSpawnTimers: this.pendingSpawnTimers,
+    };
+  }
+
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  async onBotConnected(): Promise<void> {
+    const client = this.clientService.getClient();
+    if (!client) return;
+    this.removeListeners(client);
+    this.registerListeners(client);
+    // Each step is guarded on its own (TDB:836); ROK-1446 D7/AC8 ordering —
+    // presence adoption before recoverFromVoiceChannels — lives in the helper.
+    await runBotConnectRecovery(this.joinCtx, {
+      reportBindingHealth: this.reportBindingHealthOnce,
+      startCacheSweep: () => this.startCacheSweep(),
+    });
+  }
+
+  /** ROK-1801 D: game-server presence changed — re-run cards + thresholds. */
+  @OnEvent(SERVER_PRESENCE_EVENTS.CHANGED)
+  onServerPresenceChanged(p: ServerPresenceChangedPayload): Promise<void> {
+    return handleServerPresenceChanged(this.joinCtx, p);
+  }
+
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    const client = this.clientService.getClient();
+    if (client) this.removeListeners(client);
+    this.boundHandler = null;
+    this.presenceHandler = null;
+    this.channelPresence.clear();
+    this.clearAllState();
+  }
+
+  /**
+   * A binding on this channel was written: drop its cache entry so the next
+   * join resolves the binding that exists now, not one up to 60 s stale.
+   */
+  @OnEvent(CHANNEL_BINDING_EVENTS.CHANGED)
+  onBindingChanged({ channelId }: { channelId: string }): void {
+    this.channelBindingCache.delete(channelId);
+  }
+
+  onApplicationShutdown(): void {
+    this.clearAllState();
+  }
+
+  private registerListeners(client: import('discord.js').Client): void {
+    this.boundHandler = (o: VoiceState, n: VoiceState) => {
+      this.handleVoiceStateUpdate(o, n);
+    };
+    client.on(Events.VoiceStateUpdate, this.boundHandler);
+    this.presenceHandler = (o: Presence | null, n: Presence) => {
+      this.onPresenceUpdate(o, n).catch((e) =>
+        this.logger.error(`Presence error: ${e}`),
+      );
+    };
+    client.on(Events.PresenceUpdate, this.presenceHandler);
+  }
+
+  private removeListeners(client: import('discord.js').Client): void {
+    if (this.boundHandler)
+      client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
+    if (this.presenceHandler)
+      client.removeListener(Events.PresenceUpdate, this.presenceHandler);
+  }
+
+  private clearAllState(): void {
+    this.channelBindingCache.clear();
+    this.channelMembers.clear();
+    this.userChannelMap.clear();
+    this.voiceGameTracker.clear();
+    clearTimerMap(this.debounceTimers);
+    clearTimerMap(this.pendingRechecks);
+    clearTimerMap(this.pendingSpawnTimers);
+    this.cacheSweepTimer = stopBindingCacheSweep(this.cacheSweepTimer);
+  }
+
+  /**
+   * CONNECTED fires again on every reconnect, so restart the sweep rather than
+   * stack another one: an overwritten handle is a ref'd 10-minute interval
+   * nothing can clear (it kept the in-band jest process alive on the fleet).
+   */
+  private startCacheSweep(): void {
+    stopBindingCacheSweep(this.cacheSweepTimer);
+    this.cacheSweepTimer = startBindingCacheSweep(this.channelBindingCache);
+  }
+
+  private handleVoiceStateUpdate(
+    oldState: VoiceState,
+    newState: VoiceState,
+  ): void {
+    const userId = newState.id;
+    const oldCh = oldState.channelId,
+      newCh = newState.channelId;
+    if (oldCh === newCh) return;
+    const existing = this.debounceTimers.get(userId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(userId);
+      this.processVoiceChange(
+        userId,
+        oldCh,
+        newCh,
+        newState.member ?? undefined,
+      ).catch((e) =>
+        this.logger.error(`Voice state error for ${userId}: ${e}`),
+      );
+    }, DEBOUNCE_MS);
+    this.debounceTimers.set(userId, timer);
+  }
+
+  private async processVoiceChange(
+    userId: string,
+    oldCh: string | null,
+    newCh: string | null,
+    member?: GuildMember,
+  ): Promise<void> {
+    if (oldCh) {
+      this.userChannelMap.delete(userId);
+      await handleChannelLeave(
+        this.deps,
+        oldCh,
+        userId,
+        this.timers,
+        this.adHocEventService,
+        (ch) => this.resolveAllBindings(ch),
+      );
+      // ROK-1352: ephemeral channel may now be empty post-event → idle-delete.
+      await this.ephemeralIdle
+        ?.onChannelLeave(oldCh)
+        .catch((e) => this.logger.warn(`Ephemeral leave hook failed: ${e}`));
+    }
+    if (newCh) {
+      this.userChannelMap.set(userId, newCh);
+      // ROK-1386: private-event join-guard — disconnect non-allow-listed members
+      // who join (or race into) a private ephemeral channel. Only fires on this
+      // join transition, so already-connected members are never kicked on demote.
+      await this.ephemeralVoice
+        ?.enforceJoinGuard(newCh, userId)
+        .catch((e) => this.logger.warn(`Join-guard failed: ${e}`));
+      // ROK-1352: rejoin cancels any pending ephemeral idle-delete.
+      await this.ephemeralIdle
+        ?.onChannelJoin(newCh)
+        .catch((e) => this.logger.warn(`Ephemeral join hook failed: ${e}`));
+      await handleChannelJoin(
+        this.joinCtx,
+        newCh,
+        buildDiscordMember(userId, member),
+        member,
+      );
+    }
+  }
+
+  private async onPresenceUpdate(
+    op: Presence | null,
+    np: Presence,
+  ): Promise<void> {
+    const channelId = this.userChannelMap.get(np.userId);
+    if (!channelId || !np.member) return;
+    await handlePresenceUpdate(this.joinCtx, channelId, np.member, op);
+  }
+
+  private get joinCtx(): JoinHandlerCtx {
+    return {
+      deps: this.deps,
+      timers: this.timers,
+      channelMembers: this.channelMembers,
+      userChannelMap: this.userChannelMap,
+      presenceDetector: this.presenceDetector,
+      logger: this.logger,
+      resolveAllBindings: (ch) => this.resolveAllBindings(ch),
+    };
+  }
+
+  private resolveAllBindings(ch: string): Promise<ResolvedBinding[]> {
+    return resolveAllBindings(
+      {
+        clientService: this.clientService,
+        channelBindingsService: this.channelBindingsService,
+      },
+      ch,
+      this.channelBindingCache,
+    );
+  }
+}

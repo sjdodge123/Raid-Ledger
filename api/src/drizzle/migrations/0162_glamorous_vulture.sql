@@ -1,0 +1,2 @@
+ALTER TABLE "post_event_followup_sent" ADD COLUMN "match_id" integer;--> statement-breakpoint
+ALTER TABLE "post_event_followup_sent" ADD CONSTRAINT "post_event_followup_sent_match_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."community_lineup_matches"("id") ON DELETE set null ON UPDATE no action;

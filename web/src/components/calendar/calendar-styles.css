@@ -1,0 +1,1570 @@
+/* Calendar Styles - Dark theme matching existing glassmorphism */
+
+.calendar-container {
+    background: rgba(30, 41, 59, 0.5);
+    backdrop-filter: blur(12px);
+    border-radius: 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    padding: 1.5rem;
+    min-height: 600px;
+}
+
+/* Toolbar */
+.calendar-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.toolbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.toolbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+    background: rgba(71, 85, 105, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.toolbar-btn.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: #10b981;
+}
+
+.toolbar-btn.disabled,
+.toolbar-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.toolbar-btn svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.today-btn {
+    min-width: 4rem;
+}
+
+.toolbar-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin: 0;
+}
+
+.toolbar-views {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Loading State */
+.calendar-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 3rem;
+    color: #94a3b8;
+}
+
+.loading-spinner {
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid rgba(148, 163, 184, 0.3);
+    border-top-color: #10b981;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Empty State */
+.calendar-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #94a3b8;
+    z-index: 10;
+    /* ROK-1775: never swallow clicks meant for the grid underneath; only the CTA is interactive. */
+    pointer-events: none;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.calendar-empty p {
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
+}
+
+.empty-cta {
+    pointer-events: auto;
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    border-radius: 0.5rem;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.empty-cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Calendar Grid Wrapper */
+.calendar-grid-wrapper {
+    position: relative;
+}
+
+/* Grid floor (was an inline style, which cannot take a media query). */
+.calendar-grid-wrapper .rbc-calendar {
+    min-height: 500px;
+}
+
+/*
+ * ROK-1661: portrait tablets (768–1023px, below the lg split). Chrome on iPad
+ * lets the document scroll to the ICB height (100lvh, 1180px on a portrait
+ * iPad) even when the page is shorter, and a 500px grid leaves /calendar
+ * ~1050px tall, so a blank strip showed under the footer. The grid fills the
+ * remainder instead. --calendar-chrome is everything on the page that is not
+ * the grid at this band: header 65 + page py-6 24 + h1 block 88 + container
+ * border/padding 25 + toolbar 44 + its margin 24 (above); container
+ * padding/border 25 + page pb 24 + FAB clearance md:pb-40 160 + footer 69
+ * (below) = 548. Rounded DOWN on purpose: an underestimate only makes the
+ * page a few px taller than the screen (like /games), an overestimate would
+ * leave a strip. A wrapped toolbar or a banner also only adds height.
+ */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .calendar-grid-wrapper .rbc-calendar {
+        --calendar-chrome: 540px;
+        min-height: max(500px, calc(100lvh - var(--calendar-chrome)));
+    }
+}
+
+/* React Big Calendar Overrides */
+.rbc-calendar {
+    background: transparent;
+    font-family: inherit;
+}
+
+.rbc-header {
+    padding: 0.75rem 0.5rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    background: rgba(30, 41, 59, 0.3);
+}
+
+.rbc-month-view {
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.rbc-month-row {
+    border-color: rgba(148, 163, 184, 0.1);
+}
+
+.rbc-day-bg {
+    border-color: rgba(148, 163, 184, 0.1);
+    transition: background-color 0.2s;
+}
+
+.rbc-day-bg:hover {
+    background: rgba(51, 65, 85, 0.3);
+}
+
+.rbc-off-range-bg {
+    background: rgba(15, 23, 42, 0.5);
+}
+
+.rbc-today {
+    background: transparent !important;
+}
+
+/* Month view: emerald highlight on today's cell */
+.rbc-month-view .rbc-day-bg.rbc-today {
+    background: rgba(16, 185, 129, 0.12) !important;
+    box-shadow: inset 0 2px 0 0 rgba(16, 185, 129, 0.6);
+}
+
+/* Scope the today border to the day-slot column only, not individual events */
+.rbc-day-slot.rbc-today::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(16, 185, 129, 0.3);
+    border-radius: 0.25rem;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.rbc-date-cell {
+    padding: 0.5rem;
+    text-align: right;
+}
+
+.rbc-date-cell>a {
+    color: #e2e8f0;
+    font-weight: 500;
+    font-size: 0.875rem;
+    text-decoration: none;
+}
+
+.rbc-off-range .rbc-date-cell>a,
+.rbc-off-range a {
+    color: #475569;
+}
+
+.rbc-row-segment {
+    padding: 0 0.25rem 0.25rem;
+}
+
+/* Event Chip Styles - colors inherited from .rbc-event via eventPropGetter */
+.calendar-event-chip {
+    /* No background - inherits from parent .rbc-event */
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.6875rem;
+    color: inherit;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.calendar-event-chip:hover {
+    opacity: 0.9;
+}
+
+.event-chip-time {
+    flex-shrink: 0;
+    font-weight: 600;
+    font-size: 0.625rem;
+    opacity: 0.9;
+    min-width: 1.75rem;
+}
+
+.event-chip-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.625rem;
+}
+
+/* RBC Event Overrides - allow inline styles from eventPropGetter */
+.rbc-event {
+    /* background and border set by eventPropGetter based on game */
+    padding: 0 !important;
+    outline: none !important;
+}
+
+.rbc-event:focus {
+    outline: 2px solid #8b5cf6;
+    outline-offset: 2px;
+}
+
+.rbc-event-content {
+    height: auto;
+}
+
+.rbc-show-more {
+    color: #8b5cf6;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: transparent;
+    margin-top: 0.25rem;
+}
+
+.rbc-show-more:hover {
+    text-decoration: underline;
+}
+
+/* Popup overlay */
+.rbc-overlay {
+    background: rgba(30, 41, 59, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.rbc-overlay-header {
+    color: #f1f5f9;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .calendar-container {
+        padding: 0.75rem;
+        overflow-x: clip;
+        min-height: auto;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    /* Month view: make entire date cells tappable for drill-down to day view */
+    .calendar-view-month .rbc-day-bg {
+        cursor: pointer;
+    }
+
+    .calendar-view-month .rbc-date-cell {
+        cursor: pointer;
+    }
+
+    /* Day view: readable slot heights — scroll rather than cramming 24h */
+    .calendar-view-day .rbc-calendar {
+        min-height: auto !important;
+    }
+
+    .calendar-view-day .rbc-timeslot-group {
+        min-height: 44px !important;
+    }
+
+    .calendar-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        background: var(--color-surface, rgba(15, 23, 42, 0.95));
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--color-edge, rgba(148, 163, 184, 0.1));
+        margin-left: -0.75rem;
+        margin-right: -0.75rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    /* Hide custom toolbar on mobile when CalendarMobileToolbar is active */
+    .calendar-toolbar.calendar-toolbar-desktop-only {
+        display: none;
+    }
+
+    .toolbar-title {
+        order: -1;
+        text-align: center;
+        font-size: 1.125rem;
+    }
+
+    .toolbar-nav {
+        justify-content: center;
+    }
+
+    .rbc-header {
+        font-size: 0.625rem;
+        padding: 0.5rem 0.25rem;
+    }
+
+    .rbc-time-view {
+        overflow-x: hidden;
+    }
+
+    .rbc-label {
+        font-size: 0.5rem;
+        padding: 0 0.125rem;
+    }
+}
+
+/* ============================================
+   Mini Calendar Styles (AC-5)
+   ============================================ */
+
+.mini-calendar {
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+
+.mini-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.mini-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.25rem;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mini-nav-btn:hover {
+    background: rgba(71, 85, 105, 0.6);
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.mini-calendar-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.mini-calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.125rem;
+    margin-bottom: 0.25rem;
+}
+
+.mini-weekday {
+    text-align: center;
+    font-size: 0.625rem;
+    font-weight: 500;
+    color: #64748b;
+    text-transform: uppercase;
+    padding: 0.25rem 0;
+}
+
+.mini-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.125rem;
+}
+
+.mini-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: #e2e8f0;
+    background: transparent;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mini-day:hover {
+    background: rgba(71, 85, 105, 0.5);
+}
+
+.mini-day.other-month {
+    color: #475569;
+}
+
+.mini-day.today {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.mini-day.selected {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(6, 182, 212, 0.3));
+    color: #10b981;
+    font-weight: 600;
+}
+
+/* Calendar Page Layout with Sidebar */
+.calendar-page-layout {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+    .calendar-page-layout {
+        grid-template-columns: 240px 1fr;
+    }
+}
+
+.calendar-sidebar {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .calendar-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+
+.sidebar-section {
+    background: rgba(30, 41, 59, 0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+
+.sidebar-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+}
+
+.sidebar-quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.sidebar-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+}
+
+.sidebar-action-btn:hover {
+    background: rgba(71, 85, 105, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* ============================================
+   Week View Styles (ROK-172)
+   ============================================ */
+
+/* Time view container */
+.rbc-time-view {
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 0.5rem;
+    overflow: visible;
+}
+
+/* Time header (day column headers) */
+.rbc-time-header {
+    background: rgba(30, 41, 59, 0.5);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.rbc-time-header-content {
+    border-left: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.rbc-time-header-gutter {
+    background: rgba(30, 41, 59, 0.5);
+    border-right: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Day header cells */
+.rbc-header.rbc-today {
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.rbc-allday-cell {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Time content area */
+.rbc-time-content {
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
+    overflow: visible !important;
+}
+
+.rbc-time-content>*+*>* {
+    border-left: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Time gutter (left time axis) */
+.rbc-time-gutter {
+    background: rgba(30, 41, 59, 0.3);
+}
+
+.rbc-timeslot-group {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    min-height: 40px;
+}
+
+.rbc-time-slot {
+    border-top: 1px solid rgba(148, 163, 184, 0.05);
+}
+
+.rbc-label {
+    color: #64748b;
+    font-size: 0.75rem;
+    padding: 0 0.5rem;
+}
+
+/* Day columns */
+.rbc-day-slot {
+    border-left: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.rbc-day-slot .rbc-time-slot {
+    border-top: 1px solid rgba(148, 163, 184, 0.05);
+}
+
+/* Today column highlight — header-only; no tint on the slot to avoid overlaying events */
+.rbc-day-slot.rbc-today {
+    background: transparent;
+}
+
+/* Current time indicator */
+.rbc-current-time-indicator {
+    background-color: #ef4444;
+    height: 2px;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.rbc-current-time-indicator::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+}
+
+/* Week/day view event blocks - reset the outer .rbc-event wrapper so our
+   custom inner components (WeekEventCard, DayEventCard) handle all styling.
+   eventPropGetter sets inline backgroundColor/border for month-view chips;
+   we must forcefully override those here so they don't bleed through as a
+   translucent box on top of the custom cards (ROK-235). */
+.rbc-time-view .rbc-event {
+    border-radius: 0.5rem;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background: transparent !important;
+    background-color: transparent !important;
+    padding: 0 !important;
+    overflow: hidden;
+}
+
+/* Force full width for week events */
+.rbc-day-slot .rbc-events-container {
+    margin-right: 0 !important;
+}
+
+.rbc-day-slot .rbc-event {
+    /* Let react-big-calendar calculate width/position for overlapping events
+       (side-by-side layout). Only override border for visual separation. */
+    border-top: 3px solid rgba(15, 23, 42, 0.95) !important;
+}
+
+.rbc-time-view .rbc-event-label {
+    display: none;
+}
+
+.rbc-time-view .rbc-event-content {
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Day view: allow event content to expand beyond time-slot height */
+.calendar-view-day .rbc-time-view .rbc-event {
+    overflow: visible;
+    height: auto !important;
+    min-height: 100px;
+}
+
+.calendar-view-day .rbc-time-view .rbc-event-content {
+    overflow: visible;
+    height: auto;
+}
+
+.calendar-view-day .day-event-block {
+    height: auto;
+}
+
+/* Week event block component */
+.week-event-block {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    /* Extra bottom padding to contain attendee avatars */
+    padding: 0.5rem 0.5rem 0.75rem 0.5rem;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    /* Use clip-path for strict content clipping (more reliable than overflow) */
+    clip-path: inset(0 round 0.5rem);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.week-event-block:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Week event header */
+.week-event-header {
+    margin-bottom: 0.25rem;
+}
+
+.week-event-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Week event details */
+.week-event-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    flex: 1;
+}
+
+.week-event-game {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.week-event-time {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.week-event-signups {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    width: fit-content;
+    margin-top: auto;
+}
+
+.week-event-creator {
+    font-size: 0.625rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Week event tier: minimal (<2.5hr) — tighter padding, smaller title, no avatars */
+.week-event-block--minimal {
+    padding: 0.25rem 0.375rem 0.375rem 0.375rem;
+}
+
+.week-event-block--minimal .week-event-details {
+    gap: 0.0625rem;
+}
+
+.week-event-block--minimal .week-event-game {
+    font-size: 0.625rem;
+}
+
+.week-event-block--minimal .week-event-time {
+    font-size: 0.625rem;
+}
+
+.week-event-title--minimal {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    font-size: 0.75rem;
+}
+
+/* Week event tier: compact (2.5-4hr) — slightly smaller title */
+.week-event-block--compact .week-event-title {
+    font-size: 0.8125rem;
+}
+
+.week-event-block--compact .week-event-game {
+    font-size: 0.6875rem;
+}
+
+/* Week event signup badge — compact pill with icon + count */
+.week-event-signup-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    width: fit-content;
+    margin-top: auto;
+}
+
+/* Attendee avatars container - positioned at bottom, contained within event */
+.week-event-attendees {
+    margin-top: auto;
+    padding-top: 0.25rem;
+    overflow: hidden;
+    flex-shrink: 0;
+    max-height: 2rem;
+    /* Constrain to single row of avatars */
+}
+
+/* Events label in header */
+.rbc-events-container {
+    margin-right: 0;
+}
+
+/* All-day events row */
+.rbc-row-segment .rbc-event {
+    border-radius: 0.25rem;
+}
+
+/* Responsive week view */
+@media (max-width: 768px) {
+    .rbc-time-view .rbc-header {
+        font-size: 0.625rem;
+        padding: 0.5rem 0.25rem;
+    }
+
+    .rbc-label {
+        font-size: 0.5rem;
+        padding: 0 0.125rem;
+    }
+
+    .rbc-timeslot-group {
+        min-height: 36px;
+    }
+
+    .week-event-title {
+        font-size: 0.75rem;
+    }
+
+    .week-event-game,
+    .week-event-time,
+    .week-event-signups {
+        font-size: 0.625rem;
+    }
+}
+
+/* ============================================
+   Day View Styles (ROK-178 Enhanced)
+   ============================================ */
+
+/* Day event block with centered art treatment */
+.day-event-block {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    border-radius: 0.5rem;
+    overflow: visible;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+    z-index: 2;
+    min-height: 100px;
+}
+
+.day-event-block:hover {
+    transform: scale(1.01);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Content wrapper - positioned on left side */
+.day-event-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.75rem 1rem;
+    min-width: 250px;
+    max-width: 50%;
+    z-index: 1;
+}
+
+/* Day event header with duration and title */
+.day-event-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.day-event-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    line-height: 1.3;
+    flex: 1;
+}
+
+.day-event-duration {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Meta info row - game and time */
+.day-event-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.day-event-game {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.day-event-time {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.day-event-creator {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Description preview */
+.day-event-description {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.4;
+    margin: 0.25rem 0 0 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    opacity: 0.9;
+}
+
+/* Right column: avatars + actions over cover art */
+.day-event-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.375rem;
+    padding: 0.75rem 0.75rem 0.75rem 0;
+    margin-left: auto;
+    z-index: 1;
+}
+
+.day-event-right .day-event-actions {
+    justify-content: flex-end;
+}
+
+.day-event-signups {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+}
+
+/* Responsive day view */
+@media (max-width: 768px) {
+    .day-event-block {
+        flex-direction: column;
+    }
+
+    .day-event-content {
+        min-width: auto;
+        max-width: 100%;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .day-event-right {
+        flex-direction: row;
+        margin-left: 0;
+        justify-content: space-between;
+        padding: 0.375rem 0.75rem 0.5rem;
+        align-items: center;
+    }
+
+    .day-event-right .day-event-actions {
+        justify-content: flex-start;
+    }
+
+    .day-event-title {
+        font-size: 0.875rem;
+    }
+
+    .day-event-game,
+    .day-event-time,
+    .day-event-description {
+        font-size: 0.75rem;
+    }
+
+
+    .calendar-view-day .day-event-meta {
+        gap: 0.25rem;
+    }
+}
+
+/* ============================================
+   Mobile Date Navigation Bar (ROK-368)
+   ============================================ */
+
+.calendar-mobile-nav {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(30, 41, 59, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+@media (max-width: 767px) {
+    .calendar-mobile-nav {
+        display: flex;
+    }
+}
+
+.calendar-mobile-nav-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.calendar-mobile-nav-arrow:hover {
+    background: rgba(71, 85, 105, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.calendar-mobile-nav-label {
+    flex: 1;
+    text-align: center;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+}
+
+.calendar-mobile-nav-today {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    background: #10b981;
+    border: 1px solid #10b981;
+    border-radius: 0.5rem;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.calendar-mobile-nav-today:hover {
+    background: #34d399;
+    border-color: #34d399;
+}
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-container {
+    background: rgba(241, 245, 249, 0.8);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .toolbar-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .toolbar-btn:hover:not(:disabled) {
+    background: rgba(203, 213, 225, 0.7);
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .toolbar-title {
+    color: #0f172a;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-loading {
+    color: #64748b;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-empty {
+    color: #64748b;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-header {
+    color: #64748b;
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+    background: rgba(241, 245, 249, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-view {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-row {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-bg {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-bg:hover {
+    background: rgba(241, 245, 249, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-off-range-bg {
+    background: rgba(248, 250, 252, 0.7);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-view .rbc-day-bg.rbc-today {
+    background: rgba(16, 185, 129, 0.1) !important;
+    box-shadow: inset 0 2px 0 0 rgba(16, 185, 129, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-date-cell>a {
+    color: #334155;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-off-range .rbc-date-cell>a,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-off-range a {
+    color: #cbd5e1;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-overlay {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(203, 213, 225, 0.5);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-overlay-header {
+    color: #0f172a;
+    border-bottom-color: rgba(203, 213, 225, 0.5);
+}
+
+/* Mini calendar light overrides */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-calendar {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-nav-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #64748b;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-nav-btn:hover {
+    background: rgba(203, 213, 225, 0.7);
+    color: #334155;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-calendar-title {
+    color: #0f172a;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-weekday {
+    color: #94a3b8;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-day {
+    color: #334155;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-day:hover {
+    background: rgba(226, 232, 240, 0.6);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-day.other-month {
+    color: #cbd5e1;
+}
+
+/* Sidebar light overrides */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-section {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-section-title {
+    color: #64748b;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-action-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-action-btn:hover {
+    background: rgba(203, 213, 225, 0.7);
+}
+
+/* Week view light overrides */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-view {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-header {
+    background: rgba(241, 245, 249, 0.5);
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-header-content {
+    border-left-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-header-gutter {
+    background: rgba(241, 245, 249, 0.5);
+    border-right-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-allday-cell {
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-content {
+    border-top-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-content>*+*>* {
+    border-left-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-gutter {
+    background: rgba(248, 250, 252, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-timeslot-group {
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-slot {
+    border-top-color: rgba(203, 213, 225, 0.15);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-label {
+    color: #94a3b8;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-slot {
+    border-left-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-slot .rbc-time-slot {
+    border-top-color: rgba(203, 213, 225, 0.15);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-slot .rbc-event {
+    border-top-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .week-event-signup-badge {
+    background: rgba(0, 0, 0, 0.15);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* ============================================
+   Quick-Join Actions (ROK-191)
+   ============================================ */
+
+/* Actions container in day event footer */
+.day-event-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+    flex-wrap: wrap;
+}
+
+/* Shimmer placeholder while roster loads */
+.day-event-actions-shimmer {
+    width: 120px;
+    height: 24px;
+    border-radius: 0.25rem;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Base role button style */
+.day-event-role-btn {
+    padding: 0.1875rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    border: 1px solid;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.day-event-role-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.day-event-role-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Role color variants */
+.day-event-role-btn--tank {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #93bbfd;
+}
+
+.day-event-role-btn--tank:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.35);
+}
+
+.day-event-role-btn--healer {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.5);
+    color: #86efac;
+}
+
+.day-event-role-btn--healer:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.35);
+}
+
+.day-event-role-btn--dps {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+}
+
+.day-event-role-btn--dps:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.35);
+}
+
+.day-event-role-btn--flex {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(168, 85, 247, 0.5);
+    color: #d8b4fe;
+}
+
+.day-event-role-btn--flex:hover:not(:disabled) {
+    background: rgba(168, 85, 247, 0.35);
+}
+
+/* Full slot styling */
+.day-event-role-btn--full {
+    opacity: 0.4;
+}
+
+/* Generic join button */
+.day-event-join-btn {
+    padding: 0.1875rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    border-radius: 0.25rem;
+    color: #6ee7b7;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.day-event-join-btn:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.day-event-join-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Leave button */
+.day-event-leave-btn {
+    padding: 0.1875rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 0.25rem;
+    color: #fca5a5;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.day-event-leave-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+}
+
+.day-event-leave-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Login link */
+.day-event-login-link {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s ease;
+}
+
+.day-event-login-link:hover {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* ============================================
+   Quick-Join Light Theme Overrides (ROK-191)
+   ============================================ */
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-actions-shimmer {
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.03) 100%);
+    background-size: 200% 100%;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--tank {
+    color: #2563eb;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--healer {
+    color: #16a34a;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--dps {
+    color: #b91c1c;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--flex {
+    color: #9333ea;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-join-btn {
+    color: #059669;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-leave-btn {
+    color: var(--color-danger);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-login-link {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-login-link:hover {
+    color: rgba(0, 0, 0, 0.8);
+}
+
+/* Mobile nav bar light overrides (ROK-368) */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav {
+    background: rgba(241, 245, 249, 0.95);
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-arrow {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-arrow:hover {
+    background: rgba(203, 213, 225, 0.7);
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-label {
+    color: #0f172a;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-today {
+    background: #059669;
+    border-color: #059669;
+    color: #fff;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-today:hover {
+    background: #10b981;
+    border-color: #10b981;
+}

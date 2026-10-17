@@ -1,0 +1,381 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { SystemController } from './system.controller';
+import { UsersService } from '../users/users.service';
+import { SettingsService } from '../settings/settings.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+
+function describeSystemController() {
+  let controller: SystemController;
+  let mockUsersService: Partial<UsersService>;
+  let mockSettingsService: Partial<SettingsService>;
+  let mockPluginRegistry: Partial<PluginRegistryService>;
+
+  beforeEach(async () => {
+    mockUsersService = {
+      count: jest.fn(),
+    };
+    mockSettingsService = {
+      isDiscordConfigured: jest.fn(),
+      isBlizzardConfigured: jest.fn().mockResolvedValue(false),
+      isSteamConfigured: jest.fn().mockResolvedValue(false),
+      getDemoMode: jest.fn().mockResolvedValue(false),
+      getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+      getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+      getBranding: jest.fn().mockResolvedValue({
+        communityName: null,
+        communityLogoPath: null,
+      }),
+      get: jest.fn().mockResolvedValue(null),
+    };
+    mockPluginRegistry = {
+      getActiveSlugsSync: jest.fn().mockReturnValue(new Set<string>()),
+      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [SystemController],
+      providers: [
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: SettingsService, useValue: mockSettingsService },
+        { provide: PluginRegistryService, useValue: mockPluginRegistry },
+      ],
+    }).compile();
+
+    controller = module.get<SystemController>(SystemController);
+  });
+
+  function describeGetStatus() {
+    it('should return isFirstRun: true when no users exist (AC-4)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(0);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.isFirstRun).toBe(true);
+      expect(mockUsersService.count).toHaveBeenCalled();
+    });
+
+    it('should return isFirstRun: false when users exist (AC-4)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(5);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.isFirstRun).toBe(false);
+      expect(mockUsersService.count).toHaveBeenCalled();
+    });
+
+    it('should return discordConfigured based on settings service (AC-4)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(0);
+
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+      let result = await controller.getStatus();
+      expect(result.discordConfigured).toBe(true);
+
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      result = await controller.getStatus();
+      expect(result.discordConfigured).toBe(false);
+    });
+
+    it('should include activePlugins from plugin registry (ROK-238)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockPluginRegistry.getActiveSlugsSync as jest.Mock).mockReturnValue(
+        new Set(['some-plugin']),
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.activePlugins).toEqual(
+        expect.arrayContaining(['some-plugin']),
+      );
+    });
+
+    it('should return blizzard in activePlugins when plugin is active in registry (ROK-266)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockPluginRegistry.getActiveSlugsSync as jest.Mock).mockReturnValue(
+        new Set(['blizzard']),
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.activePlugins).toContain('blizzard');
+    });
+
+    it('should return empty activePlugins when no plugins are active (ROK-266)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockPluginRegistry.getActiveSlugsSync as jest.Mock).mockReturnValue(
+        new Set<string>(),
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.activePlugins).toEqual([]);
+    });
+
+    it('should include authProviders from configured auth adapters (ROK-267)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+
+      const mockProvider = {
+        providerKey: 'discord',
+        getLoginMethod: () => ({
+          key: 'discord',
+          label: 'Continue with Discord',
+          icon: 'discord',
+          loginPath: '/auth/discord',
+          color: '#5865F2',
+        }),
+        isConfigured: jest.fn().mockResolvedValue(true),
+      };
+
+      (
+        mockPluginRegistry.getAdaptersForExtensionPoint as jest.Mock
+      ).mockReturnValue(new Map([['discord', mockProvider]]));
+
+      const result = await controller.getStatus();
+
+      expect(result.authProviders).toEqual([
+        {
+          key: 'discord',
+          label: 'Continue with Discord',
+          icon: 'discord',
+          loginPath: '/auth/discord',
+          color: '#5865F2',
+        },
+      ]);
+    });
+
+    it('should exclude unconfigured auth providers from authProviders (ROK-267)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const mockProvider = {
+        providerKey: 'discord',
+        getLoginMethod: () => ({
+          key: 'discord',
+          label: 'Continue with Discord',
+          icon: 'discord',
+          loginPath: '/auth/discord',
+          color: '#5865F2',
+        }),
+        isConfigured: jest.fn().mockResolvedValue(false),
+      };
+
+      (
+        mockPluginRegistry.getAdaptersForExtensionPoint as jest.Mock
+      ).mockReturnValue(new Map([['discord', mockProvider]]));
+
+      const result = await controller.getStatus();
+
+      expect(result.authProviders).toEqual([]);
+    });
+
+    it('should return empty authProviders when no auth adapters registered (ROK-267)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.authProviders).toEqual([]);
+    });
+
+    it('should return steamConfigured: true when Steam is configured (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockSettingsService.isSteamConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.steamConfigured).toBe(true);
+    });
+
+    it('should return steamConfigured: false when Steam is not configured (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockSettingsService.isSteamConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.steamConfigured).toBe(false);
+    });
+
+    it('should call isSteamConfigured from settings service (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      await controller.getStatus();
+
+      expect(mockSettingsService.isSteamConfigured).toHaveBeenCalled();
+    });
+
+    it('should include steamConfigured as boolean in full response shape (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(0);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+      (mockSettingsService.isSteamConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result).toMatchObject({
+        isFirstRun: expect.any(Boolean),
+        discordConfigured: expect.any(Boolean),
+        blizzardConfigured: expect.any(Boolean),
+        steamConfigured: expect.any(Boolean),
+        demoMode: expect.any(Boolean),
+        activePlugins: expect.any(Array),
+      });
+    });
+
+    describe('ROK-1779/ROK-1838: telemetryEnabled', () => {
+      const KEYS = [
+        'DISABLE_TELEMETRY',
+        'ENABLE_TELEMETRY',
+        'NODE_ENV',
+      ] as const;
+      const saved: Partial<Record<(typeof KEYS)[number], string>> = {};
+      beforeEach(() => {
+        for (const key of KEYS) {
+          const value = process.env[key];
+          if (value === undefined) delete saved[key];
+          else saved[key] = value;
+          delete process.env[key];
+        }
+        // The api reports only in production; the served flag follows it.
+        process.env.NODE_ENV = 'production';
+        (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+        (
+          mockSettingsService.isDiscordConfigured as jest.Mock
+        ).mockResolvedValue(false);
+      });
+      afterEach(() => {
+        for (const key of KEYS) {
+          const value = saved[key];
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      });
+
+      it('is true when nothing is set (on by default, ROK-1838)', async () => {
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(true);
+      });
+
+      it("is false when ENABLE_TELEMETRY='false' (ROK-1838 opt-out)", async () => {
+        process.env.ENABLE_TELEMETRY = 'false';
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(false);
+      });
+
+      it("is true when ENABLE_TELEMETRY='true'", async () => {
+        process.env.ENABLE_TELEMETRY = 'true';
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(true);
+      });
+
+      it('is false when DISABLE_TELEMETRY also is true (disable wins)', async () => {
+        process.env.ENABLE_TELEMETRY = 'true';
+        process.env.DISABLE_TELEMETRY = 'true';
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(false);
+      });
+
+      it('is false on a non-production api even with nothing set (review MAJOR 2)', async () => {
+        process.env.NODE_ENV = 'development';
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(false);
+      });
+    });
+  }
+  describe('getStatus', () => describeGetStatus());
+
+  function describeGetBranding() {
+    it('should return branding data from settings service (ROK-877)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: null,
+      });
+
+      const result = await controller.getBranding();
+
+      expect(result).toEqual({
+        communityName: 'My Guild',
+        communityLogoUrl: null,
+        privacyContactEmail: null,
+      });
+    });
+
+    it('should return null for communityLogoUrl when no logo path (ROK-877)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: null,
+        communityLogoPath: null,
+      });
+
+      const result = await controller.getBranding();
+
+      expect(result.communityLogoUrl).toBeNull();
+    });
+
+    it('should format logo URL as /uploads/branding/<basename> (ROK-877)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: '/data/uploads/branding/logo.png',
+      });
+
+      const result = await controller.getBranding();
+
+      expect(result.communityLogoUrl).toBe('/uploads/branding/logo.png');
+    });
+
+    it('does not expose communityAccentColor (TDB:991)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: null,
+        communityAccentColor: '#10B981', // legacy-shaped value must not leak
+      });
+
+      const branding = await controller.getBranding();
+      const status = await controller.getStatus();
+
+      expect(branding).not.toHaveProperty('communityAccentColor');
+      expect(status).not.toHaveProperty('communityAccentColor');
+    });
+  }
+  describe('getBranding', () => describeGetBranding());
+}
+describe('SystemController', () => describeSystemController());

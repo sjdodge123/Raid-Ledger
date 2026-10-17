@@ -1,0 +1,208 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { NotificationPreferencesSection } from './NotificationPreferencesSection';
+import { MemoryRouter } from 'react-router-dom';
+import * as useNotificationsHook from '../../hooks/use-notifications';
+
+// ROK-1797: the muted-games list has its own spec; the hash hook needs a router.
+vi.mock('./muted-games-list', () => ({ MutedGamesList: () => null }));
+
+function renderSection() {
+    return render(<MemoryRouter><NotificationPreferencesSection /></MemoryRouter>);
+}
+
+const mockPreferences = {
+    channelPrefs: {
+        slot_vacated: { inApp: true, push: false, discord: true },
+        event_reminder: { inApp: true, push: true, discord: false },
+        new_event: { inApp: false, push: false, discord: false },
+        subscribed_game: { inApp: true, push: false, discord: false },
+        achievement_unlocked: { inApp: false, push: true, discord: true },
+        level_up: { inApp: true, push: true, discord: true },
+        missed_event_nudge: { inApp: false, push: false, discord: true },
+        event_cancelled: { inApp: true, push: true, discord: true },
+        event_rescheduled: { inApp: true, push: true, discord: true },
+        bench_promoted: { inApp: true, push: true, discord: false },
+        roster_reassigned: { inApp: true, push: false, discord: true },
+        tentative_displaced: { inApp: false, push: true, discord: true },
+        // ROK-1455 R1 default (opt-OUT): on for in-app + Discord, off for push.
+        lfg_player_invite: { inApp: true, push: false, discord: true },
+    },
+};
+
+describe('NotificationPreferencesSection', () => {
+    const mockUpdatePreferences = vi.fn();
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Default: Discord available
+        vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
+            preferences: mockPreferences,
+            isLoading: false,
+            updatePreferences: mockUpdatePreferences,
+            channelAvailability: { discord: { available: true } },
+        } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
+    });
+
+    describe('Section header', () => {
+        it('renders the Notifications heading', () => {
+            renderSection();
+            expect(screen.getByText('Notifications')).toBeInTheDocument();
+        });
+
+        it('renders subtitle text', () => {
+            renderSection();
+            expect(screen.getByText('Choose how and when you get notified')).toBeInTheDocument();
+        });
+    });
+
+    function columnHeadersGroup1() {
+it('renders In-App channel column header', () => {
+            renderSection();
+            expect(screen.getByText('In-App')).toBeInTheDocument();
+        });
+
+it('renders Push channel column header', () => {
+            renderSection();
+            expect(screen.getByText('Push')).toBeInTheDocument();
+        });
+
+it('renders Discord channel column header when available', () => {
+            renderSection();
+            expect(screen.getByText('Discord')).toBeInTheDocument();
+        });
+
+it('hides Discord column when not available (ROK-180 AC-7)', () => {
+            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
+                preferences: mockPreferences,
+                isLoading: false,
+                updatePreferences: mockUpdatePreferences,
+                channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
+            } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
+
+            renderSection();
+            expect(screen.queryByText('Discord')).not.toBeInTheDocument();
+        });
+
+    }
+
+    function columnHeadersGroup2() {
+it('shows reason text when Discord is not available (ROK-180 AC-7)', () => {
+            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
+                preferences: mockPreferences,
+                isLoading: false,
+                updatePreferences: mockUpdatePreferences,
+                channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
+            } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
+
+            renderSection();
+            expect(screen.getByText('Link your Discord account')).toBeInTheDocument();
+        });
+
+    }
+
+    describe('Column headers', () => {
+        columnHeadersGroup1();
+        columnHeadersGroup2();
+    });
+
+    function notificationTypeRowsGroup1() {
+it('renders all visible notification type labels', () => {
+            renderSection();
+            expect(screen.getByText('Slot Vacated')).toBeInTheDocument();
+            expect(screen.getByText('Event Reminders')).toBeInTheDocument();
+            expect(screen.getByText('New Events')).toBeInTheDocument();
+            expect(screen.getByText('Subscribed Games')).toBeInTheDocument();
+            expect(screen.getByText('Event Cancelled')).toBeInTheDocument();
+            expect(screen.getByText('Event Rescheduled')).toBeInTheDocument();
+            expect(screen.getByText('Bench Promoted')).toBeInTheDocument();
+            expect(screen.getByText('Roster Reassignment')).toBeInTheDocument();
+            expect(screen.getByText('Tentative Displaced')).toBeInTheDocument();
+        });
+
+it('does not render missed_event_nudge label (ghost row removed)', () => {
+            renderSection();
+            expect(screen.queryByText('Missed Event Nudge')).not.toBeInTheDocument();
+        });
+
+it('does not render Achievements or Level Up (not yet implemented)', () => {
+            renderSection();
+            expect(screen.queryByText('Achievements')).not.toBeInTheDocument();
+            expect(screen.queryByText('Level Up')).not.toBeInTheDocument();
+        });
+
+    }
+
+    function notificationTypeRowsGroup2() {
+it('renders description for each notification type', () => {
+            renderSection();
+            expect(screen.getByText('When someone leaves a roster slot')).toBeInTheDocument();
+            expect(screen.getByText('Reminders for upcoming events')).toBeInTheDocument();
+            expect(screen.getByText('When new events are created')).toBeInTheDocument();
+            expect(screen.getByText('When an event you signed up for is cancelled')).toBeInTheDocument();
+            expect(screen.getByText('When an event you signed up for is rescheduled')).toBeInTheDocument();
+            expect(screen.getByText('When you are moved from bench to the active roster')).toBeInTheDocument();
+            expect(screen.getByText('When your roster slot or role is changed')).toBeInTheDocument();
+            expect(screen.getByText('When a confirmed player takes your tentative slot')).toBeInTheDocument();
+        });
+
+    }
+
+    describe('Notification type rows', () => {
+        notificationTypeRowsGroup1();
+        notificationTypeRowsGroup2();
+    });
+
+    describe('Toggle states and interaction', () => {
+        it('toggle button has correct aria-label for active toggle', () => {
+            renderSection();
+            // slot_vacated inApp is true -> should say "Disable"
+            expect(screen.getByLabelText('Disable Slot Vacated inApp notifications')).toBeInTheDocument();
+        });
+
+        it('toggle button has correct aria-label for inactive toggle', () => {
+            renderSection();
+            // slot_vacated push is false -> should say "Enable"
+            expect(screen.getByLabelText('Enable Slot Vacated push notifications')).toBeInTheDocument();
+        });
+
+        it('calls updatePreferences when toggle is clicked', () => {
+            renderSection();
+            fireEvent.click(screen.getByLabelText('Disable Slot Vacated inApp notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { slot_vacated: { inApp: false } },
+            });
+        });
+
+        it('calls updatePreferences to enable an inactive toggle', () => {
+            renderSection();
+            fireEvent.click(screen.getByLabelText('Enable Slot Vacated push notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { slot_vacated: { push: true } },
+            });
+        });
+    });
+
+    describe('LFG player invites row (ROK-1455 T-C4)', () => {
+        it('renders the lfg_player_invite row with its description', () => {
+            renderSection();
+            expect(screen.getByText('LFG player invites')).toBeInTheDocument();
+            expect(
+                screen.getByText('A player invites you to join their group for a game'),
+            ).toBeInTheDocument();
+        });
+
+        it('shows the opt-out default as an active Discord toggle', () => {
+            renderSection();
+            expect(screen.getByLabelText('Disable LFG player invites discord notifications')).toBeInTheDocument();
+        });
+
+        it('opting out of Discord invites calls updatePreferences with the lfg_player_invite type', () => {
+            renderSection();
+            fireEvent.click(screen.getByLabelText('Disable LFG player invites discord notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { lfg_player_invite: { discord: false } },
+            });
+        });
+    });
+});

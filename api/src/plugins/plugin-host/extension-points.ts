@@ -1,0 +1,302 @@
+/**
+ * Extension point interfaces that plugins implement to provide
+ * game-specific behavior. Core services resolve adapters from
+ * the plugin registry at runtime.
+ */
+
+import type {
+  ExternalCharacterProfile,
+  ExternalInferredSpecialization,
+  ExternalCharacterEquipment,
+  ExternalCharacterProfessions,
+  ExternalRealm,
+  ExternalContentInstance,
+  ExternalContentInstanceDetail,
+  CronJobDefinition,
+} from './extension-types';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  CharacterEquipmentDto,
+  CharacterLockoutsDto,
+  CreateCharacterDto,
+  ForeverTalentsDto,
+  GameServerCalendarItemDto,
+  GameServerStatusDto,
+  UpdateCharacterDto,
+  GuildKind,
+  LadderRole,
+  UserRole,
+} from '@raid-ledger/contract';
+import type * as schema from '../../drizzle/schema';
+import type { GamePresenceEvent } from '../pelican/presence/presence-events';
+
+/** The character fields a display-equipment resolver may read (ROK-1727). */
+export interface DisplayEquipmentRow {
+  id: string;
+  gameVariant: string | null;
+  /** The stored (Armory) equipment, as mapped onto the DTO. */
+  equipment: CharacterEquipmentDto | null;
+}
+
+/** The character fields a display-talents resolver may read (ROK-1744). */
+export interface DisplayTalentsRow {
+  id: string;
+  gameVariant: string | null;
+  /** The stored (Armory) talents jsonb. */
+  talents: unknown;
+  lastSyncedAt: string | null;
+}
+
+/** The character fields a display-lockouts resolver may read (ROK-1743). */
+export interface DisplayLockoutsRow {
+  id: string;
+  gameVariant: string | null;
+}
+
+/** Provides character data fetch + sync capabilities for a game */
+export interface CharacterSyncAdapter {
+  readonly gameSlugs: string[];
+  resolveGameSlugs(gameVariant?: string): string[];
+  fetchProfile(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalCharacterProfile>;
+  fetchSpecialization(
+    name: string,
+    realm: string,
+    region: string,
+    characterClass: string,
+    gameVariant?: string,
+  ): Promise<ExternalInferredSpecialization>;
+  fetchEquipment(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalCharacterEquipment>;
+  fetchProfessions?(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string | null,
+  ): Promise<ExternalCharacterProfessions | null>;
+  /**
+   * Equipment to DISPLAY on the public character detail (ROK-1727, D1):
+   * lets a plugin substitute data from a table it owns. `undefined` = no
+   * opinion (keep the stored equipment). Read-only; never persisted.
+   */
+  resolveDisplayEquipment?(
+    row: DisplayEquipmentRow,
+  ): Promise<CharacterEquipmentDto | null | undefined>;
+  /** ROK-1744: displayed talents override; undefined = keep the stored value. */
+  resolveDisplayTalents?(
+    row: DisplayTalentsRow,
+  ): Promise<ForeverTalentsDto | null | undefined>;
+  /** ROK-1743: saved instances to display; undefined = no lockouts key. */
+  resolveDisplayLockouts?(
+    row: DisplayLockoutsRow,
+  ): Promise<CharacterLockoutsDto | undefined>;
+}
+
+/** Provides game content data (realms, instances) */
+export interface ContentProvider {
+  readonly gameSlugs: string[];
+  fetchRealms(region: string, gameVariant?: string): Promise<ExternalRealm[]>;
+  fetchInstances(
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalContentInstance[]>;
+  fetchInstanceDetail(
+    instanceId: number,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalContentInstanceDetail | null>;
+}
+
+/**
+ * @deprecated Use {@link DataEnricher} instead (ROK-269).
+ * Enriches event data with game-specific information (no core consumer yet).
+ */
+export interface EventEnricher {
+  readonly gameSlugs: string[];
+  enrichEvent(event: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+
+/**
+ * Extension point for plugins that fetch supplementary character or event data
+ * from third-party APIs (Raider.IO M+ scores, WarcraftLogs parses, etc.).
+ * Unlike CharacterSyncAdapter (which owns the import/refresh lifecycle),
+ * enrichers layer additional data onto existing characters/events.
+ *
+ * Results are cached in the `enrichments` table — enrichers do NOT run on page load.
+ * They execute via BullMQ background jobs (scheduled or on manual refresh).
+ *
+ * Multiple enrichers can register for the same game slug (ROK-269).
+ */
+export interface DataEnricher {
+  /** Unique enricher identifier, e.g. 'raider-io', 'warcraftlogs' */
+  readonly key: string;
+  /** Which games this enricher applies to */
+  readonly gameSlugs: string[];
+  /** Optional refresh interval in milliseconds (defaults to 24h) */
+  readonly refreshIntervalMs?: number;
+  /** Enrich a character with supplementary data */
+  enrichCharacter?(
+    character: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
+  /** Enrich an event with supplementary data */
+  enrichEvent?(
+    event: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
+}
+
+/** Formalizes plugin settings management */
+export interface SettingsProvider {
+  readonly settingKeys: string[];
+  validateSetting?(key: string, value: string): boolean;
+  onSettingChanged?(key: string, value: string): void | Promise<void>;
+}
+
+/** Provides cron job definitions for a plugin */
+export interface CronRegistrar {
+  getCronJobs(): CronJobDefinition[];
+}
+
+/** Describes a login method surfaced to the frontend */
+export interface LoginMethod {
+  key: string;
+  label: string;
+  icon?: string;
+  loginPath: string;
+  /** Hex color for the provider button (e.g. '#5865F2') */
+  color?: string;
+}
+
+/** Pluggable authentication strategy provided by a plugin */
+export interface AuthProvider {
+  readonly providerKey: string;
+  getLoginMethod(): LoginMethod;
+  isConfigured(): boolean | Promise<boolean>;
+}
+
+/** A db or transaction handle, as handed to a CharacterIdentityProvider. */
+export type IdentityDb = PostgresJsDatabase<typeof schema>;
+
+/** Plugin-owned identity rules for MANUAL characters of a game (ROK-1733). */
+export interface CharacterIdentityProvider {
+  readonly gameSlugs: string[];
+  /** Owning plugin id — core skips the provider while that plugin is inactive. */
+  readonly pluginSlug: string;
+  /** Validate + normalize a create DTO (throws 400). */
+  prepareCreate(
+    game: { slug: string },
+    dto: CreateCharacterDto,
+  ): CreateCharacterDto;
+  /** Validate + normalize an update; may run its own claim check (throws 400/409). */
+  prepareUpdate(
+    db: IdentityDb,
+    userId: number,
+    game: { slug: string },
+    character: { id: string; gameId: number; region: string | null },
+    dto: UpdateCharacterDto,
+  ): Promise<UpdateCharacterDto>;
+  /** Cross-player claim check for a realm-less character, inside the create tx (throws 409). */
+  checkClaim(
+    tx: IdentityDb,
+    args: { gameId: number; userId: number; name: string; region: string },
+  ): Promise<void>;
+  /** Map a lost race on the core ruleset-identity index to a 409; return to let the caller continue. */
+  rethrowIdentityViolation(
+    error: unknown,
+    name: string,
+    region: string | null | undefined,
+  ): void;
+}
+
+/** A plugin that knows about game servers (any hosting panel) — ROK-268. Core never imports a provider. */
+export interface GameServerProvider {
+  /** Owning plugin id — core skips the provider while that plugin is inactive. */
+  readonly pluginSlug: string;
+  /** Human label stamped onto every item/status, e.g. the panel's display name. */
+  readonly providerLabel: string;
+  /** Windows + markers overlapping [from, to). `gameIds` undefined = all mapped games. */
+  getCalendarItems(
+    range: { from: Date; to: Date },
+    gameIds?: number[],
+  ): Promise<GameServerCalendarItemDto[]>;
+  /** Current state per mapped server. `gameIds` undefined = all mapped games. */
+  getStatuses(gameIds?: number[]): Promise<GameServerStatusDto[]>;
+}
+
+/** Multi-adapter key every game-server provider registers under (providers are not per-game). */
+export const GAME_SERVER_PROVIDER_KEY = '*';
+
+/**
+ * ROK-1800: a game plugin's console-line parser, keyed by game slug. The
+ * hosting-panel plugin pipes each line to it and never imports the game
+ * plugin. `parse` must never return or retain the raw (secret-bearing) line.
+ */
+export interface GameLogParser {
+  /** Owning plugin id — callers skip the parser while that plugin is inactive. */
+  readonly pluginSlug: string;
+  parse(line: string): GamePresenceEvent | null;
+}
+
+/**
+ * ROK-1787: a plugin that owns guilds decides who may tag an event to one.
+ * Core never imports the guild plugin; it resolves this adapter instead.
+ */
+export interface EventGuildTagger {
+  /** Owning plugin id — core treats tagging as unavailable while inactive. */
+  readonly pluginSlug: string;
+  /** Throws (400 unknown guild / wrong game, 403 not an editor) to refuse. */
+  assertCanTag(
+    actor: { id: number; role: UserRole },
+    guildId: number,
+    gameId: number | null,
+  ): Promise<void>;
+}
+
+/** Single-adapter key the event guild tagger registers under. */
+export const EVENT_GUILD_TAGGER_KEY = '*';
+
+/**
+ * ROK-1830: the plugin that owns a hub kind (e.g. `wow_guild`) answers the
+ * membership + ladder questions core cannot. Keyed by kind; core resolves it
+ * through `HubKindRegistry` (`api/src/guilds/`) and never imports the plugin.
+ */
+export interface HubKindAdapter {
+  readonly kind: GuildKind;
+  /** Owning plugin id — core refuses the kind (403) while it is inactive. */
+  readonly pluginSlug: string;
+  isMember(userId: number, groupId: number): Promise<boolean>;
+  /** The D5-A ladder role, staff ⇒ leader included. */
+  resolveLadder(
+    actor: { id: number; role: UserRole },
+    groupId: number,
+  ): Promise<LadderRole>;
+  /** Ids of the groups of this kind the user is a live member of. */
+  memberGroupIds(userId: number): Promise<number[]>;
+  /** Rank index → rank name for rank-based editor grants (empty if none). */
+  rankNames(groupId: number): Promise<Map<number, string | null>>;
+  /** Is this member-row id a live member of the group (member grants)? */
+  isLiveMember(groupId: number, memberId: number): Promise<boolean>;
+}
+
+/** Well-known extension point identifiers */
+export const EXTENSION_POINTS = {
+  CHARACTER_SYNC: 'character-sync',
+  CONTENT_PROVIDER: 'content-provider',
+  EVENT_ENRICHER: 'event-enricher',
+  DATA_ENRICHER: 'data-enricher',
+  SETTINGS_PROVIDER: 'settings-provider',
+  CRON_REGISTRAR: 'cron-registrar',
+  AUTH_PROVIDER: 'auth-provider',
+  CHARACTER_IDENTITY: 'character-identity',
+  GAME_SERVER_PROVIDER: 'game-server-provider',
+  EVENT_GUILD_TAGGER: 'event-guild-tagger',
+  GAME_LOG_PARSER: 'game-log-parser',
+  HUB_KIND: 'hub-kind',
+} as const;

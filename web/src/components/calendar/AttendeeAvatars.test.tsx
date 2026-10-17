@@ -1,0 +1,101 @@
+import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { AttendeeAvatars } from './AttendeeAvatars';
+
+const mockSignups = [
+        { id: 1, username: 'Player1', avatar: 'https://cdn.discord.com/avatar1.png' },
+        { id: 2, username: 'Player2', avatar: 'https://cdn.discord.com/avatar2.png' },
+        { id: 3, username: 'Player3', avatar: null },
+        { id: 4, username: 'Player4', avatar: 'https://cdn.discord.com/avatar4.png' },
+        { id: 5, username: 'Player5', avatar: null },
+    ];
+function attendeeavatarsGroup1() {
+it('renders correct number of avatars', () => {
+        render(<AttendeeAvatars signups={mockSignups} totalCount={5} />);
+
+        const avatars = screen.getAllByRole('img');
+        // 3 have actual images, 2 have initials (no img role)
+        expect(avatars).toHaveLength(3);
+    });
+
+it('shows +N badge when totalCount exceeds visible signups', () => {
+        render(<AttendeeAvatars signups={mockSignups} totalCount={8} />);
+
+        // 8 total - 5 visible = +3
+        expect(screen.getByText('+3')).toBeInTheDocument();
+    });
+
+it('does not show +N badge when all signups are visible', () => {
+        render(<AttendeeAvatars signups={mockSignups} totalCount={5} />);
+
+        expect(screen.queryByText(/^\+\d+$/)).not.toBeInTheDocument();
+    });
+
+it('handles null avatarUrl with initials fallback', () => {
+        const signupWithoutAvatar = [
+            { id: 1, username: 'TestUser', avatar: null },
+        ];
+
+        render(<AttendeeAvatars signups={signupWithoutAvatar} totalCount={1} />);
+
+        // Should show first letter as initials
+        expect(screen.getByText('T')).toBeInTheDocument();
+    });
+
+}
+
+function attendeeavatarsGroup2() {
+it('respects maxVisible prop', () => {
+        render(<AttendeeAvatars signups={mockSignups} totalCount={10} maxVisible={3} />);
+
+        // 10 total - 3 visible = +7
+        expect(screen.getByText('+7')).toBeInTheDocument();
+    });
+
+it('shows username as title attribute (tooltip)', () => {
+        render(<AttendeeAvatars signups={mockSignups.slice(0, 1)} totalCount={1} />);
+
+        const avatar = screen.getByTitle('Player1');
+        expect(avatar).toBeInTheDocument();
+    });
+
+it('returns null when signups array is empty', () => {
+        const { container } = render(<AttendeeAvatars signups={[]} totalCount={0} />);
+
+        expect(container.firstChild).toBeNull();
+    });
+
+it('resolves custom uploaded avatars through shared avatar helper', () => {
+        render(<AttendeeAvatars signups={[{ id: 1, username: 'CustomUser', avatar: null, customAvatarUrl: '/avatars/custom.png' }]} totalCount={1} />);
+
+        expect(screen.getByRole('img')).toHaveAttribute('src', expect.stringContaining('/avatars/custom.png'));
+    });
+
+it('resolves character avatars with numeric game context', () => {
+        render(<AttendeeAvatars signups={[{
+            id: 1,
+            username: 'CharacterUser',
+            avatar: null,
+            characters: [{ gameId: 42, name: 'Main', avatarUrl: 'https://example.com/character.png' }],
+        }]} totalCount={1} gameId={42} />);
+
+        expect(screen.getByRole('img')).toHaveAttribute('src', 'https://example.com/character.png');
+    });
+
+}
+
+describe('AttendeeAvatars', () => {
+    attendeeavatarsGroup1();
+    attendeeavatarsGroup2();
+});
+
+describe('AttendeeAvatars — dead avatar (ROK-1714)', () => {
+    it('swaps a broken avatar image for initials', () => {
+        render(<AttendeeAvatars signups={[{ id: 9, username: 'halfdead', avatar: 'deadhash', discordId: '111' }]} totalCount={1} />);
+
+        fireEvent.error(screen.getByRole('img', { name: 'halfdead' }));
+
+        expect(screen.queryByRole('img', { name: 'halfdead' }), 'broken img should be replaced').toBeNull();
+        expect(screen.queryByText('H'), 'initials fallback should render after the img error').not.toBeNull();
+    });
+});

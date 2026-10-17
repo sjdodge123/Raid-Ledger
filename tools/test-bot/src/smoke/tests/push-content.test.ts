@@ -1,0 +1,260 @@
+/**
+ * Push Content smoke tests (ROK-864).
+ * Validates that channel embed messages include a plaintext `content` field
+ * suitable for Discord mobile push notification previews.
+ * Content must be free of raw Discord tokens and markdown.
+ */
+import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
+import {
+  createEvent,
+  signup,
+  cancelEvent,
+  deleteEvent,
+  channelForTest,
+  awaitProcessing,
+} from '../fixtures.js';
+import {
+  assertEmbedCount,
+  assertHasContent,
+  assertNoDiscordTokens,
+  assertNoMarkdown,
+  isCancelledCard,
+} from '../assert.js';
+import type { SmokeTest, TestContext } from '../types.js';
+
+function embedInChannel(chId: string, title: string, timeoutMs: number) {
+  return pollForEmbed(
+    chId,
+    (msg) => msg.embeds.some((e) => e.title?.includes(title)),
+    timeoutMs,
+  );
+}
+
+/** Build event overrides for MMO roster testing when game + char available. */
+function mmoOverrides(ctx: TestContext) {
+  if (!ctx.mmoGameId) return {};
+  return {
+    gameId: ctx.mmoGameId,
+    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
+  };
+}
+
+function mmoSignupOpts(ctx: TestContext) {
+  if (!ctx.testCharId) return {};
+  return {
+    characterId: ctx.testCharId,
+    preferredRoles: [ctx.testCharRole ?? 'dps'],
+  };
+}
+
+// ─── Tests ───────────────────────────────────────────────────
+
+const eventEmbedHasContent: SmokeTest = {
+  name: 'Event embed includes push content field (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 0);
+    const ev = await createEvent(ctx.api, 'push-content', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      assertEmbedCount(msg.embeds, 1);
+      assertHasContent(msg.content);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const contentHasNoDiscordTokens: SmokeTest = {
+  name: 'Push content has no raw Discord tokens (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 1);
+    const ev = await createEvent(ctx.api, 'push-tokens', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      assertNoDiscordTokens(msg.content);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const contentHasNoMarkdown: SmokeTest = {
+  name: 'Push content has no raw markdown (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 2);
+    const ev = await createEvent(ctx.api, 'push-md', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      assertNoMarkdown(msg.content);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const contentIncludesTitle: SmokeTest = {
+  name: 'Push content includes event title (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 3);
+    const ev = await createEvent(ctx.api, 'push-title', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      assertHasContent(msg.content);
+      // Title may be truncated, check first 20 chars of the unique tag
+      const titleStart = ev.title.slice(0, 20);
+      if (!msg.content.includes(titleStart)) {
+        throw new Error(
+          `Expected content to include title "${titleStart}...", got: "${msg.content}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const contentIncludesSignupCount: SmokeTest = {
+  name: 'Push content includes signup count (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    // No gameId — title must be short to fit "signed up" within 80 chars.
+    // Embed routes to default channel since no game binding applies.
+    const ev = await createEvent(ctx.api, 'push-count', {});
+    try {
+      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      assertHasContent(msg.content);
+      // Content may be truncated if title is long — check either "signed up" or "..."
+      if (!msg.content.includes('signed up') && !msg.content.endsWith('...')) {
+        throw new Error(
+          `Expected content to include "signed up" or be truncated, got: "${msg.content}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelledEmbedHasContent: SmokeTest = {
+  name: 'Cancelled event embed has push content (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 5);
+    const ev = await createEvent(ctx.api, 'push-cancel', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      await cancelEvent(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
+      // ROK-1460 fix 12: CANCELLED moved off the title. The new grammar puts
+      // `✕ CANCELLED` on the chrome author line and strikes the title through,
+      // so match BOTH signals (stronger than the old title-only predicate) —
+      // the old one could never match and the test timed out on the fleet.
+      const found = await pollForEmbed(
+        ch.channelId,
+        (m) => m.embeds.some((e) => isCancelledCard(e, ev.title)),
+        ctx.config.timeoutMs,
+        { intervalMs: 3000, backoff: false },
+      );
+      assertHasContent(found.content);
+      assertNoDiscordTokens(found.content);
+      assertNoMarkdown(found.content);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const updatedEmbedKeepsContent: SmokeTest = {
+  name: 'Updated embed preserves push content after signup (ROK-864)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 6);
+    const ev = await createEvent(ctx.api, 'push-update', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
+      const found = await waitForEmbedUpdate(
+        ch.channelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      assertHasContent(found.content);
+      assertNoDiscordTokens(found.content);
+      assertNoMarkdown(found.content);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+/** Format a date in a given timezone the same way push-content does. */
+function formatInTimezone(isoString: string, tz: string): string {
+  return new Date(isoString).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: tz,
+    timeZoneName: 'short',
+  });
+}
+
+const contentTimeMatchesEmbed: SmokeTest = {
+  name: 'Push content time uses guild timezone, not UTC (ROK-918)',
+  category: 'embed',
+  async run(ctx) {
+    // Fetch guild timezone from settings
+    const tzRes = await ctx.api
+      .get<{ timezone: string | null }>('/admin/settings/timezone');
+    const guildTz = tzRes.timezone;
+    if (!guildTz) {
+      console.log('    SKIP: Guild timezone not configured (CI without timezone setting)');
+      return;
+    }
+    // No gameId — short tag so title+date fit within 80-char push content limit.
+    // Embed routes to default channel since no game binding applies.
+    const ev = await createEvent(ctx.api, 'tz', { maxAttendees: 5 });
+    try {
+      const msg = await embedInChannel(
+        ctx.defaultChannelId, ev.title, ctx.config.timeoutMs,
+      );
+      assertHasContent(msg.content);
+      // Format startTime in guild timezone and in UTC
+      const startTime = (ev.startTime as string) ?? '';
+      const guildFormatted = formatInTimezone(startTime, guildTz);
+      const utcFormatted = formatInTimezone(startTime, 'UTC');
+      // Push content must contain the guild-timezone-formatted date
+      if (!msg.content.includes(guildFormatted)) {
+        throw new Error(
+          `Push content missing guild-tz date "${guildFormatted}"` +
+          ` (UTC would be "${utcFormatted}"). Got: "${msg.content}"`,
+        );
+      }
+      // If UTC and guild differ, confirm UTC version is NOT present
+      if (guildFormatted !== utcFormatted && msg.content.includes(utcFormatted)) {
+        throw new Error(
+          `Push content contains UTC date "${utcFormatted}" instead of ` +
+          `guild-tz date "${guildFormatted}". Got: "${msg.content}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+export const pushContentTests: SmokeTest[] = [
+  eventEmbedHasContent,
+  contentHasNoDiscordTokens,
+  contentHasNoMarkdown,
+  contentIncludesTitle,
+  contentIncludesSignupCount,
+  cancelledEmbedHasContent,
+  updatedEmbedKeepsContent,
+  contentTimeMatchesEmbed,
+];

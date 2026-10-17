@@ -1,0 +1,156 @@
+// ROK-1338 PR-1 — rl_task_inspect: forensic read of the full task JSON.
+//
+// Companion to rl_task_status: status returns the agent-friendly summary
+// (log_tail capped, summarized fields). inspect returns the raw
+// /srv/rl-infra/state/tasks/<id>.json contents verbatim so an operator
+// or agent can pull fields that status doesn't surface (env block, exact
+// command argv, internal state — whatever the orchestrator wrote).
+
+import {
+  buildSshArgs,
+  classifySshFailure,
+  execFileP,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
+import { TASK_ID_RE } from './task.js';
+import { isLocalTaskId, readRawLocalTask } from '../local-task.js';
+import { redactAdminPassword } from '../credentials.js';
+import { redactTaskSecrets } from './task-brief.js';
+
+export const TOOL_NAME = 'rl_task_inspect';
+export const TOOL_DESCRIPTION =
+  'Forensic read of a task: returns the FULL task JSON contents as a raw object, with no log_tail capping or summary shaping. Works for VM tasks (/srv/rl-infra/state/tasks/<id>.json) AND laptop `local-...` tasks (~/.raid-ledger/tasks/<id>.json). Use this when rl_task_status is missing a field you need. Validates task_id strictly. Read-only. A3-B P4: `admin_password` is withheld from the raw dump — a deploy task JSON carries the env admin credential, and "full dump" must not mean "credential into your context by default". You get `admin_password_available` instead; pass `include_credentials: true` if you truly need the value. ROK-1534: secret-bearing assignments inside `cmd` / `args_summary` and secret-named `env` keys (`*PASSWORD`, `*TOKEN`, `*SECRET`) are redacted to `***` UNCONDITIONALLY — `include_credentials` does not unlock them, because a command line is not a credential-delivery channel.';
+
+export interface ExecuteInspectParams {
+  task_id: string;
+  /** A3-B P4: opt in to `admin_password` in the raw task JSON. Default false. */
+  include_credentials?: boolean;
+}
+
+export interface ExecuteInspectResult {
+  ok: boolean;
+  task_id?: string;
+  task?: Record<string, unknown>;
+  error?: string;
+  message?: string;
+  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
+  hint?: string;
+}
+
+export async function execute(params: ExecuteInspectParams): Promise<ExecuteInspectResult> {
+  // Defense-in-depth: validate BEFORE shell-interpolation. Zod at the MCP
+  // boundary already enforces this — but the executor mustn't trust that.
+  if (!TASK_ID_RE.test(params.task_id)) {
+    return {
+      ok: false,
+      error: 'invalid_task_id',
+      task_id: params.task_id,
+    };
+  }
+  // ROK-1362: `local-` ids are laptop tasks — read the JSON registry, no SSH.
+  if (isLocalTaskId(params.task_id)) {
+    const raw = readRawLocalTask(params.task_id);
+    // A3-B P4: "raw" stops at the credential. Everything else is verbatim.
+    return raw
+      ? {
+          ok: true,
+          task_id: params.task_id,
+          task: redactTaskSecrets(
+            redactAdminPassword(raw, params.include_credentials),
+          ) as unknown as Record<string, unknown>,
+        }
+      : { ok: false, task_id: params.task_id, error: 'task not found' };
+  }
+  // Prefer the orchestrator binary so the path layout stays a VM-side
+  // concern. Falls back to a direct cat if the binary is missing on an
+  // un-redeployed VM. Either way, task_id is single-quoted via shellQuote
+  // so the remote shell sees the literal bytes only.
+  const remote =
+    `/srv/rl-infra/orchestrator/bin/task-inspect ${shellQuote(params.task_id)} ` +
+    `2>/dev/null || cat /srv/rl-infra/state/tasks/${shellQuote(params.task_id)}.json`;
+  // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
+  // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
+  const args = await buildSshArgs(remote);
+  try {
+    const { stdout } = await execFileP('ssh', args, {
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 15_000,
+    });
+    const trimmed = stdout.trim();
+    if (!trimmed) {
+      return {
+        ok: false,
+        error: 'task not found',
+        task_id: params.task_id,
+      };
+    }
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      return {
+        ok: false,
+        error: 'failed_to_parse_response',
+        task_id: params.task_id,
+        message: trimmed.slice(0, 500),
+      };
+    }
+    // Orchestrator may itself return {ok:false, error:"not_found"} on miss.
+    if (parsed && parsed.ok === false) {
+      return {
+        ok: false,
+        error: typeof parsed.error === 'string' ? parsed.error : 'task not found',
+        task_id: params.task_id,
+      };
+    }
+    // ROK-1534: the VM path used to return `parsed` VERBATIM — no redaction of
+    // any kind. A validate-ci task launched with `against_env_slug` records
+    // `ADMIN_PASSWORD='…'` in `cmd`, so every forensic inspect handed the env
+    // admin credential to the caller, defeating the A3-B withholding that
+    // rl_env_spin / rl_task_status already enforce. Both redactors now run on
+    // both paths.
+    return {
+      ok: true,
+      task_id: params.task_id,
+      task: redactTaskSecrets(
+        redactAdminPassword(parsed, params.include_credentials),
+      ) as Record<string, unknown>,
+    };
+  } catch (err) {
+    const e = err as Error & { stderr?: string; code?: number; stdout?: string };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    // ROK-1338 PR-3: shared SSH classifier — symmetric with rl_db_query /
+    // rl_env_inspect / rl_task_logs / rl_task_* per spec §589 (operator-
+    // approved symmetry wiring). Splits sshd-denied (post-lockdown) from
+    // network-unreachable so agents don't mis-treat either as the
+    // not-found path below.
+    const sshClass = classifySshFailure(e.code, stderr);
+    if (sshClass) {
+      return {
+        ok: false,
+        task_id: params.task_id,
+        ...sshClass,
+        message: stderr,
+      };
+    }
+    // Common case: file doesn't exist — `cat` exits 1 with "No such file…".
+    // Surface as a structured not-found.
+    if (/No such file or directory/i.test(stderr)) {
+      return {
+        ok: false,
+        error: 'task not found',
+        task_id: params.task_id,
+      };
+    }
+    return {
+      ok: false,
+      error: 'task_inspect_failed',
+      task_id: params.task_id,
+      message: stderr,
+    };
+  }
+}

@@ -1,0 +1,286 @@
+import { Injectable, Inject, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { eq, and } from 'drizzle-orm';
+import {
+  MessageFlags,
+  type ButtonInteraction,
+  type StringSelectMenuInteraction,
+} from 'discord.js';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { SignupsService } from '../../events/signups.service';
+import { CharactersService } from '../../characters/characters.service';
+import {
+  DISCORD_BOT_EVENTS,
+  RESCHEDULE_BUTTON_IDS,
+} from '../discord-bot.constants';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
+import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
+import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+import {
+  isRescheduleAction,
+  isSelectAction,
+  parseRoleSelectParts,
+  lookupRescheduleEvent,
+  findLinkedUserByDiscordId,
+  dmEditFor,
+  selectDmEditFor,
+  editDmEmbed,
+  safeEditReply,
+} from './reschedule-response.helpers';
+import {
+  handleLinkedConfirm,
+  handleUnlinkedConfirm,
+  handleLinkedTentative,
+  handleUnlinkedTentative,
+} from './reschedule-confirm.handlers';
+import {
+  handleCharacterSelect as doCharSelect,
+  handleRoleSelect as doRoleSelect,
+  type SelectCtx,
+} from './reschedule-roster.handlers';
+import { errorStack } from '../../common/error-format.helpers';
+
+/**
+ * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).
+ */
+@Injectable()
+export class RescheduleResponseListener {
+  private readonly logger = new Logger(RescheduleResponseListener.name);
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'reschedule response interactions',
+  );
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly clientService: DiscordBotClientService,
+    private readonly signupsService: SignupsService,
+    private readonly charactersService: CharactersService,
+    private readonly embedSyncQueue: EmbedSyncQueueService,
+    private readonly emojiService: DiscordEmojiService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
+
+  private get deps(): RescheduleDeps {
+    return {
+      db: this.db,
+      signupsService: this.signupsService,
+      charactersService: this.charactersService,
+      embedSyncQueue: this.embedSyncQueue,
+      emojiService: this.emojiService,
+      activityLog: this.activityLog,
+      logger: this.logger,
+    };
+  }
+
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  onBotConnected(): void {
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
+        else if (interaction.isStringSelectMenu())
+          void this.handleSelectMenuInteraction(interaction);
+      }),
+    ]);
+  }
+
+  /** Drop the handler so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.binding.detach();
+  }
+
+  private async handleButtonInteraction(i: ButtonInteraction): Promise<void> {
+    const parts = i.customId.split(':');
+    if (parts.length !== 2) return;
+    const [action, idStr] = parts;
+    if (action === undefined || idStr === undefined) return;
+    const eventId = parseInt(idStr, 10);
+    if (isNaN(eventId) || !isRescheduleAction(action)) return;
+    try {
+      await i.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch {
+      return;
+    }
+    try {
+      await this.routeButton(action, i, eventId);
+    } catch (error) {
+      this.logger.error(`Reschedule error event ${eventId}`, errorStack(error));
+      await safeEditReply(i, {
+        content: 'Something went wrong. Please try again.',
+      });
+    }
+  }
+
+  private async routeButton(
+    action: string,
+    interaction: ButtonInteraction,
+    eventId: number,
+  ): Promise<void> {
+    if (action === RESCHEDULE_BUTTON_IDS.CONFIRM) {
+      await this.handleConfirm(interaction, eventId);
+    } else if (action === RESCHEDULE_BUTTON_IDS.TENTATIVE) {
+      await this.handleTentative(interaction, eventId);
+    } else {
+      await this.handleDecline(interaction, eventId);
+    }
+  }
+
+  private async handleConfirm(
+    i: ButtonInteraction,
+    eventId: number,
+  ): Promise<void> {
+    const v = await this.validateSignup(i, eventId);
+    if (!v) return;
+    const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
+    const ctx = {
+      deps: this.deps,
+      interaction: i,
+      event: v.event,
+      editDm: dmEditFor(this.logger),
+    };
+    if (linkedUser) await handleLinkedConfirm(ctx, linkedUser);
+    else await handleUnlinkedConfirm(ctx);
+  }
+
+  private async handleTentative(
+    i: ButtonInteraction,
+    eventId: number,
+  ): Promise<void> {
+    const v = await this.validateSignup(i, eventId);
+    if (!v) return;
+    const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
+    const ctx = {
+      deps: this.deps,
+      interaction: i,
+      event: v.event,
+      editDm: dmEditFor(this.logger),
+    };
+    if (linkedUser) await handleLinkedTentative(ctx, linkedUser);
+    else await handleUnlinkedTentative(ctx);
+  }
+
+  private async handleDecline(
+    i: ButtonInteraction,
+    eventId: number,
+  ): Promise<void> {
+    const v = await this.validateSignup(i, eventId);
+    if (!v) return;
+    await this.db
+      .update(schema.eventSignups)
+      .set({ status: 'declined', roachedOutAt: null })
+      .where(eq(schema.eventSignups.id, v.signup.id));
+    await this.db
+      .delete(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.signupId, v.signup.id),
+        ),
+      );
+    await i.editReply({
+      content: `You've been removed from **${v.event.title}**. No worries!`,
+    });
+    await editDmEmbed(i, 'declined', this.logger);
+    await this.embedSyncQueue.enqueue(eventId, 'reschedule-decline');
+  }
+
+  private async handleSelectMenuInteraction(
+    i: StringSelectMenuInteraction,
+  ): Promise<void> {
+    const parts = i.customId.split(':');
+    const [action, idStr] = parts;
+    if (parts.length > 4 || action === undefined || idStr === undefined) return;
+    const eventId = parseInt(idStr, 10);
+    if (isNaN(eventId) || !isSelectAction(action)) return;
+    try {
+      await i.deferUpdate();
+    } catch {
+      return;
+    }
+    try {
+      if (action === RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT) {
+        const status =
+          parts[2] === 'tentative' ? ('tentative' as const) : undefined;
+        await this.handleCharacterSelect(i, eventId, status);
+      } else {
+        const { characterId, signupStatus } = parseRoleSelectParts(parts);
+        await this.handleRoleSelect(i, eventId, characterId, signupStatus);
+      }
+    } catch (error) {
+      this.logger.error(`Select error event ${eventId}`, errorStack(error));
+      await safeEditReply(i, {
+        content: 'Something went wrong. Please try again.',
+        components: [],
+      });
+    }
+  }
+
+  private makeSelectCtx(
+    i: StringSelectMenuInteraction,
+    eventId: number,
+  ): SelectCtx {
+    return {
+      deps: this.deps,
+      interaction: i,
+      eventId,
+      lookupEvent: (id) => lookupRescheduleEvent(this.db, id),
+      editDm: selectDmEditFor(this.logger),
+    };
+  }
+
+  private async handleCharacterSelect(
+    i: StringSelectMenuInteraction,
+    eventId: number,
+    signupStatus?: 'tentative',
+  ): Promise<void> {
+    await doCharSelect(this.makeSelectCtx(i, eventId), signupStatus);
+  }
+
+  private async handleRoleSelect(
+    i: StringSelectMenuInteraction,
+    eventId: number,
+    characterId?: string,
+    signupStatus?: 'tentative',
+  ): Promise<void> {
+    await doRoleSelect(
+      this.makeSelectCtx(i, eventId),
+      characterId,
+      signupStatus,
+    );
+  }
+
+  private async validateSignup(
+    i: ButtonInteraction,
+    eventId: number,
+  ): Promise<{ event: EventRow; signup: { id: number } } | null> {
+    const event = await lookupRescheduleEvent(this.db, eventId);
+    if (!event) {
+      await i.editReply({ content: 'Event not found.' });
+      return null;
+    }
+    if (event.cancelledAt) {
+      await i.editReply({ content: 'This event has been cancelled.' });
+      return null;
+    }
+    const signup = await this.signupsService.findByDiscordUser(
+      eventId,
+      i.user.id,
+    );
+    if (!signup) {
+      await i.editReply({ content: "You're not signed up for this event." });
+      return null;
+    }
+    return { event, signup };
+  }
+}

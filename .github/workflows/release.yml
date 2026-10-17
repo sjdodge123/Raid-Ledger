@@ -1,0 +1,121 @@
+name: Release
+
+# Manual release workflow. It computes the next version from the highest
+# existing vX.Y.Z tag (scripts/next-release-version.sh), creates an annotated
+# tag on main's HEAD and pushes ONLY that tag. There is no version-bump commit:
+# protected main refuses a push made with GITHUB_TOKEN.
+#
+# A tag pushed with GITHUB_TOKEN does not fire push-event workflows, so this
+# workflow then dispatches docker-publish.yml ("Publish images") on the new
+# tag. That workflow builds and pushes the images and creates the GitHub
+# release; it is the only release creator. Because the token's tag push never
+# triggers it, the dispatch cannot cause a second build of the same tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      allow_no_feat:
+        description: >-
+          Cut a version even with no feat:/BREAKING CHANGE commit since the last
+          v* tag. A version number means "something new shipped"; fix-only spans
+          reach users as a new :main image, not a new version. Tick this ONLY
+          for a deliberate exception (e.g. a security-only release that must be
+          citable by version, or a re-cut of a botched tag).
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: Refuse a non-main ref
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Release must be dispatched from main (got $GITHUB_REF)."
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # ROK-1475: the no-feature guard resolves the previous v* tag with
+          # `git describe`, which needs the full history AND the tags.
+          fetch-depth: 0
+          fetch-tags: true
+
+      # ROK-1475 pre-flight: runs BEFORE anything bumps, commits, tags or
+      # pushes, so a fix-only release is refused while it still costs nothing.
+      # The span ends at HEAD because the new tag does not exist yet.
+      #
+      # The condition compares against BOTH the boolean and the string: a
+      # workflow_dispatch from the API or `gh workflow run -f allow_no_feat=false`
+      # delivers the STRING 'false', which is truthy — `!inputs.allow_no_feat`
+      # would silently skip the guard. (GitHub coerces a boolean/string
+      # comparison through numbers, so `true == 'true'` is false — hence both.)
+      - name: No-feature guard
+        if: ${{ inputs.allow_no_feat != true && inputs.allow_no_feat != 'true' }}
+        run: bash scripts/check-feat-since-tag.sh --mode fail
+
+      - name: No-feature guard OVERRIDDEN
+        if: ${{ inputs.allow_no_feat == true || inputs.allow_no_feat == 'true' }}
+        run: |
+          echo "::warning::ROK-1475 no-feature guard was SKIPPED — allow_no_feat=true was set by ${{ github.actor }}."
+          {
+            echo "## :warning: No-feature guard overridden"
+            echo ""
+            echo "\`allow_no_feat=true\` was set by @${{ github.actor }}, so this version"
+            echo "was cut without proving a \`feat:\`/\`BREAKING CHANGE\` commit since the"
+            echo "last \`v*\` tag. See \`docs/runbooks/releasing.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compute next version
+        id: version
+        env:
+          BUMP: ${{ inputs.version }}
+        run: |
+          VERSION=$(bash scripts/next-release-version.sh "$BUMP")
+          echo "Next version: v$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and push the tag only
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "refs/tags/v$VERSION"
+
+      - name: Dispatch Publish images on the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          # The tag is already public here. Re-running Release would bump past
+          # it, so a failed dispatch is recovered by dispatching by hand.
+          if ! gh workflow run docker-publish.yml --repo "$GITHUB_REPOSITORY" --ref "v$VERSION"; then
+            {
+              echo "Tagged \`v$VERSION\` but the **Publish images** dispatch failed, so the tag has no images and no release."
+              echo "Recover with \`gh workflow run docker-publish.yml --ref v$VERSION\` (or Actions → Publish images → Run workflow on the tag). Do not re-run Release."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Publish images dispatch failed for v$VERSION; run: gh workflow run docker-publish.yml --ref v$VERSION"
+            exit 1
+          fi
+          echo "Tagged \`v$VERSION\` and dispatched **Publish images** on it, which builds the images and creates the GitHub release." >> "$GITHUB_STEP_SUMMARY"

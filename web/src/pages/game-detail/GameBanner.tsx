@@ -1,0 +1,183 @@
+/**
+ * Game-detail banner, extracted from `game-detail-page.tsx` under ROK-1453.
+ *
+ * The page sat at 290/300 counted lines, so the meta row could not grow to
+ * carry the LFG chip without breaking the ESLint cap. Everything here is the
+ * banner's own presentation; the only new behaviour is the single
+ * `GET /lfg/:gameId` read that feeds the chip (one game, one request — the
+ * page-level provider is a games-page concern).
+ */
+import type { ImgHTMLAttributes, JSX } from 'react';
+import type { ItadGamePricingDto } from '@raid-ledger/contract';
+import { SteamIcon } from '../../components/icons/SteamIcon';
+import { PriceBadge } from '../../components/games/PriceBadge';
+import { useLfgGroupDetail } from '../../hooks/use-lfg-groups';
+import { GameDetailLfgBanner } from './game-detail-lfg-banner';
+import { GamePricingSummary } from './GamePricingSummary';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
+
+/** The banner's slice of `GameDetailDto`. */
+export interface GameBannerGame {
+    id: number;
+    slug: string;
+    name: string;
+    coverUrl: string | null;
+    itadBoxartUrl?: string | null | undefined;
+    summary: string | null;
+    playerCount: { min: number; max: number } | null;
+    crossplay: boolean | null;
+    firstReleaseDate: string | null;
+    steamAppId?: number | null | undefined;
+}
+
+/** Everything `GameBanner` renders, shared with its content column. */
+export interface GameBannerProps {
+    game: GameBannerGame;
+    rating: number | null; genres: string[]; platforms: string[]; modes: string[]; pricing: ItadGamePricingDto | null;
+}
+
+/** External "View on Steam" link for the banner — same pattern as the ITAD deal link. */
+function SteamStoreLink({ appId }: { appId: number }): JSX.Element {
+    return (
+        <a
+            href={`https://store.steampowered.com/app/${appId}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="steam-store-link"
+            className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+            <SteamIcon className="w-4 h-4" />
+            View on Steam &rarr;
+        </a>
+    );
+}
+
+/** Everything beside the cover: title, badges, LFG banner, summary, details. */
+function BannerContent({ game, rating, genres, platforms, modes, pricing }: GameBannerProps): JSX.Element {
+    return (
+        <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">{game.name}</h1>
+            <MetaRow rating={rating} genres={genres} pricing={pricing} />
+            <LfgRow game={game} />
+            {game.summary && <p className="text-secondary text-sm leading-relaxed mb-4 line-clamp-4">{game.summary}</p>}
+            <DetailsGrid modes={modes} playerCount={game.playerCount} platforms={platforms} crossplay={game.crossplay} releaseDate={game.firstReleaseDate} />
+            {pricing && <GamePricingSummary pricing={pricing} />}
+            {game.steamAppId != null && (
+                <div className="mt-2 flex justify-end">
+                    <SteamStoreLink appId={game.steamAppId} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * `sizes` for the banner art: the foreground cover paints at `w-40 sm:w-48`.
+ * The blurred backdrop reuses the SAME value (ROK-1159) so the browser picks
+ * one `srcSet` candidate for both images and the art downloads once.
+ */
+const BANNER_COVER_SIZES = '(min-width: 640px) 192px, 160px';
+
+/**
+ * Attributes the blurred backdrop and the foreground cover share (ROK-1159).
+ * Both resolve to the same srcset candidate, so they are ONE request. The
+ * backdrop is first in the DOM and would start that request at default
+ * priority before the cover's hint is seen, so both carry the high priority.
+ */
+function bannerArtProps(url: string): ImgHTMLAttributes<HTMLImageElement> {
+    return {
+        src: url,
+        width: COVER_INTRINSIC.width,
+        height: COVER_INTRINSIC.height,
+        fetchPriority: 'high',
+        ...coverSrcSetProps(url, BANNER_COVER_SIZES),
+    };
+}
+
+/**
+ * Game banner with cover, info, and details grid. ROK-773: IGDB cover > ITAD boxart > none.
+ * The foreground cover is the page's LCP image, so it decodes synchronously to
+ * paint with the banner text; the decorative backdrop decodes async.
+ */
+export function GameBanner(props: GameBannerProps): JSX.Element {
+    const { game } = props;
+    const displayCover = game.coverUrl ?? game.itadBoxartUrl ?? null;
+    return (
+        <div className="relative rounded-xl overflow-hidden mb-8">
+            <div className="absolute inset-0">
+                {displayCover && <img {...bannerArtProps(displayCover)} alt="" decoding="async" className="w-full h-full object-cover blur-2xl scale-110 opacity-30" />}
+                <div className="absolute inset-0 bg-gradient-to-b from-backdrop/50 to-backdrop" />
+            </div>
+            <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
+                {displayCover && (
+                    <div className="relative w-40 sm:w-48 aspect-[3/4] flex-shrink-0 overflow-hidden rounded-xl shadow-2xl bg-panel">
+                        <img
+                            {...bannerArtProps(displayCover)}
+                            alt={game.name}
+                            loading="eager"
+                            decoding="sync"
+                            className="absolute inset-0 h-full w-full object-cover"
+                        />
+                    </div>
+                )}
+                <BannerContent {...props} />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * The LFG affordance (ROK-1453 AC1, reshaped by the ROK-1478 walk).
+ *
+ * A full-width banner UNDER the meta row rather than a chip inside it: in the
+ * row it read as a fifth static pill and was a ~20px tap target.
+ *
+ * `empty:hidden` rather than a second copy of the banner's own zero gate: the
+ * banner renders `null` when nobody is looking, which leaves this wrapper
+ * genuinely empty, and `display:none` drops its `mb-4` with it. Re-deriving
+ * the gate here would be a drift risk for exactly one margin.
+ */
+function LfgRow({ game }: { game: GameBannerGame }): JSX.Element {
+    const { data: group } = useLfgGroupDetail(game.id);
+    return (
+        <div className="mb-4 empty:hidden">
+            <GameDetailLfgBanner
+                activeCount={group?.activeCount}
+                viabilityThreshold={group?.viabilityThreshold}
+                state={group?.state}
+                gameSlug={game.slug}
+            />
+        </div>
+    );
+}
+
+/** Rating, genre and price badges. */
+function MetaRow({ rating, genres, pricing }: { rating: number | null; genres: string[]; pricing: ItadGamePricingDto | null }): JSX.Element {
+    return (
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+            {rating && rating > 0 && (
+                <span className={`px-2.5 py-1 rounded-lg text-sm font-bold ${rating >= 75 ? 'bg-emerald-500/20 text-emerald-400' : rating >= 50 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {Math.round(rating)}/100
+                </span>
+            )}
+            {genres.map((g) => (<span key={g} className="px-2 py-0.5 bg-panel rounded text-xs text-secondary">{g}</span>))}
+            <PriceBadge pricing={pricing} className="px-2.5 py-1 text-xs" />
+        </div>
+    );
+}
+
+/** Game details grid (modes, players, platforms, crossplay, release date) */
+function DetailsGrid({ modes, playerCount, platforms, crossplay, releaseDate }: {
+    modes: string[]; playerCount: { min: number; max: number } | null;
+    platforms: string[]; crossplay: boolean | null; releaseDate: string | null;
+}): JSX.Element {
+    return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            {modes.length > 0 && <div><span className="text-dim">Game Modes</span><p className="text-foreground">{modes.join(', ')}</p></div>}
+            {playerCount && <div><span className="text-dim">Players</span><p className="text-foreground">{playerCount.min}-{playerCount.max}</p></div>}
+            {platforms.length > 0 && <div><span className="text-dim">Platforms</span><p className="text-foreground">{platforms.join(', ')}</p></div>}
+            {crossplay !== null && <div><span className="text-dim">Crossplay</span><p className={`font-medium ${crossplay ? 'text-success' : 'text-secondary'}`}>{crossplay ? 'Supported' : 'Not Available'}</p></div>}
+            {releaseDate && <div><span className="text-dim">Released</span><p className="text-foreground">{new Date(releaseDate).toLocaleDateString()}</p></div>}
+        </div>
+    );
+}

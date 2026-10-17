@@ -1,0 +1,316 @@
+---
+title: Raid Ledger
+description: Run your entire raid operation from inside Discord. A self-hosted, Discord-native dashboard for gaming communities — signups, voice attendance, reminders, and game votes, all where your community already lives.
+template: splash
+hero:
+  tagline: Run your entire raid operation from inside Discord. Members sign up on bot embeds, attendance tracks itself from voice, reminders arrive as DMs, and "what are we playing tonight?" finally has an answer.
+  actions:
+    - text: Deploy in one command
+      link: https://github.com/sjdodge123/Raid-Ledger#-quick-deploy
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/sjdodge123/Raid-Ledger
+      variant: minimal
+      icon: github
+---
+
+import { Image } from 'astro:assets';
+import eventsDesktop from '../../assets/screenshots/events-list-desktop.png';
+import calendarDesktop from '../../assets/screenshots/calendar-desktop.png';
+import eventDetail from '../../assets/screenshots/event-detail.png';
+import adminPanel from '../../assets/screenshots/admin-panel.png';
+import setupWizard from '../../assets/screenshots/setup-wizard.png';
+import eventWithRoster from '../../assets/screenshots/event-with-roster.png';
+import gameLibrary from '../../assets/screenshots/game-library.png';
+
+<div class="section-heading">
+  <h2>Built to Bring Gamers Together</h2>
+  <p>Raid Ledger exists to solve one problem: getting your community to actually show up and play together. Less coordination overhead, more game time — all where your community already lives.</p>
+</div>
+
+<div class="features-grid">
+  <div class="feature-card">
+    <h3>Event Scheduling &amp; Recurring Raids</h3>
+    <p>Spin up one-off or repeating events — weekly, biweekly, or monthly — with reusable templates and a shared calendar, so raid night books itself instead of living in a pinned message.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Discord-Native Signups &amp; Rosters</h3>
+    <p>Members sign up right inside Discord with rich embeds and slash commands. Auto-allocation, bench slots, and tentative-to-confirmed promotion keep every roster filled without manual juggling.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Automated Voice Attendance</h3>
+    <p>Attendance is tracked from who actually shows up in voice — no roll-call, no spreadsheet — with two-phase no-show detection that nudges absent players and flags them to the host.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Ephemeral Voice Channels</h3>
+    <p>A dedicated voice channel is created automatically for each event and cleaned up when it ends, so your server stays tidy and every raid gets its own room exactly when it's needed.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Running-Late &amp; Host-Delay Controls</h3>
+    <p>Attendees can flag that they're running late, and hosts can bump the start by 15 or 30 minutes in one tap — keeping everyone in sync without cancelling confirmations or spamming the channel.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Smart Reminders &amp; Reschedule Flows</h3>
+    <p>Batched, de-duplicated DM reminders and one-tap confirm/decline reschedule prompts mean fewer missed raids and far less chasing people down.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Community Lineups &amp; AI Suggestions</h3>
+    <p>Let the group nominate and vote on what to play. Common Ground scoring surfaces the games everyone actually wants, and AI-assisted picks (including wildcards) settle "what are we playing tonight?"</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Scheduling Polls &amp; Availability Heatmaps</h3>
+    <p>Find the time that works for the most people with group availability heatmaps and scheduling polls — complete with deadlines and tiebreakers — so you lock in a slot instead of guessing.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Game Library with Live Deal Pricing</h3>
+    <p>A rich game library of 200,000+ games powered by IGDB pairs every title with live IsThereAnyDeal pricing, plus Steam wishlist and playtime sync, so your community discovers what's trending, owned, and on sale.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Taste Profiles &amp; Characters</h3>
+    <p>Every member gets a taste profile and a fun archetype built from real play signals, while players manage characters — including World of Warcraft Classic toons imported via the Blizzard API.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Community Insights &amp; Analytics</h3>
+    <p>Admin dashboards reveal attendance trends, event metrics, churn risk, and social cliques — the signals you need to keep your community healthy and growing.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Discord OAuth Sign-In</h3>
+    <p>Members log in with the Discord account they already use — no new passwords, instant identity, and a roster that maps cleanly to your server.</p>
+  </div>
+</div>
+
+<div class="section-heading">
+  <h2>✨ Recently Shipped</h2>
+  <p>Raid Ledger ships continuously. A few of the newest capabilities:</p>
+</div>
+
+<div class="features-grid">
+  <div class="feature-card">
+    <h3>Ephemeral Voice Channels</h3>
+    <p>Per-event voice rooms auto-created (with a force-ephemeral option) and reaped on completion — full lifecycle cleanup, zero server clutter.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Running-Late &amp; Host Delay</h3>
+    <p>Attendee running-late markers plus one-tap host delay (+15 / +30 min) that shifts the start without resetting confirmations.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Lineups, Polls &amp; AI Picks</h3>
+    <p>Community lineups with Common Ground scoring, scheduling polls with availability heatmaps, and AI-assisted (including wildcard) game suggestions.</p>
+  </div>
+</div>
+
+<div class="section-heading">
+  <h2>See It in Action</h2>
+</div>
+
+<div class="carousel" id="screenshot-carousel">
+  <div class="carousel-track">
+    <div class="carousel-slide">
+      <Image src={eventsDesktop} alt="Events list" />
+      <div class="carousel-caption">
+        <strong>Events Dashboard</strong>
+        <span>Browse upcoming events with game cover art, signup counts, and quick filters. Create one-time or recurring events in seconds.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={calendarDesktop} alt="Calendar view" />
+      <div class="carousel-caption">
+        <strong>Calendar View</strong>
+        <span>See your community's schedule at a glance with color-coded events by game, week/month toggle, and quick-create actions.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={eventWithRoster} alt="Event with roster" />
+      <div class="carousel-caption">
+        <strong>Roster Management</strong>
+        <span>Auto-allocation, bench slots, and tentative-to-confirmed promotion keep every roster filled — no manual juggling.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={eventDetail} alt="Event detail" />
+      <div class="carousel-caption">
+        <strong>Event Details</strong>
+        <span>Full event info at a glance — time, duration, creator, description, and signup roster with one-click RSVP.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={gameLibrary} alt="Game library" />
+      <div class="carousel-caption">
+        <strong>Game Library</strong>
+        <span>Browse 200,000+ games powered by IGDB with live IsThereAnyDeal pricing. Filter by genre, spot deals, and link games to events.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={adminPanel} alt="Admin panel" />
+      <div class="carousel-caption">
+        <strong>Admin Panel</strong>
+        <span>Manage community settings, Discord integrations, plugin configuration, and user permissions from one dashboard.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={setupWizard} alt="Setup wizard" />
+      <div class="carousel-caption">
+        <strong>Setup Wizard</strong>
+        <span>Guided first-run experience walks new admins through account security, community setup, and plugin activation.</span>
+      </div>
+    </div>
+  </div>
+  <button class="carousel-btn carousel-prev" aria-label="Previous screenshot">&lsaquo;</button>
+  <button class="carousel-btn carousel-next" aria-label="Next screenshot">&rsaquo;</button>
+</div>
+<div class="carousel-dots" id="carousel-dots"></div>
+
+<script>
+{`
+  document.addEventListener('DOMContentLoaded', () => {
+    const carousel = document.querySelector('.carousel');
+    const track = document.querySelector('.carousel-track');
+    const slides = document.querySelectorAll('.carousel-slide');
+    const prevBtn = document.querySelector('.carousel-prev');
+    const nextBtn = document.querySelector('.carousel-next');
+    const dotsContainer = document.getElementById('carousel-dots');
+    let current = 0;
+
+    function sizeSlides() {
+      const w = carousel.offsetWidth;
+      slides.forEach(s => { s.style.width = w + 'px'; s.style.minWidth = w + 'px'; });
+      track.style.transform = 'translateX(-' + (current * w) + 'px)';
+    }
+
+    function positionButtons() {
+      const img = slides[current] && slides[current].querySelector('img');
+      if (img) {
+        const h = img.offsetHeight;
+        prevBtn.style.top = (h / 2) + 'px';
+        nextBtn.style.top = (h / 2) + 'px';
+      }
+    }
+
+    sizeSlides();
+    window.addEventListener('resize', () => { sizeSlides(); positionButtons(); });
+
+    slides.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'carousel-dot' + (i === 0 ? ' active' : '');
+      dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+      dot.addEventListener('click', () => goTo(i));
+      dotsContainer.appendChild(dot);
+    });
+
+    function goTo(index) {
+      current = (index + slides.length) % slides.length;
+      const w = carousel.offsetWidth;
+      track.style.transform = 'translateX(-' + (current * w) + 'px)';
+      document.querySelectorAll('.carousel-dot').forEach((d, i) =>
+        d.classList.toggle('active', i === current)
+      );
+      positionButtons();
+    }
+
+    prevBtn.addEventListener('click', () => goTo(current - 1));
+    nextBtn.addEventListener('click', () => goTo(current + 1));
+
+    const firstImg = slides[0] && slides[0].querySelector('img');
+    if (firstImg && firstImg.complete) { positionButtons(); }
+    else if (firstImg) { firstImg.addEventListener('load', positionButtons); }
+
+    let startX = 0;
+    track.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; });
+    track.addEventListener('touchend', (e) => {
+      const diff = startX - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) goTo(current + (diff > 0 ? 1 : -1));
+    });
+  });
+`}
+</script>
+
+<div class="section-heading">
+  <h2>Why Raid Ledger?</h2>
+</div>
+
+<div class="benefits">
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F3AE;</span>
+    <div>
+      <h4>Discord-Native</h4>
+      <p>Signups, rosters, reminders, and game votes all happen in Discord. No separate app for your members to adopt — just the server they're already in.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F4CA;</span>
+    <div>
+      <h4>Attendance on Autopilot</h4>
+      <p>Voice-based tracking, automatic no-show detection, and ephemeral per-event channels handle the busywork — stop chasing who showed up.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F3E0;</span>
+    <div>
+      <h4>Self-Hosted</h4>
+      <p>Your data stays on your hardware. No subscriptions, no SaaS lock-in, no data harvesting.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F433;</span>
+    <div>
+      <h4>Single Docker Command</h4>
+      <p>One container bundles PostgreSQL, Redis, the NestJS API, and the React web app. No external services to wire up.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F504;</span>
+    <div>
+      <h4>Automatic Backups</h4>
+      <p>Nightly database backups and pre-migration snapshots, preserved even across fresh resets. Your data is always safe.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F513;</span>
+    <div>
+      <h4>MIT Licensed</h4>
+      <p>Fully open source. Fork it, modify it, contribute back. No vendor lock-in.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section-heading">
+  <h2>Quick Start</h2>
+  <p>One command runs the whole stack — app, PostgreSQL, and Redis. Mount a volume so your data and nightly backups persist.</p>
+</div>
+
+```bash
+docker run -d -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
+```
+
+Then open [http://localhost](http://localhost) and check the container logs for your admin credentials. Want to look around first? Install demo data from the Admin Panel to explore a fully-populated community.
+
+<div class="cta-group">
+  <a href="https://github.com/sjdodge123/Raid-Ledger#-quick-deploy" class="cta-primary">Deploy Now</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/wiki" class="cta-secondary">Read the Docs</a>
+</div>
+
+<div class="footer-links">
+  <a href="https://github.com/sjdodge123/Raid-Ledger">GitHub</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/wiki">Documentation</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/issues">Issues</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/blob/main/LICENSE">MIT License</a>
+</div>

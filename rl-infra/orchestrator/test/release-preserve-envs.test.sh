@@ -1,0 +1,330 @@
+#!/usr/bin/env bash
+# ROK-1331 M5a — release --preserve-envs + lease-advance + branch-match handoff
+# Covers AC2 (branch-match handoff), AC3 (branch-mismatch synchronous destroy),
+# AC8 (synchronous destroy ordering), STRICT preserve-task-cancel-cascade.
+#
+# These tests are TDD-red — `release` today destroys envs unconditionally and
+# does NOT call lease-advance. M5a adds --preserve-envs (agent default ON),
+# env-registry mutation, and a fire-and-forget lease-advance call.
+
+set -uo pipefail
+
+CURRENT_TEST_FILE="release-preserve-envs.test.sh"
+TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$TEST_DIR/test_helpers.sh"
+
+# Seed an active claim for the calling agent on slot 1 with an env in registry.
+_seed_active_claim_with_env() {
+    local agent="$1" branch="$2" slug="$3"
+    local now
+    now=$(date -u +%FT%TZ)
+    jq -n --arg a "$agent" --arg b "$branch" --arg t "$now" '
+        [
+            {slot:1, claimed:true, agent_id:$a, branch:$b, started_at:$t, last_heartbeat:$t, keep_alive:false, expires_at:null, extends_count:0},
+            {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null, keep_alive:false}
+        ]
+    ' > "$RL_STATE_DIR/claims.json"
+    jq -n --arg slug "$slug" --arg b "$branch" --arg t "$now" '
+        [{slug:$slug, slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t,
+          public_domain:"x.lan", pinned:false, claimable_by_next:false, created_for_branch:$b}]
+    ' > "$RL_STATE_DIR/env-registry.json"
+}
+
+# AC2 — `release --preserve-envs` clears claim but env-registry keeps the env
+#        with claimable_by_next=true + created_for_branch
+test_release_preserve_envs_marks_claimable() {
+    CURRENT_TEST_NAME="AC2: release --preserve-envs marks env claimable_by_next + retains created_for_branch"
+    _seed_active_claim_with_env "agent-A" "feat-shared" "shared-env"
+    export RL_AGENT_ID="agent-A"
+
+    bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+
+    local claimed claimable_by_next created_for_branch
+    claimed=$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json" 2>/dev/null || echo "parse_err")
+    claimable_by_next=$(jq -r '.[0].claimable_by_next' "$RL_STATE_DIR/env-registry.json" 2>/dev/null || echo "parse_err")
+    created_for_branch=$(jq -r '.[0].created_for_branch' "$RL_STATE_DIR/env-registry.json" 2>/dev/null || echo "parse_err")
+
+    assert_eq "$claimed" "false" "claim must be cleared (claimed=false)"
+    assert_eq "$claimable_by_next" "true" "env-registry[slug].claimable_by_next must be true"
+    assert_eq "$created_for_branch" "feat-shared" "created_for_branch must be retained from the claim's branch"
+}
+
+# AC2 — `release --preserve-envs` reports preserved_envs[] and DOES NOT destroy
+test_release_preserve_envs_reports_preserved() {
+    CURRENT_TEST_NAME="AC2: release --preserve-envs JSON reports preserved_envs and cleared_lease"
+    _seed_active_claim_with_env "agent-B" "feat-keep" "keep-env"
+    export RL_AGENT_ID="agent-B"
+
+    local out
+    out=$(bash "$BIN_DIR/release" --preserve-envs 2>&1) || true
+
+    local preserved cleared_lease destroyed
+    preserved=$(echo "$out" | jq -r '.preserved_envs // empty | tostring' 2>/dev/null || echo "parse_err")
+    cleared_lease=$(echo "$out" | jq -r '.cleared_lease // empty' 2>/dev/null || echo "parse_err")
+    destroyed=$(echo "$out" | jq -r '.destroyed_envs // empty | tostring' 2>/dev/null || echo "parse_err")
+
+    assert_contains "$preserved" "keep-env" "preserved_envs must include the slug"
+    assert_eq "$cleared_lease" "true" "cleared_lease must be true when claim was active"
+    # destroyed_envs should be [] when preserve mode used
+    case "$destroyed" in
+        ""|"[]"|"null") TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1)) ;;
+        *)
+            TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+            TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: destroyed_envs not empty: $destroyed")
+            echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] destroyed_envs should be empty under --preserve-envs, got=$destroyed"
+            ;;
+    esac
+}
+
+# AC2 — branch-match handoff: next claim for SAME branch inherits the env
+test_branch_match_handoff_inherits_env() {
+    CURRENT_TEST_NAME="AC2: branch-match handoff returns inherited_envs and DOES NOT destroy"
+    _seed_active_claim_with_env "agent-prev" "feat-match" "match-env"
+    # Mark env as claimable (post-release-preserve state) directly.
+    jq '.[0].claimable_by_next = true' "$RL_STATE_DIR/env-registry.json" > "$RL_STATE_DIR/env-registry.json.tmp" \
+        && mv "$RL_STATE_DIR/env-registry.json.tmp" "$RL_STATE_DIR/env-registry.json"
+    # Clear claim slot 1 so new claim can grab.
+    jq '(.[] | select(.slot==1)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null)' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/claims.json.tmp" \
+        && mv "$RL_STATE_DIR/claims.json.tmp" "$RL_STATE_DIR/claims.json"
+
+    export RL_AGENT_ID="agent-next"
+    local out
+    out=$(bash "$BIN_DIR/claim" --branch feat-match 2>&1) || true
+
+    local inherited_first slot destroyed
+    inherited_first=$(echo "$out" | jq -r '.inherited_envs[0].slug // empty' 2>/dev/null || echo "parse_err")
+    slot=$(echo "$out" | jq -r '.slot // empty' 2>/dev/null || echo "")
+    destroyed=$(echo "$out" | jq -r '.destroyed_envs // empty | tostring' 2>/dev/null || echo "")
+
+    assert_eq "$slot" "1" "claim must grant slot 1"
+    assert_eq "$inherited_first" "match-env" "inherited_envs must include match-env"
+    # destroyed_envs must be empty on branch-match.
+    case "$destroyed" in
+        ""|"[]"|"null") TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1)) ;;
+        *)
+            TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+            TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: destroyed_envs not empty on branch-match: $destroyed")
+            echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] branch-match must NOT destroy, got=$destroyed"
+            ;;
+    esac
+
+    # claimable_by_next must be cleared after grant.
+    local still_claimable
+    still_claimable=$(jq -r '.[0].claimable_by_next' "$RL_STATE_DIR/env-registry.json" 2>/dev/null || echo "parse_err")
+    assert_eq "$still_claimable" "false" "claimable_by_next must be cleared after inherited grant"
+}
+
+# AC3 — branch-mismatch synchronous destroy: env-destroy runs BEFORE claim returns
+test_branch_mismatch_destroys_synchronously() {
+    CURRENT_TEST_NAME="AC3/AC8: branch-mismatch destroys env synchronously BEFORE claim response"
+    _seed_active_claim_with_env "agent-prev" "feat-X" "mismatch-env"
+    # Move env to claimable state, clear claim.
+    jq '.[0].claimable_by_next = true' "$RL_STATE_DIR/env-registry.json" > "$RL_STATE_DIR/env-registry.json.tmp" \
+        && mv "$RL_STATE_DIR/env-registry.json.tmp" "$RL_STATE_DIR/env-registry.json"
+    jq '(.[] | select(.slot==1)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null)' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/claims.json.tmp" \
+        && mv "$RL_STATE_DIR/claims.json.tmp" "$RL_STATE_DIR/claims.json"
+
+    export RL_AGENT_ID="agent-new"
+    local out
+    out=$(bash "$BIN_DIR/claim" --branch feat-Y 2>&1) || true
+
+    local destroyed_first inherited
+    destroyed_first=$(echo "$out" | jq -r '.destroyed_envs[0] // empty' 2>/dev/null || echo "parse_err")
+    inherited=$(echo "$out" | jq -r '.inherited_envs // empty | tostring' 2>/dev/null || echo "")
+
+    assert_eq "$destroyed_first" "mismatch-env" "destroyed_envs must list mismatch-env on branch mismatch"
+    case "$inherited" in
+        ""|"[]"|"null") TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1)) ;;
+        *)
+            TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+            TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: inherited_envs not empty on mismatch: $inherited")
+            echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] branch-mismatch must have empty inherited_envs, got=$inherited"
+            ;;
+    esac
+
+    # Env must be removed from registry (synchronous destroy must complete BEFORE response).
+    local env_count
+    env_count=$(jq 'length' "$RL_STATE_DIR/env-registry.json" 2>/dev/null || echo "parse_err")
+    assert_eq "$env_count" "0" "env-registry must have 0 entries after synchronous destroy"
+}
+
+# AC8 — audit log ordering: env-destroy must precede lease-advance granted
+test_audit_log_destroy_before_grant() {
+    CURRENT_TEST_NAME="AC8: audit log records env-destroy BEFORE lease-advance/claim grant"
+    _seed_active_claim_with_env "agent-prev" "feat-Z" "audit-env"
+    jq '.[0].claimable_by_next = true' "$RL_STATE_DIR/env-registry.json" > "$RL_STATE_DIR/env-registry.json.tmp" \
+        && mv "$RL_STATE_DIR/env-registry.json.tmp" "$RL_STATE_DIR/env-registry.json"
+    jq '(.[] | select(.slot==1)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null)' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/claims.json.tmp" \
+        && mv "$RL_STATE_DIR/claims.json.tmp" "$RL_STATE_DIR/claims.json"
+
+    export RL_AGENT_ID="agent-audit"
+    bash "$BIN_DIR/claim" --branch feat-mismatch >/dev/null 2>&1 || true
+
+    # Find line numbers of env-destroy + claim acquired/granted in audit.log
+    local destroy_line grant_line
+    destroy_line=$(grep -n 'env-destroy' "$RL_STATE_DIR/audit.log" 2>/dev/null | head -1 | cut -d: -f1)
+    grant_line=$(grep -nE 'claim.*acquired|lease-advance.*granted' "$RL_STATE_DIR/audit.log" 2>/dev/null | head -1 | cut -d: -f1)
+
+    if [[ -z "$destroy_line" || -z "$grant_line" ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: missing destroy_line=$destroy_line or grant_line=$grant_line")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] audit log missing destroy or grant entry"
+    elif (( destroy_line < grant_line )); then
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    else
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: destroy at line $destroy_line, grant at $grant_line (destroy must come first)")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] expected destroy BEFORE grant"
+    fi
+}
+
+# STRICT (architect 2026-05-20) — release preserves M1's task-cancel cascade
+test_release_preserves_task_cancel_cascade() {
+    CURRENT_TEST_NAME="STRICT: release scans tasks/*.json for owner==slot+status=running and calls task-cancel BEFORE lease-advance"
+    _seed_active_claim_with_env "agent-tasks" "feat-tasks" "tasks-env"
+    export RL_AGENT_ID="agent-tasks"
+    # Seed a running task owned by slot 1.
+    mkdir -p "$RL_STATE_DIR/tasks"
+    jq -n --arg t "$(date -u +%FT%TZ)" '
+        {task_id:"runningtask01", tool:"manual", slot:1, status:"running",
+         pid:99999, started_at:$t}
+    ' > "$RL_STATE_DIR/tasks/runningtask01.json"
+
+    # Install a fake task-cancel that records its invocation.
+    # release resolves its siblings via "$(dirname "$0")", so run a throwaway
+    # COPY of the whole bin dir with the two fakes swapped in. Never shim into
+    # the real $BIN_DIR: on a runner it is a live Mutagen-synced tree, and
+    # moving lease-advance aside there made Mutagen rewrite it mid-suite, so the
+    # TOCTOU case's extraction below intermittently found the file missing.
+    local sentinel="$RL_STATE_DIR/task-cancel.invoked"
+    local fake_bin_dir
+    fake_bin_dir=$(mktemp -d -t rl-fake-bin.XXXXXX)
+    if ! cp -p "$BIN_DIR"/* "$fake_bin_dir"/; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: copying $BIN_DIR into $fake_bin_dir failed")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] bin copy failed"
+        rm -rf "$fake_bin_dir"
+        return
+    fi
+    rm -f "$fake_bin_dir/task-cancel" "$fake_bin_dir/lease-advance"
+    cat > "$fake_bin_dir/task-cancel" <<EOF
+#!/usr/bin/env bash
+echo "task-cancel called with: \$*" >> "$sentinel"
+exit 0
+EOF
+    chmod +x "$fake_bin_dir/task-cancel"
+    # Same for lease-advance so we can check ordering.
+    cat > "$fake_bin_dir/lease-advance" <<EOF
+#!/usr/bin/env bash
+echo "lease-advance called with: \$*" >> "$sentinel"
+exit 0
+EOF
+    chmod +x "$fake_bin_dir/lease-advance"
+
+    # The copy's own dirname is what routes release's sibling calls to the fakes.
+    bash "$fake_bin_dir/release" --preserve-envs >/dev/null 2>&1 || true
+
+    if [[ ! -f "$sentinel" ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: neither task-cancel nor lease-advance was invoked")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] sentinel file never created"
+    else
+        # Order: task-cancel line must appear BEFORE lease-advance line.
+        local tc_line la_line
+        tc_line=$(grep -n 'task-cancel' "$sentinel" | head -1 | cut -d: -f1)
+        la_line=$(grep -n 'lease-advance' "$sentinel" | head -1 | cut -d: -f1)
+        if [[ -z "$tc_line" ]]; then
+            TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+            TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: task-cancel never invoked for running task")
+            echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] task-cancel must be called for tasks owned by released slot"
+        elif [[ -z "$la_line" ]]; then
+            TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+            TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: lease-advance never invoked")
+            echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] lease-advance must be called after clearing claim"
+        elif (( tc_line < la_line )); then
+            TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+        else
+            TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+            TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: task-cancel at $tc_line, lease-advance at $la_line (must call task-cancel FIRST)")
+            echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] task-cancel must be called BEFORE lease-advance"
+        fi
+    fi
+
+    rm -rf "$fake_bin_dir"
+}
+
+# --- TOCTOU guard (fix/batch-2026-06-07): env moved slots mid-handoff -------
+# Extracts lease_advance::env_still_claimable_here VERBATIM from the binary
+# (sync-local-to-env test pattern — no copy that can drift) and runs it
+# against registry fixtures. The predicate is what stops a branch-mismatch
+# handoff from destroying an env that an env-spin reclaim just moved to
+# another slot (live incident 2026-06-07T14:27:05Z, fixbatch7).
+test_destroy_recheck_skips_moved_env() {
+    CURRENT_TEST_NAME="TOCTOU: destroy re-check only passes envs still claimable on THIS slot"
+    test_setup
+    # Save/restore RL_ENVS_FILE — sibling tests in this file do NOT set it and
+    # would otherwise inherit our (deleted-at-teardown) tmp path.
+    local _saved_envs_file="${RL_ENVS_FILE-__unset__}"
+    export RL_ENVS_FILE="$RL_STATE_DIR/env-registry.json"
+
+    local fn_src
+    fn_src=$(sed -n '/^lease_advance::env_still_claimable_here() {/,/^}/p' "$BIN_DIR/lease-advance")
+    if [[ -z "$fn_src" ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: could not extract predicate from lease-advance")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] extraction failed"
+        if [[ "$_saved_envs_file" == "__unset__" ]]; then unset RL_ENVS_FILE; else export RL_ENVS_FILE="$_saved_envs_file"; fi
+        test_teardown
+        return
+    fi
+    eval "$fn_src"
+
+    # Case 1: still claimable on this slot → 0 (destroy proceeds).
+    echo '[{"slug":"e1","slot":2,"claimable_by_next":true,"created_for_branch":"x"}]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    else
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case1")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] still-claimable row must pass the re-check"
+    fi
+    # Case 2: row moved to another slot (the reclaim race) → 1 (skip).
+    echo '[{"slug":"e1","slot":1,"claimable_by_next":false}]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case2")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] moved-slot row must be SKIPPED"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    # Case 3: row deleted entirely → 1 (skip).
+    echo '[]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case3")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] missing row must be SKIPPED"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    # Case 4: same slot but claimable cleared (reclaim took ownership) → 1.
+    echo '[{"slug":"e1","slot":2,"claimable_by_next":false}]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case4")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] claimable-cleared row must be SKIPPED"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    if [[ "$_saved_envs_file" == "__unset__" ]]; then unset RL_ENVS_FILE; else export RL_ENVS_FILE="$_saved_envs_file"; fi
+    test_teardown
+}
+
+run_test "ac2-preserve-marks-claimable" test_release_preserve_envs_marks_claimable
+run_test "ac2-preserve-reports-preserved" test_release_preserve_envs_reports_preserved
+run_test "ac2-branch-match-inherits" test_branch_match_handoff_inherits_env
+run_test "ac3-branch-mismatch-destroys" test_branch_mismatch_destroys_synchronously
+run_test "ac8-audit-destroy-before-grant" test_audit_log_destroy_before_grant
+run_test "strict-task-cancel-cascade" test_release_preserves_task_cancel_cascade
+run_test "toctou-destroy-recheck-moved-env" test_destroy_recheck_skips_moved_env
+
+print_test_summary

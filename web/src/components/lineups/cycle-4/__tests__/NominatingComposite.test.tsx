@@ -1,0 +1,438 @@
+/**
+ * Failing-first tests for NominatingComposite (ROK-1297, S1 Cycle 4).
+ *
+ * MUST fail with module-not-found until the dev creates
+ * `web/src/components/lineups/cycle-4/NominatingComposite.tsx`. Assertions
+ * pin the spec's JourneyHero wiring scenarios:
+ *   - JourneyHero gets active=0 + tone="action" when the viewer has
+ *     not yet submitted nominations.
+ *   - Tone shifts to "waiting" when `viewerSubmissions.nominationsSubmittedAt`
+ *     is set on the lineup detail.
+ */
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { renderWithProviders } from '../../../../test/render-helpers';
+import { server } from '../../../../test/mocks/server';
+import type { LineupDetailResponseDto } from '@raid-ledger/contract';
+import { NominatingComposite } from '../NominatingComposite';
+import { createMockEntry } from '../../../../test/lineup-factories';
+
+const API_BASE = 'http://localhost:3000';
+
+function buildBuildingLineup(
+    overrides: Partial<LineupDetailResponseDto> = {},
+): LineupDetailResponseDto {
+    return {
+        id: 7,
+        title: 'Test Lineup',
+        description: null,
+        status: 'building',
+        targetDate: null,
+        decidedGameId: null,
+        decidedGameName: null,
+        linkedEventId: null,
+        createdBy: { id: 1, displayName: 'Admin' },
+        votingDeadline: null,
+        phaseDeadline: '2026-05-19T00:00:00.000Z',
+        pendingAdvanceAt: null,
+        autoAdvancePausedAt: null,
+        matchThreshold: 35,
+        maxVotesPerPlayer: 3,
+        defaultTiebreakerMode: null,
+        entries: [],
+        totalVoters: 5,
+        totalMembers: 5,
+        votingEligibleCount: 5,
+        myVotes: [],
+        myTopPickGameId: null,
+        decisionReason: null,
+        unlinkedSteamCount: 0,
+        unlinkedSteamMembers: [],
+        createdAt: '2026-05-15T00:00:00.000Z',
+        updatedAt: '2026-05-15T00:00:00.000Z',
+        tiebreaker: null,
+        channelOverrideId: null,
+        channelOverrideName: null,
+        visibility: 'public',
+        invitees: [],
+        stillWaitingOnVoters: [],
+        publicShareEnabled: true,
+        publicSlug: 'test-lineup',
+        includeSchedulingPhase: true,
+        // ROK-1444: early-advance target + its published denominator.
+        nominationTargetPct: null,
+        nominationCap: 20,
+        nominationTargetDisarmedAt: null,
+        nominationTargetArmed: true,
+        viewerSubmissions: {
+            nominationsSubmittedAt: null,
+            votesSubmittedAt: null,
+        },
+        ...overrides,
+    };
+}
+
+beforeEach(() => {
+    // Common Ground returns empty so the hero placeholder shows but the
+    // composite still mounts.
+    server.use(
+        http.get(`${API_BASE}/lineups/common-ground`, () =>
+            HttpResponse.json({
+                data: [],
+                meta: {
+                    total: 0,
+                    appliedWeights: {
+                        ownerWeight: 10,
+                        saleBonus: 5,
+                        fullPricePenalty: -2,
+                        tasteWeight: 8,
+                        socialWeight: 8,
+                        intensityWeight: 4,
+                    },
+                    activeLineupId: 7,
+                    nominatedCount: 0,
+                    maxNominations: 20,
+                    participantCount: 5,
+                },
+            }),
+        ),
+        http.get(`${API_BASE}/lineups/active`, () =>
+            HttpResponse.json([]),
+        ),
+    );
+});
+
+describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
+    it('renders JourneyHero with active=0 + tone="action" when the viewer has not submitted', async () => {
+        const lineup = buildBuildingLineup();
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        // The hero region's accessible name encodes the step. JourneyHero
+        // for the Nominating phase always renders the "Step 1 of 4 …
+        // Nominating" badge per ROK-1294. Use that to confirm hero is up.
+        const hero = await screen.findByRole('region', {
+            name: /step 1 of 4 · nominating/i,
+        });
+        expect(hero).toBeInTheDocument();
+
+        // tone="action" surfaces no completion pill (per JourneyHero
+        // contract — the "You're done here" / "You're set" pills only
+        // render for waiting / set tones).
+        expect(
+            screen.queryByText(/You're done here/i),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText(/You're set/i)).not.toBeInTheDocument();
+    });
+
+    // ROK-1348: the people-denominator in the hero sub-copy uses
+    // votingEligibleCount (private = creator + invitees), NOT the
+    // community-wide totalMembers, and no longer pairs the entry count
+    // with the voter count.
+    it('renders the eligible voter count in the hero copy for a private lineup', async () => {
+        const lineup = buildBuildingLineup({
+            visibility: 'private',
+            totalMembers: 13,
+            totalVoters: 0,
+            votingEligibleCount: 3,
+            entries: [],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByText(/0 \/ 20 nominated by 3 voters/i),
+            ).toBeInTheDocument();
+        });
+        // The community-wide count must NOT leak into the copy.
+        expect(screen.queryByText(/by 13 voters/i)).not.toBeInTheDocument();
+    });
+
+    it('uses the singular "voter" when only one is eligible', async () => {
+        const lineup = buildBuildingLineup({
+            visibility: 'private',
+            votingEligibleCount: 1,
+            entries: [],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByText(/0 \/ 20 nominated by 1 voter\b/i),
+            ).toBeInTheDocument();
+        });
+    });
+
+    it('shifts JourneyHero tone to "waiting" when nominationsSubmittedAt is set', async () => {
+        const lineup = buildBuildingLineup({
+            viewerSubmissions: {
+                nominationsSubmittedAt: '2026-05-17T10:00:00.000Z',
+                votesSubmittedAt: null,
+            },
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await waitFor(() => {
+            // tone="waiting" → JourneyHero renders the "✓ You're done here"
+            // completion pill (ROK-1294 contract).
+            expect(screen.getByText(/You're done here/i)).toBeInTheDocument();
+        });
+    });
+});
+
+/**
+ * ROK-1444 (Codex P2) — roster size for the co-op fit flags.
+ *
+ * Common Ground's `participantCount` only counts people who have already
+ * nominated or voted, so a PUBLIC lineup seeded with explicit invitees
+ * (ROK-1440) reported a group of 1 and stayed silent for a group of five.
+ * The composite takes the larger of that count and `invitees + creator`.
+ *
+ * The MSW handler in `beforeEach` returns `participantCount: 5`; these cases
+ * pin the invitee-driven path by asserting on the rendered flag.
+ */
+describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
+    it('flags a nomination the invited roster has outgrown, before anyone nominates', async () => {
+        const lineup = buildBuildingLineup({
+            // Creator + 5 invitees = 6, larger than the game's 4-player co-op.
+            invitees: [2, 3, 4, 5, 6].map((id) => ({
+                id,
+                displayName: `Invitee ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 4 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByTestId('nomination-fit-warning'),
+        ).toHaveTextContent(/Fits 4 online · group is 6/);
+    });
+
+    it('counts the creator once when they are also in the invitee list', async () => {
+        // rl-review WARNING: `addInvitees` does not exclude the creator, so a
+        // naive `invitees.length + 1` reports 5 for a real 4-person roster.
+        // Asserted POSITIVELY on the rendered number — an absence assertion
+        // would pass vacuously before the Common Ground query resolves.
+        const lineup = buildBuildingLineup({
+            // createdBy.id is 1 in the fixture; include it among the invitees.
+            invitees: [1, 2, 3, 4].map((id) => ({
+                id,
+                displayName: `User ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 3 })],
+        });
+        // The server dedupes the creator too (`resolveParticipantCount`), so a
+        // correct API sends 4 here, not 5.
+        server.use(
+            http.get(`${API_BASE}/lineups/common-ground`, () =>
+                HttpResponse.json({
+                    data: [],
+                    meta: {
+                        total: 0,
+                        appliedWeights: {
+                            ownerWeight: 10,
+                            saleBonus: 5,
+                            fullPricePenalty: -2,
+                            tasteWeight: 8,
+                            socialWeight: 8,
+                            intensityWeight: 4,
+                        },
+                        activeLineupId: 7,
+                        nominatedCount: 0,
+                        maxNominations: 20,
+                        participantCount: 4,
+                        coopDataAvailable: true,
+                    },
+                }),
+            ),
+        );
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        // A 3-player game against a DISTINCT roster of 4 flags as "group is 4".
+        // If the creator were double-counted it would read "group is 5".
+        expect(
+            await screen.findByTestId('nomination-fit-warning'),
+        ).toHaveTextContent(/Fits 3 online · group is 4/);
+    });
+
+    it('leaves a game that still fits the invited roster unflagged', async () => {
+        const lineup = buildBuildingLineup({
+            invitees: [2, 3].map((id) => ({
+                id,
+                displayName: `Invitee ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 8 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(
+            screen.queryByTestId('nomination-fit-warning'),
+        ).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1444 (Codex P2) — the early-advance promise must not outrun reality.
+ *
+ * `targetSuffix` renders " · voting opens at N%". It has to stay silent in
+ * every state where the target cannot actually fire, or the page lies to the
+ * group about how the lineup will end.
+ */
+describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
+    it('promises early voting when the target is armed', async () => {
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: true,
+            nominationTargetDisarmedAt: null,
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByText(/voting opens at 50%/i),
+        ).toBeInTheDocument();
+    });
+
+    it('stays silent when the target was never armed (carry-over seeded above it)', async () => {
+        // A carry-over lineup that started at or above its target has no
+        // rising edge left to cross, so it will only ever advance on the
+        // deadline — promising 50% here would be false.
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: false,
+            nominationTargetDisarmedAt: null,
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
+    });
+
+    it('stays silent once an operator revert has disarmed the target', async () => {
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: true,
+            nominationTargetDisarmedAt: '2026-08-31T00:00:00.000Z',
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
+    });
+});
+
+// ROK-1601: the mobile auto-hide translated the `sticky top-14` hero
+// off-screen, but a transform does not collapse the sticky box — the hidden
+// hero left a blank band its own height tall. The fix deletes ONLY the
+// auto-hide: the hero stays sticky at every width, because ROK-1297 put the
+// controls (Search / filters / jump / Submit) in it to keep them reachable.
+describe('NominatingComposite — sticky hero, no auto-hide (ROK-1601)', () => {
+    it('stays sticky at every width and never transforms itself off-screen', async () => {
+        renderWithProviders(
+            <NominatingComposite
+                lineup={buildBuildingLineup()}
+                canParticipate={true}
+            />,
+        );
+        const wrapper = await screen.findByTestId('nominating-hero-toolbar');
+        const classes = Array.from(wrapper.classList);
+
+        expect(classes).toContain('sticky');
+        expect(classes).toContain('top-14');
+        expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
+        expect(classes).not.toContain('will-change-transform');
+        expect(wrapper.style.transition).toBe('');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1659 — the hero keeps search + nominations; filters go behind the
+// shared funnel standard (toolbar funnel from 1024px, Filters FAB below).
+// ---------------------------------------------------------------------------
+
+/** Evaluate `min-width` media queries against a fixed width. */
+function mockViewportWidth(width: number): void {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => {
+        const min = /min-width:\s*(\d+)px/.exec(query);
+        return {
+            matches: Boolean(min) && width >= Number(min![1]), media: query, onchange: null,
+            addListener: vi.fn(), removeListener: vi.fn(),
+            addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+        };
+    }) as unknown as typeof window.matchMedia;
+}
+
+describe('NominatingComposite — funnel filter standard (ROK-1659)', () => {
+    const originalMatchMedia = window.matchMedia;
+    afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+    it('shows the search box in the hero without a Search button to expand it', async () => {
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        expect(within(toolbar).getByRole('searchbox', { name: 'Search games' })).toBeVisible();
+        expect(screen.queryByRole('button', { name: /search the game library/i })).not.toBeInTheDocument();
+    });
+
+    it('phone: the Filters FAB opens the filters; no toolbar funnel', async () => {
+        mockViewportWidth(390);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        await screen.findByTestId('nominating-hero-toolbar');
+        const fab = screen.getByTestId('filter-fab');
+        expect(screen.queryByTestId('filter-panel-trigger')).not.toBeInTheDocument();
+        await userEvent.click(fab);
+        expect(fab).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('tablet: the Filters FAB renders outside the sticky toolbar, so its z-index is not trapped', async () => {
+        mockViewportWidth(800);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        expect(toolbar).toHaveClass('sticky');
+        expect(toolbar).not.toContainElement(screen.getByTestId('filter-fab'));
+    });
+
+    it('desktop: the toolbar funnel opens the inline panel; no FAB', async () => {
+        mockViewportWidth(1280);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        const funnel = within(toolbar).getByTestId('filter-panel-trigger');
+        expect(screen.queryByTestId('filter-fab')).not.toBeInTheDocument();
+        await userEvent.click(funnel);
+        expect(funnel).toHaveAttribute('aria-expanded', 'true');
+        expect(within(toolbar).getByTestId('filter-panel')).toHaveClass('opacity-100');
+    });
+});

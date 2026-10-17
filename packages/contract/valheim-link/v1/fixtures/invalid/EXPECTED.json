@@ -1,0 +1,114 @@
+{
+  "unknown-top-level-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "steamid-as-number": {
+    "path": "character.steamId",
+    "code": "invalid_type"
+  },
+  "schema-version-2": {
+    "path": "schemaVersion",
+    "code": "invalid_value"
+  },
+  "unknown-kind": {
+    "path": "kind",
+    "code": "invalid_union"
+  },
+  "inventory-slot-outside-grid": {
+    "path": "inventory.items.3",
+    "code": "custom"
+  },
+  "duplicate-equip-slot": {
+    "path": "equipment.1",
+    "code": "custom"
+  },
+  "durability-half-null": {
+    "path": "equipment.0.item.maxDurability",
+    "code": "custom"
+  },
+  "map-bitmap-size-mismatch": {
+    "path": "explored",
+    "code": "custom"
+  },
+  "items-atlas-icon-without-atlas": {
+    "path": "atlas",
+    "code": "custom"
+  },
+  "int64-out-of-range": {
+    "path": "character.playerId",
+    "code": "custom"
+  },
+  "int64-leading-zero": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "mod-version-not-semver": {
+    "path": "modVersion",
+    "code": "invalid_format"
+  },
+  "steamid-below-individual-base": {
+    "path": "character.steamId",
+    "code": "custom"
+  },
+  "steamid-not-digits": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "steamid-negative": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "steamid-exponent": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "steamid-40-digits": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "int64-not-digits": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "int64-negative-zero": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "int64-exponent": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "int64-40-digits": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "captured-at-too-precise": {
+    "path": "capturedAt",
+    "code": "too_big"
+  },
+  "extra-row-unlisted": {
+    "path": "inventory.grid.extraRows",
+    "code": "custom"
+  },
+  "extra-row-vanilla": {
+    "path": "inventory.grid.extraRows.0",
+    "code": "custom"
+  },
+  "map-bitmap-not-gzip": {
+    "path": "explored.data",
+    "code": "invalid_format"
+  },
+  "map-bitmap-empty": {
+    "path": "explored.data",
+    "code": "too_small"
+  },
+  "map-bitmap-oversized-compressed": {
+    "path": "explored.data",
+    "code": "custom"
+  },
+  "map-basemap-size-mismatch": {
+    "path": "baseMap",
+    "code": "custom"
+  }
+}

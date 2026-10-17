@@ -1,0 +1,274 @@
+/**
+ * Tests for CommonGroundFilters (ROK-934, ROK-1659).
+ * Validates the min owners and players sliders (co-op: `.coop.test.tsx`).
+ * Common Ground has no genre filter (operator ruling 2026-09-24).
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import type { CommonGroundParams } from '../../lib/api-client';
+import { CommonGroundFilters } from './CommonGroundFilters';
+
+const defaultFilters: CommonGroundParams = { minOwners: 2 };
+
+/** `defaultFilters` with the optional `minOwners` key absent. */
+function withoutMinOwners(): CommonGroundParams {
+    const filters: CommonGroundParams = { ...defaultFilters };
+    delete filters.minOwners;
+    return filters;
+}
+
+describe('CommonGroundFilters — min owners slider', () => {
+    it('renders the "Min owners" label', () => {
+        render(
+            <CommonGroundFilters
+                filters={defaultFilters}
+                onChange={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('Min owners')).toBeInTheDocument();
+    });
+
+    it('renders slider with correct default value', () => {
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, minOwners: 5 }}
+                onChange={vi.fn()}
+            />,
+        );
+        const slider = screen.getByRole('slider', { name: /min owners/i });
+        expect(slider).toHaveValue('5');
+    });
+
+    it('defaults to 2 when minOwners is undefined', () => {
+        render(
+            <CommonGroundFilters
+                filters={withoutMinOwners()}
+                onChange={vi.fn()}
+            />,
+        );
+        const slider = screen.getByRole('slider', { name: /min owners/i });
+        expect(slider).toHaveValue('2');
+    });
+
+    it('displays current value as text', () => {
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, minOwners: 8 }}
+                onChange={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('8')).toBeInTheDocument();
+    });
+
+    it('calls onChange with updated minOwners when slider changes', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, minOwners: 2 }}
+                onChange={onChange}
+            />,
+        );
+        const slider = screen.getByRole('slider', { name: /min owners/i });
+        // Range inputs require native value setter + input event
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            'value',
+        )?.set;
+        nativeSetter?.call(slider, '7');
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+
+        expect(onChange).toHaveBeenCalledWith({
+            ...defaultFilters,
+            minOwners: 7,
+        });
+    });
+});
+
+// ROK-1297 round 5ad: the genre-dropdown describe block was removed
+// after the operator dropped the dropdown from the filter bar. The
+// `availableTags` prop remains on CommonGroundFilters for caller-shape
+// compatibility but no UI consumes it.
+
+describe('CommonGroundFilters — players slider', () => {
+    it('renders the "Players" label', () => {
+        render(
+            <CommonGroundFilters
+                filters={defaultFilters}
+                onChange={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('Players')).toBeInTheDocument();
+    });
+
+    it('shows "Any" when maxPlayers is undefined (slider at 0)', () => {
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('Any')).toBeInTheDocument();
+    });
+
+    it('shows numeric value when maxPlayers is set', () => {
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, maxPlayers: 4 }}
+                onChange={vi.fn()}
+            />,
+        );
+        const slider = screen.getByRole('slider', { name: /players/i });
+        expect(slider).toHaveValue('4');
+    });
+});
+
+describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
+    it('auto-sets maxPlayers to participantCount on first mount when filter is unset', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={3}
+            />,
+        );
+        expect(onChange).toHaveBeenCalledWith({
+            ...defaultFilters,
+            maxPlayers: 3,
+        });
+    });
+
+    it('preserves manual adjustment across re-renders (does not snap back to participantCount)', () => {
+        const onChange = vi.fn();
+        const { rerender } = render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={3}
+            />,
+        );
+        // First mount: auto-set fires once with maxPlayers: 3
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenLastCalledWith({
+            ...defaultFilters,
+            maxPlayers: 3,
+        });
+
+        // Simulate parent committing the auto-set, then user manually adjusts to 5.
+        rerender(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, maxPlayers: 5 }}
+                onChange={onChange}
+                participantCount={3}
+            />,
+        );
+        // No new onChange call from the effect — manual value sticks.
+        expect(onChange).toHaveBeenCalledTimes(1);
+
+        // Even if participantCount later changes (e.g. invitees added), no re-pin.
+        rerender(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, maxPlayers: 5 }}
+                onChange={onChange}
+                participantCount={7}
+            />,
+        );
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to default (no auto-set) when participantCount is 0', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={0}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByText('Any')).toBeInTheDocument();
+    });
+
+    it('falls back to default (no auto-set) when participantCount is undefined', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByText('Any')).toBeInTheDocument();
+    });
+
+    // ROK-1348 reviewer [low]: pin the <=1 guard's boundary — 2 is the
+    // smallest count that still auto-sets (a 2-person lineup IS meaningful).
+    it('auto-sets at the participantCount=2 boundary', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={2}
+            />,
+        );
+        expect(onChange).toHaveBeenCalledWith({
+            ...defaultFilters,
+            maxPlayers: 2,
+        });
+    });
+
+    // ROK-1348: a brand-new lineup has participantCount === 1 (creator only).
+    // Auto-pinning maxPlayers to 1 would filter out every multiplayer game,
+    // so <= 1 must be treated as "no auto-set".
+    it('does NOT auto-set when participantCount is 1 (creator-only new lineup)', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={1}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByText('Any')).toBeInTheDocument();
+    });
+
+    it('does not auto-set when maxPlayers is already set (e.g. URL/state hydration)', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, maxPlayers: 4 }}
+                onChange={onChange}
+                participantCount={3}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('captures participantCount the first time it becomes known (initial 0 then arrives)', () => {
+        const onChange = vi.fn();
+        const { rerender } = render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={0}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+
+        // Data loads — participantCount now 4. Effect should fire exactly once.
+        rerender(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters }}
+                onChange={onChange}
+                participantCount={4}
+            />,
+        );
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenLastCalledWith({
+            ...defaultFilters,
+            maxPlayers: 4,
+        });
+    });
+});

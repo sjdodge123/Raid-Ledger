@@ -1,0 +1,2 @@
+ALTER TABLE "guilds" ADD COLUMN "kind" varchar(20) DEFAULT 'wow_guild' NOT NULL;--> statement-breakpoint
+ALTER TABLE "guilds" ADD CONSTRAINT "guilds_kind_check" CHECK ("guilds"."kind" IN ('wow_guild', 'game_server'));

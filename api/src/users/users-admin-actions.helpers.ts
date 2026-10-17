@@ -1,0 +1,142 @@
+/**
+ * Admin-actions audit helpers (ROK-313 §3c).
+ * Writes to and reads from `admin_actions`. Both `actorId` and `targetId` are
+ * `ON DELETE SET NULL` (§9.9): once a moderated user is later HARD-deleted their
+ * audit rows survive but become unreachable via `getAdminActionsForUser` because
+ * `target_id` is NULL. Accepted tradeoff — the audit trail is preserved, just no
+ * longer target-addressable.
+ */
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { alias } from 'drizzle-orm/pg-core';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
+import type {
+  AdminActionDto,
+  AdminActionsListResponseDto,
+} from '@raid-ledger/contract';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Moderation kinds — the only ones the history API (AdminActionSchema) emits. */
+export const MODERATION_ACTION_KINDS = [
+  'kick',
+  'unkick',
+  'ban',
+  'unban',
+  'role_change',
+] as const;
+
+/** Kinds recorded in `admin_actions.action` (ROK-1754: + impersonation). */
+export type AdminActionKind =
+  | (typeof MODERATION_ACTION_KINDS)[number]
+  | 'impersonate_start'
+  | 'impersonate_stop';
+
+/** Rows for one target, moderation kinds only (ROK-1754). */
+function moderationRowsFor(targetId: number) {
+  return and(
+    eq(schema.adminActions.targetId, targetId),
+    inArray(schema.adminActions.action, [...MODERATION_ACTION_KINDS]),
+  );
+}
+
+export interface InsertAdminActionInput {
+  action: AdminActionKind;
+  actorId: number | null;
+  targetId: number | null;
+  reason?: string | null;
+  /** JSON string, e.g. `{"dataWiped":true,"discordKicked":false}`. */
+  metadata?: string | null;
+}
+
+/** Insert one audit row. Callers gate this on a moderation write RETURNING a row
+ * so a retry does not append a duplicate (§9.10 #4). */
+export async function insertAdminAction(
+  db: Db,
+  input: InsertAdminActionInput,
+): Promise<void> {
+  await db.insert(schema.adminActions).values({
+    action: input.action,
+    actorId: input.actorId,
+    targetId: input.targetId,
+    reason: input.reason ?? null,
+    metadata: input.metadata ?? null,
+  });
+}
+
+interface AdminActionRow {
+  id: number;
+  action: string;
+  actorId: number | null;
+  targetId: number | null;
+  actorUsername: string | null;
+  targetUsername: string | null;
+  reason: string | null;
+  metadata: string | null;
+  createdAt: Date;
+}
+
+function mapAdminActionRow(row: AdminActionRow): AdminActionDto {
+  return {
+    id: row.id,
+    action: row.action as AdminActionDto['action'],
+    actorId: row.actorId,
+    targetId: row.targetId,
+    actorUsername: row.actorUsername,
+    targetUsername: row.targetUsername,
+    reason: row.reason,
+    metadata: row.metadata,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** Fetch one page of audit rows with actor/target usernames joined, newest first. */
+function queryAdminActionRows(
+  db: Db,
+  targetId: number,
+  limit: number,
+  offset: number,
+) {
+  const actor = alias(schema.users, 'actor');
+  const target = alias(schema.users, 'target');
+  return db
+    .select({
+      id: schema.adminActions.id,
+      action: schema.adminActions.action,
+      actorId: schema.adminActions.actorId,
+      targetId: schema.adminActions.targetId,
+      actorUsername: actor.username,
+      targetUsername: target.username,
+      reason: schema.adminActions.reason,
+      metadata: schema.adminActions.metadata,
+      createdAt: schema.adminActions.createdAt,
+    })
+    .from(schema.adminActions)
+    .leftJoin(actor, eq(schema.adminActions.actorId, actor.id))
+    .leftJoin(target, eq(schema.adminActions.targetId, target.id))
+    .where(moderationRowsFor(targetId))
+    .orderBy(desc(schema.adminActions.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+/** Paginated audit history for one target user, newest first (§3c). */
+export async function getAdminActionsForUser(
+  db: Db,
+  targetId: number,
+  page: number,
+  limit: number,
+): Promise<AdminActionsListResponseDto> {
+  const offset = (page - 1) * limit;
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.adminActions)
+    .where(moderationRowsFor(targetId));
+  const rows = await queryAdminActionRows(db, targetId, limit, offset);
+  const total = Number(defined(countRow, 'admin action count row').count);
+  return {
+    data: rows.map(mapAdminActionRow),
+    meta: { total, page, limit, hasMore: offset + rows.length < total },
+  };
+}

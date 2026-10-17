@@ -1,0 +1,190 @@
+/**
+ * ROK-1435 — weekly community digest, posted to a channel.
+ *
+ * The digest runs on an hourly cron gated by a day/hour setting, so the
+ * smoke test fires it through the DEMO_MODE fixture
+ * `POST /admin/test/trigger-weekly-digest`, which skips the enabled toggle and
+ * the slot gate but keeps the real pipeline: channel resolution (dedicated
+ * setting → bot default channel), the empty-week skip, the ISO-week dedup
+ * claim and the send.
+ *
+ *  1. Raise an LFG hand so the week is guaranteed non-empty, and schedule a
+ *     (non ad-hoc) event inside the 7-day window so Coming up has a row.
+ *  2. Trigger with `resetWeek: true` (gives back this week's dedup claim).
+ *  3. Assert the embed lands in the default channel (no digest channel is
+ *     configured, so this is the fallback) with the digest chrome, the LFG
+ *     section, the v2 Coming up section (ROK-1771), no message content and no
+ *     mention markup anywhere in the embed (title, description, every field).
+ *  4. Trigger again without the reset: the fixture reports `duplicate` and no
+ *     second digest appears.
+ */
+import { readLastMessages, type SimpleMessage } from '../../helpers/messages.js';
+import { pollForEmbed } from '../../helpers/polling.js';
+import {
+  assertConditionNeverMet,
+  awaitProcessing,
+  createEvent,
+  deleteEvent,
+  futureTime,
+  postLfgIntent,
+  withdrawLfgIntent,
+} from '../fixtures.js';
+import type { ApiClient } from '../api.js';
+import { resolveConfiguredGame } from '../configured-game.js';
+import type { SmokeTest, TestContext } from '../types.js';
+
+const LFG_FIELD = '\u{1F50E} Looking for group';
+/** Must equal `DIGEST_FIELD_NAMES.upcoming` (api weekly-digest-embed-sections.helpers.ts). */
+const UPCOMING_FIELD = '\u{1F4C5} Coming up';
+/** User and role mentions plus the two mass pings. */
+const MENTION_RE = /<@[!&]?\d|@everyone|@here/;
+/** Starts the Coming up fixture a day out — inside the 7-day window. */
+const UPCOMING_START_MIN = 24 * 60;
+const TITLE_RE = /^Week in review — /;
+
+interface DigestOutcome {
+  status: string;
+  channelId?: string;
+  dedupKey?: string;
+  messageId?: string;
+}
+
+function triggerDigest(
+  api: ApiClient,
+  resetWeek: boolean,
+): Promise<DigestOutcome> {
+  return api.post<DigestOutcome>('/admin/test/trigger-weekly-digest', {
+    resetWeek,
+  });
+}
+
+function isDigest(msg: SimpleMessage): boolean {
+  return msg.embeds.some((e) => TITLE_RE.test(e.title ?? ''));
+}
+
+function embedText(msg: SimpleMessage): string {
+  return msg.embeds
+    .flatMap((e) => [
+      e.title,
+      e.description,
+      e.author,
+      e.footer,
+      ...e.fields.flatMap((f) => [f.name, f.value]),
+    ])
+    .join('\n');
+}
+
+function assertDigestShape(msg: SimpleMessage, gameName: string): void {
+  const embed = msg.embeds[0];
+  if (!embed?.footer?.includes('Weekly digest')) {
+    throw new Error(`Digest footer missing "Weekly digest": ${embed?.footer}`);
+  }
+  const lfg = embed.fields.find((f) => f.name === LFG_FIELD);
+  if (!lfg || !lfg.value.replace(/\\/g, '').includes(gameName)) {
+    throw new Error(
+      `Digest LFG field missing "${gameName}": ${JSON.stringify(embed.fields)}`,
+    );
+  }
+  if (msg.content !== '') {
+    throw new Error(`Digest must carry no message content, got "${msg.content}"`);
+  }
+  if (MENTION_RE.test(embedText(msg))) {
+    throw new Error(`Digest embed contains mention markup: ${embedText(msg)}`);
+  }
+  assertComingUp(msg);
+}
+
+/** ROK-1771: the scheduled fixture guarantees a Coming up field with a Discord timestamp. */
+function assertComingUp(msg: SimpleMessage): void {
+  const fields = msg.embeds[0]?.fields ?? [];
+  const upcoming = fields.find((f) => f.name === UPCOMING_FIELD);
+  if (!upcoming) {
+    throw new Error(
+      `Digest has no "${UPCOMING_FIELD}" field: ${JSON.stringify(fields.map((f) => f.name))}`,
+    );
+  }
+  if (!/<t:\d+:f>/.test(upcoming.value)) {
+    throw new Error(`Coming up value has no <t:UNIX:f> timestamp: ${upcoming.value}`);
+  }
+}
+
+async function createUpcomingEvent(ctx: TestContext, gameId: number): Promise<number> {
+  const ev = await createEvent(ctx.api, 'digest-upcoming', {
+    gameId,
+    startTime: futureTime(UPCOMING_START_MIN),
+    endTime: futureTime(UPCOMING_START_MIN + 120),
+  });
+  return ev.id;
+}
+
+async function assertPostedOnce(ctx: TestContext, gameName: string) {
+  const first = await triggerDigest(ctx.api, true);
+  if (first.status !== 'posted' || !first.messageId) {
+    throw new Error(`Expected digest status "posted", got ${JSON.stringify(first)}`);
+  }
+  if (first.channelId !== ctx.defaultChannelId) {
+    throw new Error(
+      `Digest went to ${first.channelId}, expected default-channel fallback ${ctx.defaultChannelId}`,
+    );
+  }
+  const msg = await pollForEmbed(
+    ctx.defaultChannelId,
+    (m) => m.id === first.messageId,
+    20_000,
+  );
+  if (!isDigest(msg)) {
+    throw new Error(`Posted message is not a digest: ${msg.embeds[0]?.title}`);
+  }
+  assertDigestShape(msg, gameName);
+  return msg;
+}
+
+/** LFG hand up → post once → duplicate never re-posts; the hand always comes down. */
+async function runWithLfgHand(
+  ctx: TestContext,
+  game: { id: number; name: string },
+): Promise<void> {
+  await postLfgIntent(ctx.api, game.id);
+  try {
+    await awaitProcessing(ctx.api);
+    const posted = await assertPostedOnce(ctx, game.name);
+
+    const again = await triggerDigest(ctx.api, false);
+    if (again.status !== 'duplicate') {
+      throw new Error(`Second trigger in one week: expected "duplicate", got ${JSON.stringify(again)}`);
+    }
+    await assertConditionNeverMet(
+      async () => {
+        const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+        return msgs.some(
+          (m) => isDigest(m) && m.id !== posted.id && m.timestamp >= posted.timestamp,
+        );
+      },
+      6_000,
+      'A second weekly digest was posted in the same ISO week',
+      { intervalMs: 2000 },
+    );
+  } finally {
+    await withdrawLfgIntent(ctx.api, game.id);
+  }
+}
+
+const digestPostsOncePerWeek: SmokeTest = {
+  name: 'Weekly digest posts to the default channel once per week (ROK-1435)',
+  category: 'embed',
+  async run(ctx: TestContext) {
+    // Registry row (real name, matched in the embed); a missing game throws
+    // a named precondition — never a hollow PASS.
+    const game = await resolveConfiguredGame(ctx);
+    console.log(`    ROK-1435: digest game id=${game.id} name="${game.name}"`);
+    // Claim the fixture id before anything else can throw.
+    const upcomingId = await createUpcomingEvent(ctx, game.id);
+    try {
+      await runWithLfgHand(ctx, game);
+    } finally {
+      await deleteEvent(ctx.api, upcomingId);
+    }
+  },
+};
+
+export const weeklyDigestTests: SmokeTest[] = [digestPostsOncePerWeek];

@@ -1,0 +1,144 @@
+---
+name: build
+description: "Lean pipeline: pull stories from Linear, spawn dev agents in worktrees, validate, review, ship"
+argument-hint: "[ROK-XXX | rework | all]"
+---
+
+# Build — Lean Parallel Pipeline
+
+Pulls dispatchable stories from Linear, profiles them, spawns dev agents in worktrees, validates, reviews, ships. State lives in `<worktree>/build-state.yaml` (per-story isolation prevents concurrent run collisions). Enriched specs go to `planning-artifacts/specs/`.
+
+**rl-infra fleet (preferred when Proxmox is reachable):** Heavy compute (validate-ci, env stack, integration tests, Playwright) runs on the rl-infra VM, not the laptop. Mode is set ONCE per session by the preflight in Step 1f.5 (probe `rl_status` with 3s timeout; persist `pipeline.test_infra_mode = fleet | local` to `build-state.yaml`). Every subsequent step that touches the test infra reads this value and branches — see Steps 3c, 3c.5, 3c.6, 4a, 4d, 5e. Preflight protocol: `.claude/skills/_shared/rl-fleet-preflight.md`. Fleet command reference: `.claude/skills/_shared/rl-infra-fleet.md`. Falls back to today's local model (env_lock + deploy_dev.sh + localhost:5173) when probe fails or operator sets `RL_TARGET=local`.
+
+**Linear Project:** Raid Ledger (`1bc39f98-abaa-4d85-912f-ba62c8da1532`)
+**Team:** Roknua's projects (`0728c19f-5268-4e16-aa45-c944349ce386`)
+
+---
+
+## Self-Recovery (Post-Compaction)
+
+Read `<worktree>/build-state.yaml`, follow `pipeline.next_action`. Stories with `requirements_gathered: false` resume Step 1e. No agents to respawn — the state file is the recovery mechanism.
+
+---
+
+## Story Profiling Matrix
+
+| Scope | Criteria | E2E Test Type | Gates |
+|-------|----------|---------------|-------|
+| **light / trivial** | Config, copy, style-only, docs, OR **any single-file ≤30-line logic/copy/style/config fix touching no `packages/contract`/migration/infra/auth surface** (the `trivial` tier — see CLAUDE.md "Trivial-fix fast lane") — no team, no worktree, no dev agent | Lightest tier that covers the change (often **none** for a behavior-neutral diff); fast CI on the touched workspace ONLY (lint + tsc + workspace tests) | lead_direct → fast_ci → operator-PR-review (non-UI: no FULL STOP, no Chrome MCP) |
+| **standard** | Single-module feature, bug fix, OR straightforward cross-module add (≤10 files) — including new contract schemas with matching backend + frontend | Playwright/Discord smoke (TDD) | e2e_first → dev → ci → operator → reviewer → smoke |
+| **full** | DB migration, breaking change to existing contract schema, Dockerfile/entrypoint/nginx, OR ≥4 unrelated modules with non-trivial logic in each | Full suite (TDD) + planner + architect + phase-split dev | e2e_first → dev → ci → operator → reviewer → architect_final → smoke |
+
+**E2E type by area touched:** UI → Playwright (desktop + mobile); Discord bot/notifications → Discord smoke; API-only → Jest integration; Pure logic → Unit test.
+
+### Full-scope triggers (be strict — full is expensive)
+
+A story is `full` ONLY if at least one is true:
+
+1. **DB migration** in `api/src/drizzle/migrations/`.
+2. **Dockerfile / docker-entrypoint / nginx / supervisor** change.
+3. **Breaking change to an existing contract schema** — field removed, field renamed, type narrowed, enum value removed. Adding a new schema or appending an optional field is NOT breaking.
+4. **≥4 unrelated modules** each with non-trivial logic (not just an import or a one-line wire-up).
+5. Operator says "this needs full".
+
+A new Zod schema + matching backend route + matching UI = `standard`. Don't promote to `full` just because `packages/contract` is touched. The 30-line schema doesn't need a planner + architect + phase-split.
+
+When in doubt, run `standard` first — Lead can escalate mid-story if the dev hits real architectural ambiguity (and that should be rare).
+
+---
+
+## Pipeline Order & Gates
+
+```
+Requirements Interview (plan mode, if spec incomplete)
+  → Linear "In Progress" (1h)
+  → E2E Test Agent writes FAILING test (2d — TDD)
+  → Dev builds to pass test (2e)
+  → CI → Deploy review env (fleet when available, local fallback; no push) → Playwright → Chrome MCP e2e (Lead-driven, mandatory)
+  → Linear "In Review" → fleet-ui-verify lane runs the plan → FULL STOP for operator only on OPERATOR-marked steps
+  → Commit operator changes → Linear "Code Review" → Codex Reviewer
+  → Optional: Architect final (if needs_architect)
+  → Lead smoke tests → git push → Create PR → Auto-merge (LAST) → Linear "Done"
+```
+
+**Nine gates before PR:** requirements, e2e_test_first (N/A only for light), dev, ci, **chrome_mcp_e2e** (N/A only for light or pure api-internal), operator, reviewer, architect_final (if needed), smoke_test.
+
+**Chrome MCP e2e (Lead-driven, mandatory for standard / full):** before the `fleet-ui-verify` lane runs the plan, Lead drives the changed user flows via `mcp__claude-in-chrome__*` on the deployed review env — fleet URL when `pipeline.test_infra_mode=fleet`, local URL when `pipeline.test_infra_mode=local`. It captures screenshots / GIFs, audits console + network, and produces a summary block that's included in the operator-presentation table. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Source-of-truth memory: `feedback_chrome_mcp_e2e_before_review.md`.
+
+**Test-infra discipline (mode-branched):**
+
+- **MODE=fleet:** preflight (1f.5) implicitly claims a slot. Step 3c spins the per-story env via `rl_env_deploy`. Slot + env stay alive through reviewer / architect / Lead-smoke / Step 5. Cleanup: optional `rl_env_destroy` per story after PR merges, single `rl_release` at end of batch (5e). Sweeper safety-nets: 5-min heartbeat / 8-hr hoarded-slot / 24-hr env TTL.
+- **MODE=local:** env-lock acquire just before deploy (3c), hold through Playwright + Chrome MCP + the `fleet-ui-verify` lane's plan run, release once the lane's verdicts land and any `OPERATOR`-marked steps are ruled (4a). Reviewer (4b), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY for 4d Playwright on UI changes.
+
+Both modes: light scope skips test-infra steps entirely.
+
+---
+
+## Ground Rules
+
+**All subagents run as team members, not loose `Agent()` calls.** Step 1 creates a team (`build-ROK-XXX` or `build-batch-N`); every subagent spawn — planner, architect, test agent, dev, reviewer, pr-writer — passes `team_name` and joins the team. Step 5 tears it down. Solo subagents are a pipeline violation.
+
+**Light scope bypasses team / worktree / dev-agent overhead.** For `scope: light` ONLY:
+- No team, no worktree, no `Agent()` spawn — Lead implements directly on a feature branch in the main repo.
+- No TDD test-first; **lightest proportionate test only** (a unit assertion for a behavior-changing fix, none for a behavior-neutral one). No reviewer team, no architect, no Lead final smoke — a single Codex pre-push pass (`/push` Step 8.5) is the one review.
+- **Human gates tier by blast radius** (CLAUDE.md "Trivial-fix fast lane"): a **non-UI** light/trivial fix skips BOTH the Chrome MCP e2e gate and the operator FULL STOP — the operator reviews the PR diff instead. A **cosmetic-UI** fix gets one screenshot on the already-running env (no `deploy_dev.sh --rebuild`). Anything touching a rendered flow / auth / contract keeps the full gate → escalate to `standard`.
+- Fast CI only — lint + tsc + workspace tests for touched workspace; skip full `validate-ci.sh`, migration validation, container-startup, Playwright.
+- No `deploy_dev.sh` re-run (except a cosmetic-UI screenshot against an already-running env).
+- Pipeline collapses to: Step 1 (setup + Linear flip) → Step 2 light fast-path → Step 3 light fast-path (Linear "In Review") → Step 4 (operator PR-diff review; FULL STOP only for cosmetic-UI fixes) → Step 5 (push + PR + auto-merge).
+- Escape hatch: if mid-implementation you find real complexity (≥3 files, cross-workspace, real architectural decision), STOP, escalate to `standard`, create a worktree, restart Step 2 from 2a.
+
+**STOP / PAUSE / halt from operator:** cease all tool calls immediately, acknowledge "Stopped.", wait.
+
+**Destructive ops require operator approval:** `deploy_dev.sh --fresh`, `git push --force`, `git reset --hard`, `rm -rf` on project dirs, DB volume deletes, table drops. If in doubt, it's destructive.
+
+**Serialization:** parallel only if no file overlap. Serialize stories touching `packages/contract/`, DB migrations, or same files. Max 2-3 devs per batch.
+
+**Git:** always `git pull --rebase origin/main` or `git rebase origin/main` (squash-merge creates divergent hashes).
+
+**Agent comms:** mailbox via `SendMessage`. Never `TaskOutput` to check on agents. Never poll with `sleep + stat`. While waiting, do parallel useful work.
+
+**No `git push` before code review.** The branch stays LOCAL through Steps 1-4. The first push + PR creation happens only in Step 5, after operator approval AND reviewer approval. Do NOT invoke `/push`, `git push`, `gh pr create`, or `gh pr merge --auto` in Steps 1-4 — even with `--skip-pr`. Pushing pre-review risks PRs + auto-merge landing before a human has reviewed.
+
+**Auto-merge is the LAST action.** Never enable at PR creation. Create PR → complete all gates → enable auto-merge.
+
+**Subagent rules (applied via templates):** subagents stay in their worktree, never push, never create PRs, never enable auto-merge, never force-push, never call `mcp__linear__*`, never run destructive ops. Lead handles all of that.
+
+**Cost discipline (applies to ALL agents — favor avoiding rework over saving tokens):**
+
+These rules cut tokens without cutting quality. They DO NOT trade quality for cost — if a rule risks rework on a given story, override it.
+
+- **Do not paste the spec into agent prompts.** Lead writes `planning-artifacts/dev-brief-ROK-XXX.md` once per story. Every agent prompt body is 2-4 lines: "Read `planning-artifacts/dev-brief-ROK-XXX.md` and `planning-artifacts/specs/ROK-XXX.md`. Execute <task>. Commit and report." That's it. The full spec/plan/architect findings already live on disk.
+- **Report cap (soft):** agents target **≤500 words** for routine `SendMessage` reports — cite commit hashes, file paths, PASS/FAIL counts. Detailed write-ups (architect findings, planner output, full AC trace, reviewer report) go to a file in `planning-artifacts/` and the message is a pointer + headlines. The cap is a target, not a gag — if a story genuinely needs more nuance to avoid rework, write more.
+- **Lead does not capture stdout into context.** Long-running command output (`validate-ci.sh`, `npx playwright test`, `deploy_dev.sh`) is read via `tail -20` or a one-line summary line — never the full log. If the command exits 0, accept it. If it exits non-zero, read only the failing block.
+- **Architect for `standard`:** allowed when the story has genuine architectural ambiguity — ≥2 viable implementation paths, or AC bar high enough that picking the wrong path means redo. Lead's call. Default is still no architect for standard, but don't ration it when it would prevent rework.
+- **Reviewer is the default, not the exception.** Reviewer runs for `standard` and `full`. Skip ONLY when the diff is genuinely trivial: single-file, <100 lines, pure copy/config/dep-bump with no logic change. Operator approval is NOT a substitute for reviewer on anything with logic — past skipped reviews caused the rework this section exists to prevent.
+- **Design-doc updates ride in the same PR, not a follow-up.** A story that adds/changes a token, primitive, shared component or pattern is not review-complete until `docs/design-system.md` (+ tokens doc + `/dev/design-system`) is updated — check this at reviewer/close-out, not after ship.
+- **Reproduce flakes BEFORE designing fixes** (STRICT — full protocol in `CLAUDE.md` "Flake-investigation protocol"). For any change framed as a fix for a flaky integration test: run `./scripts/spec-loop.sh <spec> 50` FIRST to establish baseline rate, design fix AFTER measurable signal, validate post-fix at the same per-spec scale, then run full suite. Skipping step 1 means the fix has no falsifiable baseline — ROK-1264's H2 cycle burned ~6 hours on this anti-pattern; the rule exists to prevent recurrence.
+
+---
+
+## Steps
+
+Read each step file when you reach it — do not pre-load all steps.
+
+| Step | File | Description |
+|------|------|-------------|
+| 1 | `steps/step-1-setup.md` | Cleanup, fetch, profile, requirements interview, init state, Linear → In Progress |
+| 2 | `steps/step-2-implement.md` | **Light:** Lead implements directly on a feature branch (skip 2a-2f). **Standard/Full:** worktrees, planner/architect (gated), dev + test agents |
+| 3 | `steps/step-3-validate.md` | **Light:** Linear → In Review + FULL STOP (fast CI from step 2 already passed). **Standard/Full:** full CI, deploy LOCAL (no push), Linear → In Review |
+| 4 | `steps/step-4-review.md` | **Light:** operator approval polling only (no reviewer/architect/Lead-smoke). **Standard/Full:** poll Linear, rework/approval, reviewer + architect + smoke (**still no push**) |
+| 5 | `steps/step-5-ship.md` | Rebase, `git push`, create PR, auto-merge, Linear → Done, cleanup |
+
+---
+
+## Agents
+
+All agents use **opus**. One-shot unless noted.
+
+| Agent | Template | When |
+|-------|----------|------|
+| E2E Test | `templates/test-agent.md` | Step 2d (BEFORE dev, writes failing test) |
+| Dev | `templates/dev.md` | Step 2e (makes test pass) |
+| Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) |
+| Architect | `templates/architect.md` | Step 2 pre-dev / Step 4 post-review |
+| Planner | `templates/planner.md` | Step 2 pre-dev (full scope only) |

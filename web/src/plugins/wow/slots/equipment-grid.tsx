@@ -1,0 +1,216 @@
+import type { JSX } from 'react';
+/**
+ * Equipment grid and slot components for the character detail page.
+ * Renders WoW character equipment in a paperdoll-style layout.
+ */
+import { useState } from 'react';
+import { useMediaQuery } from '../../../hooks/use-media-query';
+import { isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
+import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
+import { getWowheadItemUrl, getWowheadItemData } from '../lib/wowhead-urls';
+import { itemWowheadVariant } from '../lib/item-wowhead-variant';
+import { portraitKey, type ForeverPortrait } from '../lib/forever-portrait';
+import { ForeverPortraitTile } from '../components/forever-portrait';
+import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
+import {
+    QUALITY_COLORS, QUALITY_BORDERS, SLOT_LABELS,
+    LEFT_SLOTS, RIGHT_SLOTS, BOTTOM_SLOTS,
+} from './equipment-constants';
+
+function EmptySlot({ slotName }: { slotName: string }) {
+    return (
+        <div className="flex items-center gap-3 p-2 rounded bg-overlay/30 border border-edge/50 min-h-[52px]">
+            <div className="w-8 h-8 rounded bg-faint/50 flex items-center justify-center text-xs text-muted/50">--</div>
+            <div className="min-w-0">
+                <div className="text-xs text-muted/50">{SLOT_LABELS[slotName] ?? slotName}</div>
+                <div className="text-xs text-muted/30">Empty</div>
+            </div>
+        </div>
+    );
+}
+
+function SlotIcon({ item, iconBorderClass }: { item: EquipmentItemDto; iconBorderClass: string }) {
+    return (
+        <>
+            {item.iconUrl ? (
+                <img src={item.iconUrl} alt={item.name} width={32} height={32} loading="lazy" decoding="async"
+                    className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            ) : null}
+            <div className={`w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono flex-shrink-0${item.iconUrl ? ' hidden' : ''}`}>
+                {item.itemLevel > 0 ? item.itemLevel : '--'}
+            </div>
+        </>
+    );
+}
+
+/** Single equipment slot with item display or empty placeholder */
+export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
+    item: EquipmentItemDto | undefined; slotName: string;
+    gameVariant: string | null; onItemClick?: (() => void) | undefined;
+}) {
+    const [showFallback, setShowFallback] = useState(false);
+    const isMobile = useMediaQuery('(max-width: 768px)');
+    if (!item) return <EmptySlot slotName={slotName} />;
+
+    const qualityClass = QUALITY_COLORS[item.quality.toUpperCase()] ?? 'text-secondary';
+    const iconBorderClass = QUALITY_BORDERS[item.quality.toUpperCase()] ?? 'border-gray-500';
+
+    return (
+        <div className="relative flex items-center gap-3 p-2 rounded bg-overlay border border-edge min-h-[52px] cursor-pointer hover:bg-overlay/80 transition-colors"
+            onClick={onItemClick} onMouseEnter={() => setShowFallback(true)} onMouseLeave={() => setShowFallback(false)}>
+            <SlotIcon item={item} iconBorderClass={iconBorderClass} />
+            <SlotItemDetails item={item} qualityClass={qualityClass} gameVariant={gameVariant} isMobile={isMobile} />
+            {showFallback && !isMobile && !isWowheadLoaded() && <ItemFallbackTooltip item={item} />}
+        </div>
+    );
+}
+
+function SlotSockets({ sockets }: { sockets: EquipmentItemDto['sockets'] }) {
+    if (!sockets || sockets.length === 0) return null;
+    return (
+        <div className="flex items-center gap-1">
+            {sockets.map((s, i) => (
+                <span key={i} className={`w-3 h-3 rounded-full border ${s.itemId ? 'bg-blue-500/40 border-blue-500/60' : 'bg-faint border-edge'}`}
+                    title={`${s.socketType}${s.itemId ? ' (filled)' : ' (empty)'}`} />
+            ))}
+        </div>
+    );
+}
+
+/** Item name, slot label, subclass, enchantments and sockets */
+function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
+    item: EquipmentItemDto; qualityClass: string; gameVariant: string | null; isMobile: boolean;
+}) {
+    const firstEnchant = item.enchantments?.[0];
+    return (
+        <div className="min-w-0 flex-1">
+            <a href={getWowheadItemUrl(item.itemId, itemWowheadVariant(item, gameVariant))}
+                data-wowhead={isMobile ? undefined : getWowheadItemData(item.itemId, itemWowheadVariant(item, gameVariant))}
+                target="_blank" rel="noopener noreferrer" className={`text-sm font-medium truncate block ${qualityClass} hover:underline`}
+                onClick={(e) => e.preventDefault()}>{item.name}</a>
+            <div className="flex items-center gap-2 text-xs text-muted">
+                <span>{SLOT_LABELS[item.slot] ?? item.slot}</span>
+                {item.itemSubclass && (<><span>·</span><span>{item.itemSubclass}</span></>)}
+            </div>
+            {firstEnchant && <div className="text-xs text-green-400 truncate">{firstEnchant.displayString}</div>}
+            <SlotSockets sockets={item.sockets} />
+        </div>
+    );
+}
+
+function SlotColumn({ slots, itemsBySlot, gameVariant, onItemClick }: {
+    slots: string[]; itemsBySlot: Map<string, EquipmentItemDto>;
+    gameVariant: string | null; onItemClick: (item: EquipmentItemDto) => void;
+}) {
+    return (
+        <div className="space-y-2">
+            {slots.map((slot) => (
+                <EquipmentSlot key={slot} item={itemsBySlot.get(slot)} slotName={slot}
+                    gameVariant={gameVariant}
+                    onItemClick={itemsBySlot.get(slot) ? () => onItemClick(itemsBySlot.get(slot)!) : undefined} />
+            ))}
+        </div>
+    );
+}
+
+/** Equipment grid with responsive paperdoll layout */
+export function EquipmentGrid({ equipment, gameVariant, renderUrl, portrait, onItemClick }: {
+    equipment: CharacterEquipmentDto; gameVariant: string | null;
+    renderUrl: string | null; onItemClick: (item: EquipmentItemDto) => void;
+    /** ROK-1747: the Forever fallback portrait, shown in the render slot when `renderUrl` is null. */
+    portrait?: ForeverPortrait | undefined;
+}) {
+    const itemsBySlot = new Map(equipment.items.map((i) => [i.slot, i]));
+    const columnProps = { itemsBySlot, gameVariant, onItemClick };
+    const renderCenter = pickCenter(renderUrl, portrait);
+
+    return (
+        <div className="space-y-4">
+            {renderCenter ? (
+                <EquipmentWithCenter renderCenter={renderCenter} renderSlotColumn={(slots: string[]) => <SlotColumn slots={slots} {...columnProps} />} />
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SlotColumn slots={LEFT_SLOTS} {...columnProps} />
+                    <SlotColumn slots={RIGHT_SLOTS} {...columnProps} />
+                </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {BOTTOM_SLOTS.map((slot) => (
+                    <EquipmentSlot key={slot} item={itemsBySlot.get(slot)} slotName={slot}
+                        gameVariant={gameVariant} onItemClick={itemsBySlot.get(slot) ? () => onItemClick(itemsBySlot.get(slot)!) : undefined} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+type RenderLayout = 'desktop' | 'mobile';
+type CenterRenderer = (layout: RenderLayout) => JSX.Element;
+
+/** The render slot's content: the Blizzard render wins, else the Forever portrait, else nothing (2-col grid). */
+function pickCenter(renderUrl: string | null, portrait: ForeverPortrait | undefined): CenterRenderer | null {
+    if (renderUrl) return (layout) => <RenderImage renderUrl={renderUrl} layout={layout} />;
+    if (!portrait || portrait.kind === 'none') return null;
+    return () => (
+        <div data-testid="equipment-portrait">
+            <ForeverPortraitTile key={portraitKey(portrait)} portrait={portrait} size="lg" />
+        </div>
+    );
+}
+
+/**
+ * Expected box of the character render, per layout (ROK-1159): Blizzard's
+ * `main-raw` render at an assumed 4:3, scaled to each layout's max height.
+ * The ratio is unverified, and the API falls back to the `main` asset when
+ * `main-raw` is missing, so these attributes must not pin the box: `w-auto`
+ * keeps the painted size on the natural render (capped by max-h) and the
+ * attributes only hint the ratio. The render is the character page's likely
+ * LCP image, so it is never lazy-loaded.
+ */
+const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
+const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
+
+/** The Blizzard character render for one layout; a dead URL hides the image. */
+function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderLayout }) {
+    if (layout === 'desktop') {
+        return (
+            <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
+                className="w-auto max-h-[600px] object-contain drop-shadow-lg"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+        );
+    }
+    return (
+        <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
+            className="w-auto max-h-[300px] object-contain drop-shadow-lg"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+    );
+}
+
+/** Desktop (3-col) and mobile (stacked) layouts with a centre column: the render image or the portrait. */
+function EquipmentWithCenter({ renderCenter, renderSlotColumn }: {
+    renderCenter: CenterRenderer; renderSlotColumn: (slots: string[]) => JSX.Element;
+}) {
+    return (
+        <>
+            <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-4 items-start">
+                {renderSlotColumn(LEFT_SLOTS)}
+                <div className="flex items-center justify-center px-2">
+                    {renderCenter('desktop')}
+                </div>
+                {renderSlotColumn(RIGHT_SLOTS)}
+            </div>
+            <div className="lg:hidden space-y-4">
+                <div className="flex justify-center">
+                    {renderCenter('mobile')}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {renderSlotColumn(LEFT_SLOTS)}
+                    {renderSlotColumn(RIGHT_SLOTS)}
+                </div>
+            </div>
+        </>
+    );
+}

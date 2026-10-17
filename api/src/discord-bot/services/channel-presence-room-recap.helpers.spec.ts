@@ -1,0 +1,350 @@
+/**
+ * ROK-1499 (layer 1) — TDD pins for the ROOM summariser.
+ *
+ * Prod, 2026-09-13: `general-lobby` was occupied ~3h by three people playing
+ * three different games, no quick-play group ever qualified, and the recap
+ * therefore said "No session started." The recap's model was events-only.
+ * These pins describe the ROOM instead: who was in voice and for how long, and
+ * what they were playing WHILE they were in it.
+ *
+ * Every assertion is an exact second count — a summariser that is "roughly
+ * right" is how a 2h stay gets reported as 3h.
+ */
+import {
+  summariseRoom,
+  type ActivitySegment,
+  type OccupancySegment,
+} from './channel-presence-room-recap.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
+
+const OPENED_AT = new Date('2026-09-13T18:00:00Z');
+const ENDED_AT = new Date('2026-09-13T21:00:00Z');
+const SPAN = { openedAt: OPENED_AT, endedAt: ENDED_AT };
+const THREE_HOURS = 3 * 3600;
+
+function at(iso: string): Date {
+  return new Date(`2026-09-13T${iso}:00Z`);
+}
+
+function stay(
+  discordUserId: string,
+  displayName: string,
+  joined: string,
+  left: string | null,
+): OccupancySegment {
+  return {
+    discordUserId,
+    displayName,
+    joinedAt: at(joined),
+    leftAt: left === null ? null : at(left),
+  };
+}
+
+function played(
+  discordUserId: string,
+  name: string,
+  started: string,
+  ended: string | null,
+): ActivitySegment {
+  return {
+    discordUserId,
+    name,
+    startedAt: at(started),
+    endedAt: ended === null ? null : at(ended),
+  };
+}
+
+describe('summariseRoom — the span', () => {
+  it('reports the opened→empty window even when nobody is left to describe', () => {
+    expect(summariseRoom([], [], SPAN)).toEqual({
+      spanMs: 3 * 3_600_000,
+      members: [],
+      activities: [],
+    });
+  });
+});
+
+describe('summariseRoom — members', () => {
+  it('counts a lone member with no detected game', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '19:00')],
+      [],
+      SPAN,
+    );
+    expect(recap.members).toEqual([{ displayName: 'roknua', seconds: 3600 }]);
+    expect(recap.activities).toEqual([]);
+  });
+
+  it('merges a member who left and re-joined into one entry', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '18:30'),
+        stay('1', 'roknua', '19:00', '20:00'),
+      ],
+      [],
+      SPAN,
+    );
+    expect(recap.members).toEqual([{ displayName: 'roknua', seconds: 5400 }]);
+  });
+
+  it('clamps a still-present member to the instant the room emptied', () => {
+    const recap = summariseRoom([stay('1', 'roknua', '18:00', null)], [], SPAN);
+    expect(recap.members).toEqual([
+      { displayName: 'roknua', seconds: THREE_HOURS },
+    ]);
+  });
+
+  it('clamps a member who was already in voice before the room opened', () => {
+    const early = {
+      discordUserId: '1',
+      displayName: 'roknua',
+      joinedAt: new Date('2026-09-13T16:00:00Z'),
+      leftAt: at('19:00'),
+    };
+    expect(summariseRoom([early], [], SPAN).members).toEqual([
+      { displayName: 'roknua', seconds: 3600 },
+    ]);
+  });
+
+  it('orders members by longest stay first', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '18:30'),
+        stay('2', 'hiphoptobop', '18:00', '20:00'),
+        stay('3', 'vex', '18:00', '19:00'),
+      ],
+      [],
+      SPAN,
+    );
+    expect(recap.members.map((m) => m.displayName)).toEqual([
+      'hiphoptobop',
+      'vex',
+      'roknua',
+    ]);
+  });
+});
+
+describe('summariseRoom — activities', () => {
+  it('clamps an activity that outlived the stay down to the stay', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '19:00')],
+      // Started before they joined, still running when they left.
+      [played('1', 'Path of Exile 2', '17:00', null)],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Path of Exile 2', seconds: 3600 },
+    ]);
+  });
+
+  it('counts an activity only across the segments the member was actually in the room for', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '18:30'),
+        stay('1', 'roknua', '19:00', '20:00'),
+      ],
+      // Playing straight through the gap; the 30m they were out does not count.
+      [played('1', 'Path of Exile 2', '18:00', '20:00')],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Path of Exile 2', seconds: 5400 },
+    ]);
+  });
+
+  // ROK-1608: this used to SUM to 5400 — player-hours, not room time. Two
+  // people in the same room on the same game for an hour is one hour of room
+  // time; the old arithmetic is how a 3h 18m room reported a 9h 59m game.
+  it('counts the same game played side by side ONCE, not once per member', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '19:00'),
+        stay('2', 'vex', '18:00', '18:30'),
+      ],
+      [
+        played('1', 'WoW Classic', '18:00', '19:00'),
+        played('2', 'WoW Classic', '18:00', '18:30'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 3600 }]);
+  });
+
+  it('still adds up a game two members played at different times', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '19:00'),
+        stay('2', 'vex', '19:00', '20:00'),
+      ],
+      [
+        played('1', 'WoW Classic', '18:00', '19:00'),
+        played('2', 'WoW Classic', '19:00', '20:00'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 7200 }]);
+  });
+
+  it('partially overlapping players count the covered stretch only once', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '19:00'),
+        stay('2', 'vex', '18:30', '20:00'),
+      ],
+      [
+        played('1', 'WoW Classic', '18:00', '19:00'),
+        played('2', 'WoW Classic', '18:30', '20:00'),
+      ],
+      SPAN,
+    );
+    // 18:00–20:00 of room time, not 1h + 1h30m of player time.
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 7200 }]);
+  });
+
+  it('never reports a game for longer than the room was open', () => {
+    const recap = summariseRoom(
+      Array.from({ length: 5 }, (_, i) =>
+        stay(String(i), `member-${String(i)}`, '18:00', '21:00'),
+      ),
+      Array.from({ length: 5 }, (_, i) =>
+        played(String(i), "Baldur's Gate 3", '18:00', '21:00'),
+      ),
+      SPAN,
+    );
+    // The prod shape: five people, one game. Player-hours would say 15h.
+    expect(recap.activities).toEqual([
+      { name: "Baldur's Gate 3", seconds: THREE_HOURS },
+    ]);
+    expect(
+      nonEmpty(recap.activities, 'activities')[0].seconds * 1000,
+    ).toBeLessThanOrEqual(recap.spanMs);
+  });
+});
+
+/**
+ * ROK-1608 — prod, 2026-09-17. `Gamer Night` emptied after 3h 18m and the
+ * recap read `5 in voice · Baldur's Gate 3 (9h 59m)`. Nobody played it: one
+ * member had a `game_activity_sessions` row the bot never closed, left open
+ * since that afternoon, and `clip` reads a null `ended_at` as "still running
+ * when the room emptied" — so it was credited for their whole stay.
+ */
+describe('summariseRoom — sessions the bot never closed', () => {
+  function openedHoursBefore(hours: number, name: string): ActivitySegment {
+    return {
+      discordUserId: '1',
+      name,
+      startedAt: new Date(OPENED_AT.getTime() - hours * 3_600_000),
+      endedAt: null,
+    };
+  }
+
+  it('ignores an open session started long before the room opened', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '21:00')],
+      [openedHoursBefore(20, "Baldur's Gate 3")],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([]);
+  });
+
+  it('still believes an open session started just before the room', () => {
+    // The normal case the recap exists for: launch the game, THEN hop in.
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '21:00')],
+      [openedHoursBefore(1, 'Path of Exile 2')],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Path of Exile 2', seconds: THREE_HOURS },
+    ]);
+  });
+
+  it('keeps a CLOSED session that started long before — it carries its own end', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '21:00')],
+      [
+        {
+          discordUserId: '1',
+          name: 'WoW Classic',
+          startedAt: new Date(OPENED_AT.getTime() - 20 * 3_600_000),
+          endedAt: at('19:00'),
+        },
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([{ name: 'WoW Classic', seconds: 3600 }]);
+  });
+
+  it('drops only the stale row, leaving the game they really played', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '21:00'),
+        stay('2', 'vex', '18:00', '21:00'),
+      ],
+      [
+        openedHoursBefore(20, "Baldur's Gate 3"),
+        played('2', 'Deep Rock Galactic', '18:00', '21:00'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: THREE_HOURS },
+    ]);
+  });
+});
+
+describe('summariseRoom — activity ranking and exclusions', () => {
+  it('keeps an unmapped activity name — a game with no game_id still happened', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '20:00')],
+      [
+        played('1', 'WoW Classic', '18:00', '19:00'),
+        // No IGDB match: layer 2 passes the raw discord_activity_name through.
+        played('1', 'Slay the Spire II', '19:00', '20:00'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'Slay the Spire II', seconds: 3600 },
+      { name: 'WoW Classic', seconds: 3600 },
+    ]);
+  });
+
+  it('ignores an activity from someone who was never in the room', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '19:00')],
+      [played('99', 'Elden Ring', '18:00', '19:00')],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([]);
+  });
+
+  it('drops an activity that never overlapped the stay at all', () => {
+    const recap = summariseRoom(
+      [stay('1', 'roknua', '18:00', '19:00')],
+      [played('1', 'Elden Ring', '19:30', '20:00')],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([]);
+  });
+
+  it('orders activities by time played, longest first', () => {
+    const recap = summariseRoom(
+      [
+        stay('1', 'roknua', '18:00', '21:00'),
+        stay('2', 'vex', '18:00', '21:00'),
+      ],
+      [
+        played('1', 'Path of Exile 2', '18:00', '19:00'),
+        played('2', 'WoW Classic', '18:00', '21:00'),
+        played('1', 'Slay the Spire II', '19:00', '19:30'),
+      ],
+      SPAN,
+    );
+    expect(recap.activities).toEqual([
+      { name: 'WoW Classic', seconds: THREE_HOURS },
+      { name: 'Path of Exile 2', seconds: 3600 },
+      { name: 'Slay the Spire II', seconds: 1800 },
+    ]);
+  });
+});

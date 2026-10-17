@@ -1,0 +1,241 @@
+/**
+ * Event reminder query helpers.
+ * Extracted from event-reminder.service.ts for file size compliance (ROK-711).
+ */
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import { activeUsersFilter } from '../users/users-active.helpers';
+import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
+
+/** Character info for a user. */
+export interface UserCharacter {
+  userId: number;
+  name: string;
+  charClass: string | null;
+  gameId: number;
+}
+
+/**
+ * Fetch the players still coming, grouped by event. Rows for `declined`,
+ * `roached_out` and `departed` persist, so the status filter is what keeps
+ * people who said they're not coming out of the reminder DMs (ROK-1637).
+ * Hosts are added separately by the caller and are not filtered here.
+ */
+export async function fetchSignupsByEvent(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+): Promise<Map<number, number[]>> {
+  const signups = await db
+    .select({
+      eventId: schema.eventSignups.eventId,
+      userId: schema.eventSignups.userId,
+    })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        inArray(schema.eventSignups.eventId, eventIds),
+        inArray(schema.eventSignups.status, [...ACTIVE_SIGNUP_STATUSES]),
+      ),
+    );
+  const map = new Map<number, number[]>();
+  for (const signup of signups) {
+    if (signup.userId === null) continue;
+    if (!map.has(signup.eventId)) map.set(signup.eventId, []);
+    map.get(signup.eventId)!.push(signup.userId);
+  }
+  return map;
+}
+
+/** Fetch user discord IDs as a map. */
+export async function fetchUserMap(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Map<number, { id: number; discordId: string | null }>> {
+  const users = await db
+    .select({ id: schema.users.id, discordId: schema.users.discordId })
+    .from(schema.users)
+    .where(and(inArray(schema.users.id, userIds), activeUsersFilter()));
+  return new Map(users.map((u) => [u.id, u]));
+}
+
+/** Fetch characters grouped by user. */
+export async function fetchCharactersByUser(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Map<number, UserCharacter[]>> {
+  if (userIds.length === 0) return new Map();
+  const characters = await db
+    .select({
+      userId: schema.characters.userId,
+      name: schema.characters.name,
+      charClass: schema.characters.class,
+      gameId: schema.characters.gameId,
+    })
+    .from(schema.characters)
+    .where(inArray(schema.characters.userId, userIds));
+  const map = new Map<number, UserCharacter[]>();
+  for (const char of characters) {
+    if (!map.has(char.userId)) map.set(char.userId, []);
+    map.get(char.userId)!.push(char);
+  }
+  return map;
+}
+
+/** Fetch user timezones from preferences. */
+export async function fetchUserTimezones(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds?: number[],
+): Promise<{ userId: number; timezone: string }[]> {
+  const conditions = [eq(schema.userPreferences.key, 'timezone')];
+  if (userIds && userIds.length > 0)
+    conditions.push(inArray(schema.userPreferences.userId, userIds));
+  const rows = await db
+    .select({
+      userId: schema.userPreferences.userId,
+      value: schema.userPreferences.value,
+    })
+    .from(schema.userPreferences)
+    .where(and(...conditions));
+  return rows.map((row) => {
+    const tz = row.value as string;
+    return { userId: row.userId, timezone: tz && tz !== 'auto' ? tz : 'UTC' };
+  });
+}
+
+/** Build the character display string for a user. */
+export function buildCharDisplay(
+  charsByUser: Map<number, UserCharacter[]>,
+  userId: number,
+  gameId: number | null,
+): string | null {
+  const userChars = charsByUser.get(userId) ?? [];
+  const matchingChar = gameId
+    ? (userChars.find((c) => c.gameId === gameId) ?? userChars[0])
+    : userChars[0];
+  if (!matchingChar) return null;
+  return `${matchingChar.name}${matchingChar.charClass ? ` (${matchingChar.charClass})` : ''}`;
+}
+
+/** Build the reminder message text. */
+export function buildReminderMessage(
+  eventTitle: string,
+  timeStr: string,
+  minutesUntil: number,
+): string {
+  if (minutesUntil <= 1) return `${eventTitle} is starting now!`;
+  if (minutesUntil <= 60)
+    return `${eventTitle} starts in ${minutesUntil} minutes at ${timeStr}.`;
+  const hours = Math.round(minutesUntil / 60);
+  if (hours === 1) return `${eventTitle} starts in 1 hour at ${timeStr}.`;
+  return `${eventTitle} starts in ${hours} hours at ${timeStr}.`;
+}
+
+/** Build the title time label. */
+export function buildTitleTimeLabel(minutesUntil: number): string {
+  if (minutesUntil <= 1) return 'Now';
+  if (minutesUntil <= 60) return `in ${minutesUntil} Minutes`;
+  const hours = Math.round(minutesUntil / 60);
+  if (hours === 1) return 'in 1 Hour';
+  return `in ${hours} Hours`;
+}
+
+/** Build the notification payload for a reminder. */
+export function buildReminderPayload(input: {
+  eventId: number;
+  windowType: string;
+  characterDisplay: string | null;
+  startTime: Date;
+  discordUrl?: string | null;
+  voiceChannelId?: string | null;
+}): Record<string, unknown> {
+  return {
+    eventId: input.eventId,
+    reminderWindow: input.windowType,
+    characterDisplay: input.characterDisplay,
+    startTime: input.startTime.toISOString(),
+    ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
+    ...(input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {}),
+  };
+}
+
+/** Build reminder message text and title label. */
+export function buildReminderStrings(input: {
+  title: string;
+  startTime: Date;
+  minutesUntil: number;
+  timezone?: string;
+  defaultTimezone?: string;
+}): { messageText: string; titleTimeLabel: string } {
+  const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
+  const timeStr = input.startTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+    timeZone: timezone,
+  });
+  return {
+    messageText: buildReminderMessage(input.title, timeStr, input.minutesUntil),
+    titleTimeLabel: buildTitleTimeLabel(input.minutesUntil),
+  };
+}
+
+/** Fetch candidate events in the upcoming 24h window (ROK-860 extraction). */
+export async function fetchCandidateEvents(
+  db: PostgresJsDatabase<typeof schema>,
+  now: Date,
+) {
+  const lowerBound = new Date(now.getTime() - 90_000);
+  const upperBound = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  return db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      duration: schema.events.duration,
+      gameId: schema.events.gameId,
+      creatorId: schema.events.creatorId,
+      reminder15min: schema.events.reminder15min,
+      reminder1hour: schema.events.reminder1hour,
+      reminder24hour: schema.events.reminder24hour,
+      cancelledAt: schema.events.cancelledAt,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNull(schema.events.cancelledAt),
+        // ROK-1370: suppress reminders while a reschedule poll is open — the
+        // old-time event must not ping; reminders resume at the new time once
+        // the poll locks in and reschedulingPollId clears.
+        isNull(schema.events.reschedulingPollId),
+        sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
+        sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
+      ),
+    );
+}
+
+/**
+ * Fetch all user data needed for sending reminders.
+ *
+ * Lives here rather than on EventReminderService (ROK-1201): it needs only
+ * `db`, and the service was over the 300-line file cap once per-phase timing
+ * landed.
+ */
+export async function loadReminderContext(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+  hostIds: number[] = [],
+) {
+  const signupsByEvent = await fetchSignupsByEvent(db, eventIds);
+  const allUserIds = [
+    ...new Set([...Array.from(signupsByEvent.values()).flat(), ...hostIds]),
+  ];
+  if (allUserIds.length === 0) return null;
+  const [userMap, tzEntries, charsByUser] = await Promise.all([
+    fetchUserMap(db, allUserIds),
+    fetchUserTimezones(db, allUserIds),
+    fetchCharactersByUser(db, allUserIds),
+  ]);
+  const tzMap = new Map(tzEntries.map((ut) => [ut.userId, ut.timezone]));
+  return { signupsByEvent, userMap, tzMap, charsByUser };
+}

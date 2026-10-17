@@ -1,0 +1,544 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// ─── Navigation mock ──────────────────────────────────────────────────────────
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom');
+    return {
+        ...actual,
+        useNavigate: () => mockNavigate,
+    };
+});
+
+// ─── Mutation / query mock setup ─────────────────────────────────────────────
+
+const mockMutate = vi.fn();
+const mockTimeSuggestions = {
+    source: 'fallback',
+    interestedPlayerCount: 0,
+    suggestions: [
+        { date: '2026-03-10T18:00:00.000Z', label: 'Monday Mar 10, 6:00 PM', availableCount: 0 },
+        { date: '2026-03-11T18:00:00.000Z', label: 'Tuesday Mar 11, 6:00 PM', availableCount: 0 },
+    ],
+};
+
+vi.mock('../../hooks/use-event-plans', () => ({
+    useCreateEventPlan: vi.fn(() => ({
+        mutate: mockMutate,
+        isPending: false,
+    })),
+    useTimeSuggestions: vi.fn(() => ({
+        data: mockTimeSuggestions,
+        isLoading: false,
+    })),
+}));
+
+// ─── Game registry mock ───────────────────────────────────────────────────────
+
+vi.mock('../../hooks/use-game-registry', () => ({
+    useGameRegistry: vi.fn(() => ({ games: [] })),
+    useEventTypes: vi.fn(() => ({ data: undefined })),
+}));
+
+// ─── Plugin mocks ────────────────────────────────────────────────────────────
+
+vi.mock('../../plugins', () => ({
+    PluginSlot: vi.fn(() => null),
+}));
+
+vi.mock('../../plugins/wow/utils', () => ({
+    getWowVariant: vi.fn(() => null),
+    getContentType: vi.fn(() => null),
+}));
+
+// ─── API client mock ──────────────────────────────────────────────────────────
+
+vi.mock('../../lib/api-client', () => ({
+    getTimeSuggestions: vi.fn(),
+    createEventPlan: vi.fn(),
+}));
+
+// ─── Toast mock ───────────────────────────────────────────────────────────────
+
+vi.mock('../../lib/toast', () => ({
+    toast: {
+        success: vi.fn(),
+        error: vi.fn(),
+    },
+}));
+
+// ─── Admin settings mock ──────────────────────────────────────────────────────
+// Prevents useAdminSettings from spawning many background queries (OAuth, IGDB,
+// Discord bot, etc.) that create pending promises and cause timeouts under load.
+
+vi.mock('../../hooks/use-admin-settings', () => ({
+    useAdminSettings: vi.fn(() => ({
+        defaultTimezone: { data: { timezone: 'UTC' }, isLoading: false },
+    })),
+}));
+
+// ─── Child component mocks ────────────────────────────────────────────────────
+
+vi.mock('./game-search-input', () => ({
+    GameSearchInput: vi.fn(() => <div data-testid="game-search-input" />),
+}));
+
+// ─── Import under test AFTER mocks ────────────────────────────────────────────
+
+import { PlanEventForm } from './plan-event-form';
+import { useCreateEventPlan, useTimeSuggestions } from '../../hooks/use-event-plans';
+
+// ─── Test helpers ─────────────────────────────────────────────────────────────
+
+let activeQueryClient: QueryClient;
+
+function createQueryClient() {
+    activeQueryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return activeQueryClient;
+}
+
+function renderForm() {
+    return render(
+        <QueryClientProvider client={createQueryClient()}>
+            <MemoryRouter>
+                <PlanEventForm />
+            </MemoryRouter>
+        </QueryClientProvider>,
+    );
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe('PlanEventForm — rendering', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: false,
+        });
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: mockTimeSuggestions,
+            isLoading: false,
+        });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    it('should render the form', () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toBeTruthy();
+    });
+
+    it('should render title input', () => {
+        renderForm();
+        expect(screen.getByPlaceholderText('Weekly Raid Night')).toBeTruthy();
+    });
+
+    it('should render the "Start Poll" submit button', () => {
+        renderForm();
+        expect(screen.getByRole('button', { name: 'Start Poll' })).toBeTruthy();
+    });
+
+    it('should render both poll mode options as radios in a Poll Mode group', () => {
+        renderForm();
+        const group = screen.getByRole('radiogroup', { name: 'Poll Mode' });
+        expect(within(group).getByRole('radio', { name: 'Standard' })).toBeChecked();
+        expect(within(group).getByRole('radio', { name: 'All or Nothing' })).not.toBeChecked();
+    });
+
+    it('should show suggestions from useTimeSuggestions', () => {
+        renderForm();
+        expect(screen.getByText('Monday Mar 10, 6:00 PM')).toBeTruthy();
+        expect(screen.getByText('Tuesday Mar 11, 6:00 PM')).toBeTruthy();
+    });
+
+    it('should show "Loading suggestions..." when isLoading is true', () => {
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: undefined,
+            isLoading: true,
+        });
+
+        renderForm();
+        expect(screen.getByText('Loading suggestions...')).toBeTruthy();
+    });
+
+    it('should show "No suggestions available" when no suggestions', () => {
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
+            isLoading: false,
+        });
+
+        renderForm();
+        expect(screen.getByText(/No suggestions available/)).toBeTruthy();
+    });
+});
+
+describe('PlanEventForm — poll mode selector', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: false,
+        });
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: mockTimeSuggestions,
+            isLoading: false,
+        });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    it('should show standard mode description text when standard is selected', () => {
+        renderForm();
+        expect(
+            screen.getByText(/None of these work.*only wins if it gets the most votes/i),
+        ).toBeTruthy();
+    });
+
+    it('should show all_or_nothing description when that mode is selected', () => {
+        renderForm();
+        const aonRadio = screen.getByRole('radio', { name: 'All or Nothing' });
+        fireEvent.click(aonRadio);
+        expect(aonRadio).toBeChecked();
+
+        expect(
+            screen.getByText(/If ANY voter picks.*None of these work/i),
+        ).toBeTruthy();
+    });
+});
+
+describe('PlanEventForm — time slot selection', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: false,
+        });
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: mockTimeSuggestions,
+            isLoading: false,
+        });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    it('should add a time slot when a suggestion is clicked', () => {
+        renderForm();
+        const firstSuggestion = screen.getByText('Monday Mar 10, 6:00 PM');
+        fireEvent.click(firstSuggestion.closest('button')!);
+
+        // Selected slots section should appear
+        expect(screen.getByText('Selected (1/9)')).toBeTruthy();
+    });
+
+    it('should not allow adding the same slot twice', () => {
+        renderForm();
+        const btn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
+
+        fireEvent.click(btn);
+        fireEvent.click(btn);
+
+        // Still only 1 selected
+        expect(screen.getByText('Selected (1/9)')).toBeTruthy();
+    });
+
+    it('should remove a time slot when remove button is clicked', () => {
+        renderForm();
+        const suggestionBtn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
+        fireEvent.click(suggestionBtn);
+
+        // Should show the slot in selected list
+        expect(screen.getByText('Selected (1/9)')).toBeTruthy();
+
+        // Click the remove button
+        const removeBtn = screen.getByLabelText('Remove time slot');
+        fireEvent.click(removeBtn);
+
+        // Should be gone
+        expect(screen.queryByText('Selected (1/9)')).toBeNull();
+    });
+
+    it('should show "Selected (N/9)" count for selected slots', () => {
+        renderForm();
+
+        // Select both suggestions
+        const monBtn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
+        const tueBtn = screen.getByText('Tuesday Mar 11, 6:00 PM').closest('button')!;
+
+        fireEvent.click(monBtn);
+        fireEvent.click(tueBtn);
+
+        expect(screen.getByText('Selected (2/9)')).toBeTruthy();
+    });
+});
+
+function setupDefaultMocks() {
+    vi.clearAllMocks();
+    (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutate: mockMutate,
+        isPending: false,
+    });
+    (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+        data: mockTimeSuggestions,
+        isLoading: false,
+    });
+}
+
+function fillTitleAndSelectSlots() {
+    fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
+        target: { value: 'My Raid' },
+    });
+    fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
+    fireEvent.click(screen.getByText('Tuesday Mar 11, 6:00 PM').closest('button')!);
+}
+
+describe('PlanEventForm — validation errors', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('should show validation error when title is empty on submit', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        expect(screen.getByText('Title is required')).toBeTruthy();
+    });
+
+    it('should show validation error when fewer than 2 time slots selected', () => {
+        renderForm();
+        fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
+            target: { value: 'My Raid' },
+        });
+        fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        expect(screen.getByText('Select at least 2 time options')).toBeTruthy();
+    });
+
+    it('should not call mutate when validation fails', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        expect(mockMutate).not.toHaveBeenCalled();
+    });
+});
+
+describe('PlanEventForm — valid submission', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('should call mutate when form is valid', () => {
+        renderForm();
+        fillTitleAndSelectSlots();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+
+        expect(mockMutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                title: 'My Raid',
+                pollOptions: expect.arrayContaining([
+                    expect.objectContaining({ date: '2026-03-10T18:00:00.000Z' }),
+                    expect.objectContaining({ date: '2026-03-11T18:00:00.000Z' }),
+                ]),
+            }),
+            expect.any(Object),
+        );
+    });
+});
+
+describe('PlanEventForm — pending state', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('should show "Posting Poll..." when isPending is true', () => {
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: true,
+        });
+        renderForm();
+        expect(screen.getByRole('button', { name: 'Posting Poll...' })).toBeTruthy();
+    });
+
+    it('should disable submit button when isPending', () => {
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: true,
+        });
+        renderForm();
+        fillTitleAndSelectSlots();
+        // ROK-1649 ruling 7: a loading Button is aria-disabled + aria-busy (not
+        // native disabled, so focus survives) and swallows the click — a valid
+        // form still never submits while the poll is posting.
+        const submit = screen.getByRole('button', { name: 'Posting Poll...' });
+        expect(submit).toHaveAttribute('aria-disabled', 'true');
+        expect(submit).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(submit);
+        expect(mockMutate).not.toHaveBeenCalled();
+    });
+});
+
+describe('PlanEventForm — pollMode & navigation', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('should include pollMode in submitted DTO', () => {
+        renderForm();
+        fillTitleAndSelectSlots();
+        fireEvent.click(screen.getByRole('radio', { name: 'All or Nothing' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+
+        expect(mockMutate).toHaveBeenCalledWith(
+            expect.objectContaining({ pollMode: 'all_or_nothing' }),
+            expect.any(Object),
+        );
+    });
+
+    it('should navigate to /events on successful creation via onSuccess callback', () => {
+        let capturedCallbacks: { onSuccess?: () => void } = {};
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: vi.fn((_dto: unknown, callbacks: { onSuccess?: () => void }) => {
+                capturedCallbacks = callbacks;
+            }),
+            isPending: false,
+        });
+
+        renderForm();
+        fillTitleAndSelectSlots();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        capturedCallbacks.onSuccess?.();
+        expect(mockNavigate).toHaveBeenCalledWith('/events');
+    });
+
+    it('should navigate to /events when Cancel button clicked', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(mockNavigate).toHaveBeenCalledWith('/events');
+    });
+});
+
+describe('PlanEventForm — custom time entry', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: false,
+        });
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
+            isLoading: false,
+        });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    it('should render the custom date and time inputs', () => {
+        renderForm();
+        expect(document.querySelector('input[type="date"]')).toBeTruthy();
+        expect(document.querySelector('input[type="time"]')).toBeTruthy();
+    });
+
+    it('should disable the Add button when date or time is missing', () => {
+        renderForm();
+        const addBtn = screen.getByRole('button', { name: 'Add' });
+        expect(addBtn).toBeDisabled();
+    });
+
+    it('should enable the Add button when both date and time are filled', () => {
+        renderForm();
+
+        const dateInput = document.querySelector('input[type="date"]')!;
+        const timeInput = document.querySelector('input[type="time"]')!;
+
+        fireEvent.change(dateInput, { target: { value: '2026-03-15' } });
+        fireEvent.change(timeInput, { target: { value: '19:00' } });
+
+        const addBtn = screen.getByRole('button', { name: 'Add' });
+        expect(addBtn).not.toBeDisabled();
+    });
+});
+
+// ─── ROK-1649 AC1: required title via Field, noValidate on the form ──────────
+describe('PlanEventForm — Game details fields (ROK-1649 AC1)', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('the title is natively required + aria-required and named exactly "Event Title"', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('id', 'planTitle');
+        expect(title).toBeRequired();
+        expect(title).toHaveAttribute('required');
+        expect(title).toHaveAttribute('aria-required', 'true');
+    });
+
+    it('the title asterisk comes from Field: aria-hidden inside the label', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' }) as HTMLInputElement;
+        const star = title.labels?.[0]?.querySelector('[aria-hidden="true"]');
+        expect(star).toHaveTextContent('*');
+        expect(star).toHaveClass('text-danger');
+    });
+
+    it('Description is named "Description" and keeps the planTitle-description id', () => {
+        renderForm();
+        expect(screen.getByRole('textbox', { name: 'Description' })).toHaveAttribute('id', 'planTitle-description');
+    });
+
+    it('the form is noValidate, so an empty Start Poll reaches the inline title error', () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toHaveAttribute('novalidate');
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('aria-invalid', 'true');
+        expect(title).toHaveAccessibleDescription(/Title is required/);
+    });
+});
+
+// ─── ROK-1649 B7: poll settings, custom time and slot error on the primitives ─
+describe('PlanEventForm — poll settings + custom time primitives (ROK-1649)', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('Poll Duration is a radiogroup: 24h by default, 48h once picked, and 48 is submitted', () => {
+        renderForm();
+        const group = screen.getByRole('radiogroup', { name: 'Poll Duration' });
+        expect(within(group).getByRole('radio', { name: '24h' })).toBeChecked();
+        fireEvent.click(within(group).getByRole('radio', { name: '48h' }));
+        expect(within(group).getByRole('radio', { name: '48h' })).toBeChecked();
+        expect(within(group).getByRole('radio', { name: '24h' })).not.toBeChecked();
+        fillTitleAndSelectSlots();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        expect(mockMutate).toHaveBeenCalledWith(
+            expect.objectContaining({ pollDurationHours: 48 }), expect.any(Object),
+        );
+    });
+
+    it('names the custom date and time inputs through Field labels', () => {
+        renderForm();
+        expect(screen.getByLabelText('Custom date')).toHaveAttribute('type', 'date');
+        expect(screen.getByLabelText('Custom time')).toHaveAttribute('type', 'time');
+    });
+
+    it('announces the time-slot error as an alert', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        const alerts = screen.getAllByRole('alert').map((el) => el.textContent);
+        expect(alerts).toContain('Select at least 2 time options');
+    });
+
+    it('the remove control is a named button that drops the slot', () => {
+        renderForm();
+        fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove time slot' }));
+        expect(screen.queryByText('Selected (1/9)')).toBeNull();
+    });
+});

@@ -1,0 +1,163 @@
+// ROK-1362 — detached laptop chain runner.
+//
+// Spawned (detached, unref'd) by spawnLocalRunner as:
+//   npx tsx runner-entry.ts <taskId> <tool> <paramsJson>
+// It dispatches on <tool> — rl_env_deploy (env-deploy-steps), rl_env_clone_prod
+// (runCloneCore) or rl_env_spin (env-spin-runner) — and runs that chain to
+// completion, streaming each step into the laptop task
+// JSON (~/.raid-ledger/tasks/<id>.json) so rl_task_status shows per-step
+// progress, then writes a TERMINAL JSON in a finally and exits with the chain's
+// code. A crash before the finally is covered by the PID-liveness check on read.
+// An unrecognised <tool> fails the task loudly — it never falls through to the
+// deploy chain (a spin task must not run a full build + deploy).
+//
+// MUST NOT import ./index.js (that starts the MCP server). Imports only the
+// chain modules + the laptop registry.
+
+import {
+  readRawLocalTask,
+  writeLocalTask,
+  localLogPath,
+  type LocalTaskJson,
+} from '../local-task.js';
+import { runDeployChain, type ChainCtx } from './env-deploy-steps.js';
+import { runCloneCore } from './env-clone-prod.js';
+import { runSpinTask } from './env-spin-runner.js';
+import { dispatchTool } from './runner-dispatch.js';
+import type { EnvSpinParams } from './env-spin.js';
+import type { EnvDeployParams } from './env-deploy.js';
+import type { EnvCloneProdParams } from './env-clone-prod.js';
+
+/** A missing CLI argument is a spawn bug — exit loudly rather than run on `undefined`. */
+function requireArg(value: string | undefined, label: string): string {
+  if (value === undefined) {
+    process.stderr.write(`runner-entry: missing ${label} argument\n`);
+    process.exit(2);
+  }
+  return value;
+}
+
+const [rawTaskId, rawTool, rawParamsJson] = process.argv.slice(2);
+const taskId = requireArg(rawTaskId, 'taskId');
+const tool = requireArg(rawTool, 'tool');
+const paramsJson = requireArg(rawParamsJson, 'paramsJson');
+
+function loadTask(): LocalTaskJson {
+  const existing = readRawLocalTask(taskId);
+  if (existing) return existing;
+  // Race / missing: synthesize from our own pid so liveness still works.
+  return {
+    task_id: taskId,
+    tool: tool as LocalTaskJson['tool'],
+    slot: null,
+    args_summary: '',
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    mcp_runtime_status: 'running',
+    script_exit_code: null,
+    steps: [],
+    current_step: 'starting',
+    log_path: localLogPath(taskId),
+    pid: process.pid,
+    failed_step: null,
+  };
+}
+
+let current = loadTask();
+const persist = (): void => writeLocalTask(current);
+
+const ctx: ChainCtx = {
+  setCurrent(step: string): void {
+    current.current_step = step;
+    persist();
+  },
+  recordStep(name, ok, tookS, _detail, _error): void {
+    current.steps.push({ name, status: ok ? 'PASS' : 'FAIL', duration_s: Math.round(tookS * 10) / 10 });
+    current.current_step = ok ? null : name;
+    persist();
+  },
+};
+
+function finalize(
+  ok: boolean,
+  opts: { failed_step?: string | null | undefined; error?: string | undefined; message: string },
+): void {
+  current = {
+    ...current,
+    mcp_runtime_status: ok ? 'succeeded' : 'failed',
+    finished_at: new Date().toISOString(),
+    script_exit_code: ok ? 0 : 1,
+    current_step: null,
+    failed_step: opts.failed_step ?? null,
+    error: opts.error,
+    message: opts.message,
+  };
+  persist();
+}
+
+async function runDeploy(): Promise<number> {
+  const params = JSON.parse(paramsJson) as EnvDeployParams;
+  const res = await runDeployChain(params, ctx);
+  if (typeof res.slot === 'number') current.slot = res.slot;
+  // ROK-1362 (Codex P1): persist the deploy result fields so a terminal
+  // rl_task_status local-... exposes the shareable URL + admin login.
+  current.url = res.url ?? null;
+  current.internal_url = res.internal_url ?? null;
+  current.slot_url = res.slot_url ?? null;
+  current.admin_email = res.admin_email ?? null;
+  current.admin_password = res.admin_password ?? null;
+  current.expected_head = res.expected_head ?? null;
+  current.synced_head = res.synced_head ?? null;
+  finalize(res.ok, { failed_step: res.failed_step ?? null, error: res.error, message: res.message });
+  return res.ok ? 0 : 1;
+}
+
+async function runClone(): Promise<number> {
+  const params = JSON.parse(paramsJson) as EnvCloneProdParams;
+  ctx.setCurrent('cloning prod → local → env');
+  const cp = await runCloneCore(params);
+  ctx.recordStep('clone_prod', cp.ok, 0, undefined, cp.ok ? undefined : cp.stderr);
+  if (cp.restarted_for_settings !== undefined) {
+    ctx.recordStep('restart_for_settings', !!cp.restarted_for_settings, 0, undefined, cp.restart_error);
+  }
+  finalize(cp.ok, {
+    error: cp.ok ? undefined : 'clone_prod_failed',
+    message: cp.ok
+      ? `Cloned prod data into ${params.slug}.${cp.restarted_for_settings ? ' Restarted for settings.' : ''}`
+      : `clone_prod failed: ${cp.stderr || 'unknown'}`,
+  });
+  return cp.ok ? 0 : 1;
+}
+
+async function runSpin(): Promise<number> {
+  const params = JSON.parse(paramsJson) as EnvSpinParams;
+  const res = await runSpinTask(params, current, ctx);
+  finalize(res.ok, { failed_step: res.ok ? null : 'env_spin', error: res.error, message: res.message });
+  return res.ok ? 0 : 1;
+}
+
+function runTool(): Promise<number> {
+  return dispatchTool(
+    tool,
+    { rl_env_deploy: runDeploy, rl_env_clone_prod: runClone, rl_env_spin: runSpin },
+    (opts) => finalize(false, opts),
+  );
+}
+
+// Cancel (SIGTERM from cancelLocalTask) — exit fast; cancelLocalTask owns the
+// terminal `cancelled` write, so do NOT finalize here (would clobber it).
+process.on('SIGTERM', () => process.exit(143));
+
+async function main(): Promise<void> {
+  let code = 1;
+  try {
+    code = await runTool();
+  } catch (err) {
+    const e = err as Error;
+    finalize(false, { error: 'runner_crashed', message: `runner crashed: ${e.message}` });
+    code = 1;
+  }
+  process.exit(code);
+}
+
+void main();

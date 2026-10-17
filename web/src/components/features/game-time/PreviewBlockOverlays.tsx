@@ -1,0 +1,96 @@
+import type { JSX } from 'react';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
+import { RichEventBlock } from './RichEventBlock';
+import type { GameTimePreviewBlock, GridDims } from './game-time-grid.types';
+
+interface PreviewBlockOverlaysProps {
+    previewBlocks: GameTimePreviewBlock[];
+    displayEvents: GameTimeEventBlock[];
+    gridDims: GridDims;
+    rangeStart: number;
+    rangeEnd: number;
+}
+
+/** Renders cyan-bordered preview blocks for proposed event times */
+export function PreviewBlockOverlays({
+    previewBlocks, displayEvents, gridDims, rangeStart, rangeEnd,
+}: PreviewBlockOverlaysProps): JSX.Element {
+    return (
+        <>
+            {previewBlocks.map((block, i) => {
+                const pos = computePreviewPosition(block, gridDims, rangeStart, rangeEnd);
+                if (!pos) return null;
+                const hasEventUnderneath = displayEvents.some(
+                    (ev) => ev.dayOfWeek === block.dayOfWeek && ev.startHour < block.endHour && ev.endHour > block.startHour,
+                );
+                return (
+                    <PreviewBlock
+                        key={`preview-${block.dayOfWeek}-${block.startHour}-${i}`}
+                        block={block} pos={pos} hasEventUnderneath={hasEventUnderneath}
+                    />
+                );
+            })}
+        </>
+    );
+}
+
+interface PreviewPosition { top: number; left: number; width: number; height: number; }
+
+/** Computes the absolute position for a preview block */
+function computePreviewPosition(
+    block: GameTimePreviewBlock, gridDims: GridDims,
+    rangeStart: number, rangeEnd: number,
+): PreviewPosition | null {
+    const visibleHours = getVisibleHours(rangeStart, rangeEnd);
+    const firstIndex = visibleHours.findIndex((hour) => hour >= block.startHour && hour < block.endHour);
+    if (firstIndex < 0) return null;
+    const spanHours = visibleHours.slice(firstIndex).filter((hour) => hour >= block.startHour && hour < block.endHour).length;
+    if (spanHours <= 0) return null;
+    const colGap = gridDims.colWidth + 1;
+    return {
+        top: gridDims.headerHeight + firstIndex * gridDims.rowHeight,
+        height: Math.max(spanHours * gridDims.rowHeight - 1, 0),
+        left: gridDims.colStartLeft + block.dayOfWeek * colGap,
+        width: Math.max(gridDims.colWidth, 0),
+    };
+}
+
+function getVisibleHours(rangeStart: number, rangeEnd: number): number[] {
+    const allHours = Array.from({ length: 24 }, (_, hour) => hour);
+    if (rangeStart < rangeEnd) return allHours.filter((hour) => hour >= rangeStart && hour < rangeEnd);
+    return [...allHours.filter((hour) => hour >= rangeStart), ...allHours.filter((hour) => hour < rangeEnd)];
+}
+
+function PreviewBlock({ block, pos, hasEventUnderneath }: {
+    block: GameTimePreviewBlock; pos: PreviewPosition; hasEventUnderneath: boolean;
+}): JSX.Element {
+    const isSelected = block.variant === 'selected';
+    const borderStyle = isSelected ? '3px solid rgba(6, 182, 212, 0.95)' : '3px dashed rgba(6, 182, 212, 0.85)';
+    const bgStyle = isSelected ? 'rgba(6, 182, 212, 0.25)' : 'rgba(6, 182, 212, 0.08)';
+    const shadowStyle = isSelected
+        ? '0 0 20px rgba(6, 182, 212, 0.5), inset 0 0 12px rgba(6, 182, 212, 0.15)'
+        : '0 0 14px rgba(6, 182, 212, 0.4), inset 0 0 8px rgba(6, 182, 212, 0.1)';
+
+    return (
+        <div
+            className="absolute z-[21] rounded-sm pointer-events-none"
+            style={{ top: pos.top, left: pos.left, width: pos.width, height: pos.height, border: borderStyle, background: bgStyle, boxShadow: shadowStyle }}
+            data-testid={`preview-block-${block.dayOfWeek}-${block.startHour}`}
+        >
+            {!hasEventUnderneath && block.title && (
+                <RichEventBlock
+                    event={{
+                        title: block.title ?? block.label ?? 'Event',
+                        gameName: block.gameName, gameSlug: block.gameSlug,
+                        coverUrl: block.coverUrl, startHour: block.startHour,
+                        endHour: block.endHour, description: block.description,
+                        creatorUsername: block.creatorUsername,
+                        gameId: block.gameId,
+                        signupsPreview: block.attendees, signupCount: block.attendeeCount,
+                    }}
+                    spanHours={block.endHour - block.startHour}
+                />
+            )}
+        </div>
+    );
+}

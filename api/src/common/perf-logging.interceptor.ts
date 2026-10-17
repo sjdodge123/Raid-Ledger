@@ -1,0 +1,77 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Observable, tap, catchError } from 'rxjs';
+import type { Request, Response } from 'express';
+import { scrubString } from '../sentry/sentry-scrub.helpers';
+import { isPerfEnabled, perfLog } from './perf-logger';
+
+type AuthRequest = Request & { user?: { sub?: number } };
+
+/**
+ * Liveness probe (ROK-1165) fires ~every 30s from Docker/nginx. Keep it out of
+ * the perf log so the access log stays readable and the histogram isn't skewed.
+ */
+function isLivenessProbe(url: string): boolean {
+  // Express `req.url` includes the query string; strip it so a cache-busted
+  // probe (`/health/live?_=123`) is still suppressed.
+  const path = url.split('?')[0];
+  return path === '/health/live' || path === '/api/health/live';
+}
+
+/** Extract HTTP status from an error, defaulting to 500 for non-HttpException errors. */
+function getErrorStatus(err: unknown): number {
+  if (
+    err != null &&
+    typeof err === 'object' &&
+    'getStatus' in err &&
+    typeof err.getStatus === 'function'
+  ) {
+    return (err as { getStatus: () => number }).getStatus();
+  }
+  return 500;
+}
+
+/**
+ * Global HTTP request/response timing interceptor (ROK-563).
+ * Logs method, URL, status, duration, and userId when DEBUG=true.
+ * ROK-1599: the URL is scrubbed — a feed/share token rides the path.
+ */
+@Injectable()
+export class PerfLoggingInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    if (!isPerfEnabled()) return next.handle();
+
+    const httpCtx = context.switchToHttp();
+    const req = httpCtx.getRequest<Request>();
+    if (isLivenessProbe(req.url)) return next.handle();
+    const start = performance.now();
+
+    return next.handle().pipe(
+      tap(() => {
+        const res = httpCtx.getResponse<Response>();
+        const durationMs = performance.now() - start;
+        const userId = (req as AuthRequest).user?.sub;
+
+        perfLog('HTTP', `${req.method} ${scrubString(req.url)}`, durationMs, {
+          status: res.statusCode,
+          userId: userId ?? undefined,
+        });
+      }),
+      catchError((err: unknown) => {
+        const durationMs = performance.now() - start;
+        const userId = (req as AuthRequest).user?.sub;
+
+        perfLog('HTTP', `${req.method} ${scrubString(req.url)}`, durationMs, {
+          status: getErrorStatus(err),
+          userId: userId ?? undefined,
+        });
+
+        throw err;
+      }),
+    );
+  }
+}

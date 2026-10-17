@@ -1,0 +1,349 @@
+/**
+ * Drizzle query helpers for scheduling poll data (ROK-965).
+ * Pure functions — no NestJS dependencies.
+ */
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  ScheduleVoteSource,
+  ScheduleVoteStance,
+} from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Shape of a schedule vote row with display name and avatar fields. */
+export interface ScheduleVoteRow {
+  id: number;
+  slotId: number;
+  userId: number;
+  /**
+   * ROK-1617: the vote's polarity.
+   *
+   * Optional because the ABSENCE of a stance means `'yes'` — that is what the
+   * column default encodes and what every pre-stance row already meant. The
+   * live query always selects it; callers that build a row without one (and
+   * every fixture that predates the column) read as yes, which is correct
+   * rather than merely convenient.
+   */
+  stance?: ScheduleVoteStance;
+  displayName: string;
+  avatar: string | null;
+  discordId: string | null;
+  customAvatarUrl: string | null;
+  createdAt: Date;
+}
+
+/**
+ * Resolve the ended event whose post-event follow-up prompt opened this poll,
+ * or null for an ordinary scheduling poll. Drives the create-event prefill
+ * when the organizer locks a time in.
+ */
+export async function findFollowupSourceEventId(
+  db: Db,
+  matchId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ eventId: schema.postEventFollowupSent.eventId })
+    .from(schema.postEventFollowupSent)
+    .where(eq(schema.postEventFollowupSent.matchId, matchId))
+    .limit(1);
+  return row?.eventId ?? null;
+}
+
+/**
+ * Fetch the parent lineup's poll-page metadata (ROK-1300): status, creator,
+ * deadline, the scheduling opt-out flag, and `phaseDurationOverride` (which
+ * carries the standalone marker). Returns a single-row array.
+ */
+export function findLineupPollMeta(db: Db, lineupId: number) {
+  return db
+    .select({
+      id: schema.communityLineups.id,
+      status: schema.communityLineups.status,
+      // ROK-1545: `canVote` needs the private-lineup eligibility inputs.
+      visibility: schema.communityLineups.visibility,
+      // ROK-1750: exposed to participants of a private poll only.
+      shareToken: schema.communityLineups.shareToken,
+      createdBy: schema.communityLineups.createdBy,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+      phaseDurationOverride: schema.communityLineups.phaseDurationOverride,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+}
+
+/** Find all schedule slots for a given match. */
+export function findScheduleSlots(db: Db, matchId: number) {
+  return db
+    .select()
+    .from(schema.communityLineupScheduleSlots)
+    .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+}
+
+/** Find all votes for given slot IDs with user display names. */
+export function findScheduleVotes(
+  db: Db,
+  slotIds: number[],
+): Promise<ScheduleVoteRow[]> {
+  if (slotIds.length === 0) return Promise.resolve([]);
+  return db
+    .select({
+      id: schema.communityLineupScheduleVotes.id,
+      slotId: schema.communityLineupScheduleVotes.slotId,
+      userId: schema.communityLineupScheduleVotes.userId,
+      stance: schema.communityLineupScheduleVotes.stance,
+      displayName:
+        sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
+          'display_name',
+        ),
+      avatar: schema.users.avatar,
+      discordId: schema.users.discordId,
+      customAvatarUrl: schema.users.customAvatarUrl,
+      createdAt: schema.communityLineupScheduleVotes.createdAt,
+    })
+    .from(schema.communityLineupScheduleVotes)
+    .innerJoin(
+      schema.users,
+      eq(schema.communityLineupScheduleVotes.userId, schema.users.id),
+    )
+    .where(inArray(schema.communityLineupScheduleVotes.slotId, slotIds));
+}
+
+/** Insert a new schedule slot and return the inserted row. */
+export async function insertScheduleSlot(
+  db: Db,
+  matchId: number,
+  proposedTime: Date,
+  suggestedBy: 'system' | 'user',
+) {
+  const [slot] = await db
+    .insert(schema.communityLineupScheduleSlots)
+    .values({ matchId, proposedTime, suggestedBy })
+    .returning();
+  return defined(slot, 'inserted schedule slot');
+}
+
+/**
+ * Insert a vote for a schedule slot (idempotent).
+ * Uses ON CONFLICT DO NOTHING so concurrent inserts for the same
+ * (slotId, userId) pair never throw a unique-constraint error.
+ * Returns the inserted row when new, or an empty array when the vote
+ * already existed.
+ *
+ * ROK-1617: carries the stance. DO NOTHING (not DO UPDATE) is deliberate —
+ * the empty return is how `toggleVote` learns this tap hit an existing row and
+ * must decide between changing the stance and clearing it.
+ *
+ * ROK-1550: carries the provenance. The default is `'web'` so every other
+ * caller (and every fixture) keeps writing the truthful value without naming
+ * it.
+ */
+export function insertScheduleVote(
+  db: Db,
+  slotId: number,
+  userId: number,
+  stance: ScheduleVoteStance = 'yes',
+  source: ScheduleVoteSource = 'web',
+) {
+  return db
+    .insert(schema.communityLineupScheduleVotes)
+    .values({ slotId, userId, stance, source })
+    .onConflictDoNothing({
+      target: [
+        schema.communityLineupScheduleVotes.slotId,
+        schema.communityLineupScheduleVotes.userId,
+      ],
+    })
+    .returning();
+}
+
+/**
+ * Flip an existing vote's stance (ROK-1617 AC2).
+ *
+ * An UPDATE, never a second INSERT — `uq_schedule_vote_user` already
+ * guarantees one row per (slot, user), and re-inserting would violate it.
+ *
+ * ROK-1550: the source is overwritten too, not preserved. A row describes the
+ * action behind its CURRENT answer, so a member who voted from the web and
+ * later flipped from a Discord link counts as a Discord-initiated answer —
+ * keeping the original would credit the wrong surface for the live stance.
+ *
+ * @param db - Drizzle handle (the caller's transaction).
+ * @param slotId - Slot being re-answered.
+ * @param userId - The member changing their mind.
+ * @param stance - The stance to store.
+ * @param source - Where the flip was initiated.
+ * @returns The updated rows.
+ */
+export function updateScheduleVoteStance(
+  db: Db,
+  slotId: number,
+  userId: number,
+  stance: ScheduleVoteStance,
+  source: ScheduleVoteSource = 'web',
+) {
+  return db
+    .update(schema.communityLineupScheduleVotes)
+    .set({ stance, source })
+    .where(
+      and(
+        eq(schema.communityLineupScheduleVotes.slotId, slotId),
+        eq(schema.communityLineupScheduleVotes.userId, userId),
+      ),
+    )
+    .returning();
+}
+
+/** Delete a vote for a schedule slot. */
+export function deleteScheduleVote(db: Db, slotId: number, userId: number) {
+  return db
+    .delete(schema.communityLineupScheduleVotes)
+    .where(
+      and(
+        eq(schema.communityLineupScheduleVotes.slotId, slotId),
+        eq(schema.communityLineupScheduleVotes.userId, userId),
+      ),
+    );
+}
+
+/** Find a specific vote by slot and user, with its ROK-1617 stance. */
+export function findVoteBySlotAndUser(db: Db, slotId: number, userId: number) {
+  return db
+    .select({
+      id: schema.communityLineupScheduleVotes.id,
+      stance: schema.communityLineupScheduleVotes.stance,
+    })
+    .from(schema.communityLineupScheduleVotes)
+    .where(
+      and(
+        eq(schema.communityLineupScheduleVotes.slotId, slotId),
+        eq(schema.communityLineupScheduleVotes.userId, userId),
+      ),
+    )
+    .limit(1);
+}
+
+/** Update match status and linked event ID after event creation. */
+export function updateMatchLinkedEvent(
+  db: Db,
+  matchId: number,
+  eventId: number,
+) {
+  return db
+    .update(schema.communityLineupMatches)
+    .set({ status: 'scheduled', linkedEventId: eventId })
+    .where(eq(schema.communityLineupMatches.id, matchId));
+}
+
+/** Delete all votes by a user on slots belonging to a given match. */
+export function deleteAllUserVotesForMatch(
+  db: Db,
+  matchId: number,
+  userId: number,
+) {
+  return db
+    .delete(schema.communityLineupScheduleVotes)
+    .where(
+      and(
+        eq(schema.communityLineupScheduleVotes.userId, userId),
+        inArray(
+          schema.communityLineupScheduleVotes.slotId,
+          db
+            .select({ id: schema.communityLineupScheduleSlots.id })
+            .from(schema.communityLineupScheduleSlots)
+            .where(eq(schema.communityLineupScheduleSlots.matchId, matchId)),
+        ),
+      ),
+    );
+}
+
+/** Count distinct users who voted on any slot for a match (ROK-1015). */
+export async function countUniqueVoters(
+  db: Db,
+  matchId: number,
+): Promise<number> {
+  const [row] = await db
+    .select({
+      count: sql<number>`COUNT(DISTINCT ${schema.communityLineupScheduleVotes.userId})::int`,
+    })
+    .from(schema.communityLineupScheduleVotes)
+    .innerJoin(
+      schema.communityLineupScheduleSlots,
+      eq(
+        schema.communityLineupScheduleVotes.slotId,
+        schema.communityLineupScheduleSlots.id,
+      ),
+    )
+    .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+  return row?.count ?? 0;
+}
+
+/**
+ * Enroll a voter as a match member (open-roster scheduling polls).
+ *
+ * Slot voting is open to any authenticated user, but every member-derived
+ * surface — participants list, the "N of M have voted" denominator,
+ * submit-scheduling authorization, reminder-cron audiences, and the
+ * availability heatmap — reads `community_lineup_match_members`. Voting must
+ * therefore enroll the voter. ON CONFLICT keeps it idempotent; membership is
+ * sticky across un-vote, matching the from-match snapshot semantics (the
+ * decide-time member set never shrinks either).
+ *
+ * source='bandwagon', NOT 'voted': 'voted' means "game-phase voter" —
+ * DecidedView's matched-voter math counts voted-source members against
+ * totalVoters, so stamping slot-voters 'voted' would inflate it. A slot
+ * voter who wasn't snapshotted at decide time joined after the fact, which
+ * is exactly the bandwagon semantic.
+ */
+export function ensureMatchMember(db: Db, matchId: number, userId: number) {
+  return db
+    .insert(schema.communityLineupMatchMembers)
+    .values({ matchId, userId, source: 'bandwagon' })
+    .onConflictDoNothing({
+      target: [
+        schema.communityLineupMatchMembers.matchId,
+        schema.communityLineupMatchMembers.userId,
+      ],
+    });
+}
+
+/** Find matches in scheduling status for a lineup where a user is a member. */
+export function findUserSchedulingMatches(
+  db: Db,
+  lineupId: number,
+  userId: number,
+) {
+  return db
+    .select({
+      matchId: schema.communityLineupMatches.id,
+      gameName: schema.games.name,
+      gameCoverUrl: schema.games.coverUrl,
+      memberCount:
+        sql<number>`(SELECT count(*)::int FROM community_lineup_match_members WHERE match_id = ${schema.communityLineupMatches.id})`.as(
+          'member_count',
+        ),
+    })
+    .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.games,
+      eq(schema.communityLineupMatches.gameId, schema.games.id),
+    )
+    .innerJoin(
+      schema.communityLineupMatchMembers,
+      eq(
+        schema.communityLineupMatches.id,
+        schema.communityLineupMatchMembers.matchId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.communityLineupMatches.lineupId, lineupId),
+        eq(schema.communityLineupMatches.status, 'scheduling'),
+        eq(schema.communityLineupMatchMembers.userId, userId),
+      ),
+    );
+}

@@ -1,0 +1,312 @@
+/**
+ * Signup flow orchestration helpers for SignupsService.
+ * Contains signup, discord signup, cancel, confirm, and status update logic.
+ * Extracted from signups.service.ts for file size compliance (ROK-719).
+ */
+import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import type {
+  CreateSignupDto,
+  CreateDiscordSignupDto,
+} from '@raid-ledger/contract';
+import type {
+  SignupTxParams,
+  DuplicateSignupParams,
+  DirectSlotParams,
+  NewSignupParams,
+} from './signups.service.types';
+import * as signupH from './signups-signup.helpers';
+import * as discordH from './signups-discord.helpers';
+import * as dupH from './signups-duplicate-flow.helpers';
+import * as rosterQH from './signups-roster-query.helpers';
+import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
+import { reconfirmPendingWithSlot } from './signups-reconfirm.helpers';
+import { defined } from '../common/defined.helpers';
+
+type Tx = PostgresJsDatabase<typeof schema>;
+
+export interface FlowDeps {
+  db: Tx;
+  logger: {
+    log: (msg: string, ...a: unknown[]) => void;
+    warn: (msg: string, ...a: unknown[]) => void;
+  };
+  cancelPromotion: (
+    eventId: number,
+    role: string,
+    position: number,
+  ) => Promise<void>;
+  autoAllocateSignup: (
+    tx: Tx,
+    eventId: number,
+    signupId: number,
+    slotConfig: Record<string, unknown> | null,
+  ) => Promise<void>;
+}
+
+export async function signupTxBody(deps: FlowDeps, p: SignupTxParams) {
+  const { tx, eventRow, eventId, userId, dto } = p;
+  const autoBench = await signupH.checkSignupAutoBench(p);
+  const hasCharacter = !!dto?.characterId;
+  const discordId = p.user?.discordId ?? null;
+  const rows = await signupH.insertSignupRow(
+    tx,
+    eventId,
+    userId,
+    dto,
+    discordId,
+  );
+  if (rows.length === 0) {
+    return handleDuplicateSignup(deps, {
+      ...p,
+      autoBench,
+      hasCharacter,
+    });
+  }
+  return handleNewSignup(deps, {
+    tx,
+    eventRow,
+    eventId,
+    userId,
+    inserted: defined(rows[0], 'inserted signup row'),
+    dto,
+    autoBench,
+  });
+}
+
+async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
+  const { tx, eventRow, eventId, userId, dto, user } = p;
+  const row = await signupH.fetchExistingSignup(tx, eventId, userId);
+  const existing = defined(row, 'existing signup');
+  const reactivated = await dupH.applyDuplicateRowUpdates(
+    tx,
+    existing,
+    dto,
+    user,
+    p.hasCharacter,
+  );
+  const reconfirmed = await ensureAssignment(
+    deps,
+    tx,
+    eventRow,
+    eventId,
+    existing,
+    dto,
+    p.autoBench,
+  );
+  return {
+    isDuplicate: true as const,
+    reconfirmed,
+    reactivated,
+    reconfirmedUserId: existing.userId,
+    response: await dupH.buildDuplicateResponse(tx, existing, user),
+  };
+}
+
+async function ensureAssignment(
+  deps: FlowDeps,
+  tx: Tx,
+  eventRow: typeof schema.events.$inferSelect,
+  eventId: number,
+  existing: typeof schema.eventSignups.$inferSelect,
+  dto: CreateSignupDto | undefined,
+  autoBench: boolean,
+): Promise<boolean> {
+  // Duplicate signup already holding a non-bench slot: reconfirm the 'pending'
+  // status left by the ROK-1269 reschedule reset (mutate `existing` for the
+  // response); returns true so the service emits the post-commit audit entry.
+  if (await checkHasAssignment(tx, existing.id)) {
+    const healed = await reconfirmPendingWithSlot(
+      tx,
+      existing.id,
+      existing.confirmationStatus,
+    );
+    if (healed) existing.confirmationStatus = 'confirmed';
+    return healed;
+  }
+  if (signupH.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
+    const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+    if (!existing.preferredRoles?.length && dto?.slotRole) {
+      await tx
+        .update(schema.eventSignups)
+        .set({ preferredRoles: [dto.slotRole] })
+        .where(eq(schema.eventSignups.id, existing.id));
+    }
+    await deps.autoAllocateSignup(tx, eventId, existing.id, slotConfig);
+    if (await checkHasAssignment(tx, existing.id))
+      await signupH.syncConfirmationStatus(tx, existing);
+    else await assignBenchFallback(deps, tx, eventId, existing.id);
+  } else {
+    const confirmed = await assignDirectSlot(deps, {
+      tx,
+      eventRow,
+      eventId,
+      signupId: existing.id,
+      dto,
+      autoBench,
+      logPrefix: `Re-assigned user ${existing.userId}`,
+    });
+    if (confirmed) existing.confirmationStatus = 'confirmed';
+  }
+  return false;
+}
+
+export async function assignDirectSlot(
+  deps: FlowDeps,
+  p: DirectSlotParams,
+): Promise<boolean> {
+  const { tx, eventRow, eventId, signupId, dto, autoBench, logPrefix } = p;
+  const slotRole = autoBench
+    ? 'bench'
+    : (dto?.slotRole ??
+      (await rosterQH.resolveGenericSlotRole(tx, eventRow, eventId)));
+  if (!slotRole) return false;
+  const position = await insertRosterSlotWithRetry(tx, {
+    eventId,
+    signupId,
+    slotRole,
+    ...(dto?.slotPosition != null && { explicitPosition: dto.slotPosition }),
+    autoBench,
+  });
+  if (slotRole !== 'bench') {
+    await tx
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'confirmed' })
+      .where(eq(schema.eventSignups.id, signupId));
+    await deps.cancelPromotion(eventId, slotRole, position);
+  }
+  deps.logger.log(
+    `${logPrefix} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
+  );
+  return slotRole !== 'bench';
+}
+
+async function handleNewSignup(deps: FlowDeps, p: NewSignupParams) {
+  const { tx, eventRow, eventId, userId, inserted, dto, autoBench } = p;
+  deps.logger.log(`User ${userId} signed up for event ${eventId}`);
+  if (signupH.shouldUseAutoAllocationNew(eventRow, dto, autoBench)) {
+    await runAutoAllocWithBenchFallback(
+      deps,
+      tx,
+      eventRow,
+      eventId,
+      inserted,
+      dto,
+    );
+  } else {
+    const confirmed = await assignDirectSlot(deps, {
+      tx,
+      eventRow,
+      eventId,
+      signupId: inserted.id,
+      dto,
+      autoBench,
+      logPrefix: `Assigned user ${userId}`,
+    });
+    if (confirmed) inserted.confirmationStatus = 'confirmed';
+  }
+  await signupH.autoConfirmCreator(tx, eventRow, userId, inserted);
+  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  return { isDuplicate: false as const, signup: inserted, assignedSlot };
+}
+
+/** Run MMO auto-allocation, then bench-fallback if no assignment was made. */
+async function runAutoAllocWithBenchFallback(
+  deps: FlowDeps,
+  tx: Tx,
+  eventRow: typeof schema.events.$inferSelect,
+  eventId: number,
+  inserted: typeof schema.eventSignups.$inferSelect,
+  dto: CreateSignupDto | undefined,
+): Promise<void> {
+  const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+  const hasPrefs = dto?.preferredRoles && dto.preferredRoles.length > 0;
+  if (!hasPrefs && dto?.slotRole) {
+    await tx
+      .update(schema.eventSignups)
+      .set({ preferredRoles: [dto.slotRole] })
+      .where(eq(schema.eventSignups.id, inserted.id));
+  }
+  await deps.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
+  const hasAssignment = await checkHasAssignment(tx, inserted.id);
+  if (hasAssignment) {
+    await signupH.syncConfirmationStatus(tx, inserted);
+  } else {
+    await assignBenchFallback(deps, tx, eventId, inserted.id);
+  }
+}
+
+/** Check whether a signup has any roster assignment. */
+async function checkHasAssignment(tx: Tx, signupId: number): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: schema.rosterAssignments.id })
+    .from(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .limit(1);
+  return !!row;
+}
+
+/** Assign a signup to the bench as a fallback (ROK-626). */
+export async function assignBenchFallback(
+  deps: FlowDeps,
+  tx: Tx,
+  eventId: number,
+  signupId: number,
+  label = 'signup',
+): Promise<void> {
+  const position = await insertRosterSlotWithRetry(tx, {
+    eventId,
+    signupId,
+    slotRole: 'bench',
+    autoBench: true,
+  });
+  deps.logger.log(
+    `Auto-benched ${label} ${signupId} at bench position ${position}`,
+  );
+}
+
+export async function discordSignupTxBody(
+  deps: FlowDeps,
+  tx: Tx,
+  event: typeof schema.events.$inferSelect,
+  eventId: number,
+  dto: CreateDiscordSignupDto,
+) {
+  const rows = await discordH.insertDiscordSignupRow(tx, eventId, dto);
+  if (rows.length === 0) {
+    const existing = defined(
+      await discordH.fetchExistingDiscordSignup(tx, eventId, dto.discordUserId),
+      'existing Discord signup',
+    );
+    return {
+      signup: existing,
+      assignedSlot: await rosterQH.getAssignedSlotRole(tx, existing.id),
+    };
+  }
+  const inserted = defined(rows[0], 'inserted Discord signup row');
+  const autoBench = await signupH.checkAutoBench(tx, event, eventId);
+  if (autoBench) {
+    await assignBenchFallback(
+      deps,
+      tx,
+      eventId,
+      inserted.id,
+      'anonymous signup',
+    );
+  } else {
+    await discordH.allocateDiscordSlot(
+      tx,
+      event,
+      eventId,
+      inserted,
+      dto,
+      (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
+    );
+  }
+  deps.logger.log(
+    `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
+  );
+  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  return { signup: inserted, assignedSlot };
+}

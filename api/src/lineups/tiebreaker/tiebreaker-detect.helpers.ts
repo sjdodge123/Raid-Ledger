@@ -1,0 +1,110 @@
+/**
+ * Tie detection at the threshold boundary (ROK-938).
+ * Detects when multiple games share the same vote count.
+ */
+import { BadRequestException } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { UpdateLineupStatusDto } from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import { countVotesPerGame } from '../lineups-query.helpers';
+import { findResolvedTiebreakerWinner } from './tiebreaker-query.helpers';
+import { resolveApprovalTieByStars } from './tiebreaker-star.helpers';
+import { resetTiebreaker } from './tiebreaker-query.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Result of tie detection. Null when no tie exists. */
+export interface TieResult {
+  tiedGameIds: number[];
+  voteCount: number;
+}
+
+/**
+ * Detect tied games at the top of the vote leaderboard.
+ * A tie exists when 2+ games share the highest vote count.
+ * Returns null if no tie or fewer than 2 games have votes.
+ */
+export async function detectTies(
+  db: Db,
+  lineupId: number,
+): Promise<TieResult | null> {
+  const voteCounts = await countVotesPerGame(db, lineupId);
+  if (voteCounts.length < 2) return null;
+
+  const sorted = [...voteCounts].sort((a, b) => b.voteCount - a.voteCount);
+  const [top] = sorted;
+  if (top === undefined || top.voteCount === 0) return null;
+  const topCount = top.voteCount;
+
+  const tied = sorted.filter((v) => v.voteCount === topCount);
+  if (tied.length < 2) return null;
+
+  return {
+    tiedGameIds: tied.map((v) => v.gameId),
+    voteCount: topCount,
+  };
+}
+
+/**
+ * Guard for voting → decided transition.
+ * Blocks if ties exist (unless a resolved tiebreaker exists).
+ * Overrides decidedGameId with tiebreaker winner when applicable.
+ * Resets tiebreaker state when reverting away from voting.
+ */
+export async function guardTiebreakerOnTransition(
+  db: Db,
+  lineupId: number,
+  currentStatus: string,
+  dto: UpdateLineupStatusDto,
+): Promise<void> {
+  if (currentStatus === 'voting' && dto.status === 'decided') {
+    // Operator explicitly chose a winner — skip tie detection
+    if (dto.decidedGameId) return;
+
+    const winner = await findResolvedTiebreakerWinner(db, lineupId);
+    if (winner) {
+      dto.decidedGameId = winner;
+    } else {
+      await resolveTieOrThrow(db, lineupId, dto);
+    }
+    return;
+  }
+  // Auto-reset when leaving voting for non-decided status
+  if (currentStatus === 'voting' && dto.status !== 'voting') {
+    await resetTiebreaker(db, lineupId);
+  }
+  // ROK-1374: the tie hold is cleared by `clearTieHoldOnTransition` in
+  // `runStatusTransition`, AFTER the status CAS lands — not here, where a
+  // lost race would erase a hold the winner still needs.
+}
+
+/**
+ * ROK-1474 (D6): an approval tie is only a tie if the top picks cannot break
+ * it. A star winner is written into `dto.decidedGameId`, after which
+ * `autoPickDecidedGameId` early-returns and `deriveTopVotedGame`'s joint-top
+ * guard is never reached — that guard stays exactly as ROK-1374 left it.
+ *
+ * Everything the stars cannot decide throws the BYTE-IDENTICAL
+ * `TIEBREAKER_REQUIRED` payload, because ROK-1374's processor opens the hold
+ * off this exact shape. A star tie must be indistinguishable here from a
+ * ballot where nobody starred at all; the two are told apart on the
+ * readiness card, not in this error.
+ */
+async function resolveTieOrThrow(
+  db: Db,
+  lineupId: number,
+  dto: UpdateLineupStatusDto,
+): Promise<void> {
+  const ties = await detectTies(db, lineupId);
+  if (!ties) return;
+  const resolution = await resolveApprovalTieByStars(db, lineupId, ties);
+  if (resolution.kind === 'winner') {
+    dto.decidedGameId = resolution.gameId;
+    return;
+  }
+  throw new BadRequestException({
+    message: 'TIEBREAKER_REQUIRED',
+    tiedGameIds: ties.tiedGameIds,
+    voteCount: ties.voteCount,
+  });
+}

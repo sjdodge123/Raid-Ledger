@@ -1,0 +1,334 @@
+import {
+  Controller,
+  Get,
+  UseGuards,
+  Req,
+  Res,
+  Query,
+  Logger,
+  Optional,
+  Inject,
+} from '@nestjs/common';
+import { AuthService } from '../../auth/auth.service';
+import { UsersService } from '../../users/users.service';
+import { ConfigService } from '@nestjs/config';
+import { SettingsService } from '../../settings/settings.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { RateLimit } from '../../throttler/rate-limit.decorator';
+import { DiscordNotificationService } from '../../notifications/discord-notification.service';
+import { discordFetch } from './discord-http.util';
+import { REDIS_CLIENT } from '../../redis/redis.module';
+import type Redis from 'ioredis';
+import type { Response, Request } from 'express';
+import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
+import type { UserRole } from '@raid-ledger/contract';
+import {
+  DiscordAuthGuard,
+  signOAuthState,
+  getOriginUrl,
+  exchangeCodeForToken,
+  fetchDiscordProfile,
+  buildSilentLoginRedirect,
+  issueDiscordRefreshCookie,
+} from './discord-auth.helpers';
+import { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
+import {
+  LinkNonceService,
+  LINK_REQUEST_EXPIRED_MESSAGE,
+} from '../../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
+import { bindLinkStateToBrowser } from '../../auth/link-state-cookie.helpers';
+import { verifyDiscordLinkState } from './discord-link-state.helpers';
+import { signBrowserBoundLoginState } from './discord-login-state.helpers';
+import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
+import { verifiedLoginStateOf } from './discord-verified-login-state';
+
+interface RequestWithUser extends Request {
+  user: {
+    id: number;
+    username: string;
+    role: UserRole;
+    impersonatedBy?: number | null;
+  };
+}
+
+@Controller('auth')
+export class DiscordAuthController {
+  private readonly logger = new Logger(DiscordAuthController.name);
+
+  constructor(
+    private authService: AuthService,
+    private usersService: UsersService,
+    private configService: ConfigService,
+    private settingsService: SettingsService,
+    @Optional()
+    @Inject(DiscordNotificationService)
+    private discordNotificationService: DiscordNotificationService | null,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly refreshService: RefreshTokenService,
+    private readonly linkNonceService: LinkNonceService,
+  ) {}
+
+  /** Get the frontend client URL for post-auth redirects. */
+  private getClientUrl(req: Request): string {
+    return this.configService.get<string>('CLIENT_URL') || getOriginUrl(req);
+  }
+
+  /** Get JWT secret for state signing. */
+  private getSecret(): string {
+    return this.configService.get<string>('JWT_SECRET')!;
+  }
+
+  @RateLimit('auth')
+  @Get('discord')
+  @UseGuards(DiscordAuthGuard)
+  async discordLogin() {
+    // Initiates the Discord OAuth flow
+  }
+
+  @RateLimit('auth')
+  @Get('discord/callback')
+  @UseGuards(DiscordAuthGuard)
+  async discordLoginCallback(
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+  ) {
+    if (res.headersSent) return;
+    const { access_token } = await this.authService.login(req.user);
+    // ROK-1808: the code is bound to this browser (cookie of its hash).
+    const authCode = mintBrowserBoundAuthCode(req, res);
+    await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
+    const clientUrl = this.getClientUrl(req);
+    // ROK-1353: mint a refresh family + set the httpOnly cookie before the
+    // browser redirect so the SPA has a long-lived session post-login.
+    await issueDiscordRefreshCookie(this.refreshService, req, res, req.user.id);
+
+    // ROK-1808: route on the state the login store already verified.
+    const stateData = verifiedLoginStateOf(req);
+    const inviteCode =
+      stateData?.action === 'invite' ? stateData.inviteCode : undefined;
+    if (typeof inviteCode === 'string' && inviteCode) {
+      res.redirect(
+        `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(inviteCode)}`,
+      );
+      return;
+    }
+    res.redirect(`${clientUrl}/auth/success?code=${authCode}`);
+  }
+
+  /** GET /auth/discord/invite — initiate Discord OAuth with invite code in signed state (ROK-394). */
+  @RateLimit('auth')
+  @Get('discord/invite')
+  async discordInviteLogin(
+    @Query('code') inviteCode: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const clientUrl = this.getClientUrl(req);
+    if (!inviteCode) {
+      res.redirect(`${clientUrl}/calendar`);
+      return;
+    }
+
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) {
+      res.redirect(
+        `${clientUrl}/i/${encodeURIComponent(inviteCode)}?error=discord_not_configured`,
+      );
+      return;
+    }
+
+    // ROK-1808: bound to this browser; the callback's strategy checks it.
+    const state = signBrowserBoundLoginState(
+      req,
+      res,
+      { action: 'invite', inviteCode },
+      this.getSecret(),
+    );
+    res.redirect(
+      this.buildOAuthUrl(oauthConfig.clientId, oauthConfig.callbackUrl, state),
+    );
+  }
+
+  /** Build Discord OAuth authorize URL. */
+  private buildOAuthUrl(
+    clientId: string,
+    redirectUri: string,
+    state: string,
+  ): string {
+    return `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+  }
+
+  /**
+   * GET /auth/discord/silent — silent re-auth (`prompt=none`, ROK-1353).
+   * Builds the authorize URL with prompt=none + a signed silent state so a
+   * returning Discord-linked user is re-authenticated without a consent
+   * screen. On no active Discord session Discord returns ?error= → the
+   * callback redirects to /auth/success?silent_failed=1 (one-shot guard
+   * lives client-side).
+   */
+  @RateLimit('auth')
+  @Get('discord/silent')
+  async discordSilentLogin(
+    @Query('returnTo') returnTo: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    res.redirect(
+      buildSilentLoginRedirect({
+        oauthConfig: await this.settingsService.getDiscordOAuthConfig(),
+        signState: (p) =>
+          signBrowserBoundLoginState(req, res, p, this.getSecret()),
+        returnTo: returnTo ?? '/',
+        clientUrl: this.getClientUrl(req),
+      }),
+    );
+  }
+
+  /** Initiate the Discord link OAuth flow after validating config. */
+  private async initiateDiscordLinkFlow(
+    userId: number,
+    clientUrl: string,
+    res: Response,
+  ): Promise<void> {
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) {
+      res.redirect(
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
+      );
+      return;
+    }
+    // `r` binds the state to this browser through the callback (ROK-1366).
+    const r = bindLinkStateToBrowser(res, 'discord');
+    const state = signOAuthState(
+      { userId, action: 'link', timestamp: Date.now(), r },
+      this.getSecret(),
+    );
+    const redirectUri = oauthConfig.callbackUrl.replace(
+      '/callback',
+      '/link/callback',
+    );
+    res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
+  }
+
+  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630), bound to the minting browser's cookie. */
+  @RateLimit('auth')
+  @Get('discord/link')
+  async discordLink(
+    @Query('nonce') nonce: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const clientUrl = this.getClientUrl(req);
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'discord',
+      nonce,
+      req,
+      res,
+    );
+    if (!claims) {
+      res.redirect(
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,
+      );
+      return;
+    }
+    await this.initiateDiscordLinkFlow(claims.userId, clientUrl, res);
+  }
+
+  /** Complete the Discord link: persist link, emit event, send DM. */
+  private async completeLinkFlow(code: string, userId: number): Promise<void> {
+    const discordProfile = await this.performLinkExchange(code, userId);
+    await this.usersService.linkDiscord(
+      userId,
+      discordProfile.id,
+      discordProfile.username,
+      discordProfile.avatar ?? null,
+    );
+    this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
+      userId,
+      discordId: discordProfile.id,
+    } satisfies DiscordLoginPayload);
+    this.sendWelcomeDMSafe(userId);
+  }
+
+  /** GET /auth/discord/link/callback — handle Discord OAuth callback for linking. */
+  @RateLimit('auth')
+  @Get('discord/link/callback')
+  async discordLinkCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const clientUrl = this.getClientUrl(req);
+    try {
+      // Verified first: the state must come back to the browser the GET hop
+      // bound it to (ROK-1366) before any code exchange happens.
+      const userId = verifyDiscordLinkState(
+        state,
+        this.getSecret(),
+        this.logger,
+        { req, res },
+      );
+      await this.completeLinkFlow(code, userId);
+      res.redirect(`${clientUrl}/profile/integrations?linked=success`);
+    } catch (error) {
+      this.logger.error('Discord link error:', error);
+      const msg = error instanceof Error ? error.message : 'Link failed';
+      res.redirect(
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(msg)}`,
+      );
+    }
+  }
+
+  /** Perform the link OAuth exchange for a verified userId: exchange code, fetch profile. */
+  private async performLinkExchange(
+    code: string,
+    userId: number,
+  ): Promise<{ id: string; username: string; avatar: string | null }> {
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) throw new Error('Discord OAuth is not configured');
+    const redirectUri = oauthConfig.callbackUrl.replace(
+      '/callback',
+      '/link/callback',
+    );
+    const tokens = await exchangeCodeForToken(
+      code,
+      redirectUri,
+      oauthConfig.clientId,
+      oauthConfig.clientSecret,
+      discordFetch,
+    );
+    const discordProfile = await fetchDiscordProfile(
+      tokens.access_token,
+      discordFetch,
+    );
+    await this.validateNoExistingLink(discordProfile.id, userId);
+    return discordProfile;
+  }
+
+  /** Validate that the Discord account isn't already linked to another user. */
+  private async validateNoExistingLink(
+    discordId: string,
+    userId: number,
+  ): Promise<void> {
+    const existingUser =
+      await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
+    if (existingUser && existingUser.id !== userId)
+      throw new Error('This Discord account is already linked to another user');
+  }
+
+  /** Send welcome DM safely (fire-and-forget). */
+  private sendWelcomeDMSafe(userId: number): void {
+    if (!this.discordNotificationService) return;
+    this.discordNotificationService
+      .sendWelcomeDM(userId)
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to send welcome DM after link: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+  }
+}

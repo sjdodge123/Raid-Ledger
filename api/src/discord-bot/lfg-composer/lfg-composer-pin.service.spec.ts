@@ -1,0 +1,567 @@
+/**
+ * ROK-1612 AC1 — where the pinned composer goes, and that it never throws.
+ * ROK-1658 — the composer has no opt-in of its own: it follows the board.
+ */
+import { Logger } from '@nestjs/common';
+import { ChannelType } from 'discord.js';
+import { SETTING_KEYS } from '../../drizzle/schema';
+import type { LfgDb } from '../../lfg/lfg-query.helpers';
+import type { SettingsService } from '../../settings/settings.service';
+import type { DiscordBotClientService } from '../discord-bot-client.service';
+import { LfgComposerPinService } from './lfg-composer-pin.service';
+import { LFG_COMPOSER_IDS } from './lfg-composer.constants';
+import {
+  LFG_BOARD_EVENTS,
+  LFG_BOARD_INTRO_BODY,
+  LFG_BOARD_INTRO_TITLE,
+} from '../lfg-board/lfg-board.constants';
+import { buildComposerCard } from './lfg-composer-card.helpers';
+
+const BOT = 'bot-user';
+/** ROK-1658 — the LFG board switched on; the composer rides it. */
+const ON = { [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true' };
+
+function settings(values: Record<string, string>): SettingsService {
+  return {
+    get: jest.fn((key: string) => Promise.resolve(values[key] ?? null)),
+    getClientUrl: jest.fn(() => Promise.resolve('https://raid.example')),
+  } as unknown as SettingsService;
+}
+
+function db(boundChannelId: string | null): LfgDb {
+  const rows = boundChannelId ? [{ channelId: boundChannelId }] : [];
+  const chain = {
+    select: () => chain,
+    from: () => chain,
+    where: () => chain,
+    limit: () => Promise.resolve(rows),
+  };
+  return chain as unknown as LfgDb;
+}
+
+function service(
+  channels: Record<string, unknown>,
+  cfg: Record<string, string>,
+  bound: string | null,
+) {
+  const guild = {
+    id: 'g1',
+    channels: {
+      fetch: jest.fn((id: string) => Promise.resolve(channels[id] ?? null)),
+    },
+  };
+  const client = {
+    getGuild: () => guild,
+    getBotUser: () => ({ id: BOT, username: 'rl' }),
+  } as unknown as DiscordBotClientService;
+  return new LfgComposerPinService(client, settings(cfg), db(bound));
+}
+
+describe('LfgComposerPinService.reconcile', () => {
+  it('board on with NO composer setting row puts the buttons on the intro, in place (ROK-1658 deploy case)', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [],
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const svc = service(
+      { t1: intro },
+      {
+        [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+        [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+      },
+      null,
+    );
+    await expect(svc.reconcile()).resolves.toBe('intro-edited');
+    await expect(svc.reconcile()).resolves.toBe('intro-edited');
+    expect(starter.edit).toHaveBeenCalledTimes(2);
+    const [payload] = starter.edit.mock.calls[0] as unknown as [
+      { components: { toJSON(): unknown }[]; content?: string },
+    ];
+    // ROK-1658 — a starter without the current copy gets it in the same edit.
+    expect(payload.content).toBe(LFG_BOARD_INTRO_BODY);
+    expect(JSON.stringify(payload.components.map((c) => c.toJSON()))).toContain(
+      LFG_COMPOSER_IDS.OPEN,
+    );
+  });
+
+  it('text binding: posts and pins the card in the bound channel', async () => {
+    const posted = {
+      id: 'm1',
+      pinned: false,
+      author: { id: BOT },
+      components: [],
+      edit: jest.fn(),
+      pin: jest.fn(() => Promise.resolve()),
+      delete: jest.fn(),
+    };
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      send: jest.fn(() => Promise.resolve(posted)),
+      messages: {
+        fetchPins: () => Promise.resolve({ items: [] }),
+        fetch: () => Promise.resolve([]),
+      },
+    };
+    const svc = service({ c1: text }, ON, 'c1');
+    await expect(svc.reconcile()).resolves.toBe('posted-pinned');
+    expect(posted.pin).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LfgComposerPinService.reconcile — no target, no throw', () => {
+  it('no board and no binding: nothing is posted', async () => {
+    await expect(service({}, {}, null).reconcile()).resolves.toBe('no-target');
+  });
+
+  it('a Discord failure resolves to null instead of throwing', async () => {
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      messages: { fetchPins: () => Promise.reject(new Error('503')) },
+    };
+    await expect(
+      service({ c1: text }, ON, 'c1').reconcile(),
+    ).resolves.toBeNull();
+  });
+});
+
+describe('LfgComposerPinService.reconcile — board off, legacy text binding', () => {
+  const composerRow = {
+    components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
+  };
+
+  it('board off deletes a card left from before and posts nothing', async () => {
+    const card = {
+      id: 'm1',
+      pinned: true,
+      author: { id: BOT },
+      components: [composerRow],
+      delete: jest.fn(() => Promise.resolve()),
+    };
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      send: jest.fn(),
+      messages: {
+        fetchPins: () => Promise.resolve({ items: [{ message: card }] }),
+        fetch: () => Promise.resolve([card]),
+      },
+    };
+    await expect(service({ c1: text }, {}, 'c1').reconcile()).resolves.toBe(
+      'removed',
+    );
+    expect(card.delete).toHaveBeenCalledTimes(1);
+    expect(text.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgComposerPinService.reconcile — board switched off (ROK-1658)', () => {
+  const composerRow = {
+    components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
+  };
+
+  it('strips the composer buttons from the intro post', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [composerRow],
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'intro-cleared',
+    );
+    expect(starter.edit).toHaveBeenCalledWith({ components: [] });
+  });
+
+  it('leaves an intro without the buttons untouched', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [],
+      edit: jest.fn(),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'no-target',
+    );
+    expect(starter.edit).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgComposerPinService.reconcile — board off, intro AND legacy text binding (review NIT)', () => {
+  const composerRow = {
+    components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
+  };
+
+  it('with an intro stored AND a legacy text binding, also deletes the text card', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [composerRow],
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const card = {
+      id: 'm1',
+      pinned: true,
+      author: { id: BOT },
+      components: [composerRow],
+      delete: jest.fn(() => Promise.resolve()),
+    };
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      send: jest.fn(),
+      messages: {
+        fetchPins: () => Promise.resolve({ items: [{ message: card }] }),
+        fetch: () => Promise.resolve([card]),
+      },
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await service({ t1: intro, c1: text }, cfg, 'c1').reconcile();
+    expect(starter.edit).toHaveBeenCalledWith({ components: [] });
+    expect(card.delete).toHaveBeenCalledTimes(1);
+    expect(text.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgComposerPinService — board toggle (ROK-1658)', () => {
+  function spied() {
+    const svc = service({}, ON, null);
+    const reconcile = jest
+      .spyOn(svc, 'reconcile')
+      .mockResolvedValue('no-target');
+    return { svc, reconcile };
+  }
+
+  it('takes the composer down as soon as the board is switched off', async () => {
+    const { svc, reconcile } = spied();
+    await svc.onBoardToggled({ enabled: false });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores the ON toggle: ENABLED owns it, after provisioning', async () => {
+    const { svc, reconcile } = spied();
+    await svc.onBoardToggled({ enabled: true });
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it('is subscribed to the board TOGGLED event', () => {
+    // Scanned by method, so a missing subscription reads as `[]`, not a throw.
+    const proto = LfgComposerPinService.prototype as unknown as Record<
+      string,
+      unknown
+    >;
+    const onToggled = Object.getOwnPropertyNames(proto).filter((name) => {
+      const method = proto[name];
+      if (typeof method !== 'function') return false;
+      const events = Reflect.getMetadata('EVENT_LISTENER_METADATA', method) as
+        { event: unknown }[] | undefined;
+      return (events ?? []).some((e) => e.event === LFG_BOARD_EVENTS.TOGGLED);
+    });
+    expect(onToggled).toEqual(['onBoardToggled']);
+  });
+});
+
+/** A text channel whose `send` holds until released — the race window. */
+function gatedText() {
+  const all: Record<string, unknown>[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const own = (m: Record<string, unknown>) => m.author === BOT_AUTHOR;
+  const text = {
+    id: 'c1',
+    type: ChannelType.GuildText,
+    all,
+    send: jest.fn(async () => {
+      await gate;
+      const message: Record<string, unknown> = {
+        id: `m${String(all.length + 1)}`,
+        pinned: false,
+        author: BOT_AUTHOR,
+        components: [{ components: [{ customId: LFG_COMPOSER_IDS.OPEN }] }],
+        edit: jest.fn(() => Promise.resolve()),
+        pin: jest.fn(() => {
+          message.pinned = true;
+          return Promise.resolve();
+        }),
+        delete: jest.fn(() => {
+          all.splice(all.indexOf(message), 1);
+          return Promise.resolve();
+        }),
+      };
+      all.push(message);
+      return message;
+    }),
+    messages: {
+      fetchPins: () =>
+        Promise.resolve({
+          items: all.filter((m) => m.pinned).map((message) => ({ message })),
+        }),
+      fetch: () => Promise.resolve(all.slice().reverse()),
+    },
+  };
+  return { text, release: () => release(), cards: () => all.filter(own) };
+}
+
+const BOT_AUTHOR = { id: BOT };
+/** Let every pending microtask run — both reconciles reach `send` or wait. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+describe('LfgComposerPinService.reconcile — serialised (review MAJOR)', () => {
+  it('two concurrent reconciles post ONE card', async () => {
+    const { text, release, cards } = gatedText();
+    const svc = service({ c1: text }, { ...ON }, 'c1');
+    const a = svc.reconcile();
+    const b = svc.reconcile();
+    await settle();
+    release();
+    await Promise.all([a, b]);
+    expect(text.send).toHaveBeenCalledTimes(1);
+    expect(cards()).toHaveLength(1);
+  });
+
+  it('ON then OFF in quick succession ends with no card up', async () => {
+    const { text, release, cards } = gatedText();
+    const cfg: Record<string, string> = { ...ON };
+    const svc = service({ c1: text }, cfg, 'c1');
+    const on = svc.reconcile();
+    await settle();
+    cfg[SETTING_KEYS.LFG_BOARD_ENABLED] = 'false';
+    const off = svc.reconcile();
+    await settle();
+    release();
+    await Promise.all([on, off]);
+    expect(cards()).toHaveLength(0);
+  });
+});
+
+describe('LfgComposerPinService.reconcile — intro already current (review NIT)', () => {
+  it('does not re-edit an intro post whose buttons already match', async () => {
+    const card = buildComposerCard('https://raid.example');
+    const starter = {
+      author: { id: BOT },
+      content: LFG_BOARD_INTRO_BODY,
+      components: card.components,
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'intro-unchanged',
+    );
+    expect(starter.edit).not.toHaveBeenCalled();
+  });
+});
+
+describe('LfgComposerPinService.reconcile — intro copy refresh (ROK-1658)', () => {
+  const OLD_BODY = '**This is the LFG board.** Every post below is one group…';
+  const cfg = {
+    [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+    [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+  };
+  function introWith(content: string, components: unknown[]) {
+    const starter = {
+      author: { id: BOT },
+      content,
+      components,
+      edit: jest.fn<Promise<void>, [unknown]>(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    return { starter, intro };
+  }
+
+  it('an intro with the old body gets the new body AND the buttons in ONE edit', async () => {
+    const { starter, intro } = introWith(OLD_BODY, []);
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'intro-edited',
+    );
+    expect(starter.edit).toHaveBeenCalledTimes(1);
+    const [payload] = starter.edit.mock.calls[0] as unknown as [
+      { content?: string; components: { toJSON(): unknown }[] },
+    ];
+    expect(payload.content).toBe(LFG_BOARD_INTRO_BODY);
+    expect(JSON.stringify(payload.components.map((c) => c.toJSON()))).toContain(
+      LFG_COMPOSER_IDS.OPEN,
+    );
+  });
+
+  it('buttons already current but the old body: the copy is still rewritten', async () => {
+    const card = buildComposerCard('https://raid.example');
+    const { starter, intro } = introWith(OLD_BODY, card.components);
+    await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
+      'intro-edited',
+    );
+    expect(starter.edit).toHaveBeenCalledWith({
+      content: LFG_BOARD_INTRO_BODY,
+      components: card.components,
+    });
+  });
+});
+
+describe('LfgComposerPinService.reconcile — board off, take-down isolation (review)', () => {
+  it('a deleted intro (10008) still lets the legacy text card come down', async () => {
+    const unknownMessage = Object.assign(new Error('Unknown Message'), {
+      code: 10008,
+    });
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.reject(unknownMessage),
+    };
+    const composerRow = { components: [{ customId: LFG_COMPOSER_IDS.OPEN }] };
+    const card = {
+      id: 'm1',
+      pinned: true,
+      author: { id: BOT },
+      components: [composerRow],
+      delete: jest.fn(() => Promise.resolve()),
+    };
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      send: jest.fn(),
+      messages: {
+        fetchPins: () => Promise.resolve({ items: [{ message: card }] }),
+        fetch: () => Promise.resolve([card]),
+      },
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    const svc = service({ t1: intro, c1: text }, cfg, 'c1');
+    const warn = jest
+      .spyOn((svc as unknown as { logger: Logger }).logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    await expect(svc.reconcile()).resolves.toBe('removed');
+    expect(card.delete).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'Could not take the LFG composer down from the intro post: Unknown Message.',
+    );
+  });
+});
+
+const LEGACY_TITLE = 'How this board works';
+const ON_WITH_INTRO = {
+  [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+  [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+};
+
+interface TitledIntro {
+  id: string;
+  name: string;
+  ownerId: string;
+  isThread: () => boolean;
+  fetchStarterMessage: () => Promise<unknown>;
+  setName: jest.Mock<Promise<unknown>, [string, string?]>;
+}
+
+/** A bot-authored intro whose `setName` really renames it, like Discord. */
+function titledIntro(name: string, ownerId = BOT, setNameRejects = false) {
+  const starter = {
+    author: { id: BOT },
+    content: LFG_BOARD_INTRO_BODY,
+    components: buildComposerCard('https://raid.example')
+      .components as unknown[],
+    edit: jest.fn(() => Promise.resolve()),
+  };
+  const intro: TitledIntro = {
+    id: 't1',
+    name,
+    ownerId,
+    isThread: () => true,
+    fetchStarterMessage: () => Promise.resolve(starter),
+    setName: jest.fn((next: string) => {
+      if (setNameRejects) return Promise.reject(new Error('Missing Access'));
+      intro.name = next;
+      return Promise.resolve(intro);
+    }),
+  };
+  return { starter, intro };
+}
+
+describe('LfgComposerPinService.reconcile — legacy intro title (ROK-1658)', () => {
+  const LEGACY = LEGACY_TITLE;
+  const cfg = ON_WITH_INTRO;
+
+  it('renames a legacy-titled intro once, in place (same thread id)', async () => {
+    const { intro } = titledIntro(LEGACY);
+    const svc = service({ t1: intro }, cfg, null);
+    await svc.reconcile();
+    await svc.reconcile();
+    expect(intro.setName).toHaveBeenCalledTimes(1);
+    expect(intro.setName).toHaveBeenCalledWith(
+      LFG_BOARD_INTRO_TITLE,
+      expect.any(String),
+    );
+    expect(intro.name).toBe(LFG_BOARD_INTRO_TITLE);
+    expect(intro.id).toBe('t1');
+  });
+
+  it('never renames an intro already carrying the current title', async () => {
+    const { intro } = titledIntro(LFG_BOARD_INTRO_TITLE);
+    await service({ t1: intro }, cfg, null).reconcile();
+    expect(intro.setName).not.toHaveBeenCalled();
+  });
+
+  it('never renames a legacy-titled thread the bot does not own', async () => {
+    const { intro } = titledIntro(LEGACY, 'member-7');
+    await service({ t1: intro }, cfg, null).reconcile();
+    expect(intro.setName).not.toHaveBeenCalled();
+  });
+
+  it('a refused rename logs and still sets the buttons + copy', async () => {
+    const { starter, intro } = titledIntro(LEGACY, BOT, true);
+    starter.components = [];
+    const svc = service({ t1: intro }, cfg, null);
+    const warn = jest
+      .spyOn((svc as unknown as { logger: Logger }).logger, 'warn')
+      .mockImplementation(() => undefined);
+    await expect(svc.reconcile()).resolves.toBe('intro-edited');
+    expect(starter.edit).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not rename the LFG board intro post t1'),
+    );
+  });
+});

@@ -1,0 +1,380 @@
+/**
+ * Unit tests for scheduling response helpers (ROK-965).
+ */
+import {
+  buildPollResponse,
+  buildMatchDetailDto,
+  deriveIsStandalone,
+} from './scheduling-response.helpers';
+import { at } from '../../common/testing/narrow';
+
+const baseMatch = {
+  id: 10,
+  lineupId: 1,
+  gameId: 5,
+  status: 'scheduling',
+  thresholdMet: true,
+  voteCount: 3,
+  votePercentage: '75.00',
+  fitType: 'normal',
+  linkedEventId: null,
+  minVoteThreshold: null,
+  createdAt: new Date('2026-03-01'),
+  updatedAt: new Date('2026-03-01'),
+  gameName: 'Elden Ring',
+  gameCoverUrl: 'https://img.example.com/cover.jpg',
+};
+
+const baseMembers = [
+  {
+    id: 1,
+    matchId: 10,
+    userId: 100,
+    source: 'voted',
+    schedulingSubmittedAt: null,
+    createdAt: new Date('2026-03-01'),
+    displayName: 'Alice',
+    avatar: null,
+    discordId: null,
+    customAvatarUrl: null,
+  },
+];
+
+const baseSlots = [
+  {
+    id: 20,
+    matchId: 10,
+    proposedTime: new Date('2026-04-01T19:00:00Z'),
+    overlapScore: '0.80',
+    suggestedBy: 'user',
+    createdAt: new Date('2026-03-28'),
+  },
+];
+
+const baseVotes = [
+  {
+    id: 1,
+    slotId: 20,
+    userId: 100,
+    displayName: 'Alice',
+    avatar: null,
+    discordId: null,
+    customAvatarUrl: null,
+    createdAt: new Date('2026-03-29'),
+  },
+];
+
+/** Votes with avatar fields for ROK-1014 tests. */
+const votesWithAvatars = [
+  {
+    id: 1,
+    slotId: 20,
+    userId: 100,
+    displayName: 'Alice',
+    avatar: 'abc123hash',
+    discordId: '123456789012345678',
+    customAvatarUrl: 'https://example.com/alice-avatar.png',
+    createdAt: new Date('2026-03-29'),
+  },
+  {
+    id: 2,
+    slotId: 20,
+    userId: 101,
+    displayName: 'Bob',
+    avatar: null,
+    discordId: null,
+    customAvatarUrl: null,
+    createdAt: new Date('2026-03-29'),
+  },
+];
+
+describe('buildPollResponse', () => {
+  it('builds complete poll response with match, slots, and votes', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      false,
+    );
+
+    expect(result.match.gameName).toBe('Elden Ring');
+    expect(result.match.members).toHaveLength(1);
+    expect(result.slots).toHaveLength(1);
+    expect(result.slots[0]?.votes).toHaveLength(1);
+    expect(result.myVotedSlotIds).toEqual([20]);
+    expect(result.lineupStatus).toBe('decided');
+  });
+
+  it('returns empty myVotedSlotIds for unauthenticated user', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      null,
+      'decided',
+      false,
+    );
+
+    expect(result.myVotedSlotIds).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1014: Vote objects must include avatar, discordId, customAvatarUrl
+// ---------------------------------------------------------------------------
+
+describe('buildPollResponse — avatar fields in votes (ROK-1014)', () => {
+  it('passes through avatar fields on vote objects in slots', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      votesWithAvatars,
+      100,
+      'decided',
+      false,
+    );
+
+    const aliceVote = at(result.slots, 0).votes.find((v) => v.userId === 100);
+    expect(aliceVote).toBeDefined();
+    expect(aliceVote).toHaveProperty('avatar', 'abc123hash');
+    expect(aliceVote).toHaveProperty('discordId', '123456789012345678');
+    expect(aliceVote).toHaveProperty(
+      'customAvatarUrl',
+      'https://example.com/alice-avatar.png',
+    );
+  });
+
+  it('passes through null avatar fields for users without Discord', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      votesWithAvatars,
+      100,
+      'decided',
+      false,
+    );
+
+    const bobVote = at(result.slots, 0).votes.find((v) => v.userId === 101);
+    expect(bobVote).toBeDefined();
+    expect(bobVote).toHaveProperty('avatar', null);
+    expect(bobVote).toHaveProperty('discordId', null);
+    expect(bobVote).toHaveProperty('customAvatarUrl', null);
+  });
+});
+
+describe('buildMatchDetailDto', () => {
+  it('maps match row to DTO shape with ISO date strings', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+    );
+
+    expect(dto.id).toBe(10);
+    expect(dto.gameName).toBe('Elden Ring');
+    expect(dto.createdAt).toMatch(/^\d{4}-/);
+    expect(dto.members[0]?.displayName).toBe('Alice');
+  });
+
+  it('omits lineupCreatedById when not provided (ROK-1121)', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+    );
+
+    expect(dto.lineupCreatedById).toBeUndefined();
+  });
+
+  it('omits lineupCreatedById when null is passed (ROK-1121)', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+      null,
+    );
+
+    expect(dto.lineupCreatedById).toBeUndefined();
+  });
+
+  it('emits lineupCreatedById when supplied (ROK-1121)', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+      42,
+    );
+
+    expect(dto.lineupCreatedById).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1121: lineupCreatedById flows through buildPollResponse
+// ---------------------------------------------------------------------------
+
+describe('buildPollResponse — lineupCreatedById (ROK-1121)', () => {
+  it('passes lineupCreatedById from match input through to match DTO', () => {
+    const result = buildPollResponse(
+      { ...baseMatch, lineupCreatedById: 77 },
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      false,
+    );
+
+    expect(result.match.lineupCreatedById).toBe(77);
+  });
+
+  it('omits lineupCreatedById when match input does not include it', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      false,
+    );
+
+    expect(result.match.lineupCreatedById).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1300: isStandalone derivation + passthrough
+// ---------------------------------------------------------------------------
+
+describe('deriveIsStandalone (ROK-1300)', () => {
+  it('returns true when phaseDurationOverride.standalone === true', () => {
+    expect(deriveIsStandalone({ standalone: true })).toBe(true);
+  });
+
+  it('returns false for a from-match lineup (null override)', () => {
+    expect(deriveIsStandalone(null)).toBe(false);
+    expect(deriveIsStandalone(undefined)).toBe(false);
+  });
+
+  it('returns false when standalone key is absent or not strictly true', () => {
+    expect(deriveIsStandalone({})).toBe(false);
+    expect(deriveIsStandalone({ standalone: false })).toBe(false);
+    expect(deriveIsStandalone({ standalone: 'true' })).toBe(false);
+  });
+});
+
+describe('buildPollResponse — isStandalone (ROK-1300)', () => {
+  it('emits isStandalone=true for a standalone poll', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      true,
+    );
+
+    expect(result.isStandalone).toBe(true);
+  });
+
+  it('emits isStandalone=false for a from-match poll', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      false,
+    );
+
+    expect(result.isStandalone).toBe(false);
+  });
+});
+
+describe('followupForEventId passthrough', () => {
+  it('buildPollResponse surfaces the ended event for a follow-up poll', () => {
+    const res = buildPollResponse(
+      { ...baseMatch, followupForEventId: 77 },
+      baseMembers,
+      baseSlots,
+      [],
+      null,
+      'decided',
+      true,
+    );
+
+    expect(res.match.followupForEventId).toBe(77);
+  });
+
+  it('is null for an ordinary poll, so lock-in adds no copyFromEventId', () => {
+    const res = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      [],
+      null,
+      'decided',
+      true,
+    );
+
+    expect(res.match.followupForEventId).toBeNull();
+  });
+
+  it('buildMatchDetailDto defaults it to null when not supplied', () => {
+    const dto = buildMatchDetailDto(baseMatch, baseMembers, 'Elden Ring', null);
+
+    expect(dto.followupForEventId).toBeNull();
+  });
+});
+
+describe('distinct answerers of a slot (ROK-1617)', () => {
+  /** A vote row on the one base slot, with the given stance. */
+  function vote(userId: number, stance: 'yes' | 'no') {
+    return {
+      id: userId,
+      slotId: 20,
+      userId,
+      stance,
+      displayName: `User ${userId}`,
+      avatar: null,
+      discordId: null,
+      customAvatarUrl: null,
+      createdAt: new Date('2026-03-29'),
+    };
+  }
+
+  it('exposes a no-only member, so "N of M have voted" can count them', () => {
+    const res = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      [vote(100, 'yes'), vote(101, 'yes'), vote(102, 'no')],
+      null,
+      'decided',
+      false,
+    );
+
+    const slot = at(res.slots, 0);
+    // Supporters — what "picked this time" means.
+    expect(slot.votes.map((v) => v.userId)).toEqual([100, 101]);
+    // Answerers — what "have voted" means. The `no` is not dropped on the
+    // floor; it is reachable in `noVotes` and counts toward the total.
+    const answerers = new Set(
+      [...slot.votes, ...slot.noVotes].map((v) => v.userId),
+    );
+    expect(answerers.size).toBe(3);
+  });
+});

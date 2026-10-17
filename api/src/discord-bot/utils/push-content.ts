@@ -1,0 +1,84 @@
+import type { EmbedEventData } from '../services/discord-embed.factory';
+
+/** Max total length for a push content line. */
+const MAX_LENGTH = 80;
+
+/**
+ * Build a plaintext push notification preview for a scheduled event embed.
+ * No Discord tokens, no markdown -- just a clean, human-readable summary.
+ */
+export function buildEventPushContent(
+  event: EmbedEventData,
+  timezone?: string | null,
+): string {
+  const date = formatShortDate(event.startTime, timezone);
+  const signup = formatSignupCount(event.signupCount, event.maxAttendees);
+  const suffix = ` | ${date} | ${signup}`;
+  const titleWithGame = buildTitleWithGame(event.title, event.game?.name);
+  return truncateToFit(`\uD83D\uDCC5 ${titleWithGame}${suffix}`, MAX_LENGTH);
+}
+
+/**
+ * Build a plaintext push notification preview for a cancelled event.
+ */
+export function buildCancelledPushContent(title: string): string {
+  return truncateToFit(`\u274C Cancelled: ${title}`, MAX_LENGTH);
+}
+
+/**
+ * Build a plaintext push notification preview for an event whose reschedule
+ * poll is open (ROK-1460 — the state used to clear the push line entirely).
+ *
+ * @param title - The event title.
+ * @returns e.g. `🔁 Rescheduling: Friday Deep Dive`.
+ */
+export function buildReschedulingPushContent(title: string): string {
+  return truncateToFit(`\u{1F501} Rescheduling: ${title}`, MAX_LENGTH);
+}
+
+/**
+ * Build a plaintext push notification preview for a completed scheduled event.
+ */
+export function buildCompletedPushContent(event: EmbedEventData): string {
+  const titleWithGame = buildTitleWithGame(event.title, event.game?.name);
+  return truncateToFit(`\u2705 ${titleWithGame} -- Completed`, MAX_LENGTH);
+}
+
+/**
+ * Format "Title -- Game", or just "Title" when there is no game -- or when the
+ * title already carries the game name (ROK-1460: a Quick Play card read
+ * `Satisfactory -- Satisfactory`, and `Lost Ark - Quick Play -- Lost Ark`).
+ * Compared trimmed + case-folded, by substring so an embedded name counts too.
+ */
+function buildTitleWithGame(title: string, gameName?: string | null): string {
+  if (!gameName) return title;
+  const game = gameName.trim().toLowerCase();
+  const hasGame = game !== '' && title.trim().toLowerCase().includes(game);
+  return hasGame ? title : `${title} -- ${gameName}`;
+}
+
+/** Format signup count: "3/8 signed up" or "3 signed up". */
+function formatSignupCount(count: number, max?: number | null): string {
+  return max ? `${count}/${max} signed up` : `${count} signed up`;
+}
+
+/** Format a date as short locale string (e.g. "Mar 16, 10:00 PM EDT"). */
+function formatShortDate(isoString: string, timezone?: string | null): string {
+  const d = new Date(isoString);
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  };
+  if (timezone) opts.timeZone = timezone;
+  return d.toLocaleDateString('en-US', opts);
+}
+
+/** Truncate a string to max length, adding "..." if needed. */
+function truncateToFit(str: string, max: number): string {
+  if (str.length <= max) return str;
+  return `${str.slice(0, max - 3)}...`;
+}

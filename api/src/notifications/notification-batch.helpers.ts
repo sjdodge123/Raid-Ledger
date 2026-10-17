@@ -1,0 +1,149 @@
+/**
+ * Batch helpers for NotificationService.createMany (ROK-1043).
+ * Extracted from notification.service.ts to keep it within file size limits.
+ */
+import { defined } from '../common/defined.helpers';
+import { Logger } from '@nestjs/common';
+import { inArray } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import {
+  DEFAULT_CHANNEL_PREFS,
+  type NotificationType,
+} from '../drizzle/schema/notification-preferences';
+import {
+  mapNotificationToDto,
+  mapPreferencesToDto,
+} from './notification-mapping.helpers';
+import type {
+  CreateNotificationInput,
+  NotificationDto,
+  NotificationPreferencesDto,
+} from './notification.types';
+import type { DiscordNotificationService } from './discord-notification.service';
+
+/**
+ * Load preferences for a list of users, backfilling defaults for users
+ * without a row via a single ON CONFLICT DO NOTHING insert.
+ */
+export async function loadPreferencesForUsers(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Map<number, NotificationPreferencesDto>> {
+  const rows = await db
+    .select()
+    .from(schema.userNotificationPreferences)
+    .where(inArray(schema.userNotificationPreferences.userId, userIds));
+  const byUser = new Map<number, NotificationPreferencesDto>();
+  for (const row of rows) byUser.set(row.userId, mapPreferencesToDto(row));
+
+  const missing = userIds.filter((id) => !byUser.has(id));
+  if (missing.length > 0) {
+    await db
+      .insert(schema.userNotificationPreferences)
+      .values(missing.map((userId) => ({ userId })))
+      .onConflictDoNothing();
+    for (const userId of missing) {
+      byUser.set(userId, {
+        userId,
+        channelPrefs: { ...DEFAULT_CHANNEL_PREFS },
+      });
+    }
+  }
+  return byUser;
+}
+
+function isCategoryEnabled(
+  type: NotificationType,
+  prefs: NotificationPreferencesDto,
+): boolean {
+  return prefs.channelPrefs[type]?.inApp ?? true;
+}
+
+async function filterByEnabledCategory(
+  db: PostgresJsDatabase<typeof schema>,
+  inputs: CreateNotificationInput[],
+): Promise<CreateNotificationInput[]> {
+  const userIds = [...new Set(inputs.map((i) => i.userId))];
+  const prefsByUser = await loadPreferencesForUsers(db, userIds);
+  return inputs.filter((input) =>
+    isCategoryEnabled(input.type, prefsByUser.get(input.userId)!),
+  );
+}
+
+async function insertNotificationBatch(
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  eligible: CreateNotificationInput[],
+): Promise<(typeof schema.notifications.$inferSelect)[]> {
+  const created = await db
+    .insert(schema.notifications)
+    .values(
+      eligible.map((input) => ({
+        userId: input.userId,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        payload: input.payload ?? null,
+        expiresAt: input.expiresAt ?? null,
+      })),
+    )
+    .returning();
+  const types = [...new Set(eligible.map((e) => e.type))].join(',');
+  logger.log(`Created ${created.length} notifications (batch, types=${types})`);
+  return created;
+}
+
+/**
+ * Create many notifications in a single batch (ROK-1043).
+ * Filters by in-app preference, multi-row inserts, fires Discord batch.
+ */
+export async function createManyNotifications(
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  discordService: DiscordNotificationService | null,
+  inputs: CreateNotificationInput[],
+): Promise<NotificationDto[]> {
+  if (inputs.length === 0) return [];
+  const eligible = await filterByEnabledCategory(db, inputs);
+  if (eligible.length === 0) return [];
+  const created = await insertNotificationBatch(db, logger, eligible);
+  dispatchDiscordBatch(logger, discordService, eligible, created);
+  return created.map(mapNotificationToDto);
+}
+
+function dispatchDiscordBatch(
+  logger: Logger,
+  discordService: DiscordNotificationService | null,
+  inputs: CreateNotificationInput[],
+  created: (typeof schema.notifications.$inferSelect)[],
+): void {
+  if (!discordService) return;
+  // Index alignment contract: inputs[idx] ↔ created[idx]. Postgres preserves
+  // input order for multi-row VALUES + RETURNING, so the Nth returned row
+  // corresponds to the Nth value tuple. Drizzle does not formally guarantee
+  // this, so the assertion below fails loudly if the invariant ever breaks
+  // (a mismatch would otherwise silently route DMs to the wrong notification).
+  if (created.length !== inputs.length) {
+    throw new Error(
+      `dispatchDiscordBatch: inputs/created length mismatch (${inputs.length} vs ${created.length}) — insert-order invariant broken`,
+    );
+  }
+  const jobs = inputs
+    .map((input, idx) => ({ input, notification: created[idx] }))
+    .filter(({ input }) => !input.skipDiscord)
+    .map(({ input, notification }) => ({
+      notificationId: defined(notification, 'created notification').id,
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      ...(input.payload !== undefined ? { payload: input.payload } : {}),
+    }));
+  if (jobs.length === 0) return;
+  discordService.dispatchMany(jobs).catch((err: unknown) => {
+    logger.warn(
+      `Failed to dispatch Discord batch: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    );
+  });
+}

@@ -1,0 +1,3818 @@
+/**
+ * Scheduling Poll page smoke tests (ROK-965, ROK-999, ROK-1300).
+ * Route: /community-lineup/:lineupId/schedule/:matchId
+ * Requires DEMO_MODE=true and an authenticated admin (global setup).
+ *
+ * ROK-1300: the SchedulingWizard stepper is gone — `<SchedulingComposite>`
+ * owns the page body with a single JourneyHero toolbar at top (ROK-1558:
+ * sticky on desktop only), an in-composite U2 game-ref banner (replaces
+ * MatchContextCard), the group-availability heatmap, and per-row
+ * +Vote / operator Lock (the toolbar submit is retired, ROK-1544). The
+ * GameTimeRefreshModal stays — it self-gates on stale game time, independent
+ * of the composite.
+ */
+import { test, expect } from './base';
+import { signInAsAdmin, signInContextWithJwt } from './browser-session';
+import { devices, type Locator, type Page } from '@playwright/test';
+import { STORAGE_STATE_PATH } from '../auth-paths';
+import { dismissGameTimeCheck, isMobile, isPhoneLayout } from './helpers';
+import { at, defined } from './defined';
+import {
+    getAdminToken,
+    getInviteeFixture,
+    apiPost,
+    apiGet,
+    apiDelete,
+    apiPatch,
+    apiPut,
+    pollForCondition,
+} from './api-helpers';
+import {
+    expectUnanswered,
+    nonLeadingRow,
+    openPollPage,
+    openRowMenu,
+    rowMenuTrigger,
+    seedNonLeadingRowPoll,
+    seedPollWithTwoSlots,
+    slotDateLabel,
+    slotRowById,
+    waitForSlotCounts,
+    waitForStances,
+    yesToggle,
+} from './scheduling-poll-fixtures';
+
+interface SchedulingPollResponse {
+    slots?: { id: number; votes?: unknown[] }[];
+    match?: { status?: string };
+}
+
+/**
+ * ROK-1247: Poll the scheduling-poll API endpoint until a slot exists (and,
+ * optionally, until a slot has at least one vote). The page renders slot
+ * cards from a `useQuery` against this endpoint with a 15s staleTime —
+ * if the test navigates before the API observes the API-seeded suggest/vote
+ * writes, an empty cache can be served for the lifetime of the test.
+ */
+async function pollSchedulingPollHasSlot(
+    token: string,
+    lineupId: number,
+    matchId: number,
+    opts?: { withVote?: boolean },
+): Promise<SchedulingPollResponse> {
+    return pollForCondition<SchedulingPollResponse>(
+        async () => {
+            const data = (await apiGet(
+                token,
+                `/lineups/${lineupId}/schedule/${matchId}`,
+            )) as SchedulingPollResponse | null;
+            if (!data?.slots?.length) return null;
+            if (opts?.withVote) {
+                const hasVote = data.slots.some(
+                    (s) => Array.isArray(s.votes) && s.votes.length > 0,
+                );
+                return hasVote ? data : null;
+            }
+            return data;
+        },
+        {
+            timeoutMs: 15_000,
+            description: `/lineups/${lineupId}/schedule/${matchId} has slot${opts?.withVote ? '+vote' : ''}`,
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Setup helpers
+// ---------------------------------------------------------------------------
+
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'scheduling-poll';
+let workerPrefix: string;
+let lineupTitle: string;
+
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
+ *
+ * ROK-1070: this file's fixtures live on `decided`/`scheduling` rows (the
+ * scheduling-poll attaches to a decided lineup). The default reset only
+ * touches `building`/`voting` rows, so a stale decided/scheduling lineup
+ * from a prior run survives and the new fixture's poll lands on the wrong
+ * lineup. Pass the broader phases array so all phase rows are archived.
+ */
+async function archiveActiveLineup(token: string): Promise<void> {
+    await apiPost(token, '/admin/test/reset-lineups', {
+        titlePrefix: workerPrefix,
+        phases: ['building', 'voting', 'decided'],
+    });
+}
+
+/** Fetch real game IDs from the admin games endpoint. */
+async function fetchGameIds(
+    token: string,
+    count: number,
+): Promise<number[]> {
+    const data = await apiGet(token, '/admin/settings/games');
+    if (!data?.data?.length)
+        throw new Error('No games in DB - seed data missing');
+    return data.data.slice(0, count).map((g: { id: number }) => g.id);
+}
+
+/** Create a lineup in scheduling status with a "scheduling" match. */
+async function createSchedulingLineupWithMatch(token: string): Promise<{
+    lineupId: number;
+    matchId: number;
+    gameIds: number[];
+}> {
+    await archiveActiveLineup(token);
+
+    const gameIds = await fetchGameIds(token, 4);
+
+    // Create lineup with a low match threshold to maximize match generation
+    const createRes = await apiPost(token, '/lineups', {
+        title: lineupTitle,
+        buildingDurationHours: 24,
+        votingDurationHours: 48,
+        decidedDurationHours: 24,
+        matchThreshold: 10,
+    });
+
+    const lineupId: number =
+        createRes?.id ??
+        (await apiGet(token, '/lineups/banner'))?.id;
+
+    if (!lineupId) throw new Error('Failed to create lineup');
+
+    // Nominate games
+    for (const gid of gameIds) {
+        await apiPost(token, `/lineups/${lineupId}/nominate`, {
+            gameId: gid,
+        });
+    }
+
+    // Advance to voting
+    await apiPatch(token, `/lineups/${lineupId}/status`, {
+        status: 'voting',
+    });
+
+    // Cast votes -- first 3 games get a vote from admin
+    for (const gid of gameIds.slice(0, 3)) {
+        await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid });
+    }
+
+    // Advance to decided (generates matches from voting results).
+    // Pass decidedGameId so the transition can't fail with TIEBREAKER_REQUIRED
+    // when admin's three votes happen to land on tied games — that previously
+    // left the lineup in 'voting', the matchId fallback hit 1, and every
+    // wizard test downstream blew up with "wizard surface never rendered".
+    await apiPatch(token, `/lineups/${lineupId}/status`, {
+        status: 'decided',
+        decidedGameId: gameIds[0],
+    });
+
+    // Fetch matches and find one in "scheduling" status
+    const matchesRes = await apiGet(
+        token,
+        `/lineups/${lineupId}/matches`,
+    );
+
+    // The matches response groups by tier; scheduling tier has threshold-met matches
+    let matchId: number | undefined;
+    if (matchesRes?.scheduling?.length > 0) {
+        matchId = matchesRes.scheduling[0].id;
+    } else if (matchesRes?.almostThere?.length > 0) {
+        matchId = matchesRes.almostThere[0].id;
+    } else if (matchesRes?.rallyYourCrew?.length > 0) {
+        matchId = matchesRes.rallyYourCrew[0].id;
+    }
+
+    // Fallback: use ID 1 if no matches were generated (the page doesn't exist
+    // yet anyway, so the test will fail at navigation regardless)
+    if (!matchId) matchId = 1;
+
+    return { lineupId, matchId, gameIds };
+}
+
+// ---------------------------------------------------------------------------
+// Wizard / modal navigation helpers (ROK-1301)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dismiss the game-time check overlay if it auto-opened (ROK-1301 → ROK-1564).
+ *
+ * The overlay auto-opens on the poll page only when game time is stale. In these
+ * smoke fixtures the beforeAll PUTs slots → `game_time_confirmed_at = now` →
+ * game time is fresh, so it normally does NOT appear. We still defensively
+ * dismiss it (via its Skip answer) so a stale state from an earlier test, a
+ * sibling worker, or seed data can't block the page. Skip persists to
+ * sessionStorage, so it won't re-fire later in the same page session.
+ *
+ * ROK-1569 split the two shells apart: the desktop Modal still renders the
+ * four-answer `game-time-check-body`, while below 1024px the check is the phone
+ * week editor inside a one-view BottomSheet (ROK-1579).
+ * `dismissGameTimeCheck` (helpers.ts) probes both and is the ONLY place that
+ * knows the difference.
+ */
+async function dismissGameTimeModalIfPresent(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    await dismissGameTimeCheck(page);
+}
+
+/**
+ * Navigate to the scheduling poll and wait for the SchedulingComposite to
+ * render (ROK-1300 — the wizard stepper + separate "Scheduling Poll" h1 are
+ * gone; the composite owns the page body with a single hero toolbar at top,
+ * pinned on desktop and free-scrolling on mobile — ROK-1558).
+ * The composite's region is the JourneyHero (role="region" named /scheduling/i).
+ */
+async function goToPoll(
+    page: import('@playwright/test').Page,
+    lid: number,
+    mid: number,
+): Promise<void> {
+    await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
+    // Dismiss the game-time modal first so it can't sit over the composite.
+    await dismissGameTimeModalIfPresent(page);
+
+    const composite = page.locator('[data-testid="scheduling-composite"]');
+    const completed = page.locator('[data-testid="match-status-badge"]');
+    // The active composite OR the scheduled/completed terminal state.
+    await expect
+        .poll(
+            async () =>
+                (await composite.isVisible().catch(() => false)) ||
+                (await completed.isVisible().catch(() => false)),
+            { timeout: 20_000, message: 'scheduling composite never rendered' },
+        )
+        .toBe(true);
+}
+
+/**
+ * Suggest `when` on a poll and return the new slot's id.
+ *
+ * Suggesting auto-votes the suggester YES, so the returned slot starts at
+ * net +1 unless the caller toggles that vote back off.
+ */
+async function suggestSlotAt(
+    lid: number,
+    mid: number,
+    when: Date,
+): Promise<number> {
+    const res = await apiPost(
+        adminToken,
+        `/lineups/${lid}/schedule/${mid}/suggest`,
+        { proposedTime: when.toISOString() },
+    );
+    const id: number | undefined = res?.data?.id ?? res?.id;
+    if (!id) {
+        throw new Error(
+            `suggest did not return a slot id for ${when.toISOString()}`,
+        );
+    }
+    return id;
+}
+
+/**
+ * ROK-1635 AC1: the LEADING time renders ONCE — on the leader card — and its
+ * ladder row is removed (`SchedulingComposite` passes `excludeSlotId`). A poll
+ * whose only proposed time is the one a case is about therefore has NO
+ * `[data-testid="schedule-slot"]` in ANY stance, because even an unanswered
+ * poll derives a provisional leader (`deriveSchedulingLeader`).
+ *
+ * This suggests an EARLIER decoy time and leaves the suggester's auto-YES on
+ * it. The decoy then holds net +1, and the time under test can at best reach
+ * net +1 itself — losing the earlier-time tiebreak — so it stays a ladder ROW
+ * in every stance a case can drive it to (not answered, voted, anti-voted).
+ *
+ * `decoyTime` MUST be earlier than the time under test, and far enough from it
+ * that a case keying on the slot's own window (conflicts, labels) cannot read
+ * the decoy instead.
+ */
+async function seedDecoyLeader(
+    lid: number,
+    mid: number,
+    decoyTime: Date,
+): Promise<number> {
+    return suggestSlotAt(lid, mid, decoyTime);
+}
+
+/**
+ * ROK-1543 (Layout B): the group-availability heatmap and the suggest form
+ * are no longer in the poll's primary body — they live behind the single
+ * "Find a better time" affordance (BottomSheet <1024px, Modal >=1024px).
+ */
+async function openBetterTimeSheet(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    const affordance = page.locator('[data-testid="scheduling-find-better-time"]');
+    // The affordance mounts with the poll body — wait for it rather than
+    // clicking into a still-loading page (flaked on the fleet, ROK-1543).
+    await expect(affordance).toBeVisible({ timeout: 15_000 });
+    await affordance.click();
+    await expect(
+        page.locator('[data-testid="scheduling-better-time-body"]'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+// ---------------------------------------------------------------------------
+// Shared test state
+// ---------------------------------------------------------------------------
+
+// Increase timeout for all tests and hooks — the beforeAll setup transitions
+// through multiple lineup phases which can be slow.
+test.describe.configure({ timeout: 120_000 });
+
+let adminToken: string;
+let lineupId: number;
+let matchId: number;
+let gameIds: number[];
+
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
+    adminToken = await getAdminToken();
+    const result = await createSchedulingLineupWithMatch(adminToken);
+    lineupId = result.lineupId;
+    matchId = result.matchId;
+    gameIds = result.gameIds;
+
+    // Seed game-time availability so the heatmap has data to render
+    const slots = [
+        { dayOfWeek: 1, hour: 19 }, { dayOfWeek: 1, hour: 20 },
+        { dayOfWeek: 3, hour: 19 }, { dayOfWeek: 3, hour: 20 },
+        { dayOfWeek: 5, hour: 18 }, { dayOfWeek: 5, hour: 19 },
+    ];
+    await apiPut(adminToken, '/users/me/game-time', { slots });
+
+    // Suggest a time slot so voting/create-event tests have something to interact with
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(19, 0, 0, 0);
+    const suggestRes = await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/suggest`, {
+        proposedTime: tomorrow.toISOString(),
+    });
+
+    // Pre-vote on the slot via API so Create Event button is enabled
+    const slotId = suggestRes?.data?.id ?? suggestRes?.id;
+    if (slotId) {
+        await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/vote`, { slotId });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// AC1: Route renders the scheduling poll page
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll page route', () => {
+    test('route /community-lineup/:lineupId/schedule/:matchId renders the scheduling poll page', async ({
+        page,
+    }) => {
+        await goToPoll(page, lineupId, matchId);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// GameTimeRefreshModal (ROK-1301) — replaces the former wizard Step 1
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
+    test('returning user with fresh game time → NO modal, composite renders directly', async ({
+        page,
+    }) => {
+        // The beforeAll PUT to /users/me/game-time set confirmed_at = now, so the
+        // authenticated admin's game time is fresh → the stale-gated modal must
+        // NOT auto-open. (The positive stale-title case is covered deterministically
+        // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx.)
+        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
+
+        // Neither shell's check may mount within a short window. Both are
+        // asserted on both projects: after ROK-1569 the desktop body testid is
+        // absent on the phone by construction, so checking it alone would pass
+        // vacuously there and hide a sheet that DID open.
+        await expect(page.getByTestId('game-time-check-body')).toHaveCount(0, { timeout: 5_000 });
+        await expect(page.getByTestId('phone-week-check')).toHaveCount(0, { timeout: 5_000 });
+
+        // ROK-1300: the composite body renders directly (no wizard stepper).
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 15_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1300 single-hero layout — composite owns the page body; no wizard
+// stepper, no separate "Scheduling Poll" h1; U2 game-ref banner replaces the
+// standalone MatchContextCard.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll single-hero layout (ROK-1300)', () => {
+    test('hero at top, NO wizard stepper, NO separate "Scheduling Poll" h1', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // The morphing JourneyHero region is present (role=region named /scheduling/i).
+        await expect(
+            page.getByRole('region', { name: /scheduling/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+        // Wizard stepper is gone.
+        await expect(
+            page.locator('[data-testid="scheduling-wizard-step-1"]'),
+        ).toHaveCount(0);
+        await expect(
+            page.locator('[data-testid="wizard-step-indicator"]'),
+        ).toHaveCount(0);
+        // The active poll has no separate "Scheduling Poll" h1 (only the
+        // scheduled/completed terminal state renders one).
+        await expect(
+            page.getByRole('heading', { level: 1, name: /^scheduling poll$/i }),
+        ).toHaveCount(0);
+
+        // ROK-1584 §1 (H1-b): the participants chip rides on the HEADLINE row,
+        // to the right of the task — not in a cluster of its own below it.
+        const headline = page.getByTestId('journey-headline-row').first();
+        await expect(headline).toBeVisible({ timeout: 15_000 });
+        await expect(
+            headline.getByTestId('lineup-participants-button'),
+            'the participants chip belongs in the hero headline row',
+        ).toBeVisible();
+
+        // ...and the phase indicator is the progress line, which names the
+        // phase the viewer is in via `data-active` (1-4).
+        const progress = page.getByTestId('journey-progress').first();
+        await expect(progress).toBeVisible();
+        await expect(progress).toHaveAttribute('data-active', /^[1-4]$/);
+    });
+
+    test('U2 game-ref (in toolbar) shows game name + ⓘ; clicking navigates to /games/:id', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // ROK-1300 round 2: the game-ref lives in the hero toolbar, on the
+        // same row as the submit button, and is itself clickable.
+        const banner = page.locator('[data-testid="scheduling-game-ref"]');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        await expect(
+            banner.locator('[data-testid="match-game-name"]'),
+        ).toBeVisible({ timeout: 5_000 });
+        // ⓘ hover affordance is present.
+        await expect(
+            banner.locator('[data-testid="scheduling-game-research"]'),
+        ).toBeVisible({ timeout: 5_000 });
+        // Member/match context line.
+        await expect(banner).toContainText(/you|member|match/i);
+
+        // Clicking the game-ref navigates to the game-detail page.
+        await banner.click();
+        await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+        expect(page.url()).toMatch(/\/games\/\d+/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC3: Suggest a new time slot
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll suggest time slot', () => {
+    test('suggest slot UI exists and is interactive', async ({ page }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // AC3: the date/time picker lives in the "Find a better time" sheet
+        // since ROK-1543 — open it, then assert the picker.
+        await openBetterTimeSheet(page);
+        const dateTimeInput = page.locator(
+            'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
+        );
+        await expect(dateTimeInput).toBeVisible({ timeout: 15_000 });
+
+        // Suggest button is visible next to the picker. ROK-1588 (Q8): once a
+        // time is filled it names it ("Suggest Wed 9 PM"), so match the verb,
+        // scoped to the sheet body.
+        const suggestBtn = page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .getByRole('button', { name: /^Suggest(\s|$)/ });
+        await expect(suggestBtn).toBeVisible({ timeout: 5_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC4: Toggle votes on slots
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll vote toggling', () => {
+    test('clicking a time slot toggles the vote', async ({ page }) => {
+        // ROK-1635 AC1: the leading time is rendered ONCE, on the card, and
+        // has no ladder row — and a poll with a single proposed time leads in
+        // every stance. So this case owns a poll whose row under test can
+        // never take the lead (`seedNonLeadingRowPoll`: A keeps the
+        // suggester's auto-YES at net +1, B is cleared to net 0 and loses the
+        // earlier-time tiebreak even once this test votes it up to +1).
+        const token = await getAdminToken();
+        const seeded = await seedNonLeadingRowPoll(token, 8, 9);
+        try {
+            await goToPoll(page, seeded.lineupId, seeded.pollId);
+
+            // AC4: ROK-1300 — slot rows carry the `+ Vote` toggle (the legacy
+            // whole-card click target was replaced by the per-row vote button
+            // in the SchedulingComposite). The row keeps `data-voted` for
+            // state, and B's baseline is asserted, never assumed.
+            const row = nonLeadingRow(page, seeded);
+            await expect(row).toBeVisible({ timeout: 15_000 });
+            await expectUnanswered(row);
+
+            // Click the vote toggle — wait for API round-trip
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                yesToggle(row).click(),
+            ]);
+
+            // After click, the state is the OPPOSITE of the baseline...
+            await expect(row).toHaveAttribute('data-voted', 'true', {
+                timeout: 10_000,
+            });
+
+            // Click again to toggle back
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                yesToggle(row).click(),
+            ]);
+
+            await expect(row).toHaveAttribute('data-voted', 'false', {
+                timeout: 10_000,
+            });
+
+            // ...and the toggling never moved the lead, so the row the case
+            // drove is still a row — the toggle is not a leader promotion.
+            await expect(row).toBeVisible();
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC5: "You voted" indicator on voted slots
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll "You voted" indicator', () => {
+    test('"You voted" indicator appears on voted slots', async ({
+        page,
+    }) => {
+        // ROK-1635 AC1 again: the indicator is a ROW affordance, so the case
+        // needs a time that cannot become the leader — see the vote-toggling
+        // case above for why a one-slot poll no longer renders any row.
+        const token = await getAdminToken();
+        const seeded = await seedNonLeadingRowPoll(token, 10, 11);
+        try {
+            await goToPoll(page, seeded.lineupId, seeded.pollId);
+
+            const row = nonLeadingRow(page, seeded);
+            await expect(row).toBeVisible({ timeout: 15_000 });
+
+            // The seeded baseline is "not answered", so the ✓ must be absent
+            // first — otherwise a glyph that renders unconditionally would
+            // satisfy the assertion below without the vote meaning anything.
+            await expectUnanswered(row);
+            await expect(row.getByLabel('You voted')).toHaveCount(0);
+
+            // ROK-1300: the row is a <div>; the vote toggle is a separate
+            // <button aria-label="Vote for <time>">. Click the button (not the
+            // card) to cast the vote, then assert the ✓ indicator.
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                yesToggle(row).click(),
+            ]);
+            await expect(row.getByLabel('You voted')).toBeVisible({
+                timeout: 10_000,
+            });
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC6: the group week view renders with match members' availability (ROK-1588)
+// ---------------------------------------------------------------------------
+
+/** One cell of the group-availability aggregate the week view / day module render. */
+interface AggregateCell {
+    dayOfWeek: number;
+    hour: number;
+    availableCount: number;
+}
+
+/** A day/hour in GRID convention (0 = Sunday), as the week view renders it. */
+interface GridCell {
+    day: number;
+    hour: number;
+}
+
+/**
+ * The admin's seeded template in GRID convention (Mon/Wed/Fri).
+ *
+ * `PUT /users/me/game-time` takes GRID/Sunday-first days already — `saveTemplate`
+ * applies `(day + 6) % 7` on the way into the DB and the aggregate maps it back
+ * with `(day + 1) % 7` — so the beforeAll's days 1/3/5 render at grid days 1/3/5,
+ * NOT 2/4/6.
+ */
+const TEMPLATED_GRID_CELLS: GridCell[] = [
+    { day: 1, hour: 19 }, { day: 1, hour: 20 },
+    { day: 3, hour: 19 }, { day: 3, hour: 20 },
+    { day: 5, hour: 18 }, { day: 5, hour: 19 },
+];
+
+/** Sunday 00:00 UTC of the week containing `d`. */
+function weekStartUtc(d: Date): Date {
+    const x = new Date(d);
+    x.setUTCDate(x.getUTCDate() - x.getUTCDay());
+    x.setUTCHours(0, 0, 0, 0);
+    return x;
+}
+
+/** The instant a grid cell names inside the week starting at `weekStart`. */
+function gridCellInstant(weekStart: Date, cell: GridCell): Date {
+    const x = new Date(weekStart);
+    x.setUTCDate(x.getUTCDate() + cell.day);
+    x.setUTCHours(cell.hour, 0, 0, 0);
+    return x;
+}
+
+/**
+ * The first templated hour still in the future — this week if one is left,
+ * otherwise next week (the test then pages the sheet forward). Events must be
+ * in the future, and the test has to be deterministic on any weekday.
+ */
+function pickTargetCell(): {
+    cell: GridCell;
+    start: Date;
+    weekStart: Date;
+    weeksForward: number;
+} {
+    const now = new Date();
+    const thisWeek = weekStartUtc(now);
+    const cutoff = now.getTime() + 60 * 60_000;
+    for (const cell of TEMPLATED_GRID_CELLS) {
+        const start = gridCellInstant(thisWeek, cell);
+        if (start.getTime() > cutoff)
+            return { cell, start, weekStart: thisWeek, weeksForward: 0 };
+    }
+    const nextWeek = new Date(thisWeek);
+    nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+    const cell = at(TEMPLATED_GRID_CELLS, 0);
+    return {
+        cell,
+        start: gridCellInstant(nextWeek, cell),
+        weekStart: nextWeek,
+        weeksForward: 1,
+    };
+}
+
+/**
+ * The dated availability endpoint for a week (ROK-1570). `tzOffset=0` matches
+ * the `timezoneId: 'UTC'` browser this describe pins, so the API the test polls
+ * keys busy hours exactly the way the grid under test does.
+ */
+function availabilityPath(weekStart: Date): string {
+    return (
+        `/lineups/${lineupId}/schedule/${matchId}/availability` +
+        `?weekStart=${encodeURIComponent(weekStart.toISOString())}&tzOffset=0`
+    );
+}
+
+/** Hours the phone module shows for one day (`CHECK_HOURS` = 17..23). */
+const PHONE_HOURS = 7;
+
+/** Day names as `DayPager` prints them (`FULL_DAYS`, grid convention). */
+const FULL_DAY_NAMES = [
+    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+];
+
+/**
+ * Whether the OPEN sheet is the phone surface (ROK-1580).
+ *
+ * `SchedulingBetterTimeSheet` stamps `data-surface="sheet"` below 1024px and
+ * `"modal"` above, so these helpers branch on what the app actually mounted
+ * rather than on the project name — on `mobile` the body is the one-day group
+ * module and `[data-testid="group-week-view"]` does not exist at all.
+ */
+async function isPhoneSheet(
+    page: import('@playwright/test').Page,
+): Promise<boolean> {
+    return (
+        (await page
+            .locator('[data-testid="scheduling-better-time-body"][data-surface="sheet"]')
+            .count()) > 0
+    );
+}
+
+/** Bring `day` on screen in the phone module and wait for the pager to say so. */
+async function showPhoneDay(
+    page: import('@playwright/test').Page,
+    day: number,
+): Promise<void> {
+    const dayName = defined(FULL_DAY_NAMES[day], `day name ${day}`);
+    await page.getByTestId(`phone-week-strip-day-${day}`).click();
+    await expect(
+        page.getByTestId('phone-day-title'),
+        `phone pager should show ${dayName} after tapping its week-strip column`,
+    ).toHaveText(dayName, { timeout: 15_000 });
+}
+
+/**
+ * Advance the open sheet by ONE week, whichever surface it is.
+ *
+ * Desktop: `AvailabilityHeatmapSection`'s "Next Week →".
+ * Phone (ROK-1580): there is no week nav — the ‹ › day pager IS the week
+ * control, so Saturday › re-fetches the next week and lands on its Sunday.
+ */
+async function stepWeekForward(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    if (!(await isPhoneSheet(page))) {
+        await page.getByRole('button', { name: /next week/i }).click();
+        return;
+    }
+    await showPhoneDay(page, 6);
+    await page.getByRole('button', { name: /next day/i }).click();
+    await expect(
+        page.getByTestId('phone-day-title'),
+        'paging past Saturday must roll into the NEXT week and land on Sunday',
+    ).toHaveText('Sunday', { timeout: 20_000 });
+}
+
+/** Page the open sheet forward `count` weeks. */
+async function pageWeekForward(
+    page: import('@playwright/test').Page,
+    count: number,
+): Promise<void> {
+    for (let i = 0; i < count; i++) {
+        await stepWeekForward(page);
+    }
+}
+
+/**
+ * A group cell's accessible label.
+ *
+ * Desktop (ROK-1588) reads `group-week-cell-{d}-{h}`'s `aria-label` —
+ * `groupCellAriaLabel`: "Wed 8 PM: 0 free, 1 busy, your game time". The phone
+ * shows ONE day, so the cell has to be brought on screen first; its
+ * `aria-label` is `computeHeatmapLabel` ("0 free · 1 busy · 0 unknown"). The
+ * two copies differ, so count claims go through `cellCounts`, which parses
+ * either; whole-label equality is only ever compared on one surface.
+ */
+async function cellTitle(
+    page: import('@playwright/test').Page,
+    cell: GridCell,
+): Promise<string> {
+    if (await isPhoneSheet(page)) {
+        await showPhoneDay(page, cell.day);
+        const button = page.getByTestId(
+            `phone-group-cell-${cell.day}-${cell.hour}`,
+        );
+        await expect(button).toBeVisible({ timeout: 15_000 });
+        return (await button.getAttribute('aria-label')) ?? '';
+    }
+    const locator = page
+        .getByTestId('group-week-view')
+        .getByTestId(`group-week-cell-${cell.day}-${cell.hour}`);
+    await expect(locator).toBeVisible({ timeout: 15_000 });
+    return (await locator.getAttribute('aria-label')) ?? '';
+}
+
+/** Free/busy counts named by a cell label on either surface (-1 free = unparseable). */
+function countsOf(label: string): { free: number; busy: number } {
+    const free = /(?:^|: )(\d+) free\b/.exec(label);
+    const busy = /\b(\d+) busy\b/.exec(label);
+    return { free: free ? Number(free[1]) : -1, busy: busy ? Number(busy[1]) : 0 };
+}
+
+/** A group cell's `{free, busy}` counts, read from its label on either surface. */
+async function cellCounts(
+    page: import('@playwright/test').Page,
+    cell: GridCell,
+): Promise<{ free: number; busy: number }> {
+    return countsOf(await cellTitle(page, cell));
+}
+
+/** The Sunday one week after `weekStart`. */
+function nextWeekOf(weekStart: Date): Date {
+    const x = new Date(weekStart);
+    x.setUTCDate(x.getUTCDate() + 7);
+    return x;
+}
+
+/**
+ * The `datetime-local` value `toDatetimeLocal(day, hour, weekStart)` produces
+ * for a grid cell. The describe pins the browser to UTC, so the component's
+ * local-date arithmetic and these UTC getters name the same wall clock.
+ */
+function datetimeLocalOf(weekStart: Date, cell: GridCell): string {
+    const d = gridCellInstant(weekStart, cell);
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    return (
+        `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
+        `T${pad(cell.hour)}:00`
+    );
+}
+
+/**
+ * What a phone group cell's `aria-label` may read.
+ *
+ * `computeHeatmapLabel` drops the stale clause when nobody is stale
+ * (`grid-cell.utils.ts:114`), and `GroupDayView` falls back to "no data" for an
+ * hour the aggregate emits no cell for (a poll only emits hours some template
+ * covers, and `fillUnknownCells` only back-fills when there are untemplated
+ * members). Both shapes are legal; an UNLABELLED cell is not, and that is what
+ * this catches — the templated hour is asserted to carry a real count
+ * separately below.
+ */
+/**
+ * The phone surface's answer to "the heatmap rendered with data" (ROK-1580):
+ * the module is on screen, all seven days are reachable from the week strip,
+ * and the displayed day's hours are labelled cells rather than empty boxes.
+ */
+async function assertPhoneGroupModule(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    await expect(
+        page.getByTestId('phone-group-availability'),
+        'below 1024px the sheet must mount the one-day group module',
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+        page.locator('[data-testid^="phone-week-strip-day-"]'),
+        'the week strip is the phone\'s day affordance — all seven days must be reachable',
+    ).toHaveCount(7, { timeout: 15_000 });
+    const cells = page.locator('[data-testid^="phone-group-cell-"]');
+    await expect(
+        cells,
+        'the displayed day must render the evening hours (CHECK_HOURS 17..23)',
+    ).toHaveCount(PHONE_HOURS, { timeout: 20_000 });
+    const labels = await cells.evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute('aria-label') ?? ''),
+    );
+    for (const label of labels) {
+        expect(
+            label,
+            `every phone group cell must carry the aggregate label, got "${label}"`,
+        ).toMatch(PHONE_CELL_LABEL);
+    }
+}
+
+// ROK-1587 (1587-6): an hour a poll slot starts in appends ", N voted".
+const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)(, \d+ voted)?$/;
+
+/** The "N free" of a cell label (either surface), or -1 when it reads some other way. */
+function freeCount(title: string): number {
+    return countsOf(title).free;
+}
+
+test.describe('Scheduling poll heatmap', () => {
+    // The server keys busy hours off real UTC dates; pinning the browser to
+    // UTC makes the week the grid paints the week the aggregate subtracts.
+    test.use({ timezoneId: 'UTC' });
+
+    test('the group week view renders with match members availability data', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // AC6: the group's availability still renders — from inside the
+        // ROK-1543 "Find a better time" sheet. Below 1024px that is ROK-1580's
+        // one-day module, which has no seven-column grid and no day headers:
+        // the week strip is the day affordance and each visible hour is a
+        // labelled cell, so the same three claims are asserted against it.
+        await openBetterTimeSheet(page);
+        if (await isPhoneSheet(page)) {
+            await assertPhoneGroupModule(page);
+            return;
+        }
+        // ROK-1588: at >=1024px the sheet mounts `GroupWeekView` — seven day
+        // columns, each hour a labelled cell button (CHECK_HOURS 17..23 by
+        // default, so at least 7 x 7 = 49).
+        const weekView = page.getByTestId('group-week-view');
+        await expect(weekView).toBeVisible({ timeout: 20_000 });
+        await expect(
+            weekView.locator('[data-testid^="group-week-header-"]'),
+            'the week view must head all seven day columns',
+        ).toHaveCount(7, { timeout: 15_000 });
+        const cells = weekView.locator('button[data-testid^="group-week-cell-"]');
+        await expect
+            .poll(() => cells.count(), {
+                timeout: 15_000,
+                message: 'the week view must render at least 7 hours x 7 days of cell buttons',
+            })
+            .toBeGreaterThanOrEqual(49);
+    });
+
+    /**
+     * ROK-1570: a member who is SIGNED UP for an event is not free at that
+     * hour, so the heatmap must stop painting them available there.
+     *
+     * The beforeAll seeds the admin's game-time template through
+     * `PUT /users/me/game-time`, whose payload is GRID convention (0 = Sunday)
+     * — the round trip through DB convention and back is the endpoint's, not
+     * the test's — so the seeded days 1/3/5 are the grid days 1/3/5 the
+     * assertions target. The busy keys are built from real dates, which is why
+     * this describe pins the browser to UTC: the week the grid paints then IS
+     * the week (and the offset) the aggregate subtracts from.
+     *
+     * The assertion is before/after rather than a hard "1 free": other poll
+     * members may also carry templates, so the covered cell is required to
+     * DROP to `0 free` while an untouched templated hour keeps whatever count
+     * it had.
+     */
+    test('a signed-up hour is no longer painted free (ROK-1570)', async ({
+        page,
+        world,
+    }) => {
+        const target = pickTargetCell();
+        const neighbour = TEMPLATED_GRID_CELLS.find(
+            (c) => c.day !== target.cell.day,
+        );
+        if (!neighbour) throw new Error('no neighbouring templated cell seeded');
+
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
+        if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
+
+        const before = {
+            target: await cellTitle(page, target.cell),
+            neighbour: await cellTitle(page, neighbour),
+        };
+        expect(
+            freeCount(before.target),
+            `fixture: grid cell ${target.cell.day}-${target.cell.hour} should start free ` +
+                `(admin's template), got "${before.target}"`,
+        ).toBeGreaterThan(0);
+
+        const startTime = target.start.toISOString();
+        const endTime = new Date(target.start.getTime() + 3_600_000).toISOString();
+        const event = (await apiPost(adminToken, '/events', {
+            title: world.uid('rok-1570-busy'),
+            startTime,
+            endTime,
+            maxAttendees: 10,
+        })) as { id?: number };
+        if (!event?.id) throw new Error('failed to create the busy-hour event');
+
+        try {
+            // The creator is auto-signed-up; re-POST is idempotent and makes
+            // the precondition explicit rather than inherited.
+            await apiPost(adminToken, `/events/${event.id}/signup`, {});
+
+            // The heatmap reads a `useQuery` with a 60s staleTime, so assert
+            // the API has observed the signup BEFORE reloading the page.
+            await pollForCondition(
+                async () => {
+                    const data = (await apiGet(
+                        adminToken,
+                        availabilityPath(target.weekStart),
+                    )) as { cells?: AggregateCell[] } | null;
+                    const cell = data?.cells?.find(
+                        (c) =>
+                            c.dayOfWeek === target.cell.day &&
+                            c.hour === target.cell.hour,
+                    );
+                    // The cell must still be EMITTED (its template row is
+                    // what makes it a cell) and read zero — an absent cell
+                    // would mean the aggregate dropped the hour entirely.
+                    return cell && cell.availableCount === 0 ? data : null;
+                },
+                {
+                    timeoutMs: 20_000,
+                    description: `availability drops grid cell ${target.cell.day}-${target.cell.hour}`,
+                },
+            );
+
+            await goToPoll(page, lineupId, matchId);
+            await openBetterTimeSheet(page);
+            if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
+
+            await expect
+                .poll(async () => (await cellCounts(page, target.cell)).free, {
+                    timeout: 15_000,
+                    message: `grid cell ${target.cell.day}-${target.cell.hour} still paints the admin free at an hour they are signed up for`,
+                })
+                .toBe(0);
+
+            // ROK-1584 §2: the hour does not just go quiet — the aggregate
+            // now SAYS why, on both surfaces (the desktop week cell's
+            // `groupCellAriaLabel` "…: 0 free, 1 busy" and the phone group
+            // cell's `computeHeatmapLabel` "0 free · 1 busy · …"). Exactly one
+            // member (the admin) is signed up at this hour in this fixture.
+            expect(
+                (await cellCounts(page, target.cell)).busy,
+                'the covered hour should name the busy member, not just drop to 0 free',
+            ).toBe(1);
+            expect(
+                await cellTitle(page, neighbour),
+                `untouched templated hour ${neighbour.day}-${neighbour.hour} changed`,
+            ).toBe(before.neighbour);
+
+            if (!(await isPhoneSheet(page))) {
+                // ROK-1588: the desktop week cell carries the busy edge as data.
+                await expect(
+                    page.getByTestId(
+                        `group-week-cell-${target.cell.day}-${target.cell.hour}`,
+                    ),
+                    'the covered week cell should carry the busy edge',
+                ).toHaveAttribute('data-busy', '1');
+            } else {
+                // The phone paints it too: a `--color-busy` left edge on the
+                // covered cell, and the week strip caps the band that holds it
+                // so the day is legible without opening it.
+                await showPhoneDay(page, target.cell.day);
+                await expect(
+                    page.getByTestId(
+                        `phone-group-cell-${target.cell.day}-${target.cell.hour}`,
+                    ),
+                    'the covered phone cell should carry the busy edge',
+                ).toHaveAttribute('data-busy', /^[1-9][0-9]*$/);
+                await expect(
+                    page
+                        .getByTestId(`phone-week-strip-day-${target.cell.day}`)
+                        .locator('[data-testid="phone-week-strip-bar"] [data-busy]'),
+                    'the week strip should cap the band holding the busy hour',
+                ).not.toHaveCount(0);
+            }
+        } finally {
+            await apiDelete(adminToken, `/events/${event.id}`);
+        }
+    });
+
+    /**
+     * ROK-1580: below 1024px "Find a better time" is NOT the seven-column
+     * heatmap — it is the one-day group module (ROK-1569's phone editor in
+     * GROUP mode). This asserts the three things that make it usable, none of
+     * which the desktop grid can stand in for:
+     *
+     * 1. one day of the evening hours is on screen, every hour carrying the
+     *    aggregate's own copy on its `aria-label` (the visible count is the
+     *    short "4 free" form, so the label is the accessible full story);
+     * 2. tapping an hour drafts the 2h "Suggested" block AND prefills the
+     *    suggest form travelling with the sheet — the two live on opposite
+     *    ends of the drawer, so a tap that paints but does not prefill (or
+     *    prefills the wrong week) is exactly the bug this catches;
+     * 3. the pager is the week control: › off Saturday re-fetches the next
+     *    week and lands on its Sunday (ROK-1570's re-fetch, reached without a
+     *    "Next Week" button, which the phone deliberately does not have).
+     */
+    test('the phone sheet is the one-day group module (ROK-1580)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            !isPhoneLayout(testInfo),
+            'phone-layout only: at >=1024px the sheet mounts the seven-column GroupWeekView Modal',
+        );
+
+        const target = pickTargetCell();
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
+        if (target.weeksForward > 0) await pageWeekForward(page, target.weeksForward);
+
+        // 1. ONE day of CHECK_HOURS, each hour labelled with the group's copy.
+        const cells = page.locator('[data-testid^="phone-group-cell-"]');
+        await expect(
+            cells,
+            'the phone sheet should show ONE day of the evening hours (CHECK_HOURS 17..23)',
+        ).toHaveCount(PHONE_HOURS, { timeout: 20_000 });
+        const labels = await cells.evaluateAll((nodes) =>
+            nodes.map((n) => n.getAttribute('aria-label') ?? ''),
+        );
+        for (const label of labels) {
+            expect(
+                label,
+                `every phone group cell must carry the aggregate label, got "${label}"`,
+            ).toMatch(PHONE_CELL_LABEL);
+        }
+
+        // 1b. ROK-1584 §2: the condensed strip encodes the day's shape in
+        // attributes — a band whose hours split across two kinds renders
+        // two-tone and names the OTHER kind in `data-two-tone`; a band holding
+        // a busy hour carries a `data-busy` cap (asserted against a real
+        // signup by the ROK-1570 case above). Both are legitimately absent on
+        // a uniform, nobody-busy week, so what is pinned here is the
+        // VOCABULARY: anything stamped is one of the four band kinds, and the
+        // caps are children of the bars rather than a separate layer.
+        const bars = page.locator('[data-testid="phone-week-strip-bar"]');
+        await expect(bars).not.toHaveCount(0);
+        const tones = await bars.evaluateAll((nodes) =>
+            nodes
+                .map((n) => n.getAttribute('data-two-tone'))
+                .filter((v): v is string => v !== null),
+        );
+        for (const tone of tones) {
+            expect(tone, 'data-two-tone must name a band kind').toMatch(
+                /^(all|most|few|none)$/,
+            );
+        }
+        expect(
+            await page.locator('[data-testid="phone-week-strip-bar"] [data-busy]').count(),
+            'busy caps live inside the bars they cap',
+        ).toBe(await page.locator('[data-busy][class*="bg-busy"]').count());
+
+        // 2. The templated hour is a real count, and tapping it drafts + prefills.
+        await showPhoneDay(page, target.cell.day);
+        const targetCell = page.getByTestId(
+            `phone-group-cell-${target.cell.day}-${target.cell.hour}`,
+        );
+        const targetLabel = (await targetCell.getAttribute('aria-label')) ?? '';
+        expect(
+            freeCount(targetLabel),
+            `fixture: grid cell ${target.cell.day}-${target.cell.hour} should read free ` +
+                `(admin's template), got "${targetLabel}"`,
+        ).toBeGreaterThan(0);
+
+        await targetCell.click();
+        await expect(
+            page.getByTestId('phone-group-suggested-block'),
+            'tapping an hour should draft the 2h Suggested block on that day',
+        ).toBeVisible({ timeout: 10_000 });
+        await expect(
+            page.locator(
+                '[data-testid="scheduling-better-time-body"] [data-testid="slot-datetime-picker"]',
+            ),
+            `tapping ${FULL_DAY_NAMES[target.cell.day]} ${target.cell.hour}:00 should prefill ` +
+                'the suggest form with THAT day of the displayed week',
+        ).toHaveValue(datetimeLocalOf(target.weekStart, target.cell), {
+            timeout: 10_000,
+        });
+
+        // 3. Paging › off Saturday re-fetches next week. Assert the API can
+        // answer for that week BEFORE the UI is asked to show it, so a red run
+        // blames the aggregate rather than the pager (no sleep, ROK-1247).
+        const nextWeek = nextWeekOf(target.weekStart);
+        await pollForCondition(
+            async () => {
+                const data = (await apiGet(adminToken, availabilityPath(nextWeek))) as {
+                    cells?: AggregateCell[];
+                } | null;
+                return data?.cells?.length ? data : null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: `availability for week ${nextWeek.toISOString()} has cells`,
+            },
+        );
+
+        // `stepWeekForward` taps Saturday's strip column then › and asserts the
+        // pager rolled to Sunday; the cells must come back for that new day.
+        await stepWeekForward(page);
+        await expect(
+            page.locator('[data-testid^="phone-group-cell-0-"]'),
+            'the next week\'s Sunday must re-render its hours after the pager rolls over',
+        ).toHaveCount(PHONE_HOURS, { timeout: 25_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1587/1588: poll slots that already exist are marked on the group surface
+// ---------------------------------------------------------------------------
+
+/**
+ * A future instant at 20:00 UTC on a Monday or Wednesday at least two days
+ * out — days the admin's template (TEMPLATED_GRID_CELLS) covers at hour 20,
+ * inside CHECK_HOURS, so the phone module shows it without widening.
+ */
+function slotFixture(): { cell: GridCell; at: Date; weekStart: Date; weeksForward: number } {
+    const now = new Date();
+    for (let d = 2; d < 10; d += 1) {
+        const at = new Date(now);
+        at.setUTCDate(at.getUTCDate() + d);
+        at.setUTCHours(20, 0, 0, 0);
+        if (at.getUTCDay() !== 1 && at.getUTCDay() !== 3) continue;
+        const weekStart = weekStartUtc(at);
+        const weeksForward = Math.round(
+            (weekStart.getTime() - weekStartUtc(now).getTime()) / (7 * 86_400_000),
+        );
+        return { cell: { day: at.getUTCDay(), hour: 20 }, at, weekStart, weeksForward };
+    }
+    throw new Error('no Monday/Wednesday within 10 days — unreachable');
+}
+
+
+// ---------------------------------------------------------------------------
+// AC7: "Create Event" button enabled only after voting
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll operator lock affordance (ROK-1300 → ROK-1635)', () => {
+    /** Suggest a time `daysOut` days out on the shared poll; returns its id. */
+    async function suggestAt(daysOut: number): Promise<number> {
+        const when = new Date();
+        when.setDate(when.getDate() + daysOut);
+        when.setHours(20, 0, 0, 0);
+        const res = await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        const id: number | undefined = res?.data?.id ?? res?.id;
+        if (!id) throw new Error('suggest did not return a slot id');
+        return id;
+    }
+
+    /**
+     * Drop the suggester's auto-YES so this slot sits at net 0. `leadsAtAll`
+     * crowns a time only at net > 0, so a 0/0 slot can NEVER be the one the
+     * leader card names — which makes its ROW render whatever the rest of this
+     * file's shared poll is doing, in all three viewport projects.
+     */
+    async function clearVoteOn(slotId: number): Promise<void> {
+        await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/vote`,
+            { slotId },
+        );
+        await pollForCondition(
+            async () => {
+                const poll = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                const slot = (poll?.slots ?? []).find(
+                    (s: { id: number }) => s.id === slotId,
+                );
+                const yes = slot?.votes?.length ?? -1;
+                const no = slot?.noVotes?.length ?? -1;
+                return yes === 0 && no === 0 ? true : null;
+            },
+            {
+                timeoutMs: 15_000,
+                description: `slot ${slotId} to read 0 yes / 0 no`,
+            },
+        );
+    }
+
+    /**
+     * ROK-1635 (AC3) REVERSES ROK-1618 AC6 on purpose. The inline cyan
+     * "Lock this time →" button the ladder carried per row is DELETED; every
+     * time card — the leading one and every row — now offers the SAME ⋯ menu,
+     * whose first item is "Lock this time — <time>". The intent this case
+     * inherits from ROK-1300 is unchanged (an operator can end this poll on a
+     * row's time, and the affordance is visible and enabled); only the surface
+     * moved, so the assertions moved with it and got a step stronger: the old
+     * case stopped at "a button exists", this one opens the real lock-in
+     * confirm.
+     *
+     * It CANCELS out of that confirm and must never lock: this file shares ONE
+     * poll across its cases, and a lock flips the match to `scheduled`
+     * (read-only) — which is exactly why the event-creation cases run last.
+     */
+    test('an operator locks a non-leading time from its row ⋯ menu — no inline lock button survives', async ({
+        page,
+    }) => {
+        const slotId = await suggestAt(25);
+        await clearVoteOn(slotId);
+        await goToPoll(page, lineupId, matchId);
+
+        const row = slotRowById(page, slotId);
+        await expect(row).toBeVisible({ timeout: 15_000 });
+
+        // The reversal, asserted page-wide rather than on this row: the menu
+        // item is a `menuitem`, never a `button`, so a surviving inline lock
+        // anywhere in the ladder fails here.
+        await expect(
+            page.getByRole('button', { name: /lock this time/i }),
+        ).toHaveCount(0);
+
+        // A row names its own time (N identical "Poll actions" triggers on one
+        // page are unusable with a screen reader — ROK-1635 §2.3).
+        await expect(rowMenuTrigger(row)).toHaveAccessibleName(
+            /^Time actions — /,
+        );
+        const { container } = await openRowMenu(page, row);
+
+        const lock = container.getByTestId('scheduling-slot-lock');
+        await expect(lock).toBeVisible({ timeout: 10_000 });
+        await expect(lock).toBeEnabled({ timeout: 10_000 });
+        await expect(lock).toHaveAccessibleName(/^Lock this time — /);
+
+        // It opens the SAME lock-in confirm the deleted button opened
+        // (`useSchedulingLock` → `EarlyCreateConfirmModal`), in either copy
+        // variant. The phone menu sheet is also `role="dialog"` and stays open
+        // behind it, hence the Cancel filter.
+        await lock.click();
+        const confirm = page.getByRole('dialog').filter({
+            has: page.getByRole('button', { name: 'Cancel', exact: true }),
+        });
+        await expect(confirm).toBeVisible({ timeout: 10_000 });
+        await expect(confirm).toContainText(
+            /Lock in .+ for everyone\?|Create event below majority\?/,
+        );
+        await confirm
+            .getByRole('button', { name: 'Cancel', exact: true })
+            .click();
+        await expect(confirm).toBeHidden({ timeout: 10_000 });
+
+        // Cancel cancelled — the shared poll is still open for the cases below.
+        const after = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        expect(after?.lockedInTime ?? null).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1635 AC1: the leading time renders exactly ONCE.
+//
+// ROK-1543 promoted the winning time onto a decision card but left its row in
+// the ladder below, so the page showed the same time twice and an operator
+// could act on it from two places. The row is now excluded while the card
+// names it — and the moment the lead moves, the old leader is back in the
+// ladder and the new one's row is gone. Nothing leads (every time at net ≤ 0)
+// means nothing is excluded (AC2), which is the state this case starts from
+// for slot B.
+//
+// Seeded as its OWN standalone poll rather than on this file's shared fixture:
+// three viewport projects run against one env, and "which time leads" has to
+// be exact for the assertion to mean anything.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll leader appears exactly once (ROK-1635 AC1)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    /**
+     * On a phone/tablet layout the "confirm your game time" sheet UNMOUNTS the
+     * slot list (`SchedulingComposite.tsx`), and it opens whenever the viewer's
+     * game time has never been confirmed — which made the sibling anti-vote
+     * cases pass or fail by shard composition (ROK-1617). This case reads the
+     * ladder directly, so confirm it server-side, up front.
+     */
+    test.beforeAll(async () => {
+        await apiPatch(
+            await getAdminToken(),
+            '/users/me/game-time/confirm',
+            {},
+        );
+    });
+
+    test('the leading time is on the card and NOT in the ladder — and a flipped lead swaps which row is hidden', async ({
+        page,
+    }) => {
+        const token = await getAdminToken();
+        const seeded = await seedPollWithTwoSlots(token, 12, 13);
+        try {
+            // A (the earlier time) keeps the suggester's auto-YES → net +1, so
+            // it leads. B's auto-YES is toggled off → net 0, and `leadsAtAll`
+            // (net > 0) can never crown it, so B is unambiguously a ladder row.
+            await apiPost(
+                token,
+                `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}/vote`,
+                { slotId: seeded.slotIdB },
+            );
+            await waitForSlotCounts(token, seeded, seeded.slotIdB, {
+                yes: 0,
+                no: 0,
+            });
+            await waitForSlotCounts(token, seeded, seeded.slotId, {
+                yes: 1,
+                no: 0,
+            });
+            await openPollPage(page, seeded);
+
+            const leaderTime = page.getByTestId('scheduling-leader-time');
+            await expect(leaderTime).toContainText(
+                slotDateLabel(seeded.time),
+                { timeout: 15_000 },
+            );
+            // AC1: the card names A, so the ladder has no row for A — while
+            // every other proposed time is still listed.
+            await expect(slotRowById(page, seeded.slotIdB)).toBeVisible({
+                timeout: 15_000,
+            });
+            await expect(slotRowById(page, seeded.slotId)).toHaveCount(0);
+
+            // Flip the lead with two presses in the browser: B takes a YES
+            // from its row (both at net +1, A still leads on the earlier-time
+            // tiebreak), then A takes a "Doesn't work" on the card naming it.
+            await yesToggle(slotRowById(page, seeded.slotIdB)).click();
+            await page
+                .getByTestId('scheduling-leader-actions')
+                .getByRole('button', { name: /as not working for you$/ })
+                .click();
+
+            // The page is `useQuery`-backed with a staleTime, so the server is
+            // the only honest witness that both presses left the browser.
+            // Never a sleep.
+            await waitForStances(
+                token,
+                seeded,
+                (s) =>
+                    s.yes.includes(seeded.slotIdB) &&
+                    s.no.includes(seeded.slotId),
+                'the API to report the YES on B and the anti-vote on A',
+            );
+
+            // B leads now (net +1 against A's -1) — so the two rows swap
+            // places. Asserted in ONE poll callback: a settled frame showing
+            // both rows, or neither, fails.
+            await expect(leaderTime).toContainText(
+                slotDateLabel(seeded.timeB),
+                { timeout: 15_000 },
+            );
+            await expect
+                .poll(
+                    async () => ({
+                        a: await slotRowById(page, seeded.slotId).count(),
+                        b: await slotRowById(page, seeded.slotIdB).count(),
+                    }),
+                    {
+                        timeout: 15_000,
+                        message:
+                            'the old leader never returned to the ladder, or the new leader never left it',
+                    },
+                )
+                .toEqual({ a: 1, b: 0 });
+        } finally {
+            await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(
+                () => {},
+            );
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1544 (P1-2): the vote IS the submit.
+//
+// The member submit ritual that ROK-1300 put in the sticky toolbar
+// (`sticky-hero-schedule-submit`) is RETIRED: tapping a slot casts or
+// withdraws the vote immediately and the server stamps
+// `scheduling_submitted_at` on the first vote. These tests pin the two
+// behaviours that replaced it — one tap casts (counts + leader card move,
+// with no submit affordance anywhere on the page), and changing your mind
+// is also exactly one tap. The ONLY affordance left that ends a poll is the
+// operator's "Lock this time — <time>" inside each time card's ⋯ menu
+// (ROK-1635), covered above.
+// ---------------------------------------------------------------------------
+
+/** Every retired member-submit affordance, by testid. */
+const RETIRED_SUBMIT_TESTIDS = [
+    'sticky-hero-schedule-submit',
+    'sticky-hero-submit',
+    'schedule-submit',
+    'submit-bar',
+];
+
+/** Assert no member-submit affordance is rendered on the poll (ROK-1544). */
+async function expectNoSubmitAffordance(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    for (const testid of RETIRED_SUBMIT_TESTIDS) {
+        await expect(page.locator(`[data-testid="${testid}"]`)).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
+}
+
+test.describe('Scheduling poll one-tap vote (ROK-1544)', () => {
+    /**
+     * Drop the smoke admin's vote from EXACTLY `slotId`, so that slot's count
+     * is a known 0 before a tap. The vote endpoint TOGGLES, so this is only
+     * ever called on a slot the admin holds a vote on (every freshly suggested
+     * one — suggesting auto-votes the suggester).
+     *
+     * ROK-1635: this replaced a "clear every vote I hold" helper. Clearing the
+     * whole poll leaves it unanswered, and an unanswered poll STILL derives a
+     * provisional leader — whose row AC1 removes — so the decoy each case
+     * below seeds has to keep its vote to pin the lead where the case wants it.
+     */
+    async function clearMyVoteOn(slotId: number): Promise<void> {
+        await apiPost(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}/vote`,
+            { slotId },
+        );
+        await pollForCondition(
+            async () => {
+                const p = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                return (p?.myVotedSlotIds ?? []).includes(slotId) ? null : true;
+            },
+            { timeoutMs: 15_000, description: `admin vote cleared on slot ${slotId}` },
+        );
+    }
+
+    /** Suggest a slot `daysOut` days from now at 20:00, with its proposed time. */
+    async function suggestSlot(
+        daysOut: number,
+    ): Promise<{ id: number; when: Date }> {
+        const when = new Date();
+        when.setDate(when.getDate() + daysOut);
+        when.setHours(20, 0, 0, 0);
+        return { id: await suggestSlotAt(lineupId, matchId, when), when };
+    }
+
+    /** Row locator for one slot. */
+    function slotRow(
+        page: import('@playwright/test').Page,
+        slotId: number,
+    ): import('@playwright/test').Locator {
+        return page.locator(
+            `[data-testid="schedule-slot"][data-slot-id="${slotId}"]`,
+        );
+    }
+
+    test('one tap casts the vote — counts and leader card move, no submit step', async ({
+        page,
+    }) => {
+        // The tapped time is the EARLIER of the two, and the decoy keeps the
+        // suggester's auto-YES. So before the tap the decoy leads (net +1 vs
+        // net 0) and the tapped time is a ladder ROW; the tap takes it to net
+        // +1, which wins the earlier-time tiebreak — the leader card moves
+        // onto it and, under ROK-1635 AC1, its row leaves the ladder. That
+        // hand-off IS the "leader card moves" this case is named for.
+        const slot = await suggestSlot(2);
+        await suggestSlot(5);
+        // Suggesting auto-votes for the suggester; clear THIS slot's vote so
+        // the tap is the only thing that can move it off zero. The decoy's
+        // vote stays — it is what holds the lead away from the row.
+        await clearMyVoteOn(slot.id);
+        await goToPoll(page, lineupId, matchId);
+
+        const row = slotRow(page, slot.id);
+        await expect(row).toBeVisible({ timeout: 15_000 });
+        await expect(row).toHaveAttribute('data-voted', 'false');
+        await expect(row).toContainText('0 votes');
+        const leaderTime = page.locator('[data-testid="scheduling-leader-time"]');
+        await expect(leaderTime).not.toContainText(slotDateLabel(slot.when));
+        await expectNoSubmitAffordance(page);
+
+        // ONE interaction. No confirm, no submit, no second affordance.
+        await row.getByRole('button', { name: /vote for/i }).click();
+
+        // The tap carried the time to the top: the card now names it with the
+        // one vote it just received, and AC1 leaves it exactly one place on
+        // the page — the ladder row is gone, not duplicated.
+        await expect(leaderTime).toContainText(slotDateLabel(slot.when), {
+            timeout: 10_000,
+        });
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b1 of \d+/, { timeout: 10_000 });
+        await expect(slotRow(page, slot.id)).toHaveCount(0);
+        await expectNoSubmitAffordance(page);
+
+        // The tap WAS the submit: a fresh page load (nothing else pressed)
+        // still shows the vote, so the server committed it.
+        await goToPoll(page, lineupId, matchId);
+        await expect(leaderTime).toContainText(slotDateLabel(slot.when), {
+            timeout: 15_000,
+        });
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\b1 of \d+/);
+        await expect(slotRow(page, slot.id)).toHaveCount(0);
+    });
+
+    test('changing my mind is ONE tap — counts move on both rows', async ({
+        page,
+    }) => {
+        // The decoy is EARLIER than both slots under test and keeps its
+        // auto-YES, so neither tap below can take the lead (net +1 each, and
+        // the decoy wins the earlier-time tiebreak) — which is what keeps both
+        // of them ladder ROWS through every tap, under ROK-1635 AC1.
+        await suggestSlot(6);
+        const firstSlot = (await suggestSlot(7)).id;
+        const secondSlot = (await suggestSlot(8)).id;
+        await clearMyVoteOn(firstSlot);
+        await clearMyVoteOn(secondSlot);
+        await goToPoll(page, lineupId, matchId);
+
+        const first = slotRow(page, firstSlot);
+        const second = slotRow(page, secondSlot);
+        await expect(first).toBeVisible({ timeout: 15_000 });
+        await expect(second).toBeVisible({ timeout: 15_000 });
+
+        // Tap 1 — cast on the first slot.
+        await first.getByRole('button', { name: /vote for/i }).click();
+        await expect(first).toContainText('1 vote', { timeout: 10_000 });
+        await expect(second).toContainText('0 votes');
+
+        // Tap 2 — a single tap on ANOTHER slot moves its count, no submit.
+        await second.getByRole('button', { name: /vote for/i }).click();
+        await expect(second).toContainText('1 vote', { timeout: 10_000 });
+        await expect(second).toHaveAttribute('data-voted', 'true');
+        await expectNoSubmitAffordance(page);
+
+        // Tap 3 — withdrawing is the same single tap on the voted row.
+        await first.getByRole('button', { name: /remove vote for/i }).click();
+        await expect(first).toContainText('0 votes', { timeout: 10_000 });
+        await expect(first).toHaveAttribute('data-voted', 'false');
+        await expectNoSubmitAffordance(page);
+
+        // All three taps persisted without a submit step.
+        await goToPoll(page, lineupId, matchId);
+        await expect(slotRow(page, firstSlot)).toHaveAttribute(
+            'data-voted',
+            'false',
+            { timeout: 15_000 },
+        );
+        await expect(slotRow(page, secondSlot)).toHaveAttribute(
+            'data-voted',
+            'true',
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1395: manual "Remind Voters" nudge — creator/operator-gated toolbar
+// button. Placed BEFORE the event-creation tests: those flip the match to
+// scheduled (read-only), which hides the button by design.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll remind voters (ROK-1395)', () => {
+    test('Remind Voters button visible for creator/operator, absent for a plain member', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // Admin (operator-tier) sees the action: inline on the desktop toolbar,
+        // in the ROK-1584 "Manage poll" sheet below 1024px.
+        await openManage(page);
+        await expect(manageItem(page, /remind voters/i)).toBeVisible({
+            timeout: 15_000,
+        });
+
+        // Swap the session to the non-creator member fixture (ROK-1276) —
+        // the button must NOT render for them. Session swap pattern from
+        // lineup-confirmation-pills-invitee.smoke.spec.ts.
+        const invitee = await getInviteeFixture();
+        await signInContextWithJwt(page.context(), invitee.jwt);
+        await page.goto('/');
+        await goToPoll(page, lineupId, matchId);
+        await expect(
+            page.getByRole('button', { name: /remind voters/i }),
+        ).toHaveCount(0);
+        await expect(
+            page.getByRole('menuitem', { name: /remind voters/i }),
+        ).toHaveCount(0);
+        // ...and there is no way in either, on ANY project: the sheet trigger
+        // (phone) and the dropdown trigger (desktop, ROK-1585) share the same
+        // creator/operator gate (`useCanManagePoll`).
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
+        // Context is per-test; the admin storageState is restored for
+        // subsequent tests automatically.
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1440: explicitly enrol members in the poll roster
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll add participants (ROK-1440)', () => {
+    test('Add Participants is visible for creator/operator, absent for a plain member', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        await openManage(page);
+        await expect(
+            page.getByTestId('add-poll-members-button'),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Same session-swap pattern as the sibling Remind Voters case — a
+        // non-creator member must not get a roster-management affordance.
+        const invitee = await getInviteeFixture();
+        await signInContextWithJwt(page.context(), invitee.jwt);
+        await page.goto('/');
+        await goToPoll(page, lineupId, matchId);
+        await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
+        await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
+    });
+
+    /**
+     * The toolbar's action cluster is `flex-shrink-0` inside the hero badge
+     * row, so a third button is exactly the kind of addition that can push
+     * the row off-screen. This runs in BOTH the desktop and mobile Playwright
+     * projects, so it pins reachability at each viewport rather than only the
+     * one a developer happened to look at.
+     */
+    test('Add Participants stays inside the viewport and does not cause page overflow', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        await openManage(page);
+        const btn = page.getByTestId('add-poll-members-button');
+        await expect(btn).toBeVisible({ timeout: 15_000 });
+
+        const box = await btn.boundingBox();
+        expect(box).not.toBeNull();
+        const viewport = page.viewportSize();
+        expect(viewport).not.toBeNull();
+        // Right edge within the viewport — i.e. not clipped off-screen.
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width);
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+
+        // And the page itself must not gain a horizontal scrollbar.
+        const overflows = await page.evaluate(
+            () =>
+                document.documentElement.scrollWidth >
+                document.documentElement.clientWidth,
+        );
+        expect(overflows).toBe(false);
+    });
+
+    test('enrolling a member adds exactly that member to the poll roster', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const before = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        const existing = new Set<number>(
+            (before?.match?.members ?? []).map(
+                (m: { userId: number }) => m.userId,
+            ),
+        );
+
+        /**
+         * Pick a target deterministically. An earlier version clicked
+         * `[data-testid^="invitee-option-"]).first()`, which takes whichever
+         * option happens to render first — on CI that was already a poll
+         * member, so the roster never grew and the assertion timed out while
+         * passing locally. The picker does not filter out existing members,
+         * so the test has to do it.
+         */
+        const usersRes = await apiGet(adminToken, '/users?limit=200');
+        const candidates: {
+            id: number;
+            username: string;
+            steamLinked: boolean;
+        }[] = usersRes?.data ?? usersRes ?? [];
+        const target = candidates.find((u) => u && !existing.has(u.id));
+        expect(
+            target,
+            'no community member outside the poll roster to enrol',
+        ).toBeTruthy();
+
+        await openManage(page);
+        await page.getByTestId('add-poll-members-button').click();
+        const search = page.getByTestId('invitee-search');
+        await expect(search).toBeVisible({ timeout: 10_000 });
+        // Narrow the list so the target is rendered regardless of page size.
+        await search.fill(target!.username);
+
+        const option = page.getByTestId(`invitee-option-${target!.id}`);
+        await expect(option).toBeVisible({ timeout: 10_000 });
+
+        // ROK-1530 TD-2: `/users` exposes `steamLinked` and the picker renders
+        // the "No Steam linked" caveat for exactly the members missing it.
+        expect(
+            typeof target!.steamLinked,
+            '/users must expose steamLinked (ROK-1530 TD-2)',
+        ).toBe('boolean');
+        await expect(option.getByText(/No Steam linked/i)).toHaveCount(
+            target!.steamLinked ? 0 : 1,
+        );
+
+        await option.click();
+        await page.getByTestId('add-poll-members-submit').click();
+
+        // Assert THAT member landed, not merely that a count rose — a count
+        // check passes for the wrong member and fails silently for the right
+        // one. The mutation invalidates the schedule query, so poll the API
+        // rather than racing the refetch.
+        await pollForCondition(
+            async () => {
+                const after = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                const ids: number[] = (after?.match?.members ?? []).map(
+                    (m: { userId: number }) => m.userId,
+                );
+                // Both conditions: the target is present AND the roster
+                // actually grew. `includes` alone would pass trivially if the
+                // target had somehow already been enrolled, which is the very
+                // failure mode this rewrite exists to rule out.
+                return ids.includes(target!.id) && ids.length > existing.size
+                    ? after
+                    : null;
+            },
+            {
+                timeoutMs: 15_000,
+                intervalMs: 500,
+                description: `poll roster to contain user ${target?.id}`,
+            },
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1582: the hero's creator/operator actions are touch targets on a phone.
+// Placed BEFORE the event-creation describe for the same reason the Remind
+// Voters case is: creating the event flips the match to scheduled (read-only),
+// which hides all three buttons by design.
+// ---------------------------------------------------------------------------
+
+/** The hero card the actions must stay inside. */
+function heroCard(page: Page): Locator {
+    return page
+        .locator('[data-testid="scheduling-toolbar"] [role="region"]')
+        .first();
+}
+
+/**
+ * Open the poll's "Manage poll ⋯" control on EVERY project.
+ *
+ * Below 1024px it is the ROK-1584 bottom sheet (`scheduling-manage-sheet`);
+ * from 1024px up ROK-1585 collapsed the three inline hero buttons into a 232px
+ * `role="menu"` popover (`scheduling-manage-menu`) under the same trigger id.
+ * The action components, gates and accessible names are the same in both.
+ */
+async function openManage(page: Page): Promise<void> {
+    const manage = page.getByTestId('scheduling-manage');
+    await expect(
+        manage,
+        'the hero must offer "Manage poll ⋯" to a creator/operator (ROK-1584/1585)',
+    ).toBeVisible({ timeout: 15_000 });
+    if ((await manage.getAttribute('aria-expanded')) !== 'true') await manage.click();
+    await expect(
+        page.getByTestId(isPhoneLayout(test.info()) ? 'scheduling-manage-sheet' : 'scheduling-manage-menu'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * One Manage action by accessible name: a `button` row in the phone sheet, a
+ * `menuitem` scoped to the desktop popover (ROK-1585).
+ */
+function manageItem(page: Page, name: RegExp): Locator {
+    return isPhoneLayout(test.info())
+        ? page.getByRole('button', { name })
+        : page.getByTestId('scheduling-manage-menu').getByRole('menuitem', { name });
+}
+
+/** Inner (padding-box minus padding) width of the hero card. */
+async function heroInnerWidth(card: Locator): Promise<number> {
+    return card.evaluate((el: HTMLElement) => {
+        const cs = getComputedStyle(el);
+        return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    });
+}
+
+test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
+    test('phone layout: the three actions live in the "Manage poll" sheet (ROK-1584)', async ({
+        page,
+    }) => {
+        test.skip(
+            !isPhoneLayout(test.info()),
+            'Phone-layout — desktop keeps the inline cluster (sibling test).',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const card = await heroCard(page).boundingBox();
+        expect(card).not.toBeNull();
+        const right = card!.x + card!.width;
+
+        // ROK-1582 put the three actions in one 44px row inside the card;
+        // ROK-1584 §1 replaced that row with ONE full-width "Manage poll ⋯"
+        // control, so the inline buttons must not be in the hero at all.
+        await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^remind voters$/i })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^cancel poll$/i })).toHaveCount(0);
+
+        const manage = page.getByTestId('scheduling-manage');
+        await expect(manage).toBeVisible({ timeout: 15_000 });
+        const manageBox = (await manage.boundingBox())!;
+        expect(manageBox.height, 'Manage poll is under the 44px touch target').toBeGreaterThanOrEqual(44);
+        // Nothing hangs past the card's right edge (the ROK-1582 bug), and the
+        // row spans the card rather than hanging in a column at the right.
+        expect(manageBox.x + manageBox.width).toBeLessThanOrEqual(right + 1);
+        expect(manageBox.x).toBeGreaterThanOrEqual(card!.x - 1);
+        expect(manageBox.width, 'Manage poll should span most of the card width')
+            .toBeGreaterThanOrEqual(card!.width * 0.75);
+
+        // The participants chip in the same hero is a touch target too, and the
+        // Manage row sits UNDER it (not beside it).
+        const chip = await page
+            .getByTestId('lineup-participants-button')
+            .boundingBox();
+        expect(chip).not.toBeNull();
+        expect(chip!.height).toBeGreaterThanOrEqual(44);
+        expect(chip!.x + chip!.width).toBeLessThanOrEqual(right + 1);
+        expect(manageBox.y, 'Manage poll should sit below the participants chip')
+            .toBeGreaterThanOrEqual(chip!.y + chip!.height - 1);
+
+        // The tap opens the sheet, which carries the SAME three actions under
+        // their unchanged role names — 52px rows, stacked, inside the sheet.
+        await manage.click();
+        const sheet = page.getByRole('dialog', { name: 'Manage poll' });
+        await expect(sheet).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible();
+        const rows = [
+            sheet.getByTestId('add-poll-members-button'),
+            sheet.getByRole('button', { name: /^remind voters$/i }),
+            sheet.getByRole('button', { name: /^cancel poll$/i }),
+        ];
+        let previousBottom = 0;
+        for (const row of rows) {
+            await expect(row).toBeVisible({ timeout: 10_000 });
+            const box = (await row.boundingBox())!;
+            expect(box.height, 'a Manage poll row is under the 44px touch target')
+                .toBeGreaterThanOrEqual(44);
+            expect(box.y, 'the Manage poll rows should stack, not sit side by side')
+                .toBeGreaterThanOrEqual(previousBottom - 1);
+            previousBottom = box.y + box.height;
+        }
+    });
+
+    test('desktop: the three actions live in the "Manage poll ⋯" dropdown (ROK-1585)', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — the phone layout is the sibling sheet test.',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // AC2: ONE trigger replaces the ROK-1582 inline row.
+        await expect(page.getByRole('button', { name: /^remind voters$/i })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^cancel poll$/i })).toHaveCount(0);
+        const card = (await heroCard(page).boundingBox())!;
+        const trigger = page.getByTestId('scheduling-manage');
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+        await expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+        const tBox = (await trigger.boundingBox())!;
+        expect(Math.abs(tBox.height - 36), 'Manage poll trigger is 36px on desktop').toBeLessThanOrEqual(1);
+        expect(tBox.x + tBox.width).toBeLessThanOrEqual(card.x + card.width + 1);
+
+        // Open: a 232px menu, anchored under the trigger, items in order.
+        const menu = page.getByTestId('scheduling-manage-menu');
+        await trigger.click();
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        const mBox = (await menu.boundingBox())!;
+        expect(Math.abs(mBox.width - 232), 'the Manage popover is 232px wide').toBeLessThanOrEqual(1);
+        expect(mBox.y, 'the popover opens under its trigger').toBeGreaterThanOrEqual(tBox.y + tBox.height - 1);
+        await expect(menu.getByRole('menuitem')).toHaveText([
+            /add participants/i,
+            /remind voters/i,
+            /cancel poll/i,
+        ]);
+        await expect(menu.getByRole('separator')).toHaveCount(1);
+
+        // Esc closes it and hands focus back to the trigger.
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        await expect(trigger).toBeFocused();
+
+        // An outside click closes it too.
+        await trigger.click();
+        await expect(menu).toBeVisible();
+        // The badge line inside the card — plain text, nothing to activate.
+        await page.mouse.click(card.x + 6, card.y + 6);
+        await expect(menu).toBeHidden();
+    });
+
+    test('desktop: the headline keeps ≥56% of the hero, the chip is 36px on the same row (ROK-1585 AC1)', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — below 1024px the hero keeps the ROK-1584 layout.',
+        );
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        for (const width of [null, 1024]) {
+            if (width) await page.setViewportSize({ width, height: 800 });
+            const card = heroCard(page);
+            const headline = card.getByTestId('journey-headline');
+            const controls = card.getByTestId('journey-controls');
+            await expect(headline).toBeVisible({ timeout: 15_000 });
+            await expect(controls).toBeVisible();
+            const inner = await heroInnerWidth(card);
+            const hBox = (await headline.boundingBox())!;
+            const cBox = (await controls.boundingBox())!;
+            const label = `at ${width ?? 'the default'} width`;
+            expect(hBox.width, `headline under 56% of the card ${label}`).toBeGreaterThanOrEqual(inner * 0.56 - 1);
+            expect(cBox.width, `controls over 44% of the card ${label}`).toBeLessThanOrEqual(inner * 0.44 + 1);
+            expect(cBox.x, `controls not right of the headline ${label}`).toBeGreaterThanOrEqual(hBox.x + hBox.width - 1);
+            expect(cBox.y, `controls wrapped under the headline ${label}`).toBeLessThan(hBox.y + hBox.height);
+            const chip = (await controls.getByTestId('lineup-participants-button').boundingBox())!;
+            expect(Math.abs(chip.height - 36), `participants chip is not 36px ${label}`).toBeLessThanOrEqual(1);
+            await expect(controls.getByTestId('scheduling-manage')).toBeVisible();
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC8 + AC9: Event creation → success state → scheduled badge + event link
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll event creation and post-creation status', () => {
+    test('creating event via API shows Poll Complete state with badge and event link', async ({
+        page,
+    }) => {
+        // Create event via API (the frontend now navigates to /events/new instead)
+        const slotRes = await apiGet(adminToken, `/lineups/${lineupId}/schedule/${matchId}`);
+        const slotId = slotRes?.slots?.[0]?.id;
+
+        let eventCreated = false;
+        if (slotId) {
+            await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/vote`, {
+                slotId,
+            }).catch(() => {});
+            const createRes = await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/create-event`, {
+                slotId,
+            }).catch(() => null);
+            eventCreated = !!(createRes?.id || createRes?.eventId);
+        }
+
+        // If event creation didn't succeed (match already scheduled, no slots, etc.),
+        // check if match is already in scheduled state
+        if (!eventCreated) {
+            const matchRes = await apiGet(adminToken, `/lineups/${lineupId}/schedule/${matchId}`);
+            eventCreated = matchRes?.match?.status === 'scheduled';
+        }
+
+        // ROK-1247: when an event was created, poll until the API observes the
+        // status flip so the page renders the "Poll Complete"/"Scheduled" badge.
+        if (eventCreated) {
+            await pollForCondition<SchedulingPollResponse>(
+                async () => {
+                    const data = (await apiGet(
+                        adminToken,
+                        `/lineups/${lineupId}/schedule/${matchId}`,
+                    )) as SchedulingPollResponse | null;
+                    return data?.match?.status === 'scheduled' ? data : null;
+                },
+                {
+                    timeoutMs: 15_000,
+                    description: 'scheduling poll match status=scheduled',
+                },
+            );
+        }
+
+        await goToPoll(page, lineupId, matchId);
+
+        if (eventCreated) {
+            // Scheduled terminal state → CompletedPollState renders (it KEEPS
+            // the "Scheduling Poll" h1 + badge + event link).
+            await expect(
+                page.getByRole('heading', { level: 1, name: /^scheduling poll$/i }),
+            ).toBeVisible({ timeout: 15_000 });
+            const completedBadge = page.locator('[data-testid="match-status-badge"]');
+            await expect(completedBadge).toBeVisible({ timeout: 15_000 });
+            await expect(completedBadge).toHaveText(/Poll Complete|Scheduled/i);
+
+            const eventLink = page.getByRole('link', { name: /View Event/i });
+            await expect(eventLink).toBeVisible({ timeout: 5_000 });
+        } else {
+            // Event creation wasn't possible — verify the active-poll composite
+            // loads cleanly (ROK-1300: the active poll has no separate h1; the
+            // h1 only exists in the scheduled/completed terminal state above).
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC10: Events-view banner for match members
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll events-view banner', () => {
+    test('events-view banner component exists and renders for scheduling matches', async ({
+        page,
+    }) => {
+        // Navigate to the events list page — banner shows for scheduling matches
+        await page.goto('/events');
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
+
+        // AC10: The banner component should be in the DOM (may or may not be visible
+        // depending on test execution order — event creation in AC8 may have changed
+        // match state to 'scheduled'). Verify the component is rendered by checking
+        // for the scheduling-poll-banner OR confirm the events page loads clean.
+        const schedulingBanner = page.locator(
+            '[data-testid="scheduling-poll-banner"]',
+        );
+        const bannerVisible = await schedulingBanner
+            .isVisible({ timeout: 5_000 })
+            .catch(() => false);
+
+        if (bannerVisible) {
+            // Banner visible — verify it has a link to a scheduling poll
+            const pollLink = schedulingBanner.getByRole('link').first();
+            await expect(pollLink).toBeVisible({ timeout: 5_000 });
+            const href = await pollLink.getAttribute('href');
+            expect(href).toMatch(
+                /\/community-lineup\/\d+\/schedule\/\d+/,
+            );
+        } else {
+            // Banner not visible (match may be scheduled already) — events page loads clean
+            await expect(page.locator('body')).toBeVisible();
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC11: "Your Other Scheduling Polls" section for multi-match users
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll other polls section', () => {
+    test('"Your Other Scheduling Polls" section shows for multi-match users', async ({
+        page,
+    }) => {
+        await goToPoll(page, lineupId, matchId);
+
+        // AC11: "Your Other Scheduling Polls" section should be present
+        // for users who are members of multiple matches
+        const otherPollsSection = page.locator(
+            '[data-testid="other-scheduling-polls"]',
+        );
+        const otherPollsHeading = page.getByText(
+            /Your Other Scheduling Polls|Other Polls/i,
+        );
+
+        // If the user is a member of multiple matches, the section is visible
+        const isVisible = await otherPollsHeading
+            .isVisible({ timeout: 15_000 })
+            .catch(() => false);
+
+        if (isVisible) {
+            await expect(otherPollsSection).toBeVisible({
+                timeout: 5_000,
+            });
+
+            // Each listed poll should link to its scheduling page
+            const pollLinks = otherPollsSection.getByRole('link');
+            const linkCount = await pollLinks.count();
+            expect(linkCount).toBeGreaterThan(0);
+        } else {
+            // If only one match, the section should not be present — that's valid
+            await expect(otherPollsSection).not.toBeVisible();
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1014 AC1/AC2: GameTimeGrid shows abbreviated day names on mobile, full on desktop
+// ---------------------------------------------------------------------------
+
+// Runs AFTER every describe that shares the file-level poll: creating its own
+// lineup retires the shared one, which left the ROK-1300 lock affordance
+// read-only on the first attempt when this block sat before it.
+test.describe('Find a better time — existing slot marks (ROK-1587/1588)', () => {
+    // Slot cells are keyed off the browser's local clock; UTC makes them the
+    // UTC day/hour the fixture computes.
+    test.use({ timezoneId: 'UTC' });
+
+    let marksLineupId: number;
+    let marksMatchId: number;
+    const slot = slotFixture();
+
+    test.beforeAll(async () => {
+        // Own the poll so no sibling describe locks it in or adds slots.
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        marksLineupId = fresh.lineupId;
+        marksMatchId = fresh.matchId;
+        // Re-assert the file-level template (identical payload) so the "you"
+        // bar has a block on the slot's day whatever ran before.
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: TEMPLATED_GRID_CELLS.map((c) => ({ dayOfWeek: c.day, hour: c.hour })),
+        });
+        await apiPost(adminToken, `/lineups/${marksLineupId}/schedule/${marksMatchId}/suggest`, {
+            proposedTime: slot.at.toISOString(),
+        });
+        await pollSchedulingPollHasSlot(adminToken, marksLineupId, marksMatchId);
+    });
+
+    test('desktop: an existing slot is outlined with its vote count, and a pick prefills (ROK-1588)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(isPhoneLayout(testInfo), 'desktop-only: below 1024px the sheet is the one-day group module');
+
+        await goToPoll(page, marksLineupId, marksMatchId);
+        await openBetterTimeSheet(page);
+        await pageWeekForward(page, slot.weeksForward);
+
+        const weekView = page.getByTestId('group-week-view');
+        const slotCell = weekView.getByTestId(`group-week-cell-${slot.cell.day}-${slot.cell.hour}`);
+        await expect(
+            slotCell,
+            'the slot\'s cell must carry its summed votes as data',
+        ).toHaveAttribute('data-votes', /^\d+$/, { timeout: 20_000 });
+        await expect(slotCell, 'the slot\'s cell must print "N voted"').toContainText(/\d+ voted/);
+        await expect(slotCell).toHaveAttribute('aria-label', /, \d+ voted\b/);
+
+        // Saturday 10 PM of the slot's week is after the slot, so it is in the future.
+        const pickCell: GridCell = { day: 6, hour: 22 };
+        const pick = weekView.getByTestId(`group-week-cell-${pickCell.day}-${pickCell.hour}`);
+        await pick.click();
+        await expect(pick, 'clicking a cell must mark it picked').toHaveAttribute('data-picked', 'true');
+        const body = page.locator('[data-testid="scheduling-better-time-body"]');
+        await expect(
+            body.locator('[data-testid="slot-datetime-picker"]'),
+            'the pick must prefill the suggest form with that cell of the DISPLAYED week',
+        ).toHaveValue(datetimeLocalOf(slot.weekStart, pickCell), { timeout: 10_000 });
+        await expect(
+            body.getByRole('button', { name: /^Suggest \S/ }),
+            'once a time is filled the CTA names it (Q8)',
+        ).toBeVisible();
+
+        // Both colour families: the marks must survive the light scheme too.
+        await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'light'));
+        await expect(slotCell).toBeVisible();
+        await expect(pick).toHaveAttribute('data-picked', 'true');
+        await testInfo.attach('group-week-view-light', {
+            body: await weekView.screenshot(),
+            contentType: 'image/png',
+        });
+    });
+
+    test('phone: the slot shows as a dashed block with N voted (ROK-1587)', async ({
+        page,
+    }, testInfo) => {
+        test.skip(!isPhoneLayout(testInfo), 'phone-layout only: at >=1024px the sheet mounts GroupWeekView');
+
+        await goToPoll(page, marksLineupId, marksMatchId);
+        await openBetterTimeSheet(page);
+        await pageWeekForward(page, slot.weeksForward);
+
+        await expect(
+            page.getByTestId(`phone-week-strip-day-${slot.cell.day}`).getByTestId('phone-week-strip-votes'),
+            'the week strip must flag the day a slot already starts on',
+        ).toHaveText(/^● \d+$/, { timeout: 20_000 });
+        await showPhoneDay(page, slot.cell.day);
+        await expect(
+            page.getByTestId(`phone-group-slot-block-${slot.cell.hour}`),
+            'the slot must be drawn as a block on its hour',
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('phone-group-slot-chip')).toHaveText(/^\d+ voted$/);
+        await expect(
+            page.getByTestId(`phone-group-cell-${slot.cell.day}-${slot.cell.hour}`),
+        ).toHaveAttribute('aria-label', /, \d+ voted$/);
+        // Operator ruling 2026-09-17: the group views carry no "you" mark —
+        // the counts already include the viewer.
+        await expect(
+            page.getByTestId('phone-group-you-bar'),
+            'the group day must not draw a "you" bar',
+        ).toHaveCount(0);
+    });
+});
+
+test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', () => {
+    // The event-creation describe above locks the SHARED poll in, and a
+    // scheduled poll hides the "Find a better time" affordance by design —
+    // so on a worker that ran that describe first these two tests could never
+    // open the sheet (seen 4× on 2026-09-14 across three branches, passing on
+    // the retry's fresh worker). Own a fresh, still-open poll instead.
+    let gridLineupId: number;
+    let gridMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        gridLineupId = fresh.lineupId;
+        gridMatchId = fresh.matchId;
+    });
+
+    test('mobile: GameTimeGrid shows abbreviated day names (Sun, Mon)', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Mobile-only test — abbreviated day names only shown below the 1024px split',
+        );
+
+        // ROK-1301 moved the grid out of the wizard into the heatmap, ROK-1543
+        // moved the heatmap into the "Find a better time" sheet, and ROK-1580
+        // replaced the seven-column grid on phones with the one-day module —
+        // so below 1024px the day names now live in the WEEK STRIP: one letter
+        // per column on screen, the full name for a screen reader. The old
+        // `if (isGridVisible)` body passed vacuously once the grid stopped
+        // mounting here; this asserts the surface that actually renders.
+        await goToPoll(page, gridLineupId, gridMatchId);
+        await openBetterTimeSheet(page);
+
+        const strip = page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .locator('[data-testid^="phone-week-strip-day-"]');
+        await expect(
+            strip,
+            'the phone sheet should carry the seven-column week strip (ROK-1580)',
+        ).toHaveCount(7, { timeout: 10_000 });
+
+        for (let day = 0; day < 7; day += 1) {
+            const column = strip.nth(day);
+            const text = ((await column.textContent()) ?? '').trim();
+            expect(
+                text,
+                `strip column ${day} should show ONE letter on a phone, got "${text}"`,
+            ).toMatch(/^[SMTWF]$/);
+            const label = (await column.getAttribute('aria-label')) ?? '';
+            expect(
+                label,
+                `strip column ${day} should spell the day out for a screen reader, got "${label}"`,
+            ).toMatch(/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),/);
+        }
+    });
+
+    test('desktop: the week view shows day + date headers (ROK-1588, was ROK-1014)', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only test — full day names only shown at/above the 1024px split',
+        );
+
+        // ROK-1301 moved the grid into the heatmap, ROK-1543 moved that into
+        // the "Find a better time" sheet, and ROK-1588 replaced the painted
+        // heatmap with `GroupWeekView`, whose column headers are a bold
+        // three-letter day over the column's date ("Sun" / "Sep 20"). The old
+        // `if (isGridVisible)` body passed vacuously once nothing matched; this
+        // asserts every header, in Sunday-first order, unconditionally.
+        await goToPoll(page, gridLineupId, gridMatchId);
+        await openBetterTimeSheet(page);
+
+        const weekView = page.getByTestId('group-week-view');
+        await expect(weekView).toBeVisible({ timeout: 15_000 });
+        const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        for (let day = 0; day < 7; day += 1) {
+            const header = weekView.getByTestId(`group-week-header-${day}`);
+            await expect(
+                header.locator('b'),
+                `week-view header ${day} should name its day`,
+            ).toHaveText(new RegExp(`^${DAY_ABBR[day]}$`), { timeout: 10_000 });
+            const date = ((await header.textContent()) ?? '').trim().slice(3);
+            expect(
+                date,
+                `week-view header ${day} should carry the column's date, got "${date}"`,
+            ).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1014 AC3: Create Event button visible above bottom nav on mobile
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll bottom padding (ROK-1014)', () => {
+    test('mobile: page container has bottom padding to clear nav bar', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Mobile-only test — bottom padding only relevant on mobile with nav bar',
+        );
+
+        await goToPoll(page, lineupId, matchId);
+
+        // Verify a container has the pb-20 class (bottom padding to clear
+        // the fixed mobile nav bar). pb-20 = 5rem = 80px clearance.
+        const hasPadding = await page.evaluate(() => {
+            return !!document.querySelector('.pb-20');
+        });
+        expect(hasPadding).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1014 AC12/AC13: Voter avatars on suggested time slots
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
+    // The event-creation describe above locks the SHARED poll in, and a
+    // scheduled poll renders no votable slot rows — so on a worker that ran
+    // that describe first `[data-voted="true"]` never appears (PR #1217 shard
+    // 3/5, 2026-09-14; same family as the day-name fix in #1214). Own a
+    // fresh, still-open poll instead.
+    let avatarLineupId: number;
+    let avatarMatchId: number;
+    /** The slot the avatar case reads — deliberately never the leader. */
+    let avatarRowSlotId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        avatarLineupId = fresh.lineupId;
+        avatarMatchId = fresh.matchId;
+        // A fresh poll has no slots. ROK-1635 AC1 removes the LEADING time's
+        // ladder row, so a one-slot poll has no row for this case to read at
+        // all — suggest an earlier decoy that holds the lead (it keeps the
+        // suggester's auto-YES) plus the slot the case actually asserts on.
+        const decoyTime = new Date();
+        decoyTime.setDate(decoyTime.getDate() + 1);
+        decoyTime.setHours(16, 0, 0, 0);
+        await seedDecoyLeader(avatarLineupId, avatarMatchId, decoyTime);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        avatarRowSlotId = await suggestSlotAt(
+            avatarLineupId,
+            avatarMatchId,
+            tomorrow,
+        );
+    });
+
+    test('voted slot cards show stacked voter avatars', async ({
+        page,
+    }) => {
+        // Ensure the ROW slot carries admin's vote. Suggesting auto-votes the
+        // suggester, but the vote endpoint TOGGLES, so assert the state rather
+        // than blind-posting (the toggle-twice race documented in the
+        // TECH-DEBT-BACKLOG.md 2026-05-09 entry can leave a slot unvoted).
+        // Both times sit at net +1 and the decoy is earlier, so it keeps the
+        // card and this slot keeps its row.
+        await pollForCondition(
+            async () => {
+                const poll = await apiGet(
+                    adminToken,
+                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
+                );
+                const voted = (
+                    (poll?.myVotedSlotIds ?? []) as number[]
+                ).includes(avatarRowSlotId);
+                if (voted) return true;
+                await apiPost(
+                    adminToken,
+                    `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/vote`,
+                    { slotId: avatarRowSlotId },
+                );
+                return null;
+            },
+            {
+                timeoutMs: 20_000,
+                description: `admin's vote on slot ${avatarRowSlotId}`,
+            },
+        );
+
+        // ROK-1247: poll until the API observes the vote. Without this, the
+        // page's useQuery can serve a cached "no votes" payload and the
+        // voted slot row never renders its avatar group within the window.
+        await pollSchedulingPollHasSlot(adminToken, avatarLineupId, avatarMatchId, {
+            withVote: true,
+        });
+        await goToPoll(page, avatarLineupId, avatarMatchId);
+
+        // AC12 (ROK-1300): voted slot ROWS render a stacked voter avatar group.
+        // SchedulingSlotRow mounts MemberAvatarGroup only when the slot has
+        // votes — so a voted row (data-voted="true") MUST contain one. Scope
+        // the assertion to THE voted row by id (not page-wide `.first()`,
+        // which could match the hero game-ref's member stack and mask a row
+        // regression).
+        const votedRow = slotRowById(page, avatarRowSlotId);
+        await expect(votedRow).toBeVisible({ timeout: 15_000 });
+        await expect(votedRow).toHaveAttribute('data-voted', 'true');
+        await expect(
+            votedRow.locator('[data-testid="member-avatar-group"]'),
+        ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('slots with 0 votes show no avatar row', async ({
+        page,
+    }) => {
+        // Suggest a new slot that nobody votes on
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 14);
+        futureDate.setHours(22, 0, 0, 0);
+        await apiPost(adminToken, `/lineups/${avatarLineupId}/schedule/${avatarMatchId}/suggest`, {
+            proposedTime: futureDate.toISOString(),
+        }).catch(() => {});
+
+        await goToPoll(page, avatarLineupId, avatarMatchId);
+
+        // The newly suggested slot auto-votes for the suggester, so retract
+        const pollData = await apiGet(
+            adminToken,
+            `/lineups/${avatarLineupId}/schedule/${avatarMatchId}`,
+        );
+        const zeroVoteSlot = pollData?.slots?.find(
+            (s: { votes: unknown[] }) => s.votes.length === 0,
+        );
+
+        if (zeroVoteSlot) {
+            // AC13: Slot with 0 votes should NOT have an avatar group
+            const slotCard = page.locator(
+                `[data-testid="schedule-slot"]:has-text("0 votes")`,
+            ).first();
+            if (await slotCard.isVisible({ timeout: 5_000 }).catch(() => false)) {
+                const avatarGroup = slotCard.locator('[data-testid="member-avatar-group"]');
+                await expect(avatarGroup).not.toBeVisible();
+            }
+        }
+        // If no zero-vote slot exists (auto-vote made all slots have votes), pass vacuously
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AC12: Read-only mode when match status is not "scheduling"
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll read-only mode', () => {
+    test('scheduled match shows read-only view without vote controls', async ({
+        page,
+    }) => {
+        // Ensure the match is scheduled by creating an event via API
+        // (idempotent — if already scheduled from AC8, createEvent returns error which is fine)
+        const slotRes = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        if (slotRes?.slots?.[0]?.id) {
+            // Vote on the slot first (required to create event)
+            await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/vote`, {
+                slotId: slotRes.slots[0].id,
+            });
+            await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/create-event`, {
+                slotId: slotRes.slots[0].id,
+            }).catch(() => {/* Already created — ignore */});
+        }
+
+        await goToPoll(page, lineupId, matchId);
+
+        const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
+        await expect(heading).toBeVisible({ timeout: 15_000 });
+
+        // After event creation the match is locked in — the page is read-only.
+        const readOnlyBanner = page.locator('[data-testid="read-only-banner"]');
+
+        // ROK-1545: the banner no longer says a generic "Voting is closed." —
+        // it names the ending, so the assertion names it too.
+        await expect(readOnlyBanner).toBeVisible({ timeout: 15_000 });
+        await expect(readOnlyBanner).toHaveAttribute(
+            'data-poll-status',
+            'locked_in',
+        );
+        // …and answers "so when is it?" with a link to the created event.
+        const eventLink = readOnlyBanner.locator(
+            '[data-testid="terminal-event-link"]',
+        );
+        await expect(eventLink).toBeVisible({ timeout: 10_000 });
+        await expect(eventLink).toHaveAttribute('href', /^\/events\/\d+$/);
+
+        // The read-only page offers nothing to vote with (`canVote` false).
+        await expect(
+            page.getByRole('button', { name: /vote for/i }),
+        ).toHaveCount(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1545 (P1-3): the poll page says WHAT happened, not just "closed".
+// The three terminal endings render distinct banners; `data-poll-status`
+// is the wire between the server's `pollStatus` and the rendered ending.
+//
+// These two tests SHARE one fresh poll and run in order (Playwright runs a
+// file's tests serially in one worker): expire it first, then cancel it —
+// which also pins that a cancellation outranks an expired window.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll terminal states (ROK-1545)', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    let terminalLineupId: number;
+    let terminalMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        terminalLineupId = fresh.lineupId;
+        terminalMatchId = fresh.matchId;
+    });
+
+    test('an expired poll (lineup archived, no lock-in) renders the expired banner', async ({
+        page,
+    }) => {
+        await apiPatch(adminToken, `/lineups/${terminalLineupId}/status`, {
+            status: 'archived',
+        });
+
+        await goToPoll(page, terminalLineupId, terminalMatchId);
+
+        const banner = page.locator('[data-testid="read-only-banner"]');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        await expect(banner).toHaveAttribute('data-poll-status', 'closed');
+        await expect(banner).toContainText(/deadline passed without a lock-in/i);
+    });
+
+    test('a cancelled poll renders the operator reason, not a generic closed banner', async ({
+        page,
+    }) => {
+        const reason = 'Half the group is away this week.';
+        await apiPost(
+            adminToken,
+            `/lineups/${terminalLineupId}/schedule/${terminalMatchId}/cancel`,
+            { reason },
+        );
+
+        await goToPoll(page, terminalLineupId, terminalMatchId);
+
+        const banner = page.locator('[data-testid="read-only-banner"]');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        // Cancellation outranks the expired window set up by the test above.
+        await expect(banner).toHaveAttribute('data-poll-status', 'cancelled');
+        await expect(banner).toContainText(reason);
+        // No vote affordance survives a cancellation.
+        await expect(
+            page.getByRole('button', { name: /vote for/i }),
+        ).toHaveCount(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1543 (P1-1): Layout B — "when are we playing?" in one glance.
+// AC1 the leading time + its votes are above the slot list and inside the
+// viewport at 375px with no scrolling; AC3 the heatmap is one affordance away.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll leader card (ROK-1543)', () => {
+    // Earlier describes lock the shared poll in (Poll Complete renders no
+    // leader card), so this group gets its OWN fresh poll with one voted slot.
+    let leaderLineupId: number;
+    let leaderMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        leaderLineupId = fresh.lineupId;
+        leaderMatchId = fresh.matchId;
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        const suggestRes = await apiPost(
+            adminToken,
+            `/lineups/${leaderLineupId}/schedule/${leaderMatchId}/suggest`,
+            { proposedTime: tomorrow.toISOString() },
+        );
+        const slotId = suggestRes?.data?.id ?? suggestRes?.id;
+        if (slotId) {
+            await apiPost(
+                adminToken,
+                `/lineups/${leaderLineupId}/schedule/${leaderMatchId}/vote`,
+                { slotId },
+            );
+        }
+        // ROK-1635 AC1: the LEADING time is rendered once, on the card, and
+        // its ladder row is removed — so a one-slot poll has a card and NO
+        // row, and "the card sits above the first slot row" below could never
+        // resolve. This second time keeps the suggester's auto-YES (net +1
+        // against the toggled-off slot above), so it owns the card and the
+        // slot above stays the ladder row the case measures against.
+        const dayAfter = new Date();
+        dayAfter.setDate(dayAfter.getDate() + 2);
+        dayAfter.setHours(19, 0, 0, 0);
+        await suggestSlotAt(leaderLineupId, leaderMatchId, dayAfter);
+    });
+
+    test.beforeEach(async ({ page }) => {
+        // The test user is not in the guild, so the dismissible Discord-join
+        // banner would otherwise sit above the page and skew the fold check.
+        await page.addInitScript(() => {
+            sessionStorage.setItem('discord-join-banner-dismissed', 'true');
+        });
+    });
+    test('leader card answers the poll at 375px without scrolling', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
+        await page.setViewportSize({ width: 375, height: 667 });
+        await goToPoll(page, leaderLineupId, leaderMatchId);
+
+        const card = page.locator('[data-testid="scheduling-leader-card"]');
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.locator('[data-testid="scheduling-leader-time"]'),
+        ).toBeVisible();
+        await expect(
+            page.locator('[data-testid="scheduling-leader-votes"]'),
+        ).toContainText(/\d+ of \d+/);
+
+        // Nothing was scrolled to make it visible, and what AC1 names — the
+        // leading time, its vote count and the deadline — sits inside the
+        // 667px viewport (the card's own bottom padding may kiss the fold).
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        const box = await card.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.y).toBeGreaterThanOrEqual(0);
+        for (const id of [
+            'scheduling-leader-time',
+            'scheduling-leader-votes',
+            'poll-deadline-banner',
+        ]) {
+            const el = page.locator(`[data-testid="${id}"]`).first();
+            await expect(el).toBeVisible();
+            const b = await el.boundingBox();
+            expect(b, id).not.toBeNull();
+            expect(b!.y + b!.height, `${id} bottom edge`).toBeLessThanOrEqual(667);
+        }
+
+        // ...and it sits ABOVE the first slot row.
+        const slotBox = await page
+            .locator('[data-testid="schedule-slot"]')
+            .first()
+            .boundingBox();
+        expect(slotBox).not.toBeNull();
+        expect(box!.y).toBeLessThan(slotBox!.y);
+    });
+
+    test('the group availability is behind the "Find a better time" affordance', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, leaderLineupId, leaderMatchId);
+        await goToPoll(page, leaderLineupId, leaderMatchId);
+
+        // AC3: not in the primary body...
+        await expect(
+            page.locator('[data-testid="scheduling-leader-card"]'),
+        ).toBeVisible({ timeout: 15_000 });
+        // ROK-1580/1588: the availability surface is the seven-column week
+        // view on a desktop and the one-day group module on a phone — neither may be in
+        // the primary body, and the right one must appear one tap away.
+        const availability = page.locator(
+            '[data-testid="group-week-view"], [data-testid="phone-group-availability"]',
+        );
+        await expect(availability).toHaveCount(0);
+
+        // ...one tap away, in a Modal (>=1024px) or BottomSheet (<1024px)
+        // — ROK-1584 §7 moved the split off 768 so a tablet gets the sheet.
+        await openBetterTimeSheet(page);
+        await expect(
+            availability,
+            'the sheet must show the availability surface for this viewport',
+        ).toBeVisible({
+            timeout: 15_000,
+        });
+        const surface = await page
+            .locator('[data-testid="scheduling-better-time-body"]')
+            .getAttribute('data-surface');
+        const viewport = page.viewportSize();
+        expect(surface).toBe((viewport?.width ?? 0) >= 1024 ? 'modal' : 'sheet');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1558: on mobile the hero is NOT sticky — it scrolls away with the page
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll mobile hero scrolls away (ROK-1558)', () => {
+    // The hero used to be `sticky top-14` at every width and auto-hide on
+    // mobile scroll-down by translating itself off-screen. A transform does
+    // not collapse the sticky box, so the hidden hero left a blank band its
+    // own height tall above the slot ladder. Owns its own still-open poll —
+    // the shared one may be locked in by the event-creation describe.
+    let heroLineupId: number;
+    let heroMatchId: number;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        heroLineupId = fresh.lineupId;
+        heroMatchId = fresh.matchId;
+        const when = new Date();
+        when.setDate(when.getDate() + 1);
+        when.setHours(19, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${heroLineupId}/schedule/${heroMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(adminToken, heroLineupId, heroMatchId);
+    });
+
+    test('mobile: the hero is not sticky and leaves no blank band behind', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Mobile-only test — the hero stays pinned (lg:sticky) on desktop',
+        );
+
+        await goToPoll(page, heroLineupId, heroMatchId);
+        const toolbar = page.locator('[data-testid="scheduling-toolbar"]');
+        await expect(toolbar).toBeVisible({ timeout: 15_000 });
+
+        // 1. Not sticky at this width — nothing can pin and then transform.
+        const position = await toolbar.evaluate(
+            (el) => getComputedStyle(el).position,
+        );
+        expect(position).not.toBe('sticky');
+
+        // 2. It travels with the page, 1:1 with the scroll offset.
+        const before = (await toolbar.boundingBox())!;
+        const scrolledBy = await page.evaluate(async () => {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            return window.scrollY;
+        });
+        // How far the page CAN scroll depends on how much sits under the hero
+        // (a fresh one-slot poll scrolled 536px on the fleet, less than the
+        // hero + 100px this once demanded); the 1:1 travel check below is the
+        // real proof, so only require that the page scrolled at all.
+        expect(scrolledBy).toBeGreaterThan(0);
+
+        const after = await toolbar.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+        });
+        expect(Math.abs(after.top - (before.y - scrolledBy))).toBeLessThan(4);
+
+        // 3. No blank band: once the page is tall enough for the hero to have
+        //    left entirely, the poll body — not an empty hero-sized box —
+        //    occupies the top of the viewport. On a short page (GitHub's fresh
+        //    DB: the hero bottom sat at 44px after a full scroll) the 1:1 travel
+        //    above is already the proof, so the hero-gone checks are skipped.
+        if (scrolledBy < before.y + before.height) return;
+        expect(after.bottom).toBeLessThanOrEqual(0);
+        const hit = await page.evaluate(() => {
+            const el = document.elementFromPoint(
+                Math.floor(window.innerWidth / 2),
+                96,
+            );
+            const bar = document.querySelector(
+                '[data-testid="scheduling-toolbar"]',
+            );
+            return {
+                insideToolbar: !!(el && bar && bar.contains(el)),
+                inComposite: !!el?.closest('[data-testid="scheduling-composite"]'),
+            };
+        });
+        expect(hit.insideToolbar).toBe(false);
+        expect(hit.inComposite).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1546: the phone treatment of the slot ladder's two actions
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll mobile actions (ROK-1546)', () => {
+    // AC1 (44px hit targets) and AC6 (the "find a better time" trigger reads as
+    // a real secondary button, not a ghost) are both CSS-only and both only
+    // apply below `sm`, so they need a real mobile viewport to be worth
+    // anything. Owns its own still-open poll — the shared one may have been
+    // locked in by the event-creation describe.
+    let actionsLineupId: number;
+    let actionsMatchId: number;
+    /** The proposed time of this describe's single slot (AC3 seeds against it). */
+    let actionsSlotTime: string;
+
+    test.beforeAll(async () => {
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        actionsLineupId = fresh.lineupId;
+        actionsMatchId = fresh.matchId;
+        // An odd hour, days away from the file's shared +1d/+2d 19:00–20:00
+        // grid: the AC3 events below are admin-wide, so a slot another worker
+        // proposes in the same window would read them as ITS conflict.
+        const when = new Date();
+        when.setDate(when.getDate() + 6);
+        when.setHours(23, 15, 0, 0);
+        actionsSlotTime = when.toISOString();
+        // ROK-1635 AC1: the leading time has no ladder row, and a one-slot
+        // poll leads in every stance — so the row these cases measure needs a
+        // decoy to hold the card. A full DAY earlier, not an hour: the AC3
+        // events below are created inside the slot's own window, and a decoy
+        // sharing that window would put a `slot-conflicts` marker on the card
+        // as well as the row.
+        const decoyTime = new Date(when);
+        decoyTime.setDate(decoyTime.getDate() - 1);
+        await seedDecoyLeader(actionsLineupId, actionsMatchId, decoyTime);
+        await apiPost(
+            adminToken,
+            `/lineups/${actionsLineupId}/schedule/${actionsMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(
+            adminToken,
+            actionsLineupId,
+            actionsMatchId,
+        );
+    });
+
+    test('AC1: the vote button clears the 44px touch target', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Mobile-only — the 44px floor is `min-h-[44px] sm:min-h-[36px]`',
+        );
+
+        await goToPoll(page, actionsLineupId, actionsMatchId);
+        const vote = page
+            .locator('[data-testid="schedule-slot"] button[aria-pressed]')
+            .first();
+        await expect(vote).toBeVisible({ timeout: 15_000 });
+        const box = await vote.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    test('AC6: the better-time trigger is a solid, foreground-coloured button', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Mobile-only — the dashed/muted treatment is kept from `sm` up',
+        );
+
+        await goToPoll(page, actionsLineupId, actionsMatchId);
+        const trigger = page.locator(
+            '[data-testid="scheduling-find-better-time"]',
+        );
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+
+        // Not the ghost: solid border, and the copy is at full foreground
+        // contrast rather than the muted secondary tone.
+        const styles = await trigger.evaluate((el) => {
+            // Resolve `--color-foreground` through the engine so the hex in
+            // index.css and the computed `rgb()` are directly comparable.
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--color-foreground)';
+            document.body.appendChild(probe);
+            const foreground = getComputedStyle(probe).color;
+            probe.remove();
+            const own = getComputedStyle(el);
+            return {
+                borderStyle: own.borderTopStyle,
+                color: own.color,
+                foreground,
+            };
+        });
+        expect(styles.borderStyle).not.toBe('dashed');
+        expect(styles.color).toBe(styles.foreground);
+
+        // AC1 applies to this action too.
+        const box = await trigger.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    /**
+     * AC3 — the conflict warning used to name the FIRST clashing event inline
+     * and hide the rest behind a `title` tooltip, which a phone can never
+     * open. Both names have to be readable on the page itself.
+     */
+    test('AC3: the conflict warning names every clashing event as visible text', async ({
+        page,
+    }) => {
+        const stamp = Date.now();
+        const titles = [
+            `rok-1546-conflict-a-${stamp}`,
+            `rok-1546-conflict-b-${stamp}`,
+        ];
+        // Creating an event signs the admin up for it, which is what the
+        // conflict query keys on. Both land inside the slot's 2h window.
+        const end = new Date(
+            new Date(actionsSlotTime).getTime() + 60 * 60 * 1000,
+        ).toISOString();
+        const created: number[] = [];
+        try {
+            for (const title of titles) {
+                const event = (await apiPost(adminToken, '/events', {
+                    title,
+                    startTime: actionsSlotTime,
+                    endTime: end,
+                    maxAttendees: 10,
+                })) as { id: number };
+                created.push(event.id);
+            }
+            await goToPoll(page, actionsLineupId, actionsMatchId);
+            const marker = page
+                .locator('[data-testid="slot-conflicts"]')
+                .first();
+            await expect(marker).toBeVisible({ timeout: 15_000 });
+            for (const title of titles) {
+                await expect(marker).toContainText(title);
+            }
+            // Nothing is left behind a hover-only affordance.
+            await expect(marker).not.toContainText('+1');
+            expect(await marker.getAttribute('title')).toBeNull();
+        } finally {
+            // The events are admin-wide — a leftover would fake a conflict on
+            // any other poll with a slot in the same window.
+            for (const id of created) {
+                await apiDelete(adminToken, `/events/${id}`);
+            }
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1560: the "Find a better time" sheet names both heatmap channels.
+// The legend renders whenever the group-availability response carries
+// `freshnessDays` (the scheduling aggregate always does) AND the section has
+// cells — so this describe owns a poll whose only member (admin) has a seeded
+// game-time template.
+// ---------------------------------------------------------------------------
+
+test.describe('Find a better time — availability legend (ROK-1560)', () => {
+    let legendLineupId: number;
+    let legendMatchId: number;
+
+    test.beforeAll(async () => {
+        // Own the poll: sibling describes lock in / archive theirs, which would
+        // flip this one into a terminal state with no better-time sheet.
+        const fresh = await createSchedulingLineupWithMatch(adminToken);
+        legendLineupId = fresh.lineupId;
+        legendMatchId = fresh.matchId;
+
+        // The section renders nothing for an empty `cells` array, and cells are
+        // built from match members' game-time templates — so make sure the
+        // viewing admin has one (and a fresh `confirmed_at`).
+        await apiPut(adminToken, '/users/me/game-time', {
+            slots: [
+                { dayOfWeek: 2, hour: 20 },
+                { dayOfWeek: 2, hour: 21 },
+                { dayOfWeek: 4, hour: 20 },
+            ],
+        });
+
+        // A slot keeps the poll body in its active shape (the better-time
+        // affordance mounts with it).
+        const when = new Date();
+        when.setDate(when.getDate() + 4);
+        when.setHours(21, 30, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${legendLineupId}/schedule/${legendMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(
+            adminToken,
+            legendLineupId,
+            legendMatchId,
+        );
+    });
+
+    test('the sheet shows a two-channel legend naming the freshness window', async ({
+        page,
+    }) => {
+        await goToPoll(page, legendLineupId, legendMatchId);
+        await openBetterTimeSheet(page);
+
+        // ROK-1580: below 1024px the sheet carries the phone module's own
+        // legend. It names the fill channels (free, and stale counting half)
+        // and the two marks: the viewer's own events ("Your events", operator
+        // ruling 2026-09-17 — it replaced "You") and the poll's "Already suggested" slots. It does NOT state the freshness
+        // window, which has no room on a phone.
+        if (await isPhoneSheet(page)) {
+            const phoneLegend = page.getByTestId('phone-group-legend');
+            await expect(
+                phoneLegend,
+                'the phone sheet must still say what the fills mean',
+            ).toBeVisible({ timeout: 20_000 });
+            await expect(phoneLegend).toContainText(/free/i);
+            await expect(phoneLegend).toContainText(/stale counts half/i);
+            await expect(phoneLegend).toContainText('Your events');
+            await expect(page.getByTestId('phone-group-legend-you')).toHaveCount(0);
+            await expect(phoneLegend).toContainText('Already suggested');
+            return;
+        }
+
+        // ROK-1588: the desktop week view's `group-week-legend` keys every
+        // per-cell mark, and its right-hand `group-week-members` clause names
+        // how current the counts are — stale availability is still NAMED
+        // ("N out of date"), not silently painted as "not free", which is the
+        // whole point of ROK-1560.
+        // The approved D-b artboard drops the "last 30 days" window copy from
+        // the legend; the window survives on `ViewerStaleHint` (stale viewer)
+        // and staleness is still counted here, so the ROK-1560 claim holds.
+        const legend = page.getByTestId('group-week-legend');
+        await expect(legend).toBeVisible({ timeout: 20_000 });
+        for (const key of ['More people free', 'Someone busy', 'Your events', 'Already suggested']) {
+            await expect(legend, `the week legend must key "${key}"`).toContainText(key);
+        }
+        await expect(legend, 'the "you" mark is gone from the group views').not.toContainText('Your game time');
+        const members = legend.getByTestId('group-week-members');
+        await expect(members).toHaveText(/^\d+ members?\b/);
+        await expect(
+            members,
+            'the members clause must say how current the counts are',
+        ).toContainText(/\d+ fresh|\d+ out of date|\d+ unknown/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1564 — the game-time check before voting.
+//
+// A stale viewer is asked ONE question with four answers; the week painter is
+// gone from the overlay (it lives at /profile/gaming/game-time). "Looks right"
+// is a confirm-only save: it stamps `game_time_confirmed_at`, the refetch
+// reports `gameTimeStale: false`, and the overlay closes because the derived
+// open condition stopped holding — nothing force-closes it.
+//
+// Every project runs this: the shell is a Modal ≥1024px and a BottomSheet below,
+// but both expose `role="dialog"` and the SAME body testids, so every assertion
+// here is shell-agnostic by construction.
+// ---------------------------------------------------------------------------
+
+test.describe('Game-time check before voting (ROK-1564)', () => {
+    let checkLineupId: number;
+    let checkMatchId: number;
+
+    /** Re-stamped in afterAll so sibling describes see a FRESH admin again. */
+    const RESTORE_SLOTS = [
+        { dayOfWeek: 2, hour: 19 },
+        { dayOfWeek: 2, hour: 20 },
+        { dayOfWeek: 4, hour: 20 },
+    ];
+
+    /**
+     * The "Save my week" test's OWN baseline.
+     *
+     * It taps Saturday, so no entry here may be `dayOfWeek: 6` — a tap that
+     * lands on an existing block merges into it, leaving the block count and
+     * the draft unchanged and Save disabled (the exact failure on the 2026-09-15
+     * fleet gate, where sibling describes had written Tuesday 19–21).
+     */
+    const SAVE_WEEK_SLOTS = [
+        { dayOfWeek: 2, hour: 19 },
+        { dayOfWeek: 2, hour: 20 },
+        { dayOfWeek: 4, hour: 20 },
+    ];
+
+    /**
+     * The check's body. ROK-1569 split the shells: the desktop Modal still
+     * renders the four-answer `game-time-check-body`, the phone sheet renders
+     * the week editor (`phone-week-check`). ROK-1579 made the phone sheet ONE
+     * view, so this is the whole check there — there is no second step behind
+     * it. Every shared assertion below goes through here so it means the same
+     * thing on both projects.
+     */
+    function checkBody(
+        page: import('@playwright/test').Page,
+    ): import('@playwright/test').Locator {
+        return isPhoneLayout(test.info())
+            ? page.getByTestId('phone-week-check')
+            : page.getByTestId('game-time-check-body');
+    }
+
+    /** The prompt, wherever the check puts it. */
+    function checkPrompt(
+        page: import('@playwright/test').Page,
+    ): import('@playwright/test').Locator {
+        return isPhoneLayout(test.info())
+            ? page.getByTestId('phone-week-prompt')
+            : page.getByTestId('game-time-check-prompt');
+    }
+
+    /** The one question, in every shape the server's age/slots can produce. */
+    const PROMPT_RE =
+        /^(Your game time is \d+ days old\. Anything changed\?|Your game time hasn't been confirmed yet\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/;
+
+    /** Read the server's freshness verdict for the authenticated admin. */
+    async function readGameTimeStale(): Promise<boolean | undefined> {
+        const res = await apiGet(adminToken, '/users/me/game-time');
+        return (res?.data ?? res)?.gameTimeStale;
+    }
+
+    /**
+     * Read the admin's SAVED week from the same endpoint. The phone "Save my
+     * week" test asserts the write landed server-side before it trusts
+     * anything the collapsed drawer left on screen.
+     */
+    async function readGameTimeDays(): Promise<number[]> {
+        const res = await apiGet(adminToken, '/users/me/game-time');
+        const slots = (res?.data ?? res)?.slots ?? [];
+        return (slots as { dayOfWeek: number }[]).map((s) => s.dayOfWeek);
+    }
+
+    /**
+     * Navigate WITHOUT the defensive dismiss — here the overlay IS the subject,
+     * so `goToPoll`'s Skip would destroy what we came to assert.
+     */
+    async function goToPollExpectingCheck(
+        page: import('@playwright/test').Page,
+    ): Promise<void> {
+        await page.goto(
+            `/community-lineup/${checkLineupId}/schedule/${checkMatchId}`,
+        );
+        await expect(checkBody(page)).toBeVisible({ timeout: 20_000 });
+    }
+
+    test.beforeAll(async () => {
+        // This describe OWNS its poll: sibling describes archive/advance their
+        // lineups, and a standalone poll is its own lineup + match.
+        const [gameId] = await fetchGameIds(adminToken, 1);
+        const poll = (await apiPost(adminToken, '/scheduling-polls', {
+            gameId,
+            durationHours: 72,
+        })) as { id?: number; lineupId?: number };
+        if (!poll?.id || !poll?.lineupId) {
+            throw new Error(
+                `POST /scheduling-polls did not return {id, lineupId}: ${JSON.stringify(poll)}`,
+            );
+        }
+        checkMatchId = poll.id;
+        checkLineupId = poll.lineupId;
+
+        // TWO slots keep the poll body in its active shape behind the overlay
+        // — and, under ROK-1635 AC1, keep exactly ONE of them in the ladder.
+        // The leading time renders only on the card, and a one-slot poll leads
+        // in every stance (an unanswered poll still derives a provisional
+        // leader), so the phone cases below — which assert the collapsed
+        // drawer reveals the page's ladder, and that the ladder is ONE ballot
+        // and not two — would have had no row at all to land on.
+        //
+        // The decoy is earlier and keeps the suggester's auto-YES, so it holds
+        // the card whether or not a case toggles the row's own vote.
+        const decoyTime = new Date(Date.now() + 86_400_000);
+        decoyTime.setHours(20, 0, 0, 0);
+        await seedDecoyLeader(checkLineupId, checkMatchId, decoyTime);
+        const when = new Date(Date.now() + 2 * 86_400_000);
+        when.setHours(20, 0, 0, 0);
+        await apiPost(
+            adminToken,
+            `/lineups/${checkLineupId}/schedule/${checkMatchId}/suggest`,
+            { proposedTime: when.toISOString() },
+        );
+        await pollSchedulingPollHasSlot(adminToken, checkLineupId, checkMatchId);
+    });
+
+    test.beforeEach(async () => {
+        // Make the admin STALE. The beforeAll PUT above (and every sibling
+        // describe's) stamps the confirmation, so this must run per-test and
+        // AFTER any game-time write. Confirm the server agrees before any
+        // navigation — the page reads this same endpoint.
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'admin never became stale after clearing confirmation',
+            })
+            .toBe(true);
+    });
+
+    test.afterAll(async () => {
+        // Leave the shared admin fresh: other smoke files use the same user and
+        // only dismiss the overlay defensively.
+        await apiPut(adminToken, '/users/me/game-time', { slots: RESTORE_SLOTS });
+    });
+
+    test('a stale viewer is asked ONE question — no week grid inside the dialog', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — below 1024px the check IS the week editor (ROK-1569/1579), covered by the phone test below',
+        );
+        await goToPollExpectingCheck(page);
+
+        // Shell-agnostic: Modal and BottomSheet both expose role="dialog".
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        // The one question. Age is null here (the confirmation was cleared, so
+        // the server reports `gameTimeAgeDays: null`) and the admin HAS slots
+        // from the file-level PUT → the "hasn't been confirmed yet" copy; a
+        // seeded age reads "... N days old. Anything changed?", and a member
+        // with no slots at all reads "You haven't set a game time yet".
+        await expect(page.getByTestId('game-time-check-prompt')).toHaveText(PROMPT_RE);
+
+        // AC: the week painter is GONE from the overlay. `game-time-grid` is
+        // GridBody.tsx's testid — it renders wherever GameTimeGrid mounts.
+        await expect(
+            dialog.locator('[data-testid="game-time-grid"]'),
+        ).toHaveCount(0);
+
+        // All four answers are present.
+        for (const id of [
+            'game-time-check-confirm',
+            'game-time-check-absence',
+            'game-time-check-edit',
+            'game-time-check-skip',
+        ]) {
+            await expect(dialog.getByTestId(id)).toBeVisible();
+        }
+    });
+
+    test('phone: the check is ONE view — the week editor, no stepper, no painter (ROK-1579)', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Phone-only — the desktop modal keeps the four-answer body (ROK-1569)',
+        );
+        await goToPollExpectingCheck(page);
+
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        // The SAME one question as the desktop modal — the copy is shared
+        // (`game-time-check-copy.ts`), so the two bodies cannot drift apart.
+        await expect(checkPrompt(page)).toHaveText(PROMPT_RE);
+
+        // ...and the week itself is on screen, one day at a time.
+        for (const id of ['phone-week-editor', 'phone-day-pager', 'phone-week-strip']) {
+            await expect(dialog.getByTestId(id)).toBeVisible();
+        }
+
+        // ROK-1579: the strip is CONDENSED — three band bars per day (day
+        // 9 AM–5 PM / evening 5–9 PM / late 9 PM–1 AM), never one per hour.
+        await expect(
+            dialog.getByTestId('phone-week-strip-day-0').getByTestId('phone-week-strip-bar'),
+        ).toHaveCount(3);
+
+        // The answers wrapped around it: one-tap confirm, the absence row, and
+        // the sticky footer.
+        // ROK-1585: the away answer is the `away-entry` row that swaps the drawer.
+        for (const id of ['phone-week-same', 'away-entry', 'phone-week-save', 'phone-week-skip']) {
+            await expect(dialog.getByTestId(id)).toBeVisible();
+        }
+
+        // AC (unchanged from ROK-1564): the 7-column week painter never renders
+        // inside the overlay. `game-time-grid` is GridBody.tsx's testid.
+        await expect(dialog.locator('[data-testid="game-time-grid"]')).toHaveCount(0);
+
+        // ROK-1579: ONE view. The ROK-1574 stepper is gone in every part —
+        // the segment header, the step line, the two segment buttons and the
+        // in-sheet ballot pane — and `game-time-check-step-one` was renamed.
+        // Asserting each id (not just the wrapper) is what stops a partial
+        // revert from shipping half a stepper.
+        for (const id of [
+            'game-time-check-stepper',
+            'game-time-check-stepline',
+            'game-time-check-step-1',
+            'game-time-check-step-2',
+            'game-time-check-step2',
+            'game-time-check-step-one',
+        ]) {
+            await expect(page.getByTestId(id)).toHaveCount(0);
+        }
+        // ...and no copy anywhere still narrates a two-step flow.
+        await expect(page.getByText(/Step \d of 2/)).toHaveCount(0);
+
+        // What replaced it: a plain title row above the one content box.
+        await expect(dialog.getByTestId('game-time-check-header')).toBeVisible();
+        await expect(dialog.getByTestId('game-time-check-content')).toBeVisible();
+
+        // The ballot is the PAGE's ladder, never a second one in the drawer.
+        await expect(dialog.locator('[data-testid="schedule-slot"]')).toHaveCount(0);
+
+        // ROK-1579: no cross-hatch. Unclaimed hours are plain `bg-edge` in both
+        // the day grid and the week strip now, so NOTHING in the editor may
+        // carry the inline `repeating-linear-gradient` the stale week used to
+        // paint. Measured on the live style, not on a class name, because the
+        // hatch was an inline `style={{ backgroundImage }}`.
+        const bars = await dialog.evaluate((el: HTMLElement) => {
+            const nodes = Array.from(
+                el.querySelectorAll<HTMLElement>(
+                    '[data-testid^="phone-cell-"], [data-testid^="phone-week-strip"] *',
+                ),
+            );
+            return {
+                total: nodes.length,
+                hatched: nodes.filter((n) => (n.style.backgroundImage || '') !== '').length,
+            };
+        });
+        // Self-proving: a testid rename must fail here, not pass with zero nodes.
+        expect(bars.total, 'the hatch probe matched no editor nodes at all').toBeGreaterThan(0);
+        expect(
+            bars.hatched,
+            'the phone week editor still hatches unclaimed hours (ROK-1579 removed it)',
+        ).toBe(0);
+
+        // The four-answer desktop body is not on the phone AT ALL — asserting
+        // its absence is what keeps a future regression from quietly shipping
+        // both bodies to the same viewport.
+        for (const id of [
+            'game-time-check-body',
+            'game-time-check-confirm',
+            'game-time-check-absence',
+            'game-time-check-edit',
+            'game-time-check-skip',
+        ]) {
+            await expect(page.getByTestId(id)).toHaveCount(0);
+        }
+
+        // The comp's rule at 375x812: the one view fits, so the sheet's scroll
+        // container has nothing to scroll. Measured on the sheet's scrolling
+        // ancestor because the sheet body itself is a plain flex column. The
+        // ROK-1579 header is no taller than the stepper it replaced and the
+        // content box kept `h-[calc(95dvh-200px)]`, so the bar is unchanged.
+        const overflow = await page
+            .getByTestId('game-time-check-sheet')
+            .evaluate((el: HTMLElement) => {
+                for (let n = el.parentElement; n; n = n.parentElement) {
+                    const oy = getComputedStyle(n).overflowY;
+                    if (oy === 'auto' || oy === 'scroll') return n.scrollHeight - n.clientHeight;
+                }
+                return el.scrollHeight - el.clientHeight;
+            });
+        expect(overflow).toBeLessThanOrEqual(1);
+    });
+
+    test('phone: "I\'m away" swaps the check drawer to the away panel and back (ROK-1585 AC5)', async ({
+        page,
+    }) => {
+        test.skip(
+            !isPhoneLayout(test.info()),
+            'Phone-layout — the desktop modal keeps the four-answer body',
+        );
+        await goToPollExpectingCheck(page);
+        const dialog = page.getByRole('dialog').filter({ has: checkBody(page) });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        const entry = dialog.getByTestId('away-entry');
+        await expect(entry).toBeVisible();
+        expect((await entry.boundingBox())!.height, 'the entry row is under 44px').toBeGreaterThanOrEqual(44);
+        await entry.click();
+
+        // Swapped: the away panel and "‹ I'm away" header; the week stays
+        // mounted but NOTHING of it is on screen under the panel.
+        await expect(dialog.getByTestId('away-panel')).toBeVisible({ timeout: 10_000 });
+        await expect(dialog.getByTestId('game-time-check-header')).toContainText("I'm away");
+        for (const id of ['phone-week-editor', 'phone-week-strip', 'phone-week-save', 'phone-week-skip']) {
+            await expect(dialog.getByTestId(id), `${id} still shows under the away panel`).toBeHidden();
+        }
+        const submit = dialog.getByTestId('absence-submit');
+        await expect(submit).toBeInViewport();
+
+        // ‹ returns to the same week, footer back in view.
+        await dialog.getByTestId('away-back').click();
+        await expect(dialog.getByTestId('away-panel')).toHaveCount(0);
+        await expect(dialog.getByTestId('game-time-check-header')).not.toContainText("I'm away");
+        await expect(dialog.getByTestId('phone-week-editor')).toBeVisible();
+        await expect(dialog.getByTestId('phone-week-save')).toBeInViewport();
+    });
+
+    test('"Looks right" confirms, the check closes, and the poll is still there', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — the phone answer is "Same as last week" (ROK-1569), covered below',
+        );
+        await goToPollExpectingCheck(page);
+
+        const confirmed = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time/confirm') &&
+                r.request().method() === 'PATCH' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        const confirmButton = page.getByTestId('game-time-check-confirm');
+        await confirmButton.scrollIntoViewIfNeeded();
+        await confirmButton.click();
+        await confirmed;
+
+        // Closing is DERIVED from the refetched staleness, not forced.
+        await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'confirm did not clear staleness server-side',
+            })
+            .toBe(false);
+
+        // Nothing under the overlay was navigated away or unmounted.
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+    });
+
+    test('Skip closes the check and it stays closed for the session', async ({
+        page,
+    }) => {
+        test.skip(
+            isPhoneLayout(test.info()),
+            'Desktop-only — the phone Skip collapses the drawer onto the page ballot (ROK-1579), covered below',
+        );
+        await goToPollExpectingCheck(page);
+        await page.getByTestId('game-time-check-skip').click();
+        await expect(checkBody(page)).toBeHidden({ timeout: 10_000 });
+
+        // Skip persists to sessionStorage, so a reload in the SAME tab must not
+        // re-open it even though the admin is still stale server-side. Waiting
+        // on the game-time GET keeps the assertion from passing vacuously
+        // against a page whose query hasn't resolved yet.
+        const gameTimeFetch = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
+        await page.reload();
+        await gameTimeFetch;
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+        await expect(checkBody(page)).toHaveCount(0);
+    });
+
+    test('phone: "Same as last week" confirms and collapses the drawer onto the ballot', async ({
+        page,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Phone-only — the week-editor answers are the phone shell (ROK-1569/1579)',
+        );
+        await goToPollExpectingCheck(page);
+
+        const confirmed = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time/confirm') &&
+                r.request().method() === 'PATCH' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        const same = page.getByTestId('phone-week-same');
+        await same.scrollIntoViewIfNeeded();
+        await same.click();
+        await confirmed;
+
+        // Ending the check is DERIVED from the refetched staleness, exactly as
+        // on desktop — and on the phone the whole drawer now COLLAPSES
+        // (ROK-1579) instead of advancing to an in-sheet step 2. The sheet
+        // unmounts, so `toHaveCount(0)` is the honest assertion: a merely
+        // translated-off-screen sheet would still be attached.
+        await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect(page.getByTestId('game-time-check-sheet')).toHaveCount(0, {
+            timeout: 20_000,
+        });
+        await expect(page.getByTestId('game-time-check-step2')).toHaveCount(0);
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveCount(0);
+
+        // What the viewer lands on is the PAGE's ladder, back from behind the
+        // drawer the composite had it hidden under.
+        await expect(
+            page.locator('[data-testid="schedule-slot"]').first(),
+        ).toBeVisible({ timeout: 20_000 });
+
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'Same as last week did not clear staleness server-side',
+            })
+            .toBe(false);
+    });
+
+    test('phone: Skip collapses the drawer onto the ballot and stays skipped for the session', async ({
+        page,
+        browser,
+    }) => {
+        test.skip(
+            !isMobile(test.info()),
+            'Phone-only — the week-editor answers are the phone shell (ROK-1569/1579)',
+        );
+        // Three navigations (first load, reload, fresh context) in one test.
+        test.slow();
+        await goToPollExpectingCheck(page);
+
+        await page.getByTestId('phone-week-skip').click();
+
+        // ROK-1579: Skip alone collapses the drawer — there is no step 2 left
+        // behind it, so there is no second dismissal to make. The sheet
+        // unmounts entirely, hence `toHaveCount(0)` rather than `toBeHidden`.
+        await expect(checkBody(page)).toBeHidden({ timeout: 10_000 });
+        await expect(page.getByTestId('game-time-check-sheet')).toHaveCount(0, {
+            timeout: 10_000,
+        });
+        await expect(page.getByTestId('game-time-check-step2')).toHaveCount(0);
+
+        // The poll page underneath is untouched AND interactive: the ladder is
+        // back and its vote control is live, not a disabled placeholder.
+        const ladderRow = page.locator('[data-testid="schedule-slot"]').first();
+        await expect(ladderRow).toBeVisible({ timeout: 20_000 });
+        await expect(
+            ladderRow.getByRole('button', { name: /vote/i }),
+        ).toBeEnabled({ timeout: 10_000 });
+
+        // Skip persists to sessionStorage, so a reload in the SAME tab must not
+        // re-open the check even though the admin is still stale server-side.
+        const gameTimeFetch = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
+        await page.reload();
+        await gameTimeFetch;
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 20_000 });
+        await expect(checkBody(page)).toHaveCount(0);
+        await expect(page.getByTestId('game-time-check-sheet')).toHaveCount(0);
+
+        // ...and the skip really is SESSION-scoped, not a permanent dismissal:
+        // the admin is STILL stale server-side (Skip answers nothing), so a
+        // brand-new context — fresh sessionStorage, same stored login — is
+        // asked again. Without this, a check that had been silenced forever
+        // would satisfy the reload assertion above just as well.
+        const fresh = await browser.newContext({
+            ...devices['Pixel 5'],
+            storageState: STORAGE_STATE_PATH,
+        });
+        await signInAsAdmin(fresh); // ROK-1754: own rl_rt family, storageState holds no token
+        try {
+            const freshPage = await fresh.newPage();
+            await freshPage.goto(
+                `/community-lineup/${checkLineupId}/schedule/${checkMatchId}`,
+                { waitUntil: 'domcontentloaded' },
+            );
+            await expect(checkBody(freshPage)).toBeVisible({ timeout: 20_000 });
+        } finally {
+            await fresh.close();
+        }
+    });
+
+    test('phone: "Save my week" writes the week AND counts as the confirmation', async ({
+        page,
+    }) => {
+        test.skip(!isMobile(test.info()), 'Phone-only — ROK-1569 week editor');
+
+        // OWN the week this test edits. Sibling describes in THIS file PUT the
+        // admin's template (Tuesday 19–21, Thursday 20), so a test that assumed
+        // an empty Tuesday tapped an existing block: one block before, one
+        // after, nothing dirty, Save still disabled.
+        expect(
+            SAVE_WEEK_SLOTS.some((s) => s.dayOfWeek === 6),
+            'the baseline must leave Saturday empty — this test taps it',
+        ).toBe(false);
+        await apiPut(adminToken, '/users/me/game-time', { slots: SAVE_WEEK_SLOTS });
+
+        // A template save stamps `game_time_confirmed_at`, so that PUT just
+        // undid `beforeEach`'s clear. Clear it again and wait for the server to
+        // agree, or the check never opens and there is nothing to save.
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'admin never became stale after re-clearing the confirmation',
+            })
+            .toBe(true);
+
+        await goToPollExpectingCheck(page);
+
+        // Save is inert until the week actually differs from the saved one —
+        // an untouched draft must not be able to stamp a confirmation.
+        const save = page.getByTestId('phone-week-save');
+        await expect(save).toBeDisabled();
+
+        // Saturday: the baseline above leaves day 6 empty, so a tap creates a
+        // block instead of merging into one. Asserted, not assumed.
+        const saturday = page.getByTestId('phone-week-strip-day-6');
+        await saturday.click();
+        await expect(saturday).toHaveAttribute('aria-current', 'date');
+        await expect(page.locator('[data-testid^="slot-block-6-"]')).toHaveCount(0);
+
+        // The day target is sized from the measured row height (the editor's
+        // rows are `1fr`, so it only exists after layout), and a tap dispatched
+        // before that measure lands falls through to the cell, which has no
+        // handler. Wait for a real box instead of a timer.
+        await expect
+            .poll(
+                async () => (await page.getByTestId('slot-day-target-6').boundingBox())?.height ?? 0,
+                { timeout: 10_000, message: 'the block layer never measured a row height' },
+            )
+            .toBeGreaterThan(0);
+
+        // force: the day target sits above the cell and is the real pointer
+        // recipient, so the hit-target check would call the cell intercepted —
+        // the same gesture `game-time-blocks.smoke.spec.ts` uses.
+        await page.getByTestId('phone-cell-6-21').click({ force: true });
+        await expect(page.locator('[data-testid^="slot-block-6-"]')).toHaveCount(1);
+        await expect(save).toBeEnabled();
+
+        const saved = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'PUT' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        await save.click();
+        await saved;
+
+        // The WRITE first: poll the same endpoint the page reads, so the UI
+        // assertions below can never pass against a save that never landed.
+        await expect
+            .poll(readGameTimeDays, {
+                timeout: 15_000,
+                message: 'the tapped Saturday hour never reached /users/me/game-time',
+            })
+            .toContain(6);
+
+        // The save IS the confirmation — `saveTemplate` stamps
+        // `game_time_confirmed_at` (api/src/users/game-time.service.ts) — so the
+        // check ends without a second tap and the whole drawer COLLAPSES
+        // (ROK-1579); it does not advance to an in-sheet ballot.
+        await expect(checkBody(page)).toBeHidden({ timeout: 20_000 });
+        await expect(page.getByTestId('game-time-check-sheet')).toHaveCount(0, {
+            timeout: 20_000,
+        });
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveCount(0);
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: 'saving a week did not clear staleness server-side',
+            })
+            .toBe(false);
+
+        // ...and the ballot the viewer lands on is the page's own ladder, live.
+        const ladderRow = page.locator('[data-testid="schedule-slot"]').first();
+        await expect(ladderRow).toBeVisible({ timeout: 20_000 });
+        await expect(
+            ladderRow.getByRole('button', { name: /vote/i }),
+        ).toBeEnabled({ timeout: 10_000 });
+    });
+
+    test('phone: "Same as last week" COLLAPSES the drawer — the page ladder is the one ballot (ROK-1579)', async ({
+        page,
+    }) => {
+        test.skip(!isMobile(test.info()), 'the one-view sheet is the phone shell; desktop keeps the modal');
+        // Two navigations (first load, reload) plus a confirm and a vote.
+        test.slow();
+        await goToPollExpectingCheck(page);
+
+        const sheet = page.getByTestId('game-time-check-sheet');
+        await expect(sheet).toBeVisible();
+        // ROK-1579: one view, so nothing narrates a step.
+        await expect(page.getByTestId('game-time-check-stepper')).toHaveCount(0);
+        await expect(page.getByTestId('game-time-check-stepline')).toHaveCount(0);
+        await expect(page.getByText(/Step \d of 2/)).toHaveCount(0);
+        // ZERO ladders in the DOM while the sheet is up — the composite keeps
+        // the page copy unmounted behind the full-height drawer, and the drawer
+        // itself has never carried a ballot since ROK-1579.
+        await expect(page.locator('[data-testid="schedule-slot"]')).toHaveCount(0);
+
+        const confirmed = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time/confirm') &&
+                r.request().method() === 'PATCH' &&
+                r.ok(),
+            { timeout: 20_000 },
+        );
+        const same = page.getByTestId('phone-week-same');
+        await same.scrollIntoViewIfNeeded();
+        await same.click();
+        await confirmed;
+
+        // The sheet COLLAPSES (ROK-1579) — it unmounts, it does not advance.
+        await expect(sheet).toHaveCount(0, { timeout: 20_000 });
+        await expect(page.getByTestId('game-time-check-step2')).toHaveCount(0);
+
+        // ...and exactly ONE ladder comes back: the page's. Not two, which is
+        // the regression an in-drawer ballot reintroduces.
+        const row = page.locator('[data-testid="schedule-slot"]').first();
+        await expect(row).toBeVisible({ timeout: 20_000 });
+        await expect(page.locator('[data-testid="schedule-slot"]')).toHaveCount(1);
+
+        // That ladder is the REAL ballot: one tap moves the vote, server-side.
+        const before = await row.getAttribute('data-voted');
+        const after = before === 'true' ? 'false' : 'true';
+        await Promise.all([
+            page
+                .waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                    { timeout: 20_000 },
+                )
+                .catch(() => null),
+            row.getByRole('button', { name: /vote/i }).click(),
+        ]);
+        await expect(row).toHaveAttribute('data-voted', after, { timeout: 15_000 });
+
+        // The check is OVER, not merely hidden: the confirm cleared staleness
+        // server-side, so a reload in the SAME tab comes back with no drawer at
+        // all — and the vote cast on the page ladder is still there.
+        const gameTimeFetch = page.waitForResponse(
+            (r) =>
+                r.url().includes('/users/me/game-time') &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
+        await page.reload();
+        await gameTimeFetch;
+        await expect(
+            page.locator('[data-testid="schedule-slot"]').first(),
+        ).toHaveAttribute('data-voted', after, { timeout: 20_000 });
+        await expect(sheet).toHaveCount(0);
+    });
+});

@@ -1,0 +1,1 @@
+ALTER TABLE "event_signups" ADD COLUMN "roached_out_at" timestamp;

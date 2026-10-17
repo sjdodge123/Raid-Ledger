@@ -1,0 +1,118 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventsService } from './events.service';
+import { EventSeriesService } from './event-series.service';
+import { EventGuildTagService } from './event-guild-tag.service';
+import { EventsSeriesController } from './events-series.controller';
+import { SignupsService } from './signups.service';
+import { RunningLateService } from './running-late.service';
+import { SignupsAllocationService } from './signups-allocation.service';
+import { SignupsRosterService } from './signups-roster.service';
+import { PugsService } from './pugs.service';
+import { InviteService } from './invite.service';
+import { OgMetaService } from './og-meta.service';
+import { ShareService } from './share.service';
+import { AttendanceService } from './attendance.service';
+import { TemplatesService } from './templates.service';
+import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
+import { EventPlansProcessor } from './event-plans.processor';
+import { EventsController } from './events.controller';
+import { EventsSignupsController } from './events-signups.controller';
+import { EventsPugsController } from './events-pugs.controller';
+import { EventsAttendanceController } from './events-attendance.controller';
+import { EventsDetailController } from './events-detail.controller';
+import { EventPlansController } from './event-plans.controller';
+import { InviteController } from './invite.controller';
+import { TemplatesController } from './templates.controller';
+import { AnalyticsController } from './analytics.controller';
+import { AnalyticsService } from './analytics.service';
+import { EventDetailService } from './event-detail.service';
+import { ActiveEventCacheService } from './active-event-cache.service';
+import { AvailabilityModule } from '../availability/availability.module';
+import { NotificationModule } from '../notifications/notification.module';
+import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { SettingsModule } from '../settings/settings.module';
+import {
+  BenchPromotionService,
+  BenchPromotionProcessor,
+  BENCH_PROMOTION_QUEUE,
+} from './bench-promotion.service';
+import { AdHocEventsGateway } from './ad-hoc-events.gateway';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
+
+@Module({
+  imports: [
+    AvailabilityModule,
+    forwardRef(() => NotificationModule),
+    SettingsModule,
+    forwardRef(() => DiscordBotModule),
+    ActivityLogModule,
+    BullModule.registerQueue({ name: BENCH_PROMOTION_QUEUE }),
+    BullModule.registerQueue({ name: EVENT_PLANS_QUEUE }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        return {
+          ...(secret !== undefined ? { secret } : {}),
+          signOptions: { expiresIn: '24h' },
+        };
+      },
+      inject: [ConfigService],
+    }),
+  ],
+  controllers: [
+    EventsController,
+    EventsSignupsController,
+    EventsPugsController,
+    EventsAttendanceController,
+    EventsDetailController,
+    EventsSeriesController,
+    EventPlansController,
+    InviteController,
+    TemplatesController,
+    AnalyticsController,
+  ],
+  providers: [
+    EventsService,
+    EventSeriesService,
+    SignupsService,
+    RunningLateService,
+    SignupsAllocationService,
+    SignupsRosterService,
+    AttendanceService,
+    PugsService,
+    InviteService,
+    OgMetaService,
+    ShareService,
+    TemplatesService,
+    BenchPromotionService,
+    BenchPromotionProcessor,
+    EventPlansService,
+    EventPlansProcessor,
+    AdHocEventsGateway,
+    AnalyticsService,
+    EventDetailService,
+    ActiveEventCacheService,
+    // ROK-1573: plain provider, not an LfgModule import (LfgModule -> Notification -> Events cycle).
+    LfgEventConvertService,
+    EventGuildTagService,
+  ],
+  exports: [
+    EventsService,
+    SignupsService,
+    RunningLateService,
+    SignupsRosterService,
+    AttendanceService,
+    PugsService,
+    InviteService,
+    AdHocEventsGateway,
+    BenchPromotionService,
+    ActiveEventCacheService,
+    AnalyticsService,
+  ],
+})
+export class EventsModule {}

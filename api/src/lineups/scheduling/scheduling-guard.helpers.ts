@@ -1,0 +1,254 @@
+/**
+ * Scheduling-mutation guards (ROK-1302).
+ *
+ * Extracted from SchedulingService to keep that file under the 300-line limit.
+ */
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, eq, gte, lte } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../drizzle/schema';
+import { findSlotOrThrow } from './scheduling-event.helpers';
+import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
+import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
+import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Enforce private-lineup participation on scheduling mutations (vote /
+ * suggest). Public lineups (incl. every standalone poll) pass; private
+ * lineups are scoped to creator + invitees + admin/operator — mirroring
+ * nominate, game-vote, and bandwagon-join, which all run
+ * `assertUserCanParticipate`. Without this, a URL-holder could vote on a
+ * private lineup's poll and (since voting enrolls) persist themselves into
+ * its participant list.
+ */
+export async function assertCallerMayVote(
+  db: Db,
+  lineupId: number,
+  caller: { id: number; role?: string },
+  /**
+   * ROK-1545 (review F8): when given, the poll's lifecycle is checked against
+   * the lineup row this function already loads — no extra round trip.
+   */
+  match?: { status: string; linkedEventId?: number | null },
+): Promise<void> {
+  const [lineup] = await db
+    .select({
+      id: schema.communityLineups.id,
+      createdBy: schema.communityLineups.createdBy,
+      visibility: schema.communityLineups.visibility,
+      status: schema.communityLineups.status,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (match) assertPollOpen(match, lineup);
+  await assertUserCanParticipate(db, lineup, caller);
+}
+
+/**
+ * Gate the READ of a poll page on a private lineup. Public lineups (incl.
+ * every standalone poll) pass. A private lineup's poll is visible only to
+ * the callers who may participate in it — creator, invitees and
+ * admin/operator, via `assertUserCanParticipate`. Everyone else, anonymous
+ * viewers included, gets the same 404 as a lineup-mismatched match, so the
+ * poll's existence does not leak.
+ *
+ * @throws NotFoundException when the caller may not view the poll.
+ */
+export async function assertCallerMayViewPoll(
+  db: Db,
+  lineup: { id: number; createdBy: number; visibility: 'public' | 'private' },
+  caller: { id: number; role?: string | null } | null,
+): Promise<void> {
+  if (lineup.visibility !== 'private') return;
+  const hidden = new NotFoundException('Match not found in this lineup');
+  if (!caller) throw hidden;
+  try {
+    await assertUserCanParticipate(db, lineup, {
+      id: caller.id,
+      ...(caller.role != null ? { role: caller.role } : {}),
+    });
+  } catch (err) {
+    if (err instanceof ForbiddenException) throw hidden;
+    throw err;
+  }
+}
+
+/**
+ * ROK-1750 review m3: the poll page's private view guard for the per-match
+ * side reads (availability heatmap, other polls). The lineup is resolved from
+ * the MATCH, never the URL's `:lineupId`, so a public lineup id can't be paired
+ * with a private poll's match id. An unknown match passes (empty result).
+ *
+ * @throws NotFoundException when the caller may not view the poll.
+ */
+export async function assertCallerMayViewMatchPoll(
+  db: Db,
+  matchId: number,
+  caller: { id: number; role?: string | null },
+): Promise<void> {
+  const [lineup] = await db
+    .select({
+      id: schema.communityLineups.id,
+      createdBy: schema.communityLineups.createdBy,
+      visibility: schema.communityLineups.visibility,
+    })
+    .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.communityLineups,
+      eq(schema.communityLineupMatches.lineupId, schema.communityLineups.id),
+    )
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  if (lineup) await assertCallerMayViewPoll(db, lineup, caller);
+}
+
+/**
+ * Refuse a write to a poll the READ path already calls terminal (ROK-1545
+ * review F8).
+ *
+ * `assertSchedulable` only looks at the match row, but the lineup-phase job
+ * archives the LINEUP and leaves the match on `scheduling` — so an expired
+ * poll renders "Poll expired" with `canVote: false` and yet a stale tab or a
+ * direct `POST /vote` still mutated it. Same helper as the page and the
+ * Discord embed, so all three agree on what "open" means.
+ *
+ * `slotTimes` is opt-in. Vote and suggest share this guard (via
+ * `assertCallerMayVote`) and deliberately omit it: suggesting a new time is
+ * the one action that outlives "every time has passed" (see
+ * `isTimesPassedOnly`), and vote/rally refuse a passed slot per slot. A
+ * poll-wide action with no slot of its own (`/remind`) passes them, so it
+ * reads the page's full ROK-1607 rule.
+ *
+ * @param match - The match row (status + linked event).
+ * @param lineup - Its parent lineup's `status` + `phase_deadline`.
+ * @param slotTimes - Every slot's `proposed_time`; when given, a poll whose
+ *   every time has passed is refused too.
+ * @throws BadRequestException when the poll is no longer open.
+ */
+export function assertPollOpen(
+  match: { status: string; linkedEventId?: number | null },
+  lineup: { status?: string | null; phaseDeadline?: Date | null },
+  slotTimes?: ReadonlyArray<Date | string | null | undefined>,
+): void {
+  const pollStatus = pollStatusFromMatch({
+    matchStatus: match.status,
+    lineupStatus: lineup.status ?? null,
+    phaseDeadline: lineup.phaseDeadline ?? null,
+    linkedEventId: match.linkedEventId ?? null,
+    ...(slotTimes !== undefined ? { slotTimes } : {}),
+  });
+  if (pollStatus !== 'open') {
+    throw new BadRequestException('This poll is no longer accepting votes');
+  }
+}
+
+/**
+ * Refuse a LOCK-IN on a poll that is finished, and allow one on a poll that
+ * merely expired (ROK-1610).
+ *
+ * `assertPollOpen` is the VOTE-side guard and stays exactly as strict —
+ * voting is closed the moment the deadline passes. Locking in is a different
+ * action: an expired poll whose votes still name a future time may be
+ * finished by its organiser (the caller enforces that; see
+ * `assertCallerMayLockIn`). Only `cancelled` and `locked_in` are dead ends.
+ *
+ * @param match - The match row (status + linked event).
+ * @param lineup - Its parent lineup's `status` + `phase_deadline`.
+ * @returns The resolved poll status, so the caller can branch on `open` vs
+ *   `closed` without re-deriving it.
+ * @throws BadRequestException when the poll is already finished.
+ */
+export function assertPollLockable(
+  match: { status: string; linkedEventId?: number | null },
+  lineup: { status?: string | null; phaseDeadline?: Date | null } | undefined,
+): SchedulingPollStatus {
+  const pollStatus = pollStatusFromMatch({
+    matchStatus: match.status,
+    lineupStatus: lineup?.status ?? null,
+    phaseDeadline: lineup?.phaseDeadline ?? null,
+    linkedEventId: match.linkedEventId ?? null,
+  });
+  if (pollStatus === 'locked_in') {
+    throw new BadRequestException('Event already created for this match');
+  }
+  if (pollStatus === 'cancelled') {
+    throw new BadRequestException('This poll is no longer accepting changes');
+  }
+  return pollStatus;
+}
+
+/** A match still accepts scheduling changes while suggested or scheduling. */
+export function assertSchedulable(match: { status: string }): void {
+  if (match.status !== 'scheduling' && match.status !== 'suggested') {
+    throw new BadRequestException('This match is no longer accepting changes');
+  }
+}
+
+/**
+ * Refuse a scheduling action when the parent lineup opted out of the scheduling
+ * phase. The decided matches stay `suggested` (so `assertSchedulable` alone
+ * would let a hand-crafted matchId suggest a slot, auto-vote, and create an
+ * event), so every scheduling mutation additionally verifies the PARENT lineup
+ * still has scheduling enabled. The flag is joined into the match row by
+ * `findMatchById` (ROK-1302) — no extra query. 404s — the whole scheduling
+ * surface is "absent" for opted-out lineups, matching `getSchedulePoll`.
+ */
+export function assertSchedulingEnabled(match: {
+  includeSchedulingPhase?: boolean | null;
+}): void {
+  if (match.includeSchedulingPhase === false) {
+    throw new NotFoundException('Scheduling is disabled for this lineup');
+  }
+}
+
+const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/** Refuse a suggested slot within 15 minutes of an existing one. */
+export async function assertNoDuplicateSlot(
+  db: Db,
+  matchId: number,
+  proposed: Date,
+): Promise<void> {
+  const windowStart = new Date(proposed.getTime() - DUPLICATE_WINDOW_MS);
+  const windowEnd = new Date(proposed.getTime() + DUPLICATE_WINDOW_MS);
+  const [dup] = await db
+    .select({ id: schema.communityLineupScheduleSlots.id })
+    .from(schema.communityLineupScheduleSlots)
+    .where(
+      and(
+        eq(schema.communityLineupScheduleSlots.matchId, matchId),
+        gte(schema.communityLineupScheduleSlots.proposedTime, windowStart),
+        lte(schema.communityLineupScheduleSlots.proposedTime, windowEnd),
+      ),
+    )
+    .limit(1);
+  if (dup)
+    throw new BadRequestException('A slot within 15 minutes already exists');
+}
+
+/**
+ * Assert the slot exists AND belongs to the given match. The state guards
+ * above run against the URL's match, so a body slotId from a different match
+ * must be rejected or a vote could land on a poll whose state was never
+ * checked.
+ */
+export async function assertSlotBelongsToMatch(
+  db: Db,
+  slotId: number,
+  matchId: number,
+): Promise<Awaited<ReturnType<typeof findSlotOrThrow>>> {
+  const slot = await findSlotOrThrow(db, slotId);
+  if (slot.matchId !== matchId) {
+    throw new NotFoundException('Slot not found in this match');
+  }
+  return slot;
+}

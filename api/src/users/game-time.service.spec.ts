@@ -1,0 +1,791 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
+import { GameTimeService } from './game-time.service';
+import { GAME_TIME_FRESHNESS_DAYS } from './game-time-freshness.helpers';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
+
+function describeGameTimeService() {
+  let service: GameTimeService;
+  let mockDb: MockDb;
+  let emit: jest.Mock;
+
+  // Track which .where() call we're on to return different results
+  let whereCallIndex: number;
+  let whereResults: unknown[];
+
+  beforeEach(async () => {
+    mockDb = createDrizzleMock();
+    whereCallIndex = 0;
+    whereResults = [];
+
+    // By default, .where() resolves from whereResults array in order
+    mockDb.where.mockImplementation(() => {
+      const idx = whereCallIndex++;
+      const result = whereResults[idx] ?? [];
+      // Return chain mock with the resolved result
+      return {
+        ...mockDb,
+        limit: jest.fn().mockResolvedValue(result),
+        then: (resolve: (v: unknown) => void) => resolve(result),
+        [Symbol.toStringTag]: 'Promise',
+      };
+    });
+
+    emit = jest.fn();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        GameTimeService,
+        {
+          provide: DrizzleAsyncProvider,
+          useValue: mockDb,
+        },
+        {
+          provide: getQueueToken(CALENDAR_READ_QUEUE),
+          useValue: { add: jest.fn(), getJob: jest.fn(), remove: jest.fn() },
+        },
+        { provide: EventEmitter2, useValue: { emit } },
+      ],
+    }).compile();
+
+    service = module.get<GameTimeService>(GameTimeService);
+  });
+
+  describe('getTemplate', () => {
+    it('should return empty slots for new user', async () => {
+      whereResults = [[]];
+
+      const result = await service.getTemplate(1);
+
+      expect(result.slots).toEqual([]);
+    });
+
+    it('should return mapped slots from database rows', async () => {
+      whereResults = [
+        [
+          { dayOfWeek: 0, startHour: 18 },
+          { dayOfWeek: 0, startHour: 19 },
+          { dayOfWeek: 5, startHour: 20 },
+        ],
+      ];
+
+      const result = await service.getTemplate(1);
+
+      expect(result.slots).toEqual([
+        { dayOfWeek: 0, hour: 18 },
+        { dayOfWeek: 0, hour: 19 },
+        { dayOfWeek: 5, hour: 20 },
+      ]);
+    });
+  });
+
+  function describeSaveTemplate() {
+    /**
+     * Set up mocks for saveTemplate.
+     * Call order for getCommittedTemplateKeys:
+     *   1. Existing template slots query (.where)
+     *   2. Event signups query (.where) — only if template has slots
+     * Then the transaction runs (mocked separately).
+     */
+    function setupSaveTemplateMocks(
+      existingTemplateSlots: Array<{
+        dayOfWeek: number;
+        startHour: number;
+      }>,
+      eventSignups: Array<{ duration: [Date, Date] }> = [],
+    ) {
+      whereCallIndex = 0;
+      const results: unknown[] = [existingTemplateSlots];
+      if (existingTemplateSlots.length > 0) {
+        results.push(eventSignups);
+      }
+      whereResults = results;
+    }
+
+    it('should replace all slots via transaction when no committed slots exist', async () => {
+      // No existing template slots → no committed keys to preserve
+      setupSaveTemplateMocks([]);
+
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends 0=Sun convention; service converts to 0=Mon for DB
+      const slots = [
+        { dayOfWeek: 1, hour: 18 }, // Mon in 0=Sun convention → DB dayOfWeek=0
+        { dayOfWeek: 2, hour: 20 }, // Tue in 0=Sun convention → DB dayOfWeek=1
+      ];
+
+      const result = await service.saveTemplate(1, slots);
+
+      expect(mockTx.delete).toHaveBeenCalled();
+      expect(mockTx.insert).toHaveBeenCalled();
+      expect(mockTx.values).toHaveBeenCalled();
+      expect(result.slots).toEqual(slots);
+      // ROK-1593 D16: the save committed → synced away days re-derive.
+      expect(emit).toHaveBeenCalledWith('game-time.template-saved', {
+        userId: 1,
+      });
+    });
+
+    // ROK-1569: "Save my week" is the phone check's other way out, so a saved
+    // week must count as a CONFIRMED week — otherwise the viewer stays stale and
+    // the check re-opens on the next poll. Mutating the
+    // `updateGameTimeConfirmedAt` call in `saveTemplate` away fails this with
+    // "expected undefined to be an instance of Date".
+    it('stamps game_time_confirmed_at when a week is saved, then drops the cache', async () => {
+      setupSaveTemplateMocks([]);
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+      const invalidate = jest.spyOn(service, 'invalidateUserCache');
+
+      await service.saveTemplate(7, [{ dayOfWeek: 1, hour: 18 }]);
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt?: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+      // After the write, never before it (review MINOR a on confirmGameTime).
+      expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(
+        at(mockDb.set.mock.invocationCallOrder, 0),
+      );
+    });
+
+    it('should handle empty slots (clear all) with no committed slots', async () => {
+      setupSaveTemplateMocks([]);
+
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      const result = await service.saveTemplate(1, []);
+
+      expect(mockTx.delete).toHaveBeenCalled();
+      expect(mockTx.insert).not.toHaveBeenCalled();
+      expect(result.slots).toEqual([]);
+    });
+
+    it('should preserve committed slots that are not in the save payload', async () => {
+      // Existing template: Mon 18:00 (DB dayOfWeek=0) and Mon 19:00
+      // Event covers Mon 18:00-20:00 UTC → Mon 18 and 19 are committed
+      const eventStart = new Date('2026-02-09T18:00:00.000Z'); // Mon 18:00 UTC
+      const eventEnd = new Date('2026-02-09T20:00:00.000Z'); // Mon 20:00 UTC
+
+      setupSaveTemplateMocks(
+        [
+          { dayOfWeek: 0, startHour: 18 }, // Mon 18:00
+          { dayOfWeek: 0, startHour: 19 }, // Mon 19:00
+        ],
+        [{ duration: [eventStart, eventEnd] }],
+      );
+
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend only sends Tue 20:00 (0=Sun convention: dayOfWeek=2)
+      // Mon 18:00 and 19:00 are committed and should be auto-preserved
+      const slots = [{ dayOfWeek: 2, hour: 20 }]; // Tue 20:00
+
+      const result = await service.saveTemplate(1, slots);
+
+      // Result should include the user's slot + preserved committed slots
+      // Committed slots are in DB convention 0=Mon, returned in display convention 0=Sun
+      // DB Mon (0) → display Mon (1)
+      expect(result.slots).toEqual(
+        expect.arrayContaining([
+          { dayOfWeek: 2, hour: 20 }, // user-provided
+          { dayOfWeek: 1, hour: 18 }, // preserved committed (DB 0 → display 1)
+          { dayOfWeek: 1, hour: 19 }, // preserved committed (DB 0 → display 1)
+        ]),
+      );
+      expect(result.slots).toHaveLength(3);
+
+      // Verify transaction inserted all 3 slots
+      expect(mockTx.values).toHaveBeenCalled();
+      const valuesCall = mockTx.values.mock.calls[0] as unknown[];
+      expect(valuesCall[0]).toHaveLength(3);
+    });
+
+    it('should not duplicate committed slots already in payload', async () => {
+      // Existing template: Mon 18:00 (DB dayOfWeek=0)
+      // Event covers Mon 18:00-19:00 UTC
+      const eventStart = new Date('2026-02-09T18:00:00.000Z');
+      const eventEnd = new Date('2026-02-09T19:00:00.000Z');
+
+      setupSaveTemplateMocks(
+        [{ dayOfWeek: 0, startHour: 18 }],
+        [{ duration: [eventStart, eventEnd] }],
+      );
+
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends Mon 18:00 (0=Sun: dayOfWeek=1) — already in the payload
+      const slots = [{ dayOfWeek: 1, hour: 18 }];
+
+      const result = await service.saveTemplate(1, slots);
+
+      // Should not duplicate: only 1 slot
+      expect(result.slots).toEqual([{ dayOfWeek: 1, hour: 18 }]);
+      expect(result.slots).toHaveLength(1);
+    });
+
+    it('should handle clear-all when committed slots exist (preserve only committed)', async () => {
+      // Existing template: Mon 18:00, Mon 19:00, Tue 20:00
+      // Event covers Mon 18:00-19:00 UTC → Mon 18 is committed
+      const eventStart = new Date('2026-02-09T18:00:00.000Z');
+      const eventEnd = new Date('2026-02-09T19:00:00.000Z');
+
+      setupSaveTemplateMocks(
+        [
+          { dayOfWeek: 0, startHour: 18 }, // committed
+          { dayOfWeek: 0, startHour: 19 }, // not committed
+          { dayOfWeek: 1, startHour: 20 }, // not committed
+        ],
+        [{ duration: [eventStart, eventEnd] }],
+      );
+
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends empty slots (user cleared everything)
+      const result = await service.saveTemplate(1, []);
+
+      // Only the committed Mon 18:00 should be preserved
+      expect(result.slots).toEqual([{ dayOfWeek: 1, hour: 18 }]); // DB 0 → display 1
+      expect(result.slots).toHaveLength(1);
+    });
+
+    it('should return no preserved slots when no events overlap', async () => {
+      // Existing template: Mon 18:00, but no events
+      setupSaveTemplateMocks(
+        [{ dayOfWeek: 0, startHour: 18 }],
+        [], // no event signups
+      );
+
+      const mockTx = createDrizzleMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends only Tue 20:00
+      const slots = [{ dayOfWeek: 2, hour: 20 }];
+
+      const result = await service.saveTemplate(1, slots);
+
+      // No committed slots to preserve, just user's slots
+      expect(result.slots).toEqual([{ dayOfWeek: 2, hour: 20 }]);
+      expect(result.slots).toHaveLength(1);
+    });
+  }
+  describe('saveTemplate', () => describeSaveTemplate());
+
+  function describeGetCompositeView() {
+    const makeEventRow = (
+      overrides: Partial<{
+        eventId: number;
+        title: string;
+        description: string | null;
+        duration: [Date, Date];
+        signupId: number;
+        confirmationStatus: string;
+        gameSlug: string | null;
+        gameName: string | null;
+        gameCoverUrl: string | null;
+        gameId: number | null;
+        creatorId: number | null;
+        creatorUsername: string | null;
+      }> = {},
+    ) => ({
+      eventId: 1,
+      title: 'Raid Night',
+      description: null,
+      duration: [
+        new Date('2026-02-09T18:00:00.000Z'),
+        new Date('2026-02-09T20:00:00.000Z'),
+      ] as [Date, Date],
+      signupId: 10,
+      confirmationStatus: 'confirmed',
+      gameSlug: null,
+      gameName: null,
+      gameCoverUrl: null,
+      gameId: null,
+      creatorId: null,
+      creatorUsername: null,
+      ...overrides,
+    });
+
+    /**
+     * Set up mock DB responses for getCompositeView.
+     * Call order (template + events + overrides + absences run in parallel):
+     * 1. getTemplate query (via .where)
+     * 2. signedUpEvents query (via .where)
+     * 3. overrides query (.where with gte/lte)
+     * 4. absences query (.where with lte/gte)
+     * 5. Batch allSignups query (via .where with inArray) — after parallel block
+     * 6. Batch allCounts query (via .where with inArray + groupBy)
+     * 7. Characters query (via .where with inArray) — only if signups exist
+     */
+    function setupCompositeViewMocks(
+      templateSlots: Array<{ dayOfWeek: number; startHour: number }>,
+      events: ReturnType<typeof makeEventRow>[],
+    ) {
+      whereCallIndex = 0;
+      const hasEvents = new Set(events.map((e) => e.eventId)).size > 0;
+      // Order matches fetchAllCompositeData Promise.all:
+      // template, events, overrides, absences (parallel), then signups (sequential)
+      const results: unknown[] = [templateSlots, events];
+
+      // Overrides and absences (empty by default, run in parallel block)
+      results.push([]); // overrides
+      results.push([]); // absences
+
+      if (hasEvents) {
+        results.push([]); // batch allSignups (after parallel block)
+        results.push([]); // batch allCounts (after parallel block)
+      }
+
+      whereResults = results;
+    }
+
+    it('should return template slots as available when no events (remapped to 0=Sun)', async () => {
+      // DB stores 0=Mon. Template has Mon 18:00 and Mon 19:00.
+      setupCompositeViewMocks(
+        [
+          { dayOfWeek: 0, startHour: 18 },
+          { dayOfWeek: 0, startHour: 19 },
+        ],
+        [],
+      );
+
+      // weekStart is Sunday Feb 8, 2026
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      // DB dayOfWeek 0 (Mon) → display dayOfWeek 1 (Mon in 0=Sun)
+      expect(result.slots).toEqual([
+        { dayOfWeek: 1, hour: 18, status: 'available', fromTemplate: true },
+        { dayOfWeek: 1, hour: 19, status: 'available', fromTemplate: true },
+      ]);
+      expect(result.events).toEqual([]);
+      expect(result.weekStart).toBe(weekStart.toISOString());
+    });
+
+    it('should mark overlapping slots as committed', async () => {
+      // Template: DB Mon (dayOfWeek=0) 18:00
+      // Event on Mon 18:00-20:00 UTC
+      const eventStart = new Date('2026-02-09T18:00:00.000Z');
+      const eventEnd = new Date('2026-02-09T20:00:00.000Z');
+
+      setupCompositeViewMocks(
+        [{ dayOfWeek: 0, startHour: 18 }],
+        [makeEventRow({ duration: [eventStart, eventEnd] })],
+      );
+
+      // weekStart Sunday Feb 8
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      // Mon (display day 1) slot at 18:00 should be committed
+      const monSlot = result.slots.find(
+        (s) => s.dayOfWeek === 1 && s.hour === 18,
+      );
+      expect(monSlot?.status).toBe('committed');
+
+      // Mon 19:00 should also appear as committed (off-template event hour)
+      const offHourSlot = result.slots.find(
+        (s) => s.dayOfWeek === 1 && s.hour === 19,
+      );
+      expect(offHourSlot?.status).toBe('committed');
+    });
+
+    it('should include committed slots for events outside the template', async () => {
+      // No template slots
+      // Event on Tue 10:00-12:00 UTC
+      const eventStart = new Date('2026-02-10T10:00:00.000Z');
+      const eventEnd = new Date('2026-02-10T12:00:00.000Z');
+
+      setupCompositeViewMocks(
+        [],
+        [makeEventRow({ duration: [eventStart, eventEnd] })],
+      );
+
+      // weekStart Sunday Feb 8
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      // Tue = dayDiff 2 from Sunday (display day 2)
+      expect(result.slots).toContainEqual({
+        dayOfWeek: 2,
+        hour: 10,
+        status: 'committed',
+        fromTemplate: false,
+      });
+      expect(result.slots).toContainEqual({
+        dayOfWeek: 2,
+        hour: 11,
+        status: 'committed',
+        fromTemplate: false,
+      });
+    });
+
+    async function testReturnEventBlocksWithCorrectDayHourSpans() {
+      // Event on Wed 19:00-22:00 UTC
+      setupCompositeViewMocks(
+        [],
+        [
+          makeEventRow({
+            eventId: 5,
+            title: 'Mythic Raid',
+            duration: [
+              new Date('2026-02-11T19:00:00.000Z'),
+              new Date('2026-02-11T22:00:00.000Z'),
+            ],
+            signupId: 20,
+            confirmationStatus: 'pending',
+          }),
+        ],
+      );
+
+      // weekStart Sunday Feb 8
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toMatchObject({
+        eventId: 5,
+        title: 'Mythic Raid',
+        signupId: 20,
+        confirmationStatus: 'pending',
+        dayOfWeek: 3, // Wed is dayDiff 3 from Sunday
+        startHour: 19,
+        endHour: 22,
+        description: null,
+        creatorUsername: null,
+        signupsPreview: [],
+        signupCount: 0,
+      });
+    }
+    it('should return event blocks with correct day/hour spans', () =>
+      testReturnEventBlocksWithCorrectDayHourSpans());
+
+    it('should split midnight-spanning events into two day entries', async () => {
+      // Event Sun 22:00 - Mon 02:00 UTC
+      setupCompositeViewMocks(
+        [],
+        [
+          makeEventRow({
+            eventId: 7,
+            title: 'Late Raid',
+            duration: [
+              new Date('2026-02-08T22:00:00.000Z'),
+              new Date('2026-02-09T02:00:00.000Z'),
+            ],
+          }),
+        ],
+      );
+
+      // weekStart Sunday Feb 8
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      // Should create blocks on two different days
+      expect(result.events).toHaveLength(2);
+      const day0Block = result.events.find((e) => e.dayOfWeek === 0); // Sunday
+      const day1Block = result.events.find((e) => e.dayOfWeek === 1); // Monday
+      expect(day0Block).toMatchObject({ startHour: 22, endHour: 24 });
+      expect(day1Block).toMatchObject({ startHour: 0, endHour: 2 });
+    });
+
+    it('should resolve game data from unified games table', async () => {
+      setupCompositeViewMocks(
+        [],
+        [
+          makeEventRow({
+            gameSlug: 'world-of-warcraft',
+            gameName: 'World of Warcraft',
+            gameCoverUrl: '/cover.jpg',
+            gameId: 1,
+          }),
+        ],
+      );
+
+      // weekStart Sunday Feb 8
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      expect(result.events[0]).toMatchObject({
+        gameSlug: 'world-of-warcraft',
+        gameName: 'World of Warcraft',
+        coverUrl: '/cover.jpg',
+      });
+    });
+
+    it('should return enriched event data with creator and signups', async () => {
+      const eventStart = new Date('2026-02-09T18:00:00.000Z');
+      const eventEnd = new Date('2026-02-09T20:00:00.000Z');
+
+      setupCompositeViewMocks(
+        [],
+        [
+          makeEventRow({
+            eventId: 10,
+            title: 'Guild Run',
+            description: 'Weekly guild dungeon run',
+            duration: [eventStart, eventEnd],
+            creatorId: 5,
+            creatorUsername: 'GuildLeader',
+          }),
+        ],
+      );
+
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      expect(result.events[0]).toMatchObject({
+        description: 'Weekly guild dungeon run',
+        creatorUsername: 'GuildLeader',
+        signupsPreview: [],
+        signupCount: 0,
+      });
+    });
+
+    it('should return overrides and absences in response', async () => {
+      whereCallIndex = 0;
+      whereResults = [
+        [], // template
+        [], // events
+        // overrides
+        [{ date: '2026-02-10', hour: 18, status: 'blocked' }],
+        // absences
+        [
+          {
+            id: 1,
+            startDate: '2026-02-12',
+            endDate: '2026-02-14',
+            reason: 'Vacation',
+          },
+        ],
+      ];
+
+      const weekStart = new Date('2026-02-08T00:00:00.000Z');
+      const result = await service.getCompositeView(1, weekStart);
+
+      expect(result.overrides).toEqual([
+        { date: '2026-02-10', hour: 18, status: 'blocked' },
+      ]);
+      expect(result.absences).toEqual([
+        {
+          id: 1,
+          startDate: '2026-02-12',
+          endDate: '2026-02-14',
+          reason: 'Vacation',
+        },
+      ]);
+    });
+  }
+  describe('getCompositeView', () => describeGetCompositeView());
+
+  function describeIsGameTimeStale() {
+    /**
+     * Set up mocks for getCompositeView to test isGameTimeStale
+     * via the gameTimeStale field in the response.
+     * confirmedAt controls the fetchGameTimeConfirmedAt result.
+     */
+    function setupStaleCheckMocks(confirmedAt: Date | null) {
+      whereCallIndex = 0;
+      whereResults = [
+        [], // template
+        [], // events
+        [], // overrides
+        [], // absences
+        // fetchGameTimeConfirmedAt
+        confirmedAt ? [{ gameTimeConfirmedAt: confirmedAt }] : [],
+      ];
+    }
+
+    const weekStart = new Date('2026-02-08T00:00:00.000Z');
+
+    it('returns gameTimeStale=true when confirmedAt is null', async () => {
+      setupStaleCheckMocks(null);
+      const result = await service.getCompositeView(1, weekStart);
+      expect(result.gameTimeStale).toBe(true);
+    });
+
+    it('returns gameTimeStale=true when confirmedAt is a day past the freshness window', async () => {
+      const pastWindow = new Date();
+      pastWindow.setDate(pastWindow.getDate() - (GAME_TIME_FRESHNESS_DAYS + 1));
+      setupStaleCheckMocks(pastWindow);
+      const result = await service.getCompositeView(2, weekStart);
+      expect(result.gameTimeStale).toBe(true);
+    });
+
+    it('returns gameTimeStale=false when confirmedAt is 6 days ago', async () => {
+      const sixDaysAgo = new Date();
+      sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
+      setupStaleCheckMocks(sixDaysAgo);
+      const result = await service.getCompositeView(3, weekStart);
+      expect(result.gameTimeStale).toBe(false);
+    });
+
+    it('returns gameTimeStale=true just past the freshness-window boundary', async () => {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - GAME_TIME_FRESHNESS_DAYS);
+      // Subtract 1ms to ensure we are past the boundary
+      sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 1);
+      setupStaleCheckMocks(sevenDaysAgo);
+      const result = await service.getCompositeView(4, weekStart);
+      expect(result.gameTimeStale).toBe(true);
+    });
+
+    it('returns gameTimeStale=false when just confirmed', async () => {
+      setupStaleCheckMocks(new Date());
+      const result = await service.getCompositeView(5, weekStart);
+      expect(result.gameTimeStale).toBe(false);
+    });
+
+    // ROK-1564: the poll-page check asks "your game time is N days old".
+    // Pre-change this fails with `undefined` — the DTO had no age field.
+    it('returns gameTimeAgeDays=3 when confirmedAt is 3 days ago', async () => {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      setupStaleCheckMocks(threeDaysAgo);
+      const result = await service.getCompositeView(6, weekStart);
+      expect(result.gameTimeAgeDays).toBe(3);
+    });
+
+    it('returns gameTimeAgeDays=null when never confirmed', async () => {
+      setupStaleCheckMocks(null);
+      const result = await service.getCompositeView(7, weekStart);
+      expect(result.gameTimeAgeDays).toBeNull();
+    });
+
+    it('returns gameTimeAgeDays=0 when just confirmed', async () => {
+      setupStaleCheckMocks(new Date());
+      const result = await service.getCompositeView(8, weekStart);
+      expect(result.gameTimeAgeDays).toBe(0);
+    });
+  }
+  describe('isGameTimeStale (via getCompositeView)', () =>
+    describeIsGameTimeStale());
+
+  /**
+   * ROK-1564 — confirm-only save: "Looks right" stamps the confirmation and
+   * writes NO template, because stale means unconfirmed, not unedited.
+   */
+  function describeConfirmGameTime() {
+    // Pre-change these fail with "service.confirmGameTime is not a function".
+    it('stamps game_time_confirmed_at to now and returns it', async () => {
+      const before = Date.now();
+
+      const result = await service.confirmGameTime(42);
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+      expect(result.confirmedAt).toBeInstanceOf(Date);
+      expect(result.confirmedAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(result.confirmedAt.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('writes no template slots (confirm-only)', async () => {
+      await service.confirmGameTime(42);
+
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
+    it('invalidates the cached composite view for the user', async () => {
+      const spy = jest.spyOn(service, 'invalidateUserCache');
+
+      await service.confirmGameTime(42);
+
+      expect(spy).toHaveBeenCalledWith(42);
+    });
+  }
+  describe('confirmGameTime', () => describeConfirmGameTime());
+
+  /**
+   * ROK-1564 — "I'm away some days" is also an answer to the check, so saving
+   * an absence stamps the confirmation too (deleting one does not).
+   */
+  function describeAbsenceConfirmation() {
+    beforeEach(() => {
+      mockDb.returning.mockResolvedValue([
+        {
+          id: 1,
+          startDate: '2026-02-12',
+          endDate: '2026-02-14',
+          reason: null,
+        },
+      ]);
+    });
+
+    // Pre-change this fails: createAbsence never touched users.
+    it('stamps game_time_confirmed_at when an absence is created', async () => {
+      await service.createAbsence(42, {
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+      });
+
+      expect(mockDb.update).toHaveBeenCalled();
+      const stamped = mockDb.set.mock.calls[0][0] as {
+        gameTimeConfirmedAt?: Date;
+      };
+      expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+    });
+
+    it("returns the created absence with source 'manual'", async () => {
+      const created = await service.createAbsence(42, {
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+      });
+
+      expect(created).toEqual({
+        id: 1,
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+        reason: null,
+        source: 'manual',
+      });
+    });
+
+    it('does not stamp the confirmation when an absence is deleted', async () => {
+      await service.deleteAbsence(42, 1);
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+  }
+  describe('absence confirmation stamping', () =>
+    describeAbsenceConfirmation());
+}
+describe('GameTimeService', () => describeGameTimeService());

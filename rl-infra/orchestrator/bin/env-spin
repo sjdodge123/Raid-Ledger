@@ -1,0 +1,1103 @@
+#!/usr/bin/env bash
+# Spin up a per-env stack: sibling Postgres + allinone container.
+# Routed by Traefik via {slug}.rl.lan. Tagged with rl.slot so release sweeps it.
+#
+# Required env: RL_AGENT_ID
+# Required flags: --slug <slug>
+# Optional flags: --image <tag>  (default: registry.rl.lan/rl-allinone:latest)
+#                 --ttl <hours>  (default: 24)
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+# ROK-1469 — per-slot Discord identity helpers (public_json / payload / value).
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
+
+# ROK-1338 PR-1 fold-in (2026-05-21): emit a structured JSON error if the
+# script aborts via `set -e` before reaching the final happy-path jq emit.
+# Without this, any unhandled non-zero exit leaves the MCP layer staring at
+# empty stdout and returning `failed_to_parse_response` with no clue what
+# actually failed. The explicit exit-via-emit paths below set
+# ENV_SPIN_HANDLED=1 so the trap doesn't double-report.
+ENV_SPIN_HANDLED=0
+# ROK-1357 fold-in #1 (EXIT-trap PG cleanup): markers for the fresh-path
+# rollback. Declared up here (before the trap is armed) so an early abort
+# never dereferences them unset. Armed/flipped in the fresh path: a PG/app
+# container THIS run created (vs an existing PG the recreate flow reused) gets
+# torn down on an unexpected, pre-registration abort so the next attempt
+# starts clean. Reproduced orphan: skip_build:true + missing image → exit 125.
+BOT_IDENTITY_CLAIMED_THIS_RUN=0
+ENV_SPIN_PG_CREATED=0
+ENV_SPIN_PG_REUSED=0
+ENV_SPIN_APP_CREATED=0
+ENV_SPIN_REGISTERED=0
+# ROK-1338 PR-1 fold-in #2 (2026-05-21): LAST_PHASE tracks how far env-spin
+# progressed before an unexpected abort. The EXIT trap reports it so the
+# operator/agent knows WHICH step died without needing bash -x. Updated at
+# every major transition; treat the running value as the most-recent
+# successfully-completed step at the time of abort.
+LAST_PHASE="init"
+_env_spin_trap_on_abort() {
+    local rc=$?
+    # ROK-1357 fold-in #1: roll back any partially-created fresh-path
+    # containers FIRST (before the diagnostic emit) so a single shared rc
+    # drives the decision. Defined below; a no-op until the fresh path arms
+    # its markers. Passing rc explicitly avoids the chained-trap `$?`-clobber
+    # where the second function would otherwise read the emit's exit code.
+    _env_spin_rollback_partial "$rc"
+    if (( rc != 0 )) && [[ "${ENV_SPIN_HANDLED:-0}" != "1" ]]; then
+        jq -nc --argjson rc "$rc" --arg slug "${SLUG:-}" --arg phase "${LAST_PHASE:-unknown}" \
+            '{ok:false, error:"env_spin_aborted_unexpectedly", exit_code:$rc, slug:$slug,
+              last_phase:$phase,
+              hint:("env-spin aborted with rc=" + ($rc|tostring) + " after completing phase \"" + $phase + "\". The failing line is between the marker for that phase and the next. Agents: call rl_infra_logs(service=gc-sweeper, tail=200) for sweeper-side context. Operator-only follow-ups (rl-agent does not have shell on the VM): read /srv/rl-infra/audit.log for the matching env-spin err entry; run bash -x for deeper tracing.")}' \
+        2>/dev/null || echo '{"ok":false,"error":"env_spin_aborted_unexpectedly","exit_code":'"$rc"',"last_phase":"'"${LAST_PHASE:-unknown}"'"}'
+    fi
+}
+# ROK-1357 fold-in #1: tear down containers THIS run created in the fresh path
+# when env-spin aborts UNHANDLED before registration committed. Without this,
+# an abort after the PG `docker run` but before the allinone is healthy (e.g. a
+# bad image, a flaky network → exit 125) leaves an orphaned `rl-env-<slug>-pg`.
+# Guards (all default 0 until the fresh path arms them):
+#   - only on a non-zero rc that wasn't already handled (handled paths like the
+#     traefik/registry guards intentionally LEAVE containers up so the operator
+#     can fix perms and re-run the idempotent path);
+#   - only before registration (ENV_SPIN_REGISTERED) committed;
+#   - NEVER a PG the recreate flow reused (ENV_SPIN_PG_REUSED).
+_env_spin_rollback_partial() {
+    local rc="${1:-$?}"
+    if (( rc != 0 )) && [[ "${ENV_SPIN_HANDLED:-0}" != "1" ]] \
+       && (( ${ENV_SPIN_REGISTERED:-0} == 0 )); then
+        if (( ${ENV_SPIN_APP_CREATED:-0} == 1 )); then
+            docker rm -f "$APP_CONTAINER" >/dev/null 2>&1 || true
+        fi
+        if (( ${ENV_SPIN_PG_CREATED:-0} == 1 && ${ENV_SPIN_PG_REUSED:-0} == 0 )); then
+            docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+        fi
+        # ROK-1469 (Codex #3): an abort that tears its containers down must
+        # also hand the slot's bot identity back, or the slot stays blocked by
+        # a claim pointing at an env that no longer exists.
+        if (( ${BOT_IDENTITY_CLAIMED_THIS_RUN:-0} == 1 )); then
+            bot_identity::release "${SLOT:-}" "${SLUG:-}" 2>/dev/null || true
+        fi
+    fi
+}
+trap _env_spin_trap_on_abort EXIT
+
+# ROK-1469 D1 — settings overlay. After the container is up (and after any
+# sync_settings that copied the OPERATOR's app_settings wholesale), stamp the
+# SLOT's Discord identity into the env's app_settings so two live envs never
+# share one bot login. Failure is a WARNING, never fatal: an env with the
+# wrong identity is still a usable env, and hard-failing here would strand a
+# healthy container behind a rollback. Sets two globals read by both emits.
+# ROK-1537 AC4: which identity lands as admin on this env, surfaced as
+# `operator_admin` on both result emits so an agent can tell the operator what
+# to expect before he signs in:
+#   configured  — RL_OPERATOR_DISCORD_ID is set on the VM; bootstrap-admin
+#                 upserts that Discord id as admin (both paths).
+#   first-login — no id configured, but the app container carries
+#                 FLEET_FIRST_DISCORD_LOGIN_ADMIN=true, so the first real
+#                 Discord login is promoted (api/src/auth/fleet-first-login-admin).
+#   none        — neither. Only a pre-ROK-1537 container reached through the
+#                 idempotent path (it is never re-`docker run`) — destroy +
+#                 fresh spin to pick the marker up.
+# Same rule as api/scripts/bootstrap-admin.ts DISCORD_SNOWFLAKE — keep in step.
+ENV_SPIN_SNOWFLAKE_RE='^[0-9]{5,32}$'
+env_spin::is_discord_snowflake() {
+    [[ "$1" =~ $ENV_SPIN_SNOWFLAKE_RE ]]
+}
+env_spin::operator_admin_mode() {
+    local marker_present="$1" container_id="${2:-}"
+    local container_valid=false
+    if [[ -n "$container_id" ]] && env_spin::is_discord_snowflake "$container_id"; then
+        container_valid=true
+    fi
+    # configured: today's VM id (bootstrap-admin upserts it on every spin) OR
+    # the id the reused container was created with (the API's runtime gate
+    # reads THAT, so first-login stays off for its lifetime). A malformed id
+    # never counts: bootstrap-admin refuses it.
+    if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" || "$container_valid" == "true" ]]; then
+        echo configured
+    elif [[ -n "$container_id" ]]; then
+        # A container created (pre-fix) with a malformed id: bootstrap-admin
+        # rejected it, yet the API sees a non-empty id and keeps first-login off.
+        echo "env-spin: WARNING: the reused container's FLEET_ADMIN_DISCORD_ID is not a Discord snowflake, so no Discord login is admin; destroy + fresh spin to fix" >&2
+        echo none
+    elif [[ "$marker_present" == "true" ]]; then
+        echo first-login
+    else
+        echo none
+    fi
+}
+# Codex P2: a malformed RL_OPERATOR_DISCORD_ID is treated as unset for every
+# consumer (app container, bootstrap-admin exec, operator_admin), so the
+# first-login promotion stays on instead of an env with no Discord admin
+# claiming `configured`. The value itself is never echoed.
+# Trim surrounding whitespace (incl. a CRLF .env's \r) first, exactly as
+# bootstrap-admin's `.trim()` does, so a padded id stays `configured`.
+RL_OPERATOR_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}"
+RL_OPERATOR_DISCORD_ID="${RL_OPERATOR_DISCORD_ID#"${RL_OPERATOR_DISCORD_ID%%[![:space:]]*}"}"
+RL_OPERATOR_DISCORD_ID="${RL_OPERATOR_DISCORD_ID%"${RL_OPERATOR_DISCORD_ID##*[![:space:]]}"}"
+if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" ]] && ! env_spin::is_discord_snowflake "$RL_OPERATOR_DISCORD_ID"; then
+    echo "env-spin: WARNING: RL_OPERATOR_DISCORD_ID is not a Discord snowflake (digits only) — ignoring it; the first Discord login on this env is promoted to admin instead" >&2
+    RL_OPERATOR_DISCORD_ID=""
+fi
+# The idempotent path reuses a container created by an EARLIER env-spin, so
+# read the marker and the configured id from its actual env instead of
+# assuming today's `docker run` / today's VM setting.
+env_spin::container_env_value() {
+    docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | sed -n "s/^$1=//p" | head -n 1 || true
+}
+env_spin::container_has_first_login_marker() {
+    if [[ "$(env_spin::container_env_value FLEET_FIRST_DISCORD_LOGIN_ADMIN)" == "true" ]]; then
+        echo true
+    else
+        echo false
+    fi
+}
+
+BOT_IDENTITY_JSON="null"
+OVERLAY_WARNINGS_JSON="[]"
+OVERLAY_APPLIED_COUNT=0
+env_spin::run_overlay() {
+    local overlay_bin overlay_out overlay_rc=0 identity detail
+    overlay_bin="${RL_ENV_SETTINGS_OVERLAY:-$(dirname "$0")/env-settings-overlay}"
+    BOT_IDENTITY_JSON=$(bot_identity::public_json "$SLOT" 2>/dev/null || echo "null")
+    [[ -x "$overlay_bin" ]] || return 0
+    overlay_out=$("$overlay_bin" --slug "$SLUG" --slot "$SLOT" 2>/dev/null) || overlay_rc=$?
+    if (( overlay_rc != 0 )); then
+        detail=$(jq -r '.detail // .error // "overlay exited non-zero"' <<<"$overlay_out" 2>/dev/null || echo "overlay exited non-zero")
+        OVERLAY_WARNINGS_JSON=$(jq -nc --arg detail "$detail" \
+            '[{code: "settings_overlay_failed", detail: $detail}]')
+        return 0
+    fi
+    identity=$(jq -c '.bot_identity // empty' <<<"$overlay_out" 2>/dev/null || true)
+    [[ -n "$identity" ]] && BOT_IDENTITY_JSON="$identity"
+    OVERLAY_APPLIED_COUNT=$(jq -r '(.applied // []) | length' <<<"$overlay_out" 2>/dev/null || echo 0)
+    [[ "$OVERLAY_APPLIED_COUNT" =~ ^[0-9]+$ ]] || OVERLAY_APPLIED_COUNT=0
+    return 0
+}
+
+# ROK-1469 (Codex #5): the API booted BEFORE the overlay wrote its rows, and
+# SettingsService caches for 30 minutes while the Discord bot's startup hook
+# has already decided whether to connect. Without a restart the env keeps
+# running on whatever identity it booted with until the cache expires. Only
+# pay for it when the overlay actually wrote something.
+env_spin::restart_for_overlay() {
+    (( ${OVERLAY_APPLIED_COUNT:-0} > 0 )) || return 0
+    docker restart "$APP_CONTAINER" >/dev/null 2>&1 || return 0
+    local _i
+    for _i in $(seq 1 60); do
+        if docker exec "$APP_CONTAINER" curl -fsS "http://${APP_CONTAINER}/api/health" >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    return 0
+}
+
+SLUG=""
+IMAGE="registry.rl.lan:5000/rl-allinone:latest"
+# ROK-1357: set to 1 only when the caller passes --image. The image-ID
+# mismatch-recreate (below) is armed ONLY for explicit images — a bare
+# re-spin would otherwise compare the running container against the DEFAULT
+# :latest ref and, when :latest happens to exist locally, silently recreate
+# a branch-built env onto default-image content. Surfaced during the
+# fix/batch-2026-06-07 live dogfood.
+IMAGE_EXPLICIT=0
+TTL_HOURS="${DEFAULT_ENV_TTL_HOURS:-24}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slug) SLUG="$2"; shift 2 ;;
+        --image) IMAGE="$2"; IMAGE_EXPLICIT=1; shift 2 ;;
+        --ttl) TTL_HOURS="$2"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -z "$SLUG" ]] && { echo "--slug required" >&2; exit 2; }
+[[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required" >&2; exit 2; fi
+SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+[[ -z "$SLOT" ]] && { echo "no slot — run claim first" >&2; exit 2; }
+
+# Per-slot env-count cap. Prevents one agent from accidentally spinning N
+# envs and OOMing the VM. Tunable via MAX_ENVS_PER_SLOT env var. Counts
+# distinct slugs labeled with this slot (allinone + pg pair = one slug).
+#
+# CAREFUL: in `docker ps --format`, `.Labels` is a comma-joined STRING
+# (e.g. "rl.role=env,rl.slot=1,rl.env_slug=foo"), NOT a map. The Go
+# template `index .Labels "X"` then crashes because index treats strings
+# as []byte and can't be keyed by a string. Use `.Label "X"` (the
+# singular Method, capital L) which returns the per-key value directly.
+MAX_ENVS_PER_SLOT="${MAX_ENVS_PER_SLOT:-5}"
+EXISTING_FOR_SLOT=$(docker ps -a \
+    --filter "label=rl.slot=${SLOT}" --filter "label=rl.role=env" \
+    --format '{{ .Label "rl.env_slug" }}' | sort -u)
+EXISTING_COUNT=$(echo -n "$EXISTING_FOR_SLOT" | grep -c . || true)
+if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTING_FOR_SLOT"; then
+    # Only block NEW slugs; re-spinning an existing one is the idempotent
+    # path (covered below) and stays within the count.
+    jq -nc --argjson slot "$SLOT" --argjson count "$EXISTING_COUNT" --argjson max "$MAX_ENVS_PER_SLOT" --arg slug "$SLUG" \
+        '{ok: false, error: "max_envs_per_slot_exceeded", slot: $slot, slug: $slug, current_count: $count, max: $max, message: "slot \($slot) already has \($count) envs (max \($max)). Destroy some before spinning \($slug)."}'
+    # ROK-1357: mark handled so the EXIT trap doesn't ALSO emit a duplicate
+    # env_spin_aborted_unexpectedly JSON line on top of this clean refusal.
+    ENV_SPIN_HANDLED=1
+    exit 1
+fi
+
+NOW=$(date -u +%FT%TZ)
+VOL_PG="rl-data-${SLUG}"
+NET="rl-net"
+PG_CONTAINER="rl-env-${SLUG}-pg"
+APP_CONTAINER="rl-env-${SLUG}-allinone"
+
+TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
+
+# Slug-ownership guard. If the slug already exists on a DIFFERENT slot,
+# refuse — otherwise two agents can stomp each other's env state via
+# matching slugs. The operator bypass (RL_OPERATOR=1) is allowed because
+# the operator legitimately reaches across slots. The MCP server forces
+# RL_OPERATOR=0 for all agents, so this is agent-only friction.
+RECLAIMED_FROM_UNCLAIMED=0
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    EXISTING_SLOT=$(docker inspect "$APP_CONTAINER" \
+        --format '{{ index .Config.Labels "rl.slot" }}' 2>/dev/null || echo "")
+    if [[ -n "$EXISTING_SLOT" && "$EXISTING_SLOT" != "$SLOT" && "${RL_OPERATOR:-0}" != "1" ]]; then
+        # ROK-1357 fold-in #2: the owning slot may be UNCLAIMED. gc-sweeper
+        # auto-releases a claim when its heartbeat lapses, but the child env's
+        # container keeps its stale rl.slot label. A fresh `claim` then lands
+        # on a DIFFERENT slot, and this guard would refuse the re-spin even
+        # though nobody owns the original slot anymore — the env is stranded.
+        # Probe claims.json: if the owning slot is currently unclaimed, the
+        # slug is reclaimable — log an audit line and FALL THROUGH (the
+        # recreate/fresh flow rewrites the rl.slot label, Traefik rule, and
+        # registry row for THIS slot). If the owning slot is still claimed by
+        # a live agent, refuse as before.
+        OWNING_SLOT_CLAIMED=$(state::query "$RL_CLAIMS_FILE" --argjson s "$EXISTING_SLOT" \
+            '[.[] | select(.slot == $s and .claimed == true)] | length' 2>/dev/null || echo "0")
+        if [[ "$OWNING_SLOT_CLAIMED" -gt 0 ]]; then
+            jq -nc --arg slug "$SLUG" --argjson existing_slot "$EXISTING_SLOT" --argjson my_slot "$SLOT" \
+                '{ok: false, error: "slug_owned_by_other_slot", slug: $slug, owned_by_slot: $existing_slot, my_slot: $my_slot, message: "Env slug \"\($slug)\" is owned by slot \($existing_slot). Pick a different slug or have its owner destroy it."}'
+            # ROK-1357: mark handled so the EXIT trap doesn't double-report.
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+        audit::log env-spin slug-reclaimed-from-unclaimed-slot \
+            "$(jq -nc --arg slug "$SLUG" --argjson from_slot "$EXISTING_SLOT" --argjson to_slot "$SLOT" '{slug:$slug, from_slot:$from_slot, to_slot:$to_slot}')"
+        # CLAIM REGISTRY OWNERSHIP FIRST (live-dogfood incident, fix/batch-
+        # 2026-06-07): the recreate below can take 60+ seconds (health-wait)
+        # before the fresh path re-registers the env. During that window the
+        # row still said `.slot = <old>` + `.claimable_by_next = true` (from
+        # the old slot's `release --preserve-envs`), so a CONCURRENT claim on
+        # the old slot ran lease-advance's branch-mismatch destroy and killed
+        # the live env mid-recreate (observed 14:27:05Z 2026-06-07: agent
+        # e5fb1779 claimed slot 2 and destroyed fixbatch7 while it was being
+        # reclaimed onto slot 1). Move the row to THIS slot and clear the
+        # claimable mark BEFORE touching containers.
+        if ! state::mutate "$RL_ENVS_FILE" \
+                --arg slug "$SLUG" --argjson slot "$SLOT" \
+                'map(if .slug == $slug
+                     then .slot = $slot | .claimable_by_next = false
+                        | del(.created_for_branch)
+                     else . end)'; then
+            jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" \
+                '{ok:false, error:"env_registry_mutate_failed", phase:"reclaim_take_ownership",
+                  slug:$slug, slot:$slot,
+                  hint:"Could not move the env-registry row to this slot before reclaiming. Aborting BEFORE touching containers so the env is left intact on its old slot."}'
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+        # Codex P2 (fix/batch-2026-06-07): falling through to the IDEMPOTENT
+        # path here would only bump last_touched + rewrite the route — the
+        # docker rl.slot label (immutable) and the registry row's .slot would
+        # stay on the OLD unclaimed slot, leaving slot counts / release /
+        # destroy bookkeeping pointing at a slot nobody owns. Force the
+        # RECREATE path so the container is re-run with this slot's labels and
+        # the fresh-path UPSERT rewrites .slot.
+        RECLAIMED_FROM_UNCLAIMED=1
+    fi
+fi
+
+LAST_PHASE="preflight_done"
+
+# ROK-1357 fold-in #1: track whether the idempotent block recreated the
+# allinone container from a fresh image (image-ID mismatch). Surfaced as
+# `recreated: true|false` in the final JSON emit and carried so the fresh
+# path's PG `docker run` is skipped (the existing PG + its volume — the
+# admin row — are reused).
+RECREATED=0
+
+# ROK-1357 fold-in #1: decide UP FRONT whether to take the fast idempotent
+# path or recreate from a fresh image. The container may exist but be running
+# OLD content: after a rebuild pushes a new image under the SAME slug tag, a
+# tag-string compare can't tell — only the resolved sha256 image IDs differ.
+# Compare the RUNNING container's image ID against the CURRENT image ID for
+# the tag:
+#   - both non-empty + differ  → recreate (rm -f the container, fall through
+#                                 to the fresh-spin path; PG is reused).
+#   - CURRENT_IMAGE_ID empty    → indeterminate (image not resolvable locally,
+#                                 e.g. registry-only/unpulled). NEVER destroy a
+#                                 healthy env over an inspect miss — keep the
+#                                 fast path + emit a warning (AC3).
+#   - equal (or container gone) → fast idempotent path (AC2).
+# This runs BEFORE the idempotent block's `exec 9>` so we never leak fd 9
+# into the fresh path.
+TAKE_IDEMPOTENT_PATH=0
+IMAGE_MISMATCH_WARNING=""
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && (( RECLAIMED_FROM_UNCLAIMED == 1 )); then
+    # Unclaimed-slot reclaim (Codex P2): MUST recreate — the idempotent path
+    # can't fix the immutable rl.slot docker label or the registry row's
+    # .slot. On a BARE re-spin (no --image) pin the container's CURRENT image
+    # ID so the reclaim preserves the env's exact content instead of
+    # re-running the default :latest ref (which may not exist locally, or
+    # may be entirely different content).
+    if [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
+        RECLAIM_IMAGE=$(docker inspect "$APP_CONTAINER" --format '{{.Image}}' 2>/dev/null || echo "")
+        if [[ -n "$RECLAIM_IMAGE" ]]; then
+            IMAGE="$RECLAIM_IMAGE"
+        fi
+    fi
+    if ! docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; then
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg container "$APP_CONTAINER" \
+            '{ok:false, error:"recreate_rm_failed", slug:$slug, slot:$slot, container:$container,
+              hint:("Reclaiming " + $container + " from an unclaimed slot requires recreating it under this slot, but docker rm -f failed. The env is in a half-state — inspect the container manually then re-run env-spin.")}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    RECREATED=1
+    # Fall through (TAKE_IDEMPOTENT_PATH stays 0) → fresh-spin path re-runs
+    # the container with THIS slot's labels and the registry UPSERT rewrites
+    # .slot. PG + its volume are reused (exists-guard on the PG docker run).
+elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
+    # Bare re-spin (no --image): the caller expressed no opinion about the
+    # image, so NEVER compare against the default :latest ref — take the
+    # fast idempotent path unconditionally. See IMAGE_EXPLICIT note above.
+    TAKE_IDEMPOTENT_PATH=1
+elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    RUNNING_IMAGE_ID=$(docker inspect "$APP_CONTAINER" --format '{{.Image}}' 2>/dev/null || echo "")
+    CURRENT_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+    if [[ -z "$CURRENT_IMAGE_ID" ]]; then
+        # Indeterminate — can't resolve the tag locally. Keep the fast path.
+        TAKE_IDEMPOTENT_PATH=1
+        IMAGE_MISMATCH_WARNING="image \"${IMAGE}\" could not be resolved locally (docker image inspect returned empty); kept the existing container without verifying it matches the tag — pull the image and re-spin to force a recreate if you expect new content"
+        audit::log env-spin image-id-indeterminate \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug, slot:$slot, image:$image}')"
+    elif [[ -n "$RUNNING_IMAGE_ID" && "$RUNNING_IMAGE_ID" != "$CURRENT_IMAGE_ID" ]]; then
+        # Mismatch — the tag now resolves to a DIFFERENT image than the running
+        # container. Recreate. Fail-loud guard the rm so a stuck container
+        # surfaces a clear error instead of a silent set -e abort.
+        audit::log env-spin image-id-mismatch-recreate \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg running "$RUNNING_IMAGE_ID" --arg current "$CURRENT_IMAGE_ID" '{slug:$slug, slot:$slot, running_image_id:$running, current_image_id:$current}')"
+        if ! docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; then
+            jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg container "$APP_CONTAINER" \
+                '{ok:false, error:"recreate_rm_failed", slug:$slug, slot:$slot, container:$container,
+                  hint:("Detected a stale image for " + $container + " and tried to remove it to recreate from the fresh image, but docker rm -f failed. The env is in a half-state — inspect the container manually then re-run env-spin.")}'
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+        RECREATED=1
+        # Fall through (TAKE_IDEMPOTENT_PATH stays 0) → fresh-spin path.
+    else
+        # Equal image ID — fast idempotent path (AC2).
+        TAKE_IDEMPOTENT_PATH=1
+    fi
+fi
+
+# Idempotent: if env already exists for this slug AND its image is current,
+# refresh last_touched in the state registry (NOT via docker container update
+# --label-add — that flag is swarm-mode only and errors on standalone
+# containers). Re-write the Traefik conf file too so the route survives state
+# divergence.
+if (( TAKE_IDEMPOTENT_PATH == 1 )); then
+    LAST_PHASE="idempotent_path_entered"
+    # UPSERT: if registry already has this slug, bump last_touched.
+    # If not (e.g. registry was clobbered while the container kept
+    # running — happened 2026-05-19 after sweeper-mutate perm bug),
+    # INSERT a fresh row reconstructed from the container's labels.
+    # Without the insert branch, a clobbered registry leaves the env
+    # invisible on the dashboard even though the container is healthy.
+    IDEM_IMAGE=$(docker inspect "$APP_CONTAINER" --format '{{.Config.Image}}' 2>/dev/null || echo "${IMAGE}")
+    IDEM_TTL=$(docker inspect "$APP_CONTAINER" --format '{{ index .Config.Labels "rl.ttl" }}' 2>/dev/null || echo "${TTL_HOURS}h")
+    # ROK-1338 PR-1 fold-in: same defensive wrap as the new-env path below.
+    # `set -e` would otherwise kill the script silently on any state::mutate
+    # failure and leave the agent staring at empty stdout.
+    if ! state::mutate "$RL_ENVS_FILE" \
+            --arg slug "$SLUG" --argjson slot "$SLOT" \
+            --arg image "$IDEM_IMAGE" --arg ttl "$IDEM_TTL" --arg ts "$NOW" \
+            --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
+            'if any(.[]; .slug == $slug)
+             then map(if .slug == $slug then .last_touched = $ts else . end)
+             else . + [{slug: $slug, slot: $slot, image: $image, ttl: $ttl,
+                        created_at: $ts, last_touched: $ts, public_domain: $public_domain}]
+             end'; then
+        audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IDEM_IMAGE" '{slug:$slug,slot:$slot,image:$image,phase:"register_idempotent"}')"
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IDEM_IMAGE" \
+            '{ok:false, error:"env_registry_mutate_failed", phase:"register_idempotent",
+              slug:$slug, slot:$slot, image:$image,
+              hint:"Idempotent upsert into env-registry.json failed. Container exists but registry write was rejected — check the file is valid JSON and $RL_LOCK_DIR is writable."}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    LAST_PHASE="idempotent_state_mutated"
+    mkdir -p "$TRAEFIK_CONF_D"
+    PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
+    # Default ownership flag — only the public-domain branch can flip it.
+    SLOT_HOST_RULE_OWNED_BY_OTHER=0
+    if [[ -n "$PUBLIC_DOMAIN" ]]; then
+        # ${SLUG}test.${PUBLIC_DOMAIN} pattern + slot-N.${PUBLIC_DOMAIN} for
+        # OAuth callbacks (ROK-1324) — keep in sync with non-idempotent path.
+        # Codex finding #7: when MAX_ENVS_PER_SLOT>1, only ONE env per slot may
+        # own slot-N.${PUBLIC_DOMAIN} — Traefik would otherwise silently
+        # last-write-wins between rules. Idempotent path always claims it for
+        # this slug (re-running env-spin for the SAME slug should be a no-op,
+        # and if the slug already has the route it's the rightful owner).
+        # Other envs on the same slot fall through to the per-slug URL only.
+        # Codex finding #7 round-3 MED: the grep-then-write check below is
+        # serialized under a slot-scoped flock so two concurrent env-spins on
+        # the same slot can't both observe "no owner" and both write the slot
+        # rule. The lock is released when this scope's subshell exits, which
+        # is fine for the duration we hold — only the scan + cat are inside.
+        # TODO(env-destroy): if this slug owns the slot rule, env-destroy
+        # should re-register the rule for the next-oldest env on the slot.
+        # See cross-agent handoff note in commit message.
+        SLOT_LOCK_FILE="${TRAEFIK_CONF_D}/.slot-${SLOT}.lock"
+        : > "$SLOT_LOCK_FILE" 2>/dev/null || true
+        # TECH-DEBT 2026-06-06: guard the fd-open. On an unwritable conf.d
+        # (perms drift — e.g. a deploy rsync stripping group-write/setgid),
+        # a bare `exec 9>` returns 1 and set -e killed the script with NO
+        # error JSON (observed: silent abort at last_phase=
+        # idempotent_state_mutated during ROK-1329 AC-6). Proceed WITHOUT
+        # the flock — the guarded route-write below is the loud gate that
+        # names the real perms problem.
+        if exec 9>"$SLOT_LOCK_FILE" 2>/dev/null; then
+            flock 9 2>/dev/null || true
+        fi
+        # Codex finding #7 round-3 LOW: anchor the probe on the generated
+        # `rule:` line + the exact backtick-wrapped Host(...) literal so we
+        # don't false-positive on comments or differently quoted text.
+        SLOT_HOST_RULE_OWNER=$(grep -l -E "^[[:space:]]*rule:.*Host\(\`slot-${SLOT}\.${PUBLIC_DOMAIN}\`\)" \
+            "$TRAEFIK_CONF_D"/env-*.yml 2>/dev/null | head -n1 || true)
+        if [[ -n "$SLOT_HOST_RULE_OWNER" && "$SLOT_HOST_RULE_OWNER" != "$TRAEFIK_CONF_D/env-${SLUG}.yml" ]]; then
+            SLOT_HOST_RULE_OWNED_BY_OTHER=1
+        fi
+        if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+            HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+        else
+            HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+        fi
+    else
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
+    fi
+    # TECH-DEBT 2026-06-06: same fail-loud wrap as the fresh path below (the
+    # ROK-1338 fold-in only covered the non-idempotent write). Without it, an
+    # unwritable conf.d silently set -e-aborted the re-spin here, making the
+    # idempotent path useless as a route-recovery mechanism.
+    if ! cat > "$TRAEFIK_CONF_D/env-${SLUG}.yml" <<EOF
+# Generated by env-spin (idempotent path) — do not hand-edit.
+http:
+  routers:
+    env-${SLUG}:
+      rule: "${HOST_RULE}"
+      service: env-${SLUG}
+      entryPoints: [web]
+  services:
+    env-${SLUG}:
+      loadBalancer:
+        servers:
+          - url: "http://${APP_CONTAINER}:80"
+EOF
+    then
+        audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg phase "idempotent_traefik_route_write" --arg target "$TRAEFIK_CONF_D/env-${SLUG}.yml" '{slug:$slug,slot:$slot,phase:$phase,target:$target}')"
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg target "$TRAEFIK_CONF_D/env-${SLUG}.yml" --arg dir "$TRAEFIK_CONF_D" \
+            '{ok:false, error:"traefik_route_write_failed", phase:"idempotent_traefik_route_write",
+              slug:$slug, slot:$slot, target:$target,
+              hint:("Could not write Traefik route to " + $target + ". Most likely cause: " + $dir + " lacks group-write for rl-fleet (perms drift — e.g. a deploy rsync reset the dir). Container is RUNNING but unreachable via Traefik. Operator fix: sudo chmod 2775 " + $dir + " && sudo chown :rl-fleet " + $dir + " — matches the state dir pattern. Then re-run env-spin.")}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    LAST_PHASE="idempotent_traefik_written"
+    # Release the slot-scoped flock acquired above. Closing fd 9 drops the
+    # lock; subsequent steps (admin bootstrap, JSON output) don't need it.
+    exec 9>&-
+    # Same primary/internal/public/slot split as the non-idempotent path below.
+    # Codex finding #7 round-3 HIGH: when this env is NOT the slot-rule
+    # owner, the slot_url DOES NOT resolve to this env (Traefik routes
+    # slot-N.<DOMAIN> to whichever env wrote the rule). Returning slot_url
+    # as the primary URL in that case silently sends Discord OAuth + tester
+    # deep-links to the wrong env. Clamp slot_url to null AND prefer the
+    # per-slug public URL when this env isn't the slot owner.
+    IDEM_PUBLIC=""
+    IDEM_SLOT_URL=""
+    IDEM_IS_SLOT_OWNER_BOOL="true"
+    IDEM_SLOT_OAUTH_AVAILABLE_BOOL="true"
+    if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+        IDEM_PUBLIC="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+        if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+            # Another env owns slot-N.<DOMAIN>; slot_url would route there.
+            IDEM_SLOT_URL=""
+            IDEM_IS_SLOT_OWNER_BOOL="false"
+            IDEM_SLOT_OAUTH_AVAILABLE_BOOL="false"
+        else
+            IDEM_SLOT_URL="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
+        fi
+    else
+        # No RL_PUBLIC_DOMAIN — the slot URL concept doesn't apply.
+        IDEM_IS_SLOT_OWNER_BOOL="false"
+        IDEM_SLOT_OAUTH_AVAILABLE_BOOL="false"
+    fi
+    # Primary preference: slot_url (only if owner) > per-slug public > internal.
+    if [[ -n "$IDEM_SLOT_URL" ]]; then IDEM_PRIMARY="$IDEM_SLOT_URL"
+    elif [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"
+    else IDEM_PRIMARY="http://${SLUG}.rl.lan"
+    fi
+    # Re-seed admin idempotently. RL_ADMIN_PASSWORD from /srv/rl-infra/.env
+    # gives the same password every time so re-runs are stable. If unset,
+    # generate one per call — agent gets back a fresh password each time
+    # but at least it's not blank.
+    IDEM_ADMIN_PASSWORD="${RL_ADMIN_PASSWORD:-}"
+    if [[ -z "$IDEM_ADMIN_PASSWORD" ]]; then
+        IDEM_ADMIN_PASSWORD="rl-$(openssl rand -hex 8)"
+    fi
+    # Capture stderr instead of redirecting to /dev/null so the caller can
+    # see WHY bootstrap failed via bootstrap_warnings in the JSON output.
+    # If exec fails, blank the password (existing behavior) AND emit a soft
+    # warning rather than failing the whole env-spin. M-VM-4 (2026-05-19).
+    IDEM_BOOTSTRAP_STDERR_FILE=$(mktemp -t rl-bootstrap-admin.XXXXXX)
+    IDEM_BOOTSTRAP_WARNINGS_JSON="[]"
+    if ! docker exec \
+            -e ADMIN_PASSWORD="$IDEM_ADMIN_PASSWORD" \
+            -e RESET_PASSWORD=true \
+            -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
+            "$APP_CONTAINER" \
+            node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$IDEM_BOOTSTRAP_STDERR_FILE"; then
+        IDEM_BOOTSTRAP_STDERR=$(tr -d '\000' < "$IDEM_BOOTSTRAP_STDERR_FILE" | tail -c 1024)
+        IDEM_ADMIN_PASSWORD=""
+        IDEM_BOOTSTRAP_WARNINGS_JSON=$(jq -nc --arg msg "$IDEM_BOOTSTRAP_STDERR" \
+            '[{code: "admin_bootstrap_failed", detail: $msg}]')
+    fi
+    rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
+    LAST_PHASE="idempotent_bootstrap_done"
+    env_spin::run_overlay
+    env_spin::restart_for_overlay
+    LAST_PHASE="idempotent_overlay_done"
+
+    IDEM_OPERATOR_ADMIN=$(env_spin::operator_admin_mode \
+        "$(env_spin::container_has_first_login_marker)" \
+        "$(env_spin::container_env_value FLEET_ADMIN_DISCORD_ID)")
+    jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
+        --arg internal_url "http://${SLUG}.rl.lan" \
+        --arg public_url "$IDEM_PUBLIC" \
+        --arg slot_url "$IDEM_SLOT_URL" --argjson slot "$SLOT" \
+        --argjson is_slot_owner "$IDEM_IS_SLOT_OWNER_BOOL" \
+        --argjson slot_oauth_available "$IDEM_SLOT_OAUTH_AVAILABLE_BOOL" \
+        --arg admin_email "admin@local" \
+        --arg admin_password "$IDEM_ADMIN_PASSWORD" \
+        --argjson bootstrap_warnings "$IDEM_BOOTSTRAP_WARNINGS_JSON" \
+        --arg image_warning "$IMAGE_MISMATCH_WARNING" \
+        --argjson bot_identity "$BOT_IDENTITY_JSON" \
+        --argjson overlay_warnings "$OVERLAY_WARNINGS_JSON" \
+        --arg operator_admin "$IDEM_OPERATOR_ADMIN" \
+        '{ok: true, idempotent: true, recreated: false, slug: $slug, url: $url, internal_url: $internal_url,
+          public_url: (if $public_url == "" then null else $public_url end),
+          slot_url: (if $slot_url == "" then null else $slot_url end),
+          slot: $slot,
+          is_slot_owner: $is_slot_owner,
+          slot_oauth_available: $slot_oauth_available,
+          admin_email: $admin_email,
+          admin_password: (if $admin_password == "" then null else $admin_password end),
+          bootstrap_warnings: $bootstrap_warnings,
+          bot_identity: $bot_identity,
+          overlay_warnings: $overlay_warnings,
+          operator_admin: $operator_admin,
+          image_warning: (if $image_warning == "" then null else $image_warning end)}'
+    audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
+    exit 0
+fi
+
+LAST_PHASE="new_env_path_entered"
+
+# ROK-1357 fold-in #1 (fail-fast image validation): resolve the image BEFORE
+# creating PG so a genuinely-missing image fails FAST and leaves NO orphaned
+# PG container. The recreate path already proved the image resolves locally
+# (CURRENT_IMAGE_ID was non-empty), so this only bites a true fresh spin.
+# Don't hard-fail a registry-only/unpulled image: if local inspect misses,
+# try a pull; only fail if the pull ALSO fails (the image truly doesn't
+# exist). Skip entirely on the recreate path — RECREATED=1 means the image
+# was just validated above.
+if (( RECREATED == 0 )); then
+    if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        if ! docker pull "$IMAGE" >/dev/null 2>&1; then
+            audit::log env-spin image-not-found \
+                "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug, slot:$slot, image:$image}')"
+            jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+                '{ok:false, error:"image_not_found", slug:$slug, slot:$slot, image:$image,
+                  hint:("Image \"" + $image + "\" is not present locally and could not be pulled from the registry. Build/push it first (rl_env_build_image_from_runner) or pass an existing --image tag. No PG container was created.")}'
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+    fi
+fi
+
+LAST_PHASE="image_validated"
+
+# ROK-1469 D3 — one live bot per slot. Placed AFTER every refusal that creates
+# nothing (max-envs, slug-ownership, image-not-found) so a refused spin never
+# leaves the slot's identity claimed by a slug that does not exist (Codex #3),
+# and taken through the atomic compare-and-claim so two concurrent spins on
+# one slot cannot both win it (Codex #4). Slots with no identity configured
+# skip the rule — there is nothing to collide over.
+BOT_IDENTITY_CLAIMED_THIS_RUN=0
+if bot_identity::configured "$SLOT"; then
+    BOT_IDENTITY_HOLDER=""
+    if ! BOT_IDENTITY_HOLDER=$(bot_identity::acquire "$SLOT" "$SLUG"); then
+        audit::log env-spin bot-identity-in-use \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" '{slug:$slug, slot:$slot, held_by:$holder}')"
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" \
+            '{ok:false, error:"bot_identity_in_use", slug:$slug, slot:$slot, held_by:$holder,
+              message:"slot \($slot)'"'"'s Discord bot identity is already attached to env \"\($holder)\". Two envs cannot share one bot token — Discord drops the older gateway session.",
+              hint:"Destroy \($holder) (rl_env_destroy) and re-spin, or claim a different slot. Re-spinning \($holder) itself is always allowed."}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    BOT_IDENTITY_CLAIMED_THIS_RUN=1
+fi
+
+
+# 1. Postgres (per-env, NAS-like). The recreate flow REUSES an existing PG
+# (and its volume — the admin row persists) rather than spinning a new one;
+# the `docker inspect` guard makes the `docker run` a no-op when PG is already
+# up. The EXIT trap (armed at the top) reads ENV_SPIN_PG_CREATED to decide
+# whether to roll back — only a PG this run actually creates is torn down.
+LAST_PHASE="docker_run_pg_pending"
+if docker inspect "$PG_CONTAINER" >/dev/null 2>&1; then
+    # Existing PG (recreate flow, or a half-spun env from a prior abort).
+    # Reuse it — never tear it down in the rollback trap.
+    ENV_SPIN_PG_REUSED=1
+else
+    docker run -d \
+        --name "$PG_CONTAINER" \
+        --network "$NET" \
+        --restart unless-stopped \
+        -v "${VOL_PG}:/var/lib/postgresql/data" \
+        -e POSTGRES_USER=user \
+        -e POSTGRES_PASSWORD=password \
+        -e POSTGRES_DB=raid_ledger \
+        --label "rl.role=env" \
+        --label "rl.env_slug=${SLUG}" \
+        --label "rl.slot=${SLOT}" \
+        --label "rl.ttl=${TTL_HOURS}h" \
+        --label "rl.last_touched=${NOW}" \
+        pgvector/pgvector:pg16 >/dev/null
+    ENV_SPIN_PG_CREATED=1
+fi
+
+LAST_PHASE="pg_run_started"
+
+# Wait for postgres ready.
+for _ in $(seq 1 30); do
+    if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger >/dev/null 2>&1; then break; fi
+    sleep 1
+done
+
+LAST_PHASE="pg_ready"
+
+# 2. Allinone container — built artifacts, prod-like topology.
+#
+# Note: no traefik.* labels here. Traefik uses file-based config (see
+# /srv/rl-infra/traefik/conf.d/). We write the per-env route file below.
+#
+# ROK-1329: the allinone image bakes NODE_ENV=production, so the API's Sentry
+# init (api/src/sentry/instrument.ts) fires for fleet envs and — without an
+# override — tags every event environment=production, polluting the prod Sentry
+# inbox (1,348 events in 11h from one fleet container once looked like a prod
+# incident). Pass SENTRY_ENVIRONMENT=fleet-slot-${SLOT} so each slot's events
+# land in their own bucket instead. SLOT is the runner slot resolved above.
+# ROK-1838: error reporting is now ON by default, so fleet envs opt out with
+# ENABLE_TELEMETRY=false (API and, via /system/status, the web app) — fleet
+# envs sharing the built-in DSN helped exhaust the Sentry quota on 2026-10-15.
+# Note: only NEW containers pick this up — the idempotent re-spin path above
+# never re-runs `docker run`, so a pre-existing env keeps the env it was
+# created with until it's destroyed + spun fresh.
+#
+# When RL_PUBLIC_DOMAIN is set in /srv/rl-infra/.env (e.g.
+# "tests.gamernight.net"), pass PUBLIC_URL=https://${SLUG}.${PUBLIC_DOMAIN}
+# to the container so the Discord bot and other URL-emitting code reach
+# external testers through the operator's reverse proxy. Without that, the
+# bot would emit http://{slug}.rl.lan URLs which only work on the LAN.
+EXTRA_ENV=()
+# When set, env-spin shares the operator's JWT_SECRET with the test env so
+# app_settings rows (encrypted with that secret on operator's local DB) will
+# decrypt at runtime after rl_env_sync_from_local. Set in /srv/rl-infra/.env:
+#   RL_ENV_JWT_SECRET=<paste operator's local JWT_SECRET here>
+# Without this, the env's allinone generates its own JWT_SECRET and any
+# sync'd app_settings rows will fail to decrypt.
+if [[ -n "${RL_ENV_JWT_SECRET:-}" ]]; then
+    EXTRA_ENV+=(-e "JWT_SECRET=${RL_ENV_JWT_SECRET}")
+fi
+# ROK-1711: the API skips Discord bots in the voice game-filtered count, except
+# a DEMO_MODE-only allowlist (VOICE_THRESHOLD_BOT_ALLOWLIST). Allowlist the
+# companion test bot (tools/test-bot) so fleet voice smoke still reaches
+# minPlayers. Set RL_TEST_BOT_USER_ID (its Discord user id) in
+# /srv/rl-infra/.env; unset or malformed = no allowlist (warning on malformed).
+RL_TEST_BOT_USER_ID="${RL_TEST_BOT_USER_ID:-}"
+RL_TEST_BOT_USER_ID="${RL_TEST_BOT_USER_ID//[[:space:]]/}"
+if [[ -n "$RL_TEST_BOT_USER_ID" ]]; then
+    if env_spin::is_discord_snowflake "$RL_TEST_BOT_USER_ID"; then
+        EXTRA_ENV+=(-e "VOICE_THRESHOLD_BOT_ALLOWLIST=${RL_TEST_BOT_USER_ID}")
+    else
+        echo "env-spin: WARNING: RL_TEST_BOT_USER_ID is not a Discord snowflake (digits only) — ignoring it; the companion bot will not count toward voice minPlayers" >&2
+    fi
+fi
+# ROK-1469 D1 + review M4: the slot's OWN Discord app. The token and client
+# secret go in via --env-file, NOT `-e KEY=value`: argv is world-readable
+# through `ps` on the VM and `docker inspect` stores the -e values in the
+# container config forever. The file is 0600, lives only for the `docker run`,
+# and is removed immediately after (docker has already read it by then).
+IDENTITY_ENV_FILE=""
+if bot_identity::configured "$SLOT"; then
+    IDENTITY_ENV_FILE=$(mktemp -t rl-env-identity.XXXXXX)
+    chmod 600 "$IDENTITY_ENV_FILE" 2>/dev/null || true
+    {
+        printf 'RL_SLOT_DISCORD_BOT_TOKEN=%s\n' "$(bot_identity::value "$SLOT" BOT_TOKEN)"
+        printf 'RL_SLOT_DISCORD_CLIENT_ID=%s\n' "$(bot_identity::value "$SLOT" CLIENT_ID)"
+        _slot_client_secret=$(bot_identity::value "$SLOT" CLIENT_SECRET)
+        [[ -n "$_slot_client_secret" ]] && printf 'RL_SLOT_DISCORD_CLIENT_SECRET=%s\n' "$_slot_client_secret"
+        _slot_app_name=$(bot_identity::value "$SLOT" APP_NAME)
+        [[ -n "$_slot_app_name" ]] && printf 'RL_SLOT_DISCORD_APP_NAME=%s\n' "$_slot_app_name"
+    } > "$IDENTITY_ENV_FILE"
+    EXTRA_ENV+=(--env-file "$IDENTITY_ENV_FILE")
+fi
+PUBLIC_URL_FLAG=()
+if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+    # External hostname pattern: ${SLUG}test.${RL_PUBLIC_DOMAIN}. The literal
+    # 'test' suffix on the slug avoids collisions with real subdomains under
+    # the operator's apex (raid, plex, status, etc.) so a single-level
+    # wildcard `*.${RL_PUBLIC_DOMAIN}` covers all test envs while real
+    # services keep their own A records. Set on Cloudflare as `*` (single
+    # level), Universal SSL covers it.
+    PUBLIC_HOST="${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    PUBLIC_URL="https://${PUBLIC_HOST}"
+    # ROK-1324: slot-stable hostname for OAuth callbacks. Discord (and any
+    # other strict-redirect-URI OAuth provider) requires the callback URL
+    # to be registered in advance — registering per-slug is impractical
+    # since slugs are arbitrary, so we register slot-1/slot-2 ONCE in the
+    # Discord developer portal and route the slot hostname to whichever
+    # env is currently on that slot. Other URL-emitting code paths
+    # (bot messages, share links) continue to use the per-slug PUBLIC_URL
+    # because those don't have the registration constraint.
+    SLOT_HOST="slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
+    PUBLIC_URL_FLAG=(
+        -e "PUBLIC_URL=${PUBLIC_URL}"
+        -e "APP_URL=${PUBLIC_URL}"
+        -e "BASE_URL=${PUBLIC_URL}"
+        -e "PUBLIC_DOMAIN=${PUBLIC_HOST}"
+        -e "DISCORD_CALLBACK_URL=https://${SLOT_HOST}/api/auth/discord/callback"
+        -e "CLIENT_URL=https://${SLOT_HOST}"
+    )
+fi
+
+# DISCORD_API_TIMEOUT_MS mirrors .github/workflows/discord-smoke.yml (ROK-1689).
+docker run -d \
+    --name "$APP_CONTAINER" \
+    --network "$NET" \
+    --restart unless-stopped \
+    -e DATABASE_URL="postgresql://user:password@${PG_CONTAINER}:5432/raid_ledger" \
+    -e DEMO_MODE=true \
+    -e DISCORD_API_TIMEOUT_MS=15000 \
+    -e FLEET_FIRST_DISCORD_LOGIN_ADMIN=true \
+    -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
+    -e NODE_ENV=production \
+    -e SENTRY_ENVIRONMENT="fleet-slot-${SLOT}" \
+    -e ENABLE_TELEMETRY=false \
+    ${PUBLIC_URL_FLAG[@]+"${PUBLIC_URL_FLAG[@]}"} \
+    ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
+    --label "rl.role=env" \
+    --label "rl.env_slug=${SLUG}" \
+    --label "rl.slot=${SLOT}" \
+    --label "rl.ttl=${TTL_HOURS}h" \
+    --label "rl.last_touched=${NOW}" \
+    "$IMAGE" >/dev/null
+ENV_SPIN_APP_CREATED=1
+# The daemon has consumed the env-file by now; leaving it on disk would keep
+# the token readable to anything that can list $TMPDIR.
+[[ -n "$IDENTITY_ENV_FILE" ]] && rm -f "$IDENTITY_ENV_FILE"
+
+LAST_PHASE="allinone_running"
+
+# 3. Register the route with Traefik via the file provider.
+#    Traefik watches /etc/traefik/conf.d, so a write here triggers a reload.
+#
+# When RL_PUBLIC_DOMAIN is set (e.g. "tests.gamernight.net"), ALSO accept
+# host header {slug}.${RL_PUBLIC_DOMAIN}. The operator's external reverse
+# proxy (NPM, Caddy, etc.) forwards external testers to the rl-infra VM,
+# and Traefik routes them by the public hostname.
+TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
+PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
+mkdir -p "$TRAEFIK_CONF_D"
+# Default ownership flag — only the public-domain branch can flip it.
+SLOT_HOST_RULE_OWNED_BY_OTHER=0
+if [[ -n "$PUBLIC_DOMAIN" ]]; then
+    # Per-slug host: ${SLUG}test.${PUBLIC_DOMAIN} (testers' human-friendly URL).
+    # Slot host: slot-${SLOT}.${PUBLIC_DOMAIN} (ROK-1324 — stable hostname for
+    # OAuth callbacks since Discord requires exact redirect-URI matches).
+    # Codex finding #7: MAX_ENVS_PER_SLOT>1 + a single slot hostname means at
+    # most ONE env per slot may register the slot Host rule. Otherwise Traefik
+    # silently routes by whichever rule loaded last and both envs share the
+    # slot URL. Detect prior ownership by scanning the conf.d dir for an
+    # existing env file already carrying the slot rule. Pragmatic option (d)
+    # from the finding: per-slug URL always works for every env on the slot;
+    # the slot-stable OAuth URL routes to the OLDEST (= first registered) env.
+    # Discord OAuth users on slot-N.${PUBLIC_DOMAIN} hit the older env; agents
+    # spawning a second env on the same slot must use ${SLUG}test.${PUBLIC_DOMAIN}
+    # and forgo OAuth (or destroy the older env first).
+    #
+    # Codex finding #7 round-3 MED: serialize the scan + write under a
+    # slot-scoped flock so two concurrent env-spins on the same slot can't
+    # both observe "no owner" and both write the slot rule.
+    SLOT_LOCK_FILE="${TRAEFIK_CONF_D}/.slot-${SLOT}.lock"
+    : > "$SLOT_LOCK_FILE" 2>/dev/null || true
+    # TECH-DEBT 2026-06-06: guard the fd-open — see the identical guard on the
+    # idempotent path above. A bare `exec 9>` on an unwritable conf.d returns 1
+    # and set -e aborted the spin silently at last_phase=allinone_running.
+    if exec 9>"$SLOT_LOCK_FILE" 2>/dev/null; then
+        flock 9 2>/dev/null || true
+    fi
+    # Codex finding #7 round-3 LOW: anchor the probe on the generated
+    # `rule:` line + the exact backtick-wrapped Host(...) literal so we
+    # don't false-positive on comments or differently quoted text.
+    SLOT_HOST_RULE_OWNER=$(grep -l -E "^[[:space:]]*rule:.*Host\(\`slot-${SLOT}\.${PUBLIC_DOMAIN}\`\)" \
+        "$TRAEFIK_CONF_D"/env-*.yml 2>/dev/null | head -n1 || true)
+    if [[ -n "$SLOT_HOST_RULE_OWNER" && "$SLOT_HOST_RULE_OWNER" != "$TRAEFIK_CONF_D/env-${SLUG}.yml" ]]; then
+        SLOT_HOST_RULE_OWNED_BY_OTHER=1
+    fi
+    if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+        # Another env on this slot already owns slot-N.${PUBLIC_DOMAIN}; this
+        # env gets the per-slug URL only. TODO(env-destroy): when the owner
+        # tears down, env-destroy should re-register the slot rule against
+        # the next-oldest env on the slot. Cross-agent handoff.
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+    else
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+    fi
+else
+    HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
+fi
+# ROK-1338 PR-1 fold-in (2026-05-21): wrap the route-file write so
+# permission-denied failures emit a clear, actionable error instead of a
+# silent `set -e` abort. The dir owner is `rl` (operator) and group is
+# `rl-fleet` — if the dir lacks group-write, rl-agent (orchestrator's SSH
+# identity) can't CREATE new env-*.yml files even though it can read them
+# and write to existing ones it created. Symptom: container starts cleanly
+# but env_spin aborts at last_phase=allinone_running with exit 1. Fix:
+# operator must `sudo chmod 2775 /srv/rl-infra/traefik/conf.d` (matches
+# state dir's setgid+group-write pattern).
+if ! cat > "$TRAEFIK_CONF_D/env-${SLUG}.yml" <<EOF
+# Generated by env-spin for env "${SLUG}" — do not hand-edit.
+http:
+  routers:
+    env-${SLUG}:
+      rule: "${HOST_RULE}"
+      service: env-${SLUG}
+      entryPoints: [web]
+  services:
+    env-${SLUG}:
+      loadBalancer:
+        servers:
+          - url: "http://${APP_CONTAINER}:80"
+EOF
+then
+    audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg phase "traefik_route_write" --arg target "$TRAEFIK_CONF_D/env-${SLUG}.yml" '{slug:$slug,slot:$slot,phase:$phase,target:$target}')"
+    jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg target "$TRAEFIK_CONF_D/env-${SLUG}.yml" --arg dir "$TRAEFIK_CONF_D" \
+        '{ok:false, error:"traefik_route_write_failed", phase:"traefik_route_write",
+          slug:$slug, slot:$slot, target:$target,
+          hint:("Could not write Traefik route to " + $target + ". Most likely cause: rl-agent (the orchestrator SSH identity) is not in the docker/owner group of " + $dir + ", OR the dir lacks group-write. Container is RUNNING but unreachable via Traefik. Operator fix: sudo chmod 2775 " + $dir + " && sudo chown :rl-fleet " + $dir + " — matches the state dir pattern. Then re-run env-spin (idempotent path will skip the docker run and just register the route).")}'
+    ENV_SPIN_HANDLED=1
+    exit 1
+fi
+LAST_PHASE="traefik_written"
+
+# Release the slot-scoped flock (no-op if it wasn't acquired). Closing fd 9
+# drops the lock; later steps (health wait, admin bootstrap) don't need it.
+exec 9>&- 2>/dev/null || true
+
+LAST_PHASE="flock_released"
+
+# Wait for /health.
+URL="http://${APP_CONTAINER}/api/health"
+for _ in $(seq 1 60); do
+    if docker exec "$APP_CONTAINER" curl -fsS "$URL" >/dev/null 2>&1; then break; fi
+    sleep 1
+done
+
+LAST_PHASE="health_check_passed"
+
+# Seed admin@local with RL_ADMIN_PASSWORD so agents can /auth/local
+# immediately without a separate sync_settings round-trip. Idempotent
+# via RESET_PASSWORD=true. RL_ADMIN_PASSWORD lives in /srv/rl-infra/.env;
+# /state.sh sources that at the top of every orchestrator script.
+# Generated random as a fallback if the operator hasn't set one — agent
+# still gets a usable password back, just changes each deploy.
+#
+# A3-B P6: the same exec carries RL_OPERATOR_DISCORD_ID (also from
+# /srv/rl-infra/.env, same lifecycle as RL_ADMIN_PASSWORD) as
+# FLEET_ADMIN_DISCORD_ID, so bootstrap-admin can upsert THAT ONE Discord id as
+# an admin row. Without it the operator OAuths into a fresh env as an ordinary
+# member and every admin surface is unreachable. The flag is passed
+# unconditionally — empty when unset — so the script's own gate is the single
+# branch point. bootstrap-admin additionally refuses unless DEMO_MODE === 'true'
+# (set for every env below), which is what keeps this out of production.
+ADMIN_EMAIL_OUT="admin@local"
+ADMIN_PASSWORD_OUT="${RL_ADMIN_PASSWORD:-}"
+if [[ -z "$ADMIN_PASSWORD_OUT" ]]; then
+    ADMIN_PASSWORD_OUT="rl-$(openssl rand -hex 8)"
+fi
+# Capture bootstrap-admin stderr so callers can surface the failure reason
+# via bootstrap_warnings in the JSON output (M-VM-4 2026-05-19). Soft warning
+# — env-spin still returns ok:true so the caller can decide severity; the
+# admin_password field goes null and bootstrap_warnings explains why.
+BOOTSTRAP_STDERR_FILE=$(mktemp -t rl-bootstrap-admin.XXXXXX)
+BOOTSTRAP_WARNINGS_JSON="[]"
+if ! docker exec \
+        -e ADMIN_PASSWORD="$ADMIN_PASSWORD_OUT" \
+        -e RESET_PASSWORD=true \
+        -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
+        "$APP_CONTAINER" \
+        node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$BOOTSTRAP_STDERR_FILE"; then
+    BOOTSTRAP_STDERR=$(tr -d '\000' < "$BOOTSTRAP_STDERR_FILE" | tail -c 1024)
+    ADMIN_PASSWORD_OUT=""   # bootstrap failed; blank the output
+    BOOTSTRAP_WARNINGS_JSON=$(jq -nc --arg msg "$BOOTSTRAP_STDERR" \
+        '[{code: "admin_bootstrap_failed", detail: $msg}]')
+fi
+rm -f "$BOOTSTRAP_STDERR_FILE"
+
+LAST_PHASE="bootstrap_done"
+
+env_spin::run_overlay
+env_spin::restart_for_overlay
+LAST_PHASE="overlay_done"
+
+# Register.
+#
+# ROK-1338 PR-1 fold-in (2026-05-21): wrap state::mutate so a non-zero return
+# (corrupt env-registry.json, flock failure, mktemp/mv permission issue, jq
+# filter error) doesn't trigger `set -e` silent abort. Without this guard the
+# script dies before the final jq-emit, the MCP layer gets empty stdout and
+# returns `failed_to_parse_response`, the dashboard sees no slug in /api/state,
+# and the operator is left with running containers and no record of them.
+# Now any registry mutation failure surfaces as structured JSON on stdout so
+# the MCP layer can show the actual cause.
+#
+# ROK-1357 fold-in #1: UPSERT, not blind append. The recreate flow (image-ID
+# mismatch) and the unclaimed-slot reclaim both re-enter this fresh path for a
+# slug that ALREADY has a registry row — a blind `. += [...]` would leave a
+# DUPLICATE slug row (two entries, same slug, different/stale slot). Match the
+# idempotent path's upsert pattern: if a row for this slug exists, overwrite
+# its mutable fields (slot/image/ttl/last_touched/public_domain) in place;
+# otherwise append a fresh row.
+if ! state::mutate "$RL_ENVS_FILE" \
+        --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+        --arg ttl "${TTL_HOURS}h" --arg ts "$NOW" \
+        --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
+        'if any(.[]; .slug == $slug)
+         then map(if .slug == $slug
+                  then .slot = $slot | .image = $image | .ttl = $ttl
+                     | .last_touched = $ts | .public_domain = $public_domain
+                  else . end)
+         else . + [{slug: $slug, slot: $slot, image: $image, ttl: $ttl, created_at: $ts, last_touched: $ts, public_domain: $public_domain}]
+         end'; then
+    audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image,phase:"register_new"}')"
+    jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+        '{ok:false, error:"env_registry_mutate_failed", phase:"register_new",
+          slug:$slug, slot:$slot, image:$image,
+          hint:"state::mutate on /srv/rl-infra/state/env-registry.json returned non-zero — check that file is valid JSON, $RL_LOCK_DIR is writable, and the mktemp/mv in state::mutate succeeded. Containers may already be up; run env-destroy --slug to clean up."}'
+    ENV_SPIN_HANDLED=1
+    exit 1
+fi
+# Registration committed — the EXIT-trap rollback must NOT tear down the now-
+# tracked containers from here on.
+ENV_SPIN_REGISTERED=1
+
+LAST_PHASE="registered"
+audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image}')"
+LAST_PHASE="audit_logged"
+
+# Output. When RL_PUBLIC_DOMAIN is set, the EXTERNAL URL is the canonical
+# `url` field — that's what agents emit, testers click, operator bookmarks.
+# Pi-hole short-circuits *.{RL_PUBLIC_DOMAIN} to the rl-infra VM IP for LAN
+# clients (no Cloudflare hop), so external is fast on LAN AND reachable
+# off-LAN. The internal http://{slug}.rl.lan URL is kept as `internal_url`
+# for fallback (if CF/NPM/internet is down, LAN clients can hit it directly).
+PUBLIC_URL_OUT=""
+SLOT_URL_OUT=""
+# Codex finding #7 round-3 HIGH: slot_url MUST only be emitted when this env
+# owns the slot-N.<DOMAIN> Traefik rule. If another env on the same slot
+# already owns it, slot_url would route Discord OAuth + tester deep-links to
+# the WRONG env. Clamp to null + advertise is_slot_owner / slot_oauth_available
+# so the MCP layer can warn the agent.
+IS_SLOT_OWNER_BOOL="true"
+SLOT_OAUTH_AVAILABLE_BOOL="true"
+if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+    PUBLIC_URL_OUT="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+        SLOT_URL_OUT=""
+        IS_SLOT_OWNER_BOOL="false"
+        SLOT_OAUTH_AVAILABLE_BOOL="false"
+    else
+        SLOT_URL_OUT="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
+    fi
+else
+    # No RL_PUBLIC_DOMAIN — the slot URL concept doesn't apply.
+    IS_SLOT_OWNER_BOOL="false"
+    SLOT_OAUTH_AVAILABLE_BOOL="false"
+fi
+# Primary URL preference 2026-05-19: slot_url (only if owner) > per-slug
+# public > internal. Slot URL routes to the same env via Traefik AND is the
+# URL Discord OAuth callbacks are registered against — so it works for every
+# scenario the per-slug URL works for PLUS login. Mirrors the dashboard's
+# "open" button. NON-OWNER envs fall back to the per-slug URL.
+if [[ -n "$SLOT_URL_OUT" ]]; then
+    PRIMARY_URL="$SLOT_URL_OUT"
+elif [[ -n "$PUBLIC_URL_OUT" ]]; then
+    PRIMARY_URL="$PUBLIC_URL_OUT"
+else
+    PRIMARY_URL="http://${SLUG}.rl.lan"
+fi
+LAST_PHASE="url_computed"
+# ROK-1357 fold-in #1 + optional AC7: surface recreated + built_from_head.
+# recreated reflects the image-ID-mismatch recreate decision made up top.
+# built_from_head reads the rl.synced_head label baked into the image at
+# build time (bin/build-image-on-runner) — null when the image predates the
+# label or the inspect misses.
+RECREATED_BOOL=$([[ "$RECREATED" == "1" ]] && echo true || echo false)
+BUILT_FROM_HEAD=$(docker image inspect "$IMAGE" \
+    --format '{{ index .Config.Labels "rl.synced_head" }}' 2>/dev/null || echo "")
+# ROK-1338 PR-1 fold-in: reached the final happy-path emit, so the EXIT trap
+# should NOT also fire a duplicate error JSON.
+ENV_SPIN_HANDLED=1
+jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
+    --arg internal_url "http://${SLUG}.rl.lan" \
+    --arg public_url "$PUBLIC_URL_OUT" \
+    --arg slot_url "$SLOT_URL_OUT" --argjson slot "$SLOT" \
+    --argjson is_slot_owner "$IS_SLOT_OWNER_BOOL" \
+    --argjson slot_oauth_available "$SLOT_OAUTH_AVAILABLE_BOOL" \
+    --arg admin_email "$ADMIN_EMAIL_OUT" \
+    --arg admin_password "$ADMIN_PASSWORD_OUT" \
+    --argjson bootstrap_warnings "$BOOTSTRAP_WARNINGS_JSON" \
+    --argjson recreated "$RECREATED_BOOL" \
+    --arg built_from_head "$BUILT_FROM_HEAD" \
+    --argjson bot_identity "$BOT_IDENTITY_JSON" \
+    --argjson overlay_warnings "$OVERLAY_WARNINGS_JSON" \
+    --arg operator_admin "$(env_spin::operator_admin_mode true)" \
+    '{ok: true, recreated: $recreated, slug: $slug, url: $url, internal_url: $internal_url,
+      public_url: (if $public_url == "" then null else $public_url end),
+      slot_url: (if $slot_url == "" then null else $slot_url end),
+      slot: $slot,
+      is_slot_owner: $is_slot_owner,
+      slot_oauth_available: $slot_oauth_available,
+      admin_email: $admin_email,
+      admin_password: (if $admin_password == "" then null else $admin_password end),
+      bootstrap_warnings: $bootstrap_warnings,
+      bot_identity: $bot_identity,
+      overlay_warnings: $overlay_warnings,
+      operator_admin: $operator_admin,
+      built_from_head: (if $built_from_head == "" then null else $built_from_head end),
+      app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'

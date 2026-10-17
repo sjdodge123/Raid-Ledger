@@ -1,0 +1,748 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
+import { UsersController } from './users.controller';
+import { UsersMeController } from './users-me.controller';
+import { UsersService } from './users.service';
+import { AvatarService } from './avatar.service';
+import { PreferencesService } from './preferences.service';
+import { GameTimeService } from './game-time.service';
+import { CharactersService } from '../characters/characters.service';
+import { EventsService } from '../events/events.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
+import { at } from '../common/testing/narrow';
+
+/** Signed-in member / anonymous (OptionalJwtGuard sets null) / deactivated viewers (ROK-1734). */
+const MEMBER_REQ = { user: { id: 9, role: 'member', deactivatedAt: null } };
+const ANON_REQ = { user: null };
+const DEACTIVATED_REQ = {
+  user: { id: 9, role: 'member', deactivatedAt: new Date('2026-01-01') },
+};
+
+describe('UsersController', () => {
+  let controller: UsersController;
+  let meController: UsersMeController;
+  let usersService: UsersService;
+  let eventsService: EventsService;
+
+  const mockUser = {
+    id: 1,
+    username: 'testuser',
+    avatar: null,
+    discordId: '123',
+    customAvatarUrl: null,
+    role: 'member',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockEventsResponse = {
+    data: [
+      {
+        id: 1,
+        title: 'Test Event',
+        description: 'Test description',
+        startTime: '2026-02-14T18:00:00Z',
+        endTime: '2026-02-14T20:00:00Z',
+        creator: {
+          id: 1,
+          username: 'testuser',
+          avatar: null,
+          discordId: '123',
+          customAvatarUrl: null,
+        },
+        game: null,
+        signupCount: 3,
+        createdAt: '2026-02-01T00:00:00Z',
+        updatedAt: '2026-02-01T00:00:00Z',
+      },
+    ],
+    total: 1,
+  };
+
+  function buildTestProviders() {
+    return [
+      {
+        provide: UsersService,
+        useValue: {
+          findById: jest.fn(),
+          findRecent: jest.fn(),
+          findAll: jest.fn(),
+          getHeartedGames: jest.fn(),
+          unlinkDiscord: jest.fn(),
+          setCustomAvatar: jest.fn(),
+          findAllWithRoles: jest.fn(),
+          setRole: jest.fn(),
+          checkDisplayNameAvailability: jest.fn(),
+          setDisplayName: jest.fn(),
+          completeOnboarding: jest.fn(),
+          resetOnboarding: jest.fn(),
+        },
+      },
+      {
+        provide: AvatarService,
+        useValue: {
+          checkRateLimit: jest.fn(),
+          validateAndProcess: jest.fn(),
+          save: jest.fn(),
+          delete: jest.fn(),
+        },
+      },
+      {
+        provide: PreferencesService,
+        useValue: {
+          getUserPreferences: jest.fn(),
+          setUserPreference: jest.fn(),
+        },
+      },
+      {
+        provide: GameTimeService,
+        useValue: {
+          getCompositeView: jest.fn(),
+          saveTemplate: jest.fn(),
+          saveOverrides: jest.fn(),
+          createAbsence: jest.fn(),
+          deleteAbsence: jest.fn(),
+          getAbsences: jest.fn(),
+        },
+      },
+      {
+        provide: CharactersService,
+        useValue: {
+          findAllForUser: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+        },
+      },
+      { provide: EventsService, useValue: { findUpcomingByUser: jest.fn() } },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(false),
+          getGuildInfo: jest.fn().mockReturnValue(null),
+          getClient: jest.fn().mockReturnValue(null),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveChannelForEvent: jest.fn().mockResolvedValue(null) },
+      },
+    ];
+  }
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [UsersController, UsersMeController],
+      providers: buildTestProviders(),
+    }).compile();
+
+    controller = module.get<UsersController>(UsersController);
+    meController = module.get<UsersMeController>(UsersMeController);
+    usersService = module.get<UsersService>(UsersService);
+    eventsService = module.get<EventsService>(EventsService);
+  });
+
+  describe('listPlayers (ROK-821)', () => {
+    const mockFindAllResult = {
+      data: [
+        {
+          id: 1,
+          username: 'Alice',
+          avatar: null,
+          discordId: null,
+          customAvatarUrl: null,
+          steamLinked: false,
+        },
+      ],
+      total: 1,
+    };
+
+    it('should pass sources array to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        MEMBER_REQ,
+        '1',
+        '20',
+        undefined,
+        '42',
+        undefined,
+        'manual,discord',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        ['manual', 'discord'],
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass role to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        MEMBER_REQ,
+        '1',
+        '20',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'admin',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        undefined,
+        [],
+        undefined,
+        undefined,
+        'admin',
+      );
+    });
+
+    it('should pass playtimeMin to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        MEMBER_REQ,
+        '1',
+        '20',
+        undefined,
+        '42',
+        undefined,
+        undefined,
+        undefined,
+        '120',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        [],
+        120,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass playHistory to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        MEMBER_REQ,
+        '1',
+        '20',
+        undefined,
+        '42',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'played_recently',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        [],
+        undefined,
+        'played_recently',
+        undefined,
+      );
+    });
+
+    it('should treat old single source param as sources array', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        MEMBER_REQ,
+        '1',
+        '20',
+        undefined,
+        '42',
+        'manual',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        ['manual'],
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should return paginated response shape', async () => {
+      jest.spyOn(usersService, 'findAll').mockResolvedValue(mockFindAllResult);
+      const result = await controller.listPlayers(MEMBER_REQ, '1', '20');
+      expect(result).toMatchObject({
+        data: expect.any(Array),
+        meta: { total: 1, page: 1, limit: 20, hasMore: false },
+      });
+    });
+
+    it('strips discordId and the Discord avatar for an anonymous viewer (ROK-1827)', async () => {
+      jest.spyOn(usersService, 'findAll').mockResolvedValue({
+        data: [
+          { ...at(mockFindAllResult.data, 0), discordId: '555', avatar: 'h1' },
+        ],
+        total: 1,
+      });
+      const result = await controller.listPlayers(ANON_REQ, '1', '20');
+      expect(result.data[0]).not.toHaveProperty('discordId');
+      expect(result.data[0]?.avatar).toBeNull();
+      expect(JSON.stringify(result)).not.toContain('cdn.discordapp.com');
+      expect(result.meta).toMatchObject({ total: 1, page: 1 });
+    });
+  });
+
+  describe('listRecentPlayers', () => {
+    it('should return 200 with correct shape', async () => {
+      const mockRows = [
+        {
+          id: 1,
+          username: 'NewPlayer1',
+          avatar: 'abc123',
+          discordId: '111111',
+          customAvatarUrl: null,
+          createdAt: new Date('2026-02-10T12:00:00Z'),
+        },
+        {
+          id: 2,
+          username: 'NewPlayer2',
+          avatar: null,
+          discordId: '222222',
+          customAvatarUrl: '/avatars/2.webp',
+          createdAt: new Date('2026-02-08T08:00:00Z'),
+        },
+      ];
+
+      (usersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
+
+      const result = await controller.listRecentPlayers(MEMBER_REQ);
+
+      expect(result).toHaveProperty('data');
+      expect(Array.isArray(result.data)).toBe(true);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toEqual({
+        id: 1,
+        username: 'NewPlayer1',
+        avatar: 'abc123',
+        discordId: '111111',
+        customAvatarUrl: null,
+        createdAt: '2026-02-10T12:00:00.000Z',
+      });
+    });
+
+    it('should convert Date createdAt to ISO string', async () => {
+      const mockRows = [
+        {
+          id: 1,
+          username: 'Player',
+          avatar: null,
+          discordId: null,
+          customAvatarUrl: null,
+          createdAt: new Date('2026-02-13T15:30:00Z'),
+        },
+      ];
+
+      (usersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
+
+      const result = await controller.listRecentPlayers(MEMBER_REQ);
+
+      expect(typeof result.data[0]?.createdAt).toBe('string');
+      expect(result.data[0]?.createdAt).toBe('2026-02-13T15:30:00.000Z');
+    });
+
+    it('should match the RecentPlayersResponseDto schema', async () => {
+      const mockRows = [
+        {
+          id: 1,
+          username: 'TestPlayer',
+          avatar: 'hash',
+          discordId: '12345',
+          customAvatarUrl: null,
+          createdAt: new Date('2026-02-12T00:00:00Z'),
+        },
+      ];
+
+      (usersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
+
+      const result = await controller.listRecentPlayers(MEMBER_REQ);
+
+      // Validate against the Zod schema
+      const parseResult = RecentPlayersResponseSchema.safeParse(result);
+      expect(parseResult.success).toBe(true);
+    });
+
+    it('should return empty data array when no recent users', async () => {
+      (usersService.findRecent as jest.Mock).mockResolvedValue([]);
+
+      const result = await controller.listRecentPlayers(MEMBER_REQ);
+
+      expect(result.data).toEqual([]);
+    });
+
+    it.each([
+      ['anonymous', ANON_REQ],
+      ['deactivated', DEACTIVATED_REQ],
+    ])('strips discordId for a %s viewer (ROK-1734)', async (_label, req) => {
+      (usersService.findRecent as jest.Mock).mockResolvedValue([
+        {
+          id: 1,
+          username: 'NewPlayer1',
+          avatar: 'abc123',
+          discordId: '111111',
+          customAvatarUrl: null,
+          createdAt: new Date('2026-02-10T12:00:00Z'),
+        },
+      ]);
+      const result = await controller.listRecentPlayers(req);
+      expect(result.data[0]).toEqual({
+        id: 1,
+        username: 'NewPlayer1',
+        avatar: null,
+        customAvatarUrl: null,
+        createdAt: '2026-02-10T12:00:00.000Z',
+      });
+    });
+  });
+
+  describe('getProfile (ROK-1734)', () => {
+    beforeEach(() => {
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+    });
+
+    it('keeps discordId for a signed-in member', async () => {
+      const result = await controller.getProfile(1, MEMBER_REQ);
+      expect(result.data).toMatchObject({ id: 1, discordId: '123' });
+    });
+
+    it('strips discordId for an anonymous viewer', async () => {
+      const result = await controller.getProfile(1, ANON_REQ);
+      expect(result.data).not.toHaveProperty('discordId');
+      expect(result.data).toMatchObject({ id: 1, username: 'testuser' });
+    });
+  });
+
+  describe('getUserEventSignups (ROK-299)', () => {
+    it('strips creator.discordId for an anonymous viewer (ROK-1629)', async () => {
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+      jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(mockEventsResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result.data[0]?.creator).not.toHaveProperty('discordId');
+      expect(result.total).toBe(mockEventsResponse.total);
+    });
+
+    it('should return upcoming events for valid user', async () => {
+      const findByIdSpy = jest
+        .spyOn(usersService, 'findById')
+        .mockResolvedValue(mockUser as never);
+      const findUpcomingSpy = jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(mockEventsResponse);
+
+      const result = await controller.getUserEventSignups(1, {
+        user: { id: 2 },
+      });
+
+      expect(result).toEqual(mockEventsResponse);
+      expect(findByIdSpy).toHaveBeenCalledWith(1);
+      expect(findUpcomingSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should throw NotFoundException when user does not exist', async () => {
+      jest.spyOn(usersService, 'findById').mockResolvedValue(undefined);
+      const findUpcomingSpy = jest.spyOn(eventsService, 'findUpcomingByUser');
+
+      await expect(controller.getUserEventSignups(999)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(controller.getUserEventSignups(999)).rejects.toThrow(
+        'User not found',
+      );
+      expect(findUpcomingSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return empty data when user has no signups', async () => {
+      const emptyResponse = { data: [], total: 0 };
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+      jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(emptyResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should return limited results when user has many signups', async () => {
+      const manyEventsResponse = {
+        data: Array.from({ length: 6 }, (_, i) => ({
+          id: i + 1,
+          title: `Event ${i + 1}`,
+          description: 'Test description',
+          startTime: `2026-02-${14 + i}T18:00:00Z`,
+          endTime: `2026-02-${14 + i}T20:00:00Z`,
+          creator: {
+            id: 1,
+            username: 'testuser',
+            avatar: null,
+            discordId: '123',
+            customAvatarUrl: null,
+          },
+          game: null,
+          signupCount: 1,
+          createdAt: '2026-02-01T00:00:00Z',
+          updatedAt: '2026-02-01T00:00:00Z',
+        })),
+        total: 10,
+      };
+
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+      jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(manyEventsResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result.data.length).toBe(6);
+      expect(result.total).toBe(10);
+    });
+  });
+
+  describe('checkDisplayName (ROK-219)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should return available:true when display name is available', async () => {
+      const checkSpy = jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+
+      const result = await meController.checkDisplayName(
+        mockRequest as never,
+        'AvailableName',
+      );
+
+      expect(result.available).toBe(true);
+      expect(checkSpy).toHaveBeenCalledWith('AvailableName', 1);
+    });
+
+    it('should return available:false when display name is taken', async () => {
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(false);
+
+      const result = await meController.checkDisplayName(
+        mockRequest as never,
+        'TakenName',
+      );
+
+      expect(result.available).toBe(false);
+    });
+
+    it('should throw BadRequestException when name parameter is missing', async () => {
+      await expect(
+        meController.checkDisplayName(mockRequest as never, undefined),
+      ).rejects.toThrow('name query parameter is required');
+    });
+
+    it('should validate display name with Zod (min 2 chars)', async () => {
+      await expect(
+        meController.checkDisplayName(mockRequest as never, 'a'),
+      ).rejects.toThrow();
+    });
+
+    it('should validate display name with Zod (max 30 chars)', async () => {
+      const longName = 'a'.repeat(31);
+      await expect(
+        meController.checkDisplayName(mockRequest as never, longName),
+      ).rejects.toThrow();
+    });
+
+    it('should exclude current user from uniqueness check', async () => {
+      const checkSpy = jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+
+      await meController.checkDisplayName(mockRequest as never, 'TestName');
+
+      expect(checkSpy).toHaveBeenCalledWith('TestName', 1);
+    });
+  });
+
+  describe('updateMyProfile (ROK-219)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should update user display name when available', async () => {
+      const updatedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'NewName',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+      const setNameSpy = jest
+        .spyOn(usersService, 'setDisplayName')
+        .mockResolvedValue(updatedUser as never);
+
+      const result = await meController.updateMyProfile(mockRequest as never, {
+        displayName: 'NewName',
+      });
+
+      expect(result.data.displayName).toBe('NewName');
+      expect(setNameSpy).toHaveBeenCalledWith(1, 'NewName');
+    });
+
+    it('should throw BadRequestException when display name is taken', async () => {
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(false);
+
+      await expect(
+        meController.updateMyProfile(mockRequest as never, {
+          displayName: 'TakenName',
+        }),
+      ).rejects.toThrow('Display name is already taken');
+    });
+
+    it('should validate input with Zod schema', async () => {
+      await expect(
+        meController.updateMyProfile(mockRequest as never, {
+          displayName: 'x',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('should return updated user data', async () => {
+      const updatedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'ValidName',
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(usersService, 'setDisplayName')
+        .mockResolvedValue(updatedUser as never);
+
+      const result = await meController.updateMyProfile(mockRequest as never, {
+        displayName: 'ValidName',
+      });
+
+      expect(result.data).toHaveProperty('id', 1);
+      expect(result.data).toHaveProperty('username', 'testuser');
+      expect(result.data).toHaveProperty('displayName', 'ValidName');
+    });
+  });
+
+  describe('completeOnboarding (ROK-219)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should mark onboarding as completed', async () => {
+      const completedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'TestUser',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: new Date('2026-02-13T12:00:00Z'),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const completeSpy = jest
+        .spyOn(usersService, 'completeOnboarding')
+        .mockResolvedValue(completedUser as never);
+
+      const result = await meController.completeOnboarding(
+        mockRequest as never,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.onboardingCompletedAt).toBe('2026-02-13T12:00:00.000Z');
+      expect(completeSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should return success and timestamp', async () => {
+      const completedUser = {
+        id: 2,
+        username: 'user2',
+        displayName: null,
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: new Date('2026-02-13T15:30:00Z'),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      jest
+        .spyOn(usersService, 'completeOnboarding')
+        .mockResolvedValue(completedUser as never);
+
+      const result = await meController.completeOnboarding(
+        mockRequest as never,
+      );
+
+      expect(result).toHaveProperty('success', true);
+      expect(result).toHaveProperty('onboardingCompletedAt');
+      expect(typeof result.onboardingCompletedAt).toBe('string');
+    });
+  });
+
+  describe('resetOnboarding (ROK-312)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should reset onboarding and return success', async () => {
+      const resetSpy = jest
+        .spyOn(usersService, 'resetOnboarding')
+        .mockResolvedValue(undefined);
+
+      const result = await meController.resetOnboarding(mockRequest as never);
+
+      expect(result).toEqual({ success: true });
+      expect(resetSpy).toHaveBeenCalledWith(1);
+    });
+  });
+});

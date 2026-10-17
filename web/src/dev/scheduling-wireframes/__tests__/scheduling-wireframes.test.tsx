@@ -1,0 +1,148 @@
+/**
+ * ROK-1540 wireframe smoke coverage.
+ *
+ * These are dev-only DEMO_MODE routes, so the bar is deliberately low and
+ * behavioural rather than visual: each candidate layout mounts for every
+ * audited state without throwing, the DEMO_MODE gate redirects, and the two
+ * switchers actually change what is rendered. Anything finer would be
+ * asserting a wireframe's pixels, which is what the operator walk is for.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '../../../test/render-helpers';
+import { LayoutBLadder } from '../LayoutBLadder';
+import { SchedulingWireframesPage } from '../SchedulingWireframesPage';
+import { WF_STATES, pollFor, leader, isTied } from '../wireframe-states';
+
+const mockStatus = vi.fn();
+vi.mock('../../../hooks/use-system-status', () => ({
+  useSystemStatus: () => mockStatus(),
+}));
+
+beforeEach(() => {
+  mockStatus.mockReturnValue({ data: { demoMode: true }, isLoading: false });
+});
+
+const LAYOUTS = [
+  { name: 'B · slot cards / vote ladder', Cmp: LayoutBLadder, testId: 'wf-b-desktop' },
+];
+
+describe.each(LAYOUTS)('$name', ({ Cmp, testId }) => {
+  it('mounts a desktop and a mobile treatment', () => {
+    renderWithProviders(<Cmp state="open-unvoted" />);
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+    expect(screen.getByTestId('wf-desktop')).toBeInTheDocument();
+    expect(screen.getByTestId('wf-mobile')).toBeInTheDocument();
+  });
+
+  it.each(WF_STATES.map((s) => s.id))('renders the %s state', (state) => {
+    renderWithProviders(<Cmp state={state} />);
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+  });
+
+  it('opens with the shipped header strip in both treatments (operator ruling)', () => {
+    // The JourneyHero block is NOT part of the redesign; without this strip a
+    // candidate's own header reads as a proposed replacement for it.
+    renderWithProviders(<Cmp state="open-unvoted" />);
+    const strips = screen.getAllByTestId('wf-shipped-header');
+    expect(strips).toHaveLength(2);
+    expect(strips[0]).toHaveTextContent('unchanged by this redesign');
+    expect(strips[0]).toHaveTextContent('Lock this time →');
+  });
+
+  it('shows BOTH approval votes as selected, and leaves the leader alone', () => {
+    // Votes are approval votes — (slot_id, user_id) — so the `voted` state
+    // marks two slots and every layout must render two selected controls per
+    // treatment (desktop + mobile = 4), not one.
+    renderWithProviders(<Cmp state="voted" />);
+    expect(screen.getAllByRole('button', { pressed: true })).toHaveLength(4);
+    // Marking a second slot must not move the leader: Thu is still ahead.
+    expect(leader(pollFor('voted'))?.id).toBe(1);
+  });
+});
+
+describe('SchedulingWireframesPage — DEMO_MODE gate', () => {
+  it('renders nothing while system status is loading', () => {
+    mockStatus.mockReturnValue({ data: undefined, isLoading: true });
+    const { container } = renderWithProviders(<SchedulingWireframesPage />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('redirects away when DEMO_MODE is off', () => {
+    mockStatus.mockReturnValue({ data: { demoMode: false }, isLoading: false });
+    renderWithProviders(<SchedulingWireframesPage />);
+    expect(screen.queryByTestId('wf-layout-picker')).not.toBeInTheDocument();
+  });
+});
+
+describe('SchedulingWireframesPage — switchers', () => {
+  it('defaults to candidate B and swaps layout on click', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
+    expect(screen.getByTestId('wf-b-desktop')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('wf-layout-c'));
+    expect(screen.getByTestId('wf-option-a-comp')).toBeInTheDocument();
+    expect(screen.queryByTestId('wf-b-desktop')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('wf-layout-b'));
+    expect(screen.getByTestId('wf-b-desktop')).toBeInTheDocument();
+  });
+
+  it('shows ONLY the approved targets — rejected candidates were deleted (ROK-1569)', () => {
+    // The route confused operators by showing every idea ever drawn. It now
+    // carries decisions only; the rejected ones live in the spike doc.
+    renderWithProviders(<SchedulingWireframesPage />);
+    const picker = screen.getByTestId('wf-layout-picker');
+    expect(picker.querySelectorAll('button')).toHaveLength(3);
+    for (const dead of ['wf-layout-a', 'wf-layout-bs']) {
+      expect(screen.queryByTestId(dead)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText(/Approved targets only/)).toBeInTheDocument();
+  });
+
+  it('renders the ROK-1569 Option A comp in an iframe, not a React port', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
+    fireEvent.click(screen.getByTestId('wf-layout-c'));
+    const frame = screen.getByTestId('wf-option-a-comp-frame') as HTMLIFrameElement;
+    expect(frame).toHaveAttribute('title', 'ROK-1569 Option A comp');
+    expect(frame.getAttribute('srcdoc')).toContain('Option A — one day per screen');
+    // Option B was rejected: the panel must not reproduce it.
+    expect(frame.getAttribute('srcdoc')).not.toContain('phoneB');
+    expect(frame.getAttribute('srcdoc')).not.toContain('Option B');
+  });
+
+  it('changes the rendered state and its note when a state chip is clicked', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
+    expect(screen.getByTestId('wf-state-note')).toHaveTextContent(pollFor('open-unvoted').note);
+
+    fireEvent.click(screen.getByTestId('wf-state-locked'));
+    expect(screen.getByTestId('wf-state-note')).toHaveTextContent(pollFor('locked').note);
+    expect(screen.getByTestId('wf-state-locked')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByTestId('wf-status')[0]).toHaveTextContent('LOCKED IN');
+  });
+
+  it('tells the operator in words that only the body is being replaced', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
+    expect(screen.getByTestId('wf-rationale')).toHaveTextContent('replaces the body only');
+    expect(screen.getAllByTestId('wf-shipped-header')).toHaveLength(2);
+  });
+
+  it('exposes every audited state as a switchable chip', () => {
+    renderWithProviders(<SchedulingWireframesPage />);
+    for (const s of WF_STATES) {
+      expect(screen.getByTestId(`wf-state-${s.id}`)).toBeInTheDocument();
+    }
+  });
+});
+
+describe('wireframe-states — the shared tiebreak rule (F-03)', () => {
+  it('breaks a tie by the earlier slot, matching what the copy claims', () => {
+    const tied = pollFor('tie');
+    expect(isTied(tied)).toBe(true);
+    expect(leader(tied)?.id).toBe(1);
+  });
+
+  it('leaves an empty poll without a leader', () => {
+    expect(leader(pollFor('open-empty'))).toBeNull();
+  });
+});

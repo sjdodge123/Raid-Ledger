@@ -1,0 +1,505 @@
+/**
+ * Onboarding wizard smoke tests — wizard rendering, step navigation,
+ * games step content, progress indicator, Steam step (ROK-941),
+ * Connection step (ROK-1374), and error-free loading.
+ *
+ * The demo admin user has already completed onboarding, so we use
+ * ?rerun=1 to bypass the redirect and re-enter the wizard.
+ *
+ * IMPORTANT: These tests do NOT complete onboarding or modify guild
+ * configuration — they only verify rendering and navigation.
+ */
+import { test, expect } from './base';
+import { isPhoneLayout } from './helpers';
+import { apiPost, getAdminToken } from './api-helpers';
+import { resolveApiUrl } from './target';
+
+const WIZARD_URL = '/onboarding?rerun=1';
+const API_BASE = resolveApiUrl();
+
+// ROK-1070: clear admin onboardingCompletedAt + gameTimeConfirmedAt before
+// any test runs so the wizard breadcrumb structure (Game Time step etc.) is
+// in its fresh-onboarding shape. Without this, prior runs that saved
+// game-time leak through `?rerun=1` and the Game Time breadcrumb fails to
+// render in the expected structure.
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPost(token, '/admin/test/reset-onboarding', {});
+});
+
+/**
+ * Check whether the server has Steam configured via the system status API.
+ * Returns true when steamConfigured=true in the /system/status response.
+ */
+async function isSteamConfigured(): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_BASE}/system/status`);
+        if (!res.ok) return false;
+        const data = (await res.json()) as { steamConfigured?: boolean };
+        return !!data.steamConfigured;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Check whether the Steam onboarding step will actually appear in the wizard.
+ * Returns true only when Steam is configured AND the logged-in admin has NOT
+ * yet linked Steam (i.e., the step won't be auto-skipped).
+ */
+async function willSteamStepShow(page: import('@playwright/test').Page): Promise<boolean> {
+    if (!(await isSteamConfigured())) return false;
+    // Open the wizard briefly and check if the Steam heading appears
+    await page.goto(WIZARD_URL);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+    return steamHeading.isVisible({ timeout: 5_000 }).catch(() => false);
+}
+
+/**
+ * Navigate to the onboarding wizard and wait for the dialog to appear.
+ * Returns the dialog locator for chaining.
+ */
+async function openWizard(page: import('@playwright/test').Page) {
+    await page.goto(WIZARD_URL);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    return dialog;
+}
+
+/** If the Steam step is showing, skip past it to reach the Games step. */
+async function skipPastSteamIfPresent(dialog: import('@playwright/test').Locator) {
+    const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+    const isSteam = await steamHeading.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (isSteam) {
+        await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+        await expect(dialog.getByRole('heading', { name: 'What Do You Play?' })).toBeVisible({ timeout: 10_000 });
+    }
+}
+
+/**
+ * Advance the wizard until the Games step ("What Do You Play?") is visible
+ * (ROK-1147). Robust to whichever optional steps render first
+ * (Connect/Discord, Steam) — clicks Skip up to 4 times. Conditional steps
+ * also flip in/out as system status / steam status hooks settle, so after
+ * landing on Games we re-confirm the step is STABLY visible (the resolver
+ * can re-insert Steam a beat later) before installing the data barrier.
+ */
+async function advanceToGamesStep(
+    dialog: import('@playwright/test').Locator,
+): Promise<void> {
+    const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
+    if (!(await gamesHeading.isVisible({ timeout: 5_000 }).catch(() => false))) {
+        for (let i = 0; i < 4; i++) {
+            const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+            const hasSkip = await skipBtn.isVisible({ timeout: 2_000 }).catch(() => false);
+            if (!hasSkip) break;
+            await skipBtn.click();
+            if (await gamesHeading.isVisible({ timeout: 3_000 }).catch(() => false)) break;
+        }
+    }
+    await waitForGamesStepData(dialog);
+}
+
+/**
+ * Data-loaded barrier for the Games step. Two distinct races motivate this:
+ *
+ *  1. The conditional-step resolver (system-status / steam-status hooks) can
+ *     re-insert the Steam step a beat AFTER we advance to Games, snapping the
+ *     dialog back. We poll the Games heading and Skip past Steam if it
+ *     reappears, so we end on a STABLE Games step.
+ *  2. Once on Games, the heading renders before the genre chips / search
+ *     input, and the games-discover query then re-renders the subtree
+ *     (Loading spinner → grid), detaching the search input mid-`fill()`.
+ *     We wait for the "All" chip AND the "Loading games..." spinner to clear.
+ */
+async function waitForGamesStepData(
+    dialog: import('@playwright/test').Locator,
+): Promise<void> {
+    const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
+    const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+    // Ride out the conditional-step flap: keep skipping Steam until Games is
+    // the stable visible step.
+    await expect
+        .poll(
+            async () => {
+                if (await gamesHeading.isVisible().catch(() => false)) return true;
+                if (await steamHeading.isVisible().catch(() => false)) {
+                    await dialog
+                        .getByRole('button', { name: 'Skip', exact: true })
+                        .click()
+                        .catch(() => {});
+                }
+                return false;
+            },
+            { timeout: 15_000, message: 'Games step never stabilised (Steam flap)' },
+        )
+        .toBe(true);
+    // Now wait for the step's interactive content to settle.
+    await expect(
+        dialog.getByRole('button', { name: 'All', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText('Loading games...')).not.toBeVisible({
+        timeout: 10_000,
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Wizard rendering
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard', () => {
+    test('wizard renders with dialog and step counter', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Step counter should show "Step 1 of N"
+        await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
+
+        // Skip All button visible on first (non-final) step
+        await expect(dialog.getByRole('button', { name: 'Skip All' })).toBeVisible();
+
+        // Next button visible on first step
+        await expect(dialog.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
+
+        // Back button should NOT be visible on first step
+        await expect(dialog.getByRole('button', { name: 'Back' })).not.toBeVisible();
+    });
+
+    test('first step is Steam (when configured) or Games (when not)', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // ROK-1147: the wizard's first step depends on what's configured
+        // and what the admin has linked. Possibilities (any can be first):
+        //   Connect (Discord configured, admin not linked)
+        //   Steam   (Steam configured, admin not linked)
+        //   Games   (default)
+        // Conditional step flags also flip in/out as system-status and
+        // steam-status queries settle, so we accept any of the three
+        // headings as a valid "first step".
+        const connectHeading = dialog.getByRole('heading', { name: 'Connect Your Account' });
+        const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+        const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
+
+        await expect
+            .poll(
+                async () =>
+                    (await connectHeading.isVisible().catch(() => false)) ||
+                    (await steamHeading.isVisible().catch(() => false)) ||
+                    (await gamesHeading.isVisible().catch(() => false)),
+                {
+                    timeout: 15_000,
+                    message: 'No first-step heading rendered',
+                },
+            )
+            .toBe(true);
+    });
+
+    test('wizard loads without error boundary', async ({ page }) => {
+        const errors: string[] = [];
+        page.on('console', (msg) => {
+            if (msg.type() === 'error') errors.push(msg.text());
+        });
+
+        await openWizard(page);
+
+        // No React error boundary text
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 5_000 });
+
+        // Filter benign errors (network, favicon, CORS, third-party scripts)
+        const critical = errors.filter(
+            (e) =>
+                !e.includes('net::') &&
+                !e.includes('favicon') &&
+                !e.includes('404') &&
+                !e.includes('429') &&
+                !e.includes('CORS') &&
+                !e.includes('ERR_CONNECTION_REFUSED') &&
+                !e.includes('Failed to load resource') &&
+                !e.includes('responsive row') &&
+                !e.includes('zamimg'),
+        );
+        expect(critical).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Step navigation
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard step navigation', () => {
+    test('Next button advances to step 2 and Back returns to step 1', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Verify we start on step 1
+        await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
+
+        // Click Next to advance
+        await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+
+        // Should now show step 2
+        await expect(dialog.getByText(/Step 2 of \d+/)).toBeVisible({ timeout: 5_000 });
+
+        // Back button should now be visible
+        const backBtn = dialog.getByRole('button', { name: 'Back' });
+        await expect(backBtn).toBeVisible();
+
+        // Click Back to return to step 1
+        await backBtn.click();
+        await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('Skip button advances to next step', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Skip button should be visible on non-final steps (use exact to avoid matching "Skip All")
+        const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+        await expect(skipBtn).toBeVisible();
+
+        // Click Skip to advance
+        await skipBtn.click();
+        await expect(dialog.getByText(/Step 2 of \d+/)).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('progress breadcrumbs show current step', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // The "Games" label should always be visible in breadcrumbs
+        await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
+
+        // ROK-1147: handle Connect/Steam optional steps before Games.
+        await advanceToGamesStep(dialog);
+
+        // Now on Games step — advance to verify breadcrumbs update
+        await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+        await expect(dialog.getByText('Game Time')).toBeVisible({ timeout: 5_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Games step content
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard games step', () => {
+    test('genre filter chips are visible', async ({ page }) => {
+        const dialog = await openWizard(page);
+        await advanceToGamesStep(dialog);
+
+        // Genre chips: All is always present, plus specific genres
+        await expect(dialog.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'RPG', exact: true })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'MMORPG', exact: true })).toBeVisible();
+    });
+
+    test('game search input accepts text', async ({ page }) => {
+        const dialog = await openWizard(page);
+        await advanceToGamesStep(dialog);
+
+        const searchInput = dialog.getByPlaceholder('Search for a game...');
+        await expect(searchInput).toBeVisible({ timeout: 10_000 });
+
+        // Type into the search input
+        await searchInput.fill('World');
+        await expect(searchInput).toHaveValue('World');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Steam step (ROK-941)
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard Steam step (ROK-941)', () => {
+    test('Steam step appears when steamConfigured=true and user has no Steam linked', async ({ page }) => {
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
+
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+        await expect(
+            dialog.getByRole('heading', { name: 'Connect Your Steam Account' }),
+        ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('Steam step shows value prop text and Connect Steam button', async ({ page }) => {
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
+
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+        // Assert the specific value-prop copy rather than /steam/i, which
+        // matches 4 nodes (heading, value prop, button, footer) and trips
+        // Playwright strict mode.
+        await expect(
+            dialog.getByText(/see which games your community owns/i),
+        ).toBeVisible();
+        await expect(
+            dialog.getByRole('button', { name: /Connect Steam/i }),
+        ).toBeVisible();
+    });
+
+    // ROK-1630: the button POSTs /auth/steam/link/start (Bearer header, returnTo in
+    // the JSON body), then navigates to the single-use `?nonce=` hop — the session
+    // JWT never rides in a URL. The hop itself is fulfilled with a 204 so the page
+    // stays put instead of following the 302 out to steamcommunity.com; the
+    // nonce → provider redirect is covered by link-start.integration.spec.ts.
+    test('Steam step Connect Steam button starts a nonce link with returnTo in the POST body', async ({ page }) => {
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
+
+        const isHop = (url: URL) => url.pathname.endsWith('/auth/steam/link') && url.search !== '';
+        await page.route(isHop, (route) => route.fulfill({ status: 204 }));
+        const startRequest = page.waitForRequest(
+            (req) => req.url().includes('/auth/steam/link/start') && req.method() === 'POST',
+        );
+        const hopRequest = page.waitForRequest((req) => isHop(new URL(req.url())));
+
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+        await dialog.getByRole('button', { name: /Connect Steam/i }).click();
+
+        const start = await startRequest;
+        expect(start.postDataJSON(), 'returnTo rides in the start POST body').toEqual({ returnTo: '/onboarding' });
+        expect(await start.headerValue('authorization'), 'start authenticates by Bearer header').toMatch(/^Bearer \S+/);
+        expect(start.url(), 'the start URL carries no token').not.toContain('token=');
+
+        const hop = new URL((await hopRequest).url());
+        expect(hop.searchParams.get('nonce'), 'the hop carries a nonce').toBeTruthy();
+        expect(hop.searchParams.has('token'), 'the hop never carries the session token').toBe(false);
+        expect(hop.search, 'returnTo is bound inside the nonce, not the URL').not.toContain('returnTo');
+    });
+
+    test('Skip button on Steam step advances to Games step', async ({ page }) => {
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
+
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+        const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+        await expect(skipBtn).toBeVisible();
+        await skipBtn.click();
+
+        await expect(
+            dialog.getByRole('heading', { name: 'What Do You Play?' }),
+        ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('Steam step appears before Games in breadcrumb order', async ({ page }) => {
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
+
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+        // exact:true so the "Steam" breadcrumb step button doesn't also match
+        // the "Connect Steam" action button, which trips strict mode.
+        await expect(dialog.getByRole('button', { name: 'Steam', exact: true })).toBeVisible({ timeout: 5_000 });
+        await expect(dialog.getByRole('button', { name: 'Games', exact: true })).toBeVisible({ timeout: 5_000 });
+        await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Game Time step — compact grid (ROK-1011)
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard game-time step (ROK-1011)', () => {
+    test('game-time step renders compact GameTimeGrid on all viewports', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Navigate directly to Game Time via breadcrumb (skips dynamic character steps)
+        const gameTimeBreadcrumb = dialog.getByRole('button', { name: 'Game Time' });
+        await expect(gameTimeBreadcrumb).toBeVisible({ timeout: 10_000 });
+        await gameTimeBreadcrumb.click();
+        await expect(dialog.getByRole('heading', { name: 'When Do You Play?' })).toBeVisible({ timeout: 10_000 });
+
+        // ROK-1011: Should render GameTimeGrid, not the old accordion editor.
+        // Timed like the assertions around it: the step renders a spinner until the
+        // game-time query resolves, so an un-timed check raced the fetch and this
+        // went flaky on desktop. Same gate exists on main -- not a ROK-1426 change.
+        await expect(dialog.getByTestId('game-time-grid')).toBeVisible({ timeout: 10_000 });
+        await expect(dialog.getByTestId('game-time-mobile-editor')).not.toBeVisible();
+
+        // Instruction text tracks the interaction: ROK-1426 replaced drag-to-paint
+        // with blocks, so it must describe blocks and no longer say "paint".
+        await expect(dialog.getByText(/add blocks for the hours you're free/i)).toBeVisible();
+        await expect(dialog.getByText(/paint your weekly availability/i)).toHaveCount(0);
+        await expect(dialog.getByText(/tap days to expand/i)).not.toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Connection step (ROK-1374)
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard connection step (ROK-1374)', () => {
+    test('connection step asks for a download speed and offers both ways to give one', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Navigate straight to Connection via breadcrumb, the way the game-time
+        // test does — dynamic character steps sit before it.
+        const crumb = dialog.getByRole('button', { name: /Connection/ });
+        await expect(crumb).toBeVisible({ timeout: 10_000 });
+        await crumb.click();
+
+        await expect(
+            dialog.getByRole('heading', { name: 'How fast is your connection?' }),
+        ).toBeVisible({ timeout: 10_000 });
+        await expect(
+            dialog.getByText(/how long each game would take you to download/i),
+        ).toBeVisible();
+
+        // The admin may already carry a figure from another spec, in which case
+        // the step shows it behind an Update affordance rather than the pitch.
+        const runTest = dialog.getByRole('button', { name: 'Run test' });
+        if (!(await runTest.isVisible({ timeout: 3_000 }).catch(() => false))) {
+            await dialog
+                .getByRole('button', { name: 'Update your connection speed' })
+                .click();
+        }
+
+        // Both paths are buttons a human presses: nothing here measures on its
+        // own (operator ruling 2026-09-05). The test never CLICKS Run test —
+        // that would transfer ~100 MB from M-Lab on every CI shard.
+        await expect(runTest).toBeVisible({ timeout: 5_000 });
+        await expect(
+            dialog.getByRole('button', { name: 'Enter manually' }),
+        ).toBeVisible();
+        await expect(
+            dialog.getByText(/usually transfers less than 100 MB of data/i),
+        ).toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Final step
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard final step', () => {
+    test('final step shows Complete button instead of Next', async ({ page }) => {
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only — breadcrumb tap navigation may differ on mobile');
+
+        const dialog = await openWizard(page);
+
+        // Navigate to the final step by clicking Next/Skip until Complete appears
+        // AND Skip All is hidden (both conditions confirm we're truly on the last step).
+        // Step count is dynamic — character steps load async, so Complete may appear
+        // momentarily on a non-final step before a new step is appended.
+        const maxClicks = 10; // safety limit
+        for (let i = 0; i < maxClicks; i++) {
+            const complete = dialog.getByRole('button', { name: 'Complete' });
+            const skipAll = dialog.getByRole('button', { name: 'Skip All' });
+            const isComplete = await complete.isVisible({ timeout: 1_000 }).catch(() => false);
+            const isSkipAllGone = !(await skipAll.isVisible({ timeout: 500 }).catch(() => false));
+            if (isComplete && isSkipAllGone) break;
+            const nextBtn = dialog.getByRole('button', { name: 'Next', exact: true });
+            const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+            const hasNext = await nextBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+            if (hasNext) {
+                await nextBtn.click();
+            } else {
+                const hasSkip = await skipBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+                if (!hasSkip) break;
+                await skipBtn.click();
+            }
+        }
+
+        // On final step: Complete button should be visible, Next and Skip All should not
+        await expect(dialog.getByRole('button', { name: 'Complete' })).toBeVisible({ timeout: 5_000 });
+        await expect(dialog.getByRole('button', { name: 'Next', exact: true })).not.toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Skip All' })).not.toBeVisible();
+    });
+});

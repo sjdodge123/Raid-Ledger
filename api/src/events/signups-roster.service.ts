@@ -1,0 +1,331 @@
+/**
+ * Sub-service for cancel, self-unassign, admin remove, and roster update operations.
+ * Extracted from SignupsService for file size compliance (ROK-719).
+ */
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { NotificationService } from '../notifications/notification.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
+import { BenchPromotionService } from './bench-promotion.service';
+import { SignupsAllocationService } from './signups-allocation.service';
+import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
+import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
+import type {
+  UpdateRosterDto,
+  RosterWithAssignments,
+} from '@raid-ledger/contract';
+import * as cancelH from './signups-cancel.helpers';
+import * as notifH from './signups-notification.helpers';
+import * as rosterOpsH from './signups-roster-ops.helpers';
+import * as voiceH from '../notifications/voice-access-lost.helpers';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
+
+@Injectable()
+export class SignupsRosterService {
+  private readonly logger = new Logger(SignupsRosterService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
+    private notificationService: NotificationService,
+    private rosterNotificationBuffer: RosterNotificationBufferService,
+    private benchPromotionService: BenchPromotionService,
+    private allocationService: SignupsAllocationService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly activityLog: ActivityLogService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  async cancel(eventId: number, userId: number): Promise<void> {
+    const signup = await cancelH.findActiveSignupForCancel(
+      this.db,
+      eventId,
+      userId,
+    );
+    const cancelInfo = await cancelH.resolveCancelStatus(this.db, eventId);
+    const assignment = await cancelH.findAssignmentForSignup(
+      this.db,
+      signup.id,
+    );
+    const notifyData = assignment
+      ? await cancelH.gatherCancelNotifyData(this.db, eventId, userId)
+      : null;
+    await cancelH.executeCancelSignup(
+      this.db,
+      signup.id,
+      assignment ?? undefined,
+      cancelInfo.cancelStatus,
+      cancelInfo.isGracefulDecline,
+      cancelInfo.now,
+    );
+    this.logger.log(
+      `User ${userId} canceled signup for event ${eventId} (${cancelInfo.cancelStatus})`,
+    );
+    // ROK-1196: emitAsync awaits @OnEvent handlers so the embed-sync enqueue
+    // completes before the controller returns. With plain emit(), the
+    // /admin/test/await-processing call could observe an empty queue and
+    // return before DiscordSyncListener has even called embedSyncQueue.enqueue.
+    await this.eventEmitter.emitAsync(SIGNUP_EVENTS.DELETED, {
+      eventId,
+      userId,
+      signupId: signup.id,
+      action: 'signup_cancelled',
+    } satisfies SignupEventPayload);
+    if (notifyData && assignment) {
+      this.bufferLeave(eventId, userId, assignment, notifyData);
+      await this.triggerBackfill(eventId, assignment);
+    }
+  }
+
+  async selfUnassign(
+    eventId: number,
+    userId: number,
+    getRosterWithAssignments: (
+      eventId: number,
+    ) => Promise<RosterWithAssignments>,
+  ): Promise<RosterWithAssignments> {
+    const { signup, assignment } = await rosterOpsH.findUserAssignment(
+      this.db,
+      eventId,
+      userId,
+    );
+    const notifyData = await cancelH.gatherCancelNotifyData(
+      this.db,
+      eventId,
+      userId,
+    );
+    await this.db
+      .delete(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.id, assignment.id));
+    this.logger.log(
+      `User ${userId} self-unassigned from ${assignment.role} slot for event ${eventId}`,
+    );
+    this.emit(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId,
+      signupId: signup.id,
+      action: 'self_unassigned',
+    });
+    this.bufferLeave(eventId, userId, assignment, notifyData);
+    if (assignment.role && assignment.role !== 'bench')
+      await this.scheduleBackfill(
+        eventId,
+        assignment.role,
+        assignment.position,
+      );
+    return getRosterWithAssignments(eventId);
+  }
+
+  async adminRemoveSignup(
+    eventId: number,
+    signupId: number,
+    requesterId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const { event, signup, assignment } = await rosterOpsH.adminRemoveCore(
+      this.db,
+      eventId,
+      signupId,
+      requesterId,
+      isAdmin,
+      this.logger,
+    );
+    this.emit(SIGNUP_EVENTS.DELETED, {
+      eventId,
+      userId: signup.userId,
+      signupId: signup.id,
+      action: 'admin_removed',
+    });
+    if (signup.userId) {
+      // ROK-1769 one-DM rule: lost private voice rides on the removal DM.
+      const lost = voiceH.hadVoiceAccess(signup.status, assignment?.role)
+        ? await voiceH.voiceLossUserIds(this.voiceGate, eventId, [
+            signup.userId,
+          ])
+        : new Set<number>();
+      await rosterOpsH.notifyRemovedUser(
+        this.notificationService,
+        signup.userId,
+        eventId,
+        event.title,
+        (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
+        lost.has(signup.userId),
+      );
+    }
+    if (assignment?.role && assignment.role !== 'bench') {
+      await this.scheduleBackfill(
+        eventId,
+        assignment.role,
+        assignment.position,
+      );
+      this.allocationService
+        .reslotTentativePlayer(eventId, assignment.role, assignment.position)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `ROK-459: Failed tentative reslot (admin remove): ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
+    }
+  }
+
+  async updateRoster(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateRosterDto,
+    getRosterWithAssignments: (
+      eventId: number,
+    ) => Promise<RosterWithAssignments>,
+  ): Promise<RosterWithAssignments> {
+    const { event, signupByUserId, oldRoleBySignupId, reconfirmedUserIds } =
+      await this.executeRosterUpdate(eventId, userId, isAdmin, dto);
+    this.emit(SIGNUP_EVENTS.UPDATED, { eventId, action: 'roster_updated' });
+    // Fire-and-forget (as before ROK-1769): the voice gate never rejects.
+    void voiceH
+      .benchedVoiceLossUserIds(
+        this.voiceGate,
+        eventId,
+        dto.assignments,
+        signupByUserId,
+        oldRoleBySignupId,
+      )
+      .then((voiceLost) =>
+        rosterOpsH.fireRosterNotifications(
+          this.notificationService,
+          eventId,
+          event.title,
+          dto.assignments,
+          signupByUserId,
+          oldRoleBySignupId,
+          (eId) =>
+            notifH.fetchNotificationContext(this.notificationService, eId),
+          this.logger,
+          voiceLost,
+        ),
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `ROK-1769: Failed roster notifications for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+    return getRosterWithAssignments(eventId).then(async (roster) => {
+      // ROK-1269: emit signup_reconfirmed per attendee whose pending status
+      // got flipped to confirmed by this roster update. Done after tx commit.
+      await this.logReconfirms(eventId, reconfirmedUserIds);
+      return roster;
+    });
+  }
+
+  /** ROK-1769: db + the ephemeral-voice switches for the voice-line gate. */
+  private get voiceGate(): voiceH.VoiceGateDeps {
+    return { db: this.db, settings: this.settingsService };
+  }
+
+  /** Run roster replacement inside a transaction for atomicity (ROK-824). */
+  private async executeRosterUpdate(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateRosterDto,
+  ) {
+    const event = await cancelH.verifyAdminPermission(
+      this.db,
+      eventId,
+      userId,
+      isAdmin,
+      'update roster',
+    );
+    return this.db.transaction(async (tx) => {
+      const signupByUserId = await notifH.validateRosterAssignments(
+        tx,
+        eventId,
+        dto.assignments,
+      );
+      const oldRoleBySignupId = await notifH.captureOldAssignments(tx, eventId);
+      const reconfirmedUserIds = await notifH.replaceRosterAssignments(
+        tx,
+        eventId,
+        dto.assignments,
+        signupByUserId,
+        this.benchPromotionService,
+      );
+      this.logger.log(
+        `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
+      );
+      return { event, signupByUserId, oldRoleBySignupId, reconfirmedUserIds };
+    });
+  }
+
+  private async triggerBackfill(
+    eventId: number,
+    assignment: typeof schema.rosterAssignments.$inferSelect,
+  ) {
+    if (!assignment.role || assignment.role === 'bench') return;
+    await this.scheduleBackfill(eventId, assignment.role, assignment.position);
+    this.allocationService
+      .reslotTentativePlayer(eventId, assignment.role, assignment.position)
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `ROK-459: Failed tentative reslot: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+  }
+
+  private bufferLeave(
+    eventId: number,
+    userId: number,
+    assignment: typeof schema.rosterAssignments.$inferSelect,
+    notifyData: {
+      creatorId: number;
+      eventTitle: string;
+      displayName: string;
+    },
+  ) {
+    this.rosterNotificationBuffer.bufferLeave({
+      organizerId: notifyData.creatorId,
+      eventId,
+      eventTitle: notifyData.eventTitle,
+      userId,
+      displayName: notifyData.displayName,
+      vacatedRole: assignment.role ?? 'assigned',
+    });
+  }
+
+  private async scheduleBackfill(
+    eventId: number,
+    role: string,
+    position: number,
+  ) {
+    if (await this.benchPromotionService.isEligible(eventId))
+      await this.benchPromotionService.schedulePromotion(
+        eventId,
+        role,
+        position,
+      );
+  }
+
+  private emit(eventName: string, payload: SignupEventPayload): void {
+    this.eventEmitter.emit(eventName, payload);
+  }
+
+  /**
+   * ROK-1269: log a signup_reconfirmed activity entry per attendee whose
+   * pending status flipped to confirmed via this roster update. Actor is
+   * the attendee themselves; metadata.reason='roster-update' discriminates
+   * from the discord-ack path.
+   */
+  private async logReconfirms(
+    eventId: number,
+    userIds: number[],
+  ): Promise<void> {
+    for (const uid of userIds) {
+      await this.activityLog.log('event', eventId, 'signup_reconfirmed', uid, {
+        reason: 'roster-update',
+      });
+    }
+  }
+}

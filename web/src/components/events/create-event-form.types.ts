@@ -1,0 +1,78 @@
+import type { IgdbGameDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
+
+export interface FormState {
+    title: string;
+    description: string;
+    game: IgdbGameDto | null;
+    eventTypeId: number | null;
+    startDate: string;
+    startTime: string;
+    durationMinutes: number;
+    customDuration: boolean;
+    slotType: 'mmo' | 'generic';
+    slotTank: number;
+    slotHealer: number;
+    slotDps: number;
+    slotFlex: number;
+    slotPlayer: number;
+    maxAttendees: string;
+    autoUnbench: boolean;
+    recurrenceFrequency: '' | 'weekly' | 'biweekly' | 'monthly';
+    recurrenceUntil: string;
+    reminder15min: boolean;
+    reminder1hour: boolean;
+    reminder24hour: boolean;
+    /** ROK-1352: per-event ephemeral-voice override. null = inherit series/global. */
+    ephemeralVoiceEnabled: boolean | null;
+    /** ROK-1386: lock the ephemeral channel to rostered members only. null = open. */
+    privateVoice: boolean | null;
+    selectedInstances: Record<string, unknown>[];
+    /** ROK-1787: guild the event shows on (WoW guild page); null = none. Set via the `event-create:guild-field` slot. */
+    guildId: number | null;
+    titleIsAutoSuggested: boolean;
+    descriptionIsAutoSuggested: boolean;
+}
+
+export interface FormErrors {
+    title?: string;
+    startDate?: string;
+    startTime?: string;
+    duration?: string;
+    maxAttendees?: string;
+    recurrenceUntil?: string;
+}
+
+export interface EventFormProps {
+    event?: EventResponseDto;
+    /** Series scope for bulk edit operations (ROK-429). */
+    seriesScope?: SeriesScope | undefined;
+    /** Pre-select a game when creating from lineup decided view (ROK-989). */
+    initialGame?: { id: number; name: string; slug: string; coverUrl: string | null; playerCount?: { min: number; max: number } | null | undefined } | null | undefined;
+    /** Pre-fill start time from scheduling poll slot (ROK-977). ISO datetime string. */
+    initialStartTime?: string | null;
+    /** Scheduling poll match to complete after event creation (ROK-977). */
+    schedulingMatchId?: number | null;
+    /** ROK-1371: ended event this create is a follow-up to. Threaded into the
+     *  CreateEvent DTO (create mode only) so the server fans out sign-up DMs. */
+    followupForEventId?: number | null;
+    /** Event to prefill every configured field from (create mode only). Both
+     *  follow-up paths pass the ended event here; purely client-side, never
+     *  submitted. Distinct from `followupForEventId`, which is the server's
+     *  fan-out signal and fires on the event path only. */
+    copyFromEvent?: EventResponseDto | null;
+}
+
+export const RECURRENCE_OPTIONS = [
+    { value: '', label: 'Does not repeat' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'biweekly', label: 'Every 2 weeks' },
+    { value: 'monthly', label: 'Monthly' },
+] as const;
+
+export const ERROR_FIELD_MAP: Record<string, string> = {
+    title: 'title',
+    startDate: 'startDate',
+    startTime: 'startTime',
+    maxAttendees: 'maxAttendees',
+    recurrenceUntil: 'recurrenceUntil',
+};

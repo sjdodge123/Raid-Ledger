@@ -1,0 +1,55 @@
+import { z } from 'zod';
+
+/** Describes a login method surfaced to the frontend (ROK-267) */
+export const LoginMethodSchema = z.object({
+    key: z.string(),
+    label: z.string(),
+    icon: z.string().optional(),
+    loginPath: z.string(),
+    /** Hex color for the provider button (e.g. '#5865F2') */
+    color: z.string().optional(),
+});
+
+export type LoginMethodDto = z.infer<typeof LoginMethodSchema>;
+
+/**
+ * System status response (ROK-175 AC-4)
+ * Used for first-run detection and conditional UI rendering
+ */
+export const SystemStatusSchema = z.object({
+    /** True when no users exist in database (fresh install) */
+    isFirstRun: z.boolean(),
+    /** True when Discord OAuth is configured */
+    discordConfigured: z.boolean(),
+    /** True when Blizzard API credentials are configured (ROK-234) */
+    blizzardConfigured: z.boolean(),
+    /** True when Steam Web API key is configured (ROK-745) */
+    steamConfigured: z.boolean(),
+    /** True when running in demo/test mode */
+    demoMode: z.boolean().optional(),
+    /** Active plugin slugs for frontend slot rendering (ROK-238) */
+    activePlugins: z.array(z.string()).optional().default([]),
+    /** Community display name (ROK-271) */
+    communityName: z.string().optional(),
+    /** Community logo URL path (ROK-271) */
+    communityLogoUrl: z.string().optional(),
+    /** ROK-1778: optional contact email shown on the public /privacy page.
+     *  Null/absent = members are told to ask an admin in Discord. */
+    privacyContactEmail: z.string().email().nullable().optional(),
+    /** True when admin onboarding wizard has been completed (ROK-204) */
+    onboardingCompleted: z.boolean().optional(),
+    /** Available authentication providers (ROK-267) */
+    authProviders: z.array(LoginMethodSchema).optional().default([]),
+    /** ROK-1352: ephemeral-voice master toggle — lets the (non-admin) event-form
+     *  toggle know whether the feature is available without hitting admin-only APIs. */
+    ephemeralVoiceEnabled: z.boolean().optional(),
+    /** ROK-1352: force-ephemeral — every event gets a channel; the per-event
+     *  toggle renders as on + disabled. */
+    ephemeralVoiceForced: z.boolean().optional(),
+    /** ROK-1779/ROK-1838: true when this instance's api reports errors — on by
+     *  default in production; ENABLE_TELEMETRY=false opts out, DISABLE_TELEMETRY
+     *  wins. Absent = treat as off. */
+    telemetryEnabled: z.boolean().optional(),
+});
+
+export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;

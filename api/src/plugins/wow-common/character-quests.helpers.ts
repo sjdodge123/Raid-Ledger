@@ -1,0 +1,250 @@
+/**
+ * ROK-1745: pure builders for the character-page quest section.
+ * Intersects the addon snapshot's completed ids with the known dungeon-quest
+ * table, groups by instance and marks chain steps done. The raw completed-id
+ * list never reaches the output — only counts and the known overlap.
+ */
+import {
+  CharacterQuestsDtoSchema,
+  type CharacterCompletedQuest,
+  type CharacterQuestInstanceGroup,
+  type CharacterQuestLogEntry,
+  type CharacterQuestsDto,
+} from '@raid-ledger/contract';
+import { walkChainInMemory } from './dungeon-quests.helpers';
+import { truncationCutoff } from './quest-progress-addon.helpers';
+import type { DungeonQuestDto } from './dungeon-quests.types';
+
+/** Quest log entry as the addon exports it (fields optional). */
+interface ForeverQuestLogInput {
+  questId: number;
+  title?: string | undefined;
+  objectives?:
+    | Array<{
+        text: string;
+        done: boolean;
+        have?: number | undefined;
+        need?: number | undefined;
+      }>
+    | undefined;
+  /** Not sent by LedgerLink today; only a fallback when the known table has no id. */
+  dungeonInstanceId?: number | undefined;
+}
+
+/** Snapshot slice this builder reads; the 1742 snapshot schema maps onto it. */
+export interface ForeverQuestSnapshotInput {
+  capturedAt: string;
+  quests?: {
+    completed: number[];
+    completedTruncated?: boolean | undefined;
+    inProgress: ForeverQuestLogInput[];
+  };
+}
+
+/**
+ * Map one addon quest-log entry onto the DTO shape with null/[] defaults. The
+ * instance tag comes from the known-quest table (the addon log carries none).
+ */
+function toLogEntry(
+  q: ForeverQuestLogInput,
+  lookup: Map<number, DungeonQuestDto>,
+  names: (id: number) => string,
+): CharacterQuestLogEntry {
+  const instanceId =
+    lookup.get(q.questId)?.dungeonInstanceId ?? q.dungeonInstanceId ?? null;
+  return {
+    questId: q.questId,
+    title: q.title ?? null,
+    objectives: (q.objectives ?? []).map((o) => ({
+      text: o.text,
+      done: o.done,
+      have: o.have ?? null,
+      need: o.need ?? null,
+    })),
+    dungeonInstanceId: instanceId,
+    instanceName: instanceId === null ? null : names(instanceId),
+  };
+}
+
+/** Compare by level (nulls last), then name. */
+function byLevelThenName(
+  a: { level: number | null; name: string },
+  b: { level: number | null; name: string },
+): number {
+  const la = a.level ?? Number.MAX_SAFE_INTEGER;
+  const lb = b.level ?? Number.MAX_SAFE_INTEGER;
+  return la - lb || a.name.localeCompare(b.name);
+}
+
+/** Build one completed quest with its chain steps marked done (D7). */
+function toCompletedQuest(
+  quest: DungeonQuestDto,
+  lookup: Map<number, DungeonQuestDto>,
+  completed: Set<number>,
+): CharacterCompletedQuest {
+  const chain = walkChainInMemory(quest, lookup).map((step) => ({
+    questId: step.questId,
+    name: step.name,
+    done: step.questId === quest.questId || completed.has(step.questId),
+  }));
+  return {
+    questId: quest.questId,
+    name: quest.name,
+    questLevel: quest.questLevel,
+    chain,
+  };
+}
+
+/**
+ * Bucket known quests by non-null dungeon instance id. Null-instance rows are
+ * chain/pre-req steps: they stay in the chain lookup only, never in a group or
+ * the known counts.
+ */
+function groupByInstance(
+  known: DungeonQuestDto[],
+): Map<number, DungeonQuestDto[]> {
+  const groups = new Map<number, DungeonQuestDto[]>();
+  for (const q of known) {
+    if (q.dungeonInstanceId === null) continue;
+    const list = groups.get(q.dungeonInstanceId) ?? [];
+    list.push(q);
+    groups.set(q.dungeonInstanceId, list);
+  }
+  return groups;
+}
+
+/** Lowest quest level among a group's completed quests (null when none). */
+function minLevel(group: CharacterQuestInstanceGroup): number | null {
+  const levels = group.completed
+    .map((q) => q.questLevel)
+    .filter((l): l is number => l !== null);
+  return levels.length ? Math.min(...levels) : null;
+}
+
+/** What a group builder reads: chain lookup, completed ids, truncation test. */
+interface GroupCtx {
+  lookup: Map<number, DungeonQuestDto>;
+  completed: Set<number>;
+  /** True for a quest a truncated snapshot cannot speak to (ROK-1758). */
+  unknown: (id: number) => boolean;
+}
+
+/**
+ * Build one instance group, or `null` when none of its quests is completed.
+ * `knownCount` leaves out truncation-unknown quests, like `knownTotal`.
+ */
+function buildGroup(
+  id: number,
+  rows: DungeonQuestDto[],
+  ctx: GroupCtx,
+  names: (id: number) => string,
+): CharacterQuestInstanceGroup | null {
+  const done = rows
+    .filter((q) => ctx.completed.has(q.questId))
+    .sort((a, b) =>
+      byLevelThenName(
+        { level: a.questLevel, name: a.name },
+        { level: b.questLevel, name: b.name },
+      ),
+    )
+    .map((q) => toCompletedQuest(q, ctx.lookup, ctx.completed));
+  if (done.length === 0) return null;
+  return {
+    dungeonInstanceId: id,
+    instanceName: names(id),
+    completed: done,
+    knownCount: rows.filter((q) => !ctx.unknown(q.questId)).length,
+  };
+}
+
+/** Build instance groups holding ≥1 completed quest (R-4), sorted per D8. */
+function buildGroups(
+  known: DungeonQuestDto[],
+  base: Omit<GroupCtx, 'lookup'>,
+  names: (id: number) => string,
+): CharacterQuestInstanceGroup[] {
+  const ctx = { ...base, lookup: new Map(known.map((q) => [q.questId, q])) };
+  const groups: CharacterQuestInstanceGroup[] = [];
+  for (const [id, rows] of groupByInstance(known)) {
+    const group = buildGroup(id, rows, ctx, names);
+    if (group) groups.push(group);
+  }
+  return groups.sort((a, b) =>
+    byLevelThenName(
+      { level: minLevel(a), name: a.instanceName },
+      { level: minLevel(b), name: b.instanceName },
+    ),
+  );
+}
+
+/** True when the quest block is present and at least one list is non-empty. */
+function hasQuestData(
+  quests: ForeverQuestSnapshotInput['quests'],
+): quests is NonNullable<ForeverQuestSnapshotInput['quests']> {
+  return (
+    !!quests && (quests.completed.length > 0 || quests.inProgress.length > 0)
+  );
+}
+
+/**
+ * Quests the snapshot cannot speak to. When the completed list is truncated
+ * (the addon keeps the lowest ids), a quest above the highest sent id that is
+ * not in the log is unknown, so it is left out of the known counts rather
+ * than counted as not completed (ROK-1758).
+ */
+function unknownTest(
+  quests: NonNullable<ForeverQuestSnapshotInput['quests']>,
+): (id: number) => boolean {
+  const cutoff = truncationCutoff(quests);
+  const inLog = new Set(quests.inProgress.map((q) => q.questId));
+  return (id) => cutoff !== undefined && id > cutoff && !inLog.has(id);
+}
+
+/** Completed known quests across all instance groups. */
+function countCompleted(groups: CharacterQuestInstanceGroup[]): number {
+  return groups.reduce((n, g) => n + g.completed.length, 0);
+}
+
+/** Known in-instance quests, less the ones the snapshot cannot speak to. */
+function countKnown(
+  knownQuests: DungeonQuestDto[],
+  unknown: (id: number) => boolean,
+): number {
+  return knownQuests.filter(
+    (q) => q.dungeonInstanceId !== null && !unknown(q.questId),
+  ).length;
+}
+
+/**
+ * Build the character quest section DTO, or `null` when the snapshot carries
+ * no quest data (absent block, or both lists empty — R-6).
+ */
+export function buildCharacterQuests(
+  snapshot: ForeverQuestSnapshotInput,
+  knownQuests: DungeonQuestDto[],
+  names: (id: number) => string,
+): CharacterQuestsDto | null {
+  const quests = snapshot.quests;
+  if (!hasQuestData(quests)) return null;
+  const completed = new Set(quests.completed);
+  const unknown = unknownTest(quests);
+  const completedKnown = buildGroups(
+    knownQuests,
+    { completed, unknown },
+    names,
+  );
+  const lookup = new Map(knownQuests.map((q) => [q.questId, q]));
+  const inProgress = quests.inProgress.map((q) => toLogEntry(q, lookup, names));
+  return CharacterQuestsDtoSchema.parse({
+    source: 'addon',
+    syncedAt: snapshot.capturedAt,
+    inProgress,
+    completedKnown,
+    counts: {
+      completedKnown: countCompleted(completedKnown),
+      knownTotal: countKnown(knownQuests, unknown),
+      completedTotal: quests.completed.length,
+      inProgress: inProgress.length,
+    },
+  });
+}

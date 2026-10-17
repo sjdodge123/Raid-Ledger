@@ -1,0 +1,223 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  UseGuards,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { AdminGuard } from '../auth/admin.guard';
+import {
+  PluginActiveGuard,
+  RequirePlugin,
+} from '../plugins/plugin-host/plugin-active.guard';
+import { LlmProviderRegistry } from './llm-provider-registry';
+import { SettingsService } from '../settings/settings.service';
+import { OllamaDockerService } from './providers/ollama-docker.service';
+import { OllamaNativeService } from './providers/ollama-native.service';
+import { OllamaSetupService } from './providers/ollama-setup.service';
+import { AiRequestLogService } from './ai-request-log.service';
+import { AI_SETTING_KEYS } from './llm.constants';
+import { AiProviderConfigSchema } from '@raid-ledger/contract';
+import type {
+  AiProviderInfoDto,
+  AiOllamaSetupDto,
+  AiProviderConfigDto,
+} from '@raid-ledger/contract';
+import { getApiKeySettingKey, buildProviderInfo } from './ai-providers.helpers';
+import { resolveAvailability } from './ai-providers-availability.helper';
+import type { SettingKey } from '../drizzle/schema';
+
+/**
+ * Admin endpoints for managing AI providers.
+ */
+@Controller('admin/ai/providers')
+@UseGuards(AuthGuard('jwt'), AdminGuard, PluginActiveGuard)
+@RequirePlugin('ai')
+export class AiProvidersController {
+  private readonly logger = new Logger(AiProvidersController.name);
+
+  constructor(
+    private readonly registry: LlmProviderRegistry,
+    private readonly settings: SettingsService,
+    private readonly docker: OllamaDockerService,
+    private readonly native: OllamaNativeService,
+    private readonly ollamaSetup: OllamaSetupService,
+    private readonly logService: AiRequestLogService,
+  ) {}
+
+  /** GET /admin/ai/providers — List all providers with status. */
+  @Get()
+  async listProviders(): Promise<AiProviderInfoDto[]> {
+    const providers = this.registry.list();
+    const activeKey = await this.getActiveProviderKey();
+    return Promise.all(providers.map((p) => this.buildInfo(p, activeKey)));
+  }
+
+  /**
+   * POST /admin/ai/providers/:key/configure — Save provider config.
+   *
+   * ROK-1366: the body was a bare TS type alias with no runtime validation,
+   * so any shape an admin session sent was persisted through `settings.set()`.
+   * Parsed against the contract schema before anything is written.
+   */
+  @Post(':key/configure')
+  async configureProvider(
+    @Param('key') key: string,
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    this.requireKnownProvider(key);
+    const parsed = AiProviderConfigSchema.safeParse(body);
+    if (!parsed.success) {
+      // The whole flatten(): a `.strict()` rejection lands in `formErrors`.
+      throw new BadRequestException(parsed.error.flatten());
+    }
+    if (!parsed.data.apiKey && !parsed.data.url && !parsed.data.model) {
+      throw new BadRequestException(
+        'At least one of apiKey, url, or model is required',
+      );
+    }
+    await this.saveProviderConfig(key, parsed.data);
+    return { success: true };
+  }
+
+  /** POST /admin/ai/providers/:key/activate — Set as active provider. */
+  @Post(':key/activate')
+  async activateProvider(
+    @Param('key') key: string,
+  ): Promise<{ success: boolean }> {
+    this.requireKnownProvider(key);
+    await this.settings.set(AI_SETTING_KEYS.PROVIDER, key);
+    return { success: true };
+  }
+
+  /** POST /admin/ai/providers/ollama/setup — Start async Docker setup. */
+  @Post('ollama/setup')
+  async setupOllama(): Promise<AiOllamaSetupDto> {
+    return this.ollamaSetup.startSetup();
+  }
+
+  /** POST /admin/ai/providers/ollama/stop — Stop Ollama (Docker or native). */
+  @Post('ollama/stop')
+  async stopOllama(): Promise<{ success: boolean }> {
+    if (this.native.isAllinoneMode()) {
+      await this.native.stopService();
+    } else {
+      await this.docker.stopContainer();
+    }
+    return { success: true };
+  }
+
+  /**
+   * Resolve active provider key. Honours an explicit `ai_provider` setting,
+   * else falls back to the registry's auto-pick (first cloud provider with
+   * a key configured). Returns empty string when nothing is configured so
+   * the per-provider "active" badge stays unset.
+   */
+  private async getActiveProviderKey(): Promise<string> {
+    const explicit = await this.settings.get(AI_SETTING_KEYS.PROVIDER);
+    if (explicit) return explicit;
+    const resolution = await this.registry.resolveActive();
+    return resolution?.provider.key ?? '';
+  }
+
+  /** Build provider info including configuration and availability. */
+  private async buildInfo(
+    provider: {
+      key: string;
+      displayName: string;
+      requiresApiKey: boolean;
+      selfHosted: boolean;
+      isAvailable: () => Promise<boolean>;
+    },
+    activeKey: string,
+  ): Promise<AiProviderInfoDto> {
+    const configured = await this.isConfigured(provider);
+    const { available, error } = configured
+      ? await resolveAvailability(provider, provider.key === activeKey, (key) =>
+          this.logService.getLastSuccessfulChatAt(key),
+        )
+      : { available: false, error: undefined };
+    const info = buildProviderInfo(
+      provider as never,
+      configured,
+      available,
+      provider.key === activeKey,
+    );
+    if (error) info.error = error;
+    if (provider.key === 'ollama') {
+      await this.enrichOllamaInfo(info);
+    }
+    return info;
+  }
+
+  /** Add Ollama-specific setup state from DB to provider info. */
+  private async enrichOllamaInfo(info: AiProviderInfoDto): Promise<void> {
+    const state = await this.ollamaSetup.getSetupState();
+    info.setupInProgress = state.running;
+    if (state.running) {
+      info.setupStep = state.step;
+    }
+    if (state.step === 'error' && state.error) {
+      info.error = state.error;
+      info.setupStep = 'error';
+    }
+    if (!info.available && !state.running) {
+      const exists = await this.hasExistingInstall();
+      info.setupStep =
+        info.setupStep || (exists ? 'container_exists' : undefined);
+    }
+  }
+
+  /** Check whether an Ollama install exists (Docker container or native). */
+  private async hasExistingInstall(): Promise<boolean> {
+    if (this.native.isAllinoneMode()) {
+      const status = await this.native.getServiceStatus();
+      return status !== 'not-found';
+    }
+    const status = await this.docker.getContainerStatus();
+    return status !== 'not-found';
+  }
+
+  /** Save individual config fields for a provider. */
+  private async saveProviderConfig(
+    key: string,
+    body: AiProviderConfigDto,
+  ): Promise<void> {
+    if (body.apiKey) {
+      const settingKey = getApiKeySettingKey(key);
+      if (settingKey) {
+        await this.settings.set(settingKey as SettingKey, body.apiKey);
+      }
+    }
+    if (body.url && key === 'ollama') {
+      await this.settings.set(AI_SETTING_KEYS.OLLAMA_URL, body.url);
+    }
+    if (body.model) {
+      await this.settings.set(AI_SETTING_KEYS.MODEL, body.model);
+    }
+  }
+
+  /** Check if a provider is configured (has API key or is self-hosted). */
+  private async isConfigured(provider: {
+    key: string;
+    requiresApiKey: boolean;
+  }): Promise<boolean> {
+    if (!provider.requiresApiKey) return true;
+    const settingKey = getApiKeySettingKey(provider.key);
+    if (!settingKey) return false;
+    const value = await this.settings.get(settingKey as SettingKey);
+    return !!value;
+  }
+
+  /** Throw if provider key is not registered. */
+  private requireKnownProvider(key: string): void {
+    const provider = this.registry.resolve(key);
+    if (!provider) {
+      throw new BadRequestException(`Unknown provider: ${key}`);
+    }
+  }
+}

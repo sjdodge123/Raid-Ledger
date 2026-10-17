@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@0.0.41",
+        "--headless"
+      ]
+    },
+    "mcp-env": {
+      "type": "stdio",
+      "command": "sh",
+      "args": [
+        "scripts/mcp-launch.sh",
+        "mcp-env"
+      ],
+      "env": {}
+    },
+    "mcp-discord": {
+      "type": "stdio",
+      "command": "sh",
+      "args": [
+        "scripts/mcp-launch.sh",
+        "mcp-discord"
+      ],
+      "env": {}
+    },
+    "mcp-rl-fleet": {
+      "type": "stdio",
+      "command": "sh",
+      "args": [
+        "scripts/mcp-launch.sh",
+        "mcp-rl-fleet"
+      ],
+      "env": {}
+    }
+  }
+}

@@ -1,0 +1,651 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import { ChannelBindingList } from './ChannelBindingList';
+import type { ChannelBindingDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
+
+// BindingConfigForm is rendered inline — mock it to keep unit tests focused
+vi.mock('./BindingConfigForm', () => ({
+  BindingConfigForm: ({
+    binding,
+    onSave,
+    onCancel,
+  }: {
+    binding: ChannelBindingDto;
+    onSave: (id: string, dto: unknown) => void;
+    onCancel: () => void;
+    isSaving: boolean;
+  }) => (
+    <div data-testid="binding-config-form">
+      <span>{binding.id}</span>
+      <button onClick={() => onSave(binding.id, { config: {} })}>
+        Save Form
+      </button>
+      <button onClick={onCancel}>Cancel Form</button>
+    </div>
+  ),
+}));
+
+function makeBinding(overrides: Partial<ChannelBindingDto> = {}): ChannelBindingDto {
+  return {
+    id: 'uuid-1',
+    guildId: 'guild-123',
+    channelId: 'channel-456',
+    channelName: 'general',
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameId: null,
+    config: null,
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+const onUpdate = vi.fn();
+const onDelete = vi.fn();
+function channelbindinglistGroup1() {
+it('shows empty state message when bindings array is empty', () => {
+    render(
+      <ChannelBindingList
+        bindings={[]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(
+      screen.getByText('No channel bindings configured'),
+    ).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup2() {
+it('mentions /bind command in empty state', () => {
+    render(
+      <ChannelBindingList
+        bindings={[]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('/bind')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup3() {
+it('renders the channel name for a text binding', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ channelName: 'raid-announcements' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('#raid-announcements')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup4() {
+it('falls back to channelId when channelName is undefined', () => {
+    render(
+      <ChannelBindingList
+        bindings={[
+          makeBinding({ channelName: undefined, channelId: 'ch-789' }),
+        ]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('#ch-789')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup5() {
+it('shows "Announcements" badge for game-announcements binding', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ bindingPurpose: 'game-announcements' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('Announcements')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup6() {
+it('shows "Activity Monitor" badge for game-voice-monitor binding', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ bindingPurpose: 'game-voice-monitor' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('Activity Monitor')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup7() {
+it('shows "General Lobby" badge for general-lobby binding', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ bindingPurpose: 'general-lobby' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('General Lobby')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup8() {
+it('shows game name when binding has gameName', () => {
+    render(
+      <ChannelBindingList
+        bindings={[
+          makeBinding({ gameName: 'World of Warcraft', gameId: 1 }),
+        ]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText(/World of Warcraft/)).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup9() {
+it('shows "All games" when binding has no gameName', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ gameName: undefined, gameId: null })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText(/All games/)).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup10() {
+it('renders an Edit button for each binding', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding()]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup11() {
+it('shows BindingConfigForm when Edit is clicked', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ id: 'uuid-1' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByTestId('binding-config-form')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup12() {
+it('toggles Edit button label to "Close" when form is open', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding()]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup13() {
+it('hides BindingConfigForm when Close is clicked', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding()]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByTestId('binding-config-form')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByTestId('binding-config-form')).not.toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup14() {
+it('hides form when Cancel is clicked inside BindingConfigForm', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding()]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Form' }));
+
+    expect(screen.queryByTestId('binding-config-form')).not.toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup15() {
+it('calls onUpdate when Save is clicked inside BindingConfigForm', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ id: 'uuid-1' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Form' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('uuid-1', { config: {} });
+  });
+
+}
+
+function channelbindinglistGroup16() {
+it('hides form after Save is submitted', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding()]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Form' }));
+
+    expect(screen.queryByTestId('binding-config-form')).not.toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup17() {
+it('renders a Remove button for each binding', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding()]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup18() {
+it('calls onDelete with binding id when Remove is clicked', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ id: 'uuid-1' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(onDelete).toHaveBeenCalledWith('uuid-1');
+  });
+
+}
+
+function channelbindinglistGroup19() {
+it('disables Remove button when isDeleting and deletingId matches', () => {
+    const binding = makeBinding({ id: 'uuid-1' });
+
+    const { rerender } = render(
+      <ChannelBindingList
+        bindings={[binding]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    // Click to trigger deletion (sets deletingId)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    rerender(
+      <ChannelBindingList
+        bindings={[binding]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={true}
+      />,
+    );
+
+    // Button `loading` blocks the row via aria-disabled (not native disabled, so
+    // focus stays) and swallows clicks: a second press must not delete again.
+    const removing = screen.getByRole('button', { name: 'Removing...' });
+    expect(removing).toHaveAttribute('aria-disabled', 'true');
+    expect(removing).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(removing);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+}
+
+function channelbindinglistGroup20() {
+it('does not disable Remove button for other bindings when one is deleting', () => {
+    const bindings = [
+      makeBinding({ id: 'uuid-1', channelName: 'ch1' }),
+      makeBinding({ id: 'uuid-2', channelName: 'ch2', channelId: 'ch-2' }),
+    ];
+
+    const { rerender } = render(
+      <ChannelBindingList
+        bindings={bindings}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    // Delete the first binding
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove' });
+    fireEvent.click(at(removeButtons, 0));
+
+    rerender(
+      <ChannelBindingList
+        bindings={bindings}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={true}
+      />,
+    );
+
+    // Second binding's Remove button should still be enabled
+    const secondRemoveBtn = screen.getByRole('button', { name: 'Remove' });
+    expect(secondRemoveBtn).not.toBeDisabled();
+  });
+
+}
+
+function channelbindinglistGroup21() {
+it('renders all bindings in the list', () => {
+    const bindings = [
+      makeBinding({ id: 'uuid-1', channelName: 'general', channelId: 'ch-1' }),
+      makeBinding({ id: 'uuid-2', channelName: 'raids', channelId: 'ch-2' }),
+      makeBinding({ id: 'uuid-3', channelName: 'voice', channelId: 'ch-3' }),
+    ];
+
+    render(
+      <ChannelBindingList
+        bindings={bindings}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    expect(screen.getByText('#general')).toBeInTheDocument();
+    expect(screen.getByText('#raids')).toBeInTheDocument();
+    expect(screen.getByText('#voice')).toBeInTheDocument();
+  });
+
+}
+
+function channelbindinglistGroup22() {
+it('only opens one form at a time (closing previous when another Edit is clicked)', () => {
+    const bindings = [
+      makeBinding({ id: 'uuid-1', channelName: 'ch1', channelId: 'ch-1' }),
+      makeBinding({ id: 'uuid-2', channelName: 'ch2', channelId: 'ch-2' }),
+    ];
+
+    render(
+      <ChannelBindingList
+        bindings={bindings}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' });
+    fireEvent.click(at(editButtons, 0));
+    expect(screen.getAllByTestId('binding-config-form')).toHaveLength(1);
+
+    // Clicking Edit on the second binding
+    // (first binding now shows Close, second still shows Edit)
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    expect(closeButton).toBeInTheDocument();
+  });
+
+}
+
+describe('ChannelBindingList', () => {
+beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+    channelbindinglistGroup1();
+    channelbindinglistGroup2();
+    channelbindinglistGroup3();
+    channelbindinglistGroup4();
+    channelbindinglistGroup5();
+    channelbindinglistGroup6();
+    channelbindinglistGroup7();
+    channelbindinglistGroup8();
+    channelbindinglistGroup9();
+    channelbindinglistGroup10();
+    channelbindinglistGroup11();
+    channelbindinglistGroup12();
+    channelbindinglistGroup13();
+    channelbindinglistGroup14();
+    channelbindinglistGroup15();
+    channelbindinglistGroup16();
+    channelbindinglistGroup17();
+    channelbindinglistGroup18();
+    channelbindinglistGroup19();
+    channelbindinglistGroup20();
+    channelbindinglistGroup21();
+    channelbindinglistGroup22();
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// ROK-1416 (B5-2) — inert-binding surfacing + one-click "Fix →" repair.
+// The list flags any binding the shared classifyBindingTriple classifier rejects
+// (above all the voice, game-voice-monitor, gameId=null "inert" Quick Play shape,
+// ROK-1415) with an INERT badge and a "Fix →" action that opens the edit form.
+// RED until the dev adds the detection + badge + Fix button; the current list
+// renders neither, so the getBy* queries throw.
+// ───────────────────────────────────────────────────────────────────────────
+
+function renderBindingList(bindings: ChannelBindingDto[]) {
+  return render(
+    <ChannelBindingList
+      bindings={bindings}
+      onUpdate={onUpdate}
+      onDelete={onDelete}
+      isUpdating={false}
+      isDeleting={false}
+    />,
+  );
+}
+
+function channelbindinglistInertBadge() {
+  it('flags only the inert (voice monitor, no game) binding with an INERT badge', () => {
+    renderBindingList([
+      makeBinding({ id: 'inert', channelId: 'ch-a', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: null }),
+      makeBinding({ id: 'healthy', channelId: 'ch-b', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: 7, gameName: 'WoW' }),
+      makeBinding({ id: 'lobby', channelId: 'ch-c', channelType: 'voice', bindingPurpose: 'general-lobby', gameId: null }),
+    ]);
+    // A voice monitor with a game and a null-game general lobby are BOTH legal —
+    // exactly one row (the inert monitor) is flagged.
+    expect(screen.getAllByText(/inert/i)).toHaveLength(1);
+  });
+}
+
+function channelbindinglistFixOpensForm() {
+  it('shows a single "Fix →" action on the inert row and opens its edit form', () => {
+    renderBindingList([
+      makeBinding({ id: 'inert', channelId: 'ch-a', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: null }),
+      makeBinding({ id: 'healthy', channelId: 'ch-b', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: 7, gameName: 'WoW' }),
+    ]);
+    const fixButtons = screen.getAllByRole('button', { name: /fix/i });
+    expect(fixButtons).toHaveLength(1);
+    fireEvent.click(at(fixButtons, 0));
+    const form = screen.getByTestId('binding-config-form');
+    expect(within(form).getByText('inert')).toBeInTheDocument();
+  });
+}
+
+describe('ChannelBindingList — ROK-1416 inert surfacing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  channelbindinglistInertBadge();
+  channelbindinglistFixOpensForm();
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// UI tech-debt 2026-09-27 — at phone width the Fix/Edit/Remove cluster (44px
+// Button primitive) squeezed the info column of an INERT row to ~70px. The row
+// stacks the actions under the info below `sm` and is a row again from `sm`.
+// The INERT badge sits on the `danger` tokens so it reads in both colour
+// families (raw `bg-red-600/40 text-red-100` was 1.89:1 in default-light).
+// ───────────────────────────────────────────────────────────────────────────
+
+const INERT_BINDING = { id: 'inert', channelId: 'ch-a', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: null } as const;
+
+function channelbindinglistRowStacksOnPhone() {
+  it('stacks the action cluster under the info block at base and lays it out as a row from sm', () => {
+    renderBindingList([makeBinding(INERT_BINDING)]);
+    const row = screen.getByTestId('channel-binding-row');
+    expect(row).toHaveClass('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'sm:justify-between');
+    expect(row).not.toHaveClass('items-center');
+    const actions = screen.getByTestId('channel-binding-actions');
+    expect(actions).toHaveClass('flex', 'flex-wrap', 'gap-2');
+    expect(within(actions).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fix →', 'Edit', 'Remove']);
+  });
+}
+
+function channelbindinglistInertBadgeTokens() {
+  it('puts the INERT badge and the inert row tint on danger tokens, not raw red', () => {
+    renderBindingList([makeBinding(INERT_BINDING)]);
+    const badge = screen.getByText(/INERT/);
+    expect(badge).toHaveClass('bg-danger/10', 'text-danger', 'border', 'border-danger/30');
+    expect(badge.className).not.toMatch(/\bred-\d/);
+    const row = screen.getByTestId('channel-binding-row');
+    expect(row).toHaveClass('bg-danger/5', 'border-danger/30');
+    expect(row.className).not.toMatch(/\bred-\d/);
+  });
+}
+
+describe('ChannelBindingList — phone stacking + INERT badge tokens', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  channelbindinglistRowStacksOnPhone();
+  channelbindinglistInertBadgeTokens();
+});
+
+describe('ChannelBindingList — Quick Play Announcements (ROK-1766)', () => {
+  it('shows the "Quick Play" badge in its categorical teal and the purpose label', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ bindingPurpose: 'quick-play-announcements', gameId: 42, gameName: 'Valheim' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+    expect(screen.getByText('Quick Play')).toHaveClass('bg-teal-500/15', 'text-teal-400');
+    expect(screen.getByText('Valheim · Quick Play Announcements')).toBeInTheDocument();
+  });
+});

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_lineup_vote_user_rank" ON "community_lineup_votes" USING btree ("lineup_id","user_id","rank") WHERE "rank" is not null;

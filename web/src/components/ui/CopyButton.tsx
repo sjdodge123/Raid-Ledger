@@ -1,0 +1,42 @@
+import { useState } from 'react';
+import { copyWithToast } from '../../lib/clipboard';
+
+interface CopyButtonProps {
+    text: string;
+    className?: string;
+}
+
+/**
+ * Small icon button that copies text to clipboard.
+ * Shows checkmark briefly after successful copy; surfaces an error toast
+ * (via {@link copyWithToast}) if the copy fails in an insecure context.
+ */
+export function CopyButton({ text, className = '' }: CopyButtonProps) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async (): Promise<void> => {
+        const ok = await copyWithToast(text);
+        if (!ok) return;
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={handleCopy}
+            className={`p-1.5 rounded-md text-muted hover:text-foreground hover:bg-overlay transition-colors ${className}`}
+            title={copied ? 'Copied!' : 'Copy to clipboard'}
+        >
+            {copied ? (
+                <svg className="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+            ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+            )}
+        </button>
+    );
+}

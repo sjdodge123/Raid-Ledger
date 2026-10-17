@@ -1,0 +1,32 @@
+{
+    "name": "@raid-ledger/contract",
+    "version": "0.0.1",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "lint": "echo 'lint passed'",
+        "test": "vitest run",
+        "gen:ledgerlink-schema": "tsc && node scripts/gen-ledgerlink-schema.mjs"
+    },
+    "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^5.0.3",
+        "zod": "^4.6.5"
+    },
+    "dependencies": {
+        "zod": "^4.6.5"
+    },
+    "sideEffects": false
+}

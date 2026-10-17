@@ -1,0 +1,446 @@
+import { z } from "zod";
+import { SignupUserSchema, EventRosterSchema } from "./signups.schema.js";
+import { RosterWithAssignmentsSchema } from "./roster.schema.js";
+import { PugSlotResponseSchema } from "./pug.schema.js";
+
+// ============================================================
+// Slot Configuration Schema
+// ============================================================
+
+/** Per-event slot configuration. Type determines which role fields are relevant. */
+export const SlotConfigSchema = z.object({
+  type: z.enum(["mmo", "generic"]),
+  tank: z.number().int().min(0).optional(),
+  healer: z.number().int().min(0).optional(),
+  dps: z.number().int().min(0).optional(),
+  flex: z.number().int().min(0).optional(),
+  player: z.number().int().min(0).optional(),
+  bench: z.number().int().min(0).optional(),
+});
+
+export type SlotConfigDto = z.infer<typeof SlotConfigSchema>;
+
+/** Recurrence rule for repeating events */
+export const RecurrenceSchema = z.object({
+  frequency: z.enum(["weekly", "biweekly", "monthly"]),
+  until: z.string().datetime({ offset: true }), // End date for recurrence
+});
+
+export type RecurrenceDto = z.infer<typeof RecurrenceSchema>;
+
+// ============================================================
+// Event Creation/Update Schemas
+// ============================================================
+
+/** Schema for creating a new event */
+export const CreateEventSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+    gameId: z.number().int().positive().optional(), // ROK-400: Single FK to games.id
+    startTime: z.string().datetime({ offset: true }), // ISO 8601 datetime (with TZ offset)
+    endTime: z.string().datetime({ offset: true }), // ISO 8601 datetime (with TZ offset)
+    slotConfig: SlotConfigSchema.optional(),
+    maxAttendees: z.number().int().min(1).optional(),
+    autoUnbench: z.boolean().optional(),
+    recurrence: RecurrenceSchema.optional(),
+    contentInstances: z.array(z.record(z.string(), z.unknown())).optional(),
+    /** Send DM reminder 15 min before event. Default true (ROK-126). */
+    reminder15min: z.boolean().optional(),
+    /** Send DM reminder 1 hour before event. Default false (ROK-126). */
+    reminder1hour: z.boolean().optional(),
+    /** Send DM reminder 24 hours before event. Default false (ROK-126). */
+    reminder24hour: z.boolean().optional(),
+    /** ROK-1352: Per-event ephemeral-voice opt-in. null/false = no channel
+     *  unless the admin force-ephemeral setting is on. Series-wide changes
+     *  propagate per-event via the ROK-429 scope flow (PATCH /events/:id/series). */
+    ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1386: Lock the ephemeral voice channel to rostered members only.
+     *  Only meaningful when ephemeral voice is effectively on. */
+    privateVoice: z.boolean().nullable().optional(),
+    /** ROK-1371: When this event is created as a follow-up to a just-ended event
+     *  (via the post-event follow-up prompt deep-link), this carries the ended
+     *  event's id so the server post-create hook can fan out quick-sign-up DMs to
+     *  that event's attendees. Never persisted on the `events` row. */
+    followupForEventId: z.number().int().positive().optional(),
+    /** ROK-1573: the LFG group (game id) this event is created from. Server
+     *  converts the group's live intents to this event and signs its members
+     *  up. Never persisted. */
+    lfgGameId: z.number().int().positive().optional(),
+    /** ROK-1787: tag the event (and every recurring instance) to a guild.
+     *  Only an editor of that guild (or an admin) may set it; the guild must
+     *  belong to the event's game, so a gameId is required. */
+    guildId: z.number().int().positive().optional(),
+  })
+  .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
+    message: "Start time must be before end time",
+    path: ["endTime"],
+  })
+  .refine((d) => d.lfgGameId === undefined || d.gameId === d.lfgGameId, {
+    message: "lfgGameId must match gameId",
+    path: ["lfgGameId"],
+  })
+  .refine((d) => d.guildId === undefined || d.gameId !== undefined, {
+    message: "guildId requires gameId",
+    path: ["guildId"],
+  });
+
+export type CreateEventDto = z.infer<typeof CreateEventSchema>;
+
+/** Schema for updating an event (partial) */
+export const UpdateEventSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    description: z.string().max(2000).optional().nullable(),
+    gameId: z.number().int().positive().optional().nullable(),
+    startTime: z.string().datetime({ offset: true }).optional(),
+    endTime: z.string().datetime({ offset: true }).optional(),
+    slotConfig: SlotConfigSchema.optional().nullable(),
+    maxAttendees: z.number().int().min(1).optional().nullable(),
+    autoUnbench: z.boolean().optional(),
+    contentInstances: z
+      .array(z.record(z.string(), z.unknown()))
+      .optional()
+      .nullable(),
+    /** Send DM reminder 15 min before event (ROK-126). */
+    reminder15min: z.boolean().optional(),
+    /** Send DM reminder 1 hour before event (ROK-126). */
+    reminder1hour: z.boolean().optional(),
+    /** Send DM reminder 24 hours before event (ROK-126). */
+    reminder24hour: z.boolean().optional(),
+    /** ROK-1352: Per-event ephemeral-voice opt-in. Persisted on single + series
+     *  edits via buildUpdateData; series scope is driven by the ROK-429 modal. */
+    ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1386: Lock the ephemeral voice channel to rostered members only. */
+    privateVoice: z.boolean().nullable().optional(),
+    /** ROK-1787: guild tag. A number re-checks guild editor rights against
+     *  the resulting game; null clears the tag. */
+    guildId: z.number().int().positive().optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      if (data.startTime && data.endTime) {
+        return new Date(data.startTime) < new Date(data.endTime);
+      }
+      return true;
+    },
+    { message: "Start time must be before end time", path: ["endTime"] },
+  );
+
+export type UpdateEventDto = z.infer<typeof UpdateEventSchema>;
+
+// ============================================================
+// Event Response Schemas
+// ============================================================
+
+/** Creator info embedded in event response */
+export const EventCreatorSchema = z.object({
+  id: z.number(),
+  username: z.string(),
+  avatar: z.string().nullable(),
+  discordId: z.string().nullable().optional(),
+  customAvatarUrl: z.string().nullable().optional(),
+});
+
+export type EventCreatorDto = z.infer<typeof EventCreatorSchema>;
+
+/** Game info embedded in event response */
+export const EventGameSchema = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+    hasRoles: z.boolean().optional(),
+  })
+  .nullable();
+
+export type EventGameDto = z.infer<typeof EventGameSchema>;
+
+/** Conflicting event summary for conflict warnings (ROK-1031). */
+export const ConflictingEventSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+});
+
+export type ConflictingEventDto = z.infer<typeof ConflictingEventSchema>;
+
+/** Single event response */
+export const EventResponseSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  description: z.string().nullable(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  creator: EventCreatorSchema,
+  game: EventGameSchema,
+  signupCount: z.number(),
+  /** Preview of first N signups for calendar view (ROK-177) */
+  signupsPreview: z.array(SignupUserSchema).optional(),
+  slotConfig: SlotConfigSchema.nullable().optional(),
+  maxAttendees: z.number().nullable().optional(),
+  autoUnbench: z.boolean().optional(),
+  contentInstances: z
+    .array(z.record(z.string(), z.unknown()))
+    .nullable()
+    .optional(),
+  recurrenceGroupId: z.string().uuid().nullable().optional(),
+  /** Stored recurrence rule for recurring events (ROK-434). */
+  recurrenceRule: z
+    .object({
+      frequency: z.enum(["weekly", "biweekly", "monthly"]),
+      until: z.string().datetime({ offset: true }),
+    })
+    .nullable()
+    .optional(),
+  /** DM reminder 15 min before event (ROK-126). */
+  reminder15min: z.boolean().optional(),
+  /** DM reminder 1 hour before event (ROK-126). */
+  reminder1hour: z.boolean().optional(),
+  /** DM reminder 24 hours before event (ROK-126). */
+  reminder24hour: z.boolean().optional(),
+  cancelledAt: z.string().datetime().nullable().optional(),
+  cancellationReason: z.string().nullable().optional(),
+  /** ROK-293: Whether this event was auto-created from voice channel activity */
+  isAdHoc: z.boolean().optional(),
+  /** ROK-293: Ad-hoc event lifecycle status (null for scheduled events) */
+  adHocStatus: z.enum(["live", "grace_period", "ended"]).nullable().optional(),
+  /** ROK-293: Channel binding that spawned this ad-hoc event */
+  channelBindingId: z.string().uuid().nullable().optional(),
+  /** ROK-599: Per-event notification channel override (Discord channel ID) */
+  notificationChannelOverride: z.string().nullable().optional(),
+  /** ROK-576: Extended end time when voice channel activity extends the event */
+  extendedUntil: z.string().datetime().nullable().optional(),
+  /** ROK-1031: Events that conflict with this event for the authenticated user. */
+  myConflicts: z.array(ConflictingEventSchema).optional(),
+  /** ROK-1034: FK to scheduling poll match ID when event is being rescheduled */
+  reschedulingPollId: z.number().nullable().optional(),
+  /** ROK-1352: Per-event ephemeral-voice override (null = inherit series/global). */
+  ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+  /** ROK-1352: Live ephemeral voice channel ID (null when none). */
+  ephemeralVoiceChannelId: z.string().nullable().optional(),
+  /** ROK-1386: Lock ephemeral voice to rostered members only (null = off). */
+  privateVoice: z.boolean().nullable().optional(),
+  /** ROK-1787: guild this event is tagged to (null = untagged). */
+  guildId: z.number().int().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type EventResponseDto = z.infer<typeof EventResponseSchema>;
+
+/** Paginated event list response */
+export const EventListResponseSchema = z.object({
+  data: z.array(EventResponseSchema),
+  meta: z.object({
+    total: z.number(),
+    page: z.number(),
+    limit: z.number(),
+    totalPages: z.number(),
+    hasMore: z.boolean(),
+  }),
+});
+
+export type EventListResponseDto = z.infer<typeof EventListResponseSchema>;
+
+/** Query params for event list (ROK-174: Date Range Filtering, ROK-177: Signups Preview, ROK-213: Dashboard Filters) */
+export const EventListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    upcoming: z.enum(["true", "false"]).optional(), // Filter to upcoming events only
+    startAfter: z
+      .string()
+      .datetime({ message: "startAfter must be a valid ISO8601 datetime" })
+      .optional(),
+    endBefore: z
+      .string()
+      .datetime({ message: "endBefore must be a valid ISO8601 datetime" })
+      .optional(),
+    gameId: z.string().optional(), // Filter by integer game ID (string in query param, parsed to number in service)
+    /** Include first N signups preview for calendar views (ROK-177) */
+    includeSignups: z.enum(["true", "false"]).optional(),
+    /** Filter events by creator. Use "me" to resolve to authenticated user (ROK-213) */
+    creatorId: z.string().optional(),
+    /** Filter events the user has signed up for. Use "me" (ROK-213) */
+    signedUpAs: z.string().optional(),
+    /** Include cancelled events in results. Default false (ROK-469) */
+    includeCancelled: z.enum(["true", "false"]).optional(),
+    /** ROK-293: Include ad-hoc events in results. Default true */
+    includeAdHoc: z.enum(["true", "false"]).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.startAfter && data.endBefore) {
+        return new Date(data.startAfter) < new Date(data.endBefore);
+      }
+      return true;
+    },
+    { message: "startAfter must be before endBefore", path: ["startAfter"] },
+  );
+
+export type EventListQueryDto = z.infer<typeof EventListQuerySchema>;
+
+// ============================================================
+// Dashboard Schemas (ROK-213)
+// ============================================================
+
+/** Aggregate stats for the organizer dashboard */
+export const DashboardStatsSchema = z.object({
+  totalUpcomingEvents: z.number(),
+  totalSignups: z.number(),
+  averageFillRate: z.number(),
+  eventsWithRosterGaps: z.number(),
+  /** ROK-421: Attendance rate across past events with recorded attendance */
+  attendanceRate: z.number().optional(),
+  /** ROK-421: No-show rate across past events with recorded attendance */
+  noShowRate: z.number().optional(),
+});
+
+export type DashboardStatsDto = z.infer<typeof DashboardStatsSchema>;
+
+/** Extended event data for dashboard cards */
+export const DashboardEventSchema = EventResponseSchema.extend({
+  rosterFillPercent: z.number(),
+  unconfirmedCount: z.number(),
+  missingRoles: z.array(z.string()),
+});
+
+export type DashboardEventDto = z.infer<typeof DashboardEventSchema>;
+
+/** Full dashboard response */
+export const DashboardResponseSchema = z.object({
+  stats: DashboardStatsSchema,
+  events: z.array(DashboardEventSchema),
+});
+
+export type DashboardResponseDto = z.infer<typeof DashboardResponseSchema>;
+
+// ============================================================
+// Aggregate Game Time Schemas (ROK-223)
+// ============================================================
+
+/** Single cell in the aggregate game time heatmap */
+export const AggregateGameTimeCellSchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6), // 0=Sun, 6=Sat
+  hour: z.number().int().min(0).max(23),
+  /**
+   * Members marked available for this cell. When `staleCount` is present
+   * (ROK-1560, scheduling-poll producer only) this counts FRESH members only —
+   * a member whose game time is stale is never counted as available.
+   */
+  availableCount: z.number().int().min(0),
+  totalCount: z.number().int().min(0),
+  /**
+   * ROK-1560: members whose template covers this cell but whose game time is
+   * older than `freshnessDays`. Rendered as a hatch, never as fill. Optional —
+   * only the scheduling-poll aggregate populates it; the events aggregate omits it.
+   */
+  staleCount: z.number().int().min(0).optional(),
+  /**
+   * ROK-1560: members with no game-time template at all. They are unknown on
+   * every cell (a member WITH a template that does not cover this cell is
+   * known-busy, not unknown). Optional — scheduling-poll aggregate only.
+   */
+  unknownCount: z.number().int().min(0).optional(),
+  /**
+   * ROK-1584: members whose template covers this cell but who are signed up for
+   * an event / away at that hour (subtracted from `availableCount` since
+   * ROK-1570). Counted fresh or stale; they are busy, never unknown. Optional —
+   * scheduling-poll aggregate only.
+   */
+  busyCount: z.number().int().min(0).optional(),
+});
+
+export type AggregateGameTimeCell = z.infer<typeof AggregateGameTimeCellSchema>;
+
+/** Response for aggregate game time endpoint */
+export const AggregateGameTimeResponseSchema = z.object({
+  eventId: z.number(),
+  totalUsers: z.number(),
+  cells: z.array(AggregateGameTimeCellSchema),
+  /** ROK-1560: roster size the counts are measured against (scheduling poll only). */
+  totalMembers: z.number().int().min(0).optional(),
+  /** ROK-1560: age in days past which game time counts as stale (7). */
+  freshnessDays: z.number().int().min(0).optional(),
+  /** ROK-1560: members with no template at all — unknown on every cell. */
+  untemplatedMembers: z.number().int().min(0).optional(),
+  /**
+   * ROK-1588: members whose template exists but is past `freshnessDays` —
+   * out of date on every cell. Fresh = totalMembers − staleMembers −
+   * untemplatedMembers. Absent on aggregates without freshness data.
+   */
+  staleMembers: z.number().int().min(0).optional(),
+  /**
+   * ROK-1560: whole days since the requesting viewer last confirmed their game
+   * time. `null` = never confirmed. Absent on aggregates with no viewer context.
+   */
+  viewerGameTimeAgeDays: z.number().int().min(0).nullable().optional(),
+  /**
+   * ROK-1560: the server's own verdict on the viewer — the SAME `isGameTimeStale`
+   * rule that keeps them out of the fill. Prefer this over deriving staleness
+   * from `viewerGameTimeAgeDays`, whose floored day count drifts from the
+   * calendar cutoff for up to a day. Absent on aggregates with no viewer.
+   */
+  viewerGameTimeStale: z.boolean().optional(),
+  /**
+   * ROK-1570: ISO 8601 instant of the week (Sunday 00:00 UTC) whose dated
+   * signups and absences were subtracted from the cells. The heatmap is a
+   * recurring week painted for ONE concrete week — without this the client
+   * cannot tell which week the busy subtraction describes. Optional: only the
+   * scheduling-poll aggregate is dated; the events aggregate omits it.
+   */
+  weekStart: z.string().datetime().optional(),
+});
+
+export type AggregateGameTimeResponse = z.infer<
+  typeof AggregateGameTimeResponseSchema
+>;
+
+/** Schema for rescheduling an event */
+export const RescheduleEventSchema = z
+  .object({
+    startTime: z.string().datetime({ offset: true }),
+    endTime: z.string().datetime({ offset: true }),
+  })
+  .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
+    message: "Start time must be before end time",
+    path: ["endTime"],
+  })
+  .refine((data) => new Date(data.startTime) > new Date(), {
+    message: "Start time must be in the future",
+    path: ["startTime"],
+  });
+
+export type RescheduleEventDto = z.infer<typeof RescheduleEventSchema>;
+
+/** Schema for cancelling an event (ROK-374) */
+export const CancelEventSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+export type CancelEventDto = z.infer<typeof CancelEventSchema>;
+
+// ============================================================
+// Event Detail Bundle Schema (ROK-1046)
+// ============================================================
+
+export const VoiceChannelResponseSchema = z.object({
+  channelId: z.string().nullable(),
+  channelName: z.string().nullable(),
+  guildId: z.string().nullable(),
+});
+export type VoiceChannelResponseDto = z.infer<
+  typeof VoiceChannelResponseSchema
+>;
+
+export const EventDetailResponseSchema = z.object({
+  event: EventResponseSchema,
+  roster: EventRosterSchema,
+  rosterAssignments: RosterWithAssignmentsSchema,
+  pugs: z.array(PugSlotResponseSchema),
+  voiceChannel: VoiceChannelResponseSchema,
+});
+export type EventDetailResponseDto = z.infer<typeof EventDetailResponseSchema>;

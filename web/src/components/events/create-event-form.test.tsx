@@ -1,0 +1,619 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
+import { CreateEventForm } from './create-event-form';
+import { useEventTypes } from '../../hooks/use-game-registry';
+import { useEventTemplates, useCreateTemplate, useDeleteTemplate } from '../../hooks/use-event-templates';
+import type { FormState } from './create-event-form.types';
+import { defined } from '../../test/defined';
+
+// ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+// ─── Router/Navigation mock ───────────────────────────────────────────────────
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom');
+    return {
+        ...actual,
+        useNavigate: () => mockNavigate,
+    };
+});
+
+// ─── TanStack Query mutation mock ─────────────────────────────────────────────
+vi.mock('@tanstack/react-query', async () => {
+    const actual = await vi.importActual('@tanstack/react-query');
+    return {
+        ...actual,
+        useMutation: vi.fn(() => ({
+            mutate: vi.fn(),
+            isPending: false,
+        })),
+    };
+});
+
+// ─── API client mock ──────────────────────────────────────────────────────────
+vi.mock('../../lib/api-client', () => ({
+    createEvent: vi.fn(),
+    updateEvent: vi.fn(),
+}));
+
+// ─── Toast mock ───────────────────────────────────────────────────────────────
+vi.mock('../../lib/toast', () => ({
+    toast: {
+        success: vi.fn(),
+        error: vi.fn(),
+    },
+}));
+
+// ─── Timezone store mock ──────────────────────────────────────────────────────
+vi.mock('../../stores/timezone-store', () => ({
+    useTimezoneStore: vi.fn((selector: (s: { resolved: string }) => unknown) =>
+        selector({ resolved: 'America/New_York' }),
+    ),
+}));
+
+vi.mock('../../lib/timezone-utils', () => ({
+    getTimezoneAbbr: vi.fn(() => 'EST'),
+}));
+
+// ─── Hook mocks ───────────────────────────────────────────────────────────────
+vi.mock('../../hooks/use-event-templates', () => ({
+    useEventTemplates: vi.fn(() => ({ data: null })),
+    useCreateTemplate: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+    useDeleteTemplate: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}));
+
+vi.mock('../../hooks/use-game-registry', () => ({
+    useGameRegistry: vi.fn(() => ({ games: [] })),
+    useEventTypes: vi.fn(() => ({ data: null })),
+}));
+
+vi.mock('../../hooks/use-want-to-play', () => ({
+    useWantToPlay: vi.fn(() => ({ count: 0, isLoading: false })),
+}));
+
+// ─── Plugin/WoW mocks ─────────────────────────────────────────────────────────
+vi.mock('../../plugins', () => ({
+    PluginSlot: vi.fn(() => null),
+}));
+
+vi.mock('../../plugins/wow/utils', () => ({
+    getWowVariant: vi.fn(() => null),
+    getContentType: vi.fn(() => null),
+}));
+
+// ─── Child component mocks ────────────────────────────────────────────────────
+vi.mock('./game-search-input', () => ({
+    GameSearchInput: vi.fn(() => <div data-testid="game-search-input" />),
+}));
+
+// ─── Test helpers ─────────────────────────────────────────────────────────────
+function createQueryClient() {
+    return new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+}
+
+function renderForm(props: Parameters<typeof CreateEventForm>[0] = {}) {
+    return render(
+        <QueryClientProvider client={createQueryClient()}>
+            <MemoryRouter>
+                <CreateEventForm {...props} />
+            </MemoryRouter>
+        </QueryClientProvider>,
+    );
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe('CreateEventForm — custom duration inputs stacking', () => {
+    it('custom duration inputs show hr and min labels', () => {
+        renderForm();
+        const customRadio = screen.getByRole('radio', { name: 'Custom' });
+        fireEvent.click(customRadio);
+
+        expect(customRadio).toBeChecked();
+        expect(screen.getByText('hr')).toBeInTheDocument();
+        expect(screen.getByText('min')).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Duration hours' })).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Duration minutes' })).toBeInTheDocument();
+    });
+});
+
+function createeventformSlotStepperBehaviorGroup1() {
+it('increments slot value when the Increase button is clicked', () => {
+        renderForm();
+        // Generic Slots is the default: one "Players" stepper
+        const playersInput = screen.getByRole('spinbutton', { name: 'Players slots' });
+        const initialValue = parseInt((playersInput as HTMLInputElement).value);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Increase Players' }));
+
+        expect(playersInput).toHaveValue(initialValue + 1);
+    });
+
+it('decrements slot value when the Decrease button is clicked', () => {
+        renderForm();
+        const playersInput = screen.getByRole('spinbutton', { name: 'Players slots' });
+        const initialValue = parseInt((playersInput as HTMLInputElement).value);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Decrease Players' }));
+
+        // Value should not go below 0 (min)
+        expect(playersInput).toHaveValue(Math.max(0, initialValue - 1));
+    });
+
+}
+
+function createeventformSlotStepperBehaviorGroup2() {
+it('decrement button is disabled when value is at minimum (0)', () => {
+        renderForm();
+        // Switch to MMO roles, then walk the Tank stepper down to 0
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
+        const tankDecrement = screen.getByRole('button', { name: 'Decrease Tank' });
+        const tankInput = screen.getByRole('spinbutton', { name: 'Tank slots' }) as HTMLInputElement;
+
+        // Click decrement until we reach 0
+        const initialVal = parseInt(tankInput.value);
+        for (let i = 0; i < initialVal; i++) {
+            fireEvent.click(tankDecrement);
+        }
+
+        expect(parseInt(tankInput.value)).toBe(0);
+        expect(tankDecrement).toBeDisabled();
+    });
+
+}
+
+describe('CreateEventForm — SlotStepper behavior', () => {
+    createeventformSlotStepperBehaviorGroup1();
+    createeventformSlotStepperBehaviorGroup2();
+});
+
+describe('CreateEventForm — desktop layout unchanged', () => {
+    it('renders the Slot Type radiogroup with both options', () => {
+        renderForm();
+        expect(screen.getByRole('radiogroup', { name: 'Slot Type' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'MMO Roles' })).not.toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Generic Slots' })).toBeChecked();
+    });
+
+    it('renders all duration preset radios', () => {
+        renderForm();
+        expect(screen.getByRole('radio', { name: '1h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '1.5h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '2h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '3h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '4h' })).toBeInTheDocument();
+    });
+
+    it('renders form section labels', () => {
+        renderForm();
+        expect(screen.getByText('Game & Content')).toBeInTheDocument();
+        expect(screen.getByText('Details')).toBeInTheDocument();
+        expect(screen.getByText('When')).toBeInTheDocument();
+        expect(screen.getByText('Roster')).toBeInTheDocument();
+    });
+
+    it('renders Create Event submit button', () => {
+        renderForm();
+        expect(screen.getByRole('button', { name: 'Create Event' })).toBeInTheDocument();
+    });
+});
+
+describe('CreateEventForm — MMO vs generic slot toggle', () => {
+    it('shows MMO role steppers (Tank, Healer, DPS) when MMO Roles selected', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
+
+        expect(screen.getByRole('radio', { name: 'MMO Roles' })).toBeChecked();
+        expect(screen.getByText('Tank')).toBeInTheDocument();
+        expect(screen.getByText('Healer')).toBeInTheDocument();
+        expect(screen.getByText('DPS')).toBeInTheDocument();
+    });
+
+    it('shows Players stepper when Generic Slots selected', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('radio', { name: 'Generic Slots' }));
+
+        expect(screen.getByText('Players')).toBeInTheDocument();
+    });
+
+    it('does not show Bench stepper (bench is now dynamic)', () => {
+        renderForm();
+        expect(screen.queryByText('Bench')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
+        expect(screen.queryByText('Bench')).not.toBeInTheDocument();
+    });
+});
+
+// ─── Recurrence section tests (ROK-422 QA hardening) ─────────────────────────
+
+describe('CreateEventForm — recurrence section visibility', () => {
+    it('shows the Repeat select in create mode', () => {
+        renderForm();
+        expect(screen.getByLabelText(/repeat/i)).toBeInTheDocument();
+    });
+
+    it('does not show the recurrence until field when no frequency is selected', () => {
+        renderForm();
+        expect(screen.queryByLabelText(/repeat until/i)).not.toBeInTheDocument();
+    });
+
+    it('shows Repeat Until date input when a frequency is selected', () => {
+        renderForm();
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        expect(screen.getByLabelText(/repeat until/i)).toBeInTheDocument();
+    });
+
+    function testHidesTheRecurrenceSectionWhen() {
+        const editEvent = {
+            id: 1,
+            title: 'Test Event',
+            description: null,
+            startTime: '2026-03-01T19:00:00.000Z',
+            endTime: '2026-03-01T21:00:00.000Z',
+            creator: { id: 1, username: 'user', avatar: null, discordId: null, customAvatarUrl: null },
+            game: null,
+            signupCount: 0,
+            slotConfig: null,
+            maxAttendees: null,
+            autoUnbench: true,
+            contentInstances: null,
+            recurrenceGroupId: null,
+            recurrenceRule: null,
+            reminder15min: true,
+            reminder1hour: false,
+            reminder24hour: false,
+            cancelledAt: null,
+            cancellationReason: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        };
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                <MemoryRouter>
+                    <CreateEventForm event={editEvent as never} />
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+
+        // Repeat select should not be in the DOM in edit mode
+        expect(screen.queryByLabelText(/repeat/i)).not.toBeInTheDocument();
+    
+    }
+    it('hides the recurrence section when in edit mode', () => { testHidesTheRecurrenceSectionWhen(); });
+});
+
+describe('CreateEventForm — recurrence validation', () => {
+    it('shows error when frequency is set but until date is missing', async () => {
+        const { container } = renderForm();
+
+        // Fill in required fields to reach recurrence validation
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-01' } });
+        fireEvent.change(container.querySelector('#startTime')!, { target: { value: '19:00' } });
+        // Set a title via the hidden input approach
+        const titleInput = container.querySelector('#title') as HTMLInputElement | null;
+        if (titleInput) fireEvent.change(titleInput, { target: { value: 'Test Event' } });
+
+        // Select a recurrence frequency without setting until
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        // Submit the form
+        fireEvent.submit(container.querySelector('form')!);
+
+        // Error message should appear
+        expect(await screen.findByText('End date is required for recurring events')).toBeInTheDocument();
+    });
+
+    it('shows error when recurrence until is on or before start date', async () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-15' } });
+        fireEvent.change(container.querySelector('#startTime')!, { target: { value: '19:00' } });
+        const titleInput = container.querySelector('#title') as HTMLInputElement | null;
+        if (titleInput) fireEvent.change(titleInput, { target: { value: 'Test Event' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        // Set until to same day as start (should fail: must be AFTER start)
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        fireEvent.change(untilInput, { target: { value: '2026-03-15' } });
+
+        fireEvent.submit(container.querySelector('form')!);
+
+        expect(await screen.findByText('End date must be after start date')).toBeInTheDocument();
+    });
+});
+
+function createeventformRecurrenceInstanceCountPreviewGroup1() {
+it('shows instance count preview when frequency and until are set', async () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-01' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        // 4 weeks after start = 4 weekly occurrences (Mar 1, 8, 15, 22)
+        fireEvent.change(untilInput, { target: { value: '2026-03-22' } });
+
+        // The preview text should appear with the count
+        const preview = await screen.findByText(/creates/i);
+        expect(preview).toBeInTheDocument();
+        expect(preview.textContent).toMatch(/4/);
+    });
+
+it('shows no instance count preview when until is before start', () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-15' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        fireEvent.change(untilInput, { target: { value: '2026-03-10' } }); // before start
+
+        // Count is 0 when until <= start, so preview text should NOT appear
+        expect(screen.queryByText(/creates/i)).not.toBeInTheDocument();
+    });
+
+}
+
+function createeventformRecurrenceInstanceCountPreviewGroup2() {
+it('caps instance count preview at 52 for a far-future until date', async () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-01-01' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        fireEvent.change(untilInput, { target: { value: '2030-12-31' } }); // far future
+
+        const preview = await screen.findByText(/creates/i);
+        expect(preview).toBeInTheDocument();
+        // The count shown must be exactly 52 (cap), not more
+        expect(preview.textContent).toMatch(/52/);
+    });
+
+}
+
+describe('CreateEventForm — recurrence instance count preview', () => {
+    createeventformRecurrenceInstanceCountPreviewGroup1();
+    createeventformRecurrenceInstanceCountPreviewGroup2();
+});
+
+// ─── ROK-1350: gameId unset semantics in buildSubmitDto ───────────────────────
+describe('buildSubmitDto — gameId unset semantics (ROK-1350)', () => {
+    // `game` truthy = a game is selected in the picker; null = explicitly cleared.
+    async function buildDto(
+        opts: { registryGameId: number | null | undefined; isEditMode: boolean; gameSelected: boolean },
+    ) {
+        const { buildSubmitDto, getInitialState } = await import('./create-event-form.utils');
+        const form = getInitialState(undefined, 'America/New_York');
+        form.title = 'Chrome MCP Variety Night';
+        form.startDate = '2026-06-08';
+        form.startTime = '20:00';
+        form.game = opts.gameSelected
+            ? ({ id: 10, name: 'Valheim', slug: 'valheim', coverUrl: null } as FormState['game'])
+            : null;
+        return buildSubmitDto(form, 'America/New_York', opts.registryGameId, opts.isEditMode);
+    }
+
+    it('edit mode with cleared picker sends explicit gameId: null (unset persists)', async () => {
+        const dto = await buildDto({ registryGameId: null, isEditMode: true, gameSelected: false });
+        expect(dto.gameId).toBeNull();
+    });
+
+    it('create mode with no game omits gameId (CreateEventDto is not nullable)', async () => {
+        const dto = await buildDto({ registryGameId: null, isEditMode: false, gameSelected: false });
+        expect(dto.gameId).toBeUndefined();
+    });
+
+    it('edit mode with a selected, resolved game sends the numeric gameId', async () => {
+        const dto = await buildDto({ registryGameId: 10, isEditMode: true, gameSelected: true });
+        expect(dto.gameId).toBe(10);
+    });
+
+    it('edit mode with a selected game whose registry id is unresolved OMITS gameId (preserves existing, never wipes)', async () => {
+        const dto = await buildDto({ registryGameId: undefined, isEditMode: true, gameSelected: true });
+        expect(dto.gameId).toBeUndefined();
+    });
+});
+
+// ─── Post-event follow-up prefill ─────────────────────────────────────────────
+describe('CreateEventForm copyFromEvent prefill', () => {
+    const endedEvent = defined({
+        id: 501,
+        title: 'Thursday Deep Rock',
+        description: 'Bring your own beer',
+        startTime: '2026-08-20T20:00:00.000Z',
+        endTime: '2026-08-20T23:00:00.000Z',
+        creator: { id: 1, displayName: 'Jake', avatar: null },
+        game: { id: 42, name: 'Deep Rock Galactic', slug: 'drg', coverUrl: null },
+        signupCount: 4,
+        slotConfig: { type: 'generic', player: 6 },
+        maxAttendees: 6,
+    } as unknown as NonNullable<Parameters<typeof CreateEventForm>[0]>['copyFromEvent'], 'endedEvent');
+
+    it('renders the source event title in the form', () => {
+        renderForm({ copyFromEvent: endedEvent });
+
+        expect(screen.getByDisplayValue('Thursday Deep Rock')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Bring your own beer')).toBeInTheDocument();
+    });
+
+    it('keeps the copied cap when initialGame would otherwise default it', () => {
+        renderForm({
+            copyFromEvent: endedEvent,
+            // The game-wide cap (16) must NOT overwrite the event's own 6.
+            initialGame: {
+                id: 42, name: 'Deep Rock Galactic', slug: 'drg', coverUrl: null,
+                playerCount: { min: 1, max: 16 },
+            },
+        });
+
+        expect(screen.getByLabelText('Max Attendees')).toHaveValue(6);
+        expect(screen.queryByDisplayValue('16')).not.toBeInTheDocument();
+    });
+
+    it('opens blank with no copy source', () => {
+        renderForm();
+
+        expect(screen.queryByDisplayValue('Thursday Deep Rock')).not.toBeInTheDocument();
+    });
+});
+
+// ─── ROK-1649 AC1: required title via Field, noValidate on the form ──────────
+describe('CreateEventForm — Game details fields (ROK-1649 AC1)', () => {
+    it('the title is natively required + aria-required and named exactly "Event Title"', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('id', 'title');
+        expect(title).toBeRequired();
+        expect(title).toHaveAttribute('required');
+        expect(title).toHaveAttribute('aria-required', 'true');
+    });
+
+    it('the title asterisk comes from Field: aria-hidden inside the label', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' }) as HTMLInputElement;
+        const star = title.labels?.[0]?.querySelector('[aria-hidden="true"]');
+        expect(star).toHaveTextContent('*');
+        expect(star).toHaveClass('text-danger');
+    });
+
+    it('Description is a Textarea named "Description" that keeps the title-description id', () => {
+        renderForm();
+        expect(screen.getByRole('textbox', { name: 'Description' })).toHaveAttribute('id', 'title-description');
+    });
+
+    it('an empty submit through the button still shows the inline title error (form is noValidate)', () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toHaveAttribute('novalidate');
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('aria-invalid', 'true');
+        expect(title).toHaveAccessibleDescription(/Title is required/);
+    });
+
+    it('Event Type is a Select named exactly "Event Type" with its hint as the description', () => {
+        const types = { data: { data: [{ id: 7, name: 'Raid', slug: 'raid', defaultPlayerCap: 10 }] } };
+        vi.mocked(useEventTypes).mockReturnValue(types as unknown as ReturnType<typeof useEventTypes>);
+        try {
+            renderForm();
+            const select = screen.getByRole('combobox', { name: 'Event Type' });
+            expect(select).toHaveAttribute('id', 'eventType');
+            expect(select).toHaveAccessibleDescription('Auto-fills duration and roster slots based on content type');
+            expect(screen.getByRole('option', { name: 'Raid (10-player)' })).toBeInTheDocument();
+        } finally {
+            vi.mocked(useEventTypes).mockReturnValue({ data: null } as unknown as ReturnType<typeof useEventTypes>);
+        }
+    });
+});
+
+// ─── ROK-1649 AC1: When-section fields are Field-required ────────────────────
+function expectFieldRequired(input: Element | null, label: string) {
+    expect(input).not.toBeNull();
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute('required');
+    expect(input).toHaveAttribute('aria-required', 'true');
+    const lbl = (input as HTMLInputElement).labels?.[0];
+    expect(lbl).toHaveTextContent(label);
+    const star = lbl?.querySelector('[aria-hidden="true"]');
+    expect(star).toHaveTextContent('*');
+    expect(star).toHaveClass('text-danger');
+}
+
+describe('CreateEventForm — When section fields (ROK-1649 AC1)', () => {
+    it('Date and Start Time are natively required + aria-required, asterisk from Field', () => {
+        const { container } = renderForm();
+        expectFieldRequired(container.querySelector('#startDate'), 'Date');
+        expectFieldRequired(container.querySelector('#startTime'), 'Start Time');
+    });
+
+    it('Repeat is a combobox named exactly "Repeat"; Repeat Until is Field-required', () => {
+        const { container } = renderForm();
+        const repeat = screen.getByRole('combobox', { name: 'Repeat' });
+        expect(repeat).toHaveAttribute('id', 'recurrence');
+        fireEvent.change(repeat, { target: { value: 'weekly' } });
+        expectFieldRequired(container.querySelector('#recurrenceUntil'), 'Repeat Until');
+    });
+
+    it('an empty submit marks Date invalid and describes it with the inline error', () => {
+        const { container } = renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        const date = container.querySelector('#startDate');
+        expect(date).toHaveAttribute('aria-invalid', 'true');
+        expect(date).toHaveAccessibleDescription(/Start date is required/);
+    });
+});
+
+// ─── ROK-1649 AC2: templates bar, save-template bar and footer on Button ─────
+type TplReturn = ReturnType<typeof useEventTemplates>;
+type MutReturn = ReturnType<typeof useMutation>;
+
+describe('CreateEventForm — templates and footer on the primitives (ROK-1649 AC2)', () => {
+    it('each template is a chip plus an icon-only delete named after it', () => {
+        const del = vi.fn();
+        const tpls = { data: { data: [{ id: 42, name: 'Raid Night', config: {} }] } };
+        vi.mocked(useEventTemplates).mockReturnValue(tpls as unknown as TplReturn);
+        vi.mocked(useDeleteTemplate).mockReturnValue({ mutate: del, isPending: false } as unknown as ReturnType<typeof useDeleteTemplate>);
+        try {
+            renderForm();
+            expect(screen.getByRole('button', { name: 'Raid Night' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Delete template Raid Night' }));
+            expect(del).toHaveBeenCalledWith(42);
+        } finally {
+            vi.mocked(useEventTemplates).mockReturnValue({ data: null } as unknown as TplReturn);
+        }
+    });
+
+    it('Save as Template opens a Field-named "Template name" box with a named close button', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Save as Template' }));
+        const box = screen.getByRole('textbox', { name: 'Template name' });
+        expect(box).toHaveAttribute('maxLength', '100');
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Close template name' }));
+        expect(screen.queryByRole('textbox', { name: 'Template name' })).not.toBeInTheDocument();
+    });
+
+    it('a pending template save is a busy Save button named "Saving..."', () => {
+        const pending = { mutate: vi.fn(), isPending: true };
+        vi.mocked(useCreateTemplate).mockReturnValue(pending as unknown as ReturnType<typeof useCreateTemplate>);
+        try {
+            renderForm();
+            fireEvent.click(screen.getByRole('button', { name: 'Save as Template' }));
+            const save = screen.getByRole('button', { name: 'Saving...' });
+            expect(save).toHaveAttribute('aria-busy', 'true');
+            expect(save).toHaveAttribute('aria-disabled', 'true');
+        } finally {
+            vi.mocked(useCreateTemplate).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useCreateTemplate>);
+        }
+    });
+
+    it('a pending create is a busy submit button named "Creating..."', () => {
+        vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: true } as unknown as MutReturn);
+        try {
+            renderForm();
+            const submit = screen.getByRole('button', { name: 'Creating...' });
+            expect(submit).toHaveAttribute('type', 'submit');
+            expect(submit).toHaveAttribute('aria-busy', 'true');
+            expect(submit).toHaveAttribute('aria-disabled', 'true');
+        } finally {
+            vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as MutReturn);
+        }
+    });
+});

@@ -1,0 +1,79 @@
+import { z } from 'zod';
+
+// ============================================================
+// Activity Log Schemas (ROK-930)
+// ============================================================
+
+/** All supported activity action types across entity types. */
+export const ActivityActionSchema = z.enum([
+    // Lineup actions
+    'lineup_created',
+    'game_nominated',
+    'nomination_removed',
+    'game_carried_over',
+    'voting_started',
+    'vote_cast',
+    // ROK-1474: the single top pick. Logged separately from `vote_cast`
+    // because the outcome is now partly determined by stars — an unlogged
+    // star makes a star-broken tie unexplainable after the fact.
+    'vote_starred',
+    'vote_star_cleared',
+    'lineup_decided',
+    'lineup_aborted',
+    'lineup_public_share_toggled',
+    'lineup_auto_advance_paused',
+    // ROK-1443: building deadline hit with < 2 nominations — extended once.
+    'lineup_deadline_extended',
+    // ROK-1374 (D13): the tie hold ran out with no pick — archived, nothing decided.
+    'tie_expired',
+    'event_linked',
+    // ROK-1296 (U4 SubmitBar) — explicit submit ritual.
+    'submit_nominations',
+    'submit_votes',
+    /** Historical since ROK-1544 — no producer (the vote IS the submit); kept because logged rows still reference it. */
+    'submit_scheduling',
+    // Event actions
+    'event_created',
+    'signup_added',
+    'signup_cancelled',
+    'roster_allocated',
+    'event_cancelled',
+    'event_rescheduled',
+    'signup_reconfirmed',
+]);
+
+export type ActivityActionDto = z.infer<typeof ActivityActionSchema>;
+
+/** Entity types that can have activity timelines. */
+export const ActivityEntityTypeSchema = z.enum(['lineup', 'event']);
+
+export type ActivityEntityTypeDto = z.infer<typeof ActivityEntityTypeSchema>;
+
+// ============================================================
+// Response Schemas
+// ============================================================
+
+/** Actor identity embedded in activity entries. */
+const ActivityActorSchema = z.object({
+    id: z.number(),
+    // Non-null at the API boundary — backend uses displayNameSql(users).
+    displayName: z.string(),
+});
+
+/** A single activity log entry. */
+export const ActivityEntrySchema = z.object({
+    id: z.number(),
+    action: ActivityActionSchema,
+    actor: ActivityActorSchema.nullable(),
+    metadata: z.record(z.string(), z.unknown()).nullable(),
+    createdAt: z.string(),
+});
+
+export type ActivityEntryDto = z.infer<typeof ActivityEntrySchema>;
+
+/** Activity timeline response. */
+export const ActivityTimelineResponseSchema = z.object({
+    data: z.array(ActivityEntrySchema),
+});
+
+export type ActivityTimelineResponseDto = z.infer<typeof ActivityTimelineResponseSchema>;

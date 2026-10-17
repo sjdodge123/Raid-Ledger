@@ -1,0 +1,125 @@
+import type { JSX } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { SteamLibraryEntryDto, ItadGamePricingDto } from "@raid-ledger/contract";
+import { useUserSteamLibrary } from "../../hooks/use-user-profile";
+import { formatPlaytime } from "../../lib/activity-utils";
+import type { PricingMap } from "../user-profile-page";
+import { SteamIcon } from "../../components/icons/SteamIcon";
+import { buildDiscordAvatarUrl } from "../../lib/avatar";
+import { useBranding } from "../../hooks/use-branding";
+import { GameRowPill } from "../../components/games/game-row-pill";
+import { SteamLibraryModal } from "./steam-library-modal";
+
+/** Single Steam library entry using shared GameRowPill (ROK-805). */
+function SteamLibraryItem({
+  entry,
+  pricing,
+}: {
+  entry: SteamLibraryEntryDto;
+  pricing?: ItadGamePricingDto | null | undefined;
+}): JSX.Element {
+  return (
+    <GameRowPill
+      name={entry.gameName}
+      coverUrl={entry.coverUrl}
+      href={`/games/${entry.gameId}`}
+      subtitle={formatPlaytime(entry.playtimeSeconds)}
+      pricing={pricing}
+    />
+  );
+}
+
+/** ROK-745: Steam Library section with show-10 + modal */
+export function SteamLibrarySection({
+  userId,
+  pricingMap,
+}: {
+  userId: number;
+  pricingMap: PricingMap;
+}): JSX.Element | null {
+  const { data, isLoading } = useUserSteamLibrary(userId);
+  const [showModal, setShowModal] = useState(false);
+  const items = data?.data ?? [];
+  const total = data?.meta?.total ?? 0;
+
+  if (items.length === 0 && !isLoading) return null;
+  return (
+    <div className="user-profile-section">
+      <div className="flex items-center gap-2 mb-3">
+        <SteamIcon className="w-5 h-5 text-muted" />
+        <h2 className="user-profile-section-title mb-0">Steam Library{total > 0 ? ` (${total})` : ""}</h2>
+      </div>
+      <div className="flex flex-col gap-2">
+        {items.map((entry) => <SteamLibraryItem key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />)}
+      </div>
+      {total > 10 && (
+        <button onClick={() => setShowModal(true)} className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">Show All ({total})</button>
+      )}
+      <SteamLibraryModal userId={userId} isOpen={showModal} onClose={() => setShowModal(false)} total={total} pricingMap={pricingMap} />
+    </div>
+  );
+}
+
+/** Guest profile header with avatar and info */
+function GuestProfileHeader({
+  username,
+  avatarUrl,
+  communityName,
+}: {
+  username: string;
+  avatarUrl: string | null;
+  communityName: string;
+}): JSX.Element {
+  // TDB:1951: a broken Discord avatar falls back to the initials, not nothing.
+  // Tracked per URL, so a new avatarUrl gets a fresh load attempt.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imgFailed = !!avatarUrl && failedUrl === avatarUrl;
+  return (
+    <div className="user-profile-header">
+      {avatarUrl && !imgFailed ? (
+        <img src={avatarUrl} alt={username} className="user-profile-avatar"
+          onError={() => setFailedUrl(avatarUrl)} />
+      ) : (
+        <div className="user-profile-avatar user-profile-avatar--initials">{username.charAt(0).toUpperCase()}</div>
+      )}
+      <div className="user-profile-info">
+        <h1 className="user-profile-name">{username}</h1>
+        <p className="user-profile-meta">{username} is not currently a member of {communityName}</p>
+        <p className="user-profile-guest-note">This player was added as a guest via Discord</p>
+      </div>
+    </div>
+  );
+}
+
+/** Guest profile page for non-member Discord users (ROK-381). */
+export function GuestProfile({
+  username,
+  discordId,
+  avatarHash,
+}: {
+  username: string;
+  discordId: string;
+  avatarHash: string | null;
+}): JSX.Element {
+  const navigate = useNavigate();
+  const { brandingQuery } = useBranding();
+  const communityName = brandingQuery.data?.communityName ?? "this community";
+  const avatarUrl = buildDiscordAvatarUrl(discordId, avatarHash);
+  return (
+    <div className="user-profile-page">
+      <div className="user-profile-card">
+        <GuestProfileHeader
+          username={username}
+          avatarUrl={avatarUrl}
+          communityName={communityName}
+        />
+        <div className="user-profile-guest-actions">
+          <button onClick={() => navigate(-1)} className="btn btn-primary">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

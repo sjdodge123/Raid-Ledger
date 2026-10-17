@@ -1,0 +1,347 @@
+/**
+ * Polling utilities for Discord smoke tests.
+ * Replaces fixed sleep() calls with adaptive polling that uses
+ * exponential backoff and deadline-aware timeouts.
+ */
+import { type Message, type PartialMessage } from 'discord.js';
+import { getClient } from '../client.js';
+import { readDMs, readLastMessages, toSimpleMessage, type SimpleMessage } from './messages.js';
+import { shouldAcceptMessage } from './bot-author.js';
+import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
+
+/**
+ * Options for pollForEmbed.
+ *
+ * Extends RenderRuleOptions (ROK-1466): the matched message is swept for
+ * unrendered Discord tokens and API limit violations before it reaches the
+ * spec, unless the caller opts out with `skipRenderRules`.
+ */
+export interface PollOptions extends RenderRuleOptions {
+  /** Initial poll interval in ms (default 2000). */
+  intervalMs?: number;
+  /** Enable exponential backoff (default true). */
+  backoff?: boolean;
+  /** Max messages to fetch per poll (default 100). */
+  fetchCount?: number;
+  /**
+   * Message ids that must never match — a `snapshotMessageIds` taken BEFORE
+   * the mutation under test. Reads are oldest-first and the first match wins,
+   * so an id/path-only predicate otherwise settles on a prior run's card
+   * carrying the same seeded href (TDB:571 / TDB:1459).
+   */
+  excludeIds?: ReadonlySet<string>;
+}
+
+const DEFAULT_INTERVAL = 2000;
+const MAX_INTERVAL = 8000;
+const POLL_FALLBACK_INTERVAL = 3000;
+const DEFAULT_FETCH_COUNT = 100;
+
+/** Reads a channel's recent messages; `readLastMessages` outside unit specs. */
+type ChannelReader = (channelId: string, count: number) => Promise<SimpleMessage[]>;
+
+/**
+ * Read a channel for one poll tick. A Discord response cut off in transit
+ * fails inside discord.js's JSON.parse with a bare SyntaxError ("Unterminated
+ * string in JSON at position N") that names no channel — seen ~1 in 25 smoke
+ * runs on a ~140 KB `messages.fetch({ limit: 100 })`. That tick is logged with
+ * the channel id and counted as a miss (an empty read), so the caller polls
+ * again on its next tick. Any other error still propagates.
+ */
+export async function readOrMiss(
+  channelId: string,
+  count: number,
+  caller: string,
+  read: ChannelReader = readLastMessages,
+): Promise<SimpleMessage[]> {
+  try {
+    return await read(channelId, count);
+  } catch (err) {
+    if (!(err instanceof SyntaxError)) throw err;
+    console.warn(
+      `  [${caller}] channel ${channelId}: unparseable Discord response (${err.message}) — counted as a miss, polling again`,
+    );
+    return [];
+  }
+}
+
+/** The first message that is not excluded and satisfies `predicate`. */
+export function firstFreshMatch(
+  msgs: readonly SimpleMessage[],
+  predicate: (msg: SimpleMessage) => boolean,
+  excludeIds?: ReadonlySet<string>,
+): SimpleMessage | undefined {
+  return msgs.find((m) => !excludeIds?.has(m.id) && predicate(m));
+}
+
+/** Reads a snapshot makes before giving up on truncated Discord responses. */
+const SNAPSHOT_ATTEMPTS = 3;
+
+/**
+ * Ids of a channel's recent messages, for `PollOptions.excludeIds`. Take it
+ * BEFORE the mutation that posts the card under test (Discord caps a fetch
+ * at 100, which covers many runs' leftover cards).
+ *
+ * Unlike a poll tick, a truncated read is NOT counted as an empty result: an
+ * empty fence lets a prior run's card match, which false-passes any probe
+ * that card also satisfies. It is re-read, and after SNAPSHOT_ATTEMPTS
+ * truncated reads the SyntaxError propagates. Any other error propagates at
+ * once.
+ */
+export async function snapshotMessageIds(
+  channelId: string,
+  count = DEFAULT_FETCH_COUNT,
+  read: ChannelReader = readLastMessages,
+): Promise<Set<string>> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return new Set((await read(channelId, count)).map((m) => m.id));
+    } catch (err) {
+      if (!(err instanceof SyntaxError) || attempt >= SNAPSHOT_ATTEMPTS) throw err;
+      console.warn(
+        `  [snapshotMessageIds] channel ${channelId}: unparseable Discord response (${err.message}) — re-reading (attempt ${attempt}/${SNAPSHOT_ATTEMPTS})`,
+      );
+    }
+  }
+}
+
+/**
+ * Poll a channel for a message matching a predicate.
+ * Uses exponential backoff (2s -> 4s -> 8s cap) by default.
+ * Returns the matching message or throws on timeout.
+ */
+export async function pollForEmbed(
+  channelId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  timeoutMs: number,
+  opts?: PollOptions,
+): Promise<SimpleMessage> {
+  const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
+  const useBackoff = opts?.backoff ?? true;
+  const fetchCount = opts?.fetchCount ?? DEFAULT_FETCH_COUNT;
+  const deadline = Date.now() + timeoutMs;
+  let currentInterval = interval;
+
+  while (Date.now() < deadline) {
+    const msgs = await readOrMiss(channelId, fetchCount, 'pollForEmbed');
+    const match = firstFreshMatch(msgs, predicate, opts?.excludeIds);
+    if (match) return sweepRenderRules(match, opts);
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+
+    await delay(Math.min(currentInterval, remaining));
+
+    if (useBackoff) {
+      currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
+    }
+  }
+
+  throw new Error(
+    `pollForEmbed timed out after ${timeoutMs}ms on channel ${channelId}`,
+  );
+}
+
+/**
+ * Wait for a message update (edit) matching a predicate.
+ * Combines an event listener with polling fallback — whichever
+ * fires first wins, eliminating the race condition in pure
+ * event-driven approaches.
+ */
+export async function waitForEmbedUpdate(
+  channelId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  timeoutMs = 30_000,
+  opts?: RenderRuleOptions,
+): Promise<SimpleMessage> {
+  const client = getClient();
+  const deadline = Date.now() + timeoutMs;
+
+  return new Promise<SimpleMessage>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      settled = true;
+      client.off('messageUpdate', onUpdate);
+    };
+
+    const fail = (err: unknown) => {
+      if (settled) return;
+      clearTimeout(timer);
+      cleanup();
+      reject(err);
+    };
+
+    const timer = setTimeout(
+      () => fail(new Error(`waitForEmbedUpdate timed out after ${timeoutMs}ms on ${channelId}`)),
+      timeoutMs,
+    );
+
+    const settle = (msg: SimpleMessage) => {
+      if (settled) return;
+      clearTimeout(timer);
+      cleanup();
+      // A render-rule violation must REJECT, not throw inside a discord.js
+      // listener where nothing would catch it and the promise would hang
+      // until the timeout — reporting as "timed out" instead of the real cause.
+      try {
+        resolve(sweepRenderRules(msg, opts));
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    const onUpdate = buildUpdateHandler(channelId, predicate, settle, () => settled);
+    client.on('messageUpdate', onUpdate);
+
+    // Poll as fallback (catches edits that arrived before listener). A read
+    // error that is not a truncated body rejects this wait with its real cause
+    // instead of floating as an unhandled rejection.
+    pollFallback(channelId, predicate, deadline, settle, () => settled).catch(fail);
+  });
+}
+
+/** Build a messageUpdate handler that checks edits against a predicate. */
+function buildUpdateHandler(
+  channelId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  settle: (msg: SimpleMessage) => void,
+  isSettled: () => boolean,
+) {
+  return function onUpdate(
+    _old: Message | PartialMessage,
+    updated: Message | PartialMessage,
+  ) {
+    if (isSettled() || updated.channelId !== channelId) return;
+    if (updated.partial) {
+      void fetchAndCheck(updated, predicate, settle, isSettled);
+      return;
+    }
+    if (!updated.author) return;
+    const simple = toSimpleMessage(updated as Message);
+    // ROK-1469 (review M6): the event path gets the same author filter as the
+    // polled path, so a sibling fleet env's edit cannot settle this wait.
+    if (!shouldAcceptMessage(simple)) return;
+    try {
+      if (predicate(simple)) settle(simple);
+    } catch { /* predicate threw — not a match */ }
+  };
+}
+
+/** Fetch full message for partials and check against predicate. */
+function fetchAndCheck(
+  partial: Message | PartialMessage,
+  predicate: (msg: SimpleMessage) => boolean,
+  settle: (msg: SimpleMessage) => void,
+  isSettled: () => boolean,
+): void {
+  void partial.fetch().then((full) => {
+    if (isSettled()) return;
+    const simple = toSimpleMessage(full);
+    if (!shouldAcceptMessage(simple)) return;   // ROK-1469 review M6
+    try { if (predicate(simple)) settle(simple); } catch { /* skip */ }
+  }).catch(() => { /* fetch failed — polling fallback will catch it */ });
+}
+
+/**
+ * Internal polling fallback for waitForEmbedUpdate.
+ * Only matches messages that have been edited (editedAt is set),
+ * preventing false matches on the pre-update message.
+ * Stops early when the promise has already settled.
+ */
+async function pollFallback(
+  channelId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  deadline: number,
+  settle: (msg: SimpleMessage) => void,
+  isSettled: () => boolean,
+): Promise<void> {
+  while (Date.now() < deadline && !isSettled()) {
+    const msgs = await readOrMiss(channelId, DEFAULT_FETCH_COUNT, 'waitForEmbedUpdate');
+    const match = msgs.find((m) => m.editedAt !== null && predicate(m));
+    if (match) {
+      settle(match);
+      return;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0 || isSettled()) return;
+    await delay(Math.min(POLL_FALLBACK_INTERVAL, remaining));
+  }
+}
+
+/**
+ * Generic condition poller for non-embed use cases
+ * (e.g., waiting for notification counts, API state changes).
+ * Calls the async check function at intervals until it returns
+ * a non-null/non-undefined value or the timeout expires.
+ */
+export async function pollForCondition<T>(
+  check: () => Promise<T | null | undefined>,
+  timeoutMs: number,
+  opts?: { intervalMs?: number; backoff?: boolean },
+): Promise<T> {
+  const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
+  const useBackoff = opts?.backoff ?? true;
+  const deadline = Date.now() + timeoutMs;
+  let currentInterval = interval;
+
+  while (Date.now() < deadline) {
+    const result = await check();
+    if (result != null) return result;
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+
+    await delay(Math.min(currentInterval, remaining));
+
+    if (useBackoff) {
+      currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
+    }
+  }
+
+  throw new Error(`pollForCondition timed out after ${timeoutMs}ms`);
+}
+
+/**
+ * Poll for a DM matching a predicate.
+ * Uses readDMs() with exponential backoff to find a matching message
+ * in the bot's DM channel with a specific user.
+ *
+ * @param userId - The Discord user ID whose DM channel to read.
+ * @param predicate - Return true for the message you're looking for.
+ * @param timeoutMs - Maximum wait time (default 10_000).
+ * @param opts - Optional interval override.
+ * @returns The first matching SimpleMessage.
+ * @throws On timeout if no matching DM is found.
+ */
+export async function waitForDM(
+  userId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  timeoutMs = 10_000,
+  opts?: { intervalMs?: number } & RenderRuleOptions,
+): Promise<SimpleMessage> {
+  const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
+  const deadline = Date.now() + timeoutMs;
+  let currentInterval = interval;
+
+  while (Date.now() < deadline) {
+    const msgs = await readDMs(userId);
+    const match = msgs.find(predicate);
+    if (match) return sweepRenderRules(match, opts);
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+
+    await delay(Math.min(currentInterval, remaining));
+    currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
+  }
+
+  throw new Error(
+    `waitForDM timed out after ${timeoutMs}ms for user ${userId}`,
+  );
+}
+
+/** Simple delay helper. */
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}

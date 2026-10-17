@@ -1,0 +1,159 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import {
+  Events,
+  MessageFlags,
+  type Interaction,
+  type ChatInputCommandInteraction,
+  type AutocompleteInteraction,
+} from 'discord.js';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { EventCreateCommand } from '../commands/event-create.command';
+import { EventsListCommand } from '../commands/events-list.command';
+import { RosterViewCommand } from '../commands/roster-view.command';
+import { BindCommand } from '../commands/bind.command';
+import { UnbindCommand } from '../commands/unbind.command';
+import { BindingsCommand } from '../commands/bindings.command';
+import { InviteCommand } from '../commands/invite.command';
+import { HelpCommand } from '../commands/help.command';
+import { PlayingCommand } from '../commands/playing.command';
+import { LfgCommand } from '../commands/lfg.command';
+import { LfgLeaveCommand } from '../commands/lfg-leave.command';
+
+/**
+ * Describes a command that can handle slash command interactions.
+ */
+export interface CommandInteractionHandler {
+  readonly commandName: string;
+  handleInteraction(interaction: ChatInputCommandInteraction): Promise<void>;
+  handleAutocomplete?(interaction: AutocompleteInteraction): Promise<void>;
+}
+
+/**
+ * Listens for Discord interactions (slash commands, autocomplete)
+ * and routes them to the appropriate command handler.
+ */
+@Injectable()
+export class InteractionListener {
+  private readonly logger = new Logger(InteractionListener.name);
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'slash-command interactions',
+  );
+
+  constructor(
+    private readonly clientService: DiscordBotClientService,
+    private readonly eventCreateCommand: EventCreateCommand,
+    private readonly eventsListCommand: EventsListCommand,
+    private readonly rosterViewCommand: RosterViewCommand,
+    private readonly bindCommand: BindCommand,
+    private readonly unbindCommand: UnbindCommand,
+    private readonly bindingsCommand: BindingsCommand,
+    private readonly inviteCommand: InviteCommand,
+    private readonly helpCommand: HelpCommand,
+    private readonly playingCommand: PlayingCommand,
+    private readonly lfgCommand: LfgCommand,
+    private readonly lfgLeaveCommand: LfgLeaveCommand,
+  ) {}
+
+  private getHandlers(): CommandInteractionHandler[] {
+    return [
+      this.eventCreateCommand,
+      this.eventsListCommand,
+      this.rosterViewCommand,
+      this.bindCommand,
+      this.unbindCommand,
+      this.bindingsCommand,
+      this.inviteCommand,
+      this.helpCommand,
+      this.playingCommand,
+      this.lfgCommand,
+      this.lfgLeaveCommand,
+    ];
+  }
+
+  /**
+   * Attach the interaction listener when the bot connects.
+   */
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  attachListener(): void {
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding(Events.InteractionCreate, (interaction: Interaction) => {
+        this.handleInteraction(interaction).catch((err) => {
+          this.logger.error('Unhandled error in interaction handler:', err);
+        });
+      }),
+    ]);
+  }
+
+  /**
+   * Drop the handler so a reconnect re-attaches to the live client.
+   */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  detachListener(): void {
+    this.binding.detach();
+  }
+
+  private async handleInteraction(interaction: Interaction): Promise<void> {
+    if (interaction.isChatInputCommand()) {
+      await this.handleCommand(interaction);
+    } else if (interaction.isAutocomplete()) {
+      await this.handleAutocomplete(interaction);
+    }
+  }
+
+  private async handleCommand(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    const handler = this.getHandlers().find(
+      (h) => h.commandName === interaction.commandName,
+    );
+
+    if (!handler) {
+      this.logger.warn(`No handler for command: ${interaction.commandName}`);
+      return;
+    }
+
+    try {
+      await handler.handleInteraction(interaction);
+    } catch (error) {
+      this.logger.error(`Error handling /${interaction.commandName}:`, error);
+
+      const content = 'Something went wrong. Please try again later.';
+      if (interaction.replied || interaction.deferred) {
+        await interaction
+          .followUp({ content, flags: MessageFlags.Ephemeral })
+          .catch(() => {});
+      } else {
+        await interaction
+          .reply({ content, flags: MessageFlags.Ephemeral })
+          .catch(() => {});
+      }
+    }
+  }
+
+  private async handleAutocomplete(
+    interaction: AutocompleteInteraction,
+  ): Promise<void> {
+    const handler = this.getHandlers().find(
+      (h) => h.commandName === interaction.commandName,
+    );
+
+    if (!handler?.handleAutocomplete) return;
+
+    try {
+      await handler.handleAutocomplete(interaction);
+    } catch (error) {
+      this.logger.error(
+        `Error handling autocomplete for /${interaction.commandName}:`,
+        error,
+      );
+      await interaction.respond([]).catch(() => {});
+    }
+  }
+}

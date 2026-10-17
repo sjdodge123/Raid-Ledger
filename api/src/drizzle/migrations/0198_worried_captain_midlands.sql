@@ -1,0 +1,2 @@
+ALTER TABLE "characters" ADD COLUMN "ruleset" varchar(20);--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_characters_ruleset_identity" ON "characters" USING btree ("game_id","region",lower("name")) WHERE "characters"."ruleset" IS NOT NULL;

@@ -1,0 +1,197 @@
+import type { GuildMember } from 'discord.js';
+import type { DiscordBotClientService } from '../discord-bot-client.service';
+import type { ChannelBindingsService } from '../services/channel-bindings.service';
+import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
+
+/** TTL for channel binding cache entries (ms). */
+export const CACHE_TTL_MS = 60 * 1000;
+
+/** Debounce window per user to avoid rapid join/leave thrashing. */
+export const DEBOUNCE_MS = 2000;
+
+/** Basic Discord member info used across voice state handlers. */
+export interface DiscordMemberInfo {
+  discordUserId: string;
+  discordUsername: string;
+  discordAvatarHash: string | null;
+}
+
+/** Resolved channel binding info. */
+export interface ResolvedBinding {
+  bindingId: string;
+  gameId: number | null;
+  gameName: string | null;
+  bindingPurpose: string;
+  // ROK-1390: series link threaded into runtime so the zero-confirmation spawn
+  // guard can tell series-linked binds from plain fixed-game binds.
+  recurrenceGroupId: string | null;
+  config: {
+    minPlayers?: number;
+    gracePeriod?: number;
+    notificationChannelId?: string;
+    allowJustChatting?: boolean;
+  } | null;
+}
+
+/** Dependencies for voice state helper functions. */
+export interface VoiceStateDeps {
+  clientService: DiscordBotClientService;
+  channelBindingsService: ChannelBindingsService;
+}
+
+/** Build VoiceMemberInfo from a guild member. */
+export function buildMemberInfo(
+  memberId: string,
+  guildMember: GuildMember,
+  userId: number | null,
+): VoiceMemberInfo {
+  return {
+    discordUserId: memberId,
+    discordUsername:
+      guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+    discordAvatarHash: guildMember.user?.avatar ?? null,
+    userId,
+  };
+}
+
+/** Build basic discord member info from a voice state event. */
+export function buildDiscordMember(
+  userId: string,
+  member?: GuildMember | null,
+): DiscordMemberInfo {
+  return {
+    discordUserId: userId,
+    discordUsername: member?.displayName ?? member?.user?.username ?? 'Unknown',
+    discordAvatarHash: member?.user?.avatar ?? null,
+  };
+}
+
+/** True for a general-lobby binding (per-game presence detection). */
+export function isLobbyBinding(binding: ResolvedBinding): boolean {
+  return binding.bindingPurpose === 'general-lobby';
+}
+
+/** Resolve a voice channel from the guild. */
+export function resolveVoiceChannel(
+  clientService: DiscordBotClientService,
+  channelId: string,
+): import('discord.js').VoiceBasedChannel | null {
+  const client = clientService.getClient();
+  if (!client) return null;
+  const guildId = clientService.getGuildId();
+  if (!guildId) return null;
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return null;
+  const channel = guild.channels.cache.get(channelId);
+  if (!channel || !channel.isVoiceBased()) return null;
+  return channel;
+}
+
+/** Cache shape for resolved bindings. */
+type BindingCacheEntry = { cachedAt: number; value: ResolvedBinding[] };
+
+/**
+ * Resolve a channel ID to ALL matching bindings (with caching).
+ * Matches 'game-voice-monitor' and 'general-lobby' binding purposes.
+ */
+export async function resolveAllBindings(
+  deps: VoiceStateDeps,
+  channelId: string,
+  cache: Map<string, BindingCacheEntry>,
+): Promise<ResolvedBinding[]> {
+  const cached = cache.get(channelId);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  const guildId = deps.clientService.getGuildId();
+  if (!guildId) {
+    cache.set(channelId, { cachedAt: Date.now(), value: [] });
+    return [];
+  }
+
+  const bindings =
+    await deps.channelBindingsService.getBindingsWithGameNames(guildId);
+  const matched = bindings
+    .filter(
+      (b) =>
+        b.channelId === channelId &&
+        (b.bindingPurpose === 'game-voice-monitor' ||
+          b.bindingPurpose === 'general-lobby'),
+    )
+    .map(mapToResolvedBinding);
+
+  cache.set(channelId, { cachedAt: Date.now(), value: matched });
+  return matched;
+}
+
+/**
+ * Backward-compat: resolve first matching binding.
+ * NOTE: Only used by VoiceStateListener.resolveBinding() for the onPresenceUpdate
+ * path. Returns only the first binding, so multi-binding channels will only see
+ * one game. If the presence-update path ever needs multi-binding support, this
+ * shim must be replaced with resolveAllBindings usage.
+ */
+export async function resolveBinding(
+  deps: VoiceStateDeps,
+  channelId: string,
+  cache: Map<string, BindingCacheEntry>,
+): Promise<ResolvedBinding | null> {
+  const all = await resolveAllBindings(deps, channelId, cache);
+  return all[0] ?? null;
+}
+
+/** Map a raw binding record to ResolvedBinding. */
+function mapToResolvedBinding(binding: {
+  id: string;
+  gameId: number | null;
+  gameName?: string | null;
+  bindingPurpose: string;
+  recurrenceGroupId?: string | null;
+  config: unknown;
+}): ResolvedBinding {
+  return {
+    bindingId: binding.id,
+    gameId: binding.gameId,
+    gameName: binding.gameName ?? null,
+    bindingPurpose: binding.bindingPurpose,
+    recurrenceGroupId: binding.recurrenceGroupId ?? null,
+    config: binding.config as ResolvedBinding['config'],
+  };
+}
+
+/** Add a user to a channel's member set. */
+export function trackChannelMember(
+  channelMembers: Map<string, Set<string>>,
+  channelId: string,
+  userId: string,
+): void {
+  let members = channelMembers.get(channelId);
+  if (!members) {
+    members = new Set();
+    channelMembers.set(channelId, members);
+  }
+  members.add(userId);
+}
+
+/**
+ * Key for the listener's `pendingSpawnTimers` map (ROK-1445 AC13).
+ *
+ * One pending spawn per `(channel, game)` — keying by channel alone meant the
+ * second qualifying group in a general lobby could never arm a timer. Defined
+ * here (a leaf module) so the format has exactly one definition.
+ */
+export function spawnTimerKey(
+  channelId: string,
+  gameId: number | null,
+): string {
+  return `${channelId}:${gameId ?? 'null'}`;
+}
+
+/** Clear all timers in a map. */
+export function clearTimerMap(map: Map<string, NodeJS.Timeout>): void {
+  for (const timer of map.values()) {
+    clearTimeout(timer);
+  }
+  map.clear();
+}

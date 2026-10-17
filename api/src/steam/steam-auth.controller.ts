@@ -1,0 +1,344 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+  HttpCode,
+  Logger,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
+import * as Sentry from '@sentry/nestjs';
+import { UsersService } from '../users/users.service';
+import { SettingsService } from '../settings/settings.service';
+import { RateLimit } from '../throttler/rate-limit.decorator';
+import { SteamService } from './steam.service';
+import { SteamWishlistService } from './steam-wishlist.service';
+import { validateSteamReturnTo } from './steam-link-returnto.helpers';
+import { startSteamPostLinkSync } from './steam-link-autosync.helpers';
+import {
+  LinkNonceService,
+  LINK_REQUEST_EXPIRED_MESSAGE,
+} from '../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../auth/link-nonce-cookie.helpers';
+import {
+  assertLinkStateBoundToBrowser,
+  bindLinkStateToBrowser,
+} from '../auth/link-state-cookie.helpers';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
+import {
+  buildSteamOpenIdUrl,
+  verifySteamOpenId,
+  getPlayerSummary,
+} from './steam-http.util';
+import { assertFreshSteamAssertion } from './steam-openid-guard.helpers';
+import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
+import {
+  signSteamLinkState,
+  verifySteamLinkState,
+} from './steam-link-state.helpers';
+import { setNoStoreLinkHeaders } from './steam-link-headers.helpers';
+import type { SteamLinkStatusDto } from '@raid-ledger/contract';
+import type { Response, Request } from 'express';
+import type { AuthenticatedExpressRequest } from '../auth/types';
+
+/**
+ * Steam Auth Controller (ROK-417)
+ * Handles Steam OpenID 2.0 account linking.
+ * Unlike Discord, Steam uses OpenID 2.0 (not OAuth 2.0), so there's no token exchange.
+ */
+@Controller('auth/steam')
+export class SteamAuthController {
+  private readonly logger = new Logger(SteamAuthController.name);
+
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly settingsService: SettingsService,
+    private readonly configService: ConfigService,
+    private readonly linkNonceService: LinkNonceService,
+    private readonly steamService: SteamService,
+    private readonly steamWishlistService: SteamWishlistService,
+    private readonly nonceStore: SteamOpenIdNonceStore,
+  ) {}
+
+  private verifyState(state: string): Record<string, unknown> | null {
+    const secret = this.configService.get<string>('JWT_SECRET')!;
+    return verifySteamLinkState(state, secret, this.logger);
+  }
+
+  private getClientUrl(req: Request): string {
+    return (
+      this.configService.get<string>('CLIENT_URL') ||
+      `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`
+    );
+  }
+
+  /**
+   * Get the externally-reachable API base URL.
+   * Behind a reverse proxy (nginx), the API is at `${CLIENT_URL}/api`.
+   * In local dev (direct access), the API is at the request origin.
+   */
+  private getApiBaseUrl(req: Request): string {
+    const clientUrl = this.configService.get<string>('CLIENT_URL');
+    const isProxied = !!req.headers['x-forwarded-proto'];
+    if (clientUrl && isProxied) return `${clientUrl}/api`;
+    const proto =
+      (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
+      req.protocol ||
+      'http';
+    const host = req.headers.host || 'localhost';
+    return `${proto}://${host}`;
+  }
+
+  /** The OpenID return_to we issue, minus its `?state=` (ROK-1731). */
+  private linkCallbackUrl(req: Request): string {
+    return `${this.getApiBaseUrl(req)}/auth/steam/link/callback`;
+  }
+
+  /** Redirect to client with Steam-not-configured error. */
+  private redirectSteamNotConfigured(
+    res: Response,
+    clientUrl: string,
+    returnTo: string,
+  ): void {
+    const msg = encodeURIComponent(
+      'Steam integration is not configured. Please ask an admin to set it up.',
+    );
+    res.redirect(`${clientUrl}${returnTo}?steam=error&message=${msg}`);
+  }
+
+  /** Every GET-hop miss: one 302 to the integrations error landing (D7). */
+  private redirectLinkExpired(res: Response, clientUrl: string): void {
+    const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
+    res.redirect(
+      `${clientUrl}/profile/integrations?steam=error&message=${msg}`,
+    );
+  }
+
+  /**
+   * GET /auth/steam/link?nonce= — initiates Steam OpenID 2.0 linking. The
+   * nonce (POST /auth/steam/link/start, ROK-1630) is single-use and carries
+   * the user id + allowlisted returnTo, and only counts from the browser that
+   * holds its cookie; every miss gets the same error 302.
+   */
+  @RateLimit('auth')
+  @Get('link')
+  async steamLink(
+    @Query('nonce') nonce: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    setNoStoreLinkHeaders(res);
+    const clientUrl = this.getClientUrl(req);
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'steam',
+      nonce,
+      req,
+      res,
+    );
+    if (!claims) {
+      this.redirectLinkExpired(res, clientUrl);
+      return;
+    }
+    const returnTo = validateSteamReturnTo(claims.returnTo);
+    if (!(await this.settingsService.isSteamConfigured())) {
+      this.redirectSteamNotConfigured(res, clientUrl, returnTo);
+      return;
+    }
+    this.redirectToSteamOpenId(req, res, claims.userId, returnTo);
+  }
+
+  /** 302 to Steam OpenID with a signed `steam_link` state in return_to. */
+  private redirectToSteamOpenId(
+    req: Request,
+    res: Response,
+    userId: number,
+    returnTo: string,
+  ): void {
+    const state = signSteamLinkState(
+      {
+        userId,
+        action: 'steam_link',
+        timestamp: Date.now(),
+        returnTo,
+        // Binds the state to this browser through the callback (ROK-1366).
+        r: bindLinkStateToBrowser(res, 'steam'),
+      },
+      this.configService.get<string>('JWT_SECRET')!,
+    );
+    const callbackUrl = `${this.linkCallbackUrl(req)}?state=${encodeURIComponent(state)}`;
+    res.redirect(buildSteamOpenIdUrl(callbackUrl));
+  }
+
+  /**
+   * GET /auth/steam/link/callback
+   * Handles Steam OpenID 2.0 callback for linking.
+   */
+  @RateLimit('auth')
+  @Get('link/callback')
+  async steamLinkCallback(
+    @Query() query: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    setNoStoreLinkHeaders(res);
+    const clientUrl = this.getClientUrl(req);
+    const returnTo = this.extractReturnToFromState(query.state);
+    try {
+      const { userId, steamId } = await this.processLinkCallback(
+        query,
+        req,
+        res,
+      );
+      const isPublic = await this.checkAndSyncSteam(userId, steamId);
+      const privacyParam = isPublic ? '' : '&steam_private=true';
+      res.redirect(`${clientUrl}${returnTo}?steam=success${privacyParam}`);
+    } catch (error) {
+      this.logger.error('Steam link error:', error);
+      res.redirect(
+        `${clientUrl}${returnTo}?steam=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Steam link failed')}`,
+      );
+    }
+  }
+
+  /** Extract returnTo from signed state, defaulting to /profile. */
+  private extractReturnToFromState(state: string | undefined): string {
+    if (!state) return '/profile';
+    const stateData = this.verifyState(state);
+    if (!stateData) return '/profile';
+    return validateSteamReturnTo(stateData.returnTo);
+  }
+
+  /** Process the Steam link callback: verify state, verify OpenID, link account. */
+  private async processLinkCallback(
+    query: Record<string, string>,
+    req: Request,
+    res: Response,
+  ): Promise<{ userId: number; steamId: string }> {
+    if (!query.state) throw new Error('Missing state parameter');
+    const stateData = this.verifyState(query.state);
+    if (!stateData || stateData.action !== 'steam_link')
+      throw new Error('Invalid or tampered state parameter');
+    assertLinkStateBoundToBrowser(req, res, 'steam', stateData.r);
+    await assertFreshSteamAssertion(query, this.linkCallbackUrl(req), {
+      nonceStore: this.nonceStore,
+      logger: this.logger,
+    });
+    const userId = stateData.userId as number;
+    const steamId = await verifySteamOpenId(query);
+    if (!steamId) throw new Error('Steam verification failed');
+    await this.usersService.linkSteam(userId, steamId);
+    this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
+    return { userId, steamId };
+  }
+
+  /** Check Steam privacy and auto-sync library if public. Returns isPublic. */
+  private async checkAndSyncSteam(
+    userId: number,
+    steamId: string,
+  ): Promise<boolean> {
+    const apiKey = await this.settingsService.getSteamApiKey();
+    if (!apiKey) return false;
+    const profile = await getPlayerSummary(apiKey, steamId);
+    const isPublic = profile?.communityvisibilitystate === 3;
+    if (isPublic) {
+      startSteamPostLinkSync(
+        this.steamService,
+        this.steamWishlistService,
+        this.logger,
+        userId,
+      );
+    }
+    return isPublic;
+  }
+
+  /**
+   * GET /auth/steam/status
+   * Get current user's Steam link status.
+   */
+  @Get('status')
+  @UseGuards(AuthGuard('jwt'))
+  async steamStatus(
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<SteamLinkStatusDto> {
+    const user = await this.usersService.findById(req.user.id);
+    if (!user?.steamId) {
+      return { linked: false, steamId: null };
+    }
+
+    const apiKey = await this.settingsService.getSteamApiKey();
+    if (!apiKey) {
+      return { linked: true, steamId: user.steamId };
+    }
+
+    const profile = await getPlayerSummary(apiKey, user.steamId);
+    return {
+      linked: true,
+      steamId: user.steamId,
+      personaName: profile?.personaname ?? null,
+      avatarUrl: profile?.avatarmedium ?? null,
+      isPublic: profile?.communityvisibilitystate === 3,
+    };
+  }
+
+  /**
+   * POST /auth/steam/sync
+   * Manually trigger a Steam library sync for the current user.
+   */
+  @RateLimit('auth')
+  @Post('sync')
+  @UseGuards(AuthGuard('jwt'))
+  async syncLibrary(@Req() req: AuthenticatedExpressRequest) {
+    Sentry.setUser({ id: req.user.id.toString() });
+    try {
+      const result = await this.steamService.syncLibrary(req.user.id);
+      return {
+        success: true,
+        message: `Synced ${result.matched} games (${result.newInterests} new, ${result.updatedPlaytime} updated playtime)`,
+        ...result,
+      };
+    } catch (error) {
+      this.logger.error('Steam sync error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * POST /auth/steam/sync-wishlist
+   * Manually trigger a Steam wishlist sync for the current user.
+   */
+  @RateLimit('auth')
+  @Post('sync-wishlist')
+  @UseGuards(AuthGuard('jwt'))
+  async syncWishlist(@Req() req: AuthenticatedExpressRequest) {
+    Sentry.setUser({ id: req.user.id.toString() });
+    // A user waits on this request (nginx proxy_read_timeout 120s), so ITAD
+    // discovery fails fast on a long 429 pause instead of waiting it out.
+    const result = await this.steamWishlistService.syncWishlist(
+      req.user.id,
+      ITAD_INTERACTIVE_FETCH,
+    );
+    return {
+      success: true,
+      message: `Synced wishlist: ${result.matched} matched (${result.newInterests} new, ${result.removed} removed)`,
+      ...result,
+    };
+  }
+
+  /**
+   * DELETE /auth/steam/link
+   * Unlink Steam account from current user.
+   */
+  @Delete('link')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async unlinkSteam(@Req() req: AuthenticatedExpressRequest) {
+    await this.usersService.unlinkSteam(req.user.id);
+    this.logger.log(`Steam account unlinked for user ${req.user.id}`);
+  }
+}

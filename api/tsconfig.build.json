@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  // nest build compiles shipped api code only (src non-spec, scripts/, seeds/,
+  // drizzle.config.ts). Compiler options, noUncheckedIndexedAccess included
+  // (ROK-1161), come from tsconfig.json.
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "**/*.spec*.ts",
+    "**/*.test-fixtures.ts",
+    "src/common/testing/**"
+  ]
+}

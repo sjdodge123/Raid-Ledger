@@ -1,0 +1,211 @@
+/**
+ * DemoTestLfgController (ROK-1471 D10).
+ *
+ * DEMO_MODE-only endpoint used by the LFG board smoke test
+ * (`tools/test-bot/src/smoke/tests/lfg-board.test.ts`).
+ *
+ * Thread renames and forum-tag edits are coalesced on a trailing 5s window
+ * because Discord rate-limits renames aggressively. A smoke test asserting a
+ * thread's name would otherwise have to sleep out that window, which the
+ * project's smoke standard forbids — so it drains the window instead.
+ *
+ * The flush is delivered as an EVENT rather than an injected service on
+ * purpose: `AdminModule` and `DiscordBotModule` already need a `forwardRef`,
+ * and a module edge from here to `LfgBoardModule` would add a second cycle.
+ * `emitAsync` (not `emit`) is what makes the HTTP response wait for the writes.
+ */
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Optional,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { AuthGuard } from '@nestjs/passport';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SkipThrottle } from '@nestjs/throttler';
+import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
+import { SettingsService } from '../settings/settings.service';
+import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
+import { LfgInviteService } from '../lfg/lfg-invite.service';
+import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
+import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
+import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+import { EphemeralVoiceService } from '../discord-bot/services/ephemeral-voice.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import {
+  readBoardThreadMembers,
+  type BoardThreadMembers,
+} from './demo-test-lfg-thread-members.helpers';
+
+/** `{ gameId }` — a positive integer, or 400. */
+function parseGameIdBody(body: unknown): number {
+  const gameId = Number((body as Record<string, unknown> | null)?.gameId);
+  if (!Number.isInteger(gameId) || gameId <= 0) {
+    throw new BadRequestException('gameId must be a positive int');
+  }
+  return gameId;
+}
+
+/** `{ userId, gameId }` — both positive integers, or 400. */
+function parseInviteDeclineBody(body: unknown): {
+  userId: number;
+  gameId: number;
+} {
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const userId = Number(raw.userId);
+  const gameId = Number(raw.gameId);
+  const ok = (n: number) => Number.isInteger(n) && n > 0;
+  if (!ok(userId) || !ok(gameId)) {
+    throw new BadRequestException('userId and gameId must be positive ints');
+  }
+  return { userId, gameId };
+}
+
+@Controller('admin/test')
+@SkipThrottle()
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
+export class DemoTestLfgController {
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly lfgInviteService: LfgInviteService,
+    private readonly adHocEventService: AdHocEventService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly discordClient: DiscordBotClientService,
+    @Optional()
+    @Inject(EphemeralVoiceService)
+    private readonly ephemeralVoice: EphemeralVoiceService | null,
+  ) {}
+
+  private async assertDemoMode(): Promise<void> {
+    if (process.env.DEMO_MODE !== 'true') {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+    if (!(await this.settingsService.getDemoMode())) {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+  }
+
+  /** Drain the LFG board's rename/tag debounce now — DEMO_MODE only. */
+  @Post('lfg-board/flush')
+  @HttpCode(HttpStatus.OK)
+  async flushBoardEdits(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    await this.eventEmitter.emitAsync(LFG_BOARD_EVENTS.FLUSH);
+    return { success: true };
+  }
+
+  /**
+   * ROK-1541 — who is in a game's open board post's thread, as the API bot
+   * sees it. The smoke polls this after a join / withdraw (no sleeps).
+   */
+  @Get('lfg-board/thread-members')
+  async getBoardThreadMembers(
+    @Query('gameId') gameId: string,
+  ): Promise<BoardThreadMembers> {
+    await this.assertDemoMode();
+    return readBoardThreadMembers(
+      this.db,
+      this.discordClient,
+      parseGameIdBody({ gameId }),
+    );
+  }
+
+  /**
+   * ROK-1455 D15 — press the DM's decline button on a user's behalf.
+   *
+   * Companion bots cannot click another bot's buttons, so the smoke proves the
+   * decline EFFECT through here; the listener itself is covered by its own
+   * spec. Same write path as the button: `LfgInviteService.decline`.
+   */
+  @Post('lfg-invite-decline')
+  @HttpCode(HttpStatus.OK)
+  async declineLfgInvite(
+    @Body() body: unknown,
+  ): Promise<{ declined: boolean }> {
+    await this.assertDemoMode();
+    const { userId, gameId } = parseInviteDeclineBody(body);
+    return { declined: await this.lfgInviteService.decline(userId, gameId) };
+  }
+
+  /**
+   * ROK-1455 — forget every invite a recipient ever received, so a smoke can
+   * re-run against a persistent DB without tripping the no-repeat horizon.
+   */
+  @Post('lfg-invites/reset')
+  @HttpCode(HttpStatus.OK)
+  async resetLfgInvites(@Body() body: unknown): Promise<{ deleted: number }> {
+    await this.assertDemoMode();
+    const raw = (body ?? {}) as Record<string, unknown>;
+    const userId = Number(raw.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new BadRequestException('userId must be a positive int');
+    }
+    const deleted = await this.db
+      .delete(schema.lfgInvites)
+      .where(eq(schema.lfgInvites.recipientUserId, userId))
+      .returning({ id: schema.lfgInvites.id });
+    return { deleted: deleted.length };
+  }
+
+  /**
+   * ROK-1505 AC10b — end the game's live LFG-born session on demand.
+   *
+   * A smoke fixture that spawns a "playing now" session has no way to tear it
+   * down: the ordinary end is a grace-period timer, and the reaper only picks
+   * an event up 30 minutes after its window closed. Without this the run leaks
+   * a live session whose `lfg_group_messages` row stays `open`, and
+   * `uq_lfg_group_messages_game_open` then stops that game posting ever again.
+   *
+   * Drives the REAL end path (`finalizeEvent`), which is what announces the
+   * session end via the shared helper — no second copy of the emit lives here.
+   * `setGracePeriodStatus` first because `claimAndEndEvent` only claims an
+   * event already in `grace_period`; that is the same hand-off the queue makes.
+   *
+   * Then the session's `⏰ … — Playing now` channel is FORCE-destroyed. The
+   * ordinary path leaves it to the ephemeral reaper, 30 min after the end —
+   * but a CI run's API and DB are gone long before that, so every spawn a
+   * smoke run made would orphan a channel in the shared test guild for good.
+   * Same order as the reaper (end, then destroy); `force` because a smoke is
+   * the only occupant and must not be able to keep the channel alive.
+   *
+   * `channelDestroyed` is true only when the Discord channel was actually
+   * deleted. False (bot offline, channel already gone, delete failed, or no
+   * ephemeral voice service) lets a smoke flag a leaked channel instead of
+   * trusting `ended` alone.
+   */
+  @Post('lfg/end-session')
+  @HttpCode(HttpStatus.OK)
+  async endLfgSession(@Body() body: unknown): Promise<{
+    ended: boolean;
+    eventId: number | null;
+    channelDestroyed: boolean;
+  }> {
+    await this.assertDemoMode();
+    const gameId = parseGameIdBody(body);
+    const eventId = await findOpenLfgNowEventId(this.db, gameId);
+    if (eventId === null) {
+      return { ended: false, eventId: null, channelDestroyed: false };
+    }
+    await setGracePeriodStatus(this.db, eventId);
+    await this.adHocEventService.finalizeEvent(eventId);
+    const channelDestroyed =
+      (await this.ephemeralVoice?.destroyById(eventId, { force: true })) ??
+      false;
+    return { ended: true, eventId, channelDestroyed };
+  }
+}

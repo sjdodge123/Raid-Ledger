@@ -1,0 +1,204 @@
+import { useState } from 'react';
+import { toast } from '../../lib/toast';
+import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Switch } from '../ui/switch';
+import { PasswordInput, TestResultBanner } from './admin-form-helpers';
+import { DiscordBotInvitePanel, BotInviteLink } from './discord-bot-invite-panel';
+import { IntegrationFormActions } from './integration-form-actions';
+
+function SetupInstructions() {
+    return (
+        <div className="bg-overlay/30 border border-edge rounded-lg p-4 mb-6">
+            <p className="text-sm text-foreground font-semibold mb-2">Setup Instructions</p>
+            <p className="text-xs text-secondary font-semibold mt-2 mb-1">1. Create a Bot</p>
+            <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
+                <li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Discord Developer Portal</a></li>
+                <li>Click <strong>New Application</strong>, name it, then go to the <strong>Bot</strong> tab</li>
+                <li>Click <strong>Reset Token</strong> to generate a bot token and paste it below</li>
+            </ul>
+            <p className="text-xs text-secondary font-semibold mt-3 mb-1">2. Enable Privileged Intents</p>
+            <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
+                <li>On the <strong>Bot</strong> tab, scroll to <strong>Privileged Gateway Intents</strong></li>
+                <li>Enable all three: <strong>Presence Intent</strong>, <strong>Server Members Intent</strong>, and <strong>Message Content Intent</strong></li>
+                <li>Click <strong>Save Changes</strong></li>
+            </ul>
+            <p className="text-xs text-secondary font-semibold mt-3 mb-1">3. Invite Bot to Your Server</p>
+            <DiscordBotInvitePanel />
+        </div>
+    );
+}
+
+function EnableToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+    return (
+        <div className="flex items-center justify-between">
+            {/* The Switch is named by its own aria-label; this visible text is hidden from AT so it is not read twice. */}
+            <span aria-hidden="true" className="text-sm font-medium text-secondary">Enable Bot</span>
+            <Switch label="Enable Bot" checked={enabled} onChange={() => onToggle()} />
+        </div>
+    );
+}
+
+function botStatusLabel(data: { connecting?: boolean | undefined; connected?: boolean | undefined }) {
+    if (data.connecting) return 'Starting...';
+    if (data.connected) return 'Online';
+    return 'Offline';
+}
+
+function botStatusDotClass(data: { connecting?: boolean | undefined; connected?: boolean | undefined }) {
+    if (data.connecting) return 'bg-warning animate-pulse';
+    if (data.connected) return 'bg-success';
+    return 'bg-danger';
+}
+
+function BotStatusBar({ data, onCheckPermissions, isChecking }: {
+    data: { connecting?: boolean | undefined; connected?: boolean | undefined; guildName?: string | undefined; memberCount?: number | null | undefined };
+    onCheckPermissions: () => void; isChecking: boolean;
+}) {
+    return (
+        <div className="flex items-center gap-3 bg-surface/30 rounded-lg p-4">
+            <div className={`w-3 h-3 rounded-full ${botStatusDotClass(data)}`} />
+            <div className="flex-1">
+                <span className="text-sm font-medium text-foreground">{botStatusLabel(data)}</span>
+                {data.connected && data.guildName && (
+                    <p className="text-xs text-secondary mt-0.5">
+                        {data.guildName}{data.memberCount != null && <span className="text-dim"> &middot; {data.memberCount} members</span>}
+                    </p>
+                )}
+            </div>
+            {data.connected && (
+                <Button variant="secondary" size="sm" onClick={onCheckPermissions}
+                    loading={isChecking} loadingLabel={'Checking\u2026'}>
+                    Test Permissions
+                </Button>
+            )}
+        </div>
+    );
+}
+
+type PermissionCheck = { name: string; granted: boolean };
+
+/** Only the permissions the bot is missing, plus the URL that re-authorises them. */
+function MissingPermissions({ permissions }: { permissions: PermissionCheck[] }) {
+    return (
+        <>
+            <ul className="text-xs text-danger space-y-1 list-disc list-inside">
+                {permissions.filter((p) => !p.granted).map((p) => (
+                    <li key={p.name}>{p.name}</li>
+                ))}
+            </ul>
+            <BotInviteLink />
+        </>
+    );
+}
+
+function GrantedPermissions({ permissions }: { permissions: PermissionCheck[] }) {
+    return (
+        <div className="space-y-1">
+            {permissions.map((p) => (
+                <div key={p.name} className="flex items-center gap-2 text-xs">
+                    <span className="text-success">{'\u2713'}</span>
+                    <span className="text-secondary">{p.name}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function PermissionsResult({ result }: { result: { allGranted: boolean; permissions: PermissionCheck[] } | null }) {
+    if (!result) return null;
+    return (
+        <div data-testid="permissions-result" className={`mt-3 rounded-lg p-4 animate-[fadeIn_0.3s_ease-in] ${result.allGranted ? 'bg-success/10 border border-success/30' : 'bg-warning/10 border border-warning/30'}`}>
+            <p className={`text-xs font-semibold mb-2 ${result.allGranted ? 'text-success' : 'text-warning'}`}>
+                {result.allGranted ? '\u2713 All required permissions granted' : '\u26A0 Missing permissions \u2014 re-authorise the bot with the invite URL below'}
+            </p>
+            {result.allGranted
+                ? <GrantedPermissions permissions={result.permissions} />
+                : <MissingPermissions permissions={result.permissions} />}
+        </div>
+    );
+}
+
+function useBotFormState() {
+    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions } = useAdminSettings();
+    const [botToken, setBotToken] = useState('');
+    const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
+    const [showToken, setShowToken] = useState(false);
+    const [testResult, setTestResult] = useState<{ success: boolean; guildName?: string | undefined; message: string } | null>(null);
+    const [permissionsResult, setPermissionsResult] = useState<{ allGranted: boolean; permissions: { name: string; granted: boolean }[] } | null>(null);
+    const enabled = enabledOverride ?? discordBotStatus.data?.enabled ?? true;
+
+    return {
+        discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions,
+        botToken, setBotToken, showToken, setShowToken, enabled, enabledOverride, setEnabledOverride,
+        testResult, setTestResult, permissionsResult, setPermissionsResult,
+    };
+}
+
+async function executeBotSave(s: ReturnType<typeof useBotFormState>, e: React.FormEvent) {
+    e.preventDefault(); s.setTestResult(null);
+    if (!s.botToken) { toast.error('Bot token is required'); return; }
+    try {
+        const r = await s.updateDiscordBot.mutateAsync({ botToken: s.botToken, enabled: s.enabled });
+        if (r.success) { toast.success(r.message); s.setBotToken(''); s.setEnabledOverride(null); } else toast.error(r.message);
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed to save configuration'); }
+}
+
+async function executeBotClear(s: ReturnType<typeof useBotFormState>) {
+    if (!confirm('Are you sure you want to clear the Discord bot configuration? The bot will be disconnected.')) return;
+    try { const r = await s.clearDiscordBot.mutateAsync(); if (r.success) { toast.success(r.message); s.setTestResult(null); s.setPermissionsResult(null); } else toast.error(r.message); }
+    catch { toast.error('Failed to clear configuration'); }
+}
+
+function useBotHandlers() {
+    const s = useBotFormState();
+
+    const handleTest = async () => {
+        s.setTestResult(null);
+        try { const r = await s.testDiscordBot.mutateAsync(s.botToken ? { botToken: s.botToken } : {}); s.setTestResult(r); if (r.success) toast.success(r.message); }
+        catch { toast.error('Failed to test connection'); }
+    };
+
+    const handleCheckPermissions = async () => {
+        s.setPermissionsResult(null);
+        try { const r = await s.checkDiscordBotPermissions.mutateAsync(); s.setPermissionsResult(r); if (r.allGranted) toast.success('All required permissions are granted!'); else toast.error('Some required permissions are missing.'); }
+        catch { toast.error('Failed to check permissions'); }
+    };
+
+    return {
+        discordBotStatus: s.discordBotStatus, botToken: s.botToken, setBotToken: s.setBotToken,
+        showToken: s.showToken, setShowToken: s.setShowToken, enabled: s.enabled, setEnabledOverride: s.setEnabledOverride,
+        testResult: s.testResult, permissionsResult: s.permissionsResult,
+        handleSave: (e: React.FormEvent) => executeBotSave(s, e), handleTest, handleClear: () => executeBotClear(s), handleCheckPermissions,
+        isPending: { save: s.updateDiscordBot.isPending, test: s.testDiscordBot.isPending, clear: s.clearDiscordBot.isPending, perms: s.checkDiscordBotPermissions.isPending },
+    };
+}
+
+export function DiscordBotForm() {
+    const h = useBotHandlers();
+
+    return (
+        <>
+            <SetupInstructions />
+            <form onSubmit={h.handleSave} className="space-y-4">
+                <Field id="botToken" label="Bot Token">
+                    <PasswordInput id="botToken" value={h.botToken} onChange={h.setBotToken}
+                        placeholder={h.discordBotStatus.data?.configured ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Discord Bot Token'}
+                        showPassword={h.showToken} onToggleShow={() => h.setShowToken(!h.showToken)} fieldLabel="token" />
+                </Field>
+                <EnableToggle enabled={h.enabled} onToggle={() => h.setEnabledOverride(!h.enabled)} />
+                <TestResultBanner result={h.testResult} />
+                <IntegrationFormActions showTest={!!h.discordBotStatus.data?.configured || !!h.botToken}
+                    showClear={!!h.discordBotStatus.data?.configured}
+                    isPending={h.isPending} onTest={h.handleTest} onClear={h.handleClear} />
+            </form>
+            {h.discordBotStatus.data?.configured && (
+                <div className="mt-6 pt-6 border-t border-edge/50">
+                    <BotStatusBar data={h.discordBotStatus.data} onCheckPermissions={h.handleCheckPermissions} isChecking={h.isPending.perms} />
+                    <PermissionsResult result={h.permissionsResult} />
+                </div>
+            )}
+        </>
+    );
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineups" ADD COLUMN "default_tiebreaker_mode" text;

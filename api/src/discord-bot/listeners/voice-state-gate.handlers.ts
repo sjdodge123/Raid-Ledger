@@ -1,0 +1,260 @@
+/**
+ * ROK-1417 (plan B4) — game-binding join decision core, extracted from
+ * voice-state-join.handlers.ts so the per-outcome `traceGate` wiring fits under
+ * the 300-line file cap. Each terminal branch emits exactly one gate trace; the
+ * null-game monitor branch (ROK-1415 tolerance) also escalates via
+ * `warnInertOnce`. Behaviour is byte-for-byte the pre-1417 logic plus the trace
+ * calls — no spawn decision changed.
+ */
+import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
+import type { SpawnClearance } from '../services/ad-hoc-spawn-clearance';
+import {
+  resolveVoiceChannel,
+  type DiscordMemberInfo,
+  type ResolvedBinding,
+} from './voice-state.helpers';
+import { type VoiceHandlerDeps } from './voice-state.handlers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
+import { handleGameSpecificGroupRoster } from './voice-state-recovery.handlers';
+import { humanMembers } from './voice-lobby-groups.helpers';
+import {
+  gateCtx,
+  traceGate,
+  warnInertOnce,
+  type GateCtx,
+} from './voice-gate-trace';
+
+// ROK-1445: `gateCtx` moved to voice-gate-trace.ts (a leaf module) so the new
+// general-lobby group helpers can build a trace context without importing this
+// file, which would close an import cycle. Re-exported for existing callers.
+export { gateCtx };
+
+/** Spawn schedule callbacks for a game-specific binding. */
+export interface GameSpawnFns {
+  scheduleSpawn: () => void;
+  cancelSpawn: () => void;
+}
+
+/**
+ * Join an existing ad-hoc event for a game binding.
+ *
+ * `resolvedGameId` (ROK-1394) must match the KEY of the existing event so the
+ * join reconciles into it rather than minting a duplicate: `null` targets a
+ * degraded Untitled session (`bindingId:null`), a number targets the sticky
+ * game event (`bindingId:<gameId>`).
+ */
+export async function joinExistingEvent(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  dm: DiscordMemberInfo,
+  uid: number | null,
+  resolvedGameId?: number | null,
+): Promise<void> {
+  const mi: VoiceMemberInfo = { ...dm, userId: uid };
+  const handled = await deps.adHocEventService.handleVoiceJoin(
+    binding.bindingId,
+    mi,
+    binding,
+    resolvedGameId,
+    undefined,
+    channelId,
+  );
+  // Codex P2: only claim the outcome when the service actually processed the
+  // join — a kill-switch/suppression gate already traced its own reason.
+  if (handled)
+    traceGate(deps.logger, 'joined-existing', gateCtx(binding, channelId));
+}
+
+/**
+ * ROK-959: suppress ad-hoc if a sibling binding has a live scheduled event;
+ * otherwise run the threshold check. Split out of handleGameBindingJoin so the
+ * suppressed-scheduled trace lands here without growing that (31/30) function.
+ */
+export async function suppressOrCheckThreshold(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  spawnFns?: GameSpawnFns,
+): Promise<void> {
+  // ROK-1456: this is the ONE guard run for the join. The receipt it returns
+  // rides the immediate-spawn path into `handleVoiceJoin` so the service does
+  // not re-run the guard; the delayed-spawn timers deliberately get none.
+  const clearance = await deps.adHocEventService.ensureNotSuppressed(
+    binding.bindingId,
+    binding.gameId,
+    channelId,
+  );
+  if (!clearance) {
+    traceGate(deps.logger, 'suppressed-scheduled', gateCtx(binding, channelId));
+    return;
+  }
+  await checkGameBindingThreshold(
+    deps,
+    channelId,
+    binding,
+    clearance,
+    spawnFns,
+  );
+}
+
+/**
+ * ROK-1782 ruling (a): on a channel that also has a general-lobby binding the
+ * monitor never tracks, counts or spawns — the lobby's per-game groups decide.
+ * The ROK-959 suppression step still runs so a live scheduled event on a
+ * sibling binding keeps getting its `extended_until` window bumped.
+ *
+ * Known gap (TECH-DEBT-BACKLOG 2026-10-14): a monitor event already running
+ * when the lobby binding is added gets no new joiners from here on, and the
+ * lobby may mint a second event for the same game alongside it.
+ */
+export async function yieldMonitorToLobby(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+): Promise<void> {
+  const clearance = await deps.adHocEventService.ensureNotSuppressed(
+    binding.bindingId,
+    binding.gameId,
+    channelId,
+  );
+  const outcome = clearance ? 'yielded-to-lobby' : 'suppressed-scheduled';
+  traceGate(deps.logger, outcome, gateCtx(binding, channelId));
+}
+
+/** Check threshold and spawn for a game-specific binding. */
+async function checkGameBindingThreshold(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  clearance: SpawnClearance,
+  spawnFns?: GameSpawnFns,
+): Promise<void> {
+  const minPlayers = binding.config?.minPlayers ?? 2;
+  if (binding.gameId == null)
+    return traceNullGameMonitor(deps, channelId, binding, minPlayers, spawnFns);
+  return resolveGameBindingSpawn(
+    deps,
+    channelId,
+    binding,
+    minPlayers,
+    clearance,
+    spawnFns,
+  );
+}
+
+/**
+ * ROK-1415 tolerance + ROK-1417 observability for a null-game monitor: warn
+ * once (the inert shape), then arm the delayed spawn at/above threshold or
+ * record it inert below. getGameFilteredCount is not consulted here — with no
+ * bind game nothing can be game-confirmed, so the immediate unanimous path is
+ * unreachable by construction and the DELAYED path is always taken.
+ */
+function traceNullGameMonitor(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  minPlayers: number,
+  spawnFns?: GameSpawnFns,
+): void {
+  const members = deps.channelMembers.get(channelId)?.size ?? 0;
+  const ctx = gateCtx(binding, channelId, {
+    members,
+    minPlayers,
+    counted: 0,
+    confirmed: 0,
+  });
+  warnInertOnce(deps.logger, ctx);
+  if (members >= minPlayers) {
+    spawnFns?.scheduleSpawn();
+    return traceGate(deps.logger, 'spawn-scheduled', ctx);
+  }
+  return traceGate(deps.logger, 'below-threshold-inert', ctx);
+}
+
+/** Game-filtered threshold decision for a fixed-game bind + its trace. */
+async function resolveGameBindingSpawn(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  minPlayers: number,
+  clearance: SpawnClearance,
+  spawnFns?: GameSpawnFns,
+): Promise<void> {
+  const { counted, allConfirmed, confirmedCount } = await serverAwareGameCount(
+    deps,
+    channelId,
+    binding,
+  );
+  const members = deps.channelMembers.get(channelId)?.size;
+  const ctx = gateCtx(binding, channelId, {
+    ...(members !== undefined ? { members } : {}),
+    minPlayers,
+    counted,
+    confirmed: confirmedCount,
+  });
+  if (counted < minPlayers)
+    return traceGate(deps.logger, 'below-threshold', ctx);
+  if (allConfirmed)
+    return spawnAllConfirmed(
+      deps,
+      channelId,
+      binding,
+      ctx,
+      clearance,
+      spawnFns,
+    );
+  spawnFns?.scheduleSpawn();
+  return traceGate(deps.logger, 'spawn-scheduled', ctx);
+}
+
+/** Immediate spawn when every counted member confirmed the bound game. */
+async function spawnAllConfirmed(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  ctx: GateCtx,
+  clearance: SpawnClearance,
+  spawnFns?: GameSpawnFns,
+): Promise<void> {
+  {
+    spawnFns?.cancelSpawn();
+    // ROK-1394 / ROK-1445 review MED-1: the bind may ALREADY hold an active
+    // event — including one the degrade path keyed under `bindingId:null`.
+    // Minting here would key a second event under `bindingId:<gameId>` and
+    // leave the same humans rostered on both. The join paths normally
+    // reconcile into the existing event before reaching this function, but the
+    // bot path deliberately skips that step (it must still reach suppression),
+    // so the guard has to live here too. Mirrors `executeDelayedSpawn`.
+    if (deps.adHocEventService.getActiveBindingEventGameId(binding.bindingId))
+      return;
+    if (hasNoHumanMembers(deps, channelId))
+      return traceGate(deps.logger, 'no-human-members', ctx);
+    // allConfirmed ⟹ every counted member confirmed the bound game, so the
+    // sticky game is correct and the ROK-1394 degrade is unreachable here.
+    const rostered = await handleGameSpecificGroupRoster(
+      deps,
+      channelId,
+      binding,
+      undefined,
+      clearance,
+    );
+    // Codex P2: a kill-switch-gated roster must not log a false success line —
+    // the service already traced feature-disabled (throttled).
+    if (rostered) return traceGate(deps.logger, 'spawned-immediate', ctx);
+    return;
+  }
+}
+
+/**
+ * ROK-1390: true when the channel resolves and holds only bots. A bot's
+ * /playing confirmation still counts toward the threshold (MED-2/AC12), so a
+ * bot-only room can reach the immediate spawn, but the roster skips every bot
+ * (ROK-1445 AC9) and would mint nothing. The caller traces that outcome
+ * instead of returning silently. An unresolvable channel is left to the roster
+ * helper's own guard.
+ */
+function hasNoHumanMembers(deps: VoiceHandlerDeps, channelId: string): boolean {
+  const channel = resolveVoiceChannel(deps.clientService, channelId);
+  return channel !== null && humanMembers(channel).length === 0;
+}

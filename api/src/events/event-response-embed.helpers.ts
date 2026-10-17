@@ -1,0 +1,139 @@
+/**
+ * Helpers for building Discord embed event data.
+ */
+import { eq, sql } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import type { EventResponseDto } from '@raid-ledger/contract';
+import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
+import { toEmbedGame } from '../discord-bot/services/embed-game.helpers';
+
+const INACTIVE_STATUSES = ['declined', 'roached_out', 'departed'];
+
+/** Queries role assignment counts for an event. */
+async function queryRoleCounts(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      role: schema.rosterAssignments.role,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.eventId, eventId))
+    .groupBy(schema.rosterAssignments.role);
+  const result: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.role) result[row.role] = row.count;
+  }
+  return result;
+}
+
+/**
+ * Class column for the signup query. Characters are game-specific, so only
+ * surface a class (and therefore a class emoji) when the event has a game AND
+ * the signed-up character belongs to it; otherwise a gameless event would show
+ * the user's WoW class symbol (ROK).
+ */
+function classNameColumn(gameId: number | null) {
+  return gameId
+    ? sql<
+        string | null
+      >`CASE WHEN ${schema.characters.gameId} = ${gameId} THEN ${schema.characters.class} ELSE NULL END`
+    : sql<string | null>`NULL`;
+}
+
+/** Queries signup rows with joined user/roster/character data. */
+async function querySignupRows(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  gameId: number | null,
+) {
+  return db
+    .select({
+      discordId: sql<
+        string | null
+      >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+      username: schema.users.username,
+      // ROK-1460: the roster renders names, and prefers this one — keep it in
+      // step with embed-sync.helpers::signupRowColumns.
+      displayName: schema.users.displayName,
+      // ROK-1460 fix 9: names an unlinked Discord signup (no users row).
+      discordUsername: schema.eventSignups.discordUsername,
+      role: schema.rosterAssignments.role,
+      status: schema.eventSignups.status,
+      preferredRoles: schema.eventSignups.preferredRoles,
+      runningLateAt: schema.eventSignups.runningLateAt,
+      className: classNameColumn(gameId),
+    })
+    .from(schema.eventSignups)
+    .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+    .leftJoin(
+      schema.rosterAssignments,
+      eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+    )
+    .leftJoin(
+      schema.characters,
+      eq(schema.eventSignups.characterId, schema.characters.id),
+    )
+    .where(eq(schema.eventSignups.eventId, eventId));
+}
+
+/** Filters and maps signup rows to mention entries for embeds. */
+function buildSignupMentions(
+  signupRows: Awaited<ReturnType<typeof querySignupRows>>,
+): NonNullable<EmbedEventData['signupMentions']> {
+  return signupRows
+    .filter((r) => !INACTIVE_STATUSES.includes(r.status ?? ''))
+    .filter((r) => r.discordId || r.username)
+    .map((r) => ({
+      discordId: r.discordId,
+      username: r.username,
+      displayName: r.displayName,
+      discordUsername: r.discordUsername,
+      role: r.role ?? null,
+      preferredRoles: r.preferredRoles,
+      status: r.status ?? null,
+      className: r.className ?? null,
+      runningLate: r.runningLateAt != null,
+    }));
+}
+
+/** Builds the full embed event data for Discord rendering. */
+export async function buildEmbedEventData(
+  db: PostgresJsDatabase<typeof schema>,
+  event: EventResponseDto,
+  eventId: number,
+): Promise<EmbedEventData> {
+  const [roleCounts, signupRows] = await Promise.all([
+    queryRoleCounts(db, eventId),
+    querySignupRows(db, eventId, event.game?.id ?? null),
+  ]);
+  const activeRows = signupRows.filter(
+    (r) => !INACTIVE_STATUSES.includes(r.status ?? ''),
+  );
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    startTime: event.startTime,
+    endTime: event.endTime,
+    signupCount: activeRows.length,
+    ...(event.maxAttendees !== undefined
+      ? { maxAttendees: event.maxAttendees }
+      : {}),
+    ...(event.slotConfig !== undefined
+      ? {
+          slotConfig: event.slotConfig as NonNullable<
+            EmbedEventData['slotConfig']
+          > | null,
+        }
+      : {}),
+    roleCounts,
+    signupMentions: buildSignupMentions(signupRows),
+    // ROK-1460: the shared seam keeps `id` on the projection, so the six
+    // interactive writers render the same title link as the sync processor.
+    game: toEmbedGame(event.game),
+  };
+}

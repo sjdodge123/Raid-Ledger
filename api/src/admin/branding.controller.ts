@@ -1,0 +1,253 @@
+import {
+  Controller,
+  Patch,
+  Post,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as fs from 'fs';
+import { AdminGuard } from '../auth/admin.guard';
+import { SettingsService } from '../settings/settings.service';
+import { bestEffortInit } from '../common/lifecycle.util';
+import {
+  parsePrivacyContactEmail,
+  savePrivacyContactEmail,
+} from './branding-privacy.helpers';
+
+/** Allowed MIME types and their magic bytes for logo validation */
+const ALLOWED_TYPES: Record<string, { ext: string; magic: number[] }> = {
+  'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
+  'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff] },
+  'image/webp': { ext: 'webp', magic: [0x52, 0x49, 0x46, 0x46] },
+};
+
+// Extensions no longer accepted but possibly left on disk from prior uploads.
+// removeOldLogos walks both ALLOWED_TYPES and LEGACY_EXTS so a re-upload
+// replaces any pre-existing legacy file (ROK-1292 PR 2).
+const LEGACY_EXTS = ['svg'];
+
+const MAX_LOGO_SIZE = 2 * 1024 * 1024; // 2 MB
+
+function getBrandingDir(): string {
+  // Test-only escape hatch so integration specs can sandbox to a tmpdir
+  // instead of mutating real dev uploads. ROK-1292 PR 2's spec wiped the
+  // operator's dev logo on every CI run because it computed the same
+  // `process.cwd()/uploads/branding` path the dev server serves from.
+  if (process.env.RAID_LEDGER_BRANDING_DIR) {
+    return process.env.RAID_LEDGER_BRANDING_DIR;
+  }
+  const isProduction = process.env.NODE_ENV === 'production';
+  return isProduction
+    ? '/data/uploads/branding'
+    : path.join(process.cwd(), 'uploads', 'branding');
+}
+
+/** Build Multer storage configuration for logo upload. */
+function buildLogoStorage() {
+  return diskStorage({
+    destination: (
+      _req: unknown,
+      _file: unknown,
+      cb: (e: null, d: string) => void,
+    ) => {
+      const dir = getBrandingDir();
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (
+      _req: unknown,
+      file: Express.Multer.File,
+      cb: (e: null, f: string) => void,
+    ) => {
+      cb(null, `logo.${ALLOWED_TYPES[file.mimetype]?.ext || 'png'}`);
+    },
+  });
+}
+
+/** Filter uploaded files by MIME type. */
+function logoFileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  cb: (e: Error | null, a: boolean) => void,
+) {
+  if (!ALLOWED_TYPES[file.mimetype]) {
+    cb(
+      new BadRequestException('Only PNG, JPEG, and WebP images are allowed'),
+      false,
+    );
+    return;
+  }
+  cb(null, true);
+}
+
+/** Build Multer options for logo upload. */
+function buildLogoMulterOptions() {
+  return {
+    storage: buildLogoStorage(),
+    limits: { fileSize: MAX_LOGO_SIZE },
+    fileFilter: logoFileFilter,
+  };
+}
+
+/**
+ * Branding controller (ROK-271).
+ * Manages community name, logo, and accent color.
+ */
+@Controller('admin/branding')
+export class BrandingController implements OnModuleInit {
+  private readonly logger = new Logger(BrandingController.name);
+
+  constructor(private readonly settingsService: SettingsService) {}
+
+  // Boot-time legacy SVG eviction (ROK-1292 PR 2). The upload path stopped
+  // accepting SVG in this PR, but any logo.svg already on disk would otherwise
+  // remain reachable at /uploads/branding/logo.svg and the persisted
+  // community_logo_path setting would keep pointing at it. Self-heals each
+  // boot so deploys are complete without operator manual cleanup.
+  // Wrapped in bestEffortInit: a disk or DB error during cleanup must not
+  // crash boot — the API serves more than just branding.
+  async onModuleInit(): Promise<void> {
+    await bestEffortInit('branding-legacy-svg-eviction', this.logger, () =>
+      this.evictLegacySvg(),
+    );
+  }
+
+  private async evictLegacySvg(): Promise<void> {
+    const dir = getBrandingDir();
+    const svgPath = path.join(dir, 'logo.svg');
+    if (fs.existsSync(svgPath)) {
+      fs.unlinkSync(svgPath);
+      this.logger.warn(`Removed legacy logo.svg from ${dir} (ROK-1292 PR 2)`);
+    }
+    const branding = await this.settingsService.getBranding();
+    if (branding.communityLogoPath?.endsWith('.svg')) {
+      await this.settingsService.clearCommunityLogoPath();
+      this.logger.warn(
+        'Cleared community_logo_path (pointed at .svg) (ROK-1292 PR 2)',
+      );
+    }
+  }
+
+  /** Format branding settings for API responses. */
+  private async formatBranding() {
+    const branding = await this.settingsService.getBranding();
+    return {
+      communityName: branding.communityName,
+      communityLogoUrl: branding.communityLogoPath
+        ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
+        : null,
+      privacyContactEmail: branding.privacyContactEmail ?? null,
+    };
+  }
+
+  /**
+   * Update branding text settings. Admin-only endpoint.
+   * A legacy `communityAccentColor` key from an old client is ignored, not
+   * rejected — the accent colour was dropped (TDB:991).
+   */
+  @Patch()
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  async updateBranding(
+    @Body() body: { communityName?: string; privacyContactEmail?: unknown },
+  ) {
+    // Validate every field before writing any, so a 400 never leaves a partial save.
+    if (body.privacyContactEmail !== undefined) {
+      parsePrivacyContactEmail(body.privacyContactEmail);
+    }
+    if (body.communityName !== undefined) {
+      const trimmed = body.communityName.trim();
+      if (trimmed.length === 0 || trimmed.length > 60) {
+        throw new BadRequestException('Community name must be 1-60 characters');
+      }
+      await this.settingsService.setCommunityName(trimmed);
+    }
+    // ROK-1778: '' / null clears it; anything else must be a valid email.
+    if (body.privacyContactEmail !== undefined) {
+      await savePrivacyContactEmail(
+        this.settingsService,
+        body.privacyContactEmail,
+      );
+    }
+
+    this.logger.log('Branding settings updated');
+    return this.formatBranding();
+  }
+
+  /** Upload community logo. Admin-only endpoint with magic byte validation. */
+  @Post('logo')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  @UseInterceptors(FileInterceptor('logo', buildLogoMulterOptions()))
+  async uploadLogo(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No logo file provided');
+    this.validateMagicBytes(file);
+    this.removeOldLogos(file.filename);
+    await this.settingsService.setCommunityLogoPath(file.path);
+    this.logger.log(`Community logo uploaded: ${file.filename}`);
+    return this.formatBranding();
+  }
+
+  /** Validate that the file's magic bytes match its declared MIME type. */
+  private validateMagicBytes(file: Express.Multer.File): void {
+    const buffer = fs.readFileSync(file.path);
+    const typeInfo = ALLOWED_TYPES[file.mimetype];
+    if (!typeInfo) return;
+    const magicMatch = typeInfo.magic.every((byte, i) => buffer[i] === byte);
+    if (!magicMatch) {
+      fs.unlinkSync(file.path);
+      throw new BadRequestException(
+        'File content does not match declared type',
+      );
+    }
+  }
+
+  /** Remove old logo files with different extensions (including legacy formats). */
+  private removeOldLogos(currentFilename: string): void {
+    const dir = getBrandingDir();
+    const currentExt = path.extname(currentFilename);
+    const allExts = [
+      ...Object.values(ALLOWED_TYPES).map((t) => t.ext),
+      ...LEGACY_EXTS,
+    ];
+    for (const ext of allExts) {
+      if (`.${ext}` !== currentExt) {
+        const oldPath = path.join(dir, `logo.${ext}`);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+    }
+  }
+
+  /**
+   * Reset all branding to defaults.
+   * Admin-only endpoint.
+   */
+  @Post('reset')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  async resetBranding() {
+    // Remove logo file if it exists
+    const branding = await this.settingsService.getBranding();
+    if (
+      branding.communityLogoPath &&
+      fs.existsSync(branding.communityLogoPath)
+    ) {
+      fs.unlinkSync(branding.communityLogoPath);
+    }
+
+    await this.settingsService.clearBranding();
+    this.logger.log('Branding reset to defaults');
+
+    return {
+      communityName: null,
+      communityLogoUrl: null,
+      privacyContactEmail: null,
+    };
+  }
+}

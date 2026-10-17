@@ -1,0 +1,197 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { DiscordUserController } from './discord-user.controller';
+import { DiscordBotClientService } from './discord-bot-client.service';
+import { PugInviteService } from './services/pug-invite.service';
+
+let controller: DiscordUserController;
+let clientService: jest.Mocked<DiscordBotClientService>;
+let pugInviteService: jest.Mocked<PugInviteService>;
+
+beforeEach(async () => {
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [DiscordUserController],
+    providers: [
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildInfo: jest
+            .fn()
+            .mockReturnValue({ name: 'Test Guild', memberCount: 42 }),
+          isGuildMember: jest.fn().mockResolvedValue(false),
+        },
+      },
+      {
+        provide: PugInviteService,
+        useValue: {
+          serverInviteFor: jest
+            .fn()
+            .mockResolvedValue('https://discord.gg/abc123'),
+        },
+      },
+    ],
+  }).compile();
+
+  controller = module.get(DiscordUserController);
+  clientService = module.get(DiscordBotClientService);
+  pugInviteService = module.get(PugInviteService);
+});
+
+afterEach(() => {
+  jest.clearAllMocks();
+});
+
+// ── GET /discord/server-invite ─────────────────────────────────
+
+/** The JWT strategy puts the numeric user id on `req.user.id`. */
+const makeInviteReq = (id = 7) => ({ user: { id } });
+
+describe('DiscordUserController — getServerInvite', () => {
+  it('should return invite URL and guild name when bot is connected', async () => {
+    const result = await controller.getServerInvite(makeInviteReq());
+
+    expect(result).toEqual({
+      url: 'https://discord.gg/abc123',
+      guildName: 'Test Guild',
+    });
+  });
+
+  it("should ask for the caller's invite with eventId=0", async () => {
+    await controller.getServerInvite(makeInviteReq(7));
+
+    expect(pugInviteService.serverInviteFor).toHaveBeenCalledWith(7, 0);
+  });
+
+  it('should key the invite to each caller (ROK-1631)', async () => {
+    await controller.getServerInvite(makeInviteReq(7));
+    await controller.getServerInvite(makeInviteReq(9));
+
+    expect(pugInviteService.serverInviteFor).toHaveBeenNthCalledWith(1, 7, 0);
+    expect(pugInviteService.serverInviteFor).toHaveBeenNthCalledWith(2, 9, 0);
+  });
+
+  it('should return null url and guildName when bot is not connected', async () => {
+    clientService.isConnected.mockReturnValue(false);
+
+    const result = await controller.getServerInvite(makeInviteReq());
+
+    expect(result).toEqual({ url: null, guildName: null });
+    expect(pugInviteService.serverInviteFor).not.toHaveBeenCalled();
+  });
+
+  it('should return null guildName when getGuildInfo returns null', async () => {
+    clientService.getGuildInfo.mockReturnValue(null);
+    pugInviteService.serverInviteFor.mockResolvedValue(
+      'https://discord.gg/abc123',
+    );
+
+    const result = await controller.getServerInvite(makeInviteReq());
+
+    expect(result.guildName).toBeNull();
+    expect(result.url).toBe('https://discord.gg/abc123');
+  });
+
+  it('should return null url when no invite could be minted', async () => {
+    pugInviteService.serverInviteFor.mockResolvedValue(null);
+
+    const result = await controller.getServerInvite(makeInviteReq());
+
+    expect(result.url).toBeNull();
+    expect(result.guildName).toBe('Test Guild');
+  });
+
+  it('should not call getGuildInfo when bot is not connected', async () => {
+    clientService.isConnected.mockReturnValue(false);
+
+    await controller.getServerInvite(makeInviteReq());
+
+    expect(clientService.getGuildInfo).not.toHaveBeenCalled();
+  });
+});
+
+// ── GET /discord/guild-membership ─────────────────────────────
+
+const makeReq = (discordId: string) => ({ user: { discordId } });
+
+describe('DiscordUserController — checkGuildMembership: real Discord IDs', () => {
+  it('should return isMember=true when user is in the guild', async () => {
+    clientService.isGuildMember.mockResolvedValue(true);
+
+    const result = await controller.checkGuildMembership(makeReq('123456789'));
+
+    expect(result).toEqual({ isMember: true });
+    expect(clientService.isGuildMember).toHaveBeenCalledWith('123456789');
+  });
+
+  it('should return isMember=false when user is not in the guild', async () => {
+    clientService.isGuildMember.mockResolvedValue(false);
+
+    const result = await controller.checkGuildMembership(makeReq('987654321'));
+
+    expect(result).toEqual({ isMember: false });
+  });
+
+  it('should check guild membership for real (non-local) Discord IDs', async () => {
+    clientService.isGuildMember.mockResolvedValue(true);
+
+    await controller.checkGuildMembership(makeReq('543210987654321098'));
+
+    expect(clientService.isGuildMember).toHaveBeenCalledWith(
+      '543210987654321098',
+    );
+  });
+});
+
+describe('DiscordUserController — checkGuildMembership: skip conditions', () => {
+  it('should return isMember=false when discordId is empty string', async () => {
+    const result = await controller.checkGuildMembership(makeReq(''));
+
+    expect(result).toEqual({ isMember: false });
+    expect(clientService.isGuildMember).not.toHaveBeenCalled();
+  });
+
+  it('should return isMember=false when discordId starts with "local:"', async () => {
+    const result = await controller.checkGuildMembership(
+      makeReq('local:someuser'),
+    );
+
+    expect(result).toEqual({ isMember: false });
+    expect(clientService.isGuildMember).not.toHaveBeenCalled();
+  });
+
+  it('should return isMember=false when discordId starts with "unlinked:"', async () => {
+    const result = await controller.checkGuildMembership(
+      makeReq('unlinked:abc'),
+    );
+
+    expect(result).toEqual({ isMember: false });
+    expect(clientService.isGuildMember).not.toHaveBeenCalled();
+  });
+
+  it('should return isMember=false when bot is not connected', async () => {
+    clientService.isConnected.mockReturnValue(false);
+
+    const result = await controller.checkGuildMembership(makeReq('123456789'));
+
+    expect(result).toEqual({ isMember: false });
+    expect(clientService.isGuildMember).not.toHaveBeenCalled();
+  });
+
+  it('should return isMember=false when user has no discordId (undefined)', async () => {
+    const result = await controller.checkGuildMembership({
+      user: { discordId: undefined as unknown as string },
+    });
+
+    expect(result).toEqual({ isMember: false });
+    expect(clientService.isGuildMember).not.toHaveBeenCalled();
+  });
+
+  it('should return isMember=false when user has null discordId', async () => {
+    const result = await controller.checkGuildMembership({
+      user: { discordId: null as unknown as string },
+    });
+
+    expect(result).toEqual({ isMember: false });
+    expect(clientService.isGuildMember).not.toHaveBeenCalled();
+  });
+});

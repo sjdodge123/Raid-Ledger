@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# One-time setup: create state files + lock dir. Safe to re-run.
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+echo "rl-infra state initialized:"
+echo "  claims:   $RL_CLAIMS_FILE  ($(jq 'length' "$RL_CLAIMS_FILE") slots)"
+echo "  envs:     $RL_ENVS_FILE    ($(jq 'length' "$RL_ENVS_FILE") active)"
+echo "  audit:    $RL_AUDIT_LOG"

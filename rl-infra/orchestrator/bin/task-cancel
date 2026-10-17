@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# ROK-1331 M1 — task-cancel
+# Usage: task-cancel <task_id> <reason>
+#
+# SIGTERM the pid recorded in <task_id>.json, SIGKILL after 10s grace, flip JSON
+# status to "cancelled". Already-terminal tasks are a noop.
+set -uo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+# _state.sh enables `set -e`. task-cancel needs to tolerate transient failures
+# in state::mutate (flock missing on macOS test runners; race between cancel
+# and the supervisor's finalize block on Linux) and continue to the kill loop.
+set +e
+
+if [[ $# -lt 2 ]]; then
+    echo '{"ok":false,"error":"missing_args"}' >&2
+    exit 2
+fi
+TASK_ID="$1"
+REASON="$2"
+
+if ! [[ "$TASK_ID" =~ ^[a-z0-9]{8,32}$ ]]; then
+    echo '{"ok":false,"error":"invalid_task_id"}' >&2
+    exit 2
+fi
+if (( ${#REASON} > 256 )); then
+    REASON="${REASON:0:256}"
+fi
+
+JSON_PATH="$RL_TASKS_DIR/$TASK_ID.json"
+if [[ ! -f "$JSON_PATH" ]]; then
+    echo '{"ok":false,"error":"not_found"}' >&2
+    exit 2
+fi
+
+PREV_STATUS=$(jq -r '.status // "unknown"' "$JSON_PATH" 2>/dev/null || echo "unknown")
+SLOT=$(jq -r '.slot // empty' "$JSON_PATH" 2>/dev/null || echo "")
+
+# === A3 fix 2: runner-side child cleanup =================================
+# Killing the VM-side pgid kills the `docker exec` CLIENT, not the process it
+# started INSIDE the container: containerd owns that process, so it survives
+# and is reparented onto docker-init. Observed after cancelling 6b49906f0bf9 —
+# validate-ci.sh + jest kept running on rl-runner-2 (~2.6 GB) and held the
+# per-run redis sidecar name until a human killed them.
+#
+# Marker: task-start exports RL_TASK_ID=<task_id> and run-on-runner{,-with-
+# heartbeat} forward it with `docker exec -e`. Environment is inherited across
+# fork/exec, so EVERY runner-side descendant carries the value — and only this
+# task's descendants do, because task ids are unique per task. That is why the
+# sweep cannot touch a sibling task running on the same runner (a cmdline
+# `pkill -f jest|node` would).
+#
+# The scan reads /proc/<pid>/environ rather than using pkill because pkill
+# matches only the command line, where the marker does not appear.
+# =========================================================================
+# shellcheck disable=SC2016
+RUNNER_SWEEP_SCRIPT='
+tid="$1"; sig="$2"; mode="${3:-kill}"
+self=$$
+count=0
+for d in /proc/[0-9]*; do
+    [ -r "$d/environ" ] || continue
+    p=${d#/proc/}
+    [ "$p" = "$self" ] && continue
+    if tr "\000" "\n" < "$d/environ" 2>/dev/null | grep -qxF "RL_TASK_ID=$tid"; then
+        count=$((count + 1))
+        if [ "$mode" != "count" ]; then
+            kill -"$sig" "$p" 2>/dev/null || true
+        fi
+    fi
+done
+echo "$count"
+'
+
+# runner_sweep <slot> <task_id> <TERM|KILL> [kill|count]
+# Echoes the number of matched runner-side processes. Always exits 0: a missing
+# container, a docker daemon that is down, or no docker binary at all are all
+# "nothing to clean up" — cancel must never fail because of the sweep.
+runner_sweep() {
+    local slot="$1" tid="$2" sig="$3" mode="${4:-kill}" out=""
+    if [[ -z "$slot" ]] || ! [[ "$slot" =~ ^[0-9]+$ ]]; then echo 0; return 0; fi
+    command -v docker >/dev/null 2>&1 || { echo 0; return 0; }
+    out=$({ docker exec "rl-runner-${slot}" sh -c "$RUNNER_SWEEP_SCRIPT" \
+        sweep "$tid" "$sig" "$mode" 2>/dev/null || true; } | tail -1 || true)
+    out=$(printf '%s' "$out" | tr -d '[:space:]')
+    [[ "$out" =~ ^[0-9]+$ ]] || out=0
+    echo "$out"
+}
+
+# cancel_runner_children <slot> <task_id>
+# SIGTERM the marked tree, wait the grace window, escalate to SIGKILL only if
+# something matched. Idempotent: a task whose children are already gone matches
+# nothing, does zero kills, and returns 0 without escalating.
+cancel_runner_children() {
+    local slot="$1" tid="$2" termed=0 killed=0
+    termed=$(runner_sweep "$slot" "$tid" TERM kill)
+    if (( termed > 0 )); then
+        sleep "${RL_TASK_CANCEL_RUNNER_GRACE_SECONDS:-5}"
+        killed=$(runner_sweep "$slot" "$tid" KILL kill)
+    fi
+    task::audit "$tid" "cancel" "runner_cleanup" \
+        "$(jq -nc --arg s "$slot" --argjson t "$termed" --argjson k "$killed" \
+            '{slot: $s, runner_termed: $t, runner_killed: $k}')" 2>/dev/null || true
+    echo "$termed"
+}
+
+# Noop path: already terminal. Return killed:false without state mutation.
+if [[ "$PREV_STATUS" != "running" ]]; then
+    # A cancelled task can still be leaking runner-side children (the first
+    # cancel raced the supervisor, or ran before this fix shipped). Re-sweeping
+    # is safe and cheap, and keeps re-cancel idempotent rather than useless.
+    # Genuinely finished tasks (succeeded/failed) are left completely alone.
+    RUNNER_SWEPT=0
+    if [[ "$PREV_STATUS" == "cancelled" ]]; then
+        RUNNER_SWEPT=$(cancel_runner_children "$SLOT" "$TASK_ID")
+    fi
+    jq -nc --arg t "$TASK_ID" --arg ps "$PREV_STATUS" --argjson rs "$RUNNER_SWEPT" \
+        '{ok: true, task_id: $t, previous_status: $ps, killed: false, runner_processes_signalled: $rs}'
+    task::audit "$TASK_ID" "cancel" "noop" \
+        "$(jq -nc --arg ps "$PREV_STATUS" --arg r "$REASON" '{previous_status: $ps, reason: $r}')"
+    exit 0
+fi
+
+# Wait briefly for pid to populate if the supervisor is still booting.
+PID=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    PID=$(jq -r '.pid // "null"' "$JSON_PATH" 2>/dev/null || echo "null")
+    [[ -n "$PID" && "$PID" != "null" ]] && break
+    sleep 0.1
+done
+
+FINISHED_AT=$(date -u +%FT%TZ)
+
+# Flip the JSON BEFORE killing so the supervisor's exit hook sees "cancelled"
+# and won't overwrite to "failed". This ordering is per spec §task-cancel item 1.
+state::mutate "$JSON_PATH" --arg r "$REASON" --arg f "$FINISHED_AT" \
+    '.status = "cancelled" | .cancel_reason = $r | (if .finished_at == null then .finished_at = $f else . end)'
+
+KILLED="false"
+NOTE=""
+if [[ -n "$PID" && "$PID" != "null" ]]; then
+    # Target the process group (kill -<pgid>). Process groups under `set -m`
+    # share pgid == pid, so this kills the wrapped cmd + any children.
+    kill -TERM -- "-$PID" 2>/dev/null || kill -TERM "$PID" 2>/dev/null || true
+    KILLED="true"
+
+    # Wait up to 10s for graceful exit (spec §task-cancel item 2).
+    waited=0
+    while (( waited < 100 )); do
+        if ! kill -0 "$PID" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$PID" 2>/dev/null; then
+        kill -KILL -- "-$PID" 2>/dev/null || kill -KILL "$PID" 2>/dev/null || true
+    fi
+else
+    NOTE="no_pid_recorded"
+fi
+
+# A3 fix 2 — the host pid is dead but the container-side tree is not. Sweep it
+# by marker. Runs unconditionally (even on the no_pid_recorded path: the
+# supervisor may have launched the docker exec before recording the pid).
+RUNNER_SWEPT=$(cancel_runner_children "$SLOT" "$TASK_ID")
+
+task::audit "$TASK_ID" "cancel" "ok" \
+    "$(jq -nc --arg r "$REASON" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
+        --argjson rs "$RUNNER_SWEPT" \
+        '{reason: $r, killed: $k, runner_processes_signalled: $rs}')"
+
+if [[ -n "$NOTE" ]]; then
+    jq -nc --arg t "$TASK_ID" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
+        --arg n "$NOTE" --argjson rs "$RUNNER_SWEPT" \
+        '{ok: true, task_id: $t, previous_status: "running", killed: $k, note: $n, runner_processes_signalled: $rs}'
+else
+    jq -nc --arg t "$TASK_ID" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
+        --argjson rs "$RUNNER_SWEPT" \
+        '{ok: true, task_id: $t, previous_status: "running", killed: $k, runner_processes_signalled: $rs}'
+fi

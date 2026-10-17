@@ -1,0 +1,145 @@
+/**
+ * Shared card used by both AI suggestion surfaces (ROK-931).
+ *
+ * Two modes:
+ *   - `nominate` (default) — Nominate button fires the same
+ *     `useNominateGame` mutation Common Ground uses, optimistically
+ *     disabled when the lineup is at its nomination cap.
+ *   - `pick` — used from inside NominateModal, fires the parent-
+ *     supplied `onPick` callback which sets the modal's selected-game
+ *     state so PreviewCard can take over.
+ */
+import { type JSX } from 'react';
+import type { AiSuggestionDto } from '@raid-ledger/contract';
+import { useNominateGame } from '../../hooks/use-lineups';
+import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
+import { AiBadge, CoopPill, OwnerBadge } from '../games/game-badges';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
+
+export type AiSuggestionCardMode = 'nominate' | 'pick';
+
+export interface AiSuggestionCardProps {
+    suggestion: AiSuggestionDto;
+    lineupId: number;
+    mode?: AiSuggestionCardMode;
+    atCap?: boolean;
+    /** ROK-1349: non-invitee viewer — renders "View only" instead of "At cap". */
+    viewOnly?: boolean;
+    onPick?: (suggestion: AiSuggestionDto) => void;
+}
+
+function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reasoning?: string }): JSX.Element {
+    // ROK-1314: the DEFAULT tooltip is THIS surface's choice (ROK-931), so it
+    // is supplied here rather than baked into the shared AiBadge —
+    // CommonGroundGameCard passes no reasoning and must render no `title` at
+    // all, because ROK-1297 round-5z removed that hover surface deliberately.
+    // Applied once at the boundary so both the with-art and no-art branches
+    // agree (an earlier fix patched only one of them).
+    const tooltip = reasoning ?? 'Suggested by AI';
+    if (src) {
+        return (
+            <div className="relative">
+                <img
+                    src={src}
+                    alt={alt}
+                    className="w-full aspect-[3/4] object-cover rounded-t-xl"
+                    width={COVER_INTRINSIC.width}
+                    height={COVER_INTRINSIC.height}
+                    loading="lazy"
+                    decoding="async"
+                    {...coverSrcSetProps(src, '(max-width: 640px) 45vw, 200px')}
+                />
+                <AiBadge reasoning={tooltip} />
+            </div>
+        );
+    }
+    return (
+        <div className="relative w-full aspect-[3/4] bg-panel rounded-t-xl flex items-center justify-center text-dim">
+            No art
+            <AiBadge reasoning={tooltip} />
+        </div>
+    );
+}
+
+const ACTION_BTN_CLS =
+    'mt-auto px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-500 transition-colors disabled:opacity-50';
+
+function CardActions({
+    mode,
+    atCap,
+    viewOnly,
+    isNominating,
+    onNominate,
+    onPick,
+}: {
+    mode: AiSuggestionCardMode;
+    atCap: boolean;
+    viewOnly: boolean;
+    isNominating: boolean;
+    onNominate: () => void;
+    onPick: () => void;
+}): JSX.Element {
+    if (mode === 'nominate') {
+        const { label, disabled } = nominateButtonState(atCap, viewOnly, isNominating, {
+            compact: true,
+            addingLabel: 'Nominating…',
+            nominateLabel: 'Nominate',
+        });
+        return (
+            <button
+                type="button"
+                onClick={onNominate}
+                disabled={disabled}
+                title={viewOnly ? VIEW_ONLY_LABEL : undefined}
+                className={ACTION_BTN_CLS}
+            >
+                {label}
+            </button>
+        );
+    }
+    return (
+        <button type="button" onClick={onPick} className={ACTION_BTN_CLS}>
+            Pick
+        </button>
+    );
+}
+
+/** Single suggestion card — cover + name + reasoning + ownership + action button. */
+export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
+    const { suggestion, lineupId, mode = 'nominate', atCap = false, viewOnly = false, onPick } = props;
+    const nominate = useNominateGame();
+    const isNominating = nominate.isPending && nominate.variables?.body.gameId === suggestion.gameId;
+    const handleNominate = (): void => {
+        nominate.mutate({ lineupId, body: { gameId: suggestion.gameId } });
+    };
+    const handlePick = (): void => {
+        onPick?.(suggestion);
+    };
+    return (
+        <div className="min-w-0 rounded-xl bg-panel border border-edge/50 overflow-hidden flex flex-col">
+            <Cover src={suggestion.coverUrl} alt={suggestion.name} reasoning={suggestion.reasoning} />
+            <div className="p-3 flex flex-col gap-2 flex-1">
+                <h3 className="text-sm font-medium text-foreground line-clamp-1">{suggestion.name}</h3>
+                <div className="flex flex-wrap items-center gap-1">
+                    {suggestion.voterTotal > 0 && (
+                        <OwnerBadge count={suggestion.ownershipCount} />
+                    )}
+                    {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
+                    <CoopPill
+                        cooptimusOnlineMax={suggestion.cooptimusOnlineMax}
+                        cooptimusCouchMax={suggestion.cooptimusCouchMax}
+                        cooptimusComboCoop={suggestion.cooptimusComboCoop}
+                    />
+                </div>
+                <CardActions
+                    mode={mode}
+                    atCap={atCap}
+                    viewOnly={viewOnly}
+                    isNominating={isNominating}
+                    onNominate={handleNominate}
+                    onPick={handlePick}
+                />
+            </div>
+        </div>
+    );
+}

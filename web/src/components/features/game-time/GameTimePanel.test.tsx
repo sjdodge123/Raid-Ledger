@@ -1,0 +1,407 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GameTimePanel } from './GameTimePanel';
+
+// Mock the hooks
+vi.mock('../../../hooks/use-game-time-editor', () => ({
+    useGameTimeEditor: vi.fn(),
+}));
+
+vi.mock('../../../hooks/use-game-time', () => ({
+    useCreateAbsence: vi.fn(() => ({
+        mutateAsync: vi.fn(),
+        isPending: false,
+    })),
+    useDeleteAbsence: vi.fn(() => ({
+        mutateAsync: vi.fn(),
+        mutate: vi.fn(),
+        isPending: false,
+    })),
+    useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
+    useGameTimeAbsences: vi.fn(() => ({
+        data: [],
+    })),
+}));
+
+// Get the mocked hook
+import { useGameTimeEditor as mockUseGameTimeEditor } from '../../../hooks/use-game-time-editor';
+import { stubGridLayout } from '../../../test/stub-grid-layout';
+
+// jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
+stubGridLayout();
+
+function renderPanel(props: Partial<React.ComponentProps<typeof GameTimePanel>> = {}) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <GameTimePanel {...props} />
+        </QueryClientProvider>,
+    );
+}
+
+function createDefaultEditorMock(overrides = {}) {
+    return {
+        slots: [],
+        handleChange: vi.fn(),
+        applyPreset: vi.fn(),
+        clear: vi.fn(),
+        discard: vi.fn(),
+        save: vi.fn(),
+        isDirty: false,
+        isSaving: false,
+        isLoading: false,
+        tzLabel: 'PST',
+        overrides: [],
+        absences: [],
+        calendarBusy: [],
+        ...overrides,
+    };
+}
+
+function setupDefaultEditorMock(overrides = {}) {
+    vi.clearAllMocks();
+    vi.mocked(mockUseGameTimeEditor).mockReturnValue(createDefaultEditorMock(overrides));
+}
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 1', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Full Day Names', () => {
+        it('profile mode displays full day names (Sunday, Monday, etc.)', () => {
+            renderPanel();
+
+            // Check for full day names in header cells
+            expect(screen.getByTestId('day-header-0')).toHaveTextContent(/Sunday|Sun/);
+            expect(screen.getByTestId('day-header-1')).toHaveTextContent(/Monday|Mon/);
+            expect(screen.getByTestId('day-header-2')).toHaveTextContent(/Tuesday|Tue/);
+            expect(screen.getByTestId('day-header-3')).toHaveTextContent(/Wednesday|Wed/);
+            expect(screen.getByTestId('day-header-4')).toHaveTextContent(/Thursday|Thu/);
+            expect(screen.getByTestId('day-header-5')).toHaveTextContent(/Friday|Fri/);
+            expect(screen.getByTestId('day-header-6')).toHaveTextContent(/Saturday|Sat/);
+        });
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 2', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Sunday Week Start', () => {
+        it('starts week on Sunday (day index 0)', () => {
+            renderPanel();
+
+            // First day header should be Sunday
+            const firstDayHeader = screen.getByTestId('day-header-0');
+            expect(firstDayHeader).toHaveTextContent(/Sunday|Sun/);
+
+            // Last day header should be Saturday
+            const lastDayHeader = screen.getByTestId('day-header-6');
+            expect(lastDayHeader).toHaveTextContent(/Saturday|Sat/);
+        });
+    });
+
+    describe('No Events Displayed', () => {
+        it('profile mode does not render event blocks', () => {
+            renderPanel();
+
+            // Profile mode should not render any event blocks
+            const eventBlocks = screen.queryAllByTestId(/^event-block-/);
+            expect(eventBlocks).toHaveLength(0);
+        });
+
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 3', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Profile Mode UI Elements', () => {
+        it('renders profile mode header and description', () => {
+            renderPanel();
+
+            expect(screen.getByText('My Game Time')).toBeInTheDocument();
+            expect(screen.getByText('Set your typical weekly availability')).toBeInTheDocument();
+        });
+
+        it('renders Save button', () => {
+            renderPanel();
+
+            expect(screen.getByText('Save')).toBeInTheDocument();
+        });
+
+        it('renders Clear button', () => {
+            renderPanel();
+
+            expect(screen.getByText('Clear')).toBeInTheDocument();
+        });
+
+        it('no longer renders the legacy red Absence button (ROK-1585)', () => {
+            renderPanel();
+
+            expect(screen.queryByText('Absence')).not.toBeInTheDocument();
+        });
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 4', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Availability Data Preservation — part 1', () => {
+        it('renders slots passed to GameTimeGrid', () => {
+            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+                slots: [
+                    { dayOfWeek: 0, hour: 18, status: 'available' },
+                    { dayOfWeek: 1, hour: 19, status: 'available' },
+                ],
+                handleChange: vi.fn(),
+                applyPreset: vi.fn(),
+                clear: vi.fn(),
+                save: vi.fn(),
+                isDirty: false,
+                isSaving: false,
+                isLoading: false,
+                tzLabel: 'PST',
+                absences: [],
+                calendarBusy: [],
+                discard: vi.fn(),
+                overrides: [],
+            });
+
+            renderPanel();
+
+            // ROK-1426: availability renders as blocks in the editor layer, so the
+            // cells beneath deliberately no longer carry the 'available' fill.
+            expect(screen.getByTestId('slot-block-0-18')).toBeInTheDocument();
+            expect(screen.getByTestId('slot-block-1-19')).toBeInTheDocument();
+            expect(screen.getByTestId('cell-0-18').dataset.status).toBe('inactive');
+            expect(screen.getByTestId('cell-1-19').dataset.status).toBe('inactive');
+        });
+
+    });
+
+});
+
+describe('Availability Data Preservation — part 2 (sub 1)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('preserves committed slots', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [
+                { dayOfWeek: 2, hour: 20, status: 'committed' },
+            ],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            absences: [],
+            calendarBusy: [],
+            discard: vi.fn(),
+            overrides: [],
+        });
+
+        renderPanel();
+
+        const cell = screen.getByTestId('cell-2-20');
+        expect(cell.dataset.status).toBe('committed');
+    });
+
+});
+
+describe('Availability Data Preservation — part 2 (sub 2)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('preserves blocked slots', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [
+                // ROK-1585: the profile grid defaults to 6 PM – 1 AM, so the blocked hour sits in view.
+                { dayOfWeek: 3, hour: 20, status: 'blocked' },
+            ],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            absences: [],
+            calendarBusy: [],
+            discard: vi.fn(),
+            overrides: [],
+        });
+
+        renderPanel();
+
+        const cell = screen.getByTestId('cell-3-20');
+        expect(cell.dataset.status).toBe('blocked');
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 7', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Compact Grid Rendering (ROK-1011)', () => {
+        it('always renders GameTimeGrid with compact mode', () => {
+            renderPanel();
+
+            expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+            expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
+        });
+    });
+
+});
+
+describe('Grid receives correct props in profile mode (ROK-1011)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('renders GameTimeGrid with slots in profile mode', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue(createDefaultEditorMock({
+            slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
+        }));
+
+        renderPanel();
+
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+    });
+
+});
+
+describe('Timezone label display (ROK-1011)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('displays timezone label in profile mode', () => {
+        renderPanel();
+        expect(screen.getByText('PST')).toBeInTheDocument();
+    });
+
+});
+
+describe('GameTimePanel - always renders GameTimeGrid (ROK-1011)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('renders GameTimeGrid regardless of viewport', () => {
+        renderPanel();
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
+    });
+
+});
+
+/** Local `YYYY-MM-DD` for the date `days` after this week's Sunday. */
+function thisWeekDate(days: number): string {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+describe('Desktop profile hour window (ROK-1585 AC4a)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        setupDefaultEditorMock();
+    });
+
+    it('defaults to 6 PM – 1 AM with both toggles around the grid', () => {
+        renderPanel();
+        expect(screen.queryAllByTestId(/^cell-0-\d+$/)).toHaveLength(7);
+        expect(screen.getByTestId('desktop-week-show-earlier')).toHaveTextContent('Show earlier (6 AM – 6 PM)');
+        expect(screen.getByTestId('desktop-week-show-later')).toHaveTextContent('Show later (1 AM – 6 AM)');
+    });
+
+    it('opens the morning on "Show earlier" and remembers the choice', () => {
+        renderPanel();
+        fireEvent.click(screen.getByTestId('desktop-week-show-earlier'));
+        expect(screen.queryAllByTestId(/^cell-0-\d+$/)).toHaveLength(19);
+        expect(screen.getByTestId('cell-0-6')).toBeInTheDocument();
+        expect(JSON.parse(localStorage.getItem('rl.gameTime.profileWindow') ?? '{}')).toMatchObject({ earlier: true });
+    });
+
+    it('auto-opens the earlier band when the saved week has a 10 AM hour', () => {
+        setupDefaultEditorMock({ slots: [{ dayOfWeek: 1, hour: 10, status: 'available' }] });
+        renderPanel();
+        expect(screen.getByTestId('cell-1-10')).toBeInTheDocument();
+        expect(screen.getByTestId('desktop-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
+    });
+});
+
+describe('Desktop profile Save / Clear / Discard under the grid (ROK-1585 Q9)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        setupDefaultEditorMock({ isDirty: true });
+    });
+
+    it('renders the actions in a footer after the grid and the later toggle', () => {
+        renderPanel();
+        const footer = screen.getByTestId('game-time-profile-actions');
+        expect(within(footer).getByText('Save')).toBeInTheDocument();
+        expect(within(footer).getByText('Clear')).toBeInTheDocument();
+        expect(within(footer).getByText('Discard')).toBeInTheDocument();
+        const later = screen.getByTestId('desktop-week-show-later');
+        expect(later.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const grid = screen.getByTestId('game-time-grid');
+        expect(grid.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
+describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('marks days of the displayed week covered by an absence', () => {
+        setupDefaultEditorMock({
+            absences: [{ id: 1, startDate: thisWeekDate(6), endDate: thisWeekDate(7), reason: 'Lake trip' }],
+        });
+        renderPanel();
+        expect(screen.getByTestId('day-header-6')).toHaveTextContent('· away');
+        expect(screen.getByTestId('day-header-6')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByTestId('cell-6-20')).toHaveAttribute('data-away', 'true');
+        expect(screen.getByTestId('day-header-1')).not.toHaveTextContent('away');
+        expect(screen.getByTestId('cell-1-20')).not.toHaveAttribute('data-away');
+    });
+
+    it('uses the SHORT day name on an away day ("Sat · away"), full names elsewhere', () => {
+        setupDefaultEditorMock({
+            absences: [{ id: 1, startDate: thisWeekDate(6), endDate: thisWeekDate(6), reason: null }],
+        });
+        renderPanel();
+        expect(screen.getByTestId('day-header-6')).toHaveTextContent(/^Sat · away/);
+        expect(screen.getByTestId('day-header-6')).not.toHaveTextContent('Saturday');
+        expect(screen.getByTestId('day-header-1')).toHaveTextContent('Monday');
+    });
+
+    it('ignores absences outside the displayed week', () => {
+        setupDefaultEditorMock({
+            absences: [{ id: 1, startDate: thisWeekDate(14), endDate: thisWeekDate(16), reason: null }],
+        });
+        renderPanel();
+        expect(screen.queryByText(/· away/)).not.toBeInTheDocument();
+    });
+});

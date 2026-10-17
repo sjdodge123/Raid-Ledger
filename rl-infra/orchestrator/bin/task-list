@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# ROK-1331 M1 — task-list
+# Usage: task-list [--slot <N>] [--status <s>] [--limit <N>] [--since <iso>]
+#
+# Globs $RL_TASKS_DIR/*.json, filters, sorts by started_at descending. Caps
+# --limit at 500 for safety. Corrupted files (failed `jq empty`) are skipped
+# with a stderr warning.
+set -uo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+
+SLOT_FILTER=""
+STATUS_FILTER=""
+LIMIT=50
+SINCE_FILTER=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slot) SLOT_FILTER="$2"; shift 2 ;;
+        --status) STATUS_FILTER="$2"; shift 2 ;;
+        --limit) LIMIT="$2"; shift 2 ;;
+        --since) SINCE_FILTER="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+# Cap limit at 500.
+if [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
+    (( LIMIT > 500 )) && LIMIT=500
+else
+    LIMIT=50
+fi
+
+shopt -s nullglob
+ALL=()
+for f in "$RL_TASKS_DIR"/*.json; do
+    if ! jq empty "$f" 2>/dev/null; then
+        echo "task-list: skipping corrupt JSON: $f" >&2
+        continue
+    fi
+    ALL+=("$f")
+done
+
+if (( ${#ALL[@]} == 0 )); then
+    # ROK-1331 Session 4 dogfood (Codex P2-1): MCP wrapper's executeList
+    # expects {ok: true, tasks: [...]} envelope. Empty path must also wrap.
+    echo '{"ok":true,"tasks":[]}'
+    exit 0
+fi
+
+# Build filter jq expression. Slot is numeric; status is a string.
+FILTER='.'
+JQ_ARGS=()
+if [[ -n "$SLOT_FILTER" ]]; then
+    JQ_ARGS+=(--argjson slot "$SLOT_FILTER")
+    FILTER="$FILTER | select(.slot == \$slot)"
+fi
+if [[ -n "$STATUS_FILTER" ]]; then
+    JQ_ARGS+=(--arg st "$STATUS_FILTER")
+    FILTER="$FILTER | select(.status == \$st)"
+fi
+if [[ -n "$SINCE_FILTER" ]]; then
+    JQ_ARGS+=(--arg since "$SINCE_FILTER")
+    FILTER="$FILTER | select(.started_at >= \$since)"
+fi
+
+# Collect, sort desc by started_at, slice limit, wrap in MCP envelope.
+# ROK-1331 Session 4 dogfood (Codex P2-1): executeList in task.ts expects
+# {ok: true, tasks: [...]}, not a bare array. Bare-array success path made
+# callers treat healthy list operations as errors (ok === undefined).
+jq -s "${JQ_ARGS[@]}" --argjson lim "$LIMIT" \
+    "{ok: true, tasks: (map($FILTER) | map(select(. != null)) | sort_by(.started_at) | reverse | .[0:\$lim])}" \
+    "${ALL[@]}"

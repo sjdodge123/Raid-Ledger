@@ -1,0 +1,334 @@
+import { DeparturePromoteListener } from './departure-promote.listener';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { NotificationService } from '../../notifications/notification.service';
+import { SignupsService } from '../../events/signups.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  SIGNUP_EVENTS,
+  DEPARTURE_PROMOTE_BUTTON_IDS,
+} from '../discord-bot.constants';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
+import type { Logger } from '@nestjs/common';
+import type { ButtonInteraction, Message } from 'discord.js';
+import { EventEmitter } from 'node:events';
+
+/** Test-friendly interface exposing private members needed by specs */
+interface TestableDeparturePromoteListener {
+  onBotConnected: () => void;
+  onBotDisconnected: () => void;
+  handlePromote: (
+    interaction: ButtonInteraction,
+    eventId: number,
+  ) => Promise<void>;
+  handleDismiss: (
+    interaction: ButtonInteraction,
+    role: string,
+    signupId: number,
+  ) => Promise<void>;
+  handleButtonInteraction: (interaction: ButtonInteraction) => Promise<void>;
+}
+
+function makeMockInteraction(
+  customId: string,
+  overrides: Partial<{
+    embeds: Array<{ description: string }>;
+    components: unknown[];
+  }> = {},
+): ButtonInteraction {
+  const mockMessage = {
+    embeds: overrides.embeds ?? [{ description: 'Original embed text' }],
+    components: overrides.components ?? [],
+    edit: jest.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    customId,
+    isButton: () => true,
+    deferUpdate: jest.fn().mockResolvedValue(undefined),
+    message: mockMessage as unknown as Message,
+  } as unknown as ButtonInteraction;
+}
+
+let listener: TestableDeparturePromoteListener;
+let mockDb: MockDb;
+let mockClientService: { getClient: jest.Mock; isConnected: jest.Mock };
+let mockNotificationService: {
+  getDiscordEmbedUrl: jest.Mock;
+  resolveVoiceChannelForEvent: jest.Mock;
+  create: jest.Mock;
+};
+let mockSignupsService: { promoteFromBench: jest.Mock };
+let mockEventEmitter: { emit: jest.Mock };
+
+function setupDeparturePromote() {
+  mockDb = createDrizzleMock();
+  mockClientService = {
+    getClient: jest.fn().mockReturnValue(null),
+    isConnected: jest.fn().mockReturnValue(true),
+  };
+  mockNotificationService = {
+    getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue(undefined),
+  };
+  mockSignupsService = {
+    promoteFromBench: jest.fn(),
+  };
+  mockEventEmitter = { emit: jest.fn() };
+
+  listener = new DeparturePromoteListener(
+    mockDb as never,
+    mockClientService as unknown as DiscordBotClientService,
+    mockNotificationService as unknown as NotificationService,
+    mockSignupsService as unknown as SignupsService,
+    mockEventEmitter as unknown as EventEmitter2,
+  ) as unknown as TestableDeparturePromoteListener;
+}
+
+describe('DeparturePromoteListener', () => {
+  beforeEach(() => {
+    setupDeparturePromote();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('promote — success', () => {
+    promoteSuccessTests();
+  });
+
+  describe('promote — edge cases', () => {
+    promoteEdgeCaseTests();
+  });
+
+  describe('dismiss', () => {
+    dismissTests();
+  });
+
+  describe('button routing', () => {
+    buttonRoutingTests();
+  });
+
+  describe('Regression: ROK-1425 — attach lifecycle', () => {
+    attachLifecycleTests();
+  });
+});
+
+/**
+ * ROK-1425: a listener that never detaches leaves its only handler bound to a
+ * destroyed client after a reconnect (buttons silently stop acking) or stacks
+ * duplicates when CONNECTED double-fires. A real EventEmitter is used so
+ * `listenerCount` reports the genuine number of live handlers.
+ */
+function attachLifecycleTests() {
+  const fakeClient = () => new EventEmitter();
+
+  it('leaves exactly ONE live handler across CONNECTED → DISCONNECTED → CONNECTED', () => {
+    const first = fakeClient();
+    const second = fakeClient();
+    mockClientService.getClient.mockReturnValue(first);
+    listener.onBotConnected();
+    listener.onBotDisconnected();
+    mockClientService.getClient.mockReturnValue(second);
+    listener.onBotConnected();
+
+    expect(first.listenerCount('interactionCreate')).toBe(0);
+    expect(second.listenerCount('interactionCreate')).toBe(1);
+  });
+
+  // Reconnect with a MISSED DISCONNECTED — the production failure mode. A
+  // plain double-CONNECTED on the SAME client is not discriminating: the
+  // pre-fix code already called removeListener before re-adding, so that
+  // assertion passed against the very bug this covers. Attaching to a NEW
+  // client without an intervening detach is what actually catches it.
+  it('re-attaches to a new client when DISCONNECTED was missed', () => {
+    const stale = fakeClient();
+    const live = fakeClient();
+    mockClientService.getClient.mockReturnValue(stale);
+    listener.onBotConnected();
+    // No onBotDisconnected() — client.destroy() can reject, in which case
+    // DISCONNECTED is never emitted (discord-bot-client.service.ts).
+    mockClientService.getClient.mockReturnValue(live);
+    listener.onBotConnected();
+
+    expect(stale.listenerCount('interactionCreate')).toBe(0);
+    expect(live.listenerCount('interactionCreate')).toBe(1);
+  });
+}
+
+function promoteSuccessTests() {
+  it('promotes bench player via role calculation engine', async () => {
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
+    );
+
+    mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
+
+    mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+      role: 'tank',
+      position: 1,
+      username: 'BenchPlayer',
+    });
+
+    mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
+
+    await listener.handlePromote(interaction, 1);
+
+    expect(mockSignupsService.promoteFromBench).toHaveBeenCalledWith(1, 20);
+
+    expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 5,
+        type: 'bench_promoted',
+        title: 'Promoted from Bench!',
+      }),
+    );
+
+    expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      SIGNUP_EVENTS.UPDATED,
+      expect.objectContaining({
+        eventId: 1,
+        action: 'bench_promoted',
+      }),
+    );
+
+    expect(interaction.message.edit).toHaveBeenCalled();
+  });
+
+  it('shows warning when role calc places player in non-preferred role', async () => {
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:healer:1`,
+    );
+
+    mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
+
+    mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+      role: 'healer',
+      position: 1,
+      username: 'DPSOnly',
+      warning:
+        'DPSOnly was placed in **healer** which is not in their preferred roles (dps).',
+    });
+
+    mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
+
+    await listener.handlePromote(interaction, 1);
+
+    expect(mockSignupsService.promoteFromBench).toHaveBeenCalledWith(1, 20);
+    expect(interaction.message.edit).toHaveBeenCalled();
+  });
+}
+
+function promoteEdgeCaseTests() {
+  it('returns message when role calc cannot place player', async () => {
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
+    );
+
+    mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
+
+    mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+      role: 'bench',
+      position: 1,
+      username: 'BenchPlayer',
+      warning:
+        'Could not find a suitable roster slot for BenchPlayer based on their preferred roles.',
+    });
+
+    await listener.handlePromote(interaction, 1);
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    expect(interaction.message.edit).toHaveBeenCalled();
+  });
+
+  it('returns "no bench players" when bench is empty', async () => {
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
+    );
+
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    await listener.handlePromote(interaction, 1);
+
+    expect(mockSignupsService.promoteFromBench).not.toHaveBeenCalled();
+    expect(interaction.message.edit).toHaveBeenCalled();
+  });
+}
+
+function dismissTests() {
+  it('edits DM to show "slot left empty" and disables buttons', async () => {
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.DISMISS}:1:healer:2`,
+    );
+
+    await listener.handleDismiss(interaction, 'healer', 2);
+
+    expect(interaction.message.edit).toHaveBeenCalled();
+  });
+}
+
+function buttonRoutingTests() {
+  it('ignores interactions with wrong prefix', async () => {
+    const interaction = makeMockInteraction('signup:42');
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(interaction.deferUpdate).not.toHaveBeenCalled();
+  });
+
+  it('ignores interactions with wrong part count', async () => {
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1`,
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(interaction.deferUpdate).not.toHaveBeenCalled();
+  });
+
+  it('logs an interpolated message with the error stack when promote throws', async () => {
+    const errorSpy = jest
+      .spyOn(listenerLogger(), 'error')
+      .mockImplementation(() => undefined);
+    const boom = new Error('db down');
+    mockDb.limit.mockRejectedValueOnce(boom);
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:7:tank:1`,
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error handling departure promote for event 7',
+      boom.stack,
+    );
+  });
+
+  it('interpolates the defer failure reason into the warning', async () => {
+    const warnSpy = jest
+      .spyOn(listenerLogger(), 'warn')
+      .mockImplementation(() => undefined);
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:7:tank:1`,
+    );
+    (interaction.deferUpdate as jest.Mock).mockRejectedValueOnce(
+      new Error('Unknown interaction'),
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to defer departure promote: Unknown interaction',
+    );
+  });
+}
+
+/** The listener's private Nest logger, for spying on log output. */
+function listenerLogger(): Logger {
+  return (listener as unknown as { logger: Logger }).logger;
+}

@@ -1,0 +1,720 @@
+/**
+ * Ad-Hoc Suppression Integration Tests (batch B1-2, ROK-1418).
+ *
+ * The real regression net for the two ROK-1418 defects:
+ *   1. `events.game_id` suppression was unscoped — a scheduled event in an
+ *      unrelated voice channel suppressed Quick Play everywhere.
+ *   2. The suppression path rewrote `extended_until` to now+1h on EVERY
+ *      suppressed join (hardcoded `null` currentExtended), moving it backward
+ *      and self-extending unboundedly.
+ *
+ * Every existing suppression assertion is SQL-text or arg-threading on a mocked
+ * db and can be satisfied by a behaviourally-wrong refactor — hence a real pg16
+ * harness here. A new file is required because `ad-hoc-events.integration.spec`
+ * is already at 711/750.
+ *
+ * Time assertions read `extract(epoch from ...)` in SQL so `extended_until`
+ * (timestamp) and `upper(duration)` (tsrange) are compared in the SAME frame,
+ * immune to JS local-timezone round-trip drift.
+ *
+ * Regression: ROK-1418
+ */
+import { eq, sql } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { truncateAllTables } from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
+import { findActiveScheduledEvent } from './services/ad-hoc-event.helpers';
+import { AdHocEventService } from './services/ad-hoc-event.service';
+import { nonEmpty } from '../common/testing/narrow';
+
+/** A valid UUID that never matches a seeded binding (the "querying" binding). */
+const UNRELATED_BINDING = '00000000-0000-0000-0000-000000000000';
+const HOUR_S = 60 * 60;
+
+let testApp: TestApp;
+let service: AdHocEventService;
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+  service = testApp.app.get(AdHocEventService);
+});
+
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+});
+
+/** Minutes offset from a base Date. */
+function minsFrom(base: Date, minutes: number): Date {
+  return new Date(base.getTime() + minutes * 60_000);
+}
+
+async function createScheduledEvent(fields: {
+  gameId?: number | null;
+  start: Date;
+  end: Date;
+  extendedUntil?: Date | null;
+  ephemeralVoiceChannelId?: string | null;
+  recurrenceGroupId?: string | null;
+  channelBindingId?: string | null;
+  isAdHoc?: boolean;
+}): Promise<number> {
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Scheduled — suppression fixture',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [fields.start, fields.end] as [Date, Date],
+        gameId: fields.gameId ?? null,
+        extendedUntil: fields.extendedUntil ?? null,
+        ephemeralVoiceChannelId: fields.ephemeralVoiceChannelId ?? null,
+        recurrenceGroupId: fields.recurrenceGroupId ?? null,
+        channelBindingId: fields.channelBindingId ?? null,
+        isAdHoc: fields.isAdHoc ?? false,
+      })
+      .returning({ id: schema.events.id }),
+    'event',
+  );
+  return event.id;
+}
+
+async function createVoiceBinding(fields: {
+  channelId: string;
+  bindingPurpose?: string;
+  gameId?: number | null;
+  recurrenceGroupId?: string | null;
+}): Promise<string> {
+  const [binding] = nonEmpty(
+    await testApp.db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: 'guild-1418',
+        channelId: fields.channelId,
+        channelType: 'voice',
+        bindingPurpose: fields.bindingPurpose ?? 'game-voice-monitor',
+        gameId: fields.gameId ?? null,
+        recurrenceGroupId: fields.recurrenceGroupId ?? null,
+        config: {},
+      })
+      .returning({ id: schema.channelBindings.id }),
+    'binding',
+  );
+  return binding.id;
+}
+
+/**
+ * Read `extended_until` and `upper(duration)` as epoch seconds via SQL so both
+ * columns share the DB's frame (drift-proof). `extEpoch` is null when the
+ * suppression window has never been written.
+ */
+async function readEpochs(
+  eventId: number,
+): Promise<{ extEpoch: number | null; endEpoch: number }> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({
+        extEpoch: sql<
+          number | null
+        >`extract(epoch from ${schema.events.extendedUntil})`,
+        endEpoch: sql<number>`extract(epoch from upper(${schema.events.duration}))`,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1),
+    'row',
+  );
+  return {
+    extEpoch: row.extEpoch == null ? null : Number(row.extEpoch),
+    endEpoch: Number(row.endEpoch),
+  };
+}
+
+// ── Suppression predicate scoping (Regression: ROK-1418) ─────────────
+describe('ad-hoc suppression predicate scoping (Regression: ROK-1418)', () => {
+  // Case 1 — PIN: written and confirmed FIRST. A "website" event with no
+  // channel affinity (both anchors NULL) must still suppress Quick Play for
+  // the same game. Guards against the fix silently deleting ROK-293
+  // suppression. MUST PASS on today's unmodified code.
+  it('case 1 — affinity-free scheduled event still suppresses (ROK-293 pin)', async () => {
+    const now = new Date();
+    const gameId = testApp.seed.game.id;
+    await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+      'voice-channel-C',
+    );
+    expect(match?.matchedBy).toBe('game');
+  });
+
+  // Case 2 — RED today: an event demonstrably homed in voice channel D must
+  // NOT suppress Quick Play in unrelated channel C. Today the bare game_id
+  // term fires regardless of the ephemeral anchor, so it IS (wrongly) found.
+  it('case 2 — event homed in another voice channel does NOT suppress (RED today)', async () => {
+    const now = new Date();
+    const gameId = testApp.seed.game.id;
+    await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: 'voice-channel-D',
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+      'voice-channel-C',
+    );
+    expect(match).toBeUndefined();
+  });
+
+  // Case 3 — PIN: a series event bound (by recurrence group) to THIS voice
+  // channel still suppresses (ROK-1389/1390).
+  it('case 3 — series event bound to this channel still suppresses', async () => {
+    const now = new Date();
+    const gameId = testApp.seed.game.id;
+    const recurrenceGroupId = randomUUID();
+    await createVoiceBinding({
+      channelId: 'voice-channel-C',
+      bindingPurpose: 'game-voice-monitor',
+      recurrenceGroupId,
+    });
+    await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      recurrenceGroupId,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+      'voice-channel-C',
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 4 — PIN: a series event NOT homed to any voice channel still
+  // suppresses (the NOT-EXISTS branch of the anchor).
+  it('case 4 — unanchored series event still suppresses', async () => {
+    const now = new Date();
+    const gameId = testApp.seed.game.id;
+    await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      recurrenceGroupId: randomUUID(), // no voice binding references this group
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+      'voice-channel-C',
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 5 (TDB:222/224) replaces the ROK-959 `channel_binding_id` pin: no
+  // production path writes that column on a scheduled event, so the pin
+  // exercised a dead term. These cases pin the ruled behaviour instead — a
+  // channel-anchored scheduled event occupies the channel for EVERY game,
+  // while an affinity-free event stays game-scoped for a game monitor.
+  describe('case 5 — channel anchors suppress a game join for any game (TDB:224)', () => {
+    /** A game id no event carries: the game-X monitor joining channel C. */
+    const otherGame = () => testApp.seed.game.id + 100_000;
+
+    it('5a — series for game Y bound to C suppresses a game-X join on C', async () => {
+      const now = new Date();
+      const recurrenceGroupId = randomUUID();
+      await createVoiceBinding({
+        channelId: 'voice-channel-C',
+        bindingPurpose: 'general-lobby',
+        recurrenceGroupId,
+      });
+      const eventId = await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+        recurrenceGroupId,
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match?.id).toBe(eventId);
+      expect(match?.matchedBy).toBe('anchored');
+    });
+
+    it('5b — ephemeral anchor to C (game Y) suppresses a game-X join on C', async () => {
+      const now = new Date();
+      const eventId = await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+        ephemeralVoiceChannelId: 'voice-channel-C',
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match?.id).toBe(eventId);
+    });
+  });
+
+  // Codex B2 P2: a series bound to C whose live event runs in ephemeral D is
+  // homed in D. It occupies D for every join, and C for none.
+  it('5e — series bound to C running in ephemeral D does NOT suppress joins on C, does on D', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    await createVoiceBinding({
+      channelId: 'voice-channel-C',
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    const eventId = await createScheduledEvent({
+      gameId: testApp.seed.game.id,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: 'voice-channel-D',
+      recurrenceGroupId,
+    });
+    const find = (gameId: number | null, channelId: string) =>
+      findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        gameId,
+        now,
+        channelId,
+      );
+    const otherGame = testApp.seed.game.id + 100_000;
+
+    expect((await find(otherGame, 'voice-channel-C'))?.id).toBeUndefined();
+    expect((await find(null, 'voice-channel-C'))?.id).toBeUndefined();
+    expect(
+      (await find(testApp.seed.game.id, 'voice-channel-C'))?.id,
+    ).toBeUndefined();
+    expect((await find(otherGame, 'voice-channel-D'))?.id).toBe(eventId);
+    expect((await find(null, 'voice-channel-D'))?.id).toBe(eventId);
+  });
+
+  describe('case 5 — other events stay game-scoped for a game join (TDB:224)', () => {
+    const otherGame = () => testApp.seed.game.id + 100_000;
+
+    it('5c — an affinity-free game-Y event does NOT suppress a game-X join', async () => {
+      const now = new Date();
+      await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match).toBeUndefined();
+    });
+
+    it('5d — a game-Y event anchored to D does NOT suppress a game-X join on C', async () => {
+      const now = new Date();
+      await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+        ephemeralVoiceChannelId: 'voice-channel-D',
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match).toBeUndefined();
+    });
+  });
+
+  // Case 6 — PIN: ad-hoc events never suppress other ad-hoc spawns.
+  it('case 6 — is_ad_hoc=true events are excluded from suppression', async () => {
+    const now = new Date();
+    const gameId = testApp.seed.game.id;
+    await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      isAdHoc: true,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+      'voice-channel-C',
+    );
+    expect(match).toBeUndefined();
+  });
+
+  // Case 10 — PIN: window self-reference. A past-end event whose
+  // extended_until is still in the future IS found; once that window lapses it
+  // is NOT found.
+  it('case 10 — past-end event is found while its extended window is live, not after', async () => {
+    const now = new Date();
+    const gameId = testApp.seed.game.id;
+
+    const liveWindowId = await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -180),
+      end: minsFrom(now, -120), // ended 2h ago
+      extendedUntil: minsFrom(now, 10), // window still open
+    });
+    const lapsedWindowId = await createScheduledEvent({
+      gameId,
+      start: minsFrom(now, -180),
+      end: minsFrom(now, -120),
+      extendedUntil: minsFrom(now, -10), // window already closed
+    });
+
+    const foundLive = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+    );
+    expect(foundLive?.id).toBe(liveWindowId);
+
+    // Remove the live-window event so only the lapsed one can match by game.
+    await testApp.db
+      .delete(schema.events)
+      .where(eq(schema.events.id, liveWindowId));
+    void lapsedWindowId;
+
+    const foundLapsed = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      gameId,
+      now,
+    );
+    expect(foundLapsed).toBeUndefined();
+  });
+});
+
+// ── Bounded extension window (Regression: ROK-1418) ──────────────────
+describe('bounded extension window (Regression: ROK-1418)', () => {
+  const gameId = () => testApp.seed.game.id;
+
+  // Case 7 — RED today: a fresh window (extended_until well inside the 15m
+  // refresh threshold's forward horizon) is NOT rewritten. Today every join
+  // rewrites it to now+1h.
+  it('case 7 — a fresh window is not rewritten on a suppressed join (RED today)', async () => {
+    const now = new Date();
+    const eventId = await createScheduledEvent({
+      gameId: gameId(),
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      extendedUntil: minsFrom(now, 40), // fresh (>= now+15m)
+    });
+    const before = await readEpochs(eventId);
+
+    const clearance = await service.ensureNotSuppressed(
+      UNRELATED_BINDING,
+      gameId(),
+      undefined,
+    );
+    expect(clearance).toBeNull();
+
+    const after = await readEpochs(eventId);
+    expect(
+      Math.abs((after.extEpoch ?? 0) - (before.extEpoch ?? 0)),
+    ).toBeLessThan(2);
+  });
+
+  // Case 8 — RED today: the guard never moves extended_until backward. A
+  // window further out than now+1h must survive a suppressed join. Today the
+  // hardcoded now+1h clobbers it earlier.
+  it('case 8 — a far-future window is never moved backward (RED today)', async () => {
+    const now = new Date();
+    const eventId = await createScheduledEvent({
+      gameId: gameId(),
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      extendedUntil: minsFrom(now, 90), // beyond now+1h
+    });
+    const before = await readEpochs(eventId);
+
+    const clearance = await service.ensureNotSuppressed(
+      UNRELATED_BINDING,
+      gameId(),
+      undefined,
+    );
+    expect(clearance).toBeNull();
+
+    const after = await readEpochs(eventId);
+    expect(after.extEpoch ?? 0).toBeGreaterThanOrEqual(
+      (before.extEpoch ?? 0) - 2,
+    );
+  });
+
+  // Case 9 — RED today: extended_until is capped at scheduledEnd + 6h. Event
+  // ended 5.5h ago (ceiling now+30m) but is still found via its open window;
+  // today the join pushes extended_until to now+1h, past the ceiling.
+  it('case 9 — extension is capped at scheduledEnd + 6h (RED today)', async () => {
+    const now = new Date();
+    const eventId = await createScheduledEvent({
+      gameId: gameId(),
+      start: minsFrom(now, -360),
+      end: minsFrom(now, -330), // ended 5.5h ago ⇒ ceiling = now+30m
+      extendedUntil: minsFrom(now, 5), // open window keeps it "found"
+    });
+
+    const clearance = await service.ensureNotSuppressed(
+      UNRELATED_BINDING,
+      gameId(),
+      undefined,
+    );
+    expect(clearance).toBeNull();
+
+    const after = await readEpochs(eventId);
+    expect(after.extEpoch).not.toBeNull();
+    expect(after.extEpoch as number).toBeLessThanOrEqual(
+      after.endEpoch + 6 * HOUR_S + 2,
+    );
+  });
+
+  // Case 11 — PIN (P-9, false-negative direction): the guard DOES write when
+  // extended_until is genuinely stale — proving a "guard that never fires" is
+  // distinguishable from correct behaviour.
+  it('case 11 — the guard DOES extend a genuinely stale window', async () => {
+    const now = new Date();
+    const eventId = await createScheduledEvent({
+      gameId: gameId(),
+      start: minsFrom(now, -10),
+      end: minsFrom(now, 20), // live event
+      extendedUntil: minsFrom(now, -10), // stale window (in the past)
+    });
+    const before = await readEpochs(eventId);
+    const nowEpoch = Date.now() / 1000;
+
+    const clearance = await service.ensureNotSuppressed(
+      UNRELATED_BINDING,
+      gameId(),
+      undefined,
+    );
+    expect(clearance).toBeNull();
+
+    const after = await readEpochs(eventId);
+    expect(after.extEpoch).not.toBeNull();
+    expect(after.extEpoch as number).toBeGreaterThan(
+      (before.extEpoch ?? 0) + 60,
+    );
+    expect(after.extEpoch as number).toBeGreaterThan(nowEpoch);
+  });
+});
+
+// ── Null-game channel-anchored suppression (Regression: ROK-1423) ────
+//
+// Prod incident 2026-07-29: a "Gaming — Quick Play" null-game ad-hoc (event
+// 250, binding c5ada9a8) spawned on voice #General while the scheduled
+// Gamernight series event (event 156, game_id NULL, recurrence_group_id set,
+// no ephemeral anchor) was LIVE on that same channel — the series' general-
+// lobby binding is bound to #General by recurrence_group_id. When
+// effectiveGameId is null the pre-1423 clause builder emitted NO game term, so
+// no scheduled event could ever suppress a null-game join. These cases mirror
+// buildAnchoredGameClause's anchor disjunction for the null-game path:
+// suppress iff (1) ephemeral anchor to this channel, (2) series bound to this
+// channel by recurrence_group_id, or (3) the event is affinity-free.
+describe('null-game channel-anchored suppression (Regression: ROK-1423)', () => {
+  const CHANNEL_C = 'voice-channel-C';
+  const CHANNEL_D = 'voice-channel-D';
+
+  // Case 12 — RED today (exact prod shape). A live non-ad-hoc series event with
+  // null game + no ephemeral anchor, whose series is rgid-bound to channel C via
+  // a general-lobby binding, must suppress a null-game join on C. The querying
+  // monitor binding (analog of c5ada9a8) is a DIFFERENT binding on C, so the
+  // pre-fix binding-id + sibling terms are both structurally dead here.
+  it('case 12 — series rgid-bound to this channel suppresses a null-game join (RED today)', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    // The querying game-voice-monitor binding on C (the ad-hoc's own binding).
+    const monitorBindingId = await createVoiceBinding({
+      channelId: CHANNEL_C,
+      bindingPurpose: 'game-voice-monitor',
+      gameId: testApp.seed.game.id,
+    });
+    // The live series' general-lobby binding on C, linked by recurrence group.
+    await createVoiceBinding({
+      channelId: CHANNEL_C,
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      monitorBindingId,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 13 — RED today: ephemeral-anchor variant. Event ephemeral_voice_
+  // channel_id = C, null game, no series → suppresses a null-game join on C.
+  it('case 13 — ephemeral anchor to this channel suppresses a null-game join (RED today)', async () => {
+    const now = new Date();
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: CHANNEL_C,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 14 — RED today: affinity-free variant. Event with neither anchor
+  // (ROK-293 "community occupied") suppresses a null-game join on ANY channel.
+  it('case 14 — affinity-free event suppresses a null-game join on any channel (RED today)', async () => {
+    const now = new Date();
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 15 — OVER-REACH PIN (must STILL SPAWN, before and after the fix): an
+  // event anchored to channel C only must NOT suppress a null-game join on the
+  // unrelated channel D. Guards against resurrecting game-wide cross-channel
+  // suppression on the null-game path.
+  it('case 15 — event anchored to another channel does NOT suppress a null-game join here', async () => {
+    const now = new Date();
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: CHANNEL_C,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_D,
+    );
+    expect(match).toBeUndefined();
+  });
+
+  // Case 16 — OVER-REACH PIN: a series bound to a DIFFERENT channel (D) must
+  // NOT suppress a null-game join on C (the NOT-EXISTS affinity-free branch
+  // must see the series IS anchored elsewhere and stay out).
+  it('case 16 — series bound to a different channel does NOT suppress a null-game join here', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    await createVoiceBinding({
+      channelId: CHANNEL_D,
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeUndefined();
+  });
+
+  // Case 17 — OVER-REACH PIN (Codex P2): a non-ad-hoc event homed via
+  // channel_binding_id (a binding on channel D) with neither ephemeral nor
+  // series anchor must NOT count as affinity-free for a null-game join on C.
+  // No current write path produces this row shape (only the ad-hoc INSERT sets
+  // channel_binding_id), so this pins the structural guard, not live behavior.
+  it('case 17 — event homed via channel_binding_id is not affinity-free for a null-game join', async () => {
+    const now = new Date();
+    const bindingOnD = await createVoiceBinding({ channelId: CHANNEL_D });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId: null,
+      channelBindingId: bindingOnD,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeUndefined();
+  });
+});

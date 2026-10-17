@@ -1,0 +1,318 @@
+/**
+ * Sub-components for the Event Detail page.
+ * Extracted from event-detail-page.tsx for file size compliance (ROK-719).
+ */
+import { useState, type JSX } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contract';
+import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
+import { AttendeeAvatars } from '../../components/calendar/AttendeeAvatars';
+import { GameTimeWidget } from '../../components/features/game-time/GameTimeWidget';
+import { AttendanceTracker } from '../../components/events/AttendanceTracker';
+import { LiveBadge } from '../../components/events/LiveBadge';
+import { ServerGuestRoster, VoiceRoster } from '../../components/events/VoiceRoster';
+import { serverGuestParticipants, voiceParticipants } from '../../components/events/voice-participants';
+import { toast } from '../../lib/toast';
+import type { useEventDetailHandlers } from './use-event-detail-handlers';
+import { isRosterShownSignup } from './event-detail-helpers';
+
+/** Omits an absent character name instead of carrying the key as `undefined`. */
+type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
+type RawAttendeeCharacter = { gameId: number | string; name?: string | undefined; avatarUrl: string | null };
+function toAttendeeCharacter({ gameId, name, avatarUrl }: RawAttendeeCharacter): AttendeeCharacter {
+    return { gameId, avatarUrl, ...(name === undefined ? {} : { name }) };
+}
+
+/** `{ characters }` when the user has a character list, `{}` otherwise, so no key carries `undefined`. */
+function withCharacters(chars: RawAttendeeCharacter[] | undefined): { characters?: AttendeeCharacter[] } {
+    return chars ? { characters: chars.map(toAttendeeCharacter) } : {};
+}
+
+function mapGameTimeAttendees(roster: ViewerEventRosterDto | undefined) {
+    return roster?.signups.slice(0, 6).map(s => ({
+        id: s.user.id,
+        username: s.user.username,
+        avatar: s.user.avatar ?? null,
+        discordId: s.user.discordId ?? null,
+        customAvatarUrl: s.user.customAvatarUrl ?? null,
+        ...withCharacters(s.user.characters as RawAttendeeCharacter[] | undefined),
+    }));
+}
+
+export function EventDetailError({ message, onBack }: { message: string; onBack: () => void }) {
+    return (
+        <div className="event-detail-page event-detail-page--error">
+            <div className="event-detail-error">
+                <h2>Event not found</h2>
+                <p>{message}</p>
+                <button onClick={onBack} className="btn btn-secondary">Back to Calendar</button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * ROK-1237: shown when the event detail payload fails schema validation
+ * (e.g. enum drift between server and contract). Never leaks the raw Zod
+ * issue array — the issues are sent to Sentry by the fetch boundary.
+ */
+export function EventDetailSoftError({ onRetry, onBack }: { onRetry: () => void; onBack: () => void }) {
+    return (
+        <div className="event-detail-page event-detail-page--error">
+            <div className="event-detail-error">
+                <h2>Something went wrong loading this event</h2>
+                <p>We've reported this to the team. Try refreshing — if it keeps happening, head back to the calendar and let us know.</p>
+                <div className="flex gap-2 mt-2">
+                    <button onClick={onRetry} className="btn btn-primary">Refresh</button>
+                    <button onClick={onBack} className="btn btn-secondary">Back to Calendar</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function EventDetailFallbackSignup({ rosterAssignments, isAuthenticated, isSignedUp, isCancelled, onSignup, isPending }: {
+    rosterAssignments: unknown; isAuthenticated: boolean; isSignedUp: boolean; isCancelled: boolean; onSignup: () => void; isPending: boolean;
+}) {
+    if (rosterAssignments || !isAuthenticated || isSignedUp || isCancelled) return null;
+    return (
+        <div className="event-detail-signup-fallback">
+            <button onClick={onSignup} disabled={isPending} className="btn btn-primary">{isPending ? 'Signing up...' : 'Sign Up for Event'}</button>
+        </div>
+    );
+}
+
+export function EventDetailGameTimeWidget({ rosterAssignments, isAuthenticated, event, roster }: {
+    rosterAssignments: unknown; isAuthenticated: boolean; event: EventResponseDto; roster: ViewerEventRosterDto | undefined;
+}) {
+    if (rosterAssignments || !isAuthenticated || !event.startTime || !event.endTime) return null;
+    return (
+        <GameTimeWidget eventStartTime={event.startTime} eventEndTime={event.endTime} eventTitle={event.title} gameName={event.game?.name}
+            gameSlug={event.game?.slug} gameId={event.game?.id} coverUrl={event.game?.coverUrl} description={event.description} creatorUsername={event.creator?.username}
+            attendees={mapGameTimeAttendees(roster)} attendeeCount={roster?.count} />
+    );
+}
+
+export function EventDetailVoiceSection({ showVoiceRoster, voiceRoster, isAdHoc, event, eventStatus, roster }: {
+    showVoiceRoster: boolean; voiceRoster: { participants: AdHocParticipantDto[] };
+    isAdHoc: boolean; event: EventResponseDto; eventStatus: string | null;
+    /** The signup roster; linked server players outside it join the server group (ROK-1822). */
+    roster?: ViewerEventRosterDto | undefined;
+}) {
+    // ROK-1821: voice rows get the voice panel; server players no shown signup lists get their own group.
+    const shownSignups = roster?.signups.filter(isRosterShownSignup);
+    const signedUpUserIds = shownSignups ? new Set(shownSignups.map((s) => s.user.id)) : undefined;
+    const hasVoice = voiceParticipants(voiceRoster.participants).length > 0;
+    const hasGuests = serverGuestParticipants(voiceRoster.participants, signedUpUserIds).length > 0;
+    if (!showVoiceRoster || (!hasVoice && !hasGuests)) return null;
+    return (
+        <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
+            {(isAdHoc ? event.adHocStatus === 'live' : eventStatus === 'live') && <LiveBadge className="mb-3" />}
+            <div className="space-y-4">
+                {hasVoice && <VoiceRoster participants={voiceRoster.participants} />}
+                <ServerGuestRoster participants={voiceRoster.participants} signedUpUserIds={signedUpUserIds} />
+            </div>
+        </div>
+    );
+}
+
+function resolveBackNavigation(fromCalendar: boolean, navState: { calendarDate?: string; calendarView?: string } | null, hasHistory: boolean, navigate: ReturnType<typeof useNavigate>) {
+    if (fromCalendar) {
+        const params = new URLSearchParams();
+        if (navState?.calendarDate) params.set('date', navState.calendarDate);
+        if (navState?.calendarView) params.set('view', navState.calendarView);
+        navigate(`/calendar?${params.toString()}`);
+    } else if (hasHistory) { navigate(-1); }
+    else { navigate('/calendar'); }
+}
+
+function useTopbarActions(isSeries: boolean, eventId: number, onCancel: () => void, onDelete?: () => void, onSeriesAction?: (action: 'edit' | 'delete' | 'cancel') => void) {
+    const navigate = useNavigate();
+    return {
+        navigate,
+        handleEdit: () => { if (isSeries && onSeriesAction) onSeriesAction('edit'); else navigate(`/events/${eventId}/edit`); },
+        handleCancel: () => { if (isSeries && onSeriesAction) onSeriesAction('cancel'); else onCancel(); },
+        handleDelete: () => { if (isSeries && onSeriesAction) onSeriesAction('delete'); else onDelete?.(); },
+    };
+}
+
+/** Top bar with back + action buttons */
+export function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthenticated, canManageRoster, isCancelled, isEnded, eventId, recurrenceGroupId, onInvite, onReschedule, onCancel, onDelete, onSeriesAction }: {
+    fromCalendar: boolean; navState: { calendarDate?: string; calendarView?: string } | null;
+    hasHistory: boolean; isAuthenticated: boolean; canManageRoster: boolean; isCancelled: boolean;
+    isEnded: boolean; eventId: number; recurrenceGroupId?: string | null | undefined;
+    onInvite: () => void; onReschedule: () => void; onCancel: () => void;
+    onDelete?: () => void; onSeriesAction?: (action: 'edit' | 'delete' | 'cancel') => void;
+}): JSX.Element {
+    const { navigate, handleEdit, handleCancel, handleDelete } = useTopbarActions(!!recurrenceGroupId, eventId, onCancel, onDelete, onSeriesAction);
+    return (
+        <div className="event-detail-topbar">
+            <button onClick={() => resolveBackNavigation(fromCalendar, navState, hasHistory, navigate)} className="event-detail-back" aria-label="Go back">
+                {fromCalendar ? '\u2190 Back to Calendar' : '\u2190 Back'}
+            </button>
+            {isAuthenticated && !canManageRoster && !isCancelled && !isEnded && (
+                <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
+            )}
+            {canManageRoster && !isCancelled && !isEnded && (
+                <TopbarManagerButtons onInvite={onInvite} onReschedule={onReschedule} onEdit={handleEdit} onCancel={handleCancel} onDelete={handleDelete} />
+            )}
+            {canManageRoster && !isEnded && isCancelled && (
+                <button onClick={handleDelete} className="btn btn-danger btn-sm">Delete Event</button>
+            )}
+        </div>
+    );
+}
+
+/** Three-dot overflow menu for secondary/destructive actions on mobile (ROK-886). */
+export function MoreActionsMenu({ onReschedule, onCancel, onDelete }: {
+    onReschedule: () => void; onCancel: () => void; onDelete: () => void;
+}): JSX.Element {
+    const [open, setOpen] = useState(false);
+    const act = (handler: () => void) => { setOpen(false); handler(); };
+    return (
+        <div className="relative">
+            <button onClick={() => setOpen(!open)} className="btn btn-secondary btn-sm flex items-center justify-center" aria-label="More actions">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+            </button>
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-edge bg-surface shadow-lg">
+                        <button onClick={() => act(onReschedule)} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors rounded-t-lg">Reschedule</button>
+                        <button onClick={() => act(onCancel)} className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 transition-colors">Cancel Event</button>
+                        <button onClick={() => act(onDelete)} className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 transition-colors rounded-b-lg">Delete Event</button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+/** Manager action buttons for event topbar — desktop inline, mobile overflow (ROK-886). */
+function TopbarManagerButtons({ onInvite, onReschedule, onEdit, onCancel, onDelete }: {
+    onInvite: () => void; onReschedule: () => void; onEdit: () => void; onCancel: () => void; onDelete: () => void;
+}) {
+    return (
+        <>
+            <div className="hidden sm:flex gap-2">
+                <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
+                <button onClick={onReschedule} className="btn btn-secondary btn-sm">Reschedule</button>
+                <button onClick={onEdit} className="btn btn-secondary btn-sm">Edit Event</button>
+                <button onClick={onDelete} className="btn btn-danger btn-sm">Delete Event</button>
+                <button onClick={onCancel} className="btn btn-danger btn-sm">Cancel Event</button>
+            </div>
+            <div className="flex sm:hidden gap-2">
+                <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
+                <button onClick={onEdit} className="btn btn-secondary btn-sm">Edit</button>
+                <MoreActionsMenu onReschedule={onReschedule} onCancel={onCancel} onDelete={onDelete} />
+            </div>
+        </>
+    );
+}
+
+/** Cancelled event banner */
+export function CancelledBanner({ event, isCancelled }: {
+    event: { cancelledAt?: string | null | undefined; cancellationReason?: string | null | undefined };
+    isCancelled: boolean;
+}): JSX.Element | null {
+    if (!isCancelled || !event.cancelledAt) return null;
+    return (
+        <div className="bg-danger/10 border border-danger/30 rounded-lg px-4 py-3 mb-4">
+            <div className="flex items-center gap-2 text-danger font-semibold text-sm">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                This event has been cancelled
+            </div>
+            {event.cancellationReason && <p className="text-sm text-muted mt-1">Reason: {event.cancellationReason}</p>}
+            <p className="text-xs text-dim mt-1">
+                Cancelled on {new Intl.DateTimeFormat('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+                }).format(new Date(event.cancelledAt))}
+            </p>
+        </div>
+    );
+}
+
+/** Post-event sections (attendance tracker + metrics link) */
+export function PostEventSections({ event, eventId, isCancelled, isAdHoc, canManageRoster }: {
+    event: { endTime: string };
+    eventId: number;
+    isCancelled: boolean;
+    isAdHoc: boolean;
+    canManageRoster: boolean;
+}): JSX.Element | null {
+    const isPast = event.endTime && new Date(event.endTime) < new Date();
+    if (!isPast || isCancelled || isAdHoc || !canManageRoster) return null;
+    return (
+        <>
+            <AttendanceTracker eventId={eventId} isOrganizer={canManageRoster} />
+            <div className="flex justify-center">
+                <Link
+                    to={`/events/${eventId}/metrics`}
+                    className="px-4 py-2 bg-surface hover:bg-panel text-emerald-400 hover:text-emerald-300 text-sm font-medium rounded-lg border border-edge transition-colors"
+                >
+                    View Event Metrics
+                </Link>
+            </div>
+        </>
+    );
+}
+
+/** Mobile quick info bar */
+export function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortFn }: {
+    event: { startTime: string; game?: { id?: number } | null };
+    roster: { count: number; signups: Array<{ id: number; user: { id: number; username: string; avatar?: string | null | undefined; discordId?: string | null | undefined; customAvatarUrl?: string | null | undefined; characters?: unknown[] | undefined } }> } | undefined;
+    isSignedUp: boolean;
+    alphabetical: (a: { user: { username: string } }, b: { user: { username: string } }) => number;
+}): JSX.Element {
+    const dateStr = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(event.startTime));
+    const scrollToRoster = () => document.getElementById('event-roster-section')?.scrollIntoView({ behavior: 'smooth' });
+    const avatarSignups = (roster?.signups?.length ?? 0) > 0
+        ? [...roster!.signups].sort(sortFn).slice(0, 5).map(s => ({
+            id: s.user.id, username: s.user.username, avatar: s.user.avatar ?? null,
+            discordId: s.user.discordId ?? null, customAvatarUrl: s.user.customAvatarUrl ?? null,
+            ...withCharacters(s.user.characters as RawAttendeeCharacter[] | undefined),
+        })) : null;
+
+    return (
+        <div className="md:hidden event-detail-quick-info">
+            <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="text-xs text-muted">{dateStr}</p>
+                    <div className="flex items-center gap-2 mt-0.5 cursor-pointer group" onClick={scrollToRoster}>
+                        <span className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">{roster?.count ?? 0} signed up</span>
+                        {avatarSignups && <AttendeeAvatars signups={avatarSignups} gameId={event.game?.id ?? undefined} totalCount={roster!.count} maxVisible={5} size="md" />}
+                    </div>
+                </div>
+                {isSignedUp && <span className="text-xs font-medium text-success bg-success/10 px-2 py-1 rounded-full whitespace-nowrap shrink-0">&#10003; Signed up</span>}
+            </div>
+        </div>
+    );
+}
+
+export function AutoSubToggle({ event, handlers }: { event: EventResponseDto; handlers: ReturnType<typeof useEventDetailHandlers> }) {
+    const autoUnbench = event.autoUnbench ?? true;
+    return (
+        <div className={`event-detail-autosub-toggle ${handlers.updateAutoUnbench.isPending ? 'opacity-50 pointer-events-none' : ''}`}>
+            <span className="text-xs text-gray-400 mr-2 whitespace-nowrap">Auto-sub</span>
+            <div className="event-detail-autosub-toggle__track" role="switch" aria-checked={autoUnbench} tabIndex={0}
+                onClick={() => !handlers.updateAutoUnbench.isPending && handlers.updateAutoUnbench.mutate(!autoUnbench)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlers.updateAutoUnbench.mutate(!autoUnbench); } }}>
+                <span className={`event-detail-autosub-toggle__option ${autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                <span className={`event-detail-autosub-toggle__option ${!autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+            </div>
+        </div>
+    );
+}
+
+export function SignedUpActions({ userSignup, handlers }: { userSignup: { status: string } | undefined; handlers: ReturnType<typeof useEventDetailHandlers> }) {
+    return (
+        <div className="flex items-center gap-1.5">
+            {userSignup?.status === 'tentative'
+                ? <button onClick={() => handlers.updateStatus.mutate('signed_up')} disabled={handlers.updateStatus.isPending} className="btn btn-primary btn-sm">Confirm</button>
+                : <button onClick={() => { handlers.updateStatus.mutate('tentative'); toast.info('Marked as tentative'); }} disabled={handlers.updateStatus.isPending} className="btn btn-secondary btn-sm" title="Mark as tentative">Tentative</button>}
+            <button onClick={handlers.handleCancel} disabled={handlers.cancelSignup.isPending} className="btn btn-danger btn-sm">{handlers.cancelSignup.isPending ? 'Leaving...' : 'Leave'}</button>
+        </div>
+    );
+}

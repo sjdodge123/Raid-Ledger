@@ -1,0 +1,436 @@
+/**
+ * ROK-1786 (S2): the GM post on Overview, the Resources tab (rules, links,
+ * recommended addons) and when that tab shows.
+ */
+import { useEffect } from 'react';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { Route, Routes } from 'react-router-dom';
+import type { GuildAddon, GuildAddonList, GuildPage as GuildPageDto, GuildProfile } from '@raid-ledger/contract';
+import { server } from '../../../test/mocks/server';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
+import { activateWowPlugin } from '../../../test/activate-wow-plugin';
+import { usePluginHydration } from '../../../hooks/use-plugins';
+import { usePluginStore } from '../../../stores/plugin-store';
+import { at } from '../../../test/defined';
+import { guildPageKey } from '../api/use-guild';
+import { GuildPage } from '../hub-page';
+
+const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+
+function makePage(canEdit: boolean): GuildPageDto {
+    return {
+        guild: { id: 7, gameId: 1, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 1, lastSnapshotAt: null },
+        importedBy: null,
+        viewer: { role: canEdit ? 'officer' : 'member', canEdit, canManageEditors: false },
+        ranks: [],
+        roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
+    };
+}
+
+const EMPTY_PROFILE: GuildProfile = { guildId: 7, gmPost: null, rules: [], links: [] };
+const NO_ADDONS: GuildAddonList = { pinned: [], addons: [] };
+
+function addon(id: number, displayName: string, overrides: Partial<GuildAddon> = {}): GuildAddon {
+    return {
+        id, guildId: 7, source: 'curseforge', slugOrUrl: displayName.toLowerCase(), url: `https://www.curseforge.com/wow/addons/${displayName.toLowerCase()}`,
+        displayName, note: null, requirement: 'optional', flavor: null, sortOrder: id, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', ...overrides,
+    };
+}
+
+interface Call { method: string; url: string; body: unknown }
+let calls: Call[] = [];
+
+async function record(request: Request): Promise<void> {
+    const text = await request.text();
+    calls.push({ method: request.method, url: request.url, body: text ? JSON.parse(text) : null });
+}
+
+function serve(canEdit: boolean, profile: GuildProfile = EMPTY_PROFILE, addons: GuildAddonList = NO_ADDONS): void {
+    server.use(
+        http.get(BASE, () => HttpResponse.json(makePage(canEdit))),
+        http.get(`${BASE}/profile`, () => HttpResponse.json(profile)),
+        http.patch(`${BASE}/profile`, async ({ request }) => { await record(request); return HttpResponse.json(profile); }),
+        http.get(`${BASE}/addons`, () => HttpResponse.json(addons)),
+        http.post(`${BASE}/addons`, async ({ request }) => { await record(request); return HttpResponse.json(addon(99, 'Details')); }),
+        http.delete(`${BASE}/addons/:addonId`, async ({ request }) => { await record(request); return new HttpResponse(null, { status: 204 }); }),
+        http.put(`${BASE}/addons/order`, async ({ request }) => { await record(request); return HttpResponse.json(addons); }),
+    );
+}
+
+function renderPage(hash = ''): void {
+    window.location.hash = hash;
+    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+}
+
+async function tabLabels(): Promise<(string | null)[]> {
+    const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+    return within(nav).getAllByRole('link').map((a) => a.textContent);
+}
+
+beforeEach(() => { activateWowPlugin(); calls = []; });
+afterEach(() => { window.location.hash = ''; });
+
+describe('GM post (Overview)', () => {
+    const post: GuildProfile = { ...EMPTY_PROFILE, gmPost: { body: 'Raid Thursday 8pm.\nBring flasks.', updatedAt: '2026-10-03T12:00:00.000Z', updatedBy: 'Grimtusk' } };
+
+    it('shows the body and author to a viewer, with no Edit', async () => {
+        serve(false, post);
+        renderPage();
+        expect(await screen.findByTestId('guild-gm-post-body')).toHaveTextContent('Raid Thursday 8pm.');
+        expect(screen.getByTestId('guild-gm-post-byline')).toHaveTextContent('Grimtusk');
+        expect(screen.queryByRole('button', { name: 'Edit the guild post' }), 'a viewer must not get Edit').toBeNull();
+    });
+
+    it('shows an empty state to a viewer when there is no post', async () => {
+        serve(false);
+        renderPage();
+        expect(await screen.findByTestId('guild-gm-post-empty')).toHaveTextContent('No post from the guild master yet.');
+        expect(screen.queryByRole('button', { name: 'Add a post' })).toBeNull();
+    });
+
+    it('lets an editor add a post and PATCHes the profile', async () => {
+        serve(true);
+        renderPage();
+        await userEvent.click(await screen.findByRole('button', { name: 'Add a post' }));
+        await userEvent.type(screen.getByLabelText('Guild post'), 'Welcome raiders');
+        await userEvent.click(screen.getByTestId('guild-gm-post-save'));
+        await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', url: `${BASE}/profile`, body: { gmPost: 'Welcome raiders' } }]));
+    });
+
+    it('shows the loading skeleton, not Add a post, to an editor while the profile loads', async () => {
+        serve(true);
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.get(`${BASE}/profile`, async () => { await gate; return HttpResponse.json(EMPTY_PROFILE); }));
+        renderPage();
+        expect(await screen.findByTestId('guild-gm-post-loading')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Add a post' }), 'no Add a post before the profile loads').toBeNull();
+        release();
+        expect(await screen.findByRole('button', { name: 'Add a post' })).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-gm-post-loading')).toBeNull();
+    });
+
+    it('shows an error, not the empty prompt, to an editor when the profile fails', async () => {
+        serve(true);
+        server.use(http.get(`${BASE}/profile`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        renderPage();
+        expect(await screen.findByTestId('guild-gm-post-error')).toHaveTextContent('Couldn’t load the guild post.');
+        expect(screen.queryByTestId('guild-gm-post-prompt'), 'no empty prompt on a profile error').toBeNull();
+        expect(screen.queryByRole('button', { name: 'Add a post' })).toBeNull();
+    });
+});
+
+describe('Resources tab visibility', () => {
+    it('stays hidden for a viewer when there is nothing in it', async () => {
+        serve(false);
+        renderPage();
+        await screen.findByTestId('guild-gm-post-empty');
+        expect(await tabLabels()).toEqual(['Overview', 'Roster', 'Raids']);
+    });
+
+    it('shows for a viewer once there is content', async () => {
+        serve(false, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed' }] });
+        renderPage();
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Roster', 'Raids', 'Resources']));
+    });
+
+    it('shows for an editor even when empty', async () => {
+        serve(true);
+        renderPage();
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Roster', 'Raids', 'Resources']));
+    });
+});
+
+describe('Resources: rules and links', () => {
+    it('renders each non-blank rule line as an item', async () => {
+        serve(false, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed\n\n   \n  Main spec first  ' }] });
+        renderPage('#resources');
+        const items = await screen.findByTestId('guild-rule-items');
+        expect(within(items).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Need before greed', 'Main spec first']);
+    });
+
+    it('an editor adds a rules section and saves the whole list', async () => {
+        serve(true, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed' }] });
+        renderPage('#resources');
+        await userEvent.click(await screen.findByTestId('guild-rules-edit'));
+        await userEvent.click(screen.getByRole('button', { name: 'Add section' }));
+        const titles = screen.getAllByLabelText('Section title');
+        await userEvent.type(at(titles, 1), 'Attendance');
+        await userEvent.type(at(screen.getAllByLabelText('Rules'), 1), 'Sign up by Tuesday');
+        await userEvent.click(screen.getByRole('button', { name: 'Move Attendance up' }));
+        await userEvent.click(screen.getByTestId('guild-rules-save'));
+        await waitFor(() => expect(calls[0]?.body).toEqual({ rules: [{ title: 'Attendance', body: 'Sign up by Tuesday' }, { title: 'Loot', body: 'Need before greed' }] }));
+    });
+
+    it('an editor adds a link group and saves it', async () => {
+        serve(true);
+        renderPage('#resources');
+        await userEvent.click(await screen.findByTestId('guild-links-edit'));
+        await userEvent.click(screen.getByRole('button', { name: 'Add group' }));
+        await userEvent.type(screen.getByLabelText('Group title'), 'Logs');
+        await userEvent.type(screen.getByLabelText('Label'), 'Warcraft Logs');
+        await userEvent.type(screen.getByLabelText('URL'), 'https://classic.warcraftlogs.com/guild/1');
+        await userEvent.click(screen.getByTestId('guild-links-save'));
+        await waitFor(() => expect(calls[0]?.body).toEqual({ links: [{ title: 'Logs', links: [{ label: 'Warcraft Logs', url: 'https://classic.warcraftlogs.com/guild/1' }] }] }));
+    });
+});
+
+const list: GuildAddonList = {
+    pinned: [{ name: 'LedgerLink', url: 'https://github.com/sjdodge123/ledger-link', note: null, requirement: 'required', flavors: [] }],
+    addons: [addon(1, 'DBM', { requirement: 'required' }), addon(2, 'Details')],
+};
+
+describe('Resources: recommended addons', () => {
+
+    it('lists pinned first, then the guild addons; a viewer gets no controls', async () => {
+        serve(false, EMPTY_PROFILE, list);
+        renderPage('#resources');
+        const ul = await screen.findByRole('list', { name: 'Recommended addons' });
+        const names = within(ul).getAllByRole('listitem').map((li) => li.querySelector('span')?.textContent);
+        expect(names).toEqual(['LedgerLink', 'DBM', 'Details']);
+        expect(within(at(within(ul).getAllByRole('listitem'), 0)).getByText('Pinned')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Remove DBM' }), 'viewer must not get Remove').toBeNull();
+    });
+
+    it('an editor cannot remove a pinned addon but can add, remove and reorder', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        renderPage('#resources');
+        await screen.findByRole('button', { name: 'Remove DBM' });
+        expect(screen.queryByRole('button', { name: 'Remove LedgerLink' }), 'pinned rows are fixed').toBeNull();
+        await userEvent.type(screen.getByLabelText('Addon link'), 'https://www.curseforge.com/wow/addons/details');
+        expect(screen.getByTestId('guild-addon-preview')).toHaveTextContent('Adding Details');
+        await userEvent.click(screen.getByTestId('guild-addon-add'));
+        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'POST', url: `${BASE}/addons`, body: { url: 'https://www.curseforge.com/wow/addons/details', note: null, requirement: 'optional', flavor: null } }));
+        await userEvent.click(screen.getByRole('button', { name: 'Remove DBM' }));
+        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', url: `${BASE}/addons/1`, body: null }));
+        await userEvent.click(screen.getByRole('button', { name: 'Move DBM down' }));
+        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PUT', url: `${BASE}/addons/order`, body: { ids: [2, 1] } }));
+    });
+});
+
+describe('Resources: addon write failures', () => {
+    it('a failed edit keeps the editor open with the server error; a retry that succeeds closes it', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        let fail = true;
+        server.use(http.patch(`${BASE}/addons/:addonId`, async ({ request }) => {
+            await record(request);
+            return fail
+                ? HttpResponse.json({ message: 'Note is too long' }, { status: 400 })
+                : HttpResponse.json(addon(1, 'DBM', { note: 'Boss timers' }));
+        }));
+        renderPage('#resources');
+        await userEvent.click(await screen.findByRole('button', { name: 'Edit DBM' }));
+        // The add form above the list has its own Note; the row editor's is second.
+        const rowNote = (): HTMLElement => at(screen.getAllByLabelText('Note'), 1);
+        await userEvent.type(rowNote(), 'Boss timers');
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(await screen.findByTestId('guild-addon-edit-error')).toHaveTextContent('Couldn’t save DBM. Note is too long');
+        expect(rowNote(), 'the edit must survive a failed save').toHaveValue('Boss timers');
+        fail = false;
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getAllByLabelText('Note'), 'the editor closes once the save lands').toHaveLength(1));
+        expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(2);
+    });
+
+    it('a failed remove or reorder shows the server error above the list', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(
+            http.delete(`${BASE}/addons/:addonId`, () => HttpResponse.json({ message: 'Addon not found' }, { status: 404 })),
+            http.put(`${BASE}/addons/order`, () => HttpResponse.json({ message: 'ids must list every addon of the guild' }, { status: 400 })),
+        );
+        renderPage('#resources');
+        await userEvent.click(await screen.findByRole('button', { name: 'Remove DBM' }));
+        expect(await screen.findByTestId('guild-addons-error')).toHaveTextContent('Couldn’t remove that addon. Addon not found');
+        await userEvent.click(screen.getByRole('button', { name: 'Move DBM down' }));
+        await waitFor(() => expect(screen.getByTestId('guild-addons-error')).toHaveTextContent('Couldn’t move that addon. ids must list every addon of the guild'));
+    });
+
+    it('a rejected add shows the server message, and a bad known-host link is caught before submit', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(http.post(`${BASE}/addons`, () => HttpResponse.json({ message: 'This addon is already on the guild list' }, { status: 409 })));
+        renderPage('#resources');
+        const input = await screen.findByLabelText('Addon link');
+        await userEvent.type(input, 'https://www.curseforge.com/wow/other/details');
+        expect(screen.getByRole('alert')).toHaveTextContent('CurseForge links must look like curseforge.com/wow/addons/<name>');
+        expect(screen.getByTestId('guild-addon-add')).toBeDisabled();
+        await userEvent.clear(input);
+        await userEvent.type(input, 'https://www.curseforge.com/wow/addons/dbm');
+        await userEvent.click(screen.getByTestId('guild-addon-add'));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t add that addon. This addon is already on the guild list');
+    });
+});
+
+/**
+ * ROK-1830 r3 — the section owns its own query now, so a failed or pending
+ * addons fetch must say so. Before r3 both returned `null` and an editor lost
+ * the Add form with no message.
+ */
+describe('Resources: the addons section while it loads and when it fails', () => {
+    it('holds the skeleton while the addons query is still in flight', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(http.get(`${BASE}/addons`, () => new Promise<never>(() => { /* never settles */ })));
+        renderPage('#resources');
+        const skeleton = await screen.findByTestId('guild-addons-loading');
+        expect(skeleton, 'a pending addons fetch must keep a busy placeholder, not vanish').toHaveAttribute('aria-busy', 'true');
+        expect(screen.queryByTestId('guild-addons-load-error'), 'pending is not an error').toBeNull();
+    });
+
+    it('tells an editor the addons failed to load instead of silently dropping the panel', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(http.get(`${BASE}/addons`, () => HttpResponse.json({ message: 'nope' }, { status: 500 })));
+        renderPage('#resources');
+        const failure = await screen.findByTestId('guild-addons-load-error');
+        expect(failure).toHaveTextContent("We couldn't load this guild's recommended addons. Try again in a moment.");
+        expect(screen.queryByLabelText('Addon link'), 'the Add form belongs to a loaded list').toBeNull();
+    });
+});
+
+/**
+ * ROK-1830 — the module's Resources sections answer DURING the render pass
+ * above the tab nav, so a warm cache puts the Resources tab in the very first
+ * commit that draws the nav at all.
+ *
+ * Commit-sensitive on purpose: `PaintSpy` is a later sibling whose PASSIVE
+ * effect snapshots the tab labels after EVERY commit, and the test judges
+ * `painted[0]` — the first snapshot that saw a nav. Only an answer computed in
+ * the nav's own render pass can be in it. Any child-to-parent report fails
+ * here, in either effect phase: lifting state out of a child costs a second
+ * commit by construction, so the nav has already been drawn without Resources
+ * by the time the parent re-renders with the answer. (That is not a guess — the
+ * r3 `useLayoutEffect` probe this replaced was red on exactly this assertion.)
+ * A plain post-render query cannot tell the two apart, because RTL's `act`
+ * flushes every pending commit before it runs.
+ */
+function PaintSpy({ onPaint }: { onPaint: (labels: (string | null)[]) => void }): null {
+    // No dependency array on purpose: snapshot after EVERY commit, so the first
+    // commit that shows the tab nav at all is the one that gets judged.
+    useEffect(() => {
+        const nav = screen.queryByRole('navigation', { name: 'Guild page sections' });
+        if (nav) onPaint(within(nav).getAllByRole('link').map((a) => a.textContent));
+    });
+    return null;
+}
+
+describe('Resources tab visibility on a warm cache', () => {
+    it('offers Resources on the first render when the addons answer is already cached', async () => {
+        serve(false, EMPTY_PROFILE, list);
+        const queryClient = createTestQueryClient();
+        const painted: (string | null)[][] = [];
+        const onPaint = (labels: (string | null)[]): void => { painted.push(labels); };
+        const page = (
+            <Routes>
+                <Route path="/guilds/:id" element={<><GuildPage /><PaintSpy onPaint={onPaint} /></>} />
+            </Routes>
+        );
+        const warm = renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        await waitFor(async () => expect(await tabLabels()).toContain('Resources'));
+        warm.unmount();
+        painted.length = 0;
+
+        renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        await waitFor(() => expect(painted.length).toBeGreaterThan(0));
+        const first = painted[0];
+        expect(first, 'the spy must have observed the first commit that renders the tab nav').toBeDefined();
+        expect(first, 'a cached answer must show Resources in the first nav commit, before the first passive flush').toContain('Resources');
+        const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
+        const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
+        expect(labels, 'a cached answer must not need a second commit to show Resources').toContain('Resources');
+    });
+});
+
+/**
+ * ROK-1830 r5 — the plugin list hydrates from an async query, so `useHubModule`
+ * flips undefined → module after the page may already have rendered. The
+ * section-id key under which the hero/nav/panel live would then change on an
+ * ordinary cold load and React would remount the whole frame — mount effects
+ * re-run, panel state and scroll position are lost. The page holds its loading
+ * state until the list settles instead, so the key only moves on a real plugin
+ * toggle from the admin page.
+ */
+function HydrationHost(): null {
+    usePluginHydration();
+    return null;
+}
+
+const HERO = '[data-testid="guild-hero"]';
+
+/**
+ * Count every hero attach/detach across the WHOLE hydration window, not just
+ * the endpoints: comparing the node before and after would miss a frame that
+ * remounted and settled back before the next query ran.
+ */
+function watchHero(): { counts: () => { attaches: number; detaches: number }; stop: () => void } {
+    let attaches = 0;
+    let detaches = 0;
+    const holdsHero = (node: Node): boolean =>
+        node instanceof HTMLElement && (node.matches(HERO) || node.querySelector(HERO) !== null);
+    const absorb = (records: MutationRecord[]): void => {
+        for (const record of records) {
+            for (const node of Array.from(record.addedNodes)) if (holdsHero(node)) attaches += 1;
+            for (const node of Array.from(record.removedNodes)) if (holdsHero(node)) detaches += 1;
+        }
+    };
+    const observer = new MutationObserver(absorb);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return {
+        counts: () => { absorb(observer.takeRecords()); return { attaches, detaches }; },
+        stop: () => observer.disconnect(),
+    };
+}
+
+describe('the hub frame and an asynchronous plugin list', () => {
+    it('holds the loading state until the plugin list hydrates, then mounts the hero exactly once', async () => {
+        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false, settled: false });
+        let releaseStatus = (): void => {};
+        const statusSettled = new Promise<void>((resolve) => { releaseStatus = (): void => { resolve(); }; });
+        serve(false, EMPTY_PROFILE, list);
+        server.use(
+            http.get('http://localhost:3000/system/status', async () => {
+                await statusSettled;
+                return HttpResponse.json({ status: 'ok', activePlugins: ['blizzard'] });
+            }),
+        );
+
+        const heroMoves = watchHero();
+        const queryClient = createTestQueryClient();
+        try {
+            renderWithProviders(
+                <><HydrationHost /><Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes></>,
+                { initialEntries: ['/guilds/7'], queryClient },
+            );
+            // The guild payload is COMMITTED to the cache — a served request is
+            // not yet data the page could have drawn, so counting handler calls
+            // would judge the loading state too early.
+            await waitFor(() => expect(
+                queryClient.getQueriesData({ queryKey: guildPageKey(7) }).some(([, data]) => data !== undefined),
+                'the guild payload must be in the query cache before we judge what the page is showing',
+            ).toBe(true));
+            expect(
+                screen.queryByTestId('guild-loading'),
+                'with the guild payload cached and the plugin list still in flight, the page must still be loading',
+            ).not.toBeNull();
+            expect(
+                screen.queryByTestId('guild-hero'),
+                'the frame must not mount while the plugin list is still in flight — the module arriving would remount it',
+            ).toBeNull();
+
+            releaseStatus();
+            const hero = await screen.findByTestId('guild-hero');
+            expect(await tabLabels(), 'the module tabs must be present as soon as the frame is').toContain('Raids');
+            expect(
+                screen.getByTestId('guild-hero'),
+                'hydrating the plugin list must not remount the frame: the hero must be the same DOM node',
+            ).toBe(hero);
+            await waitFor(() => expect(heroMoves.counts().attaches, 'the hero must have attached').toBe(1));
+            expect(
+                heroMoves.counts(),
+                'across the whole hydration window the hero must attach exactly once and never detach',
+            ).toEqual({ attaches: 1, detaches: 0 });
+        } finally {
+            heroMoves.stop();
+        }
+    });
+});

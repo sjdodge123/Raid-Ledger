@@ -1,0 +1,947 @@
+/**
+ * Standalone Scheduling Poll Integration Tests (ROK-977 + ROK-1034)
+ *
+ * Verifies the POST /scheduling-polls endpoint against a real PostgreSQL
+ * database. This endpoint creates a "standalone" scheduling poll that skips
+ * the full lineup flow (building/voting) and jumps directly to scheduling.
+ *
+ * Under the hood it creates:
+ *   - A community_lineup in "decided" status
+ *   - A community_lineup_match in "scheduling" status
+ *   - community_lineup_match_members for provided userIds
+ *
+ * ROK-977 Acceptance Criteria:
+ *   AC1: POST with valid gameId creates lineup (decided) + match (scheduling)
+ *   AC2: Match members inserted for provided memberUserIds
+ *   AC3: Phase timer scheduled when durationHours provided
+ *   AC4: 404 when gameId doesn't exist
+ *   AC5: 404 when linkedEventId doesn't exist
+ *   AC6: Any authenticated user can create (no operator role required)
+ *
+ * ROK-1034 Acceptance Criteria (rescheduling poll linkage):
+ *   AC1: POST with linkedEventId sets rescheduling_poll_id on the event
+ *   AC2: GET /events excludes events with rescheduling_poll_id IS NOT NULL
+ *   AC3: POST /events/:id/signup on rescheduling event returns 409
+ *   AC4: POST /scheduling-polls on event already being rescheduled returns 409
+ *   AC5: Poll completion cancels linked event, clears rescheduling_poll_id
+ *   AC6: Poll expiry clears rescheduling_poll_id, event reappears
+ *   AC7: Roster members receive reschedule-specific DM
+ *   AC8: Game-interest-only users receive generic poll DM
+ *   AC9: Roster member who also hearted game receives ONLY reschedule DM (dedup)
+ */
+import { getTestApp, type TestApp } from '../../common/testing/test-app';
+import {
+  truncateAllTables,
+  loginAsAdmin,
+} from '../../common/testing/integration-helpers';
+import * as schema from '../../drizzle/schema';
+import { eq } from 'drizzle-orm';
+import { at, nonEmpty } from '../../common/testing/narrow';
+
+// ── Shared state ──────────────────────────────────────────────
+let testApp: TestApp;
+let adminToken: string;
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+});
+
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+});
+
+// ── Helpers ───────────────────────────────────────────────────
+
+async function loginAsMember(
+  tag = 'member',
+): Promise<{ token: string; userId: number }> {
+  const bcrypt = await import('bcrypt');
+  const hash = await bcrypt.hash('MemberPass1!', 4);
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
+  await testApp.db.insert(schema.localCredentials).values({
+    email: `${tag}@test.local`,
+    passwordHash: hash,
+    userId: user.id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email: `${tag}@test.local`, password: 'MemberPass1!' });
+  return { token: res.body.access_token as string, userId: user.id };
+}
+
+async function createEvent(title: string, gameId: number) {
+  const now = new Date();
+  const start = new Date(now.getTime() + 86_400_000);
+  const end = new Date(now.getTime() + 90_000_000);
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        gameId,
+        duration: [start, end],
+        maxAttendees: 10,
+        creatorId: testApp.seed.adminUser.id,
+      })
+      .returning(),
+    'event',
+  );
+  return event;
+}
+
+function postSchedulingPoll(token: string, body: Record<string, unknown>) {
+  return testApp.request
+    .post('/scheduling-polls')
+    .set('Authorization', `Bearer ${token}`)
+    .send(body);
+}
+
+async function addSignup(
+  eventId: number,
+  userId: number,
+  status = 'signed_up',
+) {
+  const [signup] = await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId, userId, status })
+    .returning();
+  return signup;
+}
+
+async function addGameInterest(userId: number, gameId: number) {
+  await testApp.db.insert(schema.gameInterests).values({
+    userId,
+    gameId,
+    source: 'manual',
+  });
+}
+
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+/** PATCH /events/:id/reschedule as admin (moves the event in place). */
+function rescheduleReq(eventId: number, start: Date, end: Date) {
+  return testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: start.toISOString(), endTime: end.toISOString() });
+}
+
+/** POST /scheduling-polls/:matchId/complete as admin (locks the poll in). */
+function completeReq(matchId: number) {
+  return testApp.request
+    .post(`/scheduling-polls/${matchId}/complete`)
+    .set('Authorization', `Bearer ${adminToken}`);
+}
+
+/**
+ * Poll the notifications table until a row with the given payload subtype
+ * lands for the user, or the deadline elapses. The poll DMs from
+ * POST /scheduling-polls are dispatched fire-and-forget (the controller
+ * `void`s notifyInterestedUsers), so the row appears asynchronously after
+ * the response returns. Returns the matching row, or `undefined` on timeout
+ * (preserving `.find()` semantics for the existing `toBeDefined()` checks).
+ * Replaces fixed `setTimeout` sleeps with a deterministic wait.
+ */
+async function waitForNotification(
+  userId: number,
+  subtype: string,
+  timeoutMs = 5000,
+): Promise<typeof schema.notifications.$inferSelect | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const rows = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, userId));
+    const match = rows.find((n) => {
+      const payload = n.payload as Record<string, unknown> | null;
+      return payload?.subtype === subtype;
+    });
+    if (match) return match;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return undefined;
+}
+
+/** The one lineup row the test created; throws when there is none. */
+async function firstLineup() {
+  const rows = await testApp.db.select().from(schema.communityLineups).limit(1);
+  return nonEmpty(rows, 'lineup')[0];
+}
+
+/** The one match row the test created; throws when there is none. */
+async function firstMatch() {
+  const rows = await testApp.db
+    .select()
+    .from(schema.communityLineupMatches)
+    .limit(1);
+  return nonEmpty(rows, 'match')[0];
+}
+
+/** The match row with `id`; throws when there is none. */
+async function matchById(id: number) {
+  const rows = await testApp.db
+    .select()
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.id, id));
+  return nonEmpty(rows, `match ${id}`)[0];
+}
+
+/** The event row with `id`; throws when there is none. */
+async function eventById(id: number) {
+  const rows = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, id));
+  return nonEmpty(rows, `event ${id}`)[0];
+}
+
+// ── ROK-977 AC1: POST with valid gameId creates lineup + match ───────
+
+function describeCreatePoll() {
+  it('should create a lineup in decided status and match in scheduling status', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      id: expect.any(Number),
+      lineupId: expect.any(Number),
+      gameId: testApp.seed.game.id,
+      gameName: expect.any(String),
+      status: 'scheduling',
+      memberCount: expect.any(Number),
+      createdAt: expect.any(String),
+    });
+  });
+
+  it('should persist lineup with decided status in DB', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    const lineupId = res.body.lineupId as number;
+    const lineup = await firstLineup();
+
+    expect(lineup).toBeDefined();
+    expect(lineup.id).toBe(lineupId);
+    expect(lineup.status).toBe('decided');
+  });
+
+  it('should persist match with scheduling status in DB', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    const matchId = res.body.id as number;
+    const match = await firstMatch();
+
+    expect(match).toBeDefined();
+    expect(match.id).toBe(matchId);
+    expect(match.status).toBe('scheduling');
+    expect(match.gameId).toBe(testApp.seed.game.id);
+    expect(match.thresholdMet).toBe(true);
+  });
+
+  it('should return gameCoverUrl in response when game has cover', async () => {
+    const [gameWithCover] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Cover Game',
+          slug: 'cover-game',
+          coverUrl: 'https://example.com/cover.jpg',
+        })
+        .returning(),
+      'gameWithCover',
+    );
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: gameWithCover.id,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty('gameCoverUrl');
+  });
+}
+describe('POST /scheduling-polls — create poll', describeCreatePoll);
+
+// ── ROK-977 AC2: Match members inserted for provided memberUserIds ───
+
+function describeMembers() {
+  it('should insert match members for provided memberUserIds', async () => {
+    const member1 = await loginAsMember('poll-member-1');
+    const member2 = await loginAsMember('poll-member-2');
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      memberUserIds: [member1.userId, member2.userId],
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.memberCount).toBeGreaterThanOrEqual(2);
+
+    // Verify members in DB
+    const matchId = res.body.id as number;
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers);
+    const matchMembers = members.filter((m) => m.matchId === matchId);
+
+    const memberUserIds = matchMembers.map((m) => m.userId);
+    expect(memberUserIds).toContain(member1.userId);
+    expect(memberUserIds).toContain(member2.userId);
+  });
+
+  it('should include the creator as a match member', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    expect(res.status).toBe(201);
+
+    const matchId = res.body.id as number;
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers);
+    const matchMembers = members.filter((m) => m.matchId === matchId);
+
+    const memberUserIds = matchMembers.map((m) => m.userId);
+    expect(memberUserIds).toContain(testApp.seed.adminUser.id);
+  });
+
+  it('should handle empty memberUserIds array', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      memberUserIds: [],
+    });
+
+    expect(res.status).toBe(201);
+    // At minimum the creator should be a member
+    expect(res.body.memberCount).toBeGreaterThanOrEqual(1);
+  });
+}
+describe('POST /scheduling-polls — match members', describeMembers);
+
+// ── ROK-977 AC3: Phase timer scheduled when durationHours provided ───
+
+function describePhaseDuration() {
+  it('should set phase deadline when durationHours is provided', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      durationHours: 48,
+    });
+
+    expect(res.status).toBe(201);
+
+    // Verify the lineup has a phaseDeadline in DB
+    const lineupId = res.body.lineupId as number;
+    const lineup = await firstLineup();
+
+    expect(lineup.id).toBe(lineupId);
+    expect(lineup.phaseDeadline).not.toBeNull();
+
+    // Deadline should be roughly 48h from now
+    const deadline = new Date(lineup.phaseDeadline!);
+    const hoursUntil = (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
+    expect(hoursUntil).toBeGreaterThan(46);
+    expect(hoursUntil).toBeLessThan(50);
+  });
+
+  it('should default the phase deadline to 2 weeks when durationHours is omitted', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    expect(res.status).toBe(201);
+
+    const lineupId = res.body.lineupId as number;
+    const lineup = await firstLineup();
+
+    expect(lineup.id).toBe(lineupId);
+    // A null deadline used to opt the poll out of BOTH the deadline
+    // reminders and the auto-archive job, leaving it open forever.
+    expect(lineup.phaseDeadline).not.toBeNull();
+
+    // Roughly 14 days from now.
+    const deadline = new Date(lineup.phaseDeadline!);
+    const hoursUntil = (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
+    expect(hoursUntil).toBeGreaterThan(14 * 24 - 2);
+    expect(hoursUntil).toBeLessThan(14 * 24 + 2);
+  });
+}
+describe('POST /scheduling-polls — phase duration', describePhaseDuration);
+
+// ── ROK-977 AC4: 404 when gameId doesn't exist ───────────────────────
+
+function describeInvalidGame() {
+  it('should return 404 when gameId does not exist', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: 999999,
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/game|not found/i);
+  });
+}
+describe('POST /scheduling-polls — invalid gameId', describeInvalidGame);
+
+// ── ROK-977 AC5: 404 when linkedEventId doesn't exist ────────────────
+
+function describeLinkedEvent() {
+  it('should return 404 when linkedEventId does not exist', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: 999999,
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/event|not found/i);
+  });
+
+  it('should accept valid linkedEventId and store it on the match', async () => {
+    const event = await createEvent('Linked Event', testApp.seed.game.id);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    expect(res.status).toBe(201);
+
+    // Verify linkedEventId stored on the match
+    const matchId = res.body.id as number;
+    const match = await firstMatch();
+
+    expect(match.id).toBe(matchId);
+    expect(match.linkedEventId).toBe(event.id);
+  });
+}
+describe('POST /scheduling-polls — linkedEventId', describeLinkedEvent);
+
+// ── Linked polls default min_vote_threshold to the roster size ───────
+// A NULL threshold makes the ROK-1015 "poll ready for review" cron skip the
+// poll entirely (WHERE min_vote_threshold IS NOT NULL), so the creator of a
+// reschedule poll was never notified. Linked polls must default to the
+// active roster size of the linked event.
+
+function describeLinkedPollThreshold() {
+  it('should default min_vote_threshold to the linked event active roster size', async () => {
+    const event = await createEvent('Threshold Default', testApp.seed.game.id);
+    const m1 = await loginAsMember('threshold-signed-1');
+    const m2 = await loginAsMember('threshold-signed-2');
+    const m3 = await loginAsMember('threshold-tentative');
+    const declined = await loginAsMember('threshold-declined');
+    await addSignup(event.id, m1.userId);
+    await addSignup(event.id, m2.userId);
+    await addSignup(event.id, m3.userId, 'tentative');
+    // Declined and anonymous Discord signups are not polled on a reschedule —
+    // neither may count toward the threshold.
+    await addSignup(event.id, declined.userId, 'declined');
+    await testApp.db.insert(schema.eventSignups).values({
+      eventId: event.id,
+      discordUserId: 'anon-threshold-user',
+      status: 'signed_up',
+    });
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+    expect(res.status).toBe(201);
+
+    const match = await matchById(res.body.id as number);
+    expect(match.minVoteThreshold).toBe(3);
+  });
+
+  it('should respect an explicit minVoteThreshold on a linked poll', async () => {
+    const event = await createEvent('Threshold Explicit', testApp.seed.game.id);
+    const member = await loginAsMember('threshold-explicit');
+    await addSignup(event.id, member.userId);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+      minVoteThreshold: 5,
+    });
+    expect(res.status).toBe(201);
+
+    const match = await matchById(res.body.id as number);
+    expect(match.minVoteThreshold).toBe(5);
+  });
+
+  it('should keep min_vote_threshold NULL for a poll without linkedEventId', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+    expect(res.status).toBe(201);
+
+    const match = await matchById(res.body.id as number);
+    expect(match.minVoteThreshold).toBeNull();
+  });
+
+  it('should keep min_vote_threshold NULL when the linked event has no active signups', async () => {
+    const event = await createEvent('Threshold Empty', testApp.seed.game.id);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+    expect(res.status).toBe(201);
+
+    const match = await matchById(res.body.id as number);
+    expect(match.minVoteThreshold).toBeNull();
+  });
+}
+describe(
+  'POST /scheduling-polls — linked poll vote threshold',
+  describeLinkedPollThreshold,
+);
+
+// ── ROK-977 AC6: Any authenticated user can create ───────────────────
+
+function describeAuth() {
+  it('should return 401 without authentication', async () => {
+    const res = await testApp.request
+      .post('/scheduling-polls')
+      .send({ gameId: testApp.seed.game.id });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('should allow member role to create a poll', async () => {
+    const member = await loginAsMember('poll-creator');
+
+    const res = await postSchedulingPoll(member.token, {
+      gameId: testApp.seed.game.id,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      id: expect.any(Number),
+      status: 'scheduling',
+    });
+  });
+
+  it('should allow admin role to create a poll', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    expect(res.status).toBe(201);
+  });
+}
+describe('POST /scheduling-polls — authentication', describeAuth);
+
+// =====================================================================
+// ROK-1034: Rescheduling poll event linkage
+// =====================================================================
+//
+// All tests below MUST FAIL because the implementation does not exist yet:
+// - rescheduling_poll_id column does not exist on the events table
+// - StandalonePollService.create() does not set reschedulingPollId on events
+// - completeStandalonePoll() does not cancel the linked event
+// - Signup guard does not check reschedulingPollId
+// - Notification splitting does not exist
+// =====================================================================
+
+// ── ROK-1034 AC1: POST with linkedEventId sets rescheduling_poll_id ──
+
+function describeReschedulingPollId() {
+  it('should set rescheduling_poll_id on the event when creating poll with linkedEventId', async () => {
+    const event = await createEvent('Reschedule Me', testApp.seed.game.id);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    expect(res.status).toBe(201);
+
+    // Read the event back from DB and verify reschedulingPollId is set
+    const matchId = res.body.id as number;
+    const updatedEvent = await eventById(event.id);
+
+    // This will fail because the column does not exist yet
+    expect((updatedEvent as Record<string, unknown>).reschedulingPollId).toBe(
+      matchId,
+    );
+  });
+
+  it('should NOT set rescheduling_poll_id when linkedEventId is omitted', async () => {
+    const event = await createEvent('Not Linked', testApp.seed.game.id);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+
+    expect(res.status).toBe(201);
+
+    // The event should have reschedulingPollId as null (column exists but unset)
+    const updatedEvent = await eventById(event.id);
+
+    // Will fail until the column is added — then should be null
+    expect(updatedEvent).toHaveProperty('reschedulingPollId');
+    expect(
+      (updatedEvent as Record<string, unknown>).reschedulingPollId,
+    ).toBeNull();
+  });
+}
+describe(
+  'ROK-1034 AC1 — rescheduling_poll_id linkage',
+  describeReschedulingPollId,
+);
+
+// ── ROK-1034 AC2: GET /events excludes events being rescheduled ──────
+
+function describeEventsExclusion() {
+  it('should exclude events with rescheduling_poll_id from GET /events', async () => {
+    const event = await createEvent('Hidden Event', testApp.seed.game.id);
+    const visibleEvent = await createEvent(
+      'Visible Event',
+      testApp.seed.game.id,
+    );
+
+    // Create poll linked to the first event (sets rescheduling_poll_id)
+    await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    // GET /events should only return the visible event
+    const res = await testApp.request
+      .get('/events')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+
+    // Response shape is { data: [...], meta: {...} }
+    const eventIds = (res.body.data as Array<{ id: number }>).map((e) => e.id);
+
+    // The event being rescheduled should be hidden
+    expect(eventIds).not.toContain(event.id);
+    // The normal event should still appear
+    expect(eventIds).toContain(visibleEvent.id);
+  });
+}
+describe(
+  'ROK-1034 AC2 — events query excludes rescheduling events',
+  describeEventsExclusion,
+);
+
+// ── ROK-1034 AC3: POST /events/:id/signup on rescheduling event → 409
+
+function describeSignupBlock() {
+  it('should return 409 when signing up for an event being rescheduled', async () => {
+    const event = await createEvent('Blocked Signup', testApp.seed.game.id);
+
+    // Create a poll linked to this event
+    await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    // Attempt to sign up — should be blocked with 409 Conflict
+    const member = await loginAsMember('blocked-signup-user');
+    const signupRes = await testApp.request
+      .post(`/events/${event.id}/signup`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({});
+
+    expect(signupRes.status).toBe(409);
+  });
+}
+describe(
+  'ROK-1034 AC3 — signup blocked during rescheduling',
+  describeSignupBlock,
+);
+
+// ── ROK-1034 AC4: POST /scheduling-polls on already-rescheduling event → 409
+
+function describeDuplicateReschedulingPoll() {
+  it('should return 409 when creating a second poll for an event already being rescheduled', async () => {
+    const event = await createEvent('Already Polling', testApp.seed.game.id);
+
+    // First poll succeeds
+    const firstRes = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+    expect(firstRes.status).toBe(201);
+
+    // Second poll for the same event should be rejected
+    const secondRes = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+    expect(secondRes.status).toBe(409);
+  });
+}
+describe(
+  'ROK-1034 AC4 — duplicate rescheduling poll rejected',
+  describeDuplicateReschedulingPoll,
+);
+
+// =====================================================================
+// ROK-1370: Reschedule-poll lock-in moves the event in place (no cancel)
+// =====================================================================
+//
+// The frontend reschedule-lock flow (use-scheduling-lock.ts) reschedules
+// the linked event in place — PATCH /events/:id/reschedule moves the time
+// and notifies signups — and THEN POST /scheduling-polls/:matchId/complete.
+// completeStandalonePoll() erroneously CANCELLED the just-rescheduled event
+// via a raw write, leaving it out of sync (cancelled, with no cancellation
+// notification). Lock-in must instead keep the event live at its winning
+// time and clear the reschedulingPollId linkage — same id, same signups.
+// (Supersedes the ROK-1034 AC5 "poll completion cancels linked event"
+// behavior, which this story intentionally reverses.)
+
+/** Seed an event with the given signups, then open a linked reschedule poll. */
+async function seedLinkedPoll(signupUserIds: number[]) {
+  const event = await createEvent('Lock-in Event', testApp.seed.game.id);
+  for (const uid of signupUserIds) await addSignup(event.id, uid);
+  const pollRes = await postSchedulingPoll(adminToken, {
+    gameId: testApp.seed.game.id,
+    linkedEventId: event.id,
+  });
+  expect(pollRes.status).toBe(201);
+  return { event, matchId: pollRes.body.id as number };
+}
+
+/** Drive the two-step lock-in: reschedule in place, then complete the poll. */
+async function lockInAtNewTime(eventId: number, matchId: number, start: Date) {
+  const rr = await rescheduleReq(
+    eventId,
+    start,
+    new Date(start.getTime() + TWO_HOURS_MS),
+  );
+  expect(rr.status).toBe(200);
+  const cr = await completeReq(matchId);
+  expect(cr.status).toBe(200);
+}
+
+function describeRescheduleLockIn() {
+  it('keeps the linked event live at the winning time (no cancel, linkage cleared)', async () => {
+    const member = await loginAsMember('lockin-live');
+    const { event, matchId } = await seedLinkedPoll([member.userId]);
+    const newStart = new Date(Date.now() + 7 * 86_400_000);
+
+    await lockInAtNewTime(event.id, matchId, newStart);
+
+    const after = await eventById(event.id);
+    expect(after.id).toBe(event.id);
+    expect(after.cancelledAt).toBeNull();
+    expect(new Date(after.duration[0]).getTime()).toBe(newStart.getTime());
+    expect((after as Record<string, unknown>).reschedulingPollId).toBeNull();
+  });
+
+  it('preserves existing signups and notifies each exactly once', async () => {
+    const member = await loginAsMember('lockin-notify');
+    const { event, matchId } = await seedLinkedPoll([member.userId]);
+    const newStart = new Date(Date.now() + 7 * 86_400_000);
+
+    await lockInAtNewTime(event.id, matchId, newStart);
+
+    const signups = await testApp.db
+      .select()
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, event.id));
+    expect(signups.map((s) => s.userId)).toContain(member.userId);
+
+    const notifs = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, member.userId));
+    const reschedules = notifs.filter((n) => n.type === 'event_rescheduled');
+    expect(reschedules).toHaveLength(1);
+  });
+}
+describe(
+  'ROK-1370 — reschedule lock-in moves event in place',
+  describeRescheduleLockIn,
+);
+
+// ── ROK-1034 AC6: Poll expiry restores event ────────────────────────
+
+function describePollExpiry() {
+  it('should clear rescheduling_poll_id when poll auto-archives (expires)', async () => {
+    const event = await createEvent('Expire Poll', testApp.seed.game.id);
+
+    const pollRes = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+      durationHours: 1, // short duration for test
+    });
+    expect(pollRes.status).toBe(201);
+
+    const lineupId = pollRes.body.lineupId as number;
+
+    // Force-archive the lineup via the admin status endpoint
+    // (mimics what LineupPhaseProcessor does when the phase timer fires).
+    // The auto-archive handler should detect the linked event and clear
+    // its rescheduling_poll_id without cancelling it.
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'archived' });
+
+    // After archival, the event's rescheduling_poll_id should be cleared
+    const updatedEvent = await eventById(event.id);
+
+    // Event should NOT be cancelled (poll expired, not completed)
+    expect(updatedEvent.cancelledAt).toBeNull();
+
+    // rescheduling_poll_id should be cleared so event reappears
+    expect(updatedEvent).toHaveProperty('reschedulingPollId');
+    expect(
+      (updatedEvent as Record<string, unknown>).reschedulingPollId,
+    ).toBeNull();
+  });
+}
+describe(
+  'ROK-1034 AC6 — poll expiry restores event visibility',
+  describePollExpiry,
+);
+
+// ── ROK-1034 AC7: Roster members receive reschedule-specific DM ─────
+
+function describeRosterNotifications() {
+  it('should send reschedule-specific notification to roster members', async () => {
+    const rosterMember = await loginAsMember('roster-notif');
+    const event = await createEvent('Roster DM', testApp.seed.game.id);
+
+    // Add roster member as signup on the event
+    await addSignup(event.id, rosterMember.userId);
+
+    // Create poll linked to the event
+    await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    // Poll until the fire-and-forget reschedule notification row lands.
+    const rescheduleNotif = await waitForNotification(
+      rosterMember.userId,
+      'event_rescheduling',
+    );
+
+    expect(rescheduleNotif).toBeDefined();
+    expect(rescheduleNotif!.title).toMatch(/reschedul/i);
+  });
+}
+describe(
+  'ROK-1034 AC7 — roster members get reschedule DM',
+  describeRosterNotifications,
+);
+
+// ── ROK-1034 AC8: Game-interest-only users get generic DM ───────────
+
+function describeInterestOnlyNotifications() {
+  it('should send generic poll notification (not reschedule) to game-interest-only users', async () => {
+    const interestUser = await loginAsMember('interest-notif');
+    const event = await createEvent('Interest DM', testApp.seed.game.id);
+
+    // User has game interest but is NOT signed up for the event
+    await addGameInterest(interestUser.userId, testApp.seed.game.id);
+
+    // Create poll linked to the event
+    await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    // Poll until the generic scheduling-poll notification row lands, then
+    // re-read all rows for the user to run the same shape assertions.
+    const generic = await waitForNotification(
+      interestUser.userId,
+      'standalone_scheduling_poll',
+    );
+    expect(generic).toBeDefined();
+
+    const userNotifs = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, interestUser.userId));
+
+    expect(userNotifs.length).toBeGreaterThanOrEqual(1);
+
+    // Should receive ONLY generic notifications (not reschedule)
+    for (const n of userNotifs) {
+      const payload = n.payload as Record<string, unknown> | null;
+      expect(payload?.subtype).not.toBe('event_rescheduling');
+    }
+
+    // At least one should be the standard scheduling poll notification
+    const genericNotif = userNotifs.find((n) => {
+      const payload = n.payload as Record<string, unknown> | null;
+      return payload?.subtype === 'standalone_scheduling_poll';
+    });
+    expect(genericNotif).toBeDefined();
+  });
+}
+describe(
+  'ROK-1034 AC8 — interest-only users get generic DM',
+  describeInterestOnlyNotifications,
+);
+
+// ── ROK-1034 AC9: Roster + interest user gets ONLY reschedule DM ────
+
+function describeNotificationDedup() {
+  it('should send ONLY reschedule DM to user who is both roster member and game-interested', async () => {
+    const dualUser = await loginAsMember('dual-notif');
+    const event = await createEvent('Dedup DM', testApp.seed.game.id);
+
+    // User is both signed up for the event AND has game interest
+    await addSignup(event.id, dualUser.userId);
+    await addGameInterest(dualUser.userId, testApp.seed.game.id);
+
+    // Create poll linked to the event
+    await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+
+    // Poll until the reschedule notification row lands (the dedup logic sends
+    // a dual roster+interest user ONLY this row), then re-read all rows to
+    // assert the exact count. Mirrors the established poll-then-exact-count
+    // idiom (lineup-deadline-transition-notify.integration.spec.ts).
+    const reschedule = await waitForNotification(
+      dualUser.userId,
+      'event_rescheduling',
+    );
+    expect(reschedule).toBeDefined();
+
+    // Check notifications for dual user — should have exactly 1
+    const notifications = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, dualUser.userId));
+
+    // Dedup: should receive exactly ONE notification, not two
+    expect(notifications).toHaveLength(1);
+
+    // And it should be the reschedule-specific one (higher priority)
+    const payload = at(notifications, 0).payload as Record<
+      string,
+      unknown
+    > | null;
+    expect(payload?.subtype).toBe('event_rescheduling');
+  });
+}
+describe(
+  'ROK-1034 AC9 — notification dedup for dual roster+interest users',
+  describeNotificationDedup,
+);

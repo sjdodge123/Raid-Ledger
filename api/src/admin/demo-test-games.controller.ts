@@ -1,0 +1,241 @@
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
+import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
+import { DemoTestService } from './demo-test.service';
+import { DemoTestLineupService } from './demo-test-lineup.service';
+import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
+import {
+  AddGameInterestSchema,
+  SetSteamAppIdSchema,
+  GetGameSchema,
+  ClearGameInterestSchema,
+  SetAutoHeartPrefSchema,
+  CancelLineupPhaseJobsSchema,
+  CreateBuildingLineupSchema,
+  NominateGameTestSchema,
+  ArchiveLineupSchema,
+  SetAutoNominatePrefSchema,
+  ResetLineupsSchema,
+} from './demo-test.schemas';
+import { parseDemoBody } from './demo-test.utils';
+import type { CooptimusSeedResult } from './demo-test-cooptimus.helpers';
+import type { PlayerCountSeedResult } from './demo-test-player-count.helpers';
+
+/**
+ * Game/lineup test endpoints — DEMO_MODE only (smoke tests).
+ */
+@Controller('admin/test')
+@SkipThrottle()
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
+export class DemoTestGamesController {
+  constructor(
+    private readonly demoTestService: DemoTestService,
+    private readonly demoTestLineup: DemoTestLineupService,
+    private readonly steamNudge: LineupSteamNudgeService,
+  ) {}
+
+  /** Add a game interest for a user -- DEMO_MODE only (smoke tests). */
+  @Post('add-game-interest')
+  @HttpCode(HttpStatus.OK)
+  async addGameInterestForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(AddGameInterestSchema, body);
+    await this.demoTestService.addGameInterestForTest(
+      parsed.userId,
+      parsed.gameId,
+      parsed.source,
+    );
+    return { success: true };
+  }
+
+  /** Clear game interests for a user/game — DEMO_MODE only (ROK-966 smoke test). */
+  @Post('clear-game-interest')
+  @HttpCode(HttpStatus.OK)
+  async clearGameInterestForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(ClearGameInterestSchema, body);
+    await this.demoTestService.clearGameInterestForTest(
+      parsed.userId,
+      parsed.gameId,
+    );
+    return { success: true };
+  }
+
+  /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
+  @Post('set-steam-app-id')
+  @HttpCode(HttpStatus.OK)
+  async setSteamAppIdForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(SetSteamAppIdSchema, body);
+    await this.demoTestService.setSteamAppIdForTest(
+      parsed.gameId,
+      parsed.steamAppId,
+    );
+    return { success: true };
+  }
+
+  /** Fetch a game by id — DEMO_MODE only (ROK-1054 smoke test). */
+  @Post('get-game')
+  @HttpCode(HttpStatus.OK)
+  async getGameForTest(@Body() body: unknown) {
+    const { id } = parseDemoBody(GetGameSchema, body);
+    const game = await this.demoTestService.getGameForTest(id);
+    if (!game) throw new NotFoundException('Game not found');
+    return game;
+  }
+
+  /**
+   * Seed the Co-Optimus co-op UI-state fixtures — DEMO_MODE only (ROK-1398).
+   * Returns the three game ids the game-detail smoke spec drives, plus the
+   * attribution url the enriched fixture must credit.
+   */
+  @Post('seed-cooptimus')
+  @HttpCode(HttpStatus.OK)
+  async seedCooptimusForTest(): Promise<CooptimusSeedResult> {
+    return this.demoTestService.seedCooptimusForTest();
+  }
+
+  /**
+   * Seed the Library player-count fixtures — DEMO_MODE only (ROK-1525).
+   * Returns the kept/dropped game ids the library-filter smoke spec derives
+   * its expectations from; see `demo-test-player-count.helpers.ts` for why the
+   * spec cannot read them off the ambient corpus.
+   */
+  @Post('seed-player-count-games')
+  @HttpCode(HttpStatus.OK)
+  async seedPlayerCountGamesForTest(): Promise<PlayerCountSeedResult> {
+    return this.demoTestService.seedPlayerCountFixturesForTest();
+  }
+
+  /** Set autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
+  @Post('set-auto-heart-pref')
+  @HttpCode(HttpStatus.OK)
+  async setAutoHeartPrefForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(SetAutoHeartPrefSchema, body);
+    await this.demoTestService.setAutoHeartPrefForTest(
+      parsed.userId,
+      parsed.enabled,
+    );
+    return { success: true };
+  }
+
+  /** Trigger steam nudge DMs for a lineup — DEMO_MODE only. */
+  @Post('trigger-steam-nudge')
+  @HttpCode(HttpStatus.OK)
+  async triggerSteamNudge(
+    @Body() body: { lineupId: number },
+  ): Promise<{ success: boolean }> {
+    await this.steamNudge.nudgeUnlinkedMembers(body.lineupId);
+    return { success: true };
+  }
+
+  /** Cancel all pending BullMQ phase-transition jobs for a lineup — DEMO_MODE only (ROK-1007). */
+  @Post('cancel-lineup-phase-jobs')
+  @HttpCode(HttpStatus.OK)
+  async cancelLineupPhaseJobsForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; removed: number }> {
+    const parsed = parseDemoBody(CancelLineupPhaseJobsSchema, body);
+    const removed = await this.demoTestService.cancelLineupPhaseJobsForTest(
+      parsed.lineupId,
+    );
+    return { success: true, removed };
+  }
+
+  /** Set autoNominateSteamUrls preference — DEMO_MODE only (ROK-1081). */
+  @Post('set-auto-nominate-pref')
+  @HttpCode(HttpStatus.OK)
+  async setAutoNominatePrefForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(SetAutoNominatePrefSchema, body);
+    await this.demoTestLineup.setAutoNominatePrefForTest(
+      parsed.userId,
+      parsed.enabled,
+    );
+    return { success: true };
+  }
+
+  /** Create a building-phase lineup for smoke tests — DEMO_MODE only (ROK-1081). */
+  @Post('create-building-lineup')
+  @HttpCode(HttpStatus.OK)
+  async createBuildingLineupForTest(
+    @Body() body: unknown,
+  ): Promise<{ lineupId: number }> {
+    const parsed = parseDemoBody(CreateBuildingLineupSchema, body);
+    return this.demoTestLineup.createBuildingLineupForTest(
+      parsed.createdByUserId,
+    );
+  }
+
+  /** Insert a nomination directly — DEMO_MODE only (ROK-1081). */
+  @Post('nominate-game')
+  @HttpCode(HttpStatus.OK)
+  async nominateGameForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(NominateGameTestSchema, body);
+    await this.demoTestLineup.nominateGameForTest(
+      parsed.lineupId,
+      parsed.gameId,
+      parsed.userId,
+    );
+    return { success: true };
+  }
+
+  /** Archive a specific lineup — DEMO_MODE only (ROK-1081). */
+  @Post('archive-lineup')
+  @HttpCode(HttpStatus.OK)
+  async archiveLineupForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(ArchiveLineupSchema, body);
+    await this.demoTestLineup.archiveLineupForTest(parsed.lineupId);
+    return { success: true };
+  }
+
+  /** Archive any active lineup — DEMO_MODE only (ROK-1081). */
+  @Post('archive-active-lineup')
+  @HttpCode(HttpStatus.OK)
+  async archiveAllActiveLineupsForTest(): Promise<{ success: boolean }> {
+    await this.demoTestLineup.archiveAllActiveLineupsForTest();
+    return { success: true };
+  }
+
+  /**
+   * Archive `building`/`voting` lineups whose title begins with `titlePrefix`
+   * (ROK-1147). DEMO_MODE only.
+   *
+   * Each smoke worker passes a unique prefix in its `beforeAll`, so sibling
+   * workers' lineups are not touched. The earlier global wipe wiped lineups
+   * mid-test for other workers and is no longer used.
+   */
+  @Post('reset-lineups')
+  @HttpCode(HttpStatus.OK)
+  async resetLineupsForTest(@Body() body: unknown): Promise<{
+    success: boolean;
+    archivedCount: number;
+  }> {
+    const parsed = parseDemoBody(ResetLineupsSchema, body);
+    const { archivedCount } = await this.demoTestLineup.resetLineupsForTest(
+      parsed.titlePrefix,
+      parsed.phases,
+    );
+    return { success: true, archivedCount };
+  }
+}

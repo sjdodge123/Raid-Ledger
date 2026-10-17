@@ -1,0 +1,463 @@
+/**
+ * ROK-1454 D8/D9 — every read and write the LFM embed consumer makes.
+ *
+ * Split out of `LfmEmbedService` for one reason: the service's whole job is
+ * *choosing* which read a lifecycle transition deserves (D6 says the three
+ * terminal reasons deliberately use three different strategies), and that
+ * choice is only testable if the data access behind it can be replaced. So
+ * this file is the single data-access surface — the unit spec mocks this
+ * module and nothing else, and it is this file the integration spec exercises
+ * against real Postgres.
+ *
+ * NOTHING here reinterprets a read. `readLiveGroup` calls `getGroupSummary` +
+ * `listGroupMembers` unchanged, and `readConvertedGroup` calls
+ * `listConvertedGroupMembers` unchanged — the converted path must never
+ * compose the live predicate family (that is the defect round 1 shipped).
+ */
+import { and, count, eq, gte, isNull, notExists, sql } from 'drizzle-orm';
+import type { LfgMemberDto } from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import {
+  getGroupSummary,
+  listGroupMembers,
+  liveIntent,
+  type LfgDb,
+} from '../../lfg/lfg-query.helpers';
+import { listConvertedGroupMembers } from '../../lfg/lfg-provenance.helpers';
+import { findOpenLfgNowEventId } from '../../lfg/lfg-playing.helpers';
+import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
+import type { LfgPostKind } from '../lfg-board/lfg-board.constants';
+import type { LfmTarget } from './lfm-embed.helpers';
+
+/** An LFG group is LFM — "looking for MORE" — from two live hands. */
+export const LFM_FLOOR = 2;
+
+/**
+ * ROK-1505 D4 — an LFG group is ALIVE from ONE live hand.
+ *
+ * Two constants for two questions. `LFM_FLOOR` answers "is this group LFM
+ * (2+) rather than LFG?" — it gates the text-channel ping (D3) and the LFM
+ * tag. `LIVE_FLOOR` answers "is this group still alive?" — it is what the
+ * board's parity with the web chips (AC4) is read against: a chip exists
+ * from one hand, so a board post does too, and only ZERO hands ends it.
+ */
+export const LIVE_FLOOR = 1;
+
+/** One tracked LFM message. */
+
+export type LfmMessageRow = typeof schema.lfgGroupMessages.$inferSelect;
+
+/** The games row the render projects from — badge columns included. */
+export type LfmGameRow = typeof schema.games.$inferSelect;
+
+/** The states a row can be CLOSED into. `open` is not one of them. */
+export type LfmTerminalState = 'converted' | 'expired' | 'closed';
+
+/** What a fresh post records. */
+export interface LfmMessageInsert {
+  gameId: number;
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  lastMemberCount: number;
+  /**
+   * ROK-1471: the forum thread the post lives in. On a forum row `channelId`
+   * is the SAME id — a button interaction inside a forum post carries the
+   * thread as its `channelId`, and `findLfmMessageByIds` matches on that.
+   */
+  threadId?: string | null;
+  /** ROK-1471: which surface the row was posted to. Column defaults to text. */
+  postKind?: LfgPostKind;
+}
+
+/** The live group as an open-state render reads it. */
+export interface LfmLiveGroup {
+  members: LfgMemberDto[];
+  soonestExpiresAt: string | null;
+  viabilityThreshold: number | null;
+  /** ROK-1479 — how many live hands are `now` intents. `>= 1` renders as now. */
+  nowCount: number;
+  /** ROK-1479 — soonest expiry among the `now` hands only. */
+  soonestNowExpiresAt: string | null;
+}
+
+/**
+ * `hasOwnIntent` is meaningless for a channel render — there is no viewer, and
+ * `bool_or(user_id = 0)` is simply false. Named so the 0 is not read as a bug.
+ */
+const NO_VIEWER = 0;
+
+/**
+ * The live message for a game, or null.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose group is being rendered.
+ * @returns The `open` row, or null when the game has no live message.
+ */
+export async function findOpenLfmMessage(
+  db: LfgDb,
+  gameId: number,
+): Promise<LfmMessageRow | null> {
+  const [row] = await db
+    .select()
+    .from(schema.lfgGroupMessages)
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.gameId, gameId),
+        eq(schema.lfgGroupMessages.state, 'open'),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Every `open` row, oldest first — the restart-reconcile worklist (D9).
+ *
+ * @param db - Drizzle handle.
+ * @returns All rows still believed to be live.
+ */
+export async function listOpenLfmMessages(db: LfgDb): Promise<LfmMessageRow[]> {
+  return db
+    .select()
+    .from(schema.lfgGroupMessages)
+    .where(eq(schema.lfgGroupMessages.state, 'open'))
+    .orderBy(schema.lfgGroupMessages.postedAt);
+}
+
+/**
+ * Record a freshly posted message.
+ *
+ * Deliberately NOT `onConflictDoNothing`: the partial unique index
+ * `uq_lfg_group_messages_game_open` is the "one live message per group"
+ * invariant, and a second open insert for the same game is a bug the caller
+ * needs to hear about, not a row to silently drop.
+ *
+ * @param db - Drizzle handle.
+ * @param input - Where the message landed and how many were in it.
+ */
+export async function insertLfmMessage(
+  db: LfgDb,
+  input: LfmMessageInsert,
+): Promise<void> {
+  await db.insert(schema.lfgGroupMessages).values({ ...input, state: 'open' });
+}
+
+/** Stamp a successful in-place edit that left the group open. */
+export async function recordLfmRender(
+  db: LfgDb,
+  id: string,
+  memberCount: number,
+): Promise<void> {
+  await db
+    .update(schema.lfgGroupMessages)
+    .set({ lastMemberCount: memberCount, updatedAt: new Date() })
+    .where(eq(schema.lfgGroupMessages.id, id));
+}
+
+/**
+ * Close a row into a terminal state.
+ *
+ * Clearing `open` is what releases the partial unique index so the game's NEXT
+ * group can post at all — without it the index wedges that game forever (D9).
+ *
+ * @param db - Drizzle handle.
+ * @param id - Row to close.
+ * @param state - The terminal state reached.
+ * @param memberCount - Head-count rendered in the final edit.
+ *
+ * ROK-1523 — the `open` predicate is belt-and-braces against a second writer
+ * closing a row that a first one already terminalised: without it, a late
+ * close overwrites `converted`/`expired` with its own state and resets
+ * `closed_at`, destroying the provenance of how the group actually ended.
+ */
+export async function closeLfmMessage(
+  db: LfgDb,
+  id: string,
+  state: LfmTerminalState,
+  memberCount: number,
+): Promise<void> {
+  const now = new Date();
+  await db
+    .update(schema.lfgGroupMessages)
+    .set({ state, lastMemberCount: memberCount, updatedAt: now, closedAt: now })
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.id, id),
+        eq(schema.lfgGroupMessages.state, 'open'),
+      ),
+    );
+}
+
+/** Drop a row whose Discord message a human deleted (E3, still-open case). */
+export async function deleteLfmMessage(db: LfgDb, id: string): Promise<void> {
+  await db
+    .delete(schema.lfgGroupMessages)
+    .where(eq(schema.lfgGroupMessages.id, id));
+}
+
+/**
+ * Put back a row `deleteLfmMessage` dropped when its replacement never landed
+ * (E3 heal that failed or skipped), so the next change event still finds it.
+ *
+ * The FULL row, not an input: same `id` and `posted_at`, because
+ * `latestConversionTarget` bounds on `posted_at`. Unlike `insertLfmMessage`
+ * this DOES swallow a conflict: if a replacement open row already landed under
+ * `uq_lfg_group_messages_game_open`, the group has its live message and the
+ * restore is correctly a no-op rather than a bug to surface.
+ */
+export async function restoreLfmMessage(
+  db: LfgDb,
+  row: LfmMessageRow,
+): Promise<void> {
+  await db.insert(schema.lfgGroupMessages).values(row).onConflictDoNothing();
+}
+
+/**
+ * The games row, badge columns and all.
+ *
+ * The whole row rather than a projection: `getGroupSummary` takes a full row,
+ * and `GameBadgeInputs` reads ten more columns off the same fetch.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game to load.
+ * @returns The row, or null when the game was deleted mid-flight (E13).
+ */
+export async function loadLfmGame(
+  db: LfgDb,
+  gameId: number,
+): Promise<LfmGameRow | null> {
+  const [row] = await db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The live group (D8): `getGroupSummary` + `listGroupMembers`, both unchanged.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The already-loaded games row.
+ * @returns Members in join order plus the two aggregate facts the chrome needs.
+ */
+export async function readLiveGroup(
+  db: LfgDb,
+  game: LfmGameRow,
+): Promise<LfmLiveGroup> {
+  const [summary, members] = await Promise.all([
+    getGroupSummary(db, game, NO_VIEWER),
+    listGroupMembers(db, game.id),
+  ]);
+  return {
+    members,
+    soonestExpiresAt: summary.soonestExpiresAt,
+    viabilityThreshold: summary.viabilityThreshold,
+    // ROK-1479: both are projected by `groupColumns` (`lfg/lfg-query.helpers.ts`)
+    // on every branch, including the zero-row one. Read them straight so a
+    // future projection regression is a compile error, not a silent weekly render.
+    nowCount: summary.nowCount,
+    soonestNowExpiresAt: summary.soonestNowExpiresAt,
+  };
+}
+
+/**
+ * The converted group's roster (D5) — by provenance, never by `liveIntent`.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose converted group to read.
+ * @param target - The conversion target carried on the transition payload.
+ * @returns The eligible members that converted into `target`.
+ */
+export async function readConvertedGroup(
+  db: LfgDb,
+  gameId: number,
+  target: LfgConversionTarget,
+): Promise<LfgMemberDto[]> {
+  return listConvertedGroupMembers(db, gameId, target);
+}
+
+// TDB:953 — the two provenance lookups live in their own file for the line
+// cap, and are re-exported HERE so this module stays the one data-access
+// surface the unit specs mock (`jest.mock('./lfm-embed.db-helpers')`).
+export {
+  conversionSincePosted,
+  latestConversionTarget,
+} from './lfm-embed.provenance.helpers';
+
+/**
+ * Resolve the SCHEDULED poll link.
+ *
+ * `ConvertLfgIntentsDto.pollId` is documented as `community_lineup_matches.id`
+ * (`packages/contract/src/lfg.schema.ts`), so it is ALREADY the match id — the
+ * only missing half is the lineup it belongs to. The route's final segment is a
+ * MATCH id (`web/src/app-routes.tsx`); putting a poll id there yields a dead
+ * link no type-check can see.
+ *
+ * @param db - Drizzle handle.
+ * @param matchId - `community_lineup_matches.id`, as conversion recorded it.
+ * @returns The poll link target, or null when the match row is gone.
+ */
+export async function resolvePollTarget(
+  db: LfgDb,
+  matchId: number,
+): Promise<LfmTarget | null> {
+  const [row] = await db
+    .select({ lineupId: schema.communityLineupMatches.lineupId })
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  if (!row) return null;
+  return { kind: 'poll', lineupId: row.lineupId, matchId };
+}
+
+/**
+ * Games with a live LFM group and NO `open` message — the group crossed the
+ * floor while the bot was disconnected (E1), so `LFM_REACHED` was dropped and
+ * no row was ever written. `reconcileOpenRows` cannot see these: there is no
+ * row to walk. Same live predicate as the roster read (`liveIntent`, which
+ * composes eligibility), so a banned or deactivated hand does not count.
+ *
+ * @param db - Drizzle handle.
+ * @param now - Clock, injectable for tests.
+ * @returns Distinct game ids that deserve the first post they never got.
+ */
+export async function listUntrackedLfmGames(
+  db: LfgDb,
+  now: Date = new Date(),
+): Promise<number[]> {
+  const openRowForGame = db
+    .select({ one: sql`1` })
+    .from(schema.lfgGroupMessages)
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.gameId, schema.lfgIntents.gameId),
+        eq(schema.lfgGroupMessages.state, 'open'),
+      ),
+    );
+  const rows = await db
+    .select({ gameId: schema.lfgIntents.gameId })
+    .from(schema.lfgIntents)
+    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+    .where(and(liveIntent(now), notExists(openRowForGame)))
+    .groupBy(schema.lfgIntents.gameId)
+    // ROK-1505 D4: a one-hand post lost to a restart is healed too — the
+    // forum-only rule for such a group lives in `postNew`, not here.
+    .having(gte(count(), LIVE_FLOOR));
+  return rows.map((r) => r.gameId);
+}
+
+/**
+ * ROK-1494 — everything the `playing` render reads off the spawned session.
+ */
+export interface LfmPlayingSession {
+  /** Display names of everyone still in voice, in join order. */
+  names: string[];
+  /** The live head-count the author line states. */
+  count: number;
+  /** Deep link to the temp voice channel, or null while it does not exist. */
+  voiceChannelUrl: string | null;
+}
+
+/**
+ * Who is in voice right now, by display name.
+ *
+ * Q3: an unlinked joiner is shown by their DISCORD name and never invented as
+ * an app user — `ad_hoc_participants.user_id` is nullable exactly for them, so
+ * the join is a LEFT join and `discord_username` is the fallback, not an error.
+ *
+ * @param db - Drizzle handle.
+ * @param eventId - The spawned ad-hoc event.
+ * @returns Names in join order; `left_at IS NULL` only.
+ */
+async function listVoiceParticipants(
+  db: LfgDb,
+  eventId: number,
+): Promise<string[]> {
+  const rows = await db
+    .select({
+      displayName: schema.users.displayName,
+      username: schema.users.username,
+      discordUsername: schema.adHocParticipants.discordUsername,
+    })
+    .from(schema.adHocParticipants)
+    .leftJoin(
+      schema.users,
+      eq(schema.users.id, schema.adHocParticipants.userId),
+    )
+    .where(
+      and(
+        eq(schema.adHocParticipants.eventId, eventId),
+        isNull(schema.adHocParticipants.leftAt),
+      ),
+    )
+    .orderBy(schema.adHocParticipants.joinedAt);
+  return rows.map((r) => r.displayName ?? r.username ?? r.discordUsername);
+}
+
+/** The temp voice channel of a spawned event, or null before it is created. */
+async function readVoiceChannelId(
+  db: LfgDb,
+  eventId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ channelId: schema.events.ephemeralVoiceChannelId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return row?.channelId ?? null;
+}
+
+/**
+ * Read the live session behind a `playing` render.
+ *
+ * The guild comes off the LFM row rather than settings: the row is the message
+ * being edited, so its guild is by construction the guild the link must point
+ * into, and no second source can drift from it.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose LFM message is being rendered.
+ * @param eventId - The spawned ad-hoc event.
+ * @returns Roster, head-count and the voice deep link (null until it exists).
+ */
+export async function readPlayingSession(
+  db: LfgDb,
+  gameId: number,
+  eventId: number,
+): Promise<LfmPlayingSession> {
+  const [names, channelId, row] = await Promise.all([
+    listVoiceParticipants(db, eventId),
+    readVoiceChannelId(db, eventId),
+    findOpenLfmMessage(db, gameId),
+  ]);
+  const guildId = row?.guildId ?? null;
+  return {
+    names,
+    count: names.length,
+    voiceChannelUrl:
+      channelId && guildId
+        ? `https://discord.com/channels/${guildId}/${channelId}`
+        : null,
+  };
+}
+
+/**
+ * ROK-1494 — the game's open LFG-born session, for the restart reconcile.
+ *
+ * Re-exported through this module on purpose: `lfm-embed.db-helpers` is the
+ * SINGLE data-access surface `LfmEmbedService` is allowed to reach (see the
+ * file header), and the unit spec mocks this module and nothing else. The read
+ * itself stays in `lfg-playing.helpers`, beside `openLfgNowEventWhere`, so
+ * there is still exactly one definition of "the game's open session".
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose LFM row is being reconciled.
+ * @returns The open event's id, or null.
+ */
+export function readOpenLfgNowEventId(
+  db: LfgDb,
+  gameId: number,
+): Promise<number | null> {
+  return findOpenLfgNowEventId(db, gameId);
+}

@@ -1,0 +1,132 @@
+import {
+  pgTable,
+  uuid,
+  integer,
+  varchar,
+  text,
+  boolean,
+  timestamp,
+  unique,
+  index,
+  uniqueIndex,
+  jsonb,
+} from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { users } from './users';
+import { games } from './games';
+
+/**
+ * Characters - Player characters across different games.
+ * Supports Main/Alt designation with enforced single main per game.
+ * ROK-400: gameId now references games.id (integer) instead of game_registry.id (uuid).
+ */
+export const characters = pgTable(
+  'characters',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** FK to users.id (integer) */
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** FK to games.id (integer) — ROK-400: was UUID referencing game_registry */
+    gameId: integer('game_id')
+      .references(() => games.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** Character name */
+    name: varchar('name', { length: 100 }).notNull(),
+    /** Server/realm (e.g., WoW realm, FFXIV server) */
+    realm: varchar('realm', { length: 100 }),
+    /** Character class (e.g., 'Mage', 'Warrior') */
+    class: varchar('class', { length: 50 }),
+    /** Specialization (e.g., 'Arcane', 'Protection') */
+    spec: varchar('spec', { length: 50 }),
+    /** Role: 'tank', 'healer', 'dps' (synced from Blizzard) */
+    role: varchar('role', { length: 20 }),
+    /** User-set role override — takes priority over synced role */
+    roleOverride: varchar('role_override', { length: 20 }),
+    /** Is this the user's main character for this game? */
+    isMain: boolean('is_main').default(false).notNull(),
+    /** Item level / gear score */
+    itemLevel: integer('item_level'),
+    /** External API identifier (e.g., Blizzard character ID) */
+    externalId: varchar('external_id', { length: 255 }),
+    /** Character avatar URL */
+    avatarUrl: text('avatar_url'),
+    /** Full character render URL (Blizzard main-raw asset) */
+    renderUrl: text('render_url'),
+    /** Character level (e.g., from Blizzard Armory) */
+    level: integer('level'),
+    /** Character race (e.g., "Blood Elf") */
+    race: varchar('race', { length: 50 }),
+    /** ROK-1742: 'male' | 'female' from the WoW addon's `who.gender`; null = unknown */
+    gender: varchar('gender', { length: 10 }),
+    /** Faction: "alliance" or "horde" */
+    faction: varchar('faction', { length: 20 }),
+    /** Last time character data was synced from external API */
+    lastSyncedAt: timestamp('last_synced_at'),
+    /** External profile URL (e.g., Blizzard Armory link) */
+    profileUrl: text('profile_url'),
+    /** Blizzard API region (us, eu, kr, tw) — persisted for auto-sync */
+    region: varchar('region', { length: 10 }),
+    /** ROK-1721: WoW: Forever ruleset (normal|pvp|roleplaying|hardcore); null for every other game */
+    ruleset: varchar('ruleset', { length: 20 }),
+    /**
+     * ROK-1724: in-game GUID (`Player-<realmId>-<hex8>`) pinned by the WoW
+     * addon import. Plugin-owned — only `plugins/wow-common` reads/writes it.
+     * `external_id` stays reserved for the Blizzard character id (ROK-1722).
+     */
+    addonGuid: varchar('addon_guid', { length: 32 }),
+    /** WoW game variant (retail, classic_era, classic, classic_anniversary, wow_forever) */
+    gameVariant: varchar('game_variant', { length: 30 }),
+    /** Full equipped items data from Blizzard API (JSONB) */
+    equipment: jsonb('equipment'),
+    /** Raw talent tree data from Blizzard API (JSONB) */
+    talents: jsonb('talents'),
+    /** Normalized profession data from Blizzard API (JSONB) */
+    professions: jsonb('professions'),
+    /** Display order for drag-to-reorder UI */
+    displayOrder: integer('display_order').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    /** Prevent duplicate characters (same name+realm per user per game) */
+    uniqueCharacter: unique('unique_user_game_character').on(
+      table.userId,
+      table.gameId,
+      table.name,
+      table.realm,
+    ),
+    /** Enforce single main per game per user (partial unique index) */
+    oneMainPerGame: uniqueIndex('idx_one_main_per_game')
+      .on(table.userId, table.gameId)
+      .where(sql`${table.isMain} = true`),
+    /** Index for efficient user character lookups */
+    userIdIndex: index('idx_characters_user_id').on(table.userId),
+    /** ROK-448: Composite index for avatar-by-name lookups in /auth/me */
+    userIdNameIndex: index('idx_characters_user_id_name').on(
+      table.userId,
+      table.name,
+    ),
+    /**
+     * ROK-1721: one owner per WoW: Forever character across ALL players —
+     * region + lowercased full two-part name. Ruleset is excluded from the key
+     * because it is mutable; it only marks the row as a Forever identity.
+     */
+    rulesetIdentity: uniqueIndex('idx_characters_ruleset_identity')
+      .on(table.gameId, table.region, sql`lower(${table.name})`)
+      .where(sql`${table.ruleset} IS NOT NULL`),
+    /** ROK-1724: one in-game character (GUID) ↔ one RL character per region. */
+    addonGuidIdentity: uniqueIndex('idx_characters_addon_guid')
+      .on(table.gameId, table.region, table.addonGuid)
+      .where(sql`${table.addonGuid} IS NOT NULL`),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    gameIdIndex: index('idx_characters_game_id').on(table.gameId),
+  }),
+);
+
+/** Type inference for insert operations */
+export type CharacterInsert = typeof characters.$inferInsert;
+
+/** Type inference for select operations */
+export type CharacterSelect = typeof characters.$inferSelect;

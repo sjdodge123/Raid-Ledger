@@ -1,0 +1,224 @@
+/**
+ * Terminal-state resolution for the scheduling poll page (ROK-1545).
+ *
+ * The page used to render ONE "Voting is closed." banner for lock-in,
+ * cancellation and expiry alike (audit F-01/F-02/F-04). These helpers give the
+ * response the four fields the page needs to say what actually happened —
+ * `pollStatus`, `lockedInTime`, `cancelReason`, `canVote` — deriving the
+ * status from the SAME helper the Discord embed uses so the two surfaces
+ * cannot disagree.
+ */
+import { eq, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { sortSchedulingSlots } from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
+import { isInvitee } from '../lineups-eligibility.helpers';
+import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
+import { resolveLockInPageState } from './scheduling-lock-in.helpers';
+import {
+  stanceTallyFor,
+  tallyStancesBySlot,
+} from './scheduling-stance.helpers';
+import type { StanceVoteRef } from './scheduling-stance.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** The terminal-state fields added to the poll page response. */
+export interface PollTerminalState {
+  pollStatus: SchedulingPollStatus;
+  lockedInTime: string | null;
+  cancelReason: string | null;
+  canVote: boolean;
+  /** Review fix: the viewer may suggest a time — see the contract docstring. */
+  canSuggest: boolean;
+  /** ROK-1610: the viewer may finish this expired poll. */
+  canLockIn: boolean;
+  /** ROK-1610: the future, voted slot such a lock-in would pick. */
+  lockInSlotId: number | null;
+}
+
+/** Parent-lineup fields the resolution needs. */
+export interface PollLineupContext {
+  id: number;
+  status?: string | null;
+  visibility?: string | null;
+  createdBy?: number | null;
+  phaseDeadline?: Date | null;
+}
+
+/** Match fields the resolution needs. */
+export interface PollMatchContext {
+  status: string;
+  linkedEventId: number | null;
+  cancellationReason?: string | null;
+}
+
+/** Slot shape the winning-time fallback orders. */
+interface OrderedSlot {
+  id: number;
+  proposedTime: Date;
+}
+
+/**
+ * A vote row, reduced to the fields the fallback needs.
+ *
+ * ROK-1545 review F3: the fallback used to hand `sortSchedulingSlots` a flat
+ * `voteCount: 0`, which degenerates the shared comparator to time-ascending —
+ * a lock-in whose event row was gone named the EARLIEST time, not the winner.
+ * ROK-1617 adds the stance, so a `no` no longer counts toward that winner.
+ */
+type SlotVoteRef = StanceVoteRef;
+
+/**
+ * ISO start time the lock-in selected. The linked event's start is the only
+ * trustworthy value (lock-in is not required to pick the top-voted slot); the
+ * shared comparator's winner is the fallback when the event row is gone.
+ */
+async function resolveLockedInTime(
+  db: Db,
+  match: PollMatchContext,
+  slots: OrderedSlot[],
+  votes: SlotVoteRef[],
+): Promise<string | null> {
+  if (match.linkedEventId) {
+    // `events.duration` is a tsrange — its lower bound is the start time.
+    // It is zone-less UTC, and a raw `sql` read hands back a bare string that
+    // `new Date()` parses as LOCAL time (TDB:1489: off by the host's offset
+    // off-UTC) — `to_char` spells the `Z` out, as the column's `fromDriver` does.
+    const [event] = await db
+      .select({
+        startTime: sql<string>`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, match.linkedEventId))
+      .limit(1);
+    if (event?.startTime) return new Date(event.startTime).toISOString();
+  }
+  const tallies = tallyStancesBySlot(votes);
+  const [winner] = sortSchedulingSlots(
+    slots
+      .map((s) => ({
+        id: s.id,
+        proposedTime: s.proposedTime.toISOString(),
+        ...stanceTallyFor(tallies, s.id),
+      }))
+      // At least one YES — the `findLeadingLockableSlot` floor: a time nobody
+      // said yes to is not the time this poll landed on (ROK-1617). This is
+      // deliberately LOOSER than `pickLeadingFutureSlot`'s `leadsAtAll` (more
+      // yes than no): that one proposes a time the group has still to accept,
+      // while this one only names the time a lock-in that already happened
+      // most likely picked, and is reached solely when the linked event row is
+      // gone. Refusing to name a net-negative winner there would leave the
+      // page with no locked-in time at all.
+      .filter((s) => s.voteCount > 0),
+  );
+  return winner?.proposedTime ?? null;
+}
+
+/**
+ * Whether this viewer is eligible to write to the poll at all (audit F-07),
+ * ignoring the poll's lifecycle. An anonymous viewer is false. On a PRIVATE
+ * lineup only the creator, invitees and admins/operators qualify — everyone
+ * else would be rejected by `assertCallerMayVote`, so the page renders no
+ * affordance. On a PUBLIC lineup a non-member is true: voting self-enrols
+ * them, which is deliberate.
+ */
+async function resolveViewerEligibility(
+  db: Db,
+  lineup: PollLineupContext | undefined,
+  caller: { id: number; role?: string | null } | null,
+): Promise<boolean> {
+  if (!caller) return false;
+  if (!lineup || lineup.visibility !== 'private') return true;
+  if (caller.role === 'admin' || caller.role === 'operator') return true;
+  if (lineup.createdBy === caller.id) return true;
+  return isInvitee(db, lineup.id, caller.id);
+}
+
+/**
+ * Review fix: the ONE state where suggesting outlives voting — the deadline
+ * is still ahead but every proposed time has passed.
+ *
+ * `pollStatusFromMatch` calls that poll `closed` (ROK-1607) so the card and
+ * the page stop advertising dead times, and the Discord card's own hint says
+ * "suggest a new time or start a new poll". The server agrees already:
+ * `assertPollOpen` is not given `slotTimes`, so `POST .../suggest` still
+ * accepts it. Re-deriving the status WITHOUT `slotTimes` is what separates
+ * this case from a genuinely past-deadline poll, where suggesting is refused.
+ */
+function isTimesPassedOnly(
+  match: PollMatchContext,
+  lineup: PollLineupContext | undefined,
+): boolean {
+  return (
+    pollStatusFromMatch({
+      matchStatus: match.status,
+      lineupStatus: lineup?.status ?? null,
+      phaseDeadline: lineup?.phaseDeadline ?? null,
+      linkedEventId: match.linkedEventId,
+    }) === 'open'
+  );
+}
+
+/**
+ * Whether the viewer may suggest a time: whenever they may vote, plus the one
+ * state where suggesting outlives voting (see `isTimesPassedOnly`).
+ */
+function resolveCanSuggest(
+  match: PollMatchContext,
+  lineup: PollLineupContext | undefined,
+  pollStatus: SchedulingPollStatus,
+  eligible: boolean,
+): boolean {
+  if (!eligible) return false;
+  if (pollStatus === 'open') return true;
+  return pollStatus === 'closed' && isTimesPassedOnly(match, lineup);
+}
+
+/**
+ * Resolve every terminal-state field for the poll page in one call.
+ *
+ * @param db - Drizzle database handle.
+ * @param match - The match row (status, linked event, cancellation reason).
+ * @param lineup - The parent lineup row, when it was found.
+ * @param slots - The match's slots, used for the winning-time fallback.
+ * @param caller - The authenticated viewer, or null when anonymous.
+ * @param votes - The slots' vote rows, so the fallback picks the LEADER.
+ * @returns `pollStatus`, `lockedInTime`, `cancelReason`, `canVote` and the
+ *   ROK-1610 post-expiry lock-in affordance (`canLockIn` + `lockInSlotId`).
+ */
+export async function resolvePollTerminalState(
+  db: Db,
+  match: PollMatchContext,
+  lineup: PollLineupContext | undefined,
+  slots: OrderedSlot[],
+  caller: { id: number; role?: string | null } | null,
+  votes: SlotVoteRef[] = [],
+): Promise<PollTerminalState> {
+  const pollStatus = pollStatusFromMatch({
+    matchStatus: match.status,
+    lineupStatus: lineup?.status ?? null,
+    phaseDeadline: lineup?.phaseDeadline ?? null,
+    linkedEventId: match.linkedEventId,
+    // ROK-1607: the page and the Discord card read the SAME rule — a poll
+    // whose every time has passed is expired on both.
+    slotTimes: slots.map((s) => s.proposedTime),
+  });
+  const [lockedInTime, eligible] = await Promise.all([
+    pollStatus === 'locked_in'
+      ? resolveLockedInTime(db, match, slots, votes)
+      : Promise.resolve(null),
+    resolveViewerEligibility(db, lineup, caller),
+  ]);
+  const canVote = pollStatus === 'open' && eligible;
+  return {
+    pollStatus,
+    lockedInTime,
+    cancelReason:
+      pollStatus === 'cancelled' ? (match.cancellationReason ?? null) : null,
+    canVote,
+    canSuggest: resolveCanSuggest(match, lineup, pollStatus, eligible),
+    ...resolveLockInPageState({ pollStatus, lineup, caller, slots, votes }),
+  };
+}

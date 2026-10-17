@@ -1,0 +1,116 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  SlashCommandBuilder,
+  type ChatInputCommandInteraction,
+  MessageFlags,
+  type AutocompleteInteraction,
+  type RESTPostAPIChatInputApplicationCommandsJSONBody,
+} from 'discord.js';
+import { ilike } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { escapeLikePattern } from '../../common/search.util';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { autocompleteGames } from './bind.autocomplete';
+import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
+import type { SlashCommandHandler } from './register-commands';
+import type { CommandInteractionHandler } from '../listeners/interaction.listener';
+
+/**
+ * /playing [game] — Manual fallback for users without Discord Rich Presence.
+ * Sets a temporary game override for the user in general-lobby channels.
+ * Without arguments, clears the override.
+ */
+@Injectable()
+export class PlayingCommand
+  implements SlashCommandHandler, CommandInteractionHandler
+{
+  readonly commandName = 'playing';
+  private readonly logger = new Logger(PlayingCommand.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly presenceDetector: PresenceGameDetectorService,
+  ) {}
+
+  getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
+    return new SlashCommandBuilder()
+      .setName('playing')
+      .setDescription(
+        'Tell the bot what game you are playing (for general lobby channels)',
+      )
+      .setDMPermission(false)
+      .addStringOption((opt) =>
+        opt
+          .setName('game')
+          .setDescription('Game name (leave empty to clear override)')
+          .setAutocomplete(true),
+      )
+      .toJSON();
+  }
+
+  async handleInteraction(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    const gameName = interaction.options.getString('game');
+    if (!gameName) {
+      await this.clearOverride(interaction);
+      return;
+    }
+    await this.setOverride(interaction, gameName);
+  }
+
+  /** Clear the manual game override. */
+  private async clearOverride(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    this.presenceDetector.clearManualOverride(interaction.user.id);
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.PLAYING_CLEARED,
+    }).setDescription(
+      'Game override cleared. The bot will use Discord Rich Presence to detect your game.',
+    );
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  /** Resolve game name and set override. */
+  private async setOverride(
+    interaction: ChatInputCommandInteraction,
+    gameName: string,
+  ): Promise<void> {
+    const [match] = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      // TDB:960 — escape LIKE wildcards so '%' or '_' can't match an arbitrary game.
+      .where(ilike(schema.games.name, escapeLikePattern(gameName)))
+      .limit(1);
+    const resolved = match?.name ?? gameName;
+    this.presenceDetector.setManualOverride(interaction.user.id, resolved);
+    const embed = createChannelEmbed({
+      state: 'done',
+      authorLine: COMMAND_REPLY_AUTHORS.PLAYING_SET,
+    }).setDescription(
+      `You are now marked as playing **${resolved}**.\n` +
+        'This override lasts 30 minutes or until you clear it with `/playing`.',
+    );
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    this.logger.debug(
+      `User ${interaction.user.id} set game override: "${resolved}"`,
+    );
+  }
+
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction,
+  ): Promise<void> {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name !== 'game') return;
+
+    // ROK-1531: was an inline copy of the same unordered query, so it missed
+    // the relevance ranking that `autocompleteGames` now applies.
+    await interaction.respond(await autocompleteGames(this.db, focused.value));
+  }
+}

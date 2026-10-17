@@ -1,0 +1,338 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { EventCard, EventCardSkeleton } from './event-card';
+import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
+import type { EventResponseDto } from '@raid-ledger/contract';
+
+// Mock current date for consistent testing
+const MOCK_NOW = new Date('2026-02-10T19:00:00Z');
+
+const createMockEvent = (overrides: Partial<EventResponseDto> = {}): EventResponseDto => ({
+    id: 1,
+    title: 'Test Raid Night',
+    description: 'Weekly raid session',
+    startTime: '2026-02-10T20:00:00Z',
+    endTime: '2026-02-10T23:00:00Z',
+    creator: { id: 1, username: 'TestUser', avatar: null },
+    game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: 'https://example.com/cover.jpg' },
+    signupCount: 3,
+    createdAt: '2026-02-01T00:00:00Z',
+    updatedAt: '2026-02-01T00:00:00Z',
+    ...overrides,
+});
+
+describe('getEventStatus', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('returns upcoming for future events', () => {
+        expect(getEventStatus('2026-02-10T21:00:00Z', '2026-02-10T23:00:00Z')).toBe('upcoming');
+    });
+
+    it('returns live for in-progress events', () => {
+        expect(getEventStatus('2026-02-10T18:00:00Z', '2026-02-10T22:00:00Z')).toBe('live');
+    });
+
+    it('returns ended for past events', () => {
+        expect(getEventStatus('2026-02-10T15:00:00Z', '2026-02-10T18:00:00Z')).toBe('ended');
+    });
+});
+
+describe('getRelativeTime', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('returns relative time for upcoming event', () => {
+        const result = getRelativeTime('2026-02-10T20:00:00Z', '2026-02-10T23:00:00Z');
+        expect(result).toMatch(/in 1 hour/i);
+    });
+
+    it('returns started time for live event', () => {
+        const result = getRelativeTime('2026-02-10T18:00:00Z', '2026-02-10T22:00:00Z');
+        expect(result).toMatch(/started.*ago/i);
+    });
+
+    it('returns ended time for past event', () => {
+        const result = getRelativeTime('2026-02-10T15:00:00Z', '2026-02-10T17:00:00Z');
+        expect(result).toMatch(/ended.*ago/i);
+    });
+});
+
+describe('EventCard — part 1', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('renders event title', () => {
+        render(<EventCard event={createMockEvent()} signupCount={5} />);
+        expect(screen.getByText('Test Raid Night')).toBeInTheDocument();
+    });
+
+    it('renders signup count', () => {
+        render(<EventCard event={createMockEvent()} signupCount={5} />);
+        expect(screen.getByText('5 signed up')).toBeInTheDocument();
+    });
+
+    it('renders game name', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
+    });
+
+    it('renders creator username', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        expect(screen.getByText('by TestUser')).toBeInTheDocument();
+    });
+
+    it('calls onClick when clicked', () => {
+        const onClick = vi.fn();
+        render(<EventCard event={createMockEvent()} signupCount={0} onClick={onClick} />);
+        screen.getByText('Test Raid Night').closest('div')?.click();
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders upcoming status badge for future events', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        expect(screen.getByTestId('event-status-badge')).toHaveTextContent('Upcoming');
+    });
+
+    it('renders live status badge when event is in progress', () => {
+        const liveEvent = createMockEvent({
+            startTime: '2026-02-10T18:00:00Z',
+            endTime: '2026-02-10T22:00:00Z',
+        });
+        render(<EventCard event={liveEvent} signupCount={0} />);
+        expect(screen.getByTestId('event-status-badge')).toHaveTextContent('Live');
+    });
+
+    it('renders ended status badge for past events', () => {
+        const pastEvent = createMockEvent({
+            startTime: '2026-02-10T15:00:00Z',
+            endTime: '2026-02-10T17:00:00Z',
+        });
+        render(<EventCard event={pastEvent} signupCount={0} />);
+        expect(screen.getByTestId('event-status-badge')).toHaveTextContent('Ended');
+    });
+
+    it('renders relative time for event', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        expect(screen.getByTestId('relative-time')).toBeInTheDocument();
+    });
+
+});
+
+describe('EventCard — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('applies badge-overlay class to game cover container', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const coverContainer = container.querySelector('.badge-overlay');
+        expect(coverContainer).toBeInTheDocument();
+        // The badge-overlay should be on the cover wrapper, which contains the status badge
+        const statusBadge = screen.getByTestId('event-status-badge');
+        expect(coverContainer!.contains(statusBadge)).toBe(true);
+    });
+
+    it('badge-overlay wraps game-time badge when matchesGameTime is true', () => {
+        const { container } = render(
+            <EventCard event={createMockEvent()} signupCount={0} matchesGameTime />,
+        );
+        const gameTimeBadge = screen.getByText('Inside Game Time');
+        const overlayContainer = container.querySelector('.badge-overlay');
+        expect(overlayContainer).toBeInTheDocument();
+        expect(overlayContainer!.contains(gameTimeBadge)).toBe(true);
+    });
+
+});
+
+describe('EventCardSkeleton', () => {
+    it('renders skeleton loader', () => {
+        const { container } = render(<EventCardSkeleton />);
+        expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    });
+
+    it('renders skeleton badge placeholder', () => {
+        const { container } = render(<EventCardSkeleton />);
+        const badgeSkeleton = container.querySelector('.rounded-full.bg-overlay');
+        expect(badgeSkeleton).toBeInTheDocument();
+    });
+});
+
+describe('EventCard badge-overlay class (ROK-473) — part 1', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('status badge has badge-overlay class for upcoming events', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('status badge has badge-overlay class for live events', () => {
+        const liveEvent = createMockEvent({
+            startTime: '2026-02-10T18:00:00Z',
+            endTime: '2026-02-10T22:00:00Z',
+        });
+        render(<EventCard event={liveEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('status badge has badge-overlay class for ended events', () => {
+        const endedEvent = createMockEvent({
+            startTime: '2026-02-10T15:00:00Z',
+            endTime: '2026-02-10T17:00:00Z',
+        });
+        render(<EventCard event={endedEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('status badge has badge-overlay class for cancelled events', () => {
+        const cancelledEvent = createMockEvent({
+            cancelledAt: '2026-02-05T00:00:00Z',
+        });
+        render(<EventCard event={cancelledEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('upcoming status badge has emerald color classes', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-emerald-500/20');
+    });
+
+    it('live status badge has yellow color classes', () => {
+        const liveEvent = createMockEvent({
+            startTime: '2026-02-10T18:00:00Z',
+            endTime: '2026-02-10T22:00:00Z',
+        });
+        render(<EventCard event={liveEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-yellow-500/20');
+    });
+
+});
+
+describe('EventCard badge-overlay class (ROK-473) — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('ended status badge has dim color classes', () => {
+        const endedEvent = createMockEvent({
+            startTime: '2026-02-10T15:00:00Z',
+            endTime: '2026-02-10T17:00:00Z',
+        });
+        render(<EventCard event={endedEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-dim/20');
+    });
+
+    it('cancelled status badge has red color classes', () => {
+        const cancelledEvent = createMockEvent({
+            cancelledAt: '2026-02-05T00:00:00Z',
+        });
+        render(<EventCard event={cancelledEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-red-500/20');
+    });
+
+    it('game time badge has badge-overlay class when matchesGameTime is true', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={true} />);
+        const gameTimeBadge = container.querySelector('.bg-cyan-500\\/20');
+        expect(gameTimeBadge).not.toBeNull();
+        expect(gameTimeBadge).toHaveClass('badge-overlay');
+    });
+
+    it('game time badge has cyan color classes', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={true} />);
+        const gameTimeBadge = container.querySelector('.bg-cyan-500\\/20');
+        expect(gameTimeBadge).toHaveClass('badge-overlay');
+        expect(gameTimeBadge?.textContent).toContain('Inside Game Time');
+    });
+
+    it('game time badge is not rendered when matchesGameTime is false', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={false} />);
+        expect(screen.queryByText('Inside Game Time')).not.toBeInTheDocument();
+    });
+
+    it('game time badge is not rendered when matchesGameTime is undefined', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        expect(screen.queryByText('Inside Game Time')).not.toBeInTheDocument();
+    });
+
+    it('status badge is positioned absolutely at top-right of cover image', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const badgeWrapper = screen.getByTestId('event-status-badge').closest('.absolute');
+        expect(badgeWrapper).toHaveClass('top-2', 'right-2');
+    });
+
+    it('game time badge is positioned absolutely at top-left of cover image when shown', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={true} />);
+        const gameTimeBadge = container.querySelector('.bg-cyan-500\\/20');
+        const badgeWrapper = gameTimeBadge?.closest('.absolute');
+        expect(badgeWrapper).toHaveClass('top-2', 'left-2');
+    });
+
+});
+
+describe('EventCard — series badge (ROK-429)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('shows series badge when event has recurrenceGroupId', () => {
+        const event = createMockEvent({ recurrenceGroupId: 'abc-123' });
+        render(<EventCard event={event} signupCount={0} />);
+        expect(screen.getByTestId('series-badge')).toBeInTheDocument();
+    });
+
+    it('does not show series badge without recurrenceGroupId', () => {
+        const event = createMockEvent({ recurrenceGroupId: null });
+        render(<EventCard event={event} signupCount={0} />);
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+
+    it('does not show series badge when field is undefined', () => {
+        const event = createMockEvent();
+        render(<EventCard event={event} signupCount={0} />);
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+});
+

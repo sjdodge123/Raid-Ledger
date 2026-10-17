@@ -1,0 +1,2 @@
+ALTER TABLE "pelican_schedules" DROP CONSTRAINT "pelican_schedules_effect_offset_chk";--> statement-breakpoint
+ALTER TABLE "pelican_schedules" ADD CONSTRAINT "pelican_schedules_effect_offset_chk" CHECK ("pelican_schedules"."effect_offset_s" BETWEEN 0 AND 86400);

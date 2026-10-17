@@ -1,0 +1,252 @@
+/**
+ * Voice-channel join dispatch handlers, extracted from VoiceStateListener for
+ * file-size compliance (mirrors voice-state-leave.handlers.ts). These walk the
+ * bindings for a joined channel and route to the game-binding / general-lobby
+ * handlers. handleChannelJoin is re-entrant (presence recheck re-invokes it).
+ */
+import { ActivityType, type GuildMember, type Presence } from 'discord.js';
+import type { Logger } from '@nestjs/common';
+import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import {
+  buildDiscordMember,
+  isLobbyBinding,
+  trackChannelMember,
+  type DiscordMemberInfo,
+  type ResolvedBinding,
+} from './voice-state.helpers';
+import {
+  handlePresenceChange,
+  markLobbyDirty,
+  trackScheduledEventJoin,
+  type VoiceHandlerDeps,
+} from './voice-state.handlers';
+import { yieldMonitorToLobby } from './voice-state-gate.handlers';
+import {
+  handleGameBindingJoin,
+  handleGeneralLobbyJoin,
+} from './voice-state-join.handlers';
+import {
+  cancelPendingSpawn,
+  scheduleDelayedSpawn,
+  schedulePresenceRecheck,
+  type TimerMaps,
+} from './voice-state-leave.handlers';
+import { traceGate } from './voice-gate-trace';
+import { isBotMember } from './voice-lobby-groups.helpers';
+import {
+  lfgNowDeps,
+  recordLfgNowVoiceJoin,
+} from '../lfg-now/lfg-now-voice.helpers';
+
+const SPAWN_DELAY_MS = 15 * 60 * 1000;
+
+/** Listener state the join dispatch needs, passed in to keep these pure. */
+export interface JoinHandlerCtx {
+  deps: VoiceHandlerDeps;
+  timers: TimerMaps;
+  channelMembers: Map<string, Set<string>>;
+  userChannelMap: Map<string, string>;
+  presenceDetector: PresenceGameDetectorService;
+  logger: Logger;
+  resolveAllBindings: (ch: string) => Promise<ResolvedBinding[]>;
+}
+
+/** Resolve bindings for a joined channel and dispatch each. */
+export async function handleChannelJoin(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  dm: DiscordMemberInfo,
+  gm?: GuildMember,
+): Promise<void> {
+  try {
+    await trackScheduledEventJoin(ctx.deps, chId, dm);
+  } catch (err) {
+    ctx.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
+  }
+  const bindings = await ctx.resolveAllBindings(chId);
+  if (bindings.length === 0) {
+    // ROK-1494 A3: this early return is where an LFG-born event's voice joiner
+    // was dropped — its ephemeral channel has no binding, so nothing downstream
+    // ever reached `ad_hoc_participants`. Record them first. Bots are excluded
+    // for the same reason they never enter `channelMembers` (ROK-1445 AC9).
+    if (!isBotMember(gm)) await recordUnboundJoin(ctx, chId, dm);
+    traceGate(ctx.logger, 'unbound-channel', {
+      channelId: chId,
+      bindingId: 'none',
+      gameId: null,
+    });
+    return;
+  }
+  // ROK-1445 AC9: bots must never enter `channelMembers` — that map feeds the
+  // game-binding threshold gates, where a music bot counting toward minPlayers
+  // is the same bug. Scoped to occupancy ONLY: a bot's join still dispatches
+  // every binding, so ROK-959 sibling suppression (and the `extended_until`
+  // write it performs) keeps running. Rosters are excluded separately, in the
+  // counting/roster paths themselves.
+  if (!isBotMember(gm))
+    trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
+  // ROK-1782 ruling (a): a general lobby on the channel wins over its monitors.
+  const lobbyWins = bindings.some(isLobbyBinding);
+  for (const b of bindings) {
+    await dispatchBindingJoin(ctx, chId, b, dm, gm, lobbyWins);
+  }
+}
+
+/**
+ * ROK-1782 ruling (c): evaluate a presence update against EVERY binding on the
+ * channel, not just the first row. Lobbies run the game-switch path; a
+ * fixed-game monitor (when no lobby outranks it) re-runs its join decision for
+ * a member who just started its game and is not yet in its event.
+ * `prev` is the pre-update presence (null when discord.js had none cached).
+ */
+export async function handlePresenceUpdate(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  gm: GuildMember,
+  prev: Presence | null = null,
+): Promise<void> {
+  const bindings = await ctx.resolveAllBindings(chId);
+  const lobbyWins = bindings.some(isLobbyBinding);
+  for (const b of bindings) {
+    if (isLobbyBinding(b)) await handlePresenceChange(ctx.deps, gm.id, b, gm);
+    else if (!lobbyWins) await recheckMonitorOnPresence(ctx, chId, b, gm, prev);
+  }
+}
+
+/** The Playing activity name of a presence, or null when none. */
+function playingName(p: Presence | null | undefined): string | null {
+  const playing = p?.activities?.find((a) => a.type === ActivityType.Playing);
+  return playing?.name ?? null;
+}
+
+/**
+ * Re-run a fixed-game monitor's join for a member now playing its game. Only
+ * a CHANGED Playing activity can newly qualify them — status flips, custom
+ * statuses and Rich Presence ticks on the same game return before any
+ * game-detection DB lookup. An uncached `prev` cannot be compared, so it falls
+ * through to detection.
+ */
+async function recheckMonitorOnPresence(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  gm: GuildMember,
+  prev: Presence | null,
+): Promise<void> {
+  if (b.gameId == null || isBotMember(gm)) return;
+  const next = playingName(gm.presence);
+  if (next === null) return;
+  if (prev && playingName(prev) === next) return;
+  const svc = ctx.deps.adHocEventService;
+  const active = svc.getActiveBindingEventGameId(b.bindingId);
+  const state = active && svc.getActiveState(b.bindingId, active.gameId);
+  if (state && state.memberSet.has(gm.id)) return;
+  const detected = await ctx.presenceDetector.detectGameForMember(gm);
+  if (detected.gameId !== b.gameId) return;
+  await dispatchBindingJoin(ctx, chId, b, buildDiscordMember(gm.id, gm), gm);
+}
+
+/**
+ * ROK-1494 A3: record a joiner of an LFG-born event's ephemeral channel.
+ * Never rethrows — the voice pipeline must survive a roster-write failure.
+ */
+async function recordUnboundJoin(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  dm: DiscordMemberInfo,
+): Promise<void> {
+  await recordLfgNowVoiceJoin(lfgNowDeps(ctx.deps), chId, dm).catch((err) =>
+    ctx.logger.warn(`[lfg-now] voice join record failed: ${err}`),
+  );
+}
+
+/** Route a single binding join to the general-lobby or game-binding handler. */
+async function dispatchBindingJoin(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  dm: DiscordMemberInfo,
+  gm?: GuildMember,
+  lobbyWins = false,
+): Promise<void> {
+  if (isLobbyBinding(b)) return dispatchLobbyJoin(ctx, chId, b, dm, gm);
+  if (lobbyWins) return yieldMonitorToLobby(ctx.deps, chId, b);
+  await handleGameBindingJoin(
+    ctx.deps,
+    chId,
+    b,
+    dm,
+    monitorSpawnFns(ctx, chId, b),
+    isBotMember(gm),
+  );
+}
+
+/** Channel-keyed spawn callbacks for a game-voice-monitor binding. */
+export function monitorSpawnFns(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+): { scheduleSpawn: () => void; cancelSpawn: () => void } {
+  return {
+    scheduleSpawn: () =>
+      scheduleDelayedSpawn(
+        ctx.deps,
+        chId,
+        b.gameId,
+        b,
+        ctx.timers,
+        SPAWN_DELAY_MS,
+      ),
+    cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
+  };
+}
+
+/** Per-(channel, game) spawn callbacks shared by both binding kinds (AC13). */
+export function lobbySpawnFns(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  binding: ResolvedBinding,
+): {
+  scheduleSpawn: (g: number | null) => void;
+  cancelSpawn: (g: number | null) => void;
+} {
+  return {
+    scheduleSpawn: (gameId) =>
+      scheduleDelayedSpawn(
+        ctx.deps,
+        chId,
+        gameId,
+        binding,
+        ctx.timers,
+        SPAWN_DELAY_MS,
+      ),
+    cancelSpawn: (gameId) => cancelPendingSpawn(ctx.timers, chId, gameId),
+  };
+}
+
+/** General-lobby join: wire the presence-recheck + spawn callbacks. */
+async function dispatchLobbyJoin(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  binding: ResolvedBinding,
+  dm: DiscordMemberInfo,
+  gm?: GuildMember,
+): Promise<void> {
+  const scheduleRecheck = () =>
+    schedulePresenceRecheck({
+      timers: ctx.timers,
+      dm,
+      channelId: chId,
+      guildMember: gm!,
+      userChannelMap: ctx.userChannelMap,
+      presenceDetector: ctx.presenceDetector,
+      handleJoinFn: (ch, d, g) => handleChannelJoin(ctx, ch, d, g),
+      logError: (m) => ctx.logger.error(m),
+    });
+  await handleGeneralLobbyJoin(ctx.deps, chId, binding, dm, gm, {
+    scheduleRecheck,
+    ...lobbySpawnFns(ctx, chId, binding),
+  });
+  // ROK-1446 D6: only the lobby branch of the dispatch marks dirty (D1).
+  markLobbyDirty(ctx.deps, binding, chId);
+}

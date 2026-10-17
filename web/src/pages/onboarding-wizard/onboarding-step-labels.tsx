@@ -1,0 +1,90 @@
+import type { JSX } from 'react';
+import type { GameRegistryDto } from '@raid-ledger/contract';
+import { useMyCharacters } from '../../hooks/use-characters';
+import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
+import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
+
+/**
+ * Breadcrumb label for the Connect step — shows Discord avatar + name
+ * when connected, falls back to dot + "Connect" when not.
+ */
+export function ConnectStepLabel({ user, isCurrent, isVisited }: {
+    user: { avatar: string | null; displayName: string | null; username: string; discordId: string } | null;
+    isCurrent: boolean;
+    isVisited: boolean;
+}): JSX.Element {
+    const isConnected = user && isDiscordLinked(user.discordId);
+
+    if (isConnected) {
+        return (
+            <>
+                {user.avatar ? (
+                    // ROK-1714: user.avatar is a Discord hash (or a URL) — build the CDN URL; dead URL → initials.
+                    <AvatarWithFallback avatarUrl={buildDiscordAvatarUrl(user.discordId, user.avatar)}
+                        username={user.displayName || user.username} sizeClassName="w-4 h-4 text-[8px]!" />
+                ) : (
+                    <StepDot isCurrent={isCurrent} isVisited={isVisited} />
+                )}
+                <span className="truncate max-w-[6rem]">{user.displayName || user.username}</span>
+            </>
+        );
+    }
+
+    return (
+        <>
+            <StepDot isCurrent={isCurrent} isVisited={isVisited} />
+            Connect
+        </>
+    );
+}
+
+/** Saved character avatar + name label */
+function SavedCharLabel({ avatarUrl, name, isCurrent, isVisited }: {
+    avatarUrl: string | null; name: string; isCurrent: boolean; isVisited: boolean;
+}): JSX.Element {
+    return (
+        <>
+            {avatarUrl ? (
+                <img src={avatarUrl} alt={name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+            ) : (
+                <StepDot isCurrent={isCurrent} isVisited={isVisited} />
+            )}
+            <span className="truncate max-w-[6rem]">{name}</span>
+        </>
+    );
+}
+
+/**
+ * Breadcrumb label for character steps — shows avatar + name when saved,
+ * falls back to game name + dot when empty.
+ */
+export function CharacterStepLabel({ game, charIndex, isCurrent, isVisited }: {
+    game: GameRegistryDto; charIndex: number; isCurrent: boolean; isVisited: boolean;
+}): JSX.Element {
+    const { data: myCharsData } = useMyCharacters(game.id);
+    const char = (myCharsData?.data ?? [])[charIndex];
+    if (char) {
+        return <SavedCharLabel avatarUrl={char.avatarUrl} name={char.name} isCurrent={isCurrent} isVisited={isVisited} />;
+    }
+    return (
+        <>
+            <StepDot isCurrent={isCurrent} isVisited={isVisited} />
+            {game.shortName || game.name}
+        </>
+    );
+}
+
+/** Small colored dot used in step breadcrumbs */
+export function StepDot({ isCurrent, isVisited }: {
+    isCurrent: boolean;
+    isVisited: boolean;
+}): JSX.Element {
+    return (
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent
+            ? 'bg-white'
+            : isVisited
+                ? 'bg-emerald-400'
+                : 'bg-edge/50'
+            }`} />
+    );
+}

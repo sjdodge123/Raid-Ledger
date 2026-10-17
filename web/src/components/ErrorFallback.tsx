@@ -1,0 +1,33 @@
+import { isChunkLoadError } from '../lib/chunk-error';
+
+const reloadBtnStyle = {
+  marginTop: '1rem',
+  padding: '0.5rem 1rem',
+  borderRadius: '0.5rem',
+  border: '1px solid #444',
+  cursor: 'pointer',
+} as const;
+
+export function ErrorFallback({ error }: { error: unknown }) {
+  const isChunk = isChunkLoadError(error);
+  const message = isChunk
+    ? 'The app has been updated. Please reload to get the latest version.'
+    : error instanceof Error
+      ? error.message
+      : 'An unexpected error occurred';
+
+  return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <h1>{isChunk ? 'New Version Available' : 'Something went wrong'}</h1>
+      <p style={{ color: '#888', marginTop: '0.5rem' }}>{message}</p>
+      <button
+        // Leaves the auto-reload stamp alone: if the chunk still fails after
+        // this reload, the page shows this screen again instead of looping.
+        onClick={() => window.location.reload()}
+        style={reloadBtnStyle}
+      >
+        Reload Page
+      </button>
+    </div>
+  );
+}

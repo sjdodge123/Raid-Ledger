@@ -1,0 +1,401 @@
+/**
+ * Lineup response mapping helpers (ROK-933/934/935).
+ * Maps raw query results to LineupDetailResponseDto with enrichment.
+ */
+import type {
+  LineupDetailResponseDto,
+  LineupEntryResponseDto,
+} from '@raid-ledger/contract';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { NotFoundException } from '@nestjs/common';
+import * as schema from '../drizzle/schema';
+import {
+  findLineupById,
+  findEntriesWithGames,
+  countVotesPerGame,
+  countDistinctVoters,
+  findUserById,
+  findGameName,
+} from './lineups-query.helpers';
+import {
+  countOwnersPerGame,
+  countWishlistPerGame,
+  fetchPricingMetadata,
+  countTotalMembers,
+  countUnlinkedSteamMembers,
+  findUnlinkedSteamMembers,
+  type GamePricing,
+  type LineupAudience,
+  type UnlinkedSteamMember,
+} from './lineups-enrichment.helpers';
+import { findUserVotes } from './lineups-voting.helpers';
+import { applyStarProjection } from './lineups-response-star.helpers';
+import { findPendingOrActiveTiebreaker } from './tiebreaker/tiebreaker-query.helpers';
+import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers';
+import { listInviteesWithProfile } from './lineups-invitees.helpers';
+import { findViewerSubmissions } from './lineups-submissions-query.helpers';
+import { computeVotingEligibleCount } from './voting-eligibility.helpers';
+import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
+import { loadStillWaitingOnVoters } from './lineups-quorum-waiting.helpers';
+import {
+  loadViewerInterests,
+  viewerEntryFieldsFor,
+  type ViewerInterestMap,
+} from './viewer-interests.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Enrichment maps passed through to entry mapping. */
+interface EnrichmentMaps {
+  ownerMap: Map<number, number>;
+  /**
+   * ROK-1348 (Codex P2): owners counted WITHIN the eligible audience (private
+   * = creator + invitees). For public lineups this is the same map as
+   * `ownerMap`. The non-owner subtraction must use pool-consistent numbers —
+   * community owners minus a private pool would zero out "for N" even when
+   * no invitee owns the game.
+   */
+  eligibleOwnerMap: Map<number, number>;
+  wishlistMap: Map<number, number>;
+  pricingMap: Map<number, GamePricing>;
+  totalMembers: number;
+  /**
+   * ROK-1348: voter-eligible pool size (private = creator + invitees;
+   * public = totalMembers). Used as the non-owner denominator so private
+   * lineups stop borrowing the whole community's count.
+   */
+  eligibleCount: number;
+  unlinkedSteamCount: number;
+  unlinkedSteamMembers: UnlinkedSteamMember[];
+  /** ROK-1314: viewer's per-game own/wishlist flags (empty when anonymous). */
+  viewerInterests: ViewerInterestMap;
+  /** ROK-1375: false when anonymous — the playtime field is then omitted. */
+  hasViewer: boolean;
+}
+
+/** Map a single entry row to the response shape with enrichment. */
+function mapEntry(
+  e: Awaited<ReturnType<typeof findEntriesWithGames>>[0],
+  voteMap: Map<number, number>,
+  enrichment: EnrichmentMaps,
+): LineupEntryResponseDto {
+  const ownerCount = enrichment.ownerMap.get(e.gameId) ?? 0;
+  const pricing = enrichment.pricingMap.get(e.gameId);
+
+  return {
+    id: e.id,
+    gameId: e.gameId,
+    gameName: e.gameName,
+    gameCoverUrl: e.gameCoverUrl,
+    nominatedBy: { id: e.nominatedById, displayName: e.nominatedByName },
+    note: e.note,
+    carriedOver: e.carriedOverFrom !== null,
+    voteCount: voteMap.get(e.gameId) ?? 0,
+    // ROK-1474: withheld here and filled by `applyStarProjection` only once
+    // the outcome discloses it. Stubbed null, never 0 — a zero would read as
+    // "nobody starred it" on a ballot that is simply not telling.
+    starCount: null,
+    createdAt: e.createdAt.toISOString(),
+    ownerCount,
+    totalMembers: enrichment.totalMembers,
+    // ROK-1348: non-owners measured against the eligible pool, with owners
+    // counted in the SAME pool (Codex P2 — community owners vs a private
+    // denominator would zero out "for N" even when no invitee owns it).
+    // Clamp at 0 for transient mid-write skew.
+    nonOwnerCount: Math.max(
+      0,
+      enrichment.eligibleCount -
+        (enrichment.eligibleOwnerMap.get(e.gameId) ?? 0),
+    ),
+    wishlistCount: enrichment.wishlistMap.get(e.gameId) ?? 0,
+    itadCurrentPrice: pricing?.itadCurrentPrice ?? null,
+    itadCurrentCut: pricing?.itadCurrentCut ?? null,
+    itadCurrentShop: pricing?.itadCurrentShop ?? null,
+    itadCurrentUrl: pricing?.itadCurrentUrl ?? null,
+    // ROK-1314: historical low, so the nomination card resolves `best-price`
+    // with the same rule Common Ground uses.
+    itadLowestPrice: pricing?.itadLowestPrice ?? null,
+    // ROK-1314 flags + ROK-1375 playtime from ONE batched viewer query.
+    // Flags are explicit false; playtime is omitted when anonymous.
+    ...viewerEntryFieldsFor(
+      enrichment.viewerInterests,
+      e.gameId,
+      enrichment.hasViewer,
+    ),
+    playerCount: e.playerCount ?? null,
+    // ROK-1401: raw value — positive / 0 / null, never blended with IGDB.
+    cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
+    // ROK-1314: rest of the co-op inputs + shared chrome, so the nomination
+    // card renders the same badge set as the other surfaces.
+    cooptimusCouchMax: e.cooptimusCouchMax ?? null,
+    cooptimusComboCoop: e.cooptimusComboCoop ?? null,
+    earlyAccess: e.earlyAccess ?? false,
+    genres: Array.isArray(e.genres) ? e.genres : [],
+    rating: e.rating ?? null,
+    aggregatedRating: e.aggregatedRating ?? null,
+  };
+}
+
+/** Extract core lineup metadata fields. */
+function mapLineupCore(
+  lineup: typeof schema.communityLineups.$inferSelect,
+  creator: Awaited<ReturnType<typeof findUserById>>,
+  decidedGame: Awaited<ReturnType<typeof findGameName>>,
+  channelOverrideName: string | null,
+) {
+  return {
+    id: lineup.id,
+    title: lineup.title,
+    description: lineup.description ?? null,
+    status: lineup.status,
+    targetDate: lineup.targetDate?.toISOString() ?? null,
+    decidedGameId: lineup.decidedGameId,
+    decidedGameName: decidedGame[0]?.name ?? null,
+    linkedEventId: lineup.linkedEventId,
+    createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
+    votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
+    phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
+    // ROK-1253: grace window and revert-pause stamps surfaced to clients.
+    pendingAdvanceAt: lineup.pendingAdvanceAt?.toISOString() ?? null,
+    autoAdvancePausedAt: lineup.autoAdvancePausedAt?.toISOString() ?? null,
+    matchThreshold: lineup.matchThreshold ?? 35,
+    maxVotesPerPlayer: lineup.maxVotesPerPlayer ?? 3,
+    defaultTiebreakerMode: lineup.defaultTiebreakerMode ?? null,
+    createdAt: lineup.createdAt.toISOString(),
+    updatedAt: lineup.updatedAt.toISOString(),
+    // ROK-1064: per-lineup Discord channel override + resolved name.
+    channelOverrideId: lineup.channelOverrideId ?? null,
+    channelOverrideName,
+    // ROK-1065: visibility drives DM vs channel embed dispatch.
+    visibility: lineup.visibility,
+    // ROK-1067: public-share toggle + URL-safe slug for the share URL.
+    publicShareEnabled: lineup.publicShareEnabled,
+    publicSlug: lineup.publicSlug,
+    // ROK-1302: whether the decided lineup advances into a scheduling poll.
+    includeSchedulingPhase: lineup.includeSchedulingPhase,
+    // ROK-1444: early-advance target + its sticky disarm stamp. The matching
+    // DENOMINATOR (`nominationCap`) is added in `mapToDetailResponse`, which
+    // has the entry rows needed to count distinct nominators.
+    nominationTargetPct: lineup.nominationTargetPct ?? null,
+    nominationTargetDisarmedAt:
+      lineup.nominationTargetDisarmedAt?.toISOString() ?? null,
+    // ROK-1444 (Codex P2): the rising-edge arm. Without publishing this the
+    // nominating page promised "voting opens at N%" for a carry-over lineup
+    // that started above its target and therefore can never fire.
+    nominationTargetArmed: lineup.nominationTargetBelowSeenAt != null,
+  };
+}
+
+/** Map raw query results to the detail response shape. */
+function mapToDetailResponse(
+  lineup: typeof schema.communityLineups.$inferSelect,
+  entries: Awaited<ReturnType<typeof findEntriesWithGames>>,
+  voteCounts: Awaited<ReturnType<typeof countVotesPerGame>>,
+  voterCount: Awaited<ReturnType<typeof countDistinctVoters>>,
+  creator: Awaited<ReturnType<typeof findUserById>>,
+  decidedGame: Awaited<ReturnType<typeof findGameName>>,
+  enrichment: EnrichmentMaps,
+  myVotes: number[],
+  channelOverrideName: string | null,
+): LineupDetailResponseDto {
+  const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
+  return {
+    ...mapLineupCore(lineup, creator, decidedGame, channelOverrideName),
+    // ROK-1444: publish the DENOMINATOR the nomination target is measured
+    // against. It moves — a fifth distinct nominator takes it 20 -> 25 — so
+    // clients must render it rather than assume the base 20. Derived from the
+    // already-loaded entry rows; no extra query.
+    nominationCap: effectiveNominationCap(
+      new Set(entries.map((e) => e.nominatedById)).size,
+      lineup.nominationCapPeak,
+    ),
+    entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
+    totalVoters: voterCount[0]?.total ?? 0,
+    totalMembers: enrichment.totalMembers,
+    myVotes,
+    // ROK-1474: both overwritten by `applyStarProjection` in
+    // `buildDetailResponse`, which has the viewer and the lineup row.
+    myTopPickGameId: null,
+    decisionReason: null,
+    unlinkedSteamCount: enrichment.unlinkedSteamCount,
+    unlinkedSteamMembers: enrichment.unlinkedSteamMembers,
+    // ROK-1065: populated below via a parallel query.
+    invitees: [],
+    // ROK-1258: populated below for private voting lineups; empty otherwise.
+    stillWaitingOnVoters: [],
+    // ROK-1296: populated by buildDetailResponse via a parallel query.
+    // Stubbed null/null at the mapper boundary so the type compiles even when
+    // the caller is unauthenticated; the response builder overwrites both.
+    viewerSubmissions: {
+      nominationsSubmittedAt: null,
+      votesSubmittedAt: null,
+    },
+    // ROK-1298: voter-pool denominator for Sv vote bars. Stubbed at 1
+    // (creator floor) here; buildDetailResponse overwrites with the real
+    // value once invitees + enrichment are available.
+    votingEligibleCount: 1,
+  };
+}
+
+/** Fetch enrichment data for lineup entries. */
+async function fetchEnrichment(
+  db: Db,
+  gameIds: number[],
+  audience: LineupAudience,
+  /** ROK-1314: authenticated viewer id, or undefined when anonymous. */
+  viewerId?: number,
+): Promise<EnrichmentMaps> {
+  const isPrivate = audience.visibility === 'private';
+  const audienceIds = [
+    audience.createdBy,
+    ...audience.inviteeUserIds.filter((id) => id !== audience.createdBy),
+  ];
+  const [
+    ownerMap,
+    audienceOwnerMap,
+    wishlistMap,
+    pricingMap,
+    totalMembers,
+    uc,
+    um,
+    viewerInterests,
+  ] = await Promise.all([
+    countOwnersPerGame(db, gameIds),
+    // ROK-1348 (Codex P2): private lineups need owners counted within the
+    // eligible pool; public lineups reuse the community map (no 2nd query).
+    isPrivate
+      ? countOwnersPerGame(db, gameIds, audienceIds)
+      : Promise.resolve<Map<number, number> | null>(null),
+    countWishlistPerGame(db, gameIds),
+    fetchPricingMetadata(db, gameIds),
+    countTotalMembers(db),
+    countUnlinkedSteamMembers(db, audience),
+    findUnlinkedSteamMembers(db, audience),
+    // ROK-1314: one batched lookup over the already-loaded entry game ids.
+    // Skipped entirely (no query) when there is no viewer.
+    loadViewerInterests(db, viewerId, gameIds),
+  ]);
+  const eligibleOwnerMap = audienceOwnerMap ?? ownerMap;
+  // ROK-1348: eligible pool = creator + invitees (private) or totalMembers
+  // (public). Computed here so `mapEntry` can use it as the non-owner
+  // denominator. Floors at 1 (creator always counts).
+  const eligibleCount = computeVotingEligibleCount(
+    { createdBy: audience.createdBy, visibility: audience.visibility },
+    audience.inviteeUserIds.map((id) => ({ id })),
+    totalMembers,
+  );
+  return {
+    ownerMap,
+    eligibleOwnerMap,
+    wishlistMap,
+    pricingMap,
+    totalMembers,
+    eligibleCount,
+    unlinkedSteamCount: uc,
+    unlinkedSteamMembers: um,
+    viewerInterests,
+    hasViewer: viewerId != null,
+  };
+}
+
+/**
+ * Callback for resolving a Discord channel name from its ID (ROK-1064).
+ * Callers inject this to avoid a hard dependency on the Discord bot client.
+ */
+export type ResolveChannelName = (channelId: string) => string | null;
+
+/** Assemble the full detail response for a lineup. */
+export async function buildDetailResponse(
+  db: Db,
+  lineupId: number,
+  userId?: number,
+  resolveChannelName?: ResolveChannelName,
+): Promise<LineupDetailResponseDto> {
+  const [lineup] = await findLineupById(db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+
+  const [
+    entries,
+    voteCounts,
+    voterCount,
+    creator,
+    decidedGame,
+    myVotes,
+    invitees,
+    viewerSubmissions,
+  ] = await Promise.all([
+    findEntriesWithGames(db, lineupId),
+    countVotesPerGame(db, lineupId),
+    countDistinctVoters(db, lineupId),
+    findUserById(db, lineup.createdBy),
+    lineup.decidedGameId
+      ? findGameName(db, lineup.decidedGameId)
+      : Promise.resolve([]),
+    findUserVotes(db, lineupId, userId),
+    // ROK-1252: pulled into the parallel batch so the audience is available
+    // before fetchEnrichment runs.
+    listInviteesWithProfile(db, lineupId),
+    // ROK-1296: viewer's per-phase submit timestamps for the SubmitBar.
+    findViewerSubmissions(db, lineupId, userId),
+  ]);
+
+  // ROK-1252: scope steam-link enrichment to the lineup audience.
+  const audience: LineupAudience = {
+    visibility: lineup.visibility,
+    createdBy: lineup.createdBy,
+    inviteeUserIds: invitees.map((i) => i.id),
+  };
+  const enrichment = await fetchEnrichment(
+    db,
+    entries.map((e) => e.gameId),
+    audience,
+    userId,
+  );
+  const channelOverrideName = lineup.channelOverrideId
+    ? (resolveChannelName?.(lineup.channelOverrideId) ?? null)
+    : null;
+  const detail = mapToDetailResponse(
+    lineup,
+    entries,
+    voteCounts,
+    voterCount,
+    creator,
+    decidedGame,
+    enrichment,
+    myVotes,
+    channelOverrideName,
+  );
+  // ROK-1065: invitees populated for both public (empty) and private lineups.
+  detail.invitees = invitees;
+  // ROK-1258: still-waiting-on-voters panel for private voting lineups.
+  detail.stillWaitingOnVoters = await loadStillWaitingOnVoters(
+    db,
+    lineup,
+    invitees,
+  );
+  // ROK-1296: replace the stub from mapToDetailResponse with the real
+  // viewer-scoped row. Both fields are null when userId is undefined.
+  detail.viewerSubmissions = viewerSubmissions;
+  // ROK-1298 / ROK-1348: voter-pool denominator for Sv vote bars. Reuse the
+  // eligible count fetchEnrichment already computed from the same inputs
+  // (audience invitees == listInviteesWithProfile invitees) instead of
+  // recomputing it.
+  detail.votingEligibleCount = enrichment.eligibleCount;
+
+  // ROK-1474: viewer's own top pick always; per-game counts and the outcome
+  // reasoning only once the ballot is closed.
+  await applyStarProjection(db, lineup, detail, userId);
+
+  // Attach tiebreaker detail if one exists (ROK-938)
+  if (lineup.activeTiebreakerId) {
+    const [tb] = await findPendingOrActiveTiebreaker(db, lineupId);
+    if (tb) {
+      (detail as Record<string, unknown>).tiebreaker =
+        await buildTiebreakerDetail(db, tb, userId);
+    }
+  } else {
+    (detail as Record<string, unknown>).tiebreaker = null;
+  }
+
+  return detail;
+}

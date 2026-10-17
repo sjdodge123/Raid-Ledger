@@ -1,0 +1,172 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+*.swp
+*.swo
+
+# BMAD / Agent
+_bmad/
+_bmad-output/
+.agent/
+.gemini/
+.cursor/
+.windsurf/
+.claude/*
+!.claude/skills/
+!.claude/agents/
+planning-artifacts/
+implementation-artifacts/
+scripts/*
+!scripts/deploy_prod.sh
+!scripts/deploy_dev.sh
+!scripts/env-lock.sh
+!scripts/fix-migration-order.sh
+!scripts/reconcile-migrations.mjs
+!scripts/check-migration-merge-order.mjs
+!scripts/check-migration-merge-order.spec.mjs
+!scripts/check-migration-snapshot-chain.mjs
+!scripts/check-migration-snapshot-chain.spec.mjs
+!scripts/validate-ci.sh
+!scripts/validate-migrations.sh
+!scripts/validate-migrations-drift.spec.mjs
+!scripts/setup-branch-protection.sh
+!scripts/smoke/
+!scripts/ci/
+!scripts/playwright-global-setup.ts
+!scripts/auth-paths.ts
+!scripts/launch-discord.sh
+!scripts/repro-test-infra-flake.sh
+!scripts/loop-integration.sh
+!scripts/spec-loop.sh
+!scripts/clone-prod-to-local.sh
+!scripts/sync-local-to-env.sh
+!scripts/clone-prod-to-env.sh
+!scripts/rl-encrypt-setting.mjs
+!scripts/rl-reencrypt-settings.mjs
+!scripts/rl-settings-bundle.mjs
+!scripts/test-plan-comments.sh
+!scripts/recover-stuck-migration.sh
+# Launcher .mcp.json uses for the three repo MCP servers (falls back to the main checkout's install).
+!scripts/mcp-launch.sh
+# ROK-1160: the weekly backup restore drill (harness + assertion tiers).
+!scripts/backup-restore-drill.sh
+!scripts/restore-drill-assertions.mjs
+!scripts/restore-drill-assertions.spec.mjs
+!scripts/restore-drill-corruption.spec.mjs
+!scripts/restore-drill-journal.mjs
+!scripts/restore-drill-journal.spec.mjs
+!scripts/validate-ci-discord-env.spec.mjs
+!scripts/validate-ci-smoke-ci-parity.spec.mjs
+# ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
+!scripts/surface-hash.spec.mjs
+!scripts/push-gate.spec.mjs
+# ROK-1565: the scoped-Playwright / E2E_SCOPE gate spec. `scripts/*` ignores the
+# whole directory, so a new script or spec here is INVISIBLE to `git add -A`
+# until it is un-ignored — this one shipped untracked for four commits.
+!scripts/validate-ci-e2e-scope.spec.mjs
+!scripts/restore-drill.constants.mjs
+# ROK-1154: web bundle-size budget gate (checker, budgets, node:test spec).
+!scripts/check-bundle-size.mjs
+!scripts/check-bundle-size.spec.mjs
+!scripts/bundle-budget.config.mjs
+# node:test spec for the api ESLint guard against printf-style logger messages.
+!scripts/api-eslint-no-printf-logger.spec.mjs
+!scripts/test/
+# ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the
+# fleet Mutagen replica never deletes it mid-run) while still ignoring the JWT
+# token files written into it at runtime.
+!scripts/.auth/
+scripts/.auth/*
+!scripts/.auth/.gitkeep
+!/api/scripts/
+implementation_plan.md
+walkthrough.md
+handover.zip
+
+# Node.js
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Environment (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+.env.docker
+.env.clone
+*.pem
+*.key
+
+# Dev environment
+.dev-logs/
+.dev-pids
+
+# Avatar uploads (local dev)
+uploads/
+
+# Database backups (local dev — created by BackupService)
+**/backups/
+
+# Project state
+task.md
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Turborepo
+.turbo/
+test-results/
+
+# BMB workflow creations
+bmb-creations/
+
+# Fetched Linear stories
+.stories/
+build-state.yaml
+
+# ROK-1331 M11 — local perf log emitted by validate-ci.sh perf_emit_local
+# helper. Laptop runs write to ${REPO_ROOT}/.rl-perf.log; fleet runs write
+# to /workspace/.rl-perf.log. Diagnostic sibling file (.errors) similarly.
+.rl-perf.log
+.rl-perf.log.errors
+
+# Sync sentinel written by the mcp-rl-fleet pre-build sync guard
+# (tools/mcp-rl-fleet/src/sync-guard.ts). A transient per-deploy marker
+# (`.rl-sync-probe-<hex>`, one unique name per guard call so concurrent runs
+# don't clobber each other) written into the worktree root, flushed through
+# Mutagen, read back out of the runner's /workspace to prove the synced source
+# matches laptop HEAD, then deleted. Gitignored so it never dirties git status
+# or gets committed.
+.rl-sync-probe-*
+
+# ROK-1160: the drill report artefact is produced per run, never committed.
+restore-drill-report.json
+# ROK-1154: `npm run analyze -w web` treemap. Written here, never into
+# web/dist, which Dockerfile.allinone ships to nginx.
+web/.bundle-report/
+# ROK-1527: flag file that switches the opt-in integration heap probe on
+api/.rl-heap-probe
+!scripts/contrast-audit-aggregate.spec.mjs
+
+# Playwright MCP browser screenshots (written into the cwd of whichever session drives it)
+.playwright-mcp/

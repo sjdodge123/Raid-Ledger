@@ -1,0 +1,265 @@
+import { screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { server } from '../../../test/mocks/server';
+import { renderWithProviders } from '../../../test/render-helpers';
+import { OllamaSetupCard } from './ollama-setup-card';
+import type { AiProviderInfoDto } from '@raid-ledger/contract';
+
+vi.mock('../../../hooks/use-auth', () => ({
+    getAuthToken: vi.fn(() => 'test-token'),
+}));
+
+const API = 'http://localhost:3000';
+
+function createOllamaProvider(overrides: Partial<AiProviderInfoDto> = {}): AiProviderInfoDto {
+    return {
+        key: 'ollama',
+        displayName: 'Ollama (Local)',
+        requiresApiKey: false,
+        selfHosted: true,
+        configured: true,
+        available: false,
+        active: false,
+        ...overrides,
+    };
+}
+
+describe('OllamaSetupCard', () => {
+    beforeEach(() => {
+        server.use(
+            http.post(`${API}/admin/ai/providers/ollama/setup`, () =>
+                HttpResponse.json({ step: 'ready', message: 'Ollama is ready', success: true }),
+            ),
+            http.post(`${API}/admin/ai/providers/ollama/stop`, () =>
+                HttpResponse.json({ success: true }),
+            ),
+            http.post(`${API}/admin/ai/providers/:key/activate`, () =>
+                HttpResponse.json({ success: true }),
+            ),
+            http.get(`${API}/admin/ai/providers`, () =>
+                HttpResponse.json([]),
+            ),
+        );
+    });
+
+    it('renders the Ollama card title', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        expect(screen.getByText('Ollama (Local)')).toBeInTheDocument();
+    });
+
+    it('shows Offline badge when not available', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        expect(screen.getByText('Offline')).toBeInTheDocument();
+    });
+
+    it('shows Running badge when available', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ available: true })} />);
+        expect(screen.getByText('Running')).toBeInTheDocument();
+    });
+
+    it('paints the Running badge with the neutral theme tokens, like the cloud "Configured" pill', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ available: true })} />);
+        const pill = screen.getByText('Running');
+        expect(pill.className).toContain('bg-overlay');
+        expect(pill.className).toContain('text-secondary');
+        expect(pill.className).not.toMatch(/-blue-\d{3}/);
+    });
+
+    it('shows Active badge when active', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ active: true, available: true })} />);
+        expect(screen.getByText('Active')).toBeInTheDocument();
+    });
+
+    it('shows Setup Ollama button when not available', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        expect(screen.getByRole('button', { name: /setup ollama/i })).toBeInTheDocument();
+    });
+
+    it('shows Stop button when available', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ available: true })} />);
+        expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
+    });
+
+    it('shows Set as Active button when available but not active', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ available: true })} />);
+        expect(screen.getByRole('button', { name: /set as active/i })).toBeInTheDocument();
+    });
+
+    it('hides Set as Active button when already active', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ available: true, active: true })} />);
+        expect(screen.queryByRole('button', { name: /set as active/i })).not.toBeInTheDocument();
+    });
+
+    it('shows description text', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        expect(screen.getByText(/Self-hosted LLM inference via Docker/)).toBeInTheDocument();
+    });
+
+    describe('ROK-882: downloading_binary step', () => {
+        it('AC10: shows "Downloading Ollama..." during downloading_binary step', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/downloading ollama/i)).toBeInTheDocument();
+        });
+
+        it('shows progress bar (not Setup Ollama button) during downloading_binary', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(
+                screen.queryByRole('button', { name: /setup ollama/i }),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows "Setting up..." badge during downloading_binary step', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/setting up/i)).toBeInTheDocument();
+        });
+    });
+
+    describe('ROK-882: adversarial UI paths', () => {
+        it('shows Start Ollama button (not Setup) when container_exists', () => {
+            const provider = createOllamaProvider({
+                available: false,
+                setupStep: 'container_exists',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(
+                screen.getByRole('button', { name: /start ollama/i }),
+            ).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /setup ollama/i }),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows "Selected · Offline" badge when active but not available', () => {
+            const provider = createOllamaProvider({
+                active: true,
+                available: false,
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/selected.*offline/i)).toBeInTheDocument();
+        });
+
+        it('shows default fallback step label for unknown step value', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'unknown_future_step',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            // Both the progress label and the badge show "Setting up..." for an unknown step
+            const matches = screen.getAllByText(/setting up\.\.\./i);
+            expect(matches.length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('shows Stop button but not Set as Active when available and already active', () => {
+            const provider = createOllamaProvider({
+                available: true,
+                active: true,
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /set as active/i }),
+            ).not.toBeInTheDocument();
+        });
+    });
+
+    describe('Regression: ROK-840', () => {
+        it('shows progress bar when setupInProgress from server (refresh scenario)', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'pulling_model',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/pulling default model/i)).toBeInTheDocument();
+            expect(screen.getByText(/setting up/i)).toBeInTheDocument();
+        });
+
+        it('hides setup button when setup is in progress from server', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'starting',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(
+                screen.queryByRole('button', { name: /setup ollama/i }),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows error step text when setup errored', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: false,
+                setupStep: 'error',
+                error: 'Model pull failed',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            // Error state should not show progress bar
+            expect(
+                screen.queryByText(/pulling default model/i),
+            ).not.toBeInTheDocument();
+        });
+    });
+});
+
+// --- ROK-1687: theme tokens + shared primitives, no hardcoded purple ---
+
+const RAW_HUE = /-(purple|violet|fuchsia)-\d{3}/;
+
+describe('OllamaSetupCard — theme tokens (ROK-1687)', () => {
+    it('Setup Ollama is the shared Button primitive', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        const button = screen.getByRole('button', { name: /setup ollama/i });
+        expect(button.querySelector('[data-button-label]')).not.toBeNull();
+    });
+
+    it('exposes setup progress as a progressbar at the step percentage', () => {
+        renderWithProviders(
+            <OllamaSetupCard provider={createOllamaProvider({ setupInProgress: true, setupStep: 'starting' })} />,
+        );
+        const bar = screen.getByRole('progressbar', { name: /ollama setup progress/i });
+        expect(bar).toHaveAttribute('aria-valuenow', '50');
+    });
+
+    it('renders no raw purple/violet/fuchsia hue when idle', () => {
+        const { container } = renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        expect(container.innerHTML).not.toMatch(RAW_HUE);
+    });
+
+    it('renders no raw purple/violet/fuchsia hue while setting up', () => {
+        const { container } = renderWithProviders(
+            <OllamaSetupCard provider={createOllamaProvider({ setupInProgress: true, setupStep: 'pulling_model' })} />,
+        );
+        expect(screen.getByText('Setting up...')).toBeInTheDocument();
+        expect(container.innerHTML).not.toMatch(RAW_HUE);
+    });
+});

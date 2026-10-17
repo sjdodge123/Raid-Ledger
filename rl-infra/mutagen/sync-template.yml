@@ -1,0 +1,119 @@
+# Mutagen sync session reference — DOCUMENTATION ONLY.
+#
+# This file is NOT consumed at runtime. The live sync session is created by
+# `rl claim` via direct flags in `rl-infra/cli/rl::ensure_mutagen_sync`
+# (search for `mutagen sync create --mode=one-way-replica`). This template is
+# kept as a single-file reference for the flag set and the ignore list so
+# operators can audit sync behavior without grepping shell scripts.
+#
+# Placeholders, if you ever render this manually:
+#   {{SLOT}}        — runner slot number (1..4)
+#   {{LAPTOP_REPO}} — absolute path on the laptop, e.g. /Users/sdodge/Documents/Projects/Raid-Ledger
+#   {{VM_HOST}}     — SSH host of the rl-infra VM
+#   {{VM_USER}}     — SSH user
+sync:
+  defaults:
+    # one-way-replica: laptop (alpha) is the SOLE source of truth; the VM
+    # (beta) is overwritten on every sync. Matches `rl claim` --mode flag.
+    mode: one-way-replica
+    symlink:
+      mode: posix-raw
+    permissions:
+      # mode: manual disables Mutagen's automatic permission propagation —
+      # all runner-side files land with the explicit defaults below, regardless
+      # of laptop-side perms (which on macOS pick up restrictive xattrs that
+      # mirror to 0600 / 0700 and break Docker COPY inside the allinone build).
+      # Bug S Layer 1 (ROK-1326).
+      mode: manual
+      defaultFile: 0644
+      defaultDirectory: 0755
+      # WARNING — `defaultFileExecutable` below is NOT in effect and never has
+      # been (A3-B P2, 2026-09-03). The live session is created from flags in
+      # cli/rl::ensure_mutagen_sync, which passes only
+      # --default-file-mode-beta=0644 / --default-directory-mode-beta=0755 and
+      # NO executable-mode flag at all. Empirically the runner gets every synced
+      # script at 0644 (TECH-DEBT-BACKLOG 2026-09-02: 14 of 15 repo-root
+      # scripts/ files were -rw-r--r-- on slot-1 despite being 100755 in git),
+      # which is what made `./script` die with a bare exit 126.
+      #
+      # This is repaired AFTER the sync instead, by
+      # rl-infra/runner/restore-exec-bits.sh (run from flush_mutagen). Do NOT
+      # "fix" it by switching permissions.mode back to `portable` — that is
+      # exactly the Bug S regression the manual mode above exists to prevent.
+      defaultFileExecutable: 0755
+    # NB: ignore rules are baked in when a session is CREATED. Editing this
+    # file (or the --ignore flags in rl-infra/cli/rl) does not affect a session
+    # that is already running — terminate and re-create it (`rl release` then
+    # `rl claim`) for a new entry to take effect.
+    ignore:
+      vcs: false   # we need .git/HEAD + refs synced for branch awareness
+      paths:
+        - node_modules
+        - "**/node_modules"
+        - dist
+        - "**/dist"
+        - coverage
+        - "**/coverage"
+        # Recursive match for any file beneath any coverage/ directory at any
+        # depth — defends against the vitest coverage-write race (ROK-1331
+        # M6b step (b)): vitest writes intermediate v8 reports during the
+        # run that Mutagen would otherwise re-sync mid-write.
+        - "**/coverage/**"
+        - .next
+        - .vite
+        - .turbo
+        - playwright-report
+        - "**/playwright-report"
+        - test-results
+        - "**/test-results"
+        # ROK-1466: the auth artifacts Playwright's global setup writes on the
+        # RUNNER. Under one-way-replica the laptop is the sole source of truth,
+        # so anything the runner creates in the tree that the laptop lacks is
+        # DELETED on the next cycle (~30s) — global setup logged a successful
+        # write of scripts/.auth/admin.json and the first spec still failed
+        # with `Error reading storage state ...: ENOENT`. The branch also
+        # relocates the dir out of the tree (PLAYWRIGHT_AUTH_DIR /
+        # scripts/auth-paths.ts::resolveAuthDir); this ignore is the second
+        # layer, so a runner-written auth dir can never be reaped even if the
+        # override is missing. `.gitkeep` under it survives either way — it
+        # exists on the laptop.
+        - scripts/.auth
+        - "scripts/.auth/**"
+        # Bug R (ROK-1326): exclude the entire .git dir. The runner side
+        # scaffolds a fresh shallow .git in cmd_claim via `git init` + a
+        # remote fetch, so syncing the laptop .git (objects + refs +
+        # potentially-corrupt index) actively breaks the runner's repo.
+        - .git
+        - .git/**
+        - .git/objects   # legacy entry, harmless overlap with the broader .git rule
+        - .git/lfs
+        # Bug W (ROK-1326): tsbuildinfo files are tsc incremental caches —
+        # rsyncing them mid-build clobbers the runner's own incremental
+        # state and produces phantom "no inputs found" tsc errors.
+        - "*.tsbuildinfo"
+        - "**/*.tsbuildinfo"
+        - .DS_Store
+        - "*.swp"
+        - "*.log"
+        # ROK-1336 — without these explicit entries, Mutagen one-way-replica
+        # would delete the runner-side .rl-perf.log mid-validate-ci (laptop
+        # side never has the file). The runner emits perf events to this
+        # path; the file must persist across the full run for downstream
+        # consumers to read it.
+        - .rl-perf.log
+        - .rl-perf.log.errors
+        - tools/test-bot/node_modules
+        - api/dist
+        - web/dist
+        - packages/contract/dist
+    watch:
+      pollingInterval: 2
+    digest:
+      defaultAlgorithm: xxh128
+
+  rl-slot-{{SLOT}}:
+    alpha: "{{LAPTOP_REPO}}"
+    beta: "{{VM_USER}}@{{VM_HOST}}:/srv/rl-infra/runners/slot-{{SLOT}}/worktree"
+    configurationBeta:
+      permissions:
+        defaultFileMode: 0644

@@ -1,0 +1,165 @@
+/**
+ * Test factories for the LFG DTOs (ROK-1451 intents + ROK-1463 group reads).
+ * Shared by the group-page component tests and the MSW handlers.
+ */
+import type {
+    LfgGroupDetailDto,
+    LfgPlayingNowDto,
+    LfgHistoryEntryDto,
+    LfgIntentDto,
+    LfgMemberDto,
+    LfgOverlapResponseDto,
+    LfgOverlapWindowDto,
+    LfgSuggestionDto,
+} from '@raid-ledger/contract';
+
+const NOW = '2026-09-02T18:00:00.000Z';
+const SOON = '2026-09-03T18:00:00.000Z';
+
+/** A visible member of an LFG/LFM roster. */
+export function createMockLfgMember(
+    over: Partial<LfgMemberDto> = {},
+): LfgMemberDto {
+    return {
+        userId: 1,
+        username: 'ana',
+        displayName: 'Ana',
+        avatarUrl: null,
+        expiresAt: SOON,
+        joinedAt: NOW,
+        // ROK-1479 — required on the member DTO; the group page orders on it.
+        urgency: 'week',
+        ...over,
+    };
+}
+
+/** The caller's own active intent row. */
+export function createMockLfgIntent(
+    over: Partial<LfgIntentDto> = {},
+): LfgIntentDto {
+    return {
+        id: 10,
+        userId: 1,
+        gameId: 7,
+        status: 'active',
+        visibility: 'local',
+        createdAt: NOW,
+        expiresAt: SOON,
+        // ROK-1479 — required on the intent DTO. `null` ttl is what a weekly
+        // row carries; a `now` row stores the 30/60 it refreshes on.
+        urgency: 'week',
+        ttlMinutes: null,
+        convertedToPollId: null,
+        convertedToEventId: null,
+        ...over,
+    };
+}
+
+/** `GET /lfg/:gameId`. Defaults to a one-person group with no viability data. */
+export function createMockLfgGroupDetail(
+    over: Partial<LfgGroupDetailDto> = {},
+): LfgGroupDetailDto {
+    return {
+        gameId: 7,
+        gameName: 'Deep Rock Galactic',
+        // ROK-1453 added `gameSlug` to the summary schema the detail extends.
+        gameSlug: 'deep-rock-galactic',
+        gameCoverUrl: null,
+        activeCount: 1,
+        // ROK-1479 — `activeCount` still counts BOTH urgencies (D2).
+        nowCount: 0,
+        state: 'lfg',
+        viabilityThreshold: null,
+        isViable: false,
+        hasOwnIntent: false,
+        soonestExpiresAt: SOON,
+        soonestNowExpiresAt: null,
+        members: [createMockLfgMember()],
+        ownIntent: null,
+        // ROK-1494 — every pre-1494 fixture is a group that is NOT mid-session.
+        playingNow: null,
+        // ROK-1483: required by LfgGroupDetailSchema; null means the group has
+        // no live forum thread, so the conversation panel renders nothing.
+        threadId: null,
+        // ROK-1573: required by LfgGroupDetailSchema; null = no upcoming event
+        // the group was converted into.
+        convertedEvent: null,
+        ...over,
+    };
+}
+
+/** One contiguous window the roster could play in. */
+export function createMockOverlapWindow(
+    over: Partial<LfgOverlapWindowDto> = {},
+): LfgOverlapWindowDto {
+    return {
+        start: new Date(2026, 8, 2, 19).toISOString(),
+        end: new Date(2026, 8, 2, 22).toISOString(),
+        availableCount: 2,
+        totalCount: 2,
+        members: [1, 2],
+        ...over,
+    };
+}
+
+/** `GET /lfg/:gameId/overlap`. */
+export function createMockOverlapResponse(
+    over: Partial<LfgOverlapResponseDto> = {},
+): LfgOverlapResponseDto {
+    return {
+        gameId: 7,
+        memberCount: 2,
+        horizonDays: 14,
+        windows: [createMockOverlapWindow()],
+        ...over,
+    };
+}
+
+/** One past session for `GET /lfg/:gameId/history`. */
+export function createMockHistoryEntry(
+    over: Partial<LfgHistoryEntryDto> = {},
+): LfgHistoryEntryDto {
+    return {
+        eventId: 100,
+        title: 'Friday deep dive',
+        isAdHoc: false,
+        startedAt: '2026-08-21T19:00:00.000Z',
+        endedAt: '2026-08-21T21:40:00.000Z',
+        durationMinutes: 160,
+        attendedCount: 3,
+        signedUpCount: 4,
+        participantIds: [1, 2, 3],
+        ...over,
+    };
+}
+
+/** One row of `GET /lfg/:gameId/suggestions`. */
+export function createMockSuggestion(
+    over: Partial<LfgSuggestionDto> = {},
+): LfgSuggestionDto {
+    return {
+        userId: 2,
+        username: 'bo',
+        displayName: 'Bo',
+        avatarUrl: null,
+        reasons: ['played'],
+        lastPlayedAt: '2026-08-21T21:40:00.000Z',
+        inviteState: 'none',
+        ...over,
+    };
+}
+
+/** ROK-1494 — the live session a `now` group spawned. */
+export function createMockLfgPlayingNow(
+    over: Partial<LfgPlayingNowDto> = {},
+): LfgPlayingNowDto {
+    return {
+        eventId: 4242,
+        startsAt: SOON,
+        voiceChannelId: '900000000000000001',
+        voiceInviteUrl:
+            'https://discord.com/channels/800000000000000001/900000000000000001',
+        participantCount: 3,
+        ...over,
+    };
+}

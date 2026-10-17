@@ -1,0 +1,303 @@
+/**
+ * TDD tests for steam-link-interest.helpers.ts — DB lookup helpers (ROK-966).
+ *
+ * These tests define the expected behavior of helper functions that
+ * interact with the database to support the Steam URL interest prompt.
+ *
+ * The implementation file does NOT exist yet. These tests MUST fail
+ * with "Cannot find module" until the dev agent creates the source.
+ *
+ * Uses the flat Drizzle mock pattern from drizzle-mock.ts.
+ */
+import {
+  findGameBySteamAppId,
+  findLinkedRlUser,
+  hasExistingHeartInterest,
+  getAutoHeartSteamUrlsPref,
+  addDiscordInterest,
+  setAutoHeartSteamUrlsPref,
+  findActiveBuildingLineup,
+  isGameNominated,
+  getAutoNominateSteamUrlsPref,
+  setAutoNominateSteamUrlsPref,
+  discoverGameBySteamAppId,
+} from './steam-link-interest.helpers';
+import * as discovery from '../../steam/steam-itad-discovery.helpers';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
+
+let mockDb: MockDb;
+
+beforeEach(() => {
+  mockDb = createDrizzleMock();
+});
+
+describe('findGameBySteamAppId', () => {
+  it('returns the game when a matching steamAppId exists', async () => {
+    const mockGame = { id: 42, name: 'Counter-Strike 2', steamAppId: 730 };
+    mockDb.limit.mockResolvedValueOnce([mockGame]);
+
+    const result = await findGameBySteamAppId(mockDb as never, 730);
+
+    expect(result).toMatchObject({
+      id: expect.any(Number),
+      name: expect.any(String),
+    });
+  });
+
+  it('returns null when no game matches the steamAppId', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await findGameBySteamAppId(mockDb as never, 99999);
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('findLinkedRlUser', () => {
+  it('returns the user when discord ID is linked', async () => {
+    const mockUser = { id: 7, discordId: 'discord-user-123' };
+    mockDb.limit.mockResolvedValueOnce([mockUser]);
+
+    const result = await findLinkedRlUser(mockDb as never, 'discord-user-123');
+
+    expect(result).toMatchObject({
+      id: expect.any(Number),
+    });
+  });
+
+  it('returns null when discord ID is not linked', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await findLinkedRlUser(
+      mockDb as never,
+      'unknown-discord-id',
+    );
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('hasExistingHeartInterest', () => {
+  it('returns true when user already has a heart interest for the game', async () => {
+    mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
+
+    const result = await hasExistingHeartInterest(mockDb as never, 7, 42);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when user has no heart interest for the game', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await hasExistingHeartInterest(mockDb as never, 7, 42);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('getAutoHeartSteamUrlsPref', () => {
+  it('returns true when user has auto-heart preference enabled', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { key: 'autoHeartSteamUrls', value: true },
+    ]);
+
+    const result = await getAutoHeartSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when preference row does not exist', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await getAutoHeartSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false when preference value is explicitly false', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { key: 'autoHeartSteamUrls', value: false },
+    ]);
+
+    const result = await getAutoHeartSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('addDiscordInterest', () => {
+  it('lifts an un-heart suppression in the same transaction (ROK-1796)', async () => {
+    await addDiscordInterest(mockDb as never, 7, 42);
+
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('inserts a game_interests row with source discord', async () => {
+    mockDb.onConflictDoNothing.mockResolvedValueOnce(undefined);
+
+    await addDiscordInterest(mockDb as never, 7, 42);
+
+    expect(mockDb.insert).toHaveBeenCalled();
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        gameId: 42,
+        source: 'discord',
+      }),
+    );
+  });
+
+  it('does not throw on conflict (idempotent)', async () => {
+    mockDb.onConflictDoNothing.mockResolvedValueOnce(undefined);
+
+    await expect(
+      addDiscordInterest(mockDb as never, 7, 42),
+    ).resolves.not.toThrow();
+
+    expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
+  });
+});
+
+describe('setAutoHeartSteamUrlsPref', () => {
+  it('upserts the autoHeartSteamUrls preference to true', async () => {
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+    await setAutoHeartSteamUrlsPref(mockDb as never, 7, true);
+
+    expect(mockDb.insert).toHaveBeenCalled();
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        key: 'autoHeartSteamUrls',
+        value: true,
+      }),
+    );
+  });
+
+  it('uses onConflictDoUpdate for upsert semantics', async () => {
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+    await setAutoHeartSteamUrlsPref(mockDb as never, 7, true);
+
+    expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+  });
+});
+
+// --- ROK-1081: paste-to-nominate helpers ---
+
+describe('findActiveBuildingLineup', () => {
+  it('returns the lineup when one is in building status', async () => {
+    mockDb.limit.mockResolvedValueOnce([{ id: 123 }]);
+
+    const result = await findActiveBuildingLineup(mockDb as never);
+
+    expect(result).toMatchObject({ id: expect.any(Number) });
+  });
+
+  it('returns null when no lineup is in building status', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await findActiveBuildingLineup(mockDb as never);
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('isGameNominated', () => {
+  it('returns true when the game is already on the lineup entries', async () => {
+    mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
+
+    const result = await isGameNominated(mockDb as never, 123, 42);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when the game has not been nominated for the lineup', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await isGameNominated(mockDb as never, 123, 42);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('getAutoNominateSteamUrlsPref', () => {
+  it('returns true when user has auto-nominate preference enabled', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { key: 'autoNominateSteamUrls', value: true },
+    ]);
+
+    const result = await getAutoNominateSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when preference row does not exist', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await getAutoNominateSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false when preference value is explicitly false', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { key: 'autoNominateSteamUrls', value: false },
+    ]);
+
+    const result = await getAutoNominateSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('setAutoNominateSteamUrlsPref', () => {
+  it('upserts the autoNominateSteamUrls preference to true', async () => {
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+    await setAutoNominateSteamUrlsPref(mockDb as never, 7, true);
+
+    expect(mockDb.insert).toHaveBeenCalled();
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        key: 'autoNominateSteamUrls',
+        value: true,
+      }),
+    );
+  });
+
+  it('uses onConflictDoUpdate for upsert semantics', async () => {
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+    await setAutoNominateSteamUrlsPref(mockDb as never, 7, true);
+
+    expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+  });
+});
+
+describe('discoverGameBySteamAppId — steamAppIdSource (ROK-1680)', () => {
+  it("tags a pasted store URL's discovery 'itad'", async () => {
+    const spy = jest
+      .spyOn(discovery, 'discoverGameViaItad')
+      .mockResolvedValue(null);
+    const deps = {
+      db: mockDb as never,
+      lookupBySteamAppId: jest.fn(),
+      adultFilterEnabled: false,
+    };
+
+    try {
+      const result = await discoverGameBySteamAppId(deps, 570);
+
+      expect(result).toBeNull();
+      expect(spy).toHaveBeenCalledWith(570, deps, 'itad');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

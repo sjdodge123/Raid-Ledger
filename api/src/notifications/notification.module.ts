@@ -1,0 +1,77 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { NotificationController } from './notification.controller';
+import { GameNotificationMutesController } from './game-notification-mutes.controller';
+import { NotificationService } from './notification.service';
+import { VoiceAccessLostListener } from './voice-access-lost.listener';
+import { RosterNotificationBufferService } from './roster-notification-buffer.service';
+import { EventReminderService } from './event-reminder.service';
+import { RoleGapAlertService } from './role-gap-alert.service';
+import { PostEventReminderService } from './post-event-reminder.service';
+import { PostEventFollowupService } from './post-event-followup.service';
+import { PostEventFollowupPromptService } from './post-event-followup-prompt.service';
+import { DiscordNotificationService } from './discord-notification.service';
+import { DiscordNotificationProcessor } from './discord-notification.processor';
+import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
+import { GameAffinityNotificationService } from './game-affinity-notification.service';
+import { LfgAffinityDmService } from './lfg-affinity-dm.service';
+import { LineupLfgBridgeService } from './lineup-lfg-bridge.service';
+import { LiveNoShowService } from './live-noshow.service';
+import { RecruitmentReminderService } from './recruitment-reminder.service';
+import { WeeklyDigestService } from './weekly-digest.service';
+import { NotificationDedupService } from './notification-dedup.service';
+import { SchedulingThresholdService } from './scheduling-threshold.service';
+import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
+import { DrizzleModule } from '../drizzle/drizzle.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
+import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { EventsModule } from '../events/events.module';
+import { SettingsModule } from '../settings/settings.module';
+
+@Module({
+  imports: [
+    DrizzleModule,
+    CronJobModule,
+    forwardRef(() => DiscordBotModule),
+    forwardRef(() => EventsModule),
+    SettingsModule,
+    BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
+  ],
+  controllers: [NotificationController, GameNotificationMutesController],
+  providers: [
+    NotificationService,
+    VoiceAccessLostListener,
+    RosterNotificationBufferService,
+    EventReminderService,
+    RoleGapAlertService,
+    PostEventReminderService,
+    PostEventFollowupService,
+    PostEventFollowupPromptService,
+    DiscordNotificationService,
+    DiscordNotificationProcessor,
+    DiscordNotificationEmbedService,
+    GameAffinityNotificationService,
+    LfgAffinityDmService,
+    LineupLfgBridgeService,
+    LiveNoShowService,
+    RecruitmentReminderService,
+    WeeklyDigestService,
+    NotificationDedupService,
+    SchedulingThresholdService,
+  ],
+  exports: [
+    NotificationService,
+    NotificationDedupService,
+    RosterNotificationBufferService,
+    DiscordNotificationService,
+    // The DEMO_MODE render seam (`/admin/test/render-dm-embed`) runs the real
+    // DM embed builder so smoke tests can assert DM chrome without a DM.
+    DiscordNotificationEmbedService,
+    GameAffinityNotificationService,
+    LfgAffinityDmService,
+    LineupLfgBridgeService,
+    RecruitmentReminderService,
+    WeeklyDigestService,
+  ],
+})
+export class NotificationModule {}

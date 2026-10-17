@@ -1,0 +1,431 @@
+/**
+ * Common Ground query helpers (ROK-934 / ROK-950).
+ * Builds the SQL query for ownership overlap and maps results. ROK-950
+ * extends mapping with a pluggable taste/social/intensity scoring context.
+ */
+import { sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  CommonGroundGameDto,
+  CommonGroundQueryDto,
+  CommonGroundResponseDto,
+  CommonGroundScoreBreakdownDto,
+} from '@raid-ledger/contract';
+import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
+import {
+  OWNER_WEIGHT,
+  SALE_BONUS,
+  FULL_PRICE_PENALTY,
+  SCORING_WEIGHTS,
+  type CommonGroundWeights,
+} from './common-ground-scoring.constants';
+import {
+  computeTasteScore,
+  computeSocialScore,
+  computeIntensityFit,
+  gameToTasteVector,
+  type IntensityBucket,
+} from './common-ground-taste.helpers';
+import { commonGroundSelect } from './common-ground-select.helpers';
+import {
+  toAppliedWeights,
+  withThemeAndWhyReason,
+  assertThemePairing,
+} from './common-ground-presentation.helpers';
+import { applyCohortRow } from './common-ground-cohort.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+export { queryCommonGroundByGameIds } from './common-ground-select.helpers';
+
+/** Filters applied to the common ground query. */
+export interface CommonGroundFilters {
+  minOwners: number;
+  maxPlayers?: number | undefined;
+  /** ROK-1400: minimum supported online co-op group size (see SQL below). */
+  minOnlineCoop?: number | undefined;
+  genre?: string | undefined;
+  search?: string | undefined;
+  limit: number;
+}
+
+/** Raw row returned from the aggregation query. */
+export interface CommonGroundRow {
+  gameId: number;
+  gameName: string;
+  slug: string;
+  coverUrl: string | null;
+  ownerCount: number;
+  wishlistCount: number;
+  nonOwnerPrice: number | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  itadLowestPrice: number | null;
+  earlyAccess: boolean;
+  itadTags: string[];
+  playerCount: { min: number; max: number } | null;
+  /** ROK-1401: raw Co-Optimus online co-op cap (positive / 0 / null). */
+  cooptimusOnlineMax: number | null;
+  /** ROK-1401: raw Co-Optimus couch cap — `>= 2` means local co-op. */
+  cooptimusCouchMax: number | null;
+  /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
+  cooptimusComboCoop: boolean | null;
+  /** ROK-950: Steam-library owner user IDs for social-score intersection. */
+  ownerUserIds: number[];
+  /** ROK-1314: Steam-wishlist user IDs, for the viewer's `currentUserWishlisted`. */
+  wishlistUserIds: number[];
+  /** ROK-1314 "unify up": same card chrome the /games surfaces render. */
+  genres: number[];
+  rating: number | null;
+  aggregatedRating: number | null;
+  gameModes: number[];
+}
+
+/**
+ * Scoring context passed into `mapCommonGroundRow` (ROK-950). All fields
+ * are optional — callers that don't care about taste/social/intensity
+ * scoring can omit the context entirely and the breakdown will zero those
+ * factors.
+ */
+export interface ScoringContext {
+  voterVector: number[] | null;
+  coPlayPartnerIds: Set<number>;
+  voterIntensity: IntensityBucket | null;
+  weights: CommonGroundWeights;
+}
+
+/** Build and execute the Common Ground aggregation query. */
+export async function queryCommonGround(
+  db: PostgresJsDatabase<typeof schema>,
+  filters: CommonGroundFilters,
+  excludeGameIds: number[],
+): Promise<CommonGroundRow[]> {
+  const conditions = buildWhereConditions(filters, excludeGameIds);
+  const owners = sql`COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0)`;
+  const rows = (await db.execute(
+    commonGroundSelect(
+      sql.join(conditions, sql` AND `),
+      sql`HAVING ${owners} >= ${filters.minOwners}
+          ORDER BY ${owners} DESC
+          LIMIT ${filters.limit}`,
+    ),
+  )) as unknown as CommonGroundRow[];
+
+  return rows;
+}
+
+/**
+ * Whether the catalogue has ANY Co-Optimus-synced game (ROK-1400). Drives
+ * `meta.coopDataAvailable` so the client can keep the co-op group-size
+ * control dormant until a sync has actually happened — the filter is
+ * Co-Optimus-verified only, so before that it could only return zero rows.
+ * `cooptimus_synced_at` (not `cooptimus_online_max`) is the right signal:
+ * it is set even for games the sync found no co-op entry for, i.e. "we
+ * checked" rather than "this game has co-op".
+ */
+export async function queryCoopDataAvailable(db: Db): Promise<boolean> {
+  const rows = (await db.execute(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM games WHERE cooptimus_synced_at IS NOT NULL
+    ) AS "available"
+  `)) as unknown as Array<{ available: boolean }>;
+  return rows[0]?.available === true;
+}
+
+/** Build WHERE conditions from filters. */
+function buildWhereConditions(
+  filters: CommonGroundFilters,
+  excludeGameIds: number[],
+): ReturnType<typeof sql>[] {
+  const conditions = [
+    sql`(g.steam_app_id IS NOT NULL OR g.igdb_id IS NOT NULL)`,
+  ];
+
+  if (excludeGameIds.length > 0) {
+    conditions.push(
+      sql`g.id NOT IN (${sql.join(
+        excludeGameIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+    );
+  }
+
+  if (filters.genre) {
+    conditions.push(
+      sql`g.itad_tags @> ${JSON.stringify([filters.genre])}::jsonb`,
+    );
+  }
+
+  if (filters.maxPlayers != null) {
+    // Show games that SUPPORT this many players: min <= N <= max
+    // Excludes games with unknown player count when filter is active
+    conditions.push(
+      sql`(g.player_count IS NOT NULL AND
+        (g.player_count->>'min')::int <= ${filters.maxPlayers}
+        AND (g.player_count->>'max')::int >= ${filters.maxPlayers}
+      )`,
+    );
+  }
+
+  if (filters.minOnlineCoop != null) {
+    // ROK-1400: the co-op filter is **Co-Optimus-verified only** (operator
+    // decision 2026-08-20 round 2, after PUBG passed a "4+ co-op" filter
+    // through the old IGDB fallback).
+    //
+    //   cooptimus_online_max > 0  → the ONLY way to match
+    //   cooptimus_online_max = 0  → fails (synced: this game has no online co-op)
+    //   cooptimus_online_max NULL → fails naturally (NULL >= N is NULL)
+    //
+    // IGDB `player_count.max` is a LOBBY-SIZE estimate, not a co-op
+    // capability, so it NEVER satisfies this filter. Do NOT reintroduce a
+    // COALESCE to `player_count` here, and do NOT reintroduce `NULLIF` —
+    // both were tried and both let PvP titles through.
+    //
+    // NOTE: deliberately DIVERGES from `resolvePlayerCap` (ROK-1411), which
+    // falls back to player_count because it answers a display question
+    // ("what cap do we print on the roster copy?"), not a filter one.
+    conditions.push(sql`(g.cooptimus_online_max >= ${filters.minOnlineCoop})`);
+  }
+
+  if (filters.search) {
+    conditions.push(sql`g.name ILIKE ${'%' + filters.search + '%'}`);
+  }
+
+  return conditions;
+}
+
+/**
+ * The viewer-intent filters (`search`, `genre`) applied in JS to a cohort tile.
+ * Mirrors `buildFilterConditions`: `search` is a case-insensitive substring of
+ * the name (`g.name ILIKE '%…%'`), `genre` is containment in `itad_tags`.
+ * Tiles that came from the pool already passed the SQL form; this exists for
+ * the remembered games `enrichRemembered` topped up outside the pool query.
+ */
+export function matchesViewerFilters(
+  tile: Pick<CommonGroundGameDto, 'gameName' | 'itadTags'>,
+  filters: Pick<CommonGroundQueryDto, 'search' | 'genre'>,
+): boolean {
+  if (filters.search) {
+    if (!tile.gameName.toLowerCase().includes(filters.search.toLowerCase())) {
+      return false;
+    }
+  }
+  if (filters.genre) {
+    if (!(tile.itadTags ?? []).includes(filters.genre)) return false;
+  }
+  return true;
+}
+
+/**
+ * Legacy scalar scorer kept for back-compat with existing unit tests
+ * (ROK-934). Returns the same value as `scoreBreakdown.baseScore` plus
+ * sale/full-price adjustment.
+ */
+export function computeScore(
+  ownerCount: number,
+  currentCut: number | null,
+): number {
+  const ownerScore = ownerCount * OWNER_WEIGHT;
+  const saleAdjustment =
+    currentCut != null && currentCut > 0 ? SALE_BONUS : -FULL_PRICE_PENALTY;
+  return ownerScore + saleAdjustment;
+}
+
+/** Compute the full per-game score breakdown (ROK-950). */
+export function computeScoreBreakdown(
+  row: CommonGroundRow,
+  ctx: ScoringContext | null,
+): CommonGroundScoreBreakdownDto {
+  const baseScore = computeScore(row.ownerCount, row.itadCurrentCut);
+  if (!ctx) {
+    return {
+      baseScore,
+      tasteScore: 0,
+      socialScore: 0,
+      intensityScore: 0,
+      total: baseScore,
+    };
+  }
+  const gameVec = gameToTasteVector7(row.itadTags);
+  const tasteScore = computeTasteScore(
+    gameVec,
+    ctx.voterVector,
+    ctx.weights.tasteWeight,
+  );
+  const socialScore = computeSocialScore(
+    { ownerIds: new Set(row.ownerUserIds ?? []) },
+    ctx.coPlayPartnerIds,
+    ctx.weights.socialWeight,
+  );
+  const intensityScore = computeIntensityFit(
+    { intensityBucket: deriveGameIntensity(row) },
+    ctx.voterIntensity,
+    ctx.weights.intensityWeight,
+  );
+  const total = baseScore + tasteScore + socialScore + intensityScore;
+  return { baseScore, tasteScore, socialScore, intensityScore, total };
+}
+
+/**
+ * Project the full-pool game taste vector down to the 7 pgvector axes so
+ * it can be multiplied against the stored voter vector (`vector(7)`).
+ */
+function gameToTasteVector7(itadTags: string[]): number[] {
+  const pool = gameToTasteVector(itadTags);
+  // Match stored pgvector column order: co_op, pvp, rpg, survival, strategy, social, mmo.
+  // Indices in TASTE_PROFILE_AXIS_POOL (declared in contract): 0, 1, 9, 14, 13, 19, 3.
+  return [0, 1, 9, 14, 13, 19, 3].map((i) =>
+    defined(pool[i], `pool axis ${i}`),
+  );
+}
+
+/**
+ * Intensity bucket derived from `games.playerCount.max` (ROK-1089).
+ * IGDB's mapper normalizes `min` to 1, so `max` is the principled signal:
+ * solo/1-on-1 (≤2) → low, small-party co-op (3–8) → medium, raid/MMO/
+ * competitive-sized (≥9) → high. Returns `null` when player count is
+ * unknown to preserve graceful degradation in `computeIntensityFit`.
+ */
+export function deriveGameIntensity(
+  row: CommonGroundRow,
+): IntensityBucket | null {
+  if (row.playerCount === null) return null;
+  const { max } = row.playerCount;
+  if (max <= 2) return 'low';
+  if (max <= 8) return 'medium';
+  return 'high';
+}
+
+/**
+ * Map a raw DB row to a scored CommonGroundGameDto. When `ctx` is supplied
+ * the breakdown is populated with taste/social/intensity factors; the
+ * top-level `score` field stays equal to `breakdown.total` for callers
+ * that ignore the breakdown.
+ */
+export function mapCommonGroundRow(
+  row: CommonGroundRow,
+  ctx: ScoringContext | null = null,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
+): CommonGroundGameDto {
+  const safeRow: CommonGroundRow = {
+    ...row,
+    itadTags: Array.isArray(row.itadTags) ? row.itadTags : [],
+    ownerUserIds: Array.isArray(row.ownerUserIds) ? row.ownerUserIds : [],
+    wishlistUserIds: Array.isArray(row.wishlistUserIds)
+      ? row.wishlistUserIds
+      : [],
+    genres: Array.isArray(row.genres) ? row.genres : [],
+    gameModes: Array.isArray(row.gameModes) ? row.gameModes : [],
+  };
+  const breakdown = computeScoreBreakdown(safeRow, ctx);
+  return {
+    gameId: safeRow.gameId,
+    gameName: safeRow.gameName,
+    slug: safeRow.slug,
+    coverUrl: safeRow.coverUrl,
+    ownerCount: safeRow.ownerCount,
+    wishlistCount: safeRow.wishlistCount,
+    nonOwnerPrice: safeRow.nonOwnerPrice,
+    itadCurrentCut: safeRow.itadCurrentCut,
+    itadCurrentShop: safeRow.itadCurrentShop,
+    itadCurrentUrl: safeRow.itadCurrentUrl,
+    itadLowestPrice: safeRow.itadLowestPrice,
+    earlyAccess: safeRow.earlyAccess,
+    itadTags: safeRow.itadTags,
+    playerCount: safeRow.playerCount,
+    // ROK-1401: raw co-op claim; `coopLabel` on the client decides which of
+    // combo/online/local (if any) the tile advertises.
+    genres: safeRow.genres,
+    rating: safeRow.rating ?? null,
+    aggregatedRating: safeRow.aggregatedRating ?? null,
+    gameModes: safeRow.gameModes,
+    cooptimusOnlineMax: safeRow.cooptimusOnlineMax ?? null,
+    cooptimusCouchMax: safeRow.cooptimusCouchMax ?? null,
+    cooptimusComboCoop: safeRow.cooptimusComboCoop ?? null,
+    score: breakdown.total,
+    scoreBreakdown: breakdown,
+    // ROK-1314: personalization resolved from the already-aggregated user-id
+    // arrays — no second query, no N+1. Anonymous viewers get explicit false.
+    currentUserOwns:
+      viewerId != null && safeRow.ownerUserIds.includes(viewerId),
+    currentUserWishlisted:
+      viewerId != null && safeRow.wishlistUserIds.includes(viewerId),
+  };
+}
+
+/** Build the full Common Ground response from DB. */
+export async function buildCommonGroundResponse(
+  db: Db,
+  lineupId: number,
+  nominatedIds: number[],
+  /**
+   * ROK-1444: the EFFECTIVE (ratcheted) cap, not the live one. The web derives
+   * `atCap` from this, and `validateNominationCap` gates on the peak — if this
+   * reported the live cap, a lineup whose last nominator was removed would
+   * show as full (20/20) and disable the nominate buttons while the API would
+   * still accept nominations against a peak of 25.
+   */
+  maxNominations: number,
+  participantCount: number,
+  filters: CommonGroundQueryDto,
+  ctx: ScoringContext | null = null,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
+): Promise<CommonGroundResponseDto> {
+  // Independent queries — the availability EXISTS must not add a serial
+  // round-trip to every request, including the debounced keystroke path.
+  const [rows, coopDataAvailable] = await Promise.all([
+    queryCommonGround(db, filters, nominatedIds),
+    queryCoopDataAvailable(db),
+  ]);
+  const scored = rows.map((r) => mapCommonGroundRow(r, ctx, viewerId));
+  scored.sort((a, b) => b.score - a.score);
+  // ROK-1538: the cohort row goes FIRST and takes its games out of the pool,
+  // so a remembered game that also scored into the pool renders once, themed
+  // `cohort`, rather than twice under two different rows. Everything after it
+  // keeps the score order and the ROK-1297 breakdown-derived classification.
+  //
+  // While the viewer filters by NAME or GENRE the row narrows to the remembered
+  // games that match — it does not stand down. Cohort memory deliberately
+  // ignores the pool filters (it is a historical fact, not a recommendation
+  // `minOwners` gets a vote on), but `search` and `genre` are live user intent:
+  // answering "elden" with a first row of unrelated games reads as a bug, and
+  // answering "elden" with NOTHING when Elden Ring is a remembered game reads
+  // as a worse one (GitHub smoke `game-badges-personalization` picked a cohort
+  // tile as its fixture, searched it by name, and got no row). Remembered games
+  // the pool never returned bypass the SQL predicates, so they are re-checked
+  // here with the same rules; `minOwners` and the player-range filters still
+  // do not apply — those describe the pool, not what the viewer asked to see.
+  const { cohortTiles, remainingPool } = await applyCohortRow(
+    db,
+    lineupId,
+    scored,
+    nominatedIds,
+    ctx,
+    viewerId,
+  );
+  const visibleCohort = cohortTiles.filter((tile) =>
+    matchesViewerFilters(tile, filters),
+  );
+  const themed = [
+    ...visibleCohort,
+    ...remainingPool.map(withThemeAndWhyReason),
+  ];
+  assertThemePairing(themed);
+  const weights = ctx?.weights ?? { ...SCORING_WEIGHTS };
+  return {
+    data: themed,
+    meta: {
+      total: themed.length,
+      appliedWeights: toAppliedWeights(weights),
+      activeLineupId: lineupId,
+      nominatedCount: nominatedIds.length,
+      maxNominations,
+      participantCount,
+      coopDataAvailable,
+    },
+  };
+}

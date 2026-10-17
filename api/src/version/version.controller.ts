@@ -1,0 +1,116 @@
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { AdminGuard } from '../auth/admin.guard';
+import { VersionCheckService } from './version-check.service';
+import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import type { VersionInfoDto, UpdateStatusDto } from '@raid-ledger/contract';
+
+/**
+ * Version endpoints (ROK-294).
+ *
+ * - GET /system/version — public, returns current version and relay hub status.
+ * - GET /admin/update-status — admin-only, returns update check results
+ *   (ROK-1475: `updateAvailable` is feature-level; `fixesAvailable` is the
+ *   build-level count of `fix:` commits the running build lacks).
+ */
+@Controller()
+export class VersionController {
+  constructor(
+    private readonly versionCheck: VersionCheckService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  /**
+   * GET /system/version
+   * Public endpoint returning current app version and relay hub feature flag.
+   */
+  @Get('system/version')
+  async getVersion(): Promise<VersionInfoDto> {
+    const relayEnabled = await this.settingsService.get(
+      SETTING_KEYS.RELAY_ENABLED,
+    );
+
+    return {
+      version: this.versionCheck.getVersion(),
+      commitSha: process.env.COMMIT_SHA || null,
+      relayHubEnabled: relayEnabled === 'true',
+    };
+  }
+
+  /**
+   * GET /admin/update-status
+   * Admin-only endpoint returning version check results.
+   */
+  @Get('admin/update-status')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  async getUpdateStatus(): Promise<UpdateStatusDto> {
+    const [
+      latestVersion,
+      lastChecked,
+      updateAvailable,
+      latestReleaseUrl,
+      fixesAvailable,
+      latestCommitSha,
+      fixesCompareUrl,
+      fixesComputedForSha,
+    ] = await this.readStatusSettings();
+    const runningCommitSha = this.versionCheck.getRunningCommitSha();
+    // The count describes the build it was computed against. After an upgrade
+    // (or a failed check on the new build) it is stale — report "unknown".
+    const fixesCurrent =
+      runningCommitSha !== null && fixesComputedForSha === runningCommitSha;
+
+    return {
+      // ROK-1475: the semver, not the sha — `updateAvailable` is now the
+      // feature-level signal and compares releases against this value.
+      currentVersion: this.versionCheck.getVersion(),
+      latestVersion,
+      updateAvailable: updateAvailable === 'true',
+      lastChecked,
+      latestReleaseUrl: emptyToNull(latestReleaseUrl),
+      fixesAvailable: fixesCurrent ? parseCount(fixesAvailable) : null,
+      runningCommitSha,
+      latestCommitSha: emptyToNull(latestCommitSha),
+      fixesCompareUrl: fixesCurrent ? emptyToNull(fixesCompareUrl) : null,
+    };
+  }
+
+  /** One Promise.all over every key the update-status DTO needs. */
+  private readStatusSettings(): Promise<StatusSettings> {
+    const settings = this.settingsService;
+    return Promise.all([
+      settings.get(SETTING_KEYS.LATEST_VERSION),
+      settings.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
+      settings.get(SETTING_KEYS.UPDATE_AVAILABLE),
+      settings.get(SETTING_KEYS.LATEST_RELEASE_URL),
+      settings.get(SETTING_KEYS.FIXES_AVAILABLE),
+      settings.get(SETTING_KEYS.LATEST_COMMIT_SHA),
+      settings.get(SETTING_KEYS.FIXES_COMPARE_URL),
+      settings.get(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA),
+    ]);
+  }
+}
+
+type Setting = string | null;
+/** The update-status settings, in `getUpdateStatus` destructuring order. */
+type StatusSettings = [
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+];
+
+function emptyToNull(value: string | null): string | null {
+  return value && value !== '' ? value : null;
+}
+
+/** '' / missing / garbage → null ("unknown"), never 0 ("checked, none"). */
+export function parseCount(raw: string | null): number | null {
+  if (raw == null || !/^\d+$/.test(raw)) return null;
+  return Number.parseInt(raw, 10);
+}

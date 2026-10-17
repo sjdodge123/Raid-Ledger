@@ -1,0 +1,500 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { CharacterStep } from './character-step';
+import type { GameRegistryDto } from '@raid-ledger/contract';
+
+vi.mock('../../hooks/use-character-mutations', () => ({
+    useCreateCharacter: vi.fn(() => ({
+        mutate: vi.fn(),
+        isPending: false,
+    })),
+    useDeleteCharacter: vi.fn(() => ({
+        mutate: vi.fn(),
+        isPending: false,
+    })),
+}));
+
+vi.mock('../../hooks/use-characters', () => ({
+    useMyCharacters: vi.fn(() => ({
+        data: { data: [] },
+    })),
+}));
+
+vi.mock('../../plugins', () => ({
+    PluginSlot: () => null,
+}));
+
+import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
+import { useMyCharacters } from '../../hooks/use-characters';
+
+const mockUseCreateCharacter = useCreateCharacter as unknown as ReturnType<typeof vi.fn>;
+const mockUseDeleteCharacter = useDeleteCharacter as unknown as ReturnType<typeof vi.fn>;
+const mockUseMyCharacters = useMyCharacters as unknown as ReturnType<typeof vi.fn>;
+
+const baseGame: GameRegistryDto = {
+    id: 1,
+    name: 'World of Warcraft',
+    shortName: 'WoW',
+    slug: 'world-of-warcraft',
+    hasRoles: true,
+    hasSpecs: true,
+    coverUrl: null,
+    colorHex: '#F58518',
+    maxCharactersPerUser: 10,
+    enabled: true,
+    genres: [],
+};
+
+const nonMmoGame: GameRegistryDto = {
+    id: 2,
+    name: 'Factorio',
+    shortName: null,
+    slug: 'factorio',
+    hasRoles: false,
+    hasSpecs: false,
+    coverUrl: null,
+    colorHex: '#6B7280',
+    maxCharactersPerUser: 5,
+    enabled: true,
+    genres: [],
+};
+
+function createQueryClient() {
+    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
+function renderWithProviders(ui: React.ReactElement) {
+    return render(
+        <MemoryRouter>
+            <QueryClientProvider client={createQueryClient()}>
+                {ui}
+            </QueryClientProvider>
+        </MemoryRouter>
+    );
+}
+
+describe('CharacterStep — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Rendering', () => {
+        it('renders the character creation form when no character exists', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByText(/create a character/i)).toBeInTheDocument();
+            expect(screen.getByText(/world of warcraft/i)).toBeInTheDocument();
+        });
+
+        it('renders the character name input', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByPlaceholderText(/character name/i)).toBeInTheDocument();
+        });
+
+        it('shows Class and Spec fields for MMO games with roles', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByPlaceholderText(/warrior/i)).toBeInTheDocument();
+            expect(screen.getByPlaceholderText(/arms/i)).toBeInTheDocument();
+        });
+
+        it('does not show Class and Spec fields for non-MMO games', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={nonMmoGame} charIndex={0} />
+            );
+            expect(screen.queryByPlaceholderText(/warrior/i)).not.toBeInTheDocument();
+            expect(screen.queryByPlaceholderText(/arms/i)).not.toBeInTheDocument();
+        });
+
+        it('shows Role dropdown for MMO games', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByRole('combobox')).toBeInTheDocument();
+        });
+
+        it('shows Realm input for MMO games', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByPlaceholderText(/illidan/i)).toBeInTheDocument();
+        });
+    });
+
+});
+
+describe('CharacterStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Form interaction', () => {
+        it('shows validation error when submitting without a name', async () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            const submitButton = screen.getByRole('button', { name: /create character/i });
+            fireEvent.click(submitButton);
+            await waitFor(() => {
+                expect(screen.getByText(/character name is required/i)).toBeInTheDocument();
+            });
+        });
+
+        it('calls createMutation.mutate when form is submitted with valid name', async () => {
+            const mockMutate = vi.fn();
+            mockUseCreateCharacter.mockReturnValue({ mutate: mockMutate, isPending: false });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+
+            const nameInput = screen.getByPlaceholderText(/character name/i);
+            fireEvent.change(nameInput, { target: { value: 'Arthas' } });
+
+            const submitButton = screen.getByRole('button', { name: /create character/i });
+            fireEvent.click(submitButton);
+
+            expect(mockMutate).toHaveBeenCalledWith(
+                expect.objectContaining({ name: 'Arthas', gameId: 1 }),
+                expect.any(Object),
+            );
+        });
+
+        it('shows pending state on submit button while creating', () => {
+            mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: true });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByText(/creating/i)).toBeInTheDocument();
+        });
+
+        it('role dropdown has tank, healer, dps options', () => {
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+            expect(screen.getByRole('option', { name: /tank/i })).toBeInTheDocument();
+            expect(screen.getByRole('option', { name: /healer/i })).toBeInTheDocument();
+            expect(screen.getByRole('option', { name: /dps/i })).toBeInTheDocument();
+        });
+    });
+
+});
+
+describe('Saved character display — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+        it('shows saved character card when character exists at charIndex', () => {
+            mockUseMyCharacters.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 'char-1',
+                            name: 'Thrall',
+                            class: 'Shaman',
+                            spec: 'Enhancement',
+                            effectiveRole: 'dps',
+                            isMain: true,
+                            avatarUrl: null,
+                            level: 80,
+                            race: 'Orc',
+                            realm: 'Draenor',
+                            gameId: 1,
+                        },
+                    ],
+                },
+            });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+
+            expect(screen.getByText('Thrall')).toBeInTheDocument();
+        });
+
+        it('shows Add Another Character button when character is saved', () => {
+            mockUseMyCharacters.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 'char-1',
+                            name: 'Thrall',
+                            class: 'Shaman',
+                            spec: 'Enhancement',
+                            effectiveRole: 'dps',
+                            isMain: true,
+                            avatarUrl: null,
+                            level: 80,
+                            race: 'Orc',
+                            realm: 'Draenor',
+                            gameId: 1,
+                        },
+                    ],
+                },
+            });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} onAddAnother={vi.fn()} />
+            );
+
+            const addButton = screen.getByRole('button', { name: /add another character/i });
+            expect(addButton).toBeInTheDocument();
+        });
+
+});
+
+describe('CharacterStep — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Saved character display — part 2', () => {
+        it('calls onAddAnother when Add Another Character is clicked', () => {
+            const mockOnAddAnother = vi.fn();
+            mockUseMyCharacters.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 'char-1',
+                            name: 'Thrall',
+                            class: 'Shaman',
+                            spec: null,
+                            effectiveRole: null,
+                            isMain: true,
+                            avatarUrl: null,
+                            level: null,
+                            race: null,
+                            realm: null,
+                            gameId: 1,
+                        },
+                    ],
+                },
+            });
+
+            renderWithProviders(
+                <CharacterStep
+                    preselectedGame={baseGame}
+                    charIndex={0}
+                    onAddAnother={mockOnAddAnother}
+                />
+            );
+
+            fireEvent.click(screen.getByRole('button', { name: /add another character/i }));
+            expect(mockOnAddAnother).toHaveBeenCalledOnce();
+        });
+
+    });
+
+});
+
+describe('CharacterStep — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Saved character display — part 3', () => {
+        it('calls onRemoveStep when delete button is clicked on extra step (charIndex > 0)', async () => {
+            const mockOnRemoveStep = vi.fn();
+            const mockDeleteMutate = vi.fn((_id, options) => {
+                options?.onSuccess?.();
+            });
+            mockUseDeleteCharacter.mockReturnValue({ mutate: mockDeleteMutate, isPending: false });
+            mockUseMyCharacters.mockReturnValue({
+                data: {
+                    data: [
+                        { id: 'char-0', name: 'Char0', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 },
+                        { id: 'char-1', name: 'Char1', class: null, spec: null, effectiveRole: null, isMain: false, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 },
+                    ],
+                },
+            });
+
+            renderWithProviders(
+                <CharacterStep
+                    preselectedGame={baseGame}
+                    charIndex={1}
+                    onRemoveStep={mockOnRemoveStep}
+                />
+            );
+
+            // The delete button is the X icon Button, named by aria-label
+            const deleteButton = screen.getByRole('button', { name: 'Remove character' });
+            fireEvent.click(deleteButton);
+
+            await waitFor(() => {
+                expect(mockOnRemoveStep).toHaveBeenCalledOnce();
+            });
+        });
+
+    });
+
+});
+
+describe('CharacterStep — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Edge cases', () => {
+        it('renders with empty character list (no data)', () => {
+            mockUseMyCharacters.mockReturnValue({ data: undefined });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+
+            expect(screen.getByText(/create a character/i)).toBeInTheDocument();
+        });
+
+        it('first character becomes main (isMain: true)', () => {
+            const mockMutate = vi.fn();
+            mockUseCreateCharacter.mockReturnValue({ mutate: mockMutate, isPending: false });
+            mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+
+            const nameInput = screen.getByPlaceholderText(/character name/i);
+            fireEvent.change(nameInput, { target: { value: 'FirstChar' } });
+
+            const submitButton = screen.getByRole('button', { name: /create character/i });
+            fireEvent.click(submitButton);
+
+            expect(mockMutate).toHaveBeenCalledWith(
+                expect.objectContaining({ isMain: true }),
+                expect.any(Object),
+            );
+        });
+
+        it('shows general error message on creation failure', async () => {
+            const mockMutate = vi.fn((_data, options) => {
+                options?.onError?.();
+            });
+            mockUseCreateCharacter.mockReturnValue({ mutate: mockMutate, isPending: false });
+
+            renderWithProviders(
+                <CharacterStep preselectedGame={baseGame} charIndex={0} />
+            );
+
+            const nameInput = screen.getByPlaceholderText(/character name/i);
+            fireEvent.change(nameInput, { target: { value: 'Arthas' } });
+
+            const submitButton = screen.getByRole('button', { name: /create character/i });
+            fireEvent.click(submitButton);
+
+            await waitFor(() => {
+                expect(screen.getByText(/failed to create character/i)).toBeInTheDocument();
+            });
+        });
+    });
+});
+
+describe('CharacterStep — label wiring (ROK-1645)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    it('links every visible label to its control with htmlFor, not a duplicate aria-label (ROK-1645)', () => {
+        renderWithProviders(
+            <CharacterStep preselectedGame={baseGame} charIndex={0} />
+        );
+        const fields = [['Name', 'textbox'], ['Class', 'textbox'], ['Spec', 'textbox'], ['Realm/Server', 'textbox'], ['Role', 'combobox']] as const;
+        for (const [name, role] of fields) {
+            const control = screen.getByRole(role, { name });
+            expect(control).not.toHaveAttribute('aria-label');
+            const label = [...document.querySelectorAll('label')].find((l) => l.htmlFor === control.id);
+            expect(label?.textContent, `label[for] of ${name}`).toMatch(new RegExp(`^${name}`));
+        }
+    });
+});
+
+const SAVED_CHAR = { id: 'char-1', name: 'Thrall', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 };
+
+describe('CharacterStep — form primitives (ROK-1648)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    it('Name is a required Field', () => {
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        expect(screen.getByRole('textbox', { name: 'Name' }).getAttribute('aria-required'), 'Name should be a required Field').toBe('true');
+    });
+
+    it('an empty-name submit marks the Name field invalid and describes it with the error', () => {
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const name = screen.getByRole('textbox', { name: 'Name' });
+        fireEvent.click(screen.getByRole('button', { name: /create character/i }));
+        expect(name.getAttribute('aria-invalid'), 'the name input should be aria-invalid').toBe('true');
+        const errorId = (name.getAttribute('aria-describedby') ?? '').split(' ').find((id) => document.getElementById(id)?.textContent === 'Character name is required');
+        expect(errorId, 'the name error should describe the name input').toBeDefined();
+    });
+
+    it('a failed create is a form-level alert, not a Name field error', () => {
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn((_d, o) => o?.onError?.()), isPending: false });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const name = screen.getByRole('textbox', { name: 'Name' });
+        fireEvent.change(name, { target: { value: 'Arthas' } });
+        fireEvent.click(screen.getByRole('button', { name: /create character/i }));
+        const alert = screen.queryAllByRole('alert').find((a) => /failed to create character/i.test(a.textContent ?? ''));
+        expect(alert, 'the mutation error should render as role=alert').not.toBeUndefined();
+        expect(alert?.className, 'the alert should use the danger token').toContain('text-danger');
+        expect(name.getAttribute('aria-invalid'), 'a server error must not mark the name invalid').not.toBe('true');
+    });
+
+    it('Create Character is a loading Button while pending (aria-busy, sr-only label)', () => {
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: true });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const submit = screen.getByRole('button', { name: /creating/i });
+        expect(submit.getAttribute('aria-busy'), 'Create should be aria-busy while pending').toBe('true');
+        expect(submit.getAttribute('aria-disabled'), 'Create should be aria-disabled while pending').toBe('true');
+        expect(submit.getAttribute('type')).toBe('submit');
+    });
+
+    it('the remove button is a 44px icon Button named "Remove character"', () => {
+        mockUseMyCharacters.mockReturnValue({ data: { data: [SAVED_CHAR] } });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const remove = screen.queryByRole('button', { name: 'Remove character' });
+        expect(remove, 'a button should be named "Remove character"').not.toBeNull();
+        expect(remove?.querySelector('[data-button-label]'), 'remove should be a Button').not.toBeNull();
+        expect(remove?.className, 'remove should be a 44px icon button').toContain('min-w-[44px]');
+    });
+
+    it('"Add Another Character" is a full-width Button', () => {
+        mockUseMyCharacters.mockReturnValue({ data: { data: [SAVED_CHAR] } });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} onAddAnother={vi.fn()} />);
+        const add = screen.getByRole('button', { name: /add another character/i });
+        expect(add.querySelector('[data-button-label]'), 'Add Another should be a Button').not.toBeNull();
+        expect(add.className).toContain('w-full');
+    });
+});

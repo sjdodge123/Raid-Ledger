@@ -1,0 +1,173 @@
+// rl_status — global fleet state (slots, envs, host resources).
+import { runRl, parseJsonFromStdout } from '../exec.js';
+
+export const TOOL_NAME = 'rl_status';
+export const TOOL_DESCRIPTION =
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load (ROK-1568 adds the numeric host.disk_free_gb plus host.disk_pressure, the last gc-sweeper prune-ladder run), live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung. ROK-1568 adds the disk axis: an image build can also park on free DISK (task admission_state `waiting_disk`, then failure_reason `disk_pressure`) — compare host.disk_free_gb against RL_BUILD_MIN_FREE_GB (20 GB) and use rl_fleet_prune to reclaim. It also reports settings_bundle: bundle.enc age, key count and whether it decrypts, so a stale or undecryptable settings bundle is visible without SSH (never key names or values).';
+
+// ROK-1338 PR-1 — runner sync-state fields.
+//
+// `last_sync_at` — ISO-8601 timestamp of the newest file mtime under the
+// runner's worktree (excluding node_modules/.git/dist/build/.next). Proxy for
+// Mutagen sync recency: when the operator's laptop has just edited a file,
+// Mutagen propagates that file's mtime (or its write-time) to the runner,
+// and this field reflects that. Null when the slot isn't claimed.
+//
+// `worktree_head` — short SHA from `git rev-parse --short HEAD` inside the
+// runner container's /workspace.
+//
+// IMPORTANT CAVEAT (clarified during ROK-1338 PR-1 dogfood 2026-05-21):
+// `worktree_head` does NOT reflect the operator's local git state. It
+// reflects ORIGIN's ref at the time scaffold_runner_git ran during the
+// most recent claim. Mutagen sync excludes `.git/` intentionally — the
+// runner scaffolds a fresh shallow .git via `git init` + `git fetch
+// origin <branch>` at claim time, so its HEAD always lags any UNPUSHED
+// local commits. To make this field match local: push your local
+// commits, then re-claim (or run validate-ci, which re-scaffolds).
+//
+// Operationally: `last_sync_at` is the right signal for "did my latest
+// EDIT reach the runner" — it tracks file mtimes via Mutagen.
+// `worktree_head` is the right signal for "what branch + commit is the
+// runner's .git pointing at" — useful for verifying scaffold ran but
+// expected to lag local commits when those aren't pushed.
+//
+// Both default to null when the slot isn't claimed (no worktree dir yet)
+// — the orchestrator emits null, the TS schema accepts null OR absent
+// gracefully.
+export interface RunnerStat {
+  container: string;
+  cpu: string;
+  mem: string;
+  net: string;
+  block: string;
+  last_sync_at?: string | null;
+  worktree_head?: string | null;
+}
+
+/**
+ * ROK-1469 — the Discord application a fleet env posts as. Each runner slot
+ * owns its OWN app (four registered in the portal) so two live envs never
+ * share one bot login. PUBLIC fields only: `client_id` is the application id
+ * and `app_name` the portal label. The bot token and OAuth client secret live
+ * exclusively in /srv/rl-infra/.env and are NEVER surfaced through any tool.
+ *
+ * `configured:false` (with null ids) means the slot has no identity in the
+ * VM's .env — the env fell back to whatever `sync_settings` copied in, so two
+ * such envs CAN still collide on the operator's shared bot.
+ */
+export interface BotIdentity {
+  slot: number | null;
+  client_id: string | null;
+  app_name: string | null;
+  configured: boolean;
+}
+
+/**
+ * TDB:1904 — freshness of the VM's encrypted settings bundle
+ * (/srv/rl-infra/settings/bundle.enc), so a stale or undecryptable bundle is
+ * visible without SSH. The orchestrator decrypts it in memory only to count
+ * the keys: this NEVER carries key names or values. `present:false` (every
+ * other field null) means no bundle has been pushed yet. The whole field is
+ * null/absent on an orchestrator that predates the deploy.
+ */
+export interface SettingsBundleFreshness {
+  present: boolean;
+  /** ISO-8601 UTC mtime of bundle.enc; null when absent or unstat-able. */
+  mtime: string | null;
+  /** Age of bundle.enc in hours, one decimal. */
+  age_hours: number | null;
+  /** Number of settings keys; null unless it decrypted. */
+  key_count: number | null;
+  /** True when it decrypted to a JSON object; null when absent. */
+  decrypts: boolean | null;
+  /** Why it did not decrypt (unreadable, key unset, wrong key, not an object). */
+  warning: string | null;
+}
+
+export interface StatusResult {
+  ok: boolean;
+  generated_at?: string;
+  // ROK-1338 PR-1 — deployed orchestrator tree SHA. Surfaces what the VM is
+  // actually running so agents can verify a freshly-merged change is live.
+  // Optional + nullable: the operator's deploy script writes
+  // /srv/rl-infra/.deployed_sha on every rsync; absent when not yet wired up.
+  deployed_sha?: string | null;
+  /** TDB:1904 — bundle.enc freshness; see SettingsBundleFreshness. */
+  settings_bundle?: SettingsBundleFreshness | null;
+  slots?: Array<{
+    slot: number;
+    claimed: boolean;
+    agent_id: string | null;
+    branch: string | null;
+    started_at: string | null;
+    last_heartbeat: string | null;
+  }>;
+  envs?: Array<{
+    container: string;
+    slug: string | null;
+    slot: string | null;
+    ttl: string | null;
+    last_touched: string | null;
+    status: string;
+    created: string;
+    /** ROK-1469 — which Discord app this env runs as. Null when the env's
+     *  slot can't be resolved; absent on a pre-ROK-1469 orchestrator. */
+    bot_identity?: BotIdentity | null;
+  }>;
+  runners?: RunnerStat[];
+  host?: {
+    memory: string;
+    /** Human display string, e.g. "92G/245G (39%)". */
+    disk: string;
+    loadavg: string;
+    /**
+     * ROK-1568 — free GB on the host root as a NUMBER. `disk` is for humans;
+     * this is what an agent compares before starting an image build (the gate
+     * needs RL_BUILD_MIN_FREE_GB, default 20).
+     */
+    disk_free_gb?: number;
+    /**
+     * Last gc-sweeper disk-pressure ladder run (state/disk-pressure.json).
+     * Null until the sweeper has completed a cycle on an orchestrator that
+     * predates ROK-1568.
+     */
+    disk_pressure?: {
+      used_pct: number;
+      free_gb: number;
+      last_prune_at: string | null;
+      last_checked_at?: string;
+      last_rungs: Array<{ rung: string; before_pct?: number; after_pct?: number; reclaimed?: string }>;
+    } | null;
+  };
+  queue?: Array<{ agent_id: string; branch: string | null; queued_at: string }>;
+  queue_depth?: number;
+  queue_head?: string | null;
+  // ROK-1470 — dynamic-memory admission counters. The runners over-subscribe
+  // the 15 GiB host on purpose (4 x `mem_limit: 6g`), and heavy tasks queue on
+  // host MemAvailable instead of on a per-slot cap. Optional + nullable so an
+  // orchestrator that predates ROK-1470 still parses.
+  /** Heavy tasks currently holding an admission slot. */
+  heavy_running?: number;
+  /** Heavy tasks parked waiting for memory right now. */
+  heavy_waiting?: number;
+  /** Host MemAvailable in MB; null when /proc/meminfo is unreadable. */
+  mem_available_mb?: number | null;
+  /** The floor a heavy task must clear (RL_HEAVY_TASK_MIN_FREE_MB). */
+  heavy_task_min_free_mb?: number;
+  /** Per-entry detail behind the two counts. */
+  admission?: {
+    running: Array<{ key: string; task_id: string; admitted_at: string }>;
+    waiting: Array<{ key: string; task_id: string; since: string }>;
+  };
+  error?: string;
+}
+
+export async function execute(): Promise<StatusResult> {
+  const { stdout, stderr, exitCode } = await runRl(['status']);
+  const parsed = parseJsonFromStdout<StatusResult>(stdout);
+  if (parsed) return parsed;
+  return {
+    ok: false,
+    error: stderr || stdout || `rl status exited ${exitCode}`,
+  };
+}

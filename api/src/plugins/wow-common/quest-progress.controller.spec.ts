@@ -1,0 +1,119 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { QuestProgressController } from './quest-progress.controller';
+import { QuestProgressService } from './quest-progress.service';
+import { QuestProgressReadService } from './quest-progress-read.service';
+import { Reflector } from '@nestjs/core';
+import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+
+let controller: QuestProgressController;
+let mockService: {
+  getProgressForEvent: jest.Mock;
+  getCoverageForEvent: jest.Mock;
+  updateProgress: jest.Mock;
+  getPrereqsForViewer: jest.Mock;
+};
+
+const mockProgress = [
+  {
+    id: 1,
+    eventId: 10,
+    userId: 1,
+    username: 'Roknua',
+    questId: 2040,
+    pickedUp: true,
+    completed: false,
+  },
+];
+
+const mockCoverage = [
+  {
+    questId: 2040,
+    coveredBy: [{ userId: 1, username: 'Roknua' }],
+  },
+];
+
+async function setupEach() {
+  mockService = {
+    getProgressForEvent: jest.fn().mockResolvedValue(mockProgress),
+    getCoverageForEvent: jest.fn().mockResolvedValue(mockCoverage),
+    updateProgress: jest.fn().mockResolvedValue(mockProgress[0]),
+    getPrereqsForViewer: jest.fn().mockResolvedValue(null),
+  };
+
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [QuestProgressController],
+    providers: [
+      { provide: QuestProgressService, useValue: mockService },
+      { provide: QuestProgressReadService, useValue: mockService },
+      { provide: Reflector, useValue: new Reflector() },
+      {
+        provide: PluginRegistryService,
+        useValue: {
+          getActiveSlugsSync: jest.fn().mockReturnValue(new Set(['blizzard'])),
+        },
+      },
+    ],
+  }).compile();
+
+  controller = module.get<QuestProgressController>(QuestProgressController);
+}
+
+describe('QuestProgressController — read endpoints', () => {
+  beforeEach(() => setupEach());
+
+  it('should return all progress for an event', async () => {
+    const result = await controller.getProgressForEvent(10);
+    expect(result).toEqual(mockProgress);
+    expect(mockService.getProgressForEvent).toHaveBeenCalledWith(10);
+  });
+
+  it('should return quest coverage', async () => {
+    const result = await controller.getCoverageForEvent(10);
+    expect(result).toEqual(mockCoverage);
+    expect(mockService.getCoverageForEvent).toHaveBeenCalledWith(10);
+  });
+});
+
+describe('QuestProgressController — updateProgress', () => {
+  beforeEach(() => setupEach());
+
+  it('should update progress for the current user', async () => {
+    const body = { questId: 2040, pickedUp: true };
+    const req = { user: { id: 1 } };
+    const result = await controller.updateProgress(10, body, req);
+    expect(result).toEqual(mockProgress[0]);
+    expect(mockService.updateProgress).toHaveBeenCalledWith(10, 1, 2040, {
+      pickedUp: true,
+      completed: undefined,
+    });
+  });
+
+  it('should pass completed flag through', async () => {
+    const body = { questId: 3001, completed: true };
+    const req = { user: { id: 2 } };
+    await controller.updateProgress(10, body, req);
+    expect(mockService.updateProgress).toHaveBeenCalledWith(10, 2, 3001, {
+      pickedUp: undefined,
+      completed: true,
+    });
+  });
+});
+
+describe('QuestProgressController — quest-prereqs/me (ROK-1748)', () => {
+  beforeEach(() => setupEach());
+
+  it('writes a JSON null body when the service returns null', async () => {
+    const res = { json: jest.fn() };
+    await controller.getMyPrereqs(10, { user: { id: 3 } }, res as never);
+    expect(mockService.getPrereqsForViewer).toHaveBeenCalledWith(10, 3);
+    expect(res.json).toHaveBeenCalledWith(null);
+  });
+
+  it('writes the viewer state when present', async () => {
+    const state = { characterId: 'c', asOf: null, quests: [], neededTotal: 0 };
+    mockService.getPrereqsForViewer.mockResolvedValueOnce(state);
+    const res = { json: jest.fn() };
+    await controller.getMyPrereqs(10, { user: { id: 3 } }, res as never);
+    expect(res.json).toHaveBeenCalledWith(state);
+  });
+});

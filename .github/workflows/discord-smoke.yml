@@ -1,0 +1,427 @@
+name: Discord Smoke Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# ROK-1838: error reporting is on by default; nothing CI boots may spend the
+# maintainers' Sentry quota. Every job (and so every api/web process it
+# starts) inherits the opt-out.
+env:
+  ENABLE_TELEMETRY: 'false'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      discord: ${{ steps.filter.outputs.discord }}
+      deps: ${{ steps.filter.outputs.deps }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            discord:
+              - 'api/src/discord-bot/**'
+              - 'api/src/notifications/**'
+              - 'api/src/events/signups*'
+              - 'api/src/events/event-lifecycle*'
+              - 'api/src/admin/demo-test*'
+              - 'api/src/lineups/standalone-poll/**'
+              - 'api/src/lineups/scheduling/**'
+              - 'tools/test-bot/**'
+              - 'packages/contract/**'
+              # ROK-1522: the smoke harness itself — a lease or workflow
+              # change must be exercised by the run it changes.
+              - '.github/workflows/discord-smoke.yml'
+              - 'scripts/ci/discord-smoke-lease.sh'
+            # ROK-1522 d1: push runs to main also smoke a dependency bump
+            # (e.g. discord.js). Dependabot PRs get no secrets, so the
+            # post-merge push run is their only live validation.
+            deps:
+              - 'package.json'
+              - 'package-lock.json'
+              - '**/package.json'
+              - '**/package-lock.json'
+
+  discord-smoke:
+    runs-on: ubuntu-latest
+    # AT MOST TWO RUNS ON THE SHARED GUILD — via a lease pool, not `concurrency:`.
+    # Two runs under the SAME bot identity fail each other's LFG/LFM tests
+    # (2026-09-06: three PR runs overlapped and each saw the other's posts as
+    # duplicate cards / extra hands). ROK-1522 Phase 2: each lease slot has its
+    # OWN Discord app bot, so concurrent runs are told apart by author id.
+    #
+    # ROK-1522: this used to be `concurrency: group: discord-smoke-shared-guild`.
+    # GitHub's queue for a concurrency group holds exactly ONE pending run and a
+    # newer arrival CANCELS it (`cancel-in-progress: false` protects only the
+    # running run). A cancelled run reports no conclusion, so the required
+    # `discord-smoke` context vanished and the PR sat BLOCKED with nothing red:
+    # 35 PR runs on 20 branches in 2026-09-11..25 (docs/spikes/rok-1522-discord-smoke-parallelism.md §1.1).
+    #
+    # Now `scripts/ci/discord-smoke-lease.sh` holds a lease as the git ref
+    # `refs/locks/discord-smoke/<i>`, i in 0..1 (Phase 2: a pool of 2):
+    #   - slot i = one bot identity: 0 → DISCORD_BOT_TOKEN / _CLIENT_ID /
+    #     _CLIENT_SECRET, 1 → the same names suffixed `_1`. The lease exports
+    #     SMOKE_POOL_INDEX=i; "Configure and connect Discord bot" picks that
+    #     slot's secrets, and the test-bot rotates its default voice channel
+    #     by it (one active scheduled event per voice channel). An empty `_1`
+    #     secret shrinks the pool to 1 — slot 1 NEVER falls back to bot 0.
+    #   - acquire: first free slot, atomic ref create (422 = held). A waiter polls every 30s,
+    #     logs its wait and the holder's run URL, and the job shows IN
+    #     PROGRESS the whole time, so nothing is evicted. It takes over a lease
+    #     whose holder run is completed/gone, a lease left by an earlier
+    #     attempt of this same run, or one older than 155 min (longer than
+    #     timeout-minutes below, so a live holder is never taken over).
+    #   - release: `always()` final step deletes the ref ONLY if it still
+    #     points at this run's owner commit. The step before it stops the
+    #     API, so the bot has left the gateway before the next run connects.
+    # The lease is taken right before the first step that touches Discord
+    # (bot connect), not at job start: the bot token reaches the API only via
+    # that step's admin-settings PUT, so build/migrate/seed run unleased
+    # without touching the guild, and each run holds it ~5-8 min less.
+    #
+    # Read-only token (Dependabot, fork PRs): those runs get no Discord
+    # secrets, so every live step is skipped (see "Check for Discord secrets")
+    # and they never touch the guild — the lease is skipped with them. If a run
+    # ever HAS the secrets but a read-only token, the acquire step FAILS the
+    # job rather than drive the guild unleased next to a leased run.
+    #
+    # timeout-minutes bounds the whole job: lease wait (script gives up at
+    # 100 min) + ~17 min median smoke + build. Keep it BELOW the lease's
+    # LEASE_STALE_S (scripts/ci/discord-smoke-lease.sh, 9300s = 155 min).
+    timeout-minutes: 150
+    # ROK-1352: pull CI service images from the private GHCR mirror.
+    # ROK-1522: contents: write creates/deletes the lease ref and its owner
+    # commit; actions: read lets a waiter see whether the holder run is done.
+    permissions:
+      contents: write
+      packages: read
+      actions: read
+    needs: detect-changes
+    # ROK-1522 d1: push runs use the same Discord path filter as PRs (plus
+    # package manifests); only 71 of 190 main commits touched a Discord path,
+    # yet every push held the guild. workflow_dispatch always runs.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.discord == 'true' ||
+      (github.event_name == 'push' && needs.detect-changes.outputs.deps == 'true')
+
+    services:
+      postgres:
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: raid_ledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d raid_ledger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/raid_ledger
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      CLIENT_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+      DEMO_MODE: 'true'
+      ADMIN_PASSWORD: discord-smoke-ci-password
+      API_URL: http://localhost:3000
+      # Discord secrets — required for bot connectivity
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+      DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+      # ROK-1522 Phase 2: lease pool slot 1's own app bot (app 1553219870743601232)
+      DISCORD_BOT_TOKEN_1: ${{ secrets.DISCORD_BOT_TOKEN_1 }}
+      DISCORD_CLIENT_ID_1: ${{ secrets.DISCORD_CLIENT_ID_1 }}
+      DISCORD_CLIENT_SECRET_1: ${{ secrets.DISCORD_CLIENT_SECRET_1 }}
+      # Companion test bot (channels auto-discovered from API)
+      TEST_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}
+      TEST_GUILD_ID: ${{ secrets.TEST_GUILD_ID }}
+      # Discord API timeout — relaxed for CI runners (ROK-969)
+      DISCORD_API_TIMEOUT_MS: '15000'
+      # Voice-join tests require UDP to Discord — CI runners can't do this (ROK-969)
+      SMOKE_SKIP_VOICE_JOIN: '1'
+      # Shared smoke runner config (used by all category steps below)
+      SMOKE_TIMEOUT_MS: '90000'
+      SMOKE_CONCURRENCY: '1'
+      SMOKE_RETRY_COUNT: '2'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # ROK-1522: this job has contents: write (lease refs). Keep that
+          # token out of .git/config, where npm ci postinstall scripts and
+          # test code could read it. The lease script uses the REST API
+          # with an explicit GH_TOKEN env, never git credentials.
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Build API
+        run: npm run build -w api
+
+      - name: Run database migrations
+        run: npm run db:migrate -w api
+
+      - name: Bootstrap admin account
+        run: npx ts-node api/scripts/bootstrap-admin.ts
+
+      - name: Seed game registry
+        run: npm run db:seed:games -w api
+
+      - name: Start API server
+        # ROK-1522: record the PID so "Stop API server" can end it (and the
+        # bot's gateway session) before the lease is released.
+        # ROK-1769: API output goes to api.log (uploaded + grepped on failure)
+        # so a swallowed error like createForEvent's captureError is readable.
+        # ROK-1711: the voice game-filtered count skips Discord bots except a
+        # DEMO_MODE allowlist. Allowlist the companion bot. A bot token's first
+        # segment is its base64 user id, so no extra secret is needed.
+        run: |
+          VOICE_THRESHOLD_BOT_ALLOWLIST=$(node -e 'const s=(process.env.TEST_BOT_TOKEN||"").split(".")[0];const id=Buffer.from(s,"base64").toString();process.stdout.write(/^\d{17,20}$/.test(id)?id:"")')
+          export VOICE_THRESHOLD_BOT_ALLOWLIST
+          node api/dist/src/main.js > api.log 2>&1 &
+          echo "API_PID=$!" >> "$GITHUB_ENV"
+        env:
+          PORT: '3000'
+
+      - name: Wait for API to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              echo "API is ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start within 60s"
+          exit 1
+
+      # Dependabot PRs don't have access to repository secrets. The
+      # test-bot smoke tests require Discord credentials, so we short-circuit
+      # the secret-dependent steps and report success when they're unavailable.
+      # Real validation runs on push to main (a push touching a Discord path
+      # or a package manifest).
+      - name: Check for Discord secrets
+        id: secrets
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ] || [ -z "$TEST_BOT_TOKEN" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Discord secrets unavailable — skipping live smoke tests (likely a Dependabot PR). Push to main runs the full suite."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Acquire shared-guild lease
+        id: lease
+        if: steps.secrets.outputs.available == 'true'
+        # Slot 1 exists only when ALL of its secrets do; otherwise the pool is 1.
+        run: |
+          if [ -n "$DISCORD_BOT_TOKEN_1" ] && [ -n "$DISCORD_CLIENT_ID_1" ] && [ -n "$DISCORD_CLIENT_SECRET_1" ]; then
+            export LEASE_POOL_SIZE=2
+          else
+            export LEASE_POOL_SIZE=1
+            echo "::warning::DISCORD_*_1 secrets missing: lease pool shrunk to 1 (slot 0 only)"
+          fi
+          bash scripts/ci/discord-smoke-lease.sh acquire
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEASE_NAME: discord-smoke
+
+      - name: Configure and connect Discord bot
+        if: steps.secrets.outputs.available == 'true'
+        run: |
+          # ROK-1522 Phase 2: the bot identity belongs to the lease slot. Never
+          # fall back to slot 0's bot — two runs under one bot collide.
+          case "${SMOKE_POOL_INDEX:-}" in
+            0) BOT_TOKEN="$DISCORD_BOT_TOKEN"; CLIENT_ID="$DISCORD_CLIENT_ID"; CLIENT_SECRET="$DISCORD_CLIENT_SECRET" ;;
+            1) BOT_TOKEN="$DISCORD_BOT_TOKEN_1"; CLIENT_ID="$DISCORD_CLIENT_ID_1"; CLIENT_SECRET="$DISCORD_CLIENT_SECRET_1" ;;
+            *) echo "::error::no bot identity for SMOKE_POOL_INDEX='${SMOKE_POOL_INDEX:-}'"; exit 1 ;;
+          esac
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
+            echo "::error::lease slot ${SMOKE_POOL_INDEX} has an empty bot secret; refusing to run under another slot's bot"
+            exit 1
+          fi
+          echo "Using lease slot ${SMOKE_POOL_INDEX}'s bot identity"
+          echo "Authenticating..."
+          TOKEN=$(curl -sf http://localhost:3000/auth/local \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@local","password":"discord-smoke-ci-password"}' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+
+          echo "Configuring Discord bot token..."
+          curl -sf -X PUT http://localhost:3000/admin/settings/discord-bot \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"botToken\":\"$BOT_TOKEN\",\"enabled\":true}" \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin).get("message",""))'
+
+          echo "Configuring Discord OAuth..."
+          curl -sf -X PUT http://localhost:3000/admin/settings/oauth \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"$CLIENT_ID\",\"clientSecret\":\"$CLIENT_SECRET\"}" > /dev/null 2>&1 || true
+
+          echo "Waiting for Discord bot to connect..."
+          for _ in $(seq 1 30); do
+            STATUS=$(curl -sf http://localhost:3000/admin/settings/discord-bot \
+              -H "Authorization: Bearer $TOKEN" \
+              2>/dev/null || echo '{}')
+            if echo "$STATUS" | python3 -c 'import sys,json; d=json.load(sys.stdin); exit(0 if d.get("connected") else 1)' 2>/dev/null; then
+              echo "Discord bot connected"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Discord bot failed to connect within 60s"
+          exit 1
+
+      - name: Install test-bot dependencies
+        run: npm install
+        working-directory: tools/test-bot
+
+      # Categories: embed, flow, dm, command, voice
+      # Note: 'cdp-command' is intentionally excluded — it requires Discord
+      # Electron running with CDP (--remote-debugging-port), which is only
+      # available in local dev (see scripts/launch-discord.sh). Run it
+      # locally with: SMOKE_CATEGORY=cdp-command npx tsx src/smoke/run.ts
+
+      - name: Run embed smoke tests
+        if: steps.secrets.outputs.available == 'true'
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: embed
+
+      - name: Run flow smoke tests
+        if: steps.secrets.outputs.available == 'true'
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: flow
+
+      - name: Run DM smoke tests
+        if: steps.secrets.outputs.available == 'true'
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: dm
+
+      - name: Run command smoke tests
+        if: steps.secrets.outputs.available == 'true'
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: command
+
+      - name: Run voice smoke tests
+        if: steps.secrets.outputs.available == 'true'
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: voice
+
+      # ROK-1522: the API holds the bot's gateway session. Stop it BEFORE the
+      # lease is released, or the next waiter connects the same bot while
+      # this one is still live. Never fails, so the release still runs.
+      - name: Stop API server
+        if: always()
+        continue-on-error: true
+        run: |
+          MAIN=api/dist/src/main.js
+          alive() {
+            if [ -n "${API_PID:-}" ]; then kill -0 "$API_PID" 2>/dev/null
+            else pgrep -f "node ${MAIN}" > /dev/null; fi
+          }
+          stop() {  # stop SIGNAL
+            if [ -n "${API_PID:-}" ]; then kill "-$1" "$API_PID" 2>/dev/null || true
+            else pkill "-$1" -f "node ${MAIN}" || true; fi
+          }
+          alive || { echo "API not running"; exit 0; }
+          stop TERM
+          for i in $(seq 1 30); do
+            alive || { echo "API stopped after ${i}s"; exit 0; }
+            sleep 1
+          done
+          echo "::warning::API still running after 30s — sending SIGKILL"
+          stop KILL
+          for _ in $(seq 1 10); do alive || exit 0; sleep 1; done
+          echo "::warning::API did not exit; releasing the lease anyway"
+
+      # ROK-1769: the API's stdout/stderr, readable after a failed run.
+      # ROK-944: also surface the scheduled-event completion path (status
+      # PATCH errors, timeouts) so a pool-0 failure names its cause.
+      - name: Show API errors
+        if: failure()
+        continue-on-error: true
+        run: |
+          [ -f api.log ] || { echo "no api.log"; exit 0; }
+          grep -iE "ephemeral|InvalidType|DiscordAPIError|Missing|scheduled|ScheduledEvent|completion|timeout|429|rate.?limit" api.log | tail -100 || true
+
+      - name: Upload API log
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: discord-smoke-api-log
+          path: api.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # ROK-1522: runs on success, failure, cancel and timeout. The script
+      # deletes the ref only if this run still owns it, and never fails.
+      - name: Release shared-guild lease
+        if: always() && steps.lease.outputs.ref != ''
+        run: bash scripts/ci/discord-smoke-lease.sh release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEASE_REF: ${{ steps.lease.outputs.ref }}
+          LEASE_SHA: ${{ steps.lease.outputs.sha }}
+          LEASE_ACQUIRED_AT: ${{ steps.lease.outputs.acquired_at }}

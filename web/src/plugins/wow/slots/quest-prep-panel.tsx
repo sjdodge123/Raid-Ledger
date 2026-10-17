@@ -1,0 +1,331 @@
+/**
+ * Quest Prep Panel — shows relevant quests when a player is signed up for a dungeon event.
+ *
+ * ROK-246: Dungeon Companion — Quest Suggestions UI
+ */
+import { useState, useMemo } from 'react';
+import { useAuth } from '../../../hooks/use-auth';
+import type { EnrichedDungeonQuestDto, EquipmentItemDto, QuestCoverageEntry, EventQuestPrereqsResponse } from '@raid-ledger/contract';
+import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
+import { useEnrichedQuests, useQuestCoverage, useQuestPrereqs, useUpdateQuestProgress } from '../hooks/use-quest-prep';
+import { useCharacterDetail } from '../../../hooks/use-character-detail';
+import { slugToContentVariant } from '../lib/wow-variant-config';
+import { QuestCard, type QuestCardPrereqs } from './quest-card';
+import { QuestPrepNeededLine } from './quest-prep-needed-line';
+import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
+import './quest-prep-panel.css';
+
+/** Sub-group quests by practical pickup type */
+function groupByType(list: EnrichedDungeonQuestDto[]) {
+    return {
+        sharable: list.filter((q) => q.sharable && !q.prevQuestId),
+        chain: list.filter((q) => !!q.prevQuestId),
+        solo: list.filter((q) => !q.sharable && !q.prevQuestId),
+    };
+}
+
+/** Props passed via PluginSlot context from event-detail-page */
+interface QuestPrepPanelProps {
+    contentInstances: Record<string, unknown>[];
+    eventId?: number;
+    gameSlug?: string;
+    characterId?: string;
+}
+
+interface ParsedInstance { id: number; name?: string | undefined }
+
+function useParsedInstances(contentInstances: Record<string, unknown>[]): ParsedInstance[] {
+    return useMemo(
+        () => contentInstances
+            .map((ci) => ({
+                id: typeof ci.id === 'number' ? ci.id : Number(ci.id ?? ci.instanceId),
+                name: typeof ci.name === 'string' ? ci.name : undefined,
+            }))
+            .filter((inst) => !isNaN(inst.id) && inst.id > 0),
+        [contentInstances],
+    );
+}
+
+function useInstanceIds(instances: ParsedInstance[]) {
+    return useMemo(() => instances.map((inst) => inst.id), [instances]);
+}
+
+function useEquippedSlotMap(character: ReturnType<typeof useCharacterDetail>['data']) {
+    return useMemo(() => {
+        const map = new Map<string, EquipmentItemDto>();
+        if (character?.equipment?.items) {
+            for (const item of character.equipment.items) map.set(item.slot.toUpperCase(), item);
+        }
+        return map;
+    }, [character]);
+}
+
+function useCoverageMap(coverage: QuestCoverageEntry[] | undefined) {
+    return useMemo(() => {
+        const map = new Map<number, QuestCoverageEntry>();
+        if (coverage) { for (const entry of coverage) map.set(entry.questId, entry); }
+        return map;
+    }, [coverage]);
+}
+
+/** ROK-1748: index the viewer's chain state by questId for the cards. */
+function usePrereqsByQuest(prereqs: EventQuestPrereqsResponse | undefined) {
+    return useMemo(() => new Map<number, QuestCardPrereqs>(
+        (prereqs?.quests ?? []).map((state) => [state.questId, { state, asOf: prereqs?.asOf ?? null }]),
+    ), [prereqs]);
+}
+
+function useQuestPrepState(eventId: number | undefined) {
+    const [expandedQuests, setExpandedQuests] = useState<Set<number>>(new Set());
+    const [pendingQuestId, setPendingQuestId] = useState<number | null>(null);
+    const updateProgress = useUpdateQuestProgress(eventId);
+
+    const handleTogglePickedUp = (questId: number, currentlyPickedUp: boolean) => {
+        if (eventId) {
+            setPendingQuestId(questId);
+            updateProgress.mutate({ questId, pickedUp: !currentlyPickedUp }, { onSettled: () => setPendingQuestId(null) });
+        }
+    };
+    const toggleExpanded = (questId: number) => {
+        setExpandedQuests((prev) => {
+            const next = new Set(prev);
+            if (next.has(questId)) next.delete(questId); else next.add(questId);
+            return next;
+        });
+    };
+    return { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded };
+}
+
+/** Flatten a questsByInstance map into a single array */
+function flattenQuestMap(questMap: Map<number, EnrichedDungeonQuestDto[]> | undefined): EnrichedDungeonQuestDto[] {
+    if (!questMap) return [];
+    const seen = new Set<number>();
+    const result: EnrichedDungeonQuestDto[] = [];
+    for (const batch of questMap.values()) {
+        for (const q of batch) {
+            if (!seen.has(q.questId)) { seen.add(q.questId); result.push(q); }
+        }
+    }
+    return result;
+}
+
+/** Filter and deduplicate quests for a character */
+function filterUsableQuests(quests: EnrichedDungeonQuestDto[], character: ReturnType<typeof useCharacterDetail>['data']) {
+    if (quests.length === 0) return [];
+    const charClass = character?.class ?? null;
+    const charRace = character?.race ?? null;
+    return deduplicateByName(quests.filter((q) => isQuestUsable(q, charClass, charRace)), charClass, charRace);
+}
+
+function useAllUsableQuests(questMap: Map<number, EnrichedDungeonQuestDto[]> | undefined, character: ReturnType<typeof useCharacterDetail>['data']) {
+    return useMemo(() => filterUsableQuests(flattenQuestMap(questMap), character), [questMap, character]);
+}
+
+/** Options for building shared quest props from hook state */
+interface BuildSharedPropsOptions {
+    user: ReturnType<typeof useAuth>['user'];
+    coverageMap: Map<number, QuestCoverageEntry>;
+    prereqsByQuest: Map<number, QuestCardPrereqs>;
+    eventId: number | undefined;
+    wowheadVariant: string;
+    expandedQuests: Set<number>;
+    pendingQuestId: number | null;
+    equippedBySlot: Map<string, EquipmentItemDto>;
+    character: ReturnType<typeof useCharacterDetail>['data'];
+    characterId: string | undefined;
+    toggleExpanded: (id: number) => void;
+    handleTogglePickedUp: (id: number, v: boolean) => void;
+}
+
+/** Assemble shared props from all the individual hooks */
+function buildSharedProps(opts: BuildSharedPropsOptions): SharedQuestProps {
+    return {
+        coverageMap: opts.coverageMap,
+        prereqsByQuest: opts.prereqsByQuest,
+        currentUserId: opts.user?.id,
+        eventId: opts.eventId,
+        wowheadVariant: opts.wowheadVariant,
+        expandedQuests: opts.expandedQuests,
+        pendingQuestId: opts.pendingQuestId,
+        equippedBySlot: opts.equippedBySlot,
+        charClass: opts.character?.class ?? null,
+        characterId: opts.characterId,
+        onToggleExpanded: opts.toggleExpanded,
+        onTogglePickedUp: opts.handleTogglePickedUp,
+    };
+}
+
+/** Quest Prep Panel main component */
+export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId }: QuestPrepPanelProps) {
+    const { user } = useAuth();
+    const variant = useMemo(() => slugToContentVariant(gameSlug), [gameSlug]);
+    const parsedInstances = useParsedInstances(contentInstances);
+    const instanceIds = useInstanceIds(parsedInstances);
+    const { data: questMap, isLoading } = useEnrichedQuests(instanceIds, variant);
+    const { data: coverage } = useQuestCoverage(eventId);
+    const { data: prereqs } = useQuestPrereqs(eventId, gameSlug);
+    const prereqsByQuest = usePrereqsByQuest(prereqs);
+    const { data: character } = useCharacterDetail(characterId);
+    const wowheadVariant = character?.gameVariant ?? variant;
+    const equippedBySlot = useEquippedSlotMap(character);
+    const coverageMap = useCoverageMap(coverage);
+    const allUsable = useAllUsableQuests(questMap, character);
+    const allFlat = useMemo(() => flattenQuestMap(questMap), [questMap]);
+    const { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded } = useQuestPrepState(eventId);
+    useWowheadTooltips(questMap ? [allFlat, character] : []);
+
+    if (!contentInstances.length || instanceIds.length === 0) return null;
+    if (isLoading) return <div className="quest-prep-panel"><div className="quest-prep-loading"><span>Loading quest data…</span></div></div>;
+    if (!questMap || allFlat.length === 0) return null;
+    if (allUsable.length === 0 && allFlat.length > 0) return <QuestPrepEmpty />;
+
+    const shared = buildSharedProps({ user, coverageMap, prereqsByQuest, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, character, characterId, toggleExpanded, handleTogglePickedUp });
+    return <QuestPrepBody instances={parsedInstances} questMap={questMap} allUsable={allUsable} character={character} shared={shared} prereqs={prereqs} />;
+}
+
+/** Render the panel body — separated to keep main component under 30 lines */
+function QuestPrepBody({ instances, questMap, allUsable, character, shared, prereqs }: {
+    instances: ParsedInstance[]; questMap: Map<number, EnrichedDungeonQuestDto[]>; prereqs: EventQuestPrereqsResponse | undefined;
+    allUsable: EnrichedDungeonQuestDto[]; character: ReturnType<typeof useCharacterDetail>['data']; shared: SharedQuestProps;
+}) {
+    return (
+        <div className="quest-prep-panel">
+            <QuestPrepHeader count={allUsable.length} prereqs={prereqs} />
+            {instances.length > 1
+                ? instances.map((inst) => (
+                    <InstanceQuestSection key={inst.id} instance={inst} quests={questMap.get(inst.id) ?? []} character={character} {...shared} />
+                ))
+                : <QuestLocationGroups quests={allUsable} {...shared} />
+            }
+        </div>
+    );
+}
+
+function QuestPrepHeader({ count, prereqs }: { count: number; prereqs: EventQuestPrereqsResponse | undefined }) {
+    return (
+        <>
+        <div className="quest-prep-panel__header">
+            <h2 className="quest-prep-panel__title">
+                <span className="quest-prep-panel__title-icon">📋</span>
+                Quest Prep
+            </h2>
+            <span className="text-xs text-muted">{count} quests</span>
+        </div>
+        <QuestPrepNeededLine prereqs={prereqs} />
+        </>
+    );
+}
+
+/** Empty state when all quests are filtered out */
+function QuestPrepEmpty() {
+    return (
+        <div className="quest-prep-panel">
+            <div className="quest-prep-panel__header">
+                <h2 className="quest-prep-panel__title">
+                    <span className="quest-prep-panel__title-icon">📋</span>
+                    Quest Prep
+                </h2>
+            </div>
+            <div className="quest-prep-empty">
+                <p>No quests match your character's class and race.</p>
+            </div>
+        </div>
+    );
+}
+
+/** Shared props for quest rendering (passed through from panel) */
+interface SharedQuestProps {
+    coverageMap: Map<number, QuestCoverageEntry>;
+    prereqsByQuest: Map<number, QuestCardPrereqs>;
+    currentUserId: number | undefined;
+    eventId: number | undefined;
+    wowheadVariant: string;
+    expandedQuests: Set<number>;
+    pendingQuestId: number | null;
+    equippedBySlot: Map<string, EquipmentItemDto>;
+    charClass: string | null;
+    characterId: string | undefined;
+    onToggleExpanded: (questId: number) => void;
+    onTogglePickedUp: (questId: number, currentlyPickedUp: boolean) => void;
+}
+
+/** Render outside/inside location groups for a list of quests */
+function QuestLocationGroups({ quests, ...rest }: { quests: EnrichedDungeonQuestDto[] } & SharedQuestProps) {
+    return (
+        <>
+            <QuestGroup title="Pick up before you go" icon="&#x1F5FA;&#xFE0F;" quests={quests.filter((q) => !q.startsInsideDungeon)} {...rest} />
+            <QuestGroup title="Starts inside the dungeon" icon="&#x1F3F0;" quests={quests.filter((q) => q.startsInsideDungeon)} {...rest} />
+        </>
+    );
+}
+
+/** Render a dungeon instance section with header + location-grouped quests (multi-dungeon) */
+function InstanceQuestSection({ instance, quests, character, ...rest }: {
+    instance: ParsedInstance; quests: EnrichedDungeonQuestDto[];
+    character: ReturnType<typeof useCharacterDetail>['data'];
+} & SharedQuestProps) {
+    const usable = filterUsableQuests(quests, character);
+    if (usable.length === 0) return null;
+    return (
+        <div className="quest-prep-instance">
+            {instance.name && <h3 className="quest-prep-instance__name">{instance.name}</h3>}
+            <QuestLocationGroups quests={usable} {...rest} />
+        </div>
+    );
+}
+
+/** Props for a single quest group (outside/inside) with sub-groups */
+interface QuestGroupProps extends SharedQuestProps {
+    title: string;
+    icon: string;
+    quests: EnrichedDungeonQuestDto[];
+}
+
+/** Render a group of quests (outside/inside) with sub-groups */
+function QuestGroup({ title, icon, quests, ...rest }: QuestGroupProps) {
+    if (quests.length === 0) return null;
+    const { sharable, chain, solo } = groupByType(quests);
+    return (
+        <div className="quest-group">
+            <div className="quest-group__title">
+                <span className="quest-group__icon">{icon}</span>
+                <span>{title} ({quests.length})</span>
+            </div>
+            <QuestSubGroup label="Sharable" icon="🔗" quests={sharable} {...rest} />
+            <QuestSubGroup label="Requires quest chain" icon="⛓" quests={chain} {...rest} />
+            <QuestSubGroup label="Must pick up yourself" icon="👤" quests={solo} {...rest} />
+        </div>
+    );
+}
+
+/** Render a sub-group of quests */
+function QuestSubGroup({ label, icon, quests, ...cardProps }: {
+    label: string; icon: string; quests: EnrichedDungeonQuestDto[];
+} & Omit<QuestGroupProps, 'title' | 'icon' | 'quests'>) {
+    if (quests.length === 0) return null;
+    return (
+        <div className="quest-subgroup">
+            <div className="quest-subgroup__label">
+                <span>{icon}</span>
+                <span>{label} ({quests.length})</span>
+            </div>
+            {quests.map((quest) => (
+                <QuestCard
+                    key={quest.questId}
+                    quest={quest}
+                    questCoverage={cardProps.coverageMap.get(quest.questId)}
+                    currentUserId={cardProps.currentUserId}
+                    eventId={cardProps.eventId}
+                    wowheadVariant={cardProps.wowheadVariant}
+                    isExpanded={cardProps.expandedQuests.has(quest.questId)}
+                    pendingQuestId={cardProps.pendingQuestId}
+                    equippedBySlot={cardProps.equippedBySlot}
+                    charClass={cardProps.charClass}
+                    characterId={cardProps.characterId}
+                    onToggleExpanded={cardProps.onToggleExpanded} onTogglePickedUp={cardProps.onTogglePickedUp}
+                    prereqs={cardProps.prereqsByQuest.get(quest.questId)}
+                />
+            ))}
+        </div>
+    );
+}

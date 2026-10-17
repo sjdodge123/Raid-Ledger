@@ -1,0 +1,167 @@
+import type {
+  ButtonInteraction,
+  InteractionReplyOptions,
+  StringSelectMenuInteraction,
+} from 'discord.js';
+import { eq } from 'drizzle-orm';
+import * as schema from '../../drizzle/schema';
+import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
+import type { SignupInteractionDeps } from './signup-interaction.types';
+
+/**
+ * Rate-limit tracker for signup button interactions.
+ * Prevents spam clicks within a cooldown window.
+ */
+const interactionCooldowns = new Map<string, number>();
+
+/** Cooldown window (ms) between interactions per user per event. */
+export const COOLDOWN_MS = 3000;
+
+const CLEANUP_INTERVAL_MS = 60_000;
+let lastCleanup = 0;
+
+/** Remove expired entries from the cooldown map. */
+export function cleanupCooldowns(): void {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
+  lastCleanup = now;
+  for (const [key, timestamp] of interactionCooldowns) {
+    if (now - timestamp >= COOLDOWN_MS) {
+      interactionCooldowns.delete(key);
+    }
+  }
+}
+
+/** Get the last interaction timestamp for a key. */
+export function getCooldown(key: string): number | undefined {
+  return interactionCooldowns.get(key);
+}
+
+/** Set the last interaction timestamp for a key. */
+export function setCooldown(key: string, ts: number): void {
+  interactionCooldowns.set(key, ts);
+}
+
+/** @internal Exposed for testing only — clears the cooldown map. */
+export function _resetCooldowns(): void {
+  interactionCooldowns.clear();
+  lastCleanup = 0;
+}
+
+/** @internal Exposed for testing only — current cooldown map size. */
+export function _cooldownsSize(): number {
+  return interactionCooldowns.size;
+}
+
+/**
+ * Check if an error is a Discord API interaction race condition.
+ * Code 40060 = already acknowledged, 10062 = expired token.
+ */
+export function isDiscordInteractionError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    ((error as { code: number }).code === 40060 ||
+      (error as { code: number }).code === 10062)
+  );
+}
+
+/** Logger shape for safe reply helpers. */
+interface MinimalLogger {
+  warn: (msg: string) => void;
+}
+
+/**
+ * Safely reply to an interaction, catching Discord API errors.
+ */
+export async function safeReply(
+  interaction: ButtonInteraction | StringSelectMenuInteraction,
+  options: InteractionReplyOptions & { content: string },
+  logger: MinimalLogger,
+): Promise<void> {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content: options.content });
+    } else {
+      await interaction.reply(options);
+    }
+  } catch (error: unknown) {
+    if (isDiscordInteractionError(error)) {
+      logger.warn(
+        `Interaction response failed (code ${(error as { code: number }).code}): ${(error as Error).message}`,
+      );
+      return;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Safely edit a deferred/replied interaction.
+ */
+export async function safeEditReply(
+  interaction: ButtonInteraction | StringSelectMenuInteraction,
+  options: Parameters<ButtonInteraction['editReply']>[0],
+  logger: MinimalLogger,
+): Promise<void> {
+  try {
+    await interaction.editReply(options);
+  } catch (error: unknown) {
+    if (isDiscordInteractionError(error)) {
+      logger.warn(
+        `Interaction editReply failed (code ${(error as { code: number }).code}): ${(error as Error).message}`,
+      );
+      return;
+    }
+    throw error;
+  }
+}
+
+/** Parse a signup button customId into action + eventId. */
+export function parseButtonCustomId(
+  customId: string,
+): { action: string; eventId: number } | null {
+  const parts = customId.split(':');
+  if (parts.length !== 2) return null;
+  const [action, eventIdStr] = parts;
+  if (action === undefined || eventIdStr === undefined) return null;
+  const eventId = parseInt(eventIdStr, 10);
+  if (isNaN(eventId)) return null;
+  const validActions = [
+    SIGNUP_BUTTON_IDS.SIGNUP,
+    SIGNUP_BUTTON_IDS.TENTATIVE,
+    SIGNUP_BUTTON_IDS.DECLINE,
+    SIGNUP_BUTTON_IDS.JOIN_SIGNUP,
+    SIGNUP_BUTTON_IDS.QUICK_SIGNUP,
+  ];
+  if (!validActions.includes(action as (typeof validActions)[number]))
+    return null;
+  return { action, eventId };
+}
+
+/** Find a linked Raid Ledger user by their Discord ID. */
+export async function findLinkedUser(
+  discordUserId: string,
+  deps: Pick<SignupInteractionDeps, 'db'>,
+): Promise<typeof schema.users.$inferSelect | null> {
+  const [user] = await deps.db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordUserId))
+    .limit(1);
+  return user ?? null;
+}
+
+/** Fetch an event by ID. */
+export async function fetchEvent(
+  eventId: number,
+  deps: Pick<SignupInteractionDeps, 'db'>,
+): Promise<typeof schema.events.$inferSelect | null> {
+  const [event] = await deps.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return event ?? null;
+}

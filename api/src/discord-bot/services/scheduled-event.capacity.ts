@@ -1,0 +1,50 @@
+import type { Logger } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../drizzle/schema';
+import type { DiscordBotClientService } from '../discord-bot-client.service';
+import { isAtScheduledEventCapacityError } from './scheduled-event.discord-ops';
+import { gcStaleRLScheduledEvents } from './scheduled-event.gc';
+import { CapacityStillSaturatedError } from './scheduled-event.helpers';
+
+type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
+
+/**
+ * ROK-1332: Catch Discord 30038 ("guild at 100-SE cap"), sweep stale
+ * RL-tracked SEs, retry the call once. If GC freed 0 rows, throw
+ * CapacityStillSaturatedError so the reconciliation cron can apply
+ * per-event backoff and emit a single WARN per tick.
+ *
+ * Lives as a free function (not a method on ScheduledEventService) so the
+ * service file stays under the 300-line cap; the wrapper itself is pure
+ * coordination + has no service-instance dependencies beyond what's passed in.
+ */
+export async function withCapacityRecovery(
+  guild: Guild,
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  fn: () => Promise<void>,
+  onBeforeRetry?: () => void,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    if (!isAtScheduledEventCapacityError(err)) throw err;
+    const { freed, orphanCount, deleteFailures } =
+      await gcStaleRLScheduledEvents(guild, db);
+    logger.log(
+      `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount} deleteFailures=${deleteFailures.length}`,
+    );
+    if (deleteFailures.length > 0) {
+      const codes = deleteFailures.map((f) => f.code ?? 'unknown').join(',');
+      logger.warn(`GC delete failures by Discord code: ${codes}`);
+    }
+    // freed now includes reclaimed RL duplicates (ROK-1347). Only back off when
+    // GC truly couldn't free anything — the remaining cap is operator-owned.
+    if (freed === 0) throw new CapacityStillSaturatedError(orphanCount);
+    // GC just mutated guild SE state — let the caller drop any cached guild-SE
+    // snapshot so the retry's adopt path can't resurrect a deleted SE id
+    // (review medium, fix/batch-2026-06-06).
+    onBeforeRetry?.();
+    await fn();
+  }
+}

@@ -1,0 +1,148 @@
+import {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  PermissionsBitField,
+  type ClientOptions,
+  type Guild,
+} from 'discord.js';
+
+export interface GuildInfo {
+  name: string;
+  memberCount: number;
+}
+
+export interface PermissionCheckResult {
+  name: string;
+  granted: boolean;
+}
+
+/** The permissions the bot needs to function properly. */
+export const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
+  { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
+  { label: 'Kick Members', flag: PermissionsBitField.Flags.KickMembers },
+  { label: 'Manage Channels', flag: PermissionsBitField.Flags.ManageChannels },
+  {
+    label: 'Create Instant Invite',
+    flag: PermissionsBitField.Flags.CreateInstantInvite,
+  },
+  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
+  { label: 'Send Messages', flag: PermissionsBitField.Flags.SendMessages },
+  { label: 'Embed Links', flag: PermissionsBitField.Flags.EmbedLinks },
+  {
+    label: 'Read Message History',
+    flag: PermissionsBitField.Flags.ReadMessageHistory,
+  },
+  { label: 'Send Polls', flag: PermissionsBitField.Flags.SendPolls },
+  {
+    label: 'Manage Guild Expressions',
+    flag: PermissionsBitField.Flags.ManageGuildExpressions,
+  },
+  {
+    label: 'Create Guild Expressions',
+    flag: PermissionsBitField.Flags.CreateGuildExpressions,
+  },
+  { label: 'Manage Events', flag: PermissionsBitField.Flags.ManageEvents },
+  { label: 'Create Events', flag: PermissionsBitField.Flags.CreateEvents },
+  { label: 'Connect', flag: PermissionsBitField.Flags.Connect },
+  // ROK-1471: a forum post IS a thread, so the LFG board needs the thread
+  // trio on top of Manage Channels (which already covers forum tag editing).
+  { label: 'Manage Threads', flag: PermissionsBitField.Flags.ManageThreads },
+  {
+    label: 'Create Public Threads',
+    flag: PermissionsBitField.Flags.CreatePublicThreads,
+  },
+  {
+    label: 'Send Messages in Threads',
+    flag: PermissionsBitField.Flags.SendMessagesInThreads,
+  },
+  // ROK-1740: the join post pins itself. Discord split pinning out of Manage
+  // Messages (enforced 2026-02-23), so it must be requested on its own.
+  { label: 'Pin Messages', flag: PermissionsBitField.Flags.PinMessages },
+];
+
+/**
+ * The OR of every required permission flag, as Discord's `permissions` integer.
+ *
+ * Derived, never literal: appending to {@link REQUIRED_PERMISSIONS} is the ONLY
+ * edit needed to change the invite URL (ROK-1471 AC11).
+ *
+ * @param perms - Permission descriptors to combine; defaults to the required set.
+ * @returns The combined permission bitfield.
+ */
+export function botInvitePermissionsBits(
+  perms: { label: string; flag: bigint }[] = REQUIRED_PERMISSIONS,
+): bigint {
+  return perms.reduce((acc, p) => acc | p.flag, 0n);
+}
+
+/**
+ * Build the OAuth2 install URL that grants the bot exactly what it needs.
+ *
+ * @param clientId - The bot application's client id.
+ * @param perms - Permission descriptors to request; defaults to the required set.
+ * @returns The `discord.com/oauth2/authorize` URL, permissions derived.
+ */
+export function buildBotInviteUrl(
+  clientId: string,
+  perms: { label: string; flag: bigint }[] = REQUIRED_PERMISSIONS,
+): string {
+  const bits = botInvitePermissionsBits(perms).toString();
+  return (
+    `https://discord.com/oauth2/authorize?client_id=${clientId}` +
+    `&scope=bot%20applications.commands&permissions=${bits}`
+  );
+}
+
+/** Check bot permissions in the guild. */
+export function checkBotPermissions(
+  guild: Guild | null,
+): PermissionCheckResult[] {
+  const me = guild?.members.me;
+  return REQUIRED_PERMISSIONS.map((p) => ({
+    name: p.label,
+    granted: me ? me.permissions.has(p.flag) : false,
+  }));
+}
+
+/**
+ * Client-wide mention default (ROK-1757). Every send/edit/reply that does not
+ * pass its own `allowedMentions` inherits this, so user-controlled text
+ * (event titles, character/game names, push content) can never ping
+ * `@everyone`, a role or a user. A message that MEANS to ping passes an
+ * explicit `allowedMentions: { users: [...] }` / `{ roles: [...] }`.
+ * `repliedUser: true` keeps today's reply-ping behaviour unchanged.
+ */
+export const DEFAULT_ALLOWED_MENTIONS: NonNullable<
+  ClientOptions['allowedMentions']
+> = { parse: [], repliedUser: true };
+
+/** Create a fresh Discord.js Client with all required intents. */
+export function createDiscordClient(): Client {
+  return new Client({
+    allowedMentions: DEFAULT_ALLOWED_MENTIONS,
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildPresences,
+      GatewayIntentBits.GuildScheduledEvents,
+      GatewayIntentBits.DirectMessages,
+      GatewayIntentBits.MessageContent,
+      // ROK-1506: reaction events for the thread mirror. Non-privileged — no
+      // portal toggle, no re-invite; takes effect on the next IDENTIFY.
+      GatewayIntentBits.GuildMessageReactions,
+    ],
+    // ROK-1483 D6: without `Partials.Message`, discord.js DROPS `messageUpdate`
+    // and `messageDelete` for any uncached message — and every message older
+    // than the last bot restart is uncached, so the thread mirror could never
+    // reflect an edit or a delete to history.
+    //
+    // ROK-1506 D1: `Partials.Reaction` so a reaction on an uncached message is
+    // delivered at all. `Partials.User` is deliberately ABSENT — without it the
+    // reactor is never resolvable, which makes "no per-user reaction data"
+    // (AC4) a structural property rather than a policy to remember.
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction],
+  });
+}

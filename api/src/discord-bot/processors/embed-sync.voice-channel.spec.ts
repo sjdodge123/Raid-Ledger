@@ -1,0 +1,254 @@
+/**
+ * Tests that EmbedSyncProcessor resolves and passes voiceChannelId to embeds (ROK-507).
+ */
+import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
+import { EmbedSyncProcessor } from './embed-sync.processor';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { DiscordEmbedFactory } from '../services/discord-embed.factory';
+import { ScheduledEventService } from '../services/scheduled-event.service';
+import { ChannelResolverService } from '../services/channel-resolver.service';
+import { SettingsService } from '../../settings/settings.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { EMBED_STATES } from '../discord-bot.constants';
+import { EMBED_SYNC_QUEUE } from '../queues/embed-sync.queue';
+import { QueueHealthService } from '../../queue/queue-health.service';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import type { Job } from 'bullmq';
+import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
+import { at } from '../../common/testing/narrow';
+
+const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
+
+const mockEvent = {
+  id: 42,
+  title: 'Raid Night',
+  description: 'Epic night',
+  duration: [FUTURE, FUTURE_END],
+  maxAttendees: 25,
+  cancelledAt: null,
+  gameId: 7,
+  slotConfig: null,
+  isAdHoc: false,
+  discordScheduledEventId: null,
+  notificationChannelOverride: null,
+  recurrenceGroupId: null,
+  ephemeralVoiceChannelId: null,
+};
+
+const mockRecord = {
+  id: 'record-uuid',
+  eventId: 42,
+  guildId: 'guild-123',
+  channelId: 'channel-789',
+  messageId: 'msg-456',
+  embedState: EMBED_STATES.POSTED,
+};
+
+const mockEmbed = new EmbedBuilder().setTitle('Test');
+const mockRow = new ActionRowBuilder<ButtonBuilder>();
+
+function makeSelectChain(rows: unknown[] = []) {
+  const chain: Record<string, jest.Mock> & { then?: unknown } = {};
+  chain.from = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockResolvedValue(rows);
+  chain.leftJoin = jest.fn().mockReturnValue(chain);
+  chain.innerJoin = jest.fn().mockReturnValue(chain);
+  chain.groupBy = jest.fn().mockResolvedValue([]);
+  chain.select = jest.fn().mockReturnValue(chain);
+  chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+    Promise.resolve(rows).then(resolve, reject);
+  return chain;
+}
+
+function makeUpdateChain() {
+  const chain: Record<string, jest.Mock> = {};
+  chain.set = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockResolvedValue(undefined);
+  return chain;
+}
+
+function setupDbForSuccessfulSync(mockDb: Record<'select', jest.Mock>) {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockRecord]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+}
+
+let processor: EmbedSyncProcessor;
+let embedFactory: jest.Mocked<DiscordEmbedFactory>;
+let channelResolver: jest.Mocked<ChannelResolverService>;
+let mockDb: Record<'select' | 'update', jest.Mock>;
+
+beforeEach(async () => {
+  mockDb = {
+    select: jest.fn().mockReturnValue(makeSelectChain()),
+    update: jest.fn().mockReturnValue(makeUpdateChain()),
+  };
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      EmbedSyncProcessor,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: getQueueToken(EMBED_SYNC_QUEUE),
+        useValue: {
+          drain: jest.fn(),
+          getJobCounts: jest.fn().mockResolvedValue({
+            waiting: 0,
+            active: 0,
+            completed: 0,
+            failed: 0,
+            delayed: 0,
+          }),
+        },
+      },
+      { provide: QueueHealthService, useValue: { register: jest.fn() } },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+        },
+      },
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventUpdate: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue(null),
+          getDefaultTimezone: jest.fn().mockResolvedValue(null),
+        },
+      },
+      {
+        provide: ScheduledEventService,
+        useValue: {
+          updateDescription: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          // ROK-1389: enrichWithVoiceChannel routes through the shared entry.
+          resolveVoiceChannelHonoringOverride: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+    ],
+  }).compile();
+
+  processor = module.get(EmbedSyncProcessor);
+  embedFactory = module.get(DiscordEmbedFactory);
+  channelResolver = module.get(ChannelResolverService);
+});
+
+afterEach(() => {
+  jest.clearAllMocks();
+});
+
+const job = {
+  data: { eventId: 42, reason: 'signup' },
+} as Job<EmbedSyncJobData>;
+
+describe('EmbedSyncProcessor voice channel — resolver calls', () => {
+  it('calls resolveVoiceChannelHonoringOverride with the event gameId', async () => {
+    setupDbForSuccessfulSync(mockDb);
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    await processor.process(job);
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(7, null, null, null);
+  });
+
+  it('calls resolveVoiceChannelHonoringOverride with null when event has no gameId', async () => {
+    const eventWithNoGame = { ...mockEvent, gameId: null };
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([mockRecord]))
+      .mockReturnValueOnce(makeSelectChain([eventWithNoGame]))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([]));
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    await processor.process(job);
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(null, null, null, null);
+  });
+});
+
+describe('EmbedSyncProcessor voice channel — embed data', () => {
+  it('passes voiceChannelId to buildEventUpdate when resolver returns a channel', async () => {
+    setupDbForSuccessfulSync(mockDb);
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+      'voice-ch-999',
+    );
+
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceChannelId: 'voice-ch-999' }),
+      expect.any(Object),
+      expect.any(String),
+    );
+  });
+
+  it('does NOT set voiceChannelId on event data when resolver returns null', async () => {
+    setupDbForSuccessfulSync(mockDb);
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(null);
+
+    await processor.process(job);
+
+    const [eventDataArg] = at(embedFactory.buildEventUpdate.mock.calls, 0);
+    expect(eventDataArg.voiceChannelId).toBeUndefined();
+  });
+});
+
+describe('EmbedSyncProcessor voice channel — skip conditions', () => {
+  it('does not call resolveVoiceChannelForScheduledEvent when bot is not connected', async () => {
+    const clientService = processor['clientService'] as unknown as {
+      isConnected: jest.Mock;
+    };
+    clientService.isConnected.mockReturnValue(false);
+
+    await expect(processor.process(job)).rejects.toThrow(
+      'Discord bot not connected',
+    );
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('does not call resolveVoiceChannelForScheduledEvent when no Discord message record exists', async () => {
+    mockDb.select.mockReturnValue(makeSelectChain([]));
+
+    await processor.process(job);
+
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,121 @@
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Request,
+  Res,
+  UseGuards,
+  Logger,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
+import type { Readable } from 'node:stream';
+import { AdminGuard } from '../auth/admin.guard';
+import { RateLimit } from '../throttler/rate-limit.decorator';
+import { LogsService } from './logs.service';
+import { plainName } from './log-files.helpers';
+import type { LogService } from '@raid-ledger/contract';
+import type { AuthenticatedRequest } from '../auth/types';
+
+@Controller('admin/logs')
+@UseGuards(AuthGuard('jwt'), AdminGuard)
+@RateLimit('admin')
+export class LogsController {
+  private readonly logger = new Logger(LogsController.name);
+
+  constructor(private readonly logsService: LogsService) {}
+
+  @Get()
+  listLogs(@Query('service') service?: string) {
+    const validService = this.isValidService(service) ? service : undefined;
+    const files = this.logsService.listLogFiles(validService);
+    return { files, total: files.length };
+  }
+
+  /** Resolve which filenames to export from query params. */
+  private resolveExportFilenames(
+    service?: string,
+    fileList?: string,
+  ): string[] {
+    if (fileList)
+      return fileList
+        .split(',')
+        .map((f) => f.trim())
+        .filter(Boolean);
+    const validService = this.isValidService(service) ? service : undefined;
+    return this.logsService.listLogFiles(validService).map((f) => f.filename);
+  }
+
+  @Get('export')
+  @RateLimit('export')
+  async exportLogs(
+    @Res() res: Response,
+    @Query('service') service?: string,
+    @Query('files') fileList?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    this.logger.log(
+      `Log export requested by ${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`,
+    );
+    const filenames = this.resolveExportFilenames(service, fileList);
+    if (filenames.length === 0) {
+      res.status(200).json({ files: [], total: 0 });
+      return;
+    }
+    // Awaited before any header is set, so a 413 is still a clean response.
+    const stream = await this.logsService.createExportStream(filenames);
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .slice(0, 19);
+    res.set({
+      'Content-Type': 'application/gzip',
+      'Content-Disposition': `attachment; filename="logs-${timestamp}.tar.gz"`,
+    });
+    this.pipeUntilClosed(stream, res);
+  }
+
+  @Get(':filename')
+  downloadFile(
+    @Param('filename') filename: string,
+    @Res() res: Response,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    this.logger.log(
+      `Log file download: ${filename} by ${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`,
+    );
+
+    const filepath = this.logsService.getValidatedPath(filename);
+    const stream = this.logsService.createScrubbedStream(filepath);
+
+    // A `.gz` generation is streamed decompressed, so drop the suffix.
+    const safeFilename = plainName(filename).replace(/["\r\n]/g, '_');
+    res.set({
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${safeFilename}"`,
+    });
+
+    this.pipeUntilClosed(stream, res);
+  }
+
+  /**
+   * Pipe to the response, and tear the stream chain down when the response
+   * closes (client gone) — `pipe` alone leaves the source reading (ROK-1164).
+   */
+  private pipeUntilClosed(stream: Readable, res: Response): void {
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+  }
+
+  private isValidService(service?: string): service is LogService {
+    return (
+      service === 'api' ||
+      service === 'nginx' ||
+      service === 'postgresql' ||
+      service === 'redis' ||
+      service === 'supervisor' ||
+      service === 'slow-queries'
+    );
+  }
+}

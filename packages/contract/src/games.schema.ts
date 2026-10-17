@@ -1,0 +1,486 @@
+import { z } from 'zod';
+
+// Query parameters for game search
+export const GameSearchQuerySchema = z.object({
+    q: z.string().min(1).max(100),
+});
+
+export type GameSearchQueryDto = z.infer<typeof GameSearchQuerySchema>;
+
+// Individual game from IGDB (cached locally) — basic fields
+export const IgdbGameSchema = z.object({
+    id: z.number(),
+    /** ROK-400: nullable for non-IGDB games (e.g., manually created "Generic" game) */
+    igdbId: z.number().nullable(),
+    name: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+    /** ROK-1031: Player count for max-attendees auto-populate. */
+    playerCount: z.object({ min: z.number(), max: z.number() }).nullable().optional(),
+});
+
+export type IgdbGameDto = z.infer<typeof IgdbGameSchema>;
+
+// ============================================================
+// ROK-229: Expanded game schemas for discovery
+// ============================================================
+
+/**
+ * ROK-1397: Co-Optimus display-only extras. Ships on GET /games/:id ONLY —
+ * never on list/discover rows (payload weight). The two prose fields are
+ * editorial content whose display is permission-gated (see the ROK-275 plan).
+ */
+export const CooptimusExtrasSchema = z.object({
+    /** Platform of the chosen Co-Optimus entry (e.g. "PC"). */
+    system: z.string().nullable().optional(),
+    /** Co-Optimus's own steam id for the entry (audit trail; may disagree with ours). */
+    steamAppId: z.number().nullable().optional(),
+    /** Raw comma-separated feature list. */
+    featurelist: z.string().nullable().optional(),
+    /** "The Co-Op Experience" editorial blurb. */
+    coopExperience: z.string().nullable().optional(),
+    /** Their game "Description" prose. */
+    description: z.string().nullable().optional(),
+    /**
+     * "Downloadable Only", read from the game PAGE — games.php never returns
+     * it. null = we could not determine it (don't render a negative claim).
+     */
+    downloadableOnly: z.boolean().nullable().optional(),
+    /** Co-Optimus's own combo wording, e.g. "Up to 4 Local or Online". */
+    comboLabel: z.string().nullable().optional(),
+    /**
+     * When the page-derived facts above were last read successfully. Absent =
+     * they were never page-sourced (rows written by the pre-fix featurelist
+     * regex), so they must not be preserved across an unknown re-read.
+     */
+    pageFactsAt: z.string().nullable().optional(),
+});
+
+export type CooptimusExtrasDto = z.infer<typeof CooptimusExtrasSchema>;
+
+/** Full game detail with all IGDB metadata */
+export const GameDetailSchema = z.object({
+    id: z.number(),
+    igdbId: z.number().nullable(),
+    name: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+    genres: z.array(z.number()).default([]),
+    summary: z.string().nullable(),
+    rating: z.number().nullable(),
+    aggregatedRating: z.number().nullable(),
+    popularity: z.number().nullable(),
+    gameModes: z.array(z.number()).default([]),
+    themes: z.array(z.number()).default([]),
+    platforms: z.array(z.number()).default([]),
+    screenshots: z.array(z.string()).default([]),
+    videos: z.array(z.object({
+        name: z.string().optional(),
+        videoId: z.string(),
+    })).default([]),
+    firstReleaseDate: z.string().nullable(),
+    playerCount: z.object({
+        min: z.number(),
+        max: z.number(),
+    }).nullable(),
+    twitchGameId: z.string().nullable(),
+    crossplay: z.boolean().nullable(),
+    /** ROK-772: ITAD game UUID */
+    itadGameId: z.string().nullable().optional(),
+    /** ROK-773: ITAD boxart URL (fallback when no IGDB cover) */
+    itadBoxartUrl: z.string().nullable().optional(),
+    /** ROK-773: ITAD tags (genre-like labels from ITAD) */
+    itadTags: z.array(z.string()).optional(),
+    /** ROK-818: Current best deal price from ITAD */
+    itadCurrentPrice: z.number().nullable().optional(),
+    /** ROK-818: Current discount percentage (0-100) */
+    itadCurrentCut: z.number().nullable().optional(),
+    /** ROK-818: Store name offering the current deal */
+    itadCurrentShop: z.string().nullable().optional(),
+    /** ROK-818: URL to the current deal */
+    itadCurrentUrl: z.string().nullable().optional(),
+    /** ROK-818: Historical lowest price ever */
+    itadLowestPrice: z.number().nullable().optional(),
+    /** ROK-818: Historical lowest discount percentage (0-100) */
+    itadLowestCut: z.number().nullable().optional(),
+    /** ROK-818: Last successful ITAD pricing sync timestamp */
+    itadPriceUpdatedAt: z.string().nullable().optional(),
+    /** ROK-934: Whether this game is in early access (from ITAD) */
+    earlyAccess: z.boolean().optional(),
+    /** Steam app ID for linking to the Steam store page. */
+    steamAppId: z.number().nullable().optional(),
+    /** ROK-1397: Co-Optimus max online co-op players. Precedence: wins over playerCount.max when non-null. */
+    cooptimusOnlineMax: z.number().nullable().optional(),
+    /** ROK-1397: Co-Optimus max couch/local co-op players. */
+    cooptimusCouchMax: z.number().nullable().optional(),
+    /** ROK-1397: Co-Optimus max LAN co-op players. */
+    cooptimusLanMax: z.number().nullable().optional(),
+    /** ROK-1397: split-screen support. */
+    cooptimusSplitscreen: z.boolean().nullable().optional(),
+    /** ROK-1397: drop-in/drop-out support. */
+    cooptimusDropIn: z.boolean().nullable().optional(),
+    /** ROK-1397: campaign co-op support. */
+    cooptimusCampaignCoop: z.boolean().nullable().optional(),
+    /** ROK-1397: combo (same-session local+online) co-op, parsed from their featurelist. */
+    cooptimusComboCoop: z.boolean().nullable().optional(),
+    /** ROK-1397: attribution linkback to the Co-Optimus game page. */
+    cooptimusUrl: z.string().nullable().optional(),
+    /** ROK-1397: last Co-Optimus sync (ISO). Set even when the game has no entry — "synced, no co-op" ≠ never-synced. */
+    cooptimusSyncedAt: z.string().nullable().optional(),
+    /** ROK-1397: display-only editorial extras. Populated on GET /games/:id ONLY (never on list rows — payload weight). */
+    cooptimusExtras: CooptimusExtrasSchema.nullable().optional(),
+    /**
+     * ROK-1314: does the CURRENT viewer own this game? Backed by a
+     * `game_interests` row with `source = 'steam_library'`. A `manual` heart is
+     * want-to-play, NOT ownership.
+     *
+     * `.optional()` WITHOUT `.default()` is deliberate: `.default()` makes the
+     * z.infer OUTPUT type required, which breaks every existing DTO literal in
+     * fixtures and mocks. Optional keeps a stale cached response parseable
+     * (rendered as no personalization). The BACKEND still always emits an
+     * explicit `false` rather than omitting the field — never `undefined` — and
+     * the integration specs assert exactly that.
+     */
+    currentUserOwns: z.boolean().optional(),
+    /**
+     * ROK-1314: has the CURRENT viewer wishlisted this game? Backed by
+     * `game_interests.source = 'steam_wishlist'`. Same defaulting rules.
+     *
+     * NOTE: `GameInterestResponseSchema.wishlistedByMe` is the pre-existing
+     * single-game spelling of this same flag (ROK-418) and keeps its own
+     * consumers — do not rewire it here. See TECH-DEBT-BACKLOG.md 2026-09-01.
+     */
+    currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314 follow-up: community-wide aggregates, so a Library / `/games`
+     * card can render `[You own] [N own]` and not just the personalized pill.
+     *
+     * Served on the PUBLIC path — `GameInterestResponseDto.ownerCount` already
+     * exists but its endpoints are JWT-guarded, and AC4 requires an anonymous
+     * visitor to see aggregates. Counts DISTINCT users with a `steam_library`
+     * / `steam_wishlist` row; a `manual` heart is want-to-play, not ownership,
+     * and is deliberately excluded so this stays distinct from the heart count
+     * the card already shows.
+     */
+    ownerCount: z.number().optional(),
+    wishlistCount: z.number().optional(),
+});
+
+export type GameDetailDto = z.infer<typeof GameDetailSchema>;
+
+// Response for game search endpoint (ROK-375: now returns full GameDetailDto)
+export const GameSearchResponseSchema = z.object({
+    data: z.array(GameDetailSchema),
+    meta: z.object({
+        total: z.number(),
+        cached: z.boolean(),
+        source: z.enum(['redis', 'database', 'igdb', 'itad', 'local']).optional(),
+    }),
+});
+
+export type GameSearchResponseDto = z.infer<typeof GameSearchResponseSchema>;
+
+/** Discovery page query parameters */
+export const GameDiscoverQuerySchema = z.object({
+    genre: z.coerce.number().optional(),
+});
+
+export type GameDiscoverQueryDto = z.infer<typeof GameDiscoverQuerySchema>;
+
+/** Per-game stats for a discovery row (ROK-565) */
+export const GameDiscoverRowMetadataEntrySchema = z.object({
+    playerCount: z.number().int().nonnegative(),
+    totalSeconds: z.number().int().nonnegative(),
+});
+
+export type GameDiscoverRowMetadataEntryDto = z.infer<typeof GameDiscoverRowMetadataEntrySchema>;
+
+/** A category row in the discovery response */
+export const GameDiscoverRowSchema = z.object({
+    category: z.string(),
+    slug: z.string(),
+    games: z.array(GameDetailSchema),
+    /** ROK-565: Optional per-game metadata keyed by game id (string) — used by community-playing row. */
+    metadata: z.record(z.string(), GameDiscoverRowMetadataEntrySchema).optional(),
+    /** ROK-567: UUID of the backing `discovery_category_suggestions` row when this is a dynamic category. */
+    suggestionId: z.string().uuid().optional(),
+    /** ROK-567: Marks rows sourced from the dynamic-category table so the UI can label/style them. */
+    isDynamic: z.literal(true).optional(),
+});
+
+export type GameDiscoverRowDto = z.infer<typeof GameDiscoverRowSchema>;
+
+/** Discovery endpoint response */
+export const GameDiscoverResponseSchema = z.object({
+    rows: z.array(GameDiscoverRowSchema),
+});
+
+export type GameDiscoverResponseDto = z.infer<typeof GameDiscoverResponseSchema>;
+
+/** Twitch stream info */
+export const TwitchStreamSchema = z.object({
+    userName: z.string(),
+    title: z.string(),
+    viewerCount: z.number(),
+    thumbnailUrl: z.string(),
+    language: z.string(),
+});
+
+export type TwitchStreamDto = z.infer<typeof TwitchStreamSchema>;
+
+/** Streams endpoint response */
+export const GameStreamsResponseSchema = z.object({
+    streams: z.array(TwitchStreamSchema),
+    totalLive: z.number(),
+});
+
+export type GameStreamsResponseDto = z.infer<typeof GameStreamsResponseSchema>;
+
+// ============================================================
+// ROK-173: Admin IGDB panel schemas
+// ============================================================
+
+/** IGDB sync status for admin panel */
+export const IgdbSyncStatusSchema = z.object({
+    lastSyncAt: z.string().nullable(),
+    gameCount: z.number(),
+    syncInProgress: z.boolean(),
+});
+
+export type IgdbSyncStatusDto = z.infer<typeof IgdbSyncStatusSchema>;
+
+/** IGDB connection health for admin panel */
+export const IgdbHealthStatusSchema = z.object({
+    tokenStatus: z.enum(['valid', 'expired', 'not_fetched']),
+    tokenExpiresAt: z.string().nullable(),
+    lastApiCallAt: z.string().nullable(),
+    lastApiCallSuccess: z.boolean().nullable(),
+});
+
+export type IgdbHealthStatusDto = z.infer<typeof IgdbHealthStatusSchema>;
+
+/** Admin game list query parameters */
+export const AdminGameListQuerySchema = z.object({
+    search: z.string().optional(),
+    showHidden: z.enum(['only', 'true']).optional(),
+    /** ROK-986: Filter by IGDB enrichment status */
+    enrichmentStatus: z.enum(['pending', 'failed', 'not_found']).optional(),
+    page: z.coerce.number().min(1).default(1),
+    limit: z.coerce.number().min(1).max(100).default(20),
+});
+
+export type AdminGameListQueryDto = z.infer<typeof AdminGameListQuerySchema>;
+
+/** Admin game list response */
+export const AdminGameListResponseSchema = z.object({
+    data: z.array(z.object({
+        id: z.number(),
+        igdbId: z.number().nullable(),
+        name: z.string(),
+        slug: z.string(),
+        coverUrl: z.string().nullable(),
+        cachedAt: z.string(),
+        hidden: z.boolean(),
+        banned: z.boolean(),
+        /** ROK-986: IGDB enrichment status */
+        igdbEnrichmentStatus: z.enum(['pending', 'enriched', 'failed', 'not_found', 'not_applicable']).nullable().optional(),
+        /** ROK-986: Number of failed IGDB enrichment attempts */
+        igdbEnrichmentRetryCount: z.number().optional(),
+        /** ROK-986: Steam app ID for admin visibility */
+        steamAppId: z.number().nullable().optional(),
+    })),
+    meta: z.object({
+        total: z.number(),
+        page: z.number(),
+        limit: z.number(),
+        totalPages: z.number(),
+        hasMore: z.boolean(),
+    }),
+});
+
+export type AdminGameListResponseDto = z.infer<typeof AdminGameListResponseSchema>;
+
+/** Player preview for game interest avatars (ROK-282) */
+export const InterestPlayerPreviewSchema = z.object({
+    id: z.number(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable(),
+    discordId: z.string().nullable(),
+});
+
+export type InterestPlayerPreviewDto = z.infer<typeof InterestPlayerPreviewSchema>;
+
+/** Game interest (want-to-play) */
+export const GameInterestResponseSchema = z.object({
+    wantToPlay: z.boolean(),
+    count: z.number(),
+    /** First N interested players for avatar display (ROK-282) */
+    players: z.array(InterestPlayerPreviewSchema).optional(),
+    /** Source of the interest: manual, steam, discord, or poll (ROK-444, ROK-1031) */
+    source: z.enum(['manual', 'steam', 'discord', 'poll']).optional(),
+    /** ROK-745: Steam owners — first N players who own this game on Steam */
+    owners: z.array(InterestPlayerPreviewSchema).optional(),
+    /** ROK-745: Total count of Steam owners */
+    ownerCount: z.number().optional(),
+    /** ROK-774: Steam wishlisters — first N players who wishlisted this game */
+    wishlisters: z.array(InterestPlayerPreviewSchema).optional(),
+    /** ROK-418: Number of users who wishlisted this game via Steam */
+    wishlistedCount: z.number().optional(),
+    /** ROK-418: Whether the current user has wishlisted this game on Steam */
+    wishlistedByMe: z.boolean().optional(),
+    /** ROK-1797: viewer muted per-game DMs */
+    notificationsMuted: z.boolean().optional(),
+});
+
+export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;
+
+/** ROK-362: Batch interest check response — map of gameId to interest status */
+export const BatchInterestResponseSchema = z.object({
+    data: z.record(z.string(), z.object({
+        wantToPlay: z.boolean(),
+        count: z.number(),
+    })),
+});
+
+export type BatchInterestResponseDto = z.infer<typeof BatchInterestResponseSchema>;
+
+/** A game the user has hearted, with basic info for display (ROK-282) */
+export const UserHeartedGameSchema = z.object({
+    id: z.number(),
+    igdbId: z.number().nullable(),
+    name: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+    /** ROK-805: Steam playtime in seconds, if available */
+    playtimeSeconds: z.number().nullable(),
+});
+
+export type UserHeartedGameDto = z.infer<typeof UserHeartedGameSchema>;
+
+/** Pagination metadata shared across paginated endpoints */
+export const PaginationMetaSchema = z.object({
+    total: z.number().int(),
+    page: z.number().int(),
+    limit: z.number().int(),
+    hasMore: z.boolean(),
+});
+
+export type PaginationMetaDto = z.infer<typeof PaginationMetaSchema>;
+
+/** Response for user hearted games endpoint (ROK-282, ROK-754: paginated) */
+export const UserHeartedGamesResponseSchema = z.object({
+    data: z.array(UserHeartedGameSchema),
+    meta: PaginationMetaSchema,
+});
+
+export type UserHeartedGamesResponseDto = z.infer<typeof UserHeartedGamesResponseSchema>;
+
+// ============================================================
+// ROK-754: Steam Library section on player profile
+// ============================================================
+
+/** A single game from the user's Steam library */
+export const SteamLibraryEntrySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    coverUrl: z.string().nullable(),
+    slug: z.string(),
+    /** Playtime in seconds (converted from Steam minutes) */
+    playtimeSeconds: z.number(),
+    /** Playtime in the last 2 weeks in seconds (null if unavailable) */
+    playtime2weeksSeconds: z.number().nullable(),
+});
+
+export type SteamLibraryEntryDto = z.infer<typeof SteamLibraryEntrySchema>;
+
+/** Response for GET /users/:id/steam-library */
+export const SteamLibraryResponseSchema = z.object({
+    data: z.array(SteamLibraryEntrySchema),
+    meta: PaginationMetaSchema,
+});
+
+export type SteamLibraryResponseDto = z.infer<typeof SteamLibraryResponseSchema>;
+
+// ============================================================
+// ROK-443: Game Activity Display (Phase 2)
+// ============================================================
+
+/** Period filter for activity queries */
+export const ActivityPeriodSchema = z.enum(['week', 'month', 'all']);
+export type ActivityPeriod = z.infer<typeof ActivityPeriodSchema>;
+
+/** A single game activity entry in a user's activity list */
+export const GameActivityEntrySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    coverUrl: z.string().nullable(),
+    totalSeconds: z.number(),
+    isMostPlayed: z.boolean(),
+});
+
+export type GameActivityEntryDto = z.infer<typeof GameActivityEntrySchema>;
+
+/** Response for GET /users/:id/activity */
+export const UserActivityResponseSchema = z.object({
+    data: z.array(GameActivityEntrySchema),
+    period: ActivityPeriodSchema,
+});
+
+export type UserActivityResponseDto = z.infer<typeof UserActivityResponseSchema>;
+
+/** A top player entry for game activity */
+export const GameTopPlayerSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable(),
+    discordId: z.string().nullable(),
+    totalSeconds: z.number(),
+});
+
+export type GameTopPlayerDto = z.infer<typeof GameTopPlayerSchema>;
+
+/** Response for GET /games/:id/activity */
+export const GameActivityResponseSchema = z.object({
+    topPlayers: z.array(GameTopPlayerSchema),
+    totalSeconds: z.number(),
+    period: ActivityPeriodSchema,
+});
+
+export type GameActivityResponseDto = z.infer<typeof GameActivityResponseSchema>;
+
+/** A player currently playing a game */
+export const NowPlayingPlayerSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable(),
+    discordId: z.string().nullable(),
+});
+
+export type NowPlayingPlayerDto = z.infer<typeof NowPlayingPlayerSchema>;
+
+/** Response for GET /games/:id/now-playing */
+export const GameNowPlayingResponseSchema = z.object({
+    players: z.array(NowPlayingPlayerSchema),
+    count: z.number(),
+});
+
+export type GameNowPlayingResponseDto = z.infer<typeof GameNowPlayingResponseSchema>;
+
+/**
+ * `GET /games/slug/:slug` — minimal slug → id resolution (ROK-1464).
+ *
+ * Every other games route is `ParseIntPipe`-keyed, so a slug-addressed page
+ * (`/lfg/:gameSlug`) needs one lookup to get an id before it can use the
+ * existing id-keyed detail and LFG reads. Deliberately three fields: this is a
+ * router primitive, not a second game DTO.
+ */
+export const GameSlugLookupSchema = z.object({
+    id: z.number(),
+    slug: z.string(),
+    name: z.string(),
+});
+
+export type GameSlugLookupDto = z.infer<typeof GameSlugLookupSchema>;

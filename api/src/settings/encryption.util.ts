@@ -1,0 +1,177 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  scryptSync,
+} from 'crypto';
+import { defined } from '../common/defined.helpers';
+
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 16;
+const AUTH_TAG_LENGTH = 16;
+const SALT_LENGTH = 32;
+const KEY_LENGTH = 32;
+
+/**
+ * Secrets that must never be used in production.
+ * Keep this in sync with the allinone JWT guard:
+ * Dockerfile.allinone (HARDCODED_DEFAULTS) and api/scripts/docker-entrypoint.sh.
+ */
+const BANNED_SECRETS = [
+  'raid-ledger-default-secret-change-in-production',
+  'dev-encryption-key-change-me',
+  'dev-secret-change-in-prod',
+];
+
+/**
+ * Cached derived key + the secret it was derived from.
+ * scryptSync is intentionally slow (~100ms per call on ARM/NAS hardware).
+ * Caching avoids re-deriving 40+ times per settings cache reload.
+ */
+let cachedKey: Buffer | null = null;
+let cachedKeySecret: string | null = null;
+
+/**
+ * Derives a 32-byte AES key from a secret string using scrypt.
+ * Pure function — no caching, no side effects.
+ *
+ * ROK-1366 — JWT_SECRET ONLY. DO NOT REUSE FOR PASSWORD HASHING.
+ *
+ * The salt is derived deterministically from the secret itself
+ * (`secret.slice(0, 32).padEnd(32, '0')`), which defeats the point of a salt:
+ * it is per-secret, not per-value, and a short JWT_SECRET is padded with
+ * literal '0' characters rather than entropy. That is tolerable here and
+ * ONLY here, because the input is a single high-entropy process secret used
+ * to wrap `app_settings` values — there is no rainbow-table or
+ * cross-user-collision surface. Applied to user passwords it would be a real
+ * vulnerability.
+ *
+ * The derivation is also LOAD-BEARING FOR STORED DATA. Every encrypted
+ * `app_settings` value in every deployment was sealed with the key this
+ * function returns; changing the salt, the KDF or its parameters makes all of
+ * them undecryptable, with no error until a settings read fails at runtime.
+ * `encryption.util.spec.ts` pins a golden vector so that change cannot land
+ * silently.
+ *
+ * Moving to a stored random salt (`app_settings.encryption_salt`) is the real
+ * fix and is deliberately NOT done here. It requires, as one shipped unit:
+ *   1. a migration that generates and stores the 32-byte salt,
+ *   2. a re-encrypt pass over every encrypted row keyed off the OLD
+ *      derivation, run before any reader uses the new one
+ *      (see `reencrypt-settings.integration.spec.ts`),
+ *   3. a rollback path that can re-seal with the old derivation, and
+ *   4. a verified backup taken first — step 2 is not idempotent.
+ */
+export function deriveKey(secret: string): Buffer {
+  const salt = Buffer.from(
+    secret.slice(0, SALT_LENGTH).padEnd(SALT_LENGTH, '0'),
+  );
+  return scryptSync(secret, salt, KEY_LENGTH);
+}
+
+/**
+ * Derives encryption key from JWT_SECRET using scrypt.
+ * Falls back to a default key for development if JWT_SECRET is not set.
+ * Result is cached per-process — only re-derives if JWT_SECRET changes.
+ *
+ * In production, throws if the secret is a known banned/insecure value.
+ */
+export function getEncryptionKey(): Buffer {
+  const secret = process.env.JWT_SECRET || 'dev-encryption-key-change-me';
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    BANNED_SECRETS.includes(secret)
+  ) {
+    throw new Error(
+      'Insecure JWT_SECRET detected: default secret or banned value ' +
+        'must not be used in production. Set a real JWT_SECRET.',
+    );
+  }
+
+  if (cachedKey && cachedKeySecret === secret) return cachedKey;
+  cachedKey = deriveKey(secret);
+  cachedKeySecret = secret;
+  return cachedKey;
+}
+
+/** @internal Exposed for testing only — clears the cached key. */
+export function _resetKeyCache(): void {
+  cachedKey = null;
+  cachedKeySecret = null;
+}
+
+/** @internal Exposed for testing only — true when a key is cached. */
+export function _isKeyCached(): boolean {
+  return cachedKey !== null;
+}
+
+/**
+ * Encrypts a string value using AES-256-GCM with a specific key.
+ * Returns format: iv:authTag:encryptedData (all hex encoded)
+ */
+export function encryptWithKey(text: string, key: Buffer): string {
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(text, 'utf8'),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+/**
+ * Decrypts a value using AES-256-GCM with a specific key.
+ * Expects format: iv:authTag:encryptedData (all hex encoded)
+ */
+export function decryptWithKey(encryptedText: string, key: Buffer): string {
+  const parts = encryptedText.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Invalid encrypted value format');
+  }
+  const [ivHex, authTagHex, encryptedHex] = parts;
+  const iv = Buffer.from(defined(ivHex, 'iv part'), 'hex');
+  const authTag = Buffer.from(defined(authTagHex, 'auth tag part'), 'hex');
+  const encrypted = Buffer.from(
+    defined(encryptedHex, 'ciphertext part'),
+    'hex',
+  );
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([
+    decipher.update(encrypted),
+    decipher.final(),
+  ]);
+  return decrypted.toString('utf8');
+}
+
+/**
+ * Encrypts a string value using AES-256-GCM with the process JWT_SECRET.
+ * Returns format: iv:authTag:encryptedData (all hex encoded)
+ */
+export function encrypt(text: string): string {
+  return encryptWithKey(text, getEncryptionKey());
+}
+
+/**
+ * Decrypts a value encrypted with the encrypt() function.
+ * Expects format: iv:authTag:encryptedData (all hex encoded)
+ */
+export function decrypt(encryptedText: string): string {
+  return decryptWithKey(encryptedText, getEncryptionKey());
+}
+
+/**
+ * Checks if a string appears to be an encrypted value.
+ */
+export function isEncrypted(value: string): boolean {
+  const parts = value.split(':');
+  if (parts.length !== 3) return false;
+  const [ivHex, authTagHex, encryptedHex] = parts;
+  return (
+    defined(ivHex, 'iv part').length === IV_LENGTH * 2 &&
+    defined(authTagHex, 'auth tag part').length === AUTH_TAG_LENGTH * 2 &&
+    defined(encryptedHex, 'ciphertext part').length > 0
+  );
+}

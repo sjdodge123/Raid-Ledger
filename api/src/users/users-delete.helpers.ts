@@ -1,0 +1,335 @@
+/**
+ * User deletion + moderation data-wipe helpers.
+ * Extracted from users-query.helpers.ts for file size compliance (ROK-821).
+ *
+ * ROK-313 §9.6: `wipeUserData` removes EXACTLY what a full `deleteUser` removes,
+ * minus the `users` row. Ban-with-wipe keeps the users row, so the ON DELETE
+ * CASCADE FKs never fire — the wipe must delete every user-owned row explicitly.
+ *
+ * DRIFT GUARD (games-insert-paths style): every table with an FK to `users.id`
+ * MUST be classified in exactly one bucket below (WIPE / REASSIGN / KEEP). A new
+ * FK-to-users table added later without classification fails
+ * `users-delete.helpers.drift.spec.ts`. Re-derive the source set with:
+ *   grep -rn "references(() => users.id" api/src/drizzle/schema/
+ */
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
+import { eq, inArray, or } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+import { endMarkersInvolvingUser } from '../auth/impersonation/impersonation-markers.db';
+import { Logger } from '@nestjs/common';
+import {
+  deleteUserScreenshotsBestEffort,
+  selectUserScreenshotPaths,
+} from '../feedback/feedback-screenshot-user.helpers';
+
+const logger = new Logger('UserDelete');
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** A user-owned table deleted by a single `<column> = userId` predicate. */
+export interface WipeTarget {
+  table: PgTable;
+  column: AnyPgColumn;
+}
+
+/**
+ * WIPE bucket — user-owned rows deleted by `<column> = userId`.
+ * First four are the pre-ROK-313 RESTRICT tables the delete path already wiped
+ * explicitly (Phase A); the rest are the ON DELETE CASCADE tables that a hard
+ * users-row delete would have cascaded (so an explicit delete here is
+ * behavior-neutral for delete and load-bearing for ban+wipe).
+ */
+export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
+  { table: schema.sessions, column: schema.sessions.userId },
+  { table: schema.localCredentials, column: schema.localCredentials.userId },
+  { table: schema.availability, column: schema.availability.userId },
+  { table: schema.eventTemplates, column: schema.eventTemplates.userId },
+  { table: schema.refreshTokens, column: schema.refreshTokens.userId },
+  { table: schema.characters, column: schema.characters.userId },
+  { table: schema.eventSignups, column: schema.eventSignups.userId },
+  { table: schema.notifications, column: schema.notifications.userId },
+  {
+    table: schema.userNotificationPreferences,
+    column: schema.userNotificationPreferences.userId,
+  },
+  { table: schema.userPreferences, column: schema.userPreferences.userId },
+  { table: schema.gameTimeTemplates, column: schema.gameTimeTemplates.userId },
+  { table: schema.gameTimeOverrides, column: schema.gameTimeOverrides.userId },
+  { table: schema.gameTimeAbsences, column: schema.gameTimeAbsences.userId },
+  { table: schema.gameInterests, column: schema.gameInterests.userId },
+  // ROK-1451: an LFG intent is a personal, time-boxed expression of intent.
+  // Reassigning is meaningless (it belongs to a person, not a role) and keeping
+  // is unsafe — a departed user's intent would still count toward a group and
+  // could push it into LFM, announcing a group nobody asked to form.
+  { table: schema.lfgIntents, column: schema.lfgIntents.userId },
+  {
+    table: schema.gameInterestSuppressions,
+    column: schema.gameInterestSuppressions.userId,
+  },
+  {
+    table: schema.gameNotificationMutes,
+    column: schema.gameNotificationMutes.userId,
+  },
+  { table: schema.feedback, column: schema.feedback.userId },
+  {
+    table: schema.wowClassicQuestProgress,
+    column: schema.wowClassicQuestProgress.userId,
+  },
+  { table: schema.eventPlans, column: schema.eventPlans.creatorId },
+  {
+    table: schema.eventRemindersSent,
+    column: schema.eventRemindersSent.userId,
+  },
+  {
+    table: schema.gameActivitySessions,
+    column: schema.gameActivitySessions.userId,
+  },
+  {
+    table: schema.gameActivityRollups,
+    column: schema.gameActivityRollups.userId,
+  },
+  // ROK-1767: the bot's record of which game roles it granted this user.
+  // Personal (CASCADE on delete); a ban+wipe keeps the users row, so it must
+  // be wiped explicitly or the grant rows outlive the wipe.
+  {
+    table: schema.discordGameRoleGrants,
+    column: schema.discordGameRoleGrants.userId,
+  },
+  {
+    table: schema.playerTasteVectors,
+    column: schema.playerTasteVectors.userId,
+  },
+  {
+    table: schema.playerIntensitySnapshots,
+    column: schema.playerIntensitySnapshots.userId,
+  },
+  {
+    table: schema.communityLineupEntries,
+    column: schema.communityLineupEntries.nominatedBy,
+  },
+  {
+    table: schema.communityLineupVotes,
+    column: schema.communityLineupVotes.userId,
+  },
+  {
+    table: schema.communityLineupInvitees,
+    column: schema.communityLineupInvitees.userId,
+  },
+  {
+    table: schema.communityLineupMatchMembers,
+    column: schema.communityLineupMatchMembers.userId,
+  },
+  {
+    table: schema.communityLineupScheduleVotes,
+    column: schema.communityLineupScheduleVotes.userId,
+  },
+  {
+    table: schema.communityLineupTiebreakerBracketVotes,
+    column: schema.communityLineupTiebreakerBracketVotes.userId,
+  },
+  {
+    table: schema.communityLineupTiebreakerVetoes,
+    column: schema.communityLineupTiebreakerVetoes.userId,
+  },
+  {
+    table: schema.communityLineupUserSubmissions,
+    column: schema.communityLineupUserSubmissions.userId,
+  },
+  // ROK-1724: the importer's own addon-import audit trail (CASCADE) — personal
+  // rate-limit/history rows with no value once the user is wiped.
+  { table: schema.addonImportAudit, column: schema.addonImportAudit.userId },
+  // ROK-1591: calendar sync rows are personal (CASCADE) and hold encrypted
+  // provider credentials — wiped on ban+wipe. Links first: each link also
+  // cascades from its connection, so the connection delete finds no children.
+  {
+    table: schema.calendarEventLinks,
+    column: schema.calendarEventLinks.userId,
+  },
+  // ROK-1593: busy blocks also cascade from their connection; wiped first so
+  // the connection delete finds no children.
+  {
+    table: schema.calendarBusyBlocks,
+    column: schema.calendarBusyBlocks.userId,
+  },
+  // ROK-1593: ignored away-days are personal (CASCADE) — no value once wiped.
+  {
+    table: schema.calendarIgnoredDays,
+    column: schema.calendarIgnoredDays.userId,
+  },
+  // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
+  { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
+  {
+    table: schema.calendarConnections,
+    column: schema.calendarConnections.userId,
+  },
+];
+
+/**
+ * WIPE bucket — special predicates.
+ * `player_co_play` references two users (delete where either party matches);
+ * `lfg_invites` likewise (ROK-1455: `recipient_user_id` + `inviter_user_id`,
+ * both NOT NULL ON DELETE CASCADE) — a departed user's invite must survive
+ * neither as the no-repeat/limit record it would keep charging the recipient
+ * for, nor as an inbox row pointing at a wiped inviter;
+ * `community_lineups.created_by` is a NOT NULL RESTRICT parent — deleting the
+ * lineup cascades every entry/vote/match/tiebreaker/submission child (each
+ * child→lineup FK is ON DELETE CASCADE).
+ */
+export const WIPE_SPECIAL_TABLES: readonly PgTable[] = [
+  schema.playerCoPlay,
+  schema.lfgInvites,
+  schema.communityLineups,
+  // ROK-1754: impersonation markers carry TWO user FKs (impersonator, target).
+  // Ended (with a `user_wiped` stop audit) on either side in
+  // deleteDualUserOwnedRows — ban+wipe keeps the users row, so CASCADE never
+  // fires and a banned target's marker would otherwise outlive the wipe.
+  schema.refreshFamilyImpersonations,
+];
+
+/** REASSIGN bucket — user-authored shared entities transferred to the actor. */
+export const REASSIGN_TABLES: readonly PgTable[] = [
+  schema.pugSlots,
+  schema.events,
+];
+
+/**
+ * KEEP bucket — set-null FKs (the DB nulls them on a hard delete; on ban+wipe
+ * the users row survives so they stay pointed at the still-existing banned user)
+ * plus the `admin_actions` audit table itself (actorId/targetId set-null, §9.9).
+ */
+export const KEEP_TABLES: readonly PgTable[] = [
+  schema.adminActions,
+  schema.activityLog,
+  schema.aiRequestLogs,
+  schema.adHocParticipants,
+  schema.eventVoiceSessions,
+  schema.discoveryCategorySuggestions,
+  // ROK-1724: shared community records the user only reported/captured (SET
+  // NULL) — a raid pull or guild roster row belongs to the guild, not the user.
+  schema.addonEncounterPulls,
+  schema.guildMembers,
+  // ROK-1785: `granted_by` is SET NULL; the grant belongs to the guild page,
+  // not to the admin who made it, so it survives the granter's wipe.
+  schema.guildEditors,
+  // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
+  // are SET NULL audit columns; the guild's content outlives its editor.
+  schema.guildProfiles,
+  schema.guildRecommendedAddons,
+];
+
+/**
+ * The WIPE-special tables that carry TWO user FKs — delete where either side
+ * matches. Extracted so `deleteUserOwnedData` stays inside the 30-line limit.
+ */
+async function deleteDualUserOwnedRows(tx: Db, userId: number): Promise<void> {
+  await tx
+    .delete(schema.playerCoPlay)
+    .where(
+      or(
+        eq(schema.playerCoPlay.userIdA, userId),
+        eq(schema.playerCoPlay.userIdB, userId),
+      ),
+    );
+  // ROK-1455: both directions. As RECIPIENT the row is the no-repeat/rate-limit
+  // record charged against this user; as INVITER it is someone else's invite
+  // attributed to a wiped account.
+  await tx
+    .delete(schema.lfgInvites)
+    .where(
+      or(
+        eq(schema.lfgInvites.recipientUserId, userId),
+        eq(schema.lfgInvites.inviterUserId, userId),
+      ),
+    );
+  await endMarkersInvolvingUser(tx, userId);
+}
+
+/** Delete every user-owned row (Phase A RESTRICT + all ON DELETE CASCADE). */
+async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
+  for (const { table, column } of WIPE_BY_COLUMN) {
+    await tx.delete(table).where(eq(column, userId));
+  }
+  await deleteDualUserOwnedRows(tx, userId);
+  // `community_lineup_entries.carried_over_from` is the ONLY non-cascade (RESTRICT)
+  // back-reference to community_lineups.id: carryOverFromLastDecided() inserts
+  // entries in a NEWER lineup pointing at an older one. If the user created that
+  // older lineup, a surviving newer lineup's entry would RESTRICT-block the delete
+  // below. Null those back-refs first (nullable; only feeds a display boolean).
+  const userLineupIds = tx
+    .select({ id: schema.communityLineups.id })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.createdBy, userId));
+  await tx
+    .update(schema.communityLineupEntries)
+    .set({ carriedOverFrom: null })
+    .where(
+      inArray(schema.communityLineupEntries.carriedOverFrom, userLineupIds),
+    );
+  // Deleting the lineup cascades all of its children (child→lineup FKs cascade).
+  await tx
+    .delete(schema.communityLineups)
+    .where(eq(schema.communityLineups.createdBy, userId));
+}
+
+/** Reassign a user's PUG slots to another user (null the claim, move ownership). */
+export async function reassignPugSlots(
+  tx: Db,
+  userId: number,
+  reassignToUserId: number,
+): Promise<void> {
+  await tx
+    .update(schema.pugSlots)
+    .set({ claimedByUserId: null })
+    .where(eq(schema.pugSlots.claimedByUserId, userId));
+  await tx
+    .update(schema.pugSlots)
+    .set({ createdBy: reassignToUserId })
+    .where(eq(schema.pugSlots.createdBy, userId));
+}
+
+/** Reassign user-created entities (pug slots, events) to another user. */
+async function reassignUserEntities(
+  tx: Db,
+  userId: number,
+  reassignToUserId: number,
+): Promise<void> {
+  await reassignPugSlots(tx, userId, reassignToUserId);
+  await tx
+    .update(schema.events)
+    .set({ creatorId: reassignToUserId, updatedAt: new Date() })
+    .where(eq(schema.events.creatorId, userId));
+}
+
+/**
+ * TRUE data wipe (ROK-313 §9.6): delete every user-owned row + reassign authored
+ * entities, KEEPING the users row. Must run inside the caller's transaction so a
+ * mid-wipe failure rolls back (ban+wipe wraps this in `db.transaction`).
+ */
+export async function wipeUserData(
+  tx: Db,
+  userId: number,
+  reassignToUserId: number,
+): Promise<void> {
+  await deleteUserOwnedData(tx, userId);
+  await reassignUserEntities(tx, userId, reassignToUserId);
+}
+
+/**
+ * Delete a user and cascade all related data in a transaction (ROK-405).
+ * ROK-1313: the user's feedback screenshot paths are collected under row locks
+ * in the same transaction, and the files deleted only once it commits.
+ */
+export async function deleteUserTransaction(
+  db: Db,
+  userId: number,
+  reassignToUserId: number,
+): Promise<void> {
+  const shots = await db.transaction(async (tx) => {
+    const paths = await selectUserScreenshotPaths(tx, userId);
+    await wipeUserData(tx, userId, reassignToUserId);
+    await tx.delete(schema.users).where(eq(schema.users.id, userId));
+    return paths;
+  });
+  await deleteUserScreenshotsBestEffort(shots, userId, logger);
+}

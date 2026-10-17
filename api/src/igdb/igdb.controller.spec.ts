@@ -1,0 +1,130 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
+import { IgdbController } from './igdb.controller';
+import { IgdbService } from './igdb.service';
+import { ItadPriceService } from '../itad/itad-price.service';
+import { ItadService } from '../itad/itad.service';
+import { SettingsService } from '../settings/settings.service';
+import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
+
+function describeIgdbController() {
+  let controller: IgdbController;
+  let mockIgdbService: Partial<IgdbService>;
+
+  const mockGames = [
+    {
+      id: 1,
+      igdbId: 1234,
+      name: 'Valheim',
+      slug: 'valheim',
+      coverUrl: 'https://example.com/cover.jpg',
+      // ROK-1314: personalizeGames overlays the aggregates for every caller
+      // (anonymous included, AC4), so the CONTROLLER response carries them —
+      // unlike a bare mapper result, which no longer seeds the counts.
+      ownerCount: 0,
+      wishlistCount: 0,
+      currentUserOwns: false,
+      currentUserWishlisted: false,
+    },
+  ];
+
+  beforeEach(async () => {
+    mockIgdbService = {
+      searchGames: jest
+        .fn()
+        .mockResolvedValue({ games: mockGames, cached: true }),
+      /**
+       * ROK-1314: `personalizeGames` overlays the community aggregates for
+       * EVERY caller (anonymous included, AC4), so the controller now reaches
+       * the database on this path where it previously short-circuited. An
+       * empty grouped result is the honest stub — no interests seeded means
+       * the aggregates fall back to explicit zeroes.
+       */
+      database: {
+        select: jest.fn().mockReturnValue({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              groupBy: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+        // Only the grouped-aggregate chain is exercised here, so the stub is
+        // deliberately partial; cast at this boundary rather than build a
+        // whole PostgresJsDatabase.
+      } as unknown as IgdbService['database'],
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [IgdbController],
+      providers: [
+        { provide: IgdbService, useValue: mockIgdbService },
+        { provide: ItadPriceService, useValue: {} },
+        { provide: ItadService, useValue: {} },
+        { provide: SettingsService, useValue: {} },
+        {
+          provide: getQueueToken(ITAD_PRICE_SYNC_QUEUE),
+          useValue: { add: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    controller = module.get<IgdbController>(IgdbController);
+  });
+
+  function describeSearchGames() {
+    it('should return search results for valid query', async () => {
+      const result = await controller.searchGames('valheim', {});
+
+      expect(result.data).toEqual(mockGames);
+      expect(result.meta.total).toBe(1);
+      expect(result.meta.cached).toBe(true);
+      expect(mockIgdbService.searchGames).toHaveBeenCalledWith('valheim');
+    });
+
+    it('should throw BadRequestException for empty query', async () => {
+      await expect(controller.searchGames('', {})).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException for undefined query', async () => {
+      await expect(
+        controller.searchGames(undefined as unknown as string, {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for query exceeding max length', async () => {
+      const longQuery = 'a'.repeat(101);
+      await expect(controller.searchGames(longQuery, {})).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw InternalServerErrorException for IGDB API errors', async () => {
+      mockIgdbService.searchGames = jest
+        .fn()
+        .mockRejectedValue(new Error('IGDB API error: Unauthorized'));
+
+      await expect(controller.searchGames('valheim', {})).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should re-throw unexpected errors', async () => {
+      const unexpectedError = new Error('Unexpected database error');
+      mockIgdbService.searchGames = jest
+        .fn()
+        .mockRejectedValue(unexpectedError);
+
+      await expect(controller.searchGames('valheim', {})).rejects.toThrow(
+        unexpectedError,
+      );
+    });
+  }
+  describe('searchGames', () => describeSearchGames());
+}
+describe('IgdbController', () => describeIgdbController());

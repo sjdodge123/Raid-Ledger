@@ -1,0 +1,654 @@
+/**
+ * LFM channel-embed smoke test (ROK-1454 AC10).
+ *
+ * Drives one group through its whole life against a real Discord channel and
+ * asserts the four things the design promises and the round-1 implementation
+ * broke:
+ *
+ *   1. NOTHING posts on the first hand — "LFG is quiet. LFM is loud."
+ *      (ROK-1505 Q1: this is the TEXT surface's rule and it is unchanged. The
+ *      FORUM board posts every hand — see `lfg-board.test.ts` T24. Do not
+ *      "fix" this stage to match the board.)
+ *   2. The 1 → 2 transition posts exactly one message.
+ *   3. Every later hand EDITS that message; the id never changes.
+ *   4. Conversion edits it one final time and the roster still names everyone.
+ *
+ * (4) converts the group into a SCHEDULING POLL — the product's own flow
+ * (ROK-1464 "Find a time": `POST /scheduling-polls`, then
+ * `POST /lfg/:gameId/convert { pollId }`). It deliberately does NOT convert
+ * into an event: `POST /events` signs its creator up, `signup.created` clears
+ * the creator's intent (ROK-1451 AC6), and the convert then 403s with
+ * "Only a member of this LFG group can convert it" — the exact failure the
+ * first fleet run of this test produced. That interaction is recorded in
+ * `TECH-DEBT-BACKLOG.md` (2026-09-05); no UI path converts into an event yet.
+ *
+ * (4) is also the regression guard for the defect that got round 1 rejected: the
+ * converted read composed `liveIntent`, whose `status='active'` AND
+ * `expiresAt > now` predicates are both false for a converted group, so the
+ * final embed silently lost every player. The assertion therefore names the
+ * three players INDIVIDUALLY — a count would still pass if the roster were
+ * replaced by three different people, and `Nobody yet` would pass any
+ * "description is non-empty" check.
+ *
+ * The five assertions are one test, not five: they are stages of a single
+ * lifecycle and stages 3-5 need the message id that stage 2 produced.
+ */
+import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
+import { readLastMessages } from '../../helpers/messages.js';
+import {
+  assertConditionNeverMet,
+  awaitProcessing,
+  createBinding,
+  convertLfg,
+  deleteBinding,
+  postLfgIntent,
+  seedFixtureUser,
+  withdrawLfgIntent,
+  type FixtureUser,
+  type LfgGroupSummary,
+} from '../fixtures.js';
+import { assertEmbedColor, assertEmbedRenderRules } from '../assert.js';
+import type { SmokeTest, TestContext } from '../types.js';
+import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
+import { withLfgSurface } from '../lfg-surface-lock.js';
+import { lfmCandidates } from '../lfg-smoke-scope.js';
+import { armForumSweep, sweepForumThreads } from '../lfg-forum-sweep.js';
+
+/** `EMBED_COLORS.REMINDER` — chrome state `needs_you`, below viability. */
+const AMBER = 0xf59e0b;
+/** `EMBED_COLORS.SIGNUP_CONFIRMATION` — chrome state `live`, at viability. */
+const EMERALD = 0x34d399;
+/** `EMBED_COLORS.SYSTEM` — chrome state `done`, every terminal state. */
+const SLATE = 0x64748b;
+
+/**
+ * The D7 author vocabulary. Used to tell an LFM message apart from any other
+ * embed family that happens to share the channel — the count assertion is
+ * about "one LFM message per group", so widening it to every game-titled embed
+ * would fail on an unrelated family rather than on the invariant.
+ */
+const LFM_AUTHOR =
+  /^(◌ NEEDS PLAYERS|▸ READY TO SCHEDULE|■ SCHEDULED|■ EXPIRED|■ CLOSED)/u;
+
+/** AC1 says "≥ 10 s"; a little over, and no `sleep()` anywhere. */
+const QUIET_WINDOW_MS = 12_000;
+
+/** `GET /lfg/:gameId` — the summary plus the live roster. */
+interface LfgGroupDetail extends LfgGroupSummary {
+  members: { userId: number; username: string; displayName: string | null }[];
+}
+
+/** What the DEMO_MODE slash-command harness hands back. */
+interface HarnessReply {
+  content?: string;
+  embeds?: { author?: { name?: string }; description?: string }[];
+}
+
+/** Everything the phases share. Assembled as the run progresses. */
+interface Run {
+  ctx: TestContext;
+  channelId: string;
+  game: { id: number; name: string };
+  fixture?: FixtureUser;
+  /** The third hand — its own fixture user, so cleanup can withdraw it. */
+  third?: FixtureUser;
+  /**
+   * Message ids already in the channel when the run began. The channel is
+   * shared across runs and the idle-game scan can hand back the SAME game as
+   * a previous run, whose terminal LFM card still carries the game title —
+   * every predicate below therefore looks only at messages newer than this.
+   */
+  preexisting: Set<string>;
+  /** The id of the ONE message this group is allowed to own. */
+  messageId?: string;
+  /** The lineup that owns the conversion poll — cleanup deletes it. */
+  lineupId?: number;
+  /** Roster display names, captured while the live read still works. */
+  rosterNames?: string[];
+}
+
+/** Only messages this run could have produced. */
+function isNew(run: Run, msg: SimpleMessage): boolean {
+  return !run.preexisting.has(msg.id);
+}
+
+/** `GET /lfg/:gameId` as the admin. */
+function readGroup(
+  ctx: TestContext,
+  gameId: number,
+): Promise<LfgGroupDetail> {
+  return ctx.api.get<LfgGroupDetail>(`/lfg/${gameId}`);
+}
+
+/**
+ * A game nobody is currently looking for.
+ *
+ * Scanned from the END of the registry so this suite and the `/lfg` cases in
+ * `slash-commands.test.ts` (which take the FIRST game) do not fight over one
+ * group, and re-scanned every run so a leaked intent from a failed run costs
+ * the next run a different game rather than a false failure.
+ */
+async function pickIdleGame(
+  ctx: TestContext,
+): Promise<{ id: number; name: string }> {
+  // The admin registry (`/admin/settings/games`, paginated, default 20): one
+  // wide page, candidates taken from ITS end.
+  const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
+    '/admin/settings/games?limit=100',
+  );
+  // ROK-1522: the shared LFM window, past the board's and the newest games.
+  const candidates = lfmCandidates(res.data ?? []);
+  if (candidates.length === 0) throw new Error('LFM: no games in the registry');
+  for (const game of candidates) {
+    const group = await readGroup(ctx, game.id);
+    // `activeCount === 0` stopped meaning "unused" at ROK-1494: a spawned
+    // now-session CONVERTS every intent, so the count is 0 while the group's
+    // `lfg_group_messages` row is still open and holds the game's only slot
+    // under `uq_lfg_group_messages_game_open`. Taking such a game gets this
+    // run the previous group's post EDITED instead of a post of its own.
+    if (group.activeCount === 0 && !group.playingNow) return game;
+  }
+  throw new Error(
+    `LFM: all ${candidates.length} candidate games already have active LFG ` +
+      `intents or a live LFG-born session — clear them before re-running ` +
+      `(ids: ${candidates.map((g) => g.id).join(', ')})`,
+  );
+}
+
+/** The game-titled embed on a message, or a failure naming what was there. */
+function embedFor(msg: SimpleMessage, title: string): SimpleEmbed {
+  const embed = msg.embeds.find((e) => e.title === title);
+  if (!embed) {
+    const titles = msg.embeds.map((e) => e.title).join(', ');
+    throw new Error(
+      `LFM: message ${msg.id} carries no embed titled "${title}" (titles: [${titles}])`,
+    );
+  }
+  assertEmbedRenderRules(embed);
+  return embed;
+}
+
+/** Assert an author line, reporting the line that was actually rendered. */
+function assertAuthor(embed: SimpleEmbed, pattern: RegExp, label: string): void {
+  const author = embed.author ?? '';
+  if (!pattern.test(author)) {
+    throw new Error(
+      `${label}: expected author matching ${String(pattern)}, got "${author}"`,
+    );
+  }
+}
+
+/** Assert a description, reporting the description that was rendered. */
+function assertDescription(
+  embed: SimpleEmbed,
+  pattern: RegExp,
+  label: string,
+): void {
+  const description = embed.description ?? '';
+  if (!pattern.test(description)) {
+    throw new Error(
+      `${label}: expected description matching ${String(pattern)}, got "${description}"`,
+    );
+  }
+}
+
+/**
+ * Assert the edit landed on the SAME message.
+ *
+ * A new message id is the AC2 failure, not a flake — `waitForEmbedUpdate`
+ * polls the channel as a fallback, so a re-post satisfies the predicate and
+ * arrives here to be named.
+ */
+function assertSameMessage(run: Run, msg: SimpleMessage, label: string): void {
+  if (msg.id !== run.messageId) {
+    throw new Error(
+      `${label}: expected the SAME message id ${run.messageId} (AC2 — one ` +
+        `message per group, edited in place), got a different message ${msg.id}`,
+    );
+  }
+}
+
+/**
+ * Stage 1 — the first hand is silent.
+ *
+ * Still true after ROK-1505 (Q1 / D3 / R1): a bound TEXT channel is the
+ * "looking for MORE" ping and is never posted below two hands. Only the forum
+ * board posts at one hand.
+ */
+async function assertQuietOnFirstHand(run: Run): Promise<void> {
+  const first = await postLfgIntent(run.ctx.api, run.game.id);
+  if (first.group.activeCount !== 1) {
+    throw new Error(
+      `LFM precondition: expected activeCount 1 after the first hand on ` +
+        `"${run.game.name}", got ${first.group.activeCount} — the group was ` +
+        `not idle, so the quiet-window assertion would be vacuous`,
+    );
+  }
+  await awaitProcessing(run.ctx.api);
+  await assertConditionNeverMet(
+    async () => {
+      const msgs = await readLastMessages(run.channelId, 50);
+      return msgs.some(
+        (m) =>
+          isNew(run, m) && m.embeds.some((e) => e.title === run.game.name),
+      );
+    },
+    QUIET_WINDOW_MS,
+    `AC1: a bot message titled "${run.game.name}" appeared in channel ` +
+      `${run.channelId} after ONE hand — nothing may post before the 1 → 2 ` +
+      `transition ("LFG is quiet, LFM is loud")`,
+  );
+}
+
+/** Stage 2 — the second hand posts exactly one message. */
+async function assertPostsOnSecondHand(run: Run): Promise<void> {
+  run.fixture = await seedFixtureUser(run.ctx.api);
+  const second = await postLfgIntent(run.fixture.api, run.game.id);
+  if (second.group.activeCount !== 2) {
+    throw new Error(
+      `LFM precondition: expected activeCount 2 after the second hand, got ` +
+        `${second.group.activeCount}`,
+    );
+  }
+  await awaitProcessing(run.ctx.api);
+  const msg = await pollForEmbed(
+    run.channelId,
+    (m) => isNew(run, m) && m.embeds.some((e) => e.title === run.game.name),
+    run.ctx.config.timeoutMs,
+  );
+  run.messageId = msg.id;
+  const embed = embedFor(msg, run.game.name);
+  assertAuthor(embed, /^(◌ NEEDS PLAYERS|▸ READY TO SCHEDULE)/u, 'AC3 author');
+  assertAuthor(embed, /\b2 looking\b/u, 'AC3 count');
+  assertDescription(embed, /Open group/u, 'AC3 group link');
+  // Read viability rather than hard-coding it: the threshold is
+  // `games.cooptimusOnlineMax`, which is null for most seeded games.
+  const group = await readGroup(run.ctx, run.game.id);
+  assertEmbedColor(embed, group.isViable ? EMERALD : AMBER);
+}
+
+/** Invoke `/lfg game:<id>` through the DEMO_MODE harness. */
+function invokeLfg(
+  ctx: TestContext,
+  discordUserId: string,
+  game: string,
+): Promise<HarnessReply> {
+  return ctx.api.post<HarnessReply>('/admin/test/slash-command', {
+    commandName: 'lfg',
+    options: { game },
+    discordUserId,
+    guildId: ctx.config.guildId,
+    channelId: ctx.defaultChannelId,
+  });
+}
+
+/**
+ * The third player: a SECOND fixture user (its own JWT and Discord id), so the
+ * `/lfg` harness resolves it by `users.discord_id` AND cleanup can withdraw
+ * its hand. A borrowed demo user had no client to withdraw with, and a failure
+ * between stages 3 and 4 left its intent live for days, poisoning the game.
+ */
+async function seedThirdPlayer(run: Run): Promise<string> {
+  // Slot 2: the seed endpoint is idempotent per slot, and slot 1 is already
+  // the second hand — the same user again would be a no-op `/lfg`.
+  run.third = await seedFixtureUser(run.ctx.api, 3, 2);
+  return run.third.discordId;
+}
+
+/** Stage 3 — the third hand, through `/lfg`, EDITS the same message. */
+async function assertEditsOnThirdHand(run: Run): Promise<void> {
+  const discordId = await seedThirdPlayer(run);
+  const reply = await invokeLfg(run.ctx, discordId, String(run.game.id));
+  const replyAuthor = reply.embeds?.[0]?.author?.name ?? '';
+  if (!/\b3 looking\b/u.test(replyAuthor)) {
+    throw new Error(
+      `AC6: /lfg should have raised the third hand and answered with the ` +
+        `group state, got author "${replyAuthor}" / content ` +
+        `"${reply.content ?? ''}"`,
+    );
+  }
+  await awaitProcessing(run.ctx.api);
+  const msg = await waitForEmbedUpdate(
+    run.channelId,
+    (m) =>
+      isNew(run, m) &&
+      m.embeds.some(
+        (e) => e.title === run.game.name && /\b3 looking\b/u.test(e.author ?? ''),
+      ),
+    run.ctx.config.timeoutMs,
+  );
+  assertSameMessage(run, msg, 'AC2 third hand');
+  // Captured while the LIVE read still works: after conversion every intent is
+  // `status='converted'` and this endpoint returns an empty roster by design.
+  const group = await readGroup(run.ctx, run.game.id);
+  run.rosterNames = group.members.map((m) => m.displayName ?? m.username);
+  if (run.rosterNames.length !== 3) {
+    throw new Error(
+      `LFM precondition: expected a 3-player roster before conversion, got ` +
+        `${run.rosterNames.length} ([${run.rosterNames.join(', ')}])`,
+    );
+  }
+}
+
+/** What `POST /scheduling-polls` hands back — the match id IS the poll id. */
+interface SchedulingPoll {
+  id: number;
+  lineupId: number;
+}
+
+/**
+ * The product's conversion, step 1: a scheduling poll for the live roster,
+ * created by the admin — a MEMBER of the group (the first hand). Creating a
+ * poll signs nobody up, so every intent is still `active` when the convert
+ * call checks membership (see the header for why an event would not be).
+ */
+async function createPollForGroup(run: Run): Promise<SchedulingPoll> {
+  const group = await readGroup(run.ctx, run.game.id);
+  const memberUserIds = group.members.map((m) => m.userId);
+  const poll = await run.ctx.api.post<SchedulingPoll>('/scheduling-polls', {
+    gameId: run.game.id,
+    memberUserIds,
+    durationHours: 2,
+    minVoteThreshold: memberUserIds.length,
+  });
+  run.lineupId = poll.lineupId;
+  return poll;
+}
+
+/** Stage 4 — conversion is the final edit, and it keeps everyone. */
+async function assertConvertedEdit(run: Run, poll: SchedulingPoll): Promise<void> {
+  await convertLfg(run.ctx.api, run.game.id, { pollId: poll.id });
+  await awaitProcessing(run.ctx.api);
+  const msg = await waitForEmbedUpdate(
+    run.channelId,
+    (m) =>
+      isNew(run, m) &&
+      m.embeds.some(
+        (e) => e.title === run.game.name && /^■ SCHEDULED/u.test(e.author ?? ''),
+      ),
+    run.ctx.config.timeoutMs,
+  );
+  assertSameMessage(run, msg, 'AC5 conversion');
+  const embed = embedFor(msg, run.game.name);
+  assertEmbedColor(embed, SLATE);
+  assertDescription(embed, /Open poll/u, 'AC5 poll link');
+  const description = embed.description ?? '';
+  if (/Open group/u.test(description)) {
+    throw new Error(
+      `AC5: the SCHEDULED embed still links to the group page — the target ` +
+        `link must replace it. Description: "${description}"`,
+    );
+  }
+  assertRosterSurvived(run, description);
+}
+
+/**
+ * The round-1 regression guard: every player is still named after conversion.
+ *
+ * Asserted name by name. A count would pass if the roster had been rebuilt
+ * from different rows, and the round-1 defect rendered the `|| 'Nobody yet'`
+ * fallback, which satisfies any "description is non-empty" check.
+ */
+function assertRosterSurvived(run: Run, description: string): void {
+  const missing = (run.rosterNames ?? []).filter(
+    (name) => !description.includes(name),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `AC5 regression guard: the converted embed lost ${missing.length} of ` +
+        `${run.rosterNames?.length} players from the roster — missing ` +
+        `[${missing.join(', ')}]. This is the round-1 defect (the converted ` +
+        `read composed liveIntent). Description: "${description}"`,
+    );
+  }
+}
+
+/** Stage 5 — one message for the whole run, and every embed renders. */
+async function assertExactlyOneMessage(run: Run): Promise<void> {
+  const msgs = await readLastMessages(run.channelId, 100);
+  const lfm = msgs.filter(
+    (m) =>
+      isNew(run, m) &&
+      m.embeds.some(
+        (e) => e.title === run.game.name && LFM_AUTHOR.test(e.author ?? ''),
+      ),
+  );
+  for (const msg of lfm) embedFor(msg, run.game.name);
+  if (lfm.length !== 1) {
+    throw new Error(
+      `AC2/AC5: expected exactly 1 LFM message for "${run.game.name}" in ` +
+        `channel ${run.channelId} for the whole run, found ${lfm.length} ` +
+        `(ids: ${lfm.map((m) => m.id).join(', ')}) — a terminal state must ` +
+        `edit, never post a second card`,
+    );
+  }
+}
+
+/** Withdraw what can be withdrawn and drop the fixtures this test created. */
+async function cleanup(run: Run, bindingId?: string): Promise<void> {
+  await withdrawLfgIntent(run.ctx.api, run.game.id);
+  if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
+  if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
+  // The poll's lineup: there is no `DELETE /lineups/:id`, so force-archive it
+  // the way the abort smoke does (operator/admin route, empty body).
+  if (run.lineupId !== undefined) {
+    await run.ctx.api
+      .post(`/lineups/${run.lineupId}/abort`, {})
+      .catch(() => {});
+  }
+  if (bindingId) await deleteBinding(run.ctx.api, bindingId);
+}
+
+const lfmEmbedLifecycle: SmokeTest = {
+  name: 'LFM embed: quiet on hand 1, one message edited in place through conversion',
+  category: 'embed',
+  run(ctx) {
+    // ROK-1471: the LFG board's master toggle is GLOBAL and its forum outranks
+    // this test's text binding, so while `lfg-board.test.ts` holds the board on
+    // this group posts to the FORUM and the poll below times out. Serialised
+    // rather than "fixed" because both surfaces are real product behaviour —
+    // see `lfg-surface-lock.ts`.
+    return withLfgSurface('lfm-embed', () => runLifecycle(ctx));
+  },
+};
+
+/** The lifecycle itself, run under the LFG surface lock. */
+async function runLifecycle(ctx: TestContext): Promise<void> {
+  const game = await pickIdleGame(ctx);
+  const preexisting = new Set(
+    (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
+  );
+  const run: Run = {
+    ctx,
+    channelId: ctx.defaultChannelId,
+    game,
+    preexisting,
+  };
+  // ROK-1522: with the board on, every hand below opens a forum post.
+  const sweep = await armForumSweep(ctx.api, game.name);
+  let bindingId: string | undefined;
+  try {
+    // Bind the game explicitly so `resolveLfmChannel`'s FIRST step decides
+    // where the embed lands. Relying on the default-channel fallback would
+    // make the destination depend on a setting this test does not own.
+    bindingId = await createBinding(ctx.api, {
+      channelId: run.channelId,
+      channelType: 'text',
+      purpose: 'game-announcements',
+      gameId: game.id,
+    });
+    await assertQuietOnFirstHand(run);
+    await assertPostsOnSecondHand(run);
+    await assertEditsOnThirdHand(run);
+    const poll = await createPollForGroup(run);
+    await assertConvertedEdit(run, poll);
+    await assertExactlyOneMessage(run);
+  } finally {
+    await cleanup(run, bindingId);
+    await sweepForumThreads(ctx.api, sweep);
+  }
+}
+
+/**
+ * ROK-1479 AC6 — a NOW group renders its live clock, in the one slot that can.
+ *
+ * Discord renders `<t:EPOCH:style>` in an embed's DESCRIPTION but NOT in its
+ * author line or footer, and `assertNoTimestampMarkup` (api
+ * `embeds/embed-chrome.helpers.ts`) THROWS when the markup reaches either. So
+ * this asserts BOTH halves of that ledger against a real rendered message: the
+ * clock is present in the description, and absent from the author line.
+ * Asserting only the description would go green on a build that also leaked the
+ * markup upward — right up until the guard threw on a real post.
+ *
+ * Two hands, because the LFM card only exists at the 1 → 2 transition ("LFG is
+ * quiet, LFM is loud"); a single now-intent posts nothing at all ON THE TEXT
+ * SURFACE (ROK-1505 Q1 — the forum board would post it as `LOOKING`). Both are
+ * FIXTURE users on their own slots (3 and 4), never the admin, so cleanup can
+ * withdraw each hand with the client that raised it.
+ *
+ * `ttlMinutes: 60` rather than 30 (spec A13): the intent must outlive a slow
+ * run, and a lapsed one silently drops out of every read.
+ *
+ * The poll predicate matches the MESSAGE (its title), not the urgency line.
+ * That is deliberate: a build that ignored `urgency` then fails on the
+ * description assertion below, which names expected-vs-actual, instead of dying
+ * by poll exhaustion — which would prove nothing about urgency.
+ */
+const NOW_LINE_RE = /🔥 \d+ wants? to play now · until <t:\d+:t>/u;
+/** Discord timestamp markup, assembled so no scan of this file self-matches. */
+const TIMESTAMP_MARKUP = '<t' + ':';
+
+/** Assert the author line is free of timestamp markup, quoting what rendered. */
+function assertAuthorHasNoTimestamp(embed: SimpleEmbed, label: string): void {
+  const author = embed.author ?? '';
+  if (author.includes(TIMESTAMP_MARKUP)) {
+    throw new Error(
+      `${label}: the author line carries ${TIMESTAMP_MARKUP}…> markup, which ` +
+        `Discord does not render there and applyEmbedChrome throws on. It ` +
+        `belongs in the description. Author: "${author}"`,
+    );
+  }
+}
+
+/** Raise a now-hand and fail loudly if the group did not reach the count. */
+async function raiseNowHand(
+  run: Run,
+  user: FixtureUser,
+  expectedCount: number,
+): Promise<void> {
+  const res = await postLfgIntent(user.api, run.game.id, {
+    urgency: 'now',
+    ttlMinutes: 60,
+  });
+  if (res.group.activeCount !== expectedCount) {
+    throw new Error(
+      `AC6 precondition: expected activeCount ${expectedCount} after a ` +
+        `now-hand on "${run.game.name}", got ${res.group.activeCount} — the ` +
+        `group was not idle, so the embed assertions would be about someone else`,
+    );
+  }
+}
+
+/**
+ * Raise a plain WEEK hand — the one that crosses the LFM floor without arming
+ * ROK-1494's spawn. Same precondition check as {@link raiseNowHand}.
+ */
+async function raiseWeekHand(
+  run: Run,
+  user: FixtureUser,
+  expectedCount: number,
+): Promise<void> {
+  const res = await postLfgIntent(user.api, run.game.id);
+  if (res.group.activeCount !== expectedCount) {
+    throw new Error(
+      `AC6 precondition: expected activeCount ${expectedCount} after a ` +
+        `week-hand on "${run.game.name}", got ${res.group.activeCount} — the ` +
+        `group was not idle, so the embed assertions would be about someone else`,
+    );
+  }
+}
+
+/** The AC6 body, run under the LFG surface lock. */
+async function runNowUrgency(ctx: TestContext): Promise<void> {
+  const game = await pickIdleGame(ctx);
+  const preexisting = new Set(
+    (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
+  );
+  const run: Run = { ctx, channelId: ctx.defaultChannelId, game, preexisting };
+  const sweep = await armForumSweep(ctx.api, game.name);
+  let bindingId: string | undefined;
+  try {
+    bindingId = await createBinding(ctx.api, {
+      channelId: run.channelId,
+      channelType: 'text',
+      purpose: 'game-announcements',
+      gameId: game.id,
+    });
+    run.fixture = await seedFixtureUser(ctx.api, 3, 3);
+    run.third = await seedFixtureUser(ctx.api, 3, 4);
+    // ROK-1494: the hand that CROSSES the LFM floor decides whether a session
+    // spawns — `LfgService` emits `LFM_REACHED` with `urgency` read off the row
+    // that just landed (`lfg.service.ts` D7), and `LfgNowSpawnService
+    // .onLfmReached` returns early unless that is `now`. Two `now` hands
+    // therefore spawn, and the spawn repaints the card as `▸ PLAYING NOW`
+    // ("Nobody yet" + Join voice / Open event) BEFORE this test can read it —
+    // AC6's render window would not exist at all.
+    //
+    // So the second hand is a plain WEEK hand. The group still holds a `now`
+    // intent, and the clock line keys off `nowCount >= 1`
+    // (`lfm-embed.helpers.ts:222`), not off the group's aggregate urgency — so
+    // AC6 asserts exactly what it always did, on a group that reaches the floor
+    // without spawning. This also stops the test leaking a live session, which
+    // is what held the next game's `uq_lfg_group_messages_game_open` slot and
+    // broke T25 in `lfg-board.test.ts`.
+    await raiseNowHand(run, run.fixture, 1);
+    await raiseWeekHand(run, run.third, 2);
+    await awaitProcessing(ctx.api);
+
+    const msg = await pollForEmbed(
+      run.channelId,
+      (m) => isNew(run, m) && m.embeds.some((e) => e.title === run.game.name),
+      ctx.config.timeoutMs,
+    );
+    const embed = embedFor(msg, run.game.name);
+    assertDescription(embed, NOW_LINE_RE, 'AC6 now line');
+    assertAuthorHasNoTimestamp(embed, 'AC6 author slot');
+  } finally {
+    // No admin hand was raised here, so only the two fixtures need withdrawing.
+    // These now MATTER on every path: the second hand is a week hand, so no
+    // session spawns and neither intent is `converted` — withdrawing them is
+    // what actually returns the game to idle for the next test.
+    if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
+    if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
+    if (bindingId) await deleteBinding(ctx.api, bindingId);
+    await sweepForumThreads(ctx.api, sweep);
+    // NOTE: this test no longer spawns a session at all (see the week-hand
+    // comment above), so there is nothing left live behind it. The paragraph
+    // below is kept because it still describes the gap any test that DOES
+    // spawn will hit — see the session-teardown story.
+    //
+    // There is no route that ENDS
+    // an ad-hoc session — `DELETE /events/:id` and `PATCH /events/:id/cancel`
+    // both remove it from `playingNow` WITHOUT closing the group's
+    // `lfg_group_messages` row (only a terminal LFM render or the ad-hoc reaper
+    // does that, ROK-1494 Q4). Using either would leave the game looking idle
+    // while its one `uq_lfg_group_messages_game_open` slot is still taken —
+    // strictly worse than leaving the session live, which every `pickIdleGame`
+    // here now reads off `playingNow` and skips. The reaper closes the row
+    // ~30 min after the session's hour is up.
+  }
+}
+
+const lfmEmbedNowUrgency: SmokeTest = {
+  name: 'LFM embed: a now-group states its clock in the description, never the author line',
+  category: 'embed',
+  // Same global board toggle as the lifecycle test above — see lfg-surface-lock.
+  run(ctx) {
+    return withLfgSurface('lfm-embed-now', () => runNowUrgency(ctx));
+  },
+};
+
+export const lfmEmbedTests: SmokeTest[] = [
+  lfmEmbedLifecycle,
+  lfmEmbedNowUrgency,
+];

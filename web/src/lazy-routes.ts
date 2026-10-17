@@ -1,0 +1,224 @@
+/**
+ * Lazy-loaded route components with auto-reload on stale chunk failures.
+ * Extracted from App.tsx for file size compliance.
+ */
+import { lazy } from 'react';
+import type { ComponentType } from 'react';
+import { claimChunkReload, isChunkLoadError } from './lib/chunk-error';
+
+export { CHUNK_RELOAD_KEY } from './lib/chunk-error';
+
+/**
+ * Wraps React.lazy() to auto-reload the page on stale chunk import failures.
+ * First failure: stamps sessionStorage and reloads. A failure within
+ * `CHUNK_RELOAD_WINDOW_MS` of that reload throws to the ErrorBoundary.
+ */
+export function lazyWithRetry<
+    T extends ComponentType<Record<string, never>>,
+>(importFn: () => Promise<{ default: T }>) {
+    return lazy(() =>
+        importFn().catch((error: unknown) => {
+            if (isChunkLoadError(error) && claimChunkReload()) {
+                window.location.reload();
+                return new Promise<{ default: T }>(() => {});
+            }
+            throw error;
+        }),
+    );
+}
+
+// -- Lazy loaded public pages --
+export const JoinPage = lazyWithRetry(() =>
+    import('./pages/join-page').then((m) => ({ default: m.JoinPage })),
+);
+/** ROK-1750: private poll share link landing (`/p/poll/:token`). */
+export const PollSharePage = lazyWithRetry(() =>
+    import('./pages/poll-share-page').then((m) => ({ default: m.PollSharePage })),
+);
+/** ROK-1778: public privacy policy (`/privacy`), linked from Google's consent screen. */
+export const PrivacyPage = lazyWithRetry(() =>
+    import('./pages/privacy-page').then((m) => ({ default: m.PrivacyPage })),
+);
+export const InvitePage = lazyWithRetry(() =>
+    import('./pages/invite-page').then((m) => ({ default: m.InvitePage })),
+);
+
+// -- Lazy loaded pages --
+export const CalendarPage = lazyWithRetry(() =>
+    import('./pages/calendar-page').then((m) => ({ default: m.CalendarPage })),
+);
+export const CreateEventPage = lazyWithRetry(() =>
+    import('./pages/create-event-page').then((m) => ({ default: m.CreateEventPage })),
+);
+export const PlanEventPage = lazyWithRetry(() =>
+    import('./pages/plan-event-page').then((m) => ({ default: m.PlanEventPage })),
+);
+export const EditEventPage = lazyWithRetry(() =>
+    import('./pages/edit-event-page').then((m) => ({ default: m.EditEventPage })),
+);
+export const GamesPage = lazyWithRetry(() =>
+    import('./pages/games-page').then((m) => ({ default: m.GamesPage })),
+);
+export const GameDetailPage = lazyWithRetry(() =>
+    import('./pages/game-detail-page').then((m) => ({ default: m.GameDetailPage })),
+);
+export const LfgGroupPage = lazyWithRetry(() =>
+    import('./pages/lfg/lfg-group-page').then((m) => ({ default: m.LfgGroupPage })),
+);
+export const LineupDetailPage = lazyWithRetry(() =>
+    import('./pages/lineup-detail-page').then((m) => ({ default: m.LineupDetailPage })),
+);
+export const SchedulingPollPage = lazyWithRetry(() =>
+    import('./pages/scheduling-poll-page').then((m) => ({ default: m.SchedulingPollPage })),
+);
+export const CharacterDetailPage = lazyWithRetry(() =>
+    import('./pages/character-detail-page').then((m) => ({ default: m.CharacterDetailPage })),
+);
+/** ROK-1785: WoW-plugin-owned guild page (no plugin route host exists, so it mounts here). */
+export const GuildPage = lazyWithRetry(() =>
+    import('./components/hub/hub-page').then((m) => ({ default: m.GuildPage })),
+);
+export const PlayersPage = lazyWithRetry(() =>
+    import('./pages/players-page').then((m) => ({ default: m.PlayersPage })),
+);
+export const EventMetricsPage = lazyWithRetry(() =>
+    import('./pages/event-metrics-page').then((m) => ({ default: m.EventMetricsPage })),
+);
+export const InsightsHubPage = lazyWithRetry(() =>
+    import('./pages/insights-hub-page').then((m) => ({ default: m.InsightsHubPage })),
+);
+export const InsightsCommunityTab = lazyWithRetry(() =>
+    import('./pages/insights-community-tab').then((m) => ({ default: m.InsightsCommunityTab })),
+);
+export const InsightsEventsTab = lazyWithRetry(() =>
+    import('./pages/insights-events-tab').then((m) => ({ default: m.InsightsEventsTab })),
+);
+export const UserProfilePage = lazyWithRetry(() =>
+    import('./pages/user-profile-page').then((m) => ({ default: m.UserProfilePage })),
+);
+export const OnboardingWizardPage = lazyWithRetry(() =>
+    import('./pages/onboarding-wizard-page').then((m) => ({ default: m.OnboardingWizardPage })),
+);
+
+// -- Lazy loaded profile panels --
+export const ProfileLayout = lazyWithRetry(() =>
+    import('./components/profile/profile-layout').then((m) => ({ default: m.ProfileLayout })),
+);
+export const PreferencesPanel = lazyWithRetry(() =>
+    import('./pages/profile/preferences-panel').then((m) => ({ default: m.PreferencesPanel })),
+);
+export const NotificationsPanel = lazyWithRetry(() =>
+    import('./pages/profile/notifications-panel').then((m) => ({ default: m.NotificationsPanel })),
+);
+export const ProfileGameTimePanel = lazyWithRetry(() =>
+    import('./pages/profile/game-time-panel').then((m) => ({ default: m.ProfileGameTimePanel })),
+);
+export const CharactersPanel = lazyWithRetry(() =>
+    import('./pages/profile/characters-panel').then((m) => ({ default: m.CharactersPanel })),
+);
+export const WatchedGamesPanel = lazyWithRetry(() =>
+    import('./pages/profile/watched-games-panel').then((m) => ({ default: m.WatchedGamesPanel })),
+);
+export const SendEventsPanel = lazyWithRetry(() =>
+    import('./components/features/calendar-sync/SendEventsPage').then((m) => ({ default: m.SendEventsPage })),
+);
+export const AvatarPanel = lazyWithRetry(() =>
+    import('./pages/profile/avatar-panel').then((m) => ({ default: m.AvatarPanel })),
+);
+export const IntegrationsPanel = lazyWithRetry(() =>
+    import('./pages/profile/integrations-panel').then((m) => ({ default: m.IntegrationsPanel })),
+);
+export const AccountPanel = lazyWithRetry(() =>
+    import('./pages/profile/account-panel').then((m) => ({ default: m.AccountPanel })),
+);
+
+// -- DEMO_MODE-gated dev wireframes (ROK-1193 spike) --
+export const LineupWireframesRoute = lazyWithRetry(() =>
+    import('./dev/lineup-wireframes/LineupWireframesRoute').then((m) => ({ default: m.LineupWireframesRoute })),
+);
+export const LineupWireframesIndexRoute = lazyWithRetry(() =>
+    import('./dev/lineup-wireframes/LineupWireframesRoute').then((m) => ({ default: m.LineupWireframesIndexRoute })),
+);
+export const SimplifyWireframesPage = lazyWithRetry(() =>
+    import('./dev/simplify-wireframes/SimplifyWireframesPage').then((m) => ({ default: m.SimplifyWireframesPage })),
+);
+export const BindingAdminWireframesPage = lazyWithRetry(() =>
+    import('./dev/binding-admin-wireframes/BindingAdminWireframesPage').then((m) => ({ default: m.BindingAdminWireframesPage })),
+);
+export const DesignSystemPage = lazyWithRetry(() =>
+    import('./dev/design-system/DesignSystemPage').then((m) => ({ default: m.DesignSystemPage })),
+);
+export const SchedulingWireframesPage = lazyWithRetry(() =>
+    import('./dev/scheduling-wireframes/SchedulingWireframesPage').then((m) => ({ default: m.SchedulingWireframesPage })),
+);
+export const ServerScheduleWireframesPage = lazyWithRetry(() =>
+    import('./dev/server-schedule-wireframes/ServerScheduleWireframesPage').then((m) => ({ default: m.ServerScheduleWireframesPage })),
+);
+/** ROK-1661 bare viewport probe; `Layout.tsx` renders it with no shell. */
+export const ViewportProbePage = lazyWithRetry(() =>
+    import('./dev/ViewportProbePage').then((m) => ({ default: m.ViewportProbePage })),
+);
+
+// -- Lazy loaded admin panels --
+export const AdminSettingsLayout = lazyWithRetry(() =>
+    import('./components/admin/admin-settings-layout').then((m) => ({ default: m.AdminSettingsLayout })),
+);
+export const AdminSetupWizard = lazyWithRetry(() =>
+    import('./pages/admin/admin-setup-wizard').then((m) => ({ default: m.AdminSetupWizard })),
+);
+export const GeneralPanel = lazyWithRetry(() =>
+    import('./pages/admin/general-panel').then((m) => ({ default: m.GeneralPanel })),
+);
+export const RolesPanel = lazyWithRetry(() =>
+    import('./pages/admin/roles-panel').then((m) => ({ default: m.RolesPanel })),
+);
+export const DemoDataPanel = lazyWithRetry(() =>
+    import('./pages/admin/demo-data-panel').then((m) => ({ default: m.DemoDataPanel })),
+);
+export const IgdbPanel = lazyWithRetry(() =>
+    import('./pages/admin/igdb-panel').then((m) => ({ default: m.IgdbPanel })),
+);
+export const SteamPanel = lazyWithRetry(() =>
+    import('./pages/admin/steam-panel').then((m) => ({ default: m.SteamPanel })),
+);
+export const CalendarSyncPanel = lazyWithRetry(() =>
+    import('./pages/admin/calendar-sync-panel').then((m) => ({ default: m.CalendarSyncPanel })),
+);
+export const ItadPanel = lazyWithRetry(() =>
+    import('./pages/admin/itad-panel').then((m) => ({ default: m.ItadPanel })),
+);
+export const CooptimusPanel = lazyWithRetry(() =>
+    import('./pages/admin/cooptimus-panel').then((m) => ({ default: m.CooptimusPanel })),
+);
+export const PluginsPanel = lazyWithRetry(() =>
+    import('./pages/admin/plugins-panel').then((m) => ({ default: m.PluginsPanel })),
+);
+export const PluginIntegrationPanel = lazyWithRetry(() =>
+    import('./pages/admin/plugin-integration-panel').then((m) => ({ default: m.PluginIntegrationPanel })),
+);
+export const CronJobsPanel = lazyWithRetry(() =>
+    import('./pages/admin/cron-jobs-panel').then((m) => ({ default: m.CronJobsPanel })),
+);
+export const BackupsPanel = lazyWithRetry(() =>
+    import('./pages/admin/backups-panel').then((m) => ({ default: m.BackupsPanel })),
+);
+export const LogsPanel = lazyWithRetry(() =>
+    import('./pages/admin/logs-panel').then((m) => ({ default: m.LogsPanel })),
+);
+
+// -- Lazy loaded Discord admin pages --
+export const DiscordOverviewPage = lazyWithRetry(() =>
+    import('./pages/admin/discord-overview-page').then((m) => ({ default: m.DiscordOverviewPage })),
+);
+export const DiscordAuthPage = lazyWithRetry(() =>
+    import('./pages/admin/discord-auth-page').then((m) => ({ default: m.DiscordAuthPage })),
+);
+export const DiscordConnectionPage = lazyWithRetry(() =>
+    import('./pages/admin/discord-connection-page').then((m) => ({ default: m.DiscordConnectionPage })),
+);
+export const DiscordChannelsPage = lazyWithRetry(() =>
+    import('./pages/admin/discord-channels-page').then((m) => ({ default: m.DiscordChannelsPage })),
+);
+export const DiscordFeaturesPage = lazyWithRetry(() =>
+    import('./pages/admin/discord-features-page').then((m) => ({ default: m.DiscordFeaturesPage })),
+);

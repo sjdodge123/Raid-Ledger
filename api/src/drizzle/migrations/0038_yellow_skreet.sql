@@ -1,0 +1,1 @@
+ALTER TABLE "game_registry" ADD COLUMN "enabled" boolean DEFAULT true NOT NULL;

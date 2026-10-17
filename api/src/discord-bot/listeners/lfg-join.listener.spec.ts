@@ -1,0 +1,480 @@
+/**
+ * ROK-1471 D6 / AC4 — the `+1` button on an LFG board post.
+ *
+ * The listener's whole contract is that it is a THIN mouth on top of
+ * `LfgService.createIntent`: identity comes from the interaction, eligibility is
+ * re-checked here because `NotDeactivatedGuard` only covers the HTTP routes, and
+ * the public post is never touched — it repaints through the event consumer.
+ */
+import { ButtonStyle } from 'discord.js';
+import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { LFG_INVITE_VIEW_LABEL } from '../embeds/lfg-view-group-button.helpers';
+import {
+  LFG_BLOCKED_REPLY,
+  LFG_UNLINKED_REPLY,
+} from '../commands/lfg.command.helpers';
+import {
+  LFG_JOIN_TERMINAL_REPLY,
+  LfgJoinListener,
+  parseJoinPress,
+} from './lfg-join.listener';
+
+type Row = Record<string, unknown>;
+
+/**
+ * Queued-result drizzle stand-in: the caller lookup, then the board row (board
+ * press) or the group-horizon row (DM press). `innerJoin` / `orderBy` are here
+ * because `readGroupHorizon` joins `users` and takes the longest-running hand.
+ */
+function fakeDb(batches: Row[][]): never {
+  let calls = 0;
+  return {
+    select: () => {
+      const rows = batches[calls++] ?? [];
+      const chain: Record<string, unknown> = {};
+      Object.assign(chain, {
+        from: () => chain,
+        innerJoin: () => chain,
+        where: () => chain,
+        orderBy: () => chain,
+        limit: () => Promise.resolve(rows),
+      });
+      return chain;
+    },
+  } as never;
+}
+
+const LINKED: Row[] = [{ id: 7, deactivatedAt: null, bannedAt: null }];
+const OPEN_ROW: Row[] = [{ id: 'row-1', state: 'open', threadId: 'thread-1' }];
+
+/**
+ * Shared by BOTH press surfaces since ROK-1614 — the board `+1` resolves the
+ * same horizon the DM Join button does, so these fixtures live at module scope
+ * rather than inside the DM describe.
+ */
+const DM_42 = `${LFG_BUTTON_IDS.INVITE_JOIN}:42`;
+const LAPSES_AT = new Date('2026-09-08T20:45:00.000Z');
+/** One live `now` hand on the group — whoever it belongs to. */
+const NOW_GROUP: Row[] = [{ expiresAt: LAPSES_AT, ttlMinutes: 60 }];
+/** One live `tonight` hand: an absolute 04:00 expiry, no TTL bucket. */
+const TONIGHT_GROUP: Row[] = [{ expiresAt: LAPSES_AT, ttlMinutes: null }];
+
+/** A press that arrived in a DM: no guild, so no board row to look up. */
+function makeDmButton(customId: string, discordId = 'discord-1') {
+  const made = makeButton(customId, discordId);
+  (made.interaction as unknown as Record<string, unknown>).guildId = null;
+  (made.interaction as unknown as Record<string, unknown>).channelId = 'dm-1';
+  return made;
+}
+
+function makeButton(customId: string, discordId = 'discord-1') {
+  const deferReply = jest.fn().mockResolvedValue(undefined);
+  const editReply = jest.fn().mockResolvedValue(undefined);
+  const messageEdit = jest.fn().mockResolvedValue(undefined);
+  return {
+    interaction: {
+      customId,
+      user: { id: discordId },
+      guildId: 'guild-1',
+      channelId: 'thread-1',
+      message: { id: 'msg-1', edit: messageEdit },
+      deferReply,
+      editReply,
+    } as never,
+    deferReply,
+    editReply,
+    messageEdit,
+  };
+}
+
+/**
+ * `createIntent`'s response body is the caller's OWN intent plus the derived
+ * group — the confirmation copy reads the horizon off the ROOT, never off the
+ * group aggregate (ROK-1455 walk feedback 2).
+ */
+function makeService(
+  created = true,
+  activeCount = 3,
+  intent: Record<string, unknown> = {},
+): Record<'createIntent', jest.Mock> {
+  return {
+    createIntent: jest.fn().mockResolvedValue({
+      created,
+      body: {
+        id: 1,
+        userId: 7,
+        gameId: 42,
+        urgency: 'week',
+        ttlMinutes: null,
+        expiresAt: '2026-09-22T20:12:00.000Z',
+        ...intent,
+        group: {
+          gameId: 42,
+          gameName: 'Deep Rock Galactic',
+          gameSlug: 'deep-rock-galactic',
+          activeCount,
+          isViable: false,
+        },
+      },
+    }),
+  };
+}
+
+function build(
+  batches: Row[][],
+  lfgService: Record<string, jest.Mock>,
+  client: unknown = null,
+): { listener: LfgJoinListener; clientService: Record<string, jest.Mock> } {
+  const clientService = {
+    getClient: jest.fn().mockReturnValue(client),
+    editEmbed: jest.fn(),
+    sendEmbed: jest.fn(),
+  };
+  const settings = {
+    getClientUrl: jest.fn().mockResolvedValue('https://raid.example'),
+    // ROK-1616 — the DM Join button recomputes a `tonight` horizon from the
+    // press, so it needs the community zone.
+    getDiscordBotTimezone: jest.fn().mockResolvedValue('UTC'),
+  };
+  const listener = new LfgJoinListener(
+    fakeDb(batches),
+    clientService as never,
+    lfgService as never,
+    settings as never,
+  );
+  return { listener, clientService };
+}
+
+describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
+  it('writes through LfgService.createIntent for the user who CLICKED, and edits no Discord message itself (T11)', async () => {
+    const service = makeService();
+    // caller -> board row -> now-hand lookup (empty) -> tonight lookup (empty)
+    const { listener, clientService } = build(
+      [LINKED, OPEN_ROW, [], []],
+      service,
+    );
+    const { interaction, deferReply, editReply, messageEdit } = makeButton(
+      `${LFG_BUTTON_IDS.JOIN}:42`,
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledTimes(1);
+    // ROK-1614 REPLACES the old ROK-1455 guard here. That guard asserted the
+    // board passed NO urgency argument (defaulting to WEEK_REQUEST); the
+    // operator ruling reversed exactly that. What the guard PROTECTED is now
+    // asserted below instead: a group with no live now/tonight hand still
+    // yields a week hand — see the lapsed-group case.
+    // MUTATION: restore the `press.source === 'board'` early return in
+    // `lfg-join.listener.ts` and this fails on the missing third argument.
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+    expect(deferReply).toHaveBeenCalledWith({ flags: 64 });
+    // ROK-1455 walk feedback 1: the board's reply is the SAME shape the DM's
+    // Join press gets — the operator ruled one consistent reply beats two.
+    expect(editReply.mock.calls[0][0]).toMatchObject({
+      content: "You're in — Deep Rock Galactic, this week. 3 looking.",
+    });
+    // The post repaints through GROUP_CHANGED, never from this listener.
+    expect(clientService.editEmbed).not.toHaveBeenCalled();
+    expect(clientService.sendEmbed).not.toHaveBeenCalled();
+    expect(messageEdit).not.toHaveBeenCalled();
+  });
+
+  it('links the group page with a `View the group` BUTTON, not an inline masked link (walk feedback 4)', async () => {
+    const { listener } = build([LINKED, OPEN_ROW], makeService());
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    const payload = editReply.mock.calls[0][0] as {
+      content: string;
+      components: { toJSON(): { components: unknown[] } }[];
+    };
+    expect(payload.components).toHaveLength(1);
+    expect(payload.components[0]?.toJSON().components).toEqual([
+      expect.objectContaining({
+        style: ButtonStyle.Link,
+        label: LFG_INVITE_VIEW_LABEL,
+        url: 'https://raid.example/lfg/deep-rock-galactic',
+      }),
+    ]);
+    // The masked link the walk complained about is gone from the copy.
+    expect(payload.content).not.toContain('Open group');
+    expect(payload.content).not.toContain('https://raid.example');
+  });
+
+  it('refuses a DEACTIVATED account and writes nothing — the HTTP guard never sees a gateway click (T12/E9)', async () => {
+    const service = makeService();
+    const { listener } = build(
+      [[{ id: 7, deactivatedAt: new Date(), bannedAt: null }], OPEN_ROW],
+      service,
+    );
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).not.toHaveBeenCalled();
+    expect(editReply.mock.calls[0][0]).toMatchObject({
+      content: LFG_BLOCKED_REPLY,
+    });
+  });
+
+  it('refuses a BANNED account and writes nothing (E9)', async () => {
+    const service = makeService();
+    const { listener } = build(
+      [[{ id: 7, deactivatedAt: null, bannedAt: new Date() }], OPEN_ROW],
+      service,
+    );
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).not.toHaveBeenCalled();
+    expect(editReply.mock.calls[0][0]).toMatchObject({
+      content: LFG_BLOCKED_REPLY,
+    });
+  });
+
+  it('tells an UNLINKED account to link, and writes nothing (E8)', async () => {
+    const service = makeService();
+    const { listener } = build([[], OPEN_ROW], service);
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).not.toHaveBeenCalled();
+    expect(editReply.mock.calls[0][0]).toMatchObject({
+      content: LFG_UNLINKED_REPLY,
+    });
+  });
+
+  it('says "already in" on a repeat press — one idempotent call, no second row (E10)', async () => {
+    const service = makeService(false, 4);
+    const { listener } = build([LINKED, OPEN_ROW], service);
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledTimes(1);
+    expect(editReply.mock.calls[0][0]).toMatchObject({
+      content: "You're already in — Deep Rock Galactic, this week. 4 looking.",
+    });
+  });
+
+  it('refuses a press on a TERMINAL post from a stale client, and writes nothing (E11)', async () => {
+    const service = makeService();
+    const { listener } = build(
+      [LINKED, [{ id: 'row-1', state: 'converted', threadId: 'thread-1' }]],
+      service,
+    );
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).not.toHaveBeenCalled();
+    expect(editReply.mock.calls[0][0]).toMatchObject({
+      content: LFG_JOIN_TERMINAL_REPLY,
+    });
+  });
+
+  it('still joins when the click carries no tracked row at all — E11 refuses terminal, not unknown', async () => {
+    const service = makeService();
+    // caller -> no tracked board row -> no now hand -> no tonight hand.
+    // ROK-1614: the write now carries the resolved horizon, so this asserts
+    // the E11 decision (it JOINED) rather than the old argument arity.
+    const { listener } = build([LINKED, [], [], []], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+  });
+
+  it('matches its own prefix and nobody else’s', () => {
+    const { listener } = build([], makeService());
+
+    expect(listener.matches(`${LFG_BUTTON_IDS.JOIN}:42`)).toBe(true);
+    expect(listener.matches(`${LFG_BUTTON_IDS.WITHDRAW}:42`)).toBe(false);
+    expect(listener.matches(`${LFG_BUTTON_IDS.JOIN}:abc`)).toBe(false);
+    expect(listener.matches('event_roachout:42')).toBe(false);
+  });
+
+  it('ignores a withdraw button entirely — 1454 still owns that prefix', async () => {
+    const service = makeService();
+    const { listener } = build([], service);
+    const { interaction, deferReply } = makeButton(
+      `${LFG_BUTTON_IDS.WITHDRAW}:42`,
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(deferReply).not.toHaveBeenCalled();
+    expect(service.createIntent).not.toHaveBeenCalled();
+  });
+
+  it('attaches on CONNECTED and detaches on DISCONNECTED', () => {
+    const client = { on: jest.fn(), removeListener: jest.fn() };
+    const { listener } = build([], makeService(), client);
+
+    listener.onBotConnected();
+    expect(client.on).toHaveBeenCalledWith(
+      'interactionCreate',
+      expect.any(Function),
+    );
+
+    listener.onBotDisconnected();
+    expect(client.removeListener).toHaveBeenCalledWith(
+      'interactionCreate',
+      expect.any(Function),
+    );
+  });
+});
+
+describe('LfgJoinListener DM branch (ROK-1455 walk feedback 3)', () => {
+  it('parses both join buttons and keeps their namespaces disjoint', () => {
+    expect(parseJoinPress(`${LFG_BUTTON_IDS.JOIN}:42`)).toEqual({
+      gameId: 42,
+      source: 'board',
+    });
+    expect(parseJoinPress(DM_42)).toEqual({ gameId: 42, source: 'dm' });
+    expect(parseJoinPress(`${LFG_BUTTON_IDS.INVITE_DECLINE}:42`)).toBeNull();
+    expect(parseJoinPress(`${LFG_BUTTON_IDS.INVITE_JOIN}:abc`)).toBeNull();
+    expect(
+      LFG_BUTTON_IDS.INVITE_JOIN.startsWith(`${LFG_BUTTON_IDS.JOIN}:`),
+    ).toBe(false);
+  });
+
+  it('matches the DM Join button as well as the board +1', () => {
+    const { listener } = build([], makeService());
+
+    expect(listener.matches(DM_42)).toBe(true);
+    expect(listener.matches(`${LFG_BUTTON_IDS.JOIN}:42`)).toBe(true);
+    expect(listener.matches(`${LFG_BUTTON_IDS.INVITE_DECLINE}:42`)).toBe(false);
+  });
+
+  it('raises a NOW hand on the group’s own TTL bucket when the group has a live now hand', async () => {
+    const service = makeService();
+    const { listener } = build([LINKED, NOW_GROUP], service);
+    const { interaction } = makeDmButton(DM_42);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'now',
+      ttlMinutes: 60,
+      timezone: 'UTC',
+    });
+  });
+
+  it('raises a WEEK hand once the group’s now hands have LAPSED — the horizon is read at press time, not baked into the id', async () => {
+    const service = makeService();
+    // Same DM, same custom id as the now-group case above; the group simply no
+    // longer has a live `now` hand when the button is finally pressed.
+    const { listener } = build([LINKED, []], service);
+    const { interaction } = makeDmButton(DM_42);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+  });
+});
+
+describe('LfgJoinListener board +1 horizon inheritance (ROK-1614)', () => {
+  // THE REPORTED CASE: roknua raised a now hand, Metaveix pressed `+1` on the
+  // board card and got a WEEK hand, so the group stuck at one now-hand and
+  // never reached LFG_NOW_SPAWN_THRESHOLD. Two present, both willing, nothing
+  // spawned.
+  // MUTATION: restore the `press.source === 'board'` early return and this
+  // fails with `urgency: 'week'`.
+  it('raises a NOW hand when the board +1 lands on a group that wants to play now', async () => {
+    const service = makeService();
+    // caller -> board row -> live now hand
+    const { listener } = build([LINKED, OPEN_ROW, NOW_GROUP], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'now',
+      ttlMinutes: 60,
+      timezone: 'UTC',
+    });
+  });
+
+  // AC2 — the ROK-1455 hazard the old board default existed to prevent. It is
+  // still covered, by press-time resolution rather than by the default: a
+  // group whose now-hands have all lapsed reports `week`, so a late press on a
+  // stale card cannot manufacture a now-hand.
+  // MUTATION: resolve the horizon from `press`/the custom id instead of from
+  // live intents and this fails with `urgency: 'now'`.
+  it('still raises a WEEK hand when the board card is stale and the now hands have LAPSED', async () => {
+    const service = makeService();
+    // caller -> board row -> no live now hand -> no live tonight hand
+    const { listener } = build([LINKED, OPEN_ROW, [], []], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+  });
+
+  // ROK-1616 three-way resolution reaching the board surface.
+  it('raises a TONIGHT hand when the board +1 lands on a tonight group', async () => {
+    const service = makeService();
+    // caller -> board row -> no now hand -> a live tonight hand
+    const { listener } = build([LINKED, OPEN_ROW, [], TONIGHT_GROUP], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    // No `ttlMinutes` KEY at all — tonight has no TTL bucket; the server
+    // computes 04:00 from this press.
+    expect(service.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'tonight',
+      timezone: 'UTC',
+    });
+  });
+
+  // AC3 — a joiner gets the group's TTL BUCKET measured from their own press,
+  // never the remaining time on whoever's hand they matched. `LAPSES_AT` is
+  // the starter's expiry; the joiner must not be handed it.
+  it('does not hand the joiner the remaining time on the matched hand', async () => {
+    const service = makeService();
+    const { listener } = build([LINKED, OPEN_ROW, NOW_GROUP], service);
+    const { interaction } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    const arg = service.createIntent.mock.calls[0][2] as Record<
+      string,
+      unknown
+    >;
+    expect(arg).not.toHaveProperty('expiresAt');
+    expect(arg.ttlMinutes).toBe(60);
+  });
+});
+
+describe('LfgJoinListener DM branch — guards', () => {
+  it('still refuses an unlinked clicker and writes nothing', async () => {
+    const service = makeService();
+    const { listener } = build([[], []], service);
+    const { interaction, editReply } = makeDmButton(DM_42);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(service.createIntent).not.toHaveBeenCalled();
+    expect(editReply).toHaveBeenCalledWith({ content: LFG_UNLINKED_REPLY });
+  });
+});

@@ -1,0 +1,2737 @@
+#!/bin/bash
+# =============================================================================
+# validate-ci.sh - Unified Local CI Validation
+# =============================================================================
+# Runs the complete CI pipeline locally: build, typecheck, lint, unit tests
+# with coverage, integration tests, plus conditional migration and container
+# validation based on changed files.
+#
+# Usage:
+#   ./scripts/validate-ci.sh             # Run all checks (e2e auto-scoped)
+#   ./scripts/validate-ci.sh --full      # Same (accepted for explicitness)
+#   ./scripts/validate-ci.sh --static    # FAST LITE GATE (default for most
+#                                        # stories): build + typecheck + lint
+#                                        # only, PLUS the conditional migration
+#                                        # and container checks (which auto-skip
+#                                        # when no migration/infra files
+#                                        # changed). Skips unit, integration,
+#                                        # Playwright, and Discord smoke —
+#                                        # those are deferred to GitHub CI,
+#                                        # which runs them sharded + randomized
+#                                        # on every PR. ~3-4 min vs ~20+ for
+#                                        # --full. Use when you want the cheap
+#                                        # deterministic gate that catches
+#                                        # compile/type/lint breaks (the
+#                                        # failures that waste a whole GitHub
+#                                        # cycle) and lets behavioral coverage
+#                                        # ride on GitHub. Migration/infra
+#                                        # changes still get full local
+#                                        # validation automatically.
+#   ./scripts/validate-ci.sh --scope=auto # Narrow build+typecheck+lint to the
+#                                        # single changed workspace (+contract)
+#                                        # when the diff touches only api/ or only
+#                                        # web/. all|api|web force a value; default
+#                                        # "all" is the legacy whole-monorepo gate.
+#                                        # GitHub CI still runs the full suite, so
+#                                        # this only trims duplicated local work for
+#                                        # a single-workspace small fix. Composes
+#                                        # with --static (e.g. --static --scope=auto).
+#   ./scripts/validate-ci.sh --fleet --integration-parallel=2  # Run integration
+#                                        # shards 2 at a time (ROK-1793; opt-in,
+#                                        # = INTEGRATION_PARALLEL=2; default 1).
+#   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
+#                                        # (e.g. pg_dump). Use in CI to ensure
+#                                        # backup integration tests never silently
+#                                        # skip.
+#   ./scripts/validate-ci.sh --no-e2e    # Skip Playwright + Discord smoke
+#                                        # (use only when you know you don't
+#                                        # need browser/bot coverage; default
+#                                        # is auto-scoped by diff).
+#   ./scripts/validate-ci.sh --with-e2e  # Force Playwright + Discord smoke
+#                                        # even if no triggering files changed
+#                                        # (e.g. paranoid pre-push pass).
+#                                        # The only flag that overrides an
+#                                        # ambient E2E_SCOPE=none.
+#   ./scripts/validate-ci.sh --only-e2e  # Skip build/typecheck/lint/tests and
+#                                        # run only the diff-gated e2e steps.
+#                                        # Use in post-deploy gates where the
+#                                        # static checks already ran upstream.
+#   ./scripts/validate-ci.sh --only-e2e --contrast-audit
+#                                        # ROK-1203 report-only light-mode
+#                                        # contrast sweep. Valid ONLY with
+#                                        # --only-e2e (exit 2 otherwise). Runs
+#                                        # INSTEAD of the normal Playwright
+#                                        # suite and Discord smoke: exports
+#                                        # CONTRAST_AUDIT=1, runs
+#                                        # scripts/smoke/contrast-audit.config.ts
+#                                        # (desktop project, --workers=2)
+#                                        # against the resolved BASE_URL with
+#                                        # the usual global-setup login, then
+#                                        # scripts/smoke/contrast-audit.aggregate.mjs
+#                                        # (writes test-results/contrast-audit/
+#                                        # REPORT.md). PASS when the sweep and
+#                                        # aggregator exit 0, even if contrast
+#                                        # violations are reported.
+#   ./scripts/validate-ci.sh --only-integration
+#                                        # Run ONLY the sharded integration
+#                                        # suite — same Redis sidecar, shard
+#                                        # count and env exports as --full.
+#                                        # Exists because --full on a 4 GiB
+#                                        # fleet runner dies in the unit step
+#                                        # (stop-on-first-failure) so
+#                                        # integration never runs there at all.
+#   ./scripts/validate-ci.sh --only-unit  # Run ONLY the api+web unit step.
+#   ./scripts/validate-ci.sh --fleet     # ONE-CALL FLEET GATE (ROK-1466).
+#                                        # Everything --static runs, PLUS the
+#                                        # unit step without coverage, the
+#                                        # sharded integration suite, and the
+#                                        # e2e steps pointed at an already-
+#                                        # deployed env. Requires an explicit
+#                                        # BASE_URL (or PLAYWRIGHT_BASE_URL) —
+#                                        # a runner container has no localhost
+#                                        # app, so defaulting to :5173 would
+#                                        # hang Playwright's webServer for 120s
+#                                        # and report a misleading failure.
+#                                        # Replaces the three-dispatch dance
+#                                        # (--static, --only-unit --no-coverage,
+#                                        # --only-integration) with one run
+#                                        # whose summary lists every step.
+#                                        # E2E_SCOPE=none skips Playwright
+#                                        # here too; only an explicit
+#                                        # --with-e2e overrides it.
+#                                        # ROK-1793: a web-only diff skips api
+#                                        # unit + integration, an api-only diff
+#                                        # skips web vitest (SKIPPED rows name
+#                                        # the reason). packages/**, scripts/**,
+#                                        # deps/root config or an empty diff
+#                                        # run everything. --full never skips.
+#                                        # Example:
+#                                        #   BASE_URL=http://rl-env-<slug>-allinone \
+#                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
+#   ./scripts/validate-ci.sh --no-coverage
+#                                        # Modifier for --only-unit / --full:
+#                                        # run jest/vitest WITHOUT --coverage
+#                                        # and pin NODE_OPTIONS to
+#                                        # --max-old-space-size=3072 unless the
+#                                        # caller already set it. Coverage
+#                                        # instrumentation is what pushes the
+#                                        # unit suite past a 4 GiB cgroup cap.
+#                                        # Coverage stays the default elsewhere.
+#   E2E_SPECS="<spec> [<spec>...]" ./scripts/validate-ci.sh --only-e2e
+#                                        # ROK-1792 EXPLICIT SPEC LIST. Env var
+#                                        # (not a flag, and not a 4th E2E_SCOPE
+#                                        # value) so rl_validate_ci forwards it
+#                                        # the same way it forwards E2E_SCOPE,
+#                                        # and E2E_SCOPE stays a plain enum.
+#                                        # Space- or comma-separated paths, each
+#                                        # scripts/smoke/<name>.spec.ts, no `..`,
+#                                        # and present in the checkout — any bad
+#                                        # path exits 2 before a step runs. The
+#                                        # Playwright tier then runs EXACTLY those
+#                                        # specs, on every configured project
+#                                        # (desktop + mobile; never --project),
+#                                        # and REQUIRES the env: a down target
+#                                        # FAILs instead of skipping, and the
+#                                        # changed-files gate is bypassed. Row:
+#                                        # `Playwright (desktop + mobile,
+#                                        # explicit: N specs)` — same prefix, so a
+#                                        # PASS still writes the playwright-tier
+#                                        # pre-push sentinel. Conflicts (exit 2):
+#                                        # E2E_SCOPE other than auto, --static,
+#                                        # --no-e2e. Example (fleet env):
+#                                        #   BASE_URL=https://slot-2.gamernight.net \
+#                                        #   E2E_SPECS=scripts/smoke/games.smoke.spec.ts \
+#                                        #     ./scripts/validate-ci.sh --only-e2e
+#
+# Every conflicting flag combination (two --only-* flags, --static plus any
+# --only-*/--with-e2e, --only-e2e plus --no-e2e) exits 2 on stderr — an
+# invocation error, rather than 1 (a check failed), so callers can tell the
+# two apart.
+#
+# E2E auto-scope (default):
+#   * Playwright runs if web/**, api/src/auth/**, api/src/admin/demo-test*,
+#     playwright.config.*, or scripts/smoke/** changed AND the dev env is up
+#     (curl :3000/health returns ok).
+#   * Discord smoke runs if api/src/discord-bot/**, api/src/notifications/**,
+#     api/src/events/signups*, api/src/events/event-lifecycle*,
+#     api/src/admin/demo-test*, tools/test-bot/src/smoke/**, or
+#     tools/test-bot/src/helpers/polling.ts changed AND env is up AND this
+#     checkout has companion-bot credentials (tools/test-bot/.env, or both
+#     TEST_BOT_TOKEN and TEST_GUILD_ID). Without them the tier is SKIPPED
+#     locally and FAILS under --ci, mirroring the pg_dump precedent.
+#   * Either step SKIPS with a clear message if scope is empty or env is down.
+#     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
+#     you need that coverage.
+#   * A Playwright FAIL does not stop the gate on the spot: it is recorded,
+#     the Discord smoke step still runs and reports its row, and the gate then
+#     exits 1. This holds wherever the e2e steps run: the default/--full
+#     gate, --fleet and --only-e2e.
+# =============================================================================
+
+set -euo pipefail
+
+# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner
+# (via `rl validate-ci` → run-on-runner → docker exec as root in
+# /workspace owned by uid 1001), git's dubious-ownership check fires
+# on every git call. GIT_CONFIG_PARAMETERS is process-scoped and writes
+# no on-disk config — harmless on the laptop, required on the fleet
+# runner. Whitelists everything (the laptop's own repo root, AND
+# /workspace inside the runner container).
+export GIT_CONFIG_PARAMETERS="'safe.directory=*'"
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# ROK-1326 fix-11 / TDB:924: the fleet runner's node_modules is Mutagen-excluded,
+# so scripts/ci/ensure-runner-deps.sh installs (or refreshes) it there and is a
+# no-op on a laptop. Skipped under RL_VALIDATE_CI_DRY=1: the scripts/test
+# harnesses source this file and must never trigger an install.
+if [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" || {
+    echo "[validate-ci] dependency install failed (see above)" >&2
+    exit 1
+  }
+fi
+
+# ---------------------------------------------------------------------------
+# RL_TARGET=remote shortcut — ship validation to the rl-infra runner.
+# Default behavior unchanged. Opt in by exporting RL_TARGET=remote or by
+# passing through rl-infra/cli/rl, which sets it on your behalf.
+# ---------------------------------------------------------------------------
+if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ] && [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  export RL_TARGET_DISPATCHED=1   # prevent loop if rl re-execs us inside the runner
+  # ROK-1331 M2: the rl CLI is SYNC by default (its rl_validate_ci MCP
+  # surface is wait:true under the hood), so this exec preserves the
+  # operator's terminal-attached output expectation. If the CLI ever grows
+  # an async dispatch flag, this caller must keep passing the equivalent
+  # of wait=true (or this script's stdout/stderr surfaces will return
+  # immediately with a task_id instead of streaming the run).
+  # ROK-1331 M6b: the dry-run guard (RL_VALIDATE_CI_DRY=1) lets bash test
+  # harnesses source the script with RL_TARGET=remote to exercise the
+  # fallback chain WITHOUT actually shipping execution to the rl CLI.
+  exec "$REPO_ROOT/rl-infra/cli/rl" validate-ci "$@"
+fi
+
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Result tracking
+declare -a CHECK_NAMES=()
+declare -a CHECK_RESULTS=()
+# ROK-1793 S1: optional per-row note (a skip reason), printed after the status
+# as `SKIPPED — <note>` — the row format gate-summary.ts already documents.
+declare -a CHECK_NOTES=()
+FAILURES=0
+
+# Scope flags
+migrations_changed=false
+container_changed=false
+playwright_relevant=false
+discord_smoke_relevant=false
+
+# Mode flags
+ci_mode=false
+# e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
+e2e_mode="auto"
+# e2e_explicit: true ONLY when --with-e2e was passed. --fleet also sets
+# e2e_mode=on, but that is implied, so it must not override E2E_SCOPE=none.
+e2e_explicit=false
+# RUN_STEP_DEFER_FAIL: set around the Playwright step only. Its FAIL is recorded
+# and the run continues so the Discord smoke row still reports; the gate then
+# exits 1 via _exit_if_deferred_fail. Every other step stays fail-fast.
+RUN_STEP_DEFER_FAIL=0
+GATE_DEFERRED_FAIL=0
+# ROK-1565 — the Playwright tier's SIZE, independent of whether it runs at all.
+# Set from the environment (rl_validate_ci forwards E2E_SCOPE); resolved once by
+# _prepare_playwright_scope into these two globals.
+PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
+PLAYWRIGHT_SCOPED_SPECS=""
+# ROK-1792 — true when scope-specs.sh printed exactly NONE (the diff maps to no
+# smoke spec): the tier is SKIPPED, never run as `npx playwright test NONE`.
+PLAYWRIGHT_SCOPE_NONE=false
+# ROK-1792 — the validated E2E_SPECS list (space-separated), set by
+# _parse_e2e_specs in main. Non-empty overrides the scope-specs.sh mapping.
+E2E_SPECS_LIST=""
+# Memo for _resolve_e2e_scope; empty means "not resolved yet".
+E2E_SCOPE_RESOLVED=""
+# only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
+# single family of steps. Empty means "no narrowing". Two different --only-*
+# flags are a contradiction, not a merge — see _set_only_mode.
+only_mode=""
+# only_e2e: derived from only_mode="e2e". Kept as its own flag because the e2e
+# narrowing predates only_mode and is threaded through several checks below.
+only_e2e=false
+# contrast_audit (--contrast-audit): ROK-1203 report-only contrast sweep. Only
+# meaningful with --only-e2e; swaps the e2e tier for the sweep + aggregator.
+contrast_audit=false
+# no_coverage (--no-coverage): drop --coverage from the unit step and pin the V8
+# heap. Composes with --only-unit and with the default/--full gate.
+no_coverage=false
+# Label for the unit step's summary row — flipped by --no-coverage so a summary
+# can never claim coverage ran when it didn't.
+unit_step_label="Unit tests + coverage"
+# fleet_mode (--fleet): ROK-1466 one-call fleet gate — the full step list with a
+# no-coverage unit step and e2e bound to an explicit BASE_URL. Implies
+# --no-coverage; contradicts --static and every --only-* flag.
+fleet_mode=false
+# static_mode (--static): lite gate — build + typecheck + lint + conditional
+# migration/container checks only. Skips unit, integration, and all e2e.
+# Behavioral coverage is deferred to GitHub CI. See the usage header.
+static_mode=false
+# scope_mode (--scope=all|api|web|auto): narrows build/typecheck/lint to a single
+# changed workspace (+contract) instead of all three. Default "all" preserves the
+# legacy whole-monorepo gate exactly. "auto" resolves to detected_workspace (set in
+# detect_scope). GitHub CI still runs the full path-filtered suite on every PR, so
+# scoping the LOCAL gate loses no coverage — it only cuts duplicated build/lint work
+# for a single-workspace small fix.
+scope_mode="all"
+detected_workspace="all"
+effective_scope="all"
+# fleet_test_scope (ROK-1793 S1): which workspace's unit + integration suites a
+# --fleet gate runs — api | web | all. detected_workspace, widened to "all" when
+# the diff touches scripts/** (the gate itself). Only --fleet reads it; --full
+# and --static always run (or defer) everything.
+fleet_test_scope="all"
+
+# ---------------------------------------------------------------------------
+# Result tracking helpers
+# ---------------------------------------------------------------------------
+
+record_result() {
+  CHECK_NAMES+=("$1")
+  CHECK_RESULTS+=("$2")
+  CHECK_NOTES+=("${3:-}")
+  if [ "$2" = "FAIL" ]; then
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+# ROK-1331 M11 — local perf emit. Inside the fleet runner the orchestrator's
+# perf.log isn't writable, so we append to a runner-local file that release
+# flushes back to /srv/rl-infra/state/perf.log. Local laptop runs land in
+# the worktree's .rl-perf.log (cheap to inspect, gitignored).
+PERF_LOG_LOCAL="${PERF_LOG_LOCAL:-${REPO_ROOT}/.rl-perf.log}"
+if [ -d /workspace ]; then
+  PERF_LOG_LOCAL="/workspace/.rl-perf.log"
+fi
+
+# perf_emit_local <event> <extra-json>
+# Best-effort — never fails the calling step. Writes one compact JSON
+# object per call (open+append+close so logrotate is safe). Inside-runner
+# events get source=runner; everything else (laptop runs) is source=mcp.
+#
+# ROK-1336 diagnostic (2026-05-21): the original implementation swallowed
+# all errors via `2>/dev/null || true`, so the runner-side perf log silently
+# fails to materialize on real fleet runs (function reproduces correctly in
+# isolation — bug is in the runtime context, theory undetermined). Capture
+# python3's stderr to `${PERF_LOG_LOCAL}.errors` so the next failed run
+# leaves behind a JSON-line trace of WHY each call failed. Best-effort
+# posture preserved — the function still returns 0 on disk-side errors so
+# the calling step never aborts.
+perf_emit_local() {
+  local event="$1"
+  local extra="${2-}"
+  [ -z "$extra" ] && extra='{}'
+  local source_label="runner"
+  [ ! -d /workspace ] && source_label="mcp"
+  local ts
+  ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+    || date -u +%FT%TZ)
+  local slot="${RL_SLOT:-}" branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+  local emit_out emit_rc
+  emit_out=$(python3 -c "
+import json, sys
+extra = json.loads(sys.argv[5])
+extra.update({'ts': sys.argv[1], 'event': sys.argv[2], 'source': sys.argv[3], 'branch': sys.argv[4]})
+if sys.argv[6]:
+    try: extra['slot'] = int(sys.argv[6])
+    except ValueError: pass
+print(json.dumps(extra, separators=(',', ':')))
+" "$ts" "$event" "$source_label" "$branch" "$extra" "$slot" 2>&1)
+  emit_rc=$?
+  if [ "$emit_rc" -eq 0 ]; then
+    # Happy path — append to perf log. Silent ignore on disk errors so the
+    # function preserves its best-effort contract.
+    printf '%s\n' "$emit_out" >> "$PERF_LOG_LOCAL" 2>/dev/null || true
+  else
+    # Failure path — log the python3 rc + captured stderr to a sibling
+    # `.errors` file. Operators tail this after a fleet run to debug why
+    # validate.start / validate.step.end / validate.end never landed.
+    python3 -c "
+import json, sys
+print(json.dumps({'ts': sys.argv[1], 'event': sys.argv[2], 'rc': int(sys.argv[3]), 'stderr': sys.argv[4], 'PERF_LOG_LOCAL': sys.argv[5]}))
+" "$ts" "$event" "$emit_rc" "$emit_out" "$PERF_LOG_LOCAL" \
+      >> "${PERF_LOG_LOCAL}.errors" 2>/dev/null || true
+  fi
+}
+
+# perf_now_ms — millisecond timestamp via python3 (portable).
+perf_now_ms() {
+  python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(( $(date -u +%s) * 1000 ))"
+}
+
+# ---------------------------------------------------------------------------
+# Step skip signalling.
+#
+# `run_step` used to read **exit code 2** as SKIPPED. That silently overloaded a
+# code real tools return for real failures: `npm run build -w web` runs
+# `tsc -b && vite build`, and `tsc -b` exits 2 on a type error. A genuinely
+# broken web build was therefore printed in full, recorded as
+# `Build (all workspaces): SKIPPED`, and the run still ended on a green
+# "All checks passed!" summary — a gate that can wave through a branch that
+# does not compile.
+#
+# A step now declares "not applicable" EXPLICITLY by calling `skip_step`, and
+# must also exit cleanly. Intent and failure can no longer collide, whatever
+# exit code a tool happens to pick.
+# ---------------------------------------------------------------------------
+STEP_SKIPPED=0
+# Optional reason for the skip, shown on the step's summary row.
+STEP_SKIP_REASON=""
+
+# Mark the running step as SKIPPED. Call it, then `return 0`.
+skip_step() {
+  STEP_SKIPPED=1
+}
+
+# ROK-1793 S1 — does this --fleet gate skip <workspace>'s (api|web) test suites?
+# True only under --fleet with a single-workspace diff that is not <workspace>.
+_fleet_skips() {
+  $fleet_mode && [ "$fleet_test_scope" != "all" ] && [ "$fleet_test_scope" != "$1" ]
+}
+
+# ROK-1793 M1 — the --fleet unit/integration scope for a change set (newline-
+# separated paths on $1). Echoes api | web | all. It narrows ONLY when every
+# path is under api/ or web/ (no inert allowlist: the api guard
+# fleet-first-login-admin.prod-guard.spec.ts scans EVERY tracked file, and
+# others read README.md, .env.example and rl-infra/**, so no other path is
+# provably irrelevant to api jest). A web diff under web/src/{components,pages}/admin/
+# widens to all: discord-bot-permissions-literal.guard.spec.ts scans those dirs.
+# Empty -> all.
+_fleet_test_scope_for() {
+  local files="$1"
+  if [ -z "$(printf '%s' "$files" | tr -d '[:space:]')" ]; then echo all; return 0; fi
+  # Here-strings, never `printf | grep -q`: grep -q exits on its first match,
+  # the writer takes SIGPIPE, and under pipefail the pipeline reads as NO match
+  # (Codex: 1 api path + 2000 web paths classified as web).
+  if grep -qvE -e '^$|^(api|web)/' <<<"$files"; then echo all; return 0; fi
+  local api=false web=false
+  grep -qE -e '^api/' <<<"$files" && api=true
+  grep -qE -e '^web/' <<<"$files" && web=true
+  if $api && $web; then echo all
+  elif $api; then echo api
+  elif grep -qE -e '^web/src/(components|pages)/admin/' <<<"$files"; then echo all
+  else echo web
+  fi
+}
+
+# api specs a web-only diff can still break: they read web/ files or scan every
+# tracked file. Derived at run time (a spec naming a 'web/ path or calling
+# `git ls-files`), so a new cross-workspace guard is picked up without editing
+# this list. Echoes paths relative to api/, one per line.
+_api_cross_workspace_specs() {
+  (cd "$REPO_ROOT/api" && grep -rlE "['\"]web/|'ls-files'" src \
+    --include='*.spec.ts' --exclude='*.integration.spec.ts' 2>/dev/null) | LC_ALL=C sort
+}
+
+# Step body for a suite --fleet skips on a single-workspace diff. The reason
+# lands on the summary row, so a scoped gate is never mistakable for a full one,
+# and says what DID run: GitHub's api job does not fire on web/** either.
+# Args: $1 - optional detail appended to the reason.
+skip_by_fleet_scope() {
+  STEP_SKIP_REASON="${fleet_test_scope}-only diff (--fleet scope): ${1:-not run by this gate}"
+  echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+  skip_step
+}
+
+# Step body for a step disabled by an --only-* flag. Narrowed runs still emit a
+# summary row for every step they did NOT run, stamped SKIPPED — a narrowed gate
+# must never be mistakable for a full green one.
+# Args: $1 - the flag that disabled the step (for the log line).
+skip_by_flag() {
+  echo -e "${YELLOW}Not run under ${1} — deferred to the full gate.${NC}"
+  skip_step
+}
+
+run_step() {
+  local name="$1"
+  shift
+  echo ""
+  echo -e "${YELLOW}========== $name ==========${NC}"
+  local step_start_ms
+  step_start_ms=$(perf_now_ms)
+  local rc=0
+  # Reset per step — a skip must be declared by THIS step, never inherited.
+  STEP_SKIPPED=0
+  STEP_SKIP_REASON=""
+  "$@" || rc=$?
+  local step_end_ms step_dur
+  step_end_ms=$(perf_now_ms)
+  step_dur=$(( step_end_ms - step_start_ms ))
+  # ROK-1331 M11 — emit validate.step.end per AC2.
+  local step_extra
+  step_extra=$(python3 -c "
+import json, sys
+print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_code': int(sys.argv[3])}))
+" "$name" "$step_dur" "$rc" 2>/dev/null || echo '{}')
+  perf_emit_local "validate.step.end" "$step_extra"
+  # ROK-1793 S0 — machine-readable step duration for rl_task_status
+  # steps[].duration_s. Printed BEFORE the "<name>: <STATUS>" line so the
+  # orchestrator's steps[] parser (task-start, PATTERN_STEP_TIME) and the MCP
+  # log-tail backfill (tools/mcp-rl-fleet/src/step-durations.ts) can attach it
+  # to the row that follows. Format: `[step-time] <name> <seconds, 1 dp>`.
+  printf '[step-time] %s %d.%d\n' "$name" \
+    $(( step_dur / 1000 )) $(( (step_dur % 1000) / 100 ))
+
+  # A skip requires BOTH the explicit declaration and a clean exit, so a step
+  # that declares a skip and then fails is still reported as a failure.
+  if [ "$rc" -eq 0 ] && [ "$STEP_SKIPPED" -eq 1 ]; then
+    echo -e "${YELLOW}$name: SKIPPED${NC}"
+    record_result "$name" "SKIPPED" "$STEP_SKIP_REASON"
+  elif [ "$rc" -eq 0 ]; then
+    echo -e "${GREEN}$name: PASS${NC}"
+    record_result "$name" "PASS"
+  else
+    echo -e "${RED}$name: FAIL${NC}"
+    record_result "$name" "FAIL"
+    if [ "${RUN_STEP_DEFER_FAIL:-0}" = 1 ]; then
+      GATE_DEFERRED_FAIL=1
+      return 0
+    fi
+    print_summary
+    echo -e "${RED}Stopping on first failure.${NC}"
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Scope detection
+# ---------------------------------------------------------------------------
+
+detect_scope() {
+  echo -e "${YELLOW}Detecting change scope against origin/main...${NC}"
+  git fetch origin --quiet 2>/dev/null || true
+
+  local changed_files
+  # Untracked (not ignored) files count too: a new, uncommitted spec must not
+  # be invisible to the scope a --fleet gate uses to skip suites (ROK-1793 m2).
+  changed_files="$( { git diff --name-only origin/main 2>/dev/null || true
+    git ls-files --others --exclude-standard 2>/dev/null || true; } | sort -u)"
+
+  if echo "$changed_files" | grep -q 'drizzle/migrations'; then
+    migrations_changed=true
+    echo -e "  Migrations changed: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Migrations changed: no"
+  fi
+
+  if echo "$changed_files" | grep -qE 'Dockerfile|nginx/|docker-entrypoint'; then
+    container_changed=true
+    echo -e "  Container files changed: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Container files changed: no"
+  fi
+
+  # Playwright-relevant: web UI, auth (smoke tests log in), demo-test endpoints,
+  # playwright config, and the smoke specs themselves. Exclude web/src/test/**
+  # and web/src/dev/** (unit-test scaffolding and DEMO_MODE wireframes don't
+  # ship to the smoke surface).
+  if echo "$changed_files" \
+    | grep -vE '^web/src/(test|dev)/' \
+    | grep -qE '^web/|^api/src/auth/|^api/src/admin/demo-test|^playwright\.config\.|^scripts/smoke/'; then
+    playwright_relevant=true
+    echo -e "  Playwright-relevant changes: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Playwright-relevant changes: no"
+  fi
+
+  # Discord-smoke-relevant: the 6 trigger paths from CLAUDE.md's
+  # "Files that trigger smoke test review" list. Matches discord-bot listeners,
+  # notifications, signup flows, lifecycle ops, demo-test endpoints used by
+  # smoke fixtures, the smoke tests themselves, and the polling helper — plus
+  # standalone-poll, which enqueues embed syncs at reschedule-poll lock-in, and
+  # scheduling, home of scheduling-poll-embed.service.ts (ROK-1547).
+  if echo "$changed_files" \
+    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$|^api/src/lineups/standalone-poll/|^api/src/lineups/scheduling/'; then
+    discord_smoke_relevant=true
+    echo -e "  Discord-smoke-relevant changes: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Discord-smoke-relevant changes: no"
+  fi
+
+  # Single-workspace detection for --scope=auto. Sets detected_workspace to
+  # api | web | all. Resolves to "all" whenever the diff crosses a workspace
+  # boundary, touches packages/** (contract feeds both), or touches root
+  # config/tooling that can break anything (package.json, tsconfig, eslint,
+  # vitest/playwright config). Anything purely under api/ → "api"; purely under
+  # web/ → "web". Conservative: unknown/empty diffs fall back to "all".
+  local touches_api=false touches_web=false touches_shared=false
+  echo "$changed_files" | grep -qE '^api/' && touches_api=true
+  echo "$changed_files" | grep -qE '^web/' && touches_web=true
+  if echo "$changed_files" | grep -vE '^(api|web)/' \
+       | grep -qE '^packages/|(^|/)package(-lock)?\.json$|(^|/)tsconfig|(^|/)\.eslintrc|vitest\.config|playwright\.config'; then
+    touches_shared=true
+  fi
+  if $touches_shared || { $touches_api && $touches_web; }; then
+    detected_workspace="all"
+  elif $touches_api; then
+    detected_workspace="api"
+  elif $touches_web; then
+    detected_workspace="web"
+  else
+    detected_workspace="all"
+  fi
+  echo -e "  Detected workspace (for --scope=auto): ${YELLOW}${detected_workspace}${NC}"
+
+  fleet_test_scope=$(_fleet_test_scope_for "$changed_files")
+  if $fleet_mode; then
+    echo -e "  --fleet unit/integration scope: ${YELLOW}${fleet_test_scope}${NC}"
+  fi
+}
+
+# Resolve the canonical web target for fleet/local. Sets the global `web_url`.
+# Precedence (mirrors playwright.config.ts):
+#   1. BASE_URL                     — explicit override (rl_validate_ci)
+#   2. PLAYWRIGHT_BASE_URL          — Playwright's own convention; honored for parity
+#   3. https://slot-N.<domain>      — RL_TARGET=remote + numeric RL_SLOT
+#   4. http://localhost:5173        — local-dev fallback
+# RL_SLOT is validated as a positive integer when used; non-numeric input is a
+# loud config error rather than a silently-broken `slot-foo.gamernight.net` URL.
+_resolve_web_url() {
+  if [ -n "${BASE_URL:-}" ]; then
+    web_url="$BASE_URL"
+    return 0
+  fi
+  if [ -n "${PLAYWRIGHT_BASE_URL:-}" ]; then
+    web_url="$PLAYWRIGHT_BASE_URL"
+    return 0
+  fi
+  if [ -n "${RL_SLOT:-}" ] && [ "${RL_TARGET:-local}" = "remote" ]; then
+    if ! [[ "$RL_SLOT" =~ ^[0-9]+$ ]]; then
+      echo -e "${RED}RL_SLOT='${RL_SLOT}' is not numeric — refusing to construct slot URL.${NC}" >&2
+      return 1
+    fi
+    web_url="https://slot-${RL_SLOT}.${RL_PUBLIC_DOMAIN:-gamernight.net}"
+    return 0
+  fi
+  web_url="http://localhost:5173"
+}
+
+# Refuse a plain-http `rl-env-<slug>-allinone` target (ROK-1466, runner run 3).
+#
+# Historically the allinone nginx sent `upgrade-insecure-requests` + HSTS on
+# every response, so over the plain-http INTERNAL route the browser re-requested
+# every JS chunk as https://rl-env-<slug>-allinone/assets/*.js → blank SPA.
+# ROK-1577 made those directives HTTPS-only, so the page now renders over plain
+# http too — but the slot HTTPS URL is still the only target Discord OAuth and
+# the auth cookies work on, so the refusal stays.
+# Args: $1 - the resolved web target.
+_reject_internal_http_target() {
+  local url="$1"
+  case "$url" in
+    http://rl-env-*-allinone|http://rl-env-*-allinone/*|http://rl-env-*-allinone:*) ;;
+    *) return 0 ;;
+  esac
+  echo -e "${RED}Refusing a plain-http fleet-env target: ${url}${NC}" >&2
+  echo -e "${RED}  Discord OAuth and the auth cookies only work on the slot HTTPS URL; the internal${NC}" >&2
+  echo -e "${RED}  hostname is not reachable from a browser either.${NC}" >&2
+  echo -e "${RED}  Use the slot HTTPS URL instead: BASE_URL=https://slot-N.gamernight.net${NC}" >&2
+  echo -e "${RED}  (pass against_env_slug or admin_password so the env admin password is still seeded).${NC}" >&2
+  return 1
+}
+
+# Echo the URL check_env_up probes for API health. Mirrors check_env_up's own
+# precedence so an "env down" message can name the host that actually failed
+# instead of a hardcoded ":3000/health" (ROK-1466: on the fleet that string was
+# a lie — the probe went to the env, the message blamed localhost).
+#   1. HEALTH_URL                 — explicit override (rl_validate_ci)
+#   2. <web_url>/api/health       — any non-default web target (fleet/allinone)
+#   3. http://localhost:3000/health
+_resolve_health_url() {
+  if [ -n "${HEALTH_URL:-}" ]; then
+    echo "$HEALTH_URL"
+    return 0
+  fi
+  local web_url
+  _resolve_web_url || return 1
+  if [[ "$web_url" != "http://localhost:5173" ]]; then
+    echo "${web_url%/}/api/health"
+  else
+    echo "http://localhost:3000/health"
+  fi
+}
+
+# Move Playwright's auth artifacts OUT of the Mutagen-synced tree on a runner.
+#
+# The rl-infra sync is `mode: one-way-replica` with the laptop as the sole
+# source of truth, so any file the runner creates under /workspace that does
+# not exist on the laptop is deleted on the next cycle (~30s). Global setup
+# wrote scripts/.auth/admin.json, Mutagen reaped it mid-run, and the first spec
+# died with `Error reading storage state ...: ENOENT` on a run whose setup had
+# just logged a successful write.
+#
+# A caller-supplied PLAYWRIGHT_AUTH_DIR always wins. The value is exported ONCE
+# here and inherited by global setup and every worker, so all three resolve the
+# same directory (scripts/auth-paths.ts::resolveAuthDir reads it). RL_WORKSPACE_ROOT
+# is a test seam — production always compares against the real /workspace.
+# Remove the auth dir this run created. Only ever deletes a path THIS process
+# made (PLAYWRIGHT_AUTH_DIR_OWNED), never a caller-supplied one.
+_cleanup_playwright_auth_dir() {
+  [ -n "${PLAYWRIGHT_AUTH_DIR_OWNED:-}" ] || return 0
+  rm -rf "$PLAYWRIGHT_AUTH_DIR_OWNED"
+  PLAYWRIGHT_AUTH_DIR_OWNED=""
+}
+
+_export_playwright_auth_dir() {
+  [ -z "${PLAYWRIGHT_AUTH_DIR:-}" ] || return 0
+  local workspace="${RL_WORKSPACE_ROOT:-/workspace}"
+  case "$REPO_ROOT" in
+    "$workspace"|"$workspace"/*) ;;
+    *) return 0 ;;
+  esac
+  export PLAYWRIGHT_AUTH_DIR="/tmp/rl-playwright-auth-$$"
+  mkdir -p "$PLAYWRIGHT_AUTH_DIR"
+  # The dir holds a live admin JWT for the target env. /tmp is shared, so 700
+  # (not the default umask) and removed when the run exits — see
+  # _cleanup_playwright_auth_dir, called from the EXIT trap.
+  chmod 700 "$PLAYWRIGHT_AUTH_DIR"
+  PLAYWRIGHT_AUTH_DIR_OWNED="$PLAYWRIGHT_AUTH_DIR"
+  echo -e "${YELLOW}Playwright auth dir: ${PLAYWRIGHT_AUTH_DIR} (outside the Mutagen-replicated tree)${NC}"
+}
+
+# Export the resolved target so every e2e consumer agrees on ONE host.
+#
+# Three different readers need three different variables and they do NOT share
+# a fallback chain: playwright.config.ts reads PLAYWRIGHT_BASE_URL (and treats
+# either var as "remote, skip webServer"), scripts/playwright-global-setup.ts
+# reads BASE_URL for its page.goto, and every smoke API helper plus the
+# companion bot read API_URL. Exporting only PLAYWRIGHT_BASE_URL — which is
+# what this did before ROK-1466 — produced the exact failure this fixes:
+# validate-ci PROBED the fleet env, then global-setup logged into
+# localhost:3000 and the specs drove localhost:5173.
+#
+# Local-dev targets are left completely untouched: setting BASE_URL for a
+# laptop run would flip playwright.config's IS_REMOTE_TARGET and suppress the
+# webServer auto-start. Only a non-default (remote/allinone) target is exported.
+_export_e2e_target() {
+  local web_url
+  _resolve_web_url || return 0
+  [[ "$web_url" != "http://localhost:5173" ]] || return 0
+  _reject_internal_http_target "$web_url" || return 1
+  export BASE_URL="$web_url"
+  export PLAYWRIGHT_BASE_URL="$web_url"
+  if [ -z "${API_URL:-}" ]; then
+    export API_URL="${web_url%/}/api"
+  fi
+  _export_playwright_auth_dir
+  echo -e "${YELLOW}E2E targeting: web=${BASE_URL} api=${API_URL}${NC}"
+}
+
+# Returns 0 if the dev env (API + web) is up, 1 otherwise.
+# Quiet on failure — callers decide whether absence is fatal or just a skip signal.
+# Local-dev mode probes API :3000 and Vite :5173 separately. Fleet mode
+# (RL_TARGET=remote / rl_validate_ci with against_env_slug) probes the allinone
+# at HEALTH_URL/BASE_URL — same host serves /api/health and the SPA root.
+#
+# Why probe the web side at all: Playwright's webServer config has
+# reuseExistingServer:true with a 120s timeout, so if :5173 is down (local)
+# or BASE_URL is unreachable (fleet) it'll silently try to spawn its own
+# `npm run dev -w web` and only fail after 2 minutes — too slow for fail-fast.
+#
+# `curl --url "$..."` is used (not bare `curl "$..."`) so a URL whose value
+# starts with `-` is parsed as a URL, not as a curl flag (option injection
+# defense — codex round-3 finding).
+check_env_up() {
+  # Resolve the web target first; the API health URL is derived from it
+  # when HEALTH_URL is not explicitly set, so a single BASE_URL is enough
+  # to switch both probes to the fleet env.
+  local web_url
+  _resolve_web_url || return 1
+
+  # Health URL precedence:
+  #   1. HEALTH_URL (set by rl_validate_ci against_env_slug → rl-net DNS)
+  #   2. <web_url>/api/health when web_url is non-localhost (fleet)
+  #   3. http://localhost:3000/health (local-dev default)
+  local health_url
+  health_url="$(_resolve_health_url)" || return 1
+
+  curl -fsS --max-time 3 --url "$health_url" 2>/dev/null \
+    | grep -q '"status":"ok"' || return 1
+
+  curl -fsS --max-time 5 -o /dev/null --url "$web_url" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# CI check functions
+# ---------------------------------------------------------------------------
+
+run_build() {
+  # Contract is always built (both api and web depend on it). api/web are gated
+  # by effective_scope so a single-workspace --scope=auto run skips the other.
+  npm run build -w packages/contract || return $?
+  if [ "$effective_scope" != "web" ]; then npm run build -w api || return $?; fi
+  if [ "$effective_scope" != "api" ]; then npm run build -w web || return $?; fi
+}
+
+# ROK-1154: gzip budget per web chunk class (entry / vendor / lazy), measured on
+# the web/dist the build step above just produced. The budgets, and the reason
+# for each, live in scripts/bundle-budget.config.mjs. An overrun exits 1, which
+# run_step records as a FAIL row. Runs in BOTH the static and full gates: it
+# needs no database and takes about a second. Skipped only when scope=api,
+# because run_build did not build web and there is no bundle to measure.
+run_bundle_budget() {
+  if [ "$effective_scope" = "api" ]; then
+    echo "scope=api — web was not built, no bundle to measure"
+    skip_step
+    return 0
+  fi
+  (cd "$REPO_ROOT" && node scripts/check-bundle-size.mjs)
+}
+
+run_typecheck() {
+  # ROK-1336 #5 — propagate failure of the FIRST tsc invocation. The script
+  # doesn't set -e, so without `|| return $?` the function reports the exit
+  # code of the LAST command only. With this missing, api/ TS2741 errors
+  # printed to stderr but the step's outer `$?` capture (run_step:195) saw
+  # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
+  if [ "$effective_scope" != "web" ]; then
+    # ROK-1161: noUncheckedIndexedAccess is on in api/tsconfig.json, so this
+    # one run covers shipped code, specs and test infra under it.
+    npx tsc --noEmit -p api/tsconfig.json || return $?
+  fi
+  # web/tsconfig.json is a solution-style config (`files: []` + references):
+  # `tsc -p` on it compiles an empty file list and exits 0 without following
+  # the references, so the web half of this step checked nothing. Point at the
+  # two leaf projects instead (app source, then vite.config.ts), then at
+  # tsconfig.test.json for the vitest specs and src/test/** that
+  # tsconfig.app.json excludes: vitest transpiles without typechecking, so
+  # without it a spec type error or a drifted fixture failed no gate.
+  # Mirrors the CI lint job's "Typecheck (web specs)" step.
+  if [ "$effective_scope" != "api" ]; then
+    npx tsc --noEmit -p web/tsconfig.app.json || return $?
+    npx tsc --noEmit -p web/tsconfig.node.json || return $?
+    npx tsc --noEmit -p web/tsconfig.test.json || return $?
+  fi
+  # Playwright transpiles the smoke specs without typechecking them, so a type
+  # error in scripts/smoke/**, scripts/*.ts or playwright.config.ts used to
+  # surface only when a gate loaded the file. Runs on every scope (~1.3s): an
+  # api-only diff can still carry a smoke spec. Mirrors the CI lint job's step.
+  npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json || return $?
+}
+
+run_lint() {
+  # Check-only by design (ROK-1404): `lint` must never mutate the tree, so the
+  # lint → prettier:check order is irrelevant; use `lint:fix` for auto-fixes.
+  if [ "$effective_scope" != "web" ]; then
+    npm run lint -w api || return $?
+    npm run prettier:check -w api || return $?
+  fi
+  if [ "$effective_scope" != "api" ]; then
+    npm run lint -w web || return $?
+  fi
+  # ROK-1516: tools/test-bot is NOT an npm workspace, so `npm run lint
+  # --workspaces` never reaches it. Its flat config resolves eslint + plugins
+  # from the repo-root node_modules (no test-bot install needed). Mirrors the
+  # `Lint (tools/test-bot)` step of the CI lint job. Skipped only when the
+  # gate is narrowed to a single api/web workspace.
+  if [ "$effective_scope" = "all" ]; then
+    (cd "$REPO_ROOT/tools/test-bot" && npm run lint) || return $?
+  fi
+}
+
+run_shell_parse_check() {
+  # bash -n parse-lint every scripts/*.sh. Bash-3.2 parse breaks have shipped
+  # before (sync-local-to-env.sh) because shell scripts were never
+  # syntax-checked. Scope is scripts/*.sh only — rl-infra/** is a larger
+  # surface, out of scope here. Mirrors the `lint` job's shell-parse step in CI.
+  local f
+  for f in "$REPO_ROOT"/scripts/*.sh; do
+    [ -e "$f" ] || continue
+    bash -n "$f" || return $?
+  done
+}
+
+# Tools MCP-server vitest suites. CI runs these via the `tools-tests` matrix
+# job; mirror it locally so a broken tools test (e.g. env-lock.test.ts) is
+# caught by the local gate too. Each suite is sub-second. test-bot is NOT a
+# workspace and has no `test` script — it's intentionally excluded (its
+# coverage is the Discord smoke suite, gated separately).
+# tools/test-bot is a standalone package, NOT an npm workspace, so the root
+# `npm install` (and the fleet runner image's baked install) does NOT cover it.
+# Without its node_modules anything that imports from it dies at load
+# (ERR_MODULE_NOT_FOUND: @discordjs/voice). scripts/ci/ensure-runner-deps.sh
+# with SUBDIR tools/test-bot installs it under the same lock as the root
+# install: on a laptop only when node_modules is missing; on a fleet runner
+# (where node_modules survives between claims) also whenever its
+# package-lock.json changed since the last install. Never wrap that call in a
+# second flock: the helper takes the shared lock itself. If `npm ci` fails
+# (lockfile drift) we fall back to `npm install` here, outside the helper, and
+# write no marker, so the next run retries until the lockfile is fixed.
+#
+# ROK-1466: shared by BOTH consumers — the Discord smoke step and the render-rule
+# self-test in run_tools_tests. The self-test shipped without it and would have
+# died at import on the first fresh runner.
+#
+# After the install, build the contract when its entry is missing: test-bot
+# imports @raid-ledger/contract, whose main is dist/index.js, and a fresh
+# runner or worktree (or an --only-e2e run) never ran run_build.
+_ensure_test_bot_deps() {
+  if ! bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" tools/test-bot; then
+    echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
+    (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
+  fi
+  [ -f "$REPO_ROOT/packages/contract/dist/index.js" ] \
+    || (cd "$REPO_ROOT" && npm run build -w packages/contract) || return 1
+}
+
+# ROK-1160: `scripts/*.spec.mjs` are plain node:test specs (the restore-drill
+# assertion tiers, T-U1..T-U7, and the corruption failure path, T-C2). They were
+# executed by NOTHING before this step — api's jest has `rootDir: src` and
+# `testRegex: .spec.ts`, so it cannot see them. They need no database and no
+# binaries and run in well under a second, so they ride in the static gate
+# beside the shell parse check rather than waiting on GitHub.
+run_script_node_specs() {
+  local specs=("$REPO_ROOT"/scripts/*.spec.mjs)
+  if [ ! -e "${specs[0]}" ]; then
+    echo "no scripts/*.spec.mjs — nothing to run"
+    return 0
+  fi
+  (cd "$REPO_ROOT" && node --test "${specs[@]}")
+}
+
+run_tools_tests() {
+  local ws pkg
+  for ws in mcp-rl-fleet mcp-env mcp-discord; do
+    pkg="$REPO_ROOT/tools/$ws/package.json"
+    # Guard: skip any workspace lacking a `test` script so the gate never
+    # fails on a missing script (defensive — all three define one today).
+    if ! python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('scripts',{}).get('test') else 1)" "$pkg" 2>/dev/null; then
+      echo "tools/$ws has no test script — skipping"
+      continue
+    fi
+    echo "--- tools/$ws (vitest) ---"
+    npm test -w "@raid-ledger/$ws" || return $?
+  done
+
+  # tools/test-bot is NOT an npm workspace and ships no vitest, so its pure
+  # assertion specs need their own invocation. This used to name four specs
+  # explicitly; by 2026-09-07 there were TEN, so six had drifted out of every
+  # gate entirely. The glob runner in tools/test-bot/scripts/run-unit-specs.sh
+  # is now the single source of truth and is invoked identically by the GitHub
+  # `lint` job, so local and CI can no longer disagree about the spec list.
+  # All of these are pure: no Discord connection, no API, no env.
+  echo "--- tools/test-bot (pure assertion specs) ---"
+  _ensure_test_bot_deps || return $?
+  npm test --prefix "$REPO_ROOT/tools/test-bot" || return $?
+}
+
+# TDB:1246: the packages/contract schema specs (src/__tests__/*.spec.ts) ran in
+# no gate at all. The workspace carries its own node-environment vitest config;
+# the root one forces jsdom + the web setup file and is not the right runner.
+run_contract_specs() { (cd "$REPO_ROOT" && npm test -w @raid-ledger/contract); }
+
+# ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
+#
+# 75% of the container limit leaves headroom for the node process itself and
+# jest's worker bookkeeping outside the JS heap. The clamp is the guard: cgroup
+# v2 writes the literal "max" for "no limit", but some runtimes report the
+# PAGE_COUNTER_MAX sentinel (9223372036854771712) instead, and 75% of THAT is a
+# nonsense --max-old-space-size that breaks the run in a way that reads as a
+# test failure. Anything outside (0, 16384] MB — sentinel, non-numeric, absent,
+# or a host so large the cap is pointless — echoes nothing, and the caller
+# falls through to the npm script's own ceiling.
+#
+# Args: $1 - raw contents of the cgroup memory.max file (may be empty).
+# Echoes: the clamped heap size in MB, or nothing.
+resolve_heap_mb() {
+  local limit_bytes="${1:-}"
+  [ -n "$limit_bytes" ] || return 0
+  [ "$limit_bytes" != "max" ] || return 0
+  case "$limit_bytes" in ''|*[!0-9]*) return 0 ;; esac
+  # Integer MB first, then 3/4 of it: scripts/test/validate-ci-heap-clamp.test.sh
+  # pins the values this exact order produces, so the order is not "improved".
+  # shellcheck disable=SC2017
+  local heap_mb=$(( limit_bytes / 1024 / 1024 * 3 / 4 ))
+  if [ "$heap_mb" -gt 0 ] && [ "$heap_mb" -le 16384 ]; then
+    echo "$heap_mb"
+  fi
+}
+
+# ROK-1467: the --no-coverage unit path. Coverage instrumentation is what
+# carries the api unit suite over a 4 GiB runner's cgroup ceiling (verified on
+# slot-1: `jest --coverage` at a 3072 MB heap still SIGKILLs; bare `jest` at the
+# same ceiling completes), and the fleet's stop-on-first-failure meant that
+# single step blocked integration from ever running. Dropping coverage is a
+# deliberate, flag-gated trade — GitHub CI still runs the coverage-gated suite
+# on every PR, so the thresholds keep their teeth.
+#
+# The heap ceiling is pinned to 3072 MB (the value verified on a 4 GiB slot)
+# unless the caller already set NODE_OPTIONS, which then wins untouched.
+# ROK-1466 W4: scripts/smoke/*.spec.ts (target / auth-paths / login-retry /
+# browser-preflight, plus the ROK-1085 api-helpers cache tests) are included by
+# the ROOT vitest.config.mts, which nothing ever invoked — GitHub CI's web job
+# and this script both `cd web` first, picking up web/vitest.config.ts instead.
+# They are the only coverage the Playwright harness helpers have.
+# Args: $1 - NODE_OPTIONS to run under (defaults to the inherited value). The
+# no-coverage path passes its own resolved value so the fleet heap re-pin
+# applies here too, rather than this one suite silently keeping the runner's
+# injected 3072 ceiling.
+run_smoke_helper_specs() {
+  local node_opts="${1:-${NODE_OPTIONS:-}}"
+  echo "--- scripts/smoke helper specs (root vitest config) ---"
+  (cd "$REPO_ROOT" && NODE_OPTIONS="$node_opts" \
+     npx vitest run --config vitest.config.mts scripts/smoke)
+}
+
+# Replace (or add) --max-old-space-size inside a NODE_OPTIONS string, leaving
+# every other flag intact. Echoes the rewritten value.
+# Args: $1 - existing NODE_OPTIONS (may be empty); $2 - heap size in MB.
+_repin_heap() {
+  local opts="$1" heap_mb="$2" stripped
+  # `[[:space:]]*` on both sides so removing the flag never leaves a double
+  # space or a leading/trailing one.
+  stripped="$(printf '%s' "$opts" | sed -E 's/[[:space:]]*--max[-_]old[-_]space[-_]size=[0-9]+[[:space:]]*/ /g')"
+  stripped="$(printf '%s' "$stripped" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  printf '%s--max-old-space-size=%s' "${stripped:+$stripped }" "$heap_mb"
+}
+
+run_unit_tests_no_coverage() {
+  local node_opts="${NODE_OPTIONS:-}"
+  local -a jest_args=() vitest_args=()
+
+  if [ -z "$node_opts" ]; then
+    # Prefer the cgroup-derived ceiling (ROK-1451's clamp) so a slot smaller
+    # than 4 GiB is not pinned ABOVE its own limit — the SIGKILL-with-no-summary
+    # failure that clamp exists to prevent. 3072 stays the documented fallback
+    # for hosts that expose no usable limit.
+    local heap_mb
+    heap_mb="$(_cgroup_heap_mb)"
+    [ -n "$heap_mb" ] || heap_mb=3072
+    node_opts="--max-old-space-size=${heap_mb}"
+  fi
+
+  # ROK-1466: the runner recipe, applied LAST and UNCONDITIONALLY in fleet mode.
+  #
+  # `--fleet --with-e2e` died here twice. First (task de3ead1d639b) as ONE
+  # in-band jest process walking into the V8 heap limit at ~2.9 GB on a 4 GiB
+  # runner ("Ineffective mark-compacts near heap limit"); run_step stops on
+  # first failure, so the gate never reached e2e. The first fix only applied
+  # 1536 when NODE_OPTIONS was EMPTY — but the runner container exports
+  # `NODE_OPTIONS=--max-old-space-size=3072` itself, so that branch was dead on
+  # every fleet run and task 35761319dca3 OOM-killed two workers at 3 GB each.
+  # "An inherited NODE_OPTIONS means the operator chose it" is simply false on
+  # this path, so an inherited heap pin is overridden here; unrelated node flags
+  # in NODE_OPTIONS are preserved.
+  #
+  # RL_UNIT_HEAP_MB is therefore the ONLY operator override — nothing sets it
+  # ambiently, so reading it as intent is safe.
+  # ROK-1470 (unmerged, rebases after this) derives that value from the
+  # container memory limit instead of the 1536 literal — this block is its
+  # rebase target.
+  if $fleet_mode; then
+    local unit_heap_mb="${RL_UNIT_HEAP_MB:-1536}"
+    node_opts="$(_repin_heap "$node_opts" "$unit_heap_mb")"
+    # Two workers fit a 4 GiB cgroup with room for the node parents.
+    # --workerIdleMemoryLimit recycles a worker before it grows into the cap;
+    # it is a JEST flag — vitest rejects it, hence the separate arrays.
+    jest_args=(--maxWorkers=2 --workerIdleMemoryLimit=1024MB)
+    vitest_args=(--maxWorkers=2)
+  fi
+
+  echo "Running unit tests WITHOUT coverage (NODE_OPTIONS=${node_opts})"
+  # `${arr[@]+"${arr[@]}"}` — an empty array under `set -u` is an unbound
+  # variable error on bash 3.2 (macOS), and a bare "$arr" would pass an empty
+  # string as a real argv entry.
+  # ROK-1793 S1: a --fleet gate on a single-workspace diff skips the other
+  # workspace's suite; its own summary row (skip_by_fleet_scope) says so.
+  if ! _fleet_skips api; then
+    (cd api && NODE_OPTIONS="$node_opts" \
+       npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
+  else
+    # A web-only diff still runs the api specs that read web/ (M1).
+    local -a xws=()
+    local f
+    while IFS= read -r f; do [ -n "$f" ] && xws+=("$f"); done < <(_api_cross_workspace_specs)
+    if [ "${#xws[@]}" -gt 0 ]; then
+      echo "api jest narrowed to ${#xws[@]} cross-workspace spec(s): ${xws[*]}"
+      (cd api && NODE_OPTIONS="$node_opts" \
+         npx jest --runTestsByPath "${xws[@]}" ${jest_args[@]+"${jest_args[@]}"}) || return $?
+    fi
+  fi
+  if ! _fleet_skips web; then
+    (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
+       npx vitest run ${vitest_args[@]+"${vitest_args[@]}"}) || return $?
+  fi
+  run_smoke_helper_specs "$node_opts"
+}
+
+# Read the container memory limit and hand it to resolve_heap_mb. Echoes the
+# clamped heap size in MB, or nothing when there is no usable limit (laptops,
+# cgroup v2 "max", the PAGE_COUNTER_MAX sentinel, absurdly large hosts).
+_cgroup_heap_mb() {
+  local cgroup_max="${RL_CGROUP_MEMORY_MAX_FILE:-/sys/fs/cgroup/memory.max}"
+  local limit_bytes=""
+  if [ -r "$cgroup_max" ]; then
+    limit_bytes=$(cat "$cgroup_max" 2>/dev/null || true)
+  fi
+  resolve_heap_mb "$limit_bytes"
+}
+
+run_unit_tests() {
+  if $no_coverage; then
+    run_unit_tests_no_coverage
+    return $?
+  fi
+  # ROK-1451: api/package.json's `test:cov` hardcodes --max-old-space-size=8192,
+  # but a fleet runner container is capped at 4 GiB (cgroup memory.max). Telling
+  # V8 it may grow to 8 GB inside a 4 GB cgroup means the kernel SIGKILLs the
+  # process (exit 137) as soon as the suite climbs past the limit — and because
+  # jest never gets to print a summary, it surfaces as a mystery "Unit tests:
+  # FAIL" with no failing test in the log. The heap ceiling that was supposed to
+  # protect the run was set too high to ever engage.
+  #
+  # When we're inside a memory-capped cgroup, call jest directly with a ceiling
+  # derived from the real limit (same idiom run_integration_tests already uses
+  # for its shards). Laptop and GitHub CI paths are untouched — they keep the
+  # npm script and its 8 GB ceiling.
+  #
+  # Verified on slot-1 (4 GiB): 8192 -> exit 137 mid-run; 3072 -> exit 0,
+  # 537/537 suites, 7027/7027 tests.
+  local heap_mb
+  heap_mb="$(_cgroup_heap_mb)"
+  if [ -n "$heap_mb" ]; then
+    echo "Memory-capped environment detected; capping V8 heap at ${heap_mb}MB"
+    (cd api && NODE_OPTIONS="--max-old-space-size=${heap_mb}" \
+       npx jest --coverage --passWithNoTests) || return $?
+  else
+    npm run test:cov -w api -- --passWithNoTests || return $?
+  fi
+  # ROK-1331 M6b MED-5: vitest coverage race on fleet runners. When
+  # RL_TARGET=remote, fall through a three-step chain before declaring
+  # failure. Step (a) is the normal attempt; (b) retries (relies on the
+  # mutagen recursive **/coverage/** ignore in rl-infra/cli/rl /
+  # mutagen/sync-template.yml to break the race); (c) re-runs with
+  # --pool=forks --poolOptions.forks.singleFork=true. If all three fail,
+  # exit non-zero with an explicit PAUSED message — never silently drop
+  # --coverage. Operator approval is required to ship a no-coverage
+  # workaround for the fleet only.
+  if [ "${RL_TARGET:-local}" = "remote" ]; then
+    (
+      cd "$REPO_ROOT/web"
+      if npx vitest run --coverage; then exit 0; fi
+      echo "[validate-ci] vitest coverage race detected (step a); retrying (step b — relies on mutagen **/coverage/** recursive ignore)" >&2
+      if npx vitest run --coverage; then exit 0; fi
+      echo "[validate-ci] step (b) still failing; falling back to step (c) — --pool=forks --poolOptions.forks.singleFork=true" >&2
+      if npx vitest run --coverage --pool=forks --poolOptions.forks.singleFork=true; then exit 0; fi
+      echo "[validate-ci] PAUSED awaiting operator approval — all three remote fallback steps failed for the vitest coverage run. Refusing to silently degrade to a no-coverage run; the operator must explicitly authorize that workaround for the fleet only." >&2
+      exit 1
+    )
+  else
+    (cd "$REPO_ROOT/web" && npx vitest run --coverage) || return $?
+  fi
+  run_smoke_helper_specs
+}
+
+check_backup_prereqs() {
+  # Backup integration tests shell out to pg_dump/pg_restore. On dev machines
+  # without postgresql-client installed they hard-fail with 500 → 200 mismatch
+  # and obscure real failures. CI runners install postgresql-client, so the
+  # binary is always present there.
+  if command -v pg_dump >/dev/null 2>&1; then
+    # ROK-1144: backup.integration.spec.ts gates on `=== '1'`, so the
+    # "no env var = run" model is the source of truth. Unset (rather than
+    # export 0) on the success path so a stale SKIP_BACKUP_INTEGRATION=1 from
+    # an earlier shell can't survive and silently skip the suite.
+    unset SKIP_BACKUP_INTEGRATION
+    return 0
+  fi
+
+  if $ci_mode; then
+    echo -e "${RED}pg_dump not found on PATH.${NC}"
+    echo -e "${RED}CI mode requires postgresql-client installed for backup integration tests.${NC}"
+    return 1
+  fi
+
+  echo -e "${YELLOW}pg_dump not found on PATH — skipping backup integration tests.${NC}"
+  echo -e "${YELLOW}Install postgresql-client (e.g. \`brew install libpq\` on macOS) to run them locally.${NC}"
+  export SKIP_BACKUP_INTEGRATION=1
+  return 0
+}
+
+check_test_bot_env() {
+  # The companion bot requires TEST_BOT_TOKEN *and* TEST_GUILD_ID
+  # (tools/test-bot/src/config.ts), normally out of tools/test-bot/.env —
+  # gitignored, since it holds a real Discord bot token. A freshly created
+  # worktree or a fleet runner that synced only tracked files has neither the
+  # file nor the variables, and `npm run smoke` then dies on config load.
+  #
+  # Codex P2: the env-var path must demand EVERY required variable. Accepting a
+  # lone TEST_BOT_TOKEN would pass this preflight and then fail in config load
+  # anyway — the exact failure mode this function exists to prevent.
+  #
+  # Same shape as check_backup_prereqs/pg_dump above: skip locally, hard-fail
+  # under --ci. Signals "skip" via SKIP_DISCORD_SMOKE_NO_BOT_ENV rather than a
+  # return code, so a genuine error here can still return non-zero.
+  unset SKIP_DISCORD_SMOKE_NO_BOT_ENV
+  if [[ -f "$REPO_ROOT/tools/test-bot/.env" ]]; then
+    return 0
+  fi
+  if [[ -n "${TEST_BOT_TOKEN:-}" ]] && [[ -n "${TEST_GUILD_ID:-}" ]]; then
+    return 0
+  fi
+
+  local missing=""
+  [[ -z "${TEST_BOT_TOKEN:-}" ]] && missing="TEST_BOT_TOKEN"
+  [[ -z "${TEST_GUILD_ID:-}" ]] && missing="${missing:+$missing, }TEST_GUILD_ID"
+
+  if $ci_mode; then
+    echo -e "${RED}No tools/test-bot/.env, and these are unset: ${missing}.${NC}"
+    echo -e "${RED}CI mode requires companion-bot credentials for the Discord smoke tier.${NC}"
+    return 1
+  fi
+
+  echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
+  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
+  export SKIP_DISCORD_SMOKE_NO_BOT_ENV=1
+  return 0
+}
+
+run_integration_tests() {
+  # Explicit `|| return` — `set -e` is disabled inside `||`/`&&` lists, and
+  # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
+  # would not halt this function on failure.
+  check_backup_prereqs || return $?
+
+  # ROK-1331 M9: per-slot Redis sidecar for fleet integration tests.
+  # The fleet runner image ships only redis-tools (CLI), not redis-server,
+  # so any integration spec that boots a BullMQ worker (which spawns its
+  # own ioredis to the configured REDIS_URL) hits ECONNREFUSED on
+  # localhost:6379. We spawn an ephemeral sidecar on rl-net so the runner
+  # can reach it by DNS, then point REDIS_URL at it. Per-slot naming keeps
+  # concurrent slots isolated. Skipped in local mode — laptop
+  # deploy_dev.sh already manages Redis on localhost:6379.
+  _spawn_redis_sidecar_if_remote || return $?
+
+  # TDB:330 — every shard's output is teed here so a failed run can name the
+  # specs that never reported a result. Outside the worktree; removed on both
+  # return paths below (no trap: validate-ci keeps exactly one EXIT trap).
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/rl-integration-out.XXXXXX") || return $?
+
+  # ROK-1331 M5b — when validate-ci runs inside the fleet runner, surface
+  # per-test progress via jest --verbose. Otherwise a 12-min silent
+  # window during the integration suite looks like the run is hung
+  # (comment 23:21 B). Local runs stay quiet.
+  #
+  # ROK-1331 dogfood fix (2026-05-20): the inner script (running INSIDE the
+  # runner via ssh-dispatched run-on-runner) does NOT inherit the laptop's
+  # RL_TARGET=remote env. Detect "inside runner" via /workspace existing —
+  # that's the orchestrator's bind-mount and is the canonical marker.
+  #
+  # ROK-1331 M10 (scope-add, 2026-05-20): on the fleet runner, jest
+  # --runInBand accumulates ~98 integration suites' module state in one
+  # Node process; V8 heap hit 3 GB and SIGABRT'd ~50 suites in (Probe 1
+  # attempt 5). Split the run into $INTEGRATION_SHARDS shards (default 4)
+  # so each shard is its own Node process; heap frees between shards.
+  #
+  # Cycle-19 chore (2026-09-01): the laptop path used to stay single-process
+  # ("more RAM headroom"). It no longer has any — the suite grew to ~134
+  # specs and `npm run test:integration -w api` OOMs/segfaults after ~75 of
+  # them even at 8 GB (TECH-DEBT-BACKLOG 2026-08-24), and the summary never
+  # says which specs were skipped. So EVERY path shards now; the runner-only
+  # bits (M9 Redis sidecar, --verbose progress) keep their own guards above.
+  # Override the count with INTEGRATION_SHARDS=N; INTEGRATION_SHARDS=1 is the
+  # old single-process behaviour if you ever need it.
+  # ROK-1793 S1(ii): INTEGRATION_PARALLEL=2 runs the shards two at a time, in
+  # waves (shards 1+2, then 3+4). Default 1 = the serial loop below, unchanged.
+  # Isolation (verified 2026-10-15): jest.integration.config.js's globalSetup
+  # starts ONE Postgres Testcontainer per jest process, so each shard has its
+  # own DB; the app's REDIS_CLIENT is an in-memory mock per process; the only
+  # real Redis user is BullMQ, keyed under BULLMQ_KEY_PREFIX=test-<pid>-<ts>-.
+  # Parallel shards additionally get their own Redis db index on the sidecar.
+  {
+    local shards="${INTEGRATION_SHARDS:-4}"
+    local parallel
+    parallel=$(_integration_parallelism "$shards")
+    local shard_results=()
+    local i
+    if [ "$parallel" -gt 1 ]; then
+      _run_integration_shards_parallel "$shards" "$parallel" "$tmp"
+    else
+    for i in $(seq 1 "$shards"); do
+      echo "=== Integration shard ${i}/${shards} ==="
+      # `npx jest` directly so each shard is its own Node process. We `cd api`
+      # FIRST so the jest config's relative paths (rootDir, transforms,
+      # ts-jest's tsconfig resolution) match what `npm run test:integration
+      # -w api` would produce. Without cd, jest loads config from repo root
+      # and ts-jest mis-resolves --ignoreDeprecations to an empty value
+      # (TS5103). Discovered ROK-1331 Probe 1 attempt 6 (2026-05-20).
+      #
+      # NODE_OPTIONS=--max-old-space-size=4096 gives V8 a 4 GB heap ceiling
+      # per shard (vs 1.4 GB default) which is ample headroom for ~25 suites
+      # per shard. Raised 3072 -> 4096 (ROK-1268): 3 GB was tripping the OOM
+      # carrier under sustained re-runs while still leaving margin on the
+      # 7 GB fleet/CI runners (one shard process runs at a time here).
+      # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
+       # reporter so jest.suite.end events carry shard labels.
+       # --logHeapUsage feeds the reporter's heap_used_mb sample.
+      if _integration_shard_jest "$i" "$shards" 4096 "" 2>&1 | tee -a "$tmp"; then
+        shard_results+=("PASS")
+      else
+        shard_results+=("FAIL")
+        echo "Shard ${i}/${shards} FAILED — stopping early"
+        break
+      fi
+    done
+    fi
+    echo "=== Shard results: ${shard_results[*]} ==="
+    local r
+    for r in "${shard_results[@]}"; do
+      if [ "$r" = "FAIL" ]; then
+        _report_unrun_integration_specs "$tmp"
+        rm -f "$tmp"
+        return 1
+      fi
+    done
+    rm -f "$tmp"
+  }
+}
+
+# One integration shard: its own jest process. Args: shard total heap_mb
+# redis_url ("" = inherit). The `cd api` keeps the jest config's relative paths
+# right (ROK-1331 Probe 1 attempt 6, TS5103); JEST_SHARD_ID/JEST_TOTAL_SHARDS
+# label the perf reporter's events (ROK-1331 M11).
+_integration_shard_jest() {
+  local i="$1" n="$2" heap="$3" redis_url="${4:-}"
+  (
+    cd api || exit 1
+    if [ -n "$redis_url" ]; then export REDIS_URL="$redis_url"; fi
+    NODE_OPTIONS="--max-old-space-size=${heap}" \
+      JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${n}" \
+      npx jest --config ./jest.integration.config.js \
+               --runInBand --verbose --logHeapUsage --shard="${i}/${n}"
+  )
+}
+
+# ROK-1793 S1(ii): how many shards run at once. INTEGRATION_PARALLEL defaults
+# to 1 (serial). Capped at 2: two shards at the parallel heap fit the runner's
+# 6 GB ceiling, three do not. Forced back to 1 when CI=true + DATABASE_URL,
+# because the globalSetup then skips its per-process Testcontainer and every
+# shard would truncate the SAME database.
+_integration_parallelism() {
+  local shards="$1" p="${INTEGRATION_PARALLEL:-1}"
+  case "$p" in
+    '' | *[!0-9]*)
+      echo "INTEGRATION_PARALLEL='${p}' is not a positive integer — running shards serially" >&2
+      p=1 ;;
+  esac
+  if [ "$p" -lt 1 ]; then p=1; fi
+  if [ "$p" -gt 2 ]; then
+    echo "INTEGRATION_PARALLEL=${p} capped at 2 (2 x heap must stay under the runner's 6 GB)" >&2
+    p=2
+  fi
+  if [ "$p" -gt 1 ] && [ "${CI:-}" = "true" ] && [ -n "${DATABASE_URL:-}" ]; then
+    echo "INTEGRATION_PARALLEL ignored: CI=true + DATABASE_URL means every shard shares one DB — running shards serially" >&2
+    p=1
+  fi
+  if [ "$p" -gt "$shards" ]; then p="$shards"; fi
+  echo "$p"
+}
+
+# Per-shard Redis db index for parallel shards: redis://host:6379 -> .../<i>.
+# Only a bare TCP URL (no db path, no socket) is rewritten; anything else, or
+# an unset REDIS_URL (laptop: deploy_dev's Redis), is inherited unchanged.
+_integration_shard_redis_url() {
+  local i="$1" url="${REDIS_URL:-}"
+  if [[ "$url" =~ ^redis://[^/]+/?$ ]]; then
+    echo "${url%/}/${i}"
+  fi
+}
+
+# Parallel waves of $parallel shards. Each shard streams to the log with a
+# `[shard i/N]` prefix and keeps a raw copy, appended to $tmp in shard order
+# after the wave so _report_unrun_integration_specs reads clean jest lines.
+# Writes PASS/FAIL/STOPPED into the CALLER's shard_results (bash dynamic
+# scope). A failed shard stops its still-running wave partner (STOPPED), and
+# later waves are never launched.
+# Heap per shard: INTEGRATION_PARALLEL_HEAP_MB (default 2560; 2 x 2.5 GB plus
+# the parent processes stays under 6 GB). UNMEASURED — opt-in until it is.
+_run_integration_shards_parallel() {
+  local shards="$1" parallel="$2" tmp="$3"
+  local heap="${INTEGRATION_PARALLEL_HEAP_MB:-2560}"
+  local first last i wave_failed
+  echo "=== Integration: ${shards} shards, ${parallel} at a time, ${heap} MB heap each ==="
+  for ((first = 1; first <= shards; first += parallel)); do
+    last=$((first + parallel - 1))
+    if [ "$last" -gt "$shards" ]; then last="$shards"; fi
+    local pids=()
+    for ((i = first; i <= last; i++)); do
+      echo "=== Integration shard ${i}/${shards} (parallel) ==="
+      (
+        set -o pipefail
+        # Own LOG_DIR per parallel shard: the slow-query specs unlink/append/read
+        # slow-queries.log there, so two shards sharing it would race (Codex P2).
+        export LOG_DIR="${tmp}.logdir${i}"
+        mkdir -p "$LOG_DIR"
+        _integration_shard_jest "$i" "$shards" "$heap" "$(_integration_shard_redis_url "$i")" 2>&1 \
+          | tee "${tmp}.shard${i}" \
+          | awk -v p="[shard ${i}/${shards}] " '{ print p $0; fflush() }'
+      ) &
+      pids+=("$!")
+    done
+    wave_failed=0
+    local stopped=0 rc
+    # bash >= 4.3 (the fleet runner): `wait -n` notices the FIRST shard to end,
+    # so a failure stops its partner at once. bash 3.2 (macOS) falls back to
+    # the ordered waits below, which stop the rest once a waited shard fails.
+    if _have_wait_n; then
+      local live=$((last - first + 1))
+      while [ "$live" -gt 0 ]; do
+        rc=0; wait -n || rc=$?
+        live=$((live - 1))
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 127 ]; then
+          _stop_wave_shards "${pids[@]}"; stopped=1; break
+        fi
+      done
+    fi
+    for ((i = first; i <= last; i++)); do
+      rc=0; wait "${pids[$((i - first))]}" || rc=$?
+      if [ "$rc" -eq 0 ]; then
+        shard_results+=("PASS")
+      elif [ "$stopped" -eq 1 ] && [ "$rc" -eq 143 ]; then
+        shard_results+=("STOPPED")
+        echo "Shard ${i}/${shards} STOPPED — its wave partner failed"
+      else
+        shard_results+=("FAIL")
+        wave_failed=1
+        echo "Shard ${i}/${shards} FAILED"
+        if [ "$stopped" -eq 0 ]; then _stop_wave_shards "${pids[@]}"; stopped=1; fi
+      fi
+      cat "${tmp}.shard${i}" >>"$tmp" 2>/dev/null || true
+      rm -f "${tmp}.shard${i}"
+      rm -rf "${tmp}.logdir${i}"
+    done
+    if [ "$wave_failed" -eq 1 ]; then
+      echo "Integration wave ${first}-${last} FAILED — stopping early"
+      break
+    fi
+  done
+}
+
+# `wait -n` exists from bash 4.3.
+_have_wait_n() {
+  [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 3 ]; }
+}
+
+# SIGTERM a process and everything under it, children first (once the parent
+# dies its children reparent and `pgrep -P` can no longer find them).
+_kill_tree() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do _kill_tree "$c"; done
+  kill -TERM "$1" 2>/dev/null || true
+}
+
+# Stop every still-running shard of a wave (its pids as args). A stopped shard
+# prints no jest result, so _report_unrun_integration_specs lists its specs.
+_stop_wave_shards() {
+  local p
+  for p in "$@"; do
+    if kill -0 "$p" 2>/dev/null; then _kill_tree "$p"; fi
+  done
+}
+
+# TDB:330 — after a failed shard, list the integration specs that never printed
+# a PASS/FAIL line: killed mid-run (OOM), or in a shard the fast-fail break
+# skipped. Expected set mirrors jest.integration.config.js (rootDir src,
+# *.integration.spec.ts). ANSI is stripped first: jest colours the path itself.
+_report_unrun_integration_specs() {
+  local out_file="$1" expected ran missing n_missing
+  expected=$( (cd api && find src -name '*.integration.spec.ts') | LC_ALL=C sort -u)
+  ran=$(sed $'s/\033\\[[0-9;]*m//g' "$out_file" \
+    | grep -E '^[[:space:]]*(PASS|FAIL)[[:space:]]+src/[^ ]+\.integration\.spec\.ts' \
+    | sed -E 's/^[[:space:]]*(PASS|FAIL)[[:space:]]+//; s/[[:space:]].*$//' \
+    | LC_ALL=C sort -u || true)
+  missing=$(LC_ALL=C comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$ran") | grep . || true)
+  n_missing=$(printf '%s\n' "$missing" | grep -c . || true)
+  if [ "$n_missing" -eq 0 ]; then
+    echo "all $(printf '%s\n' "$expected" | grep -c . || true) spec(s) reported a result"
+    return 0
+  fi
+  echo "${n_missing} spec(s) never ran or did not finish:"
+  if [ -z "$ran" ]; then
+    echo "  no spec reported a result: setup failure?"
+    return 0
+  fi
+  printf '%s\n' "$missing" | sed -n '1,40s/^/  /p'
+  if [ "$n_missing" -gt 40 ]; then
+    echo "  ... and $((n_missing - 40)) more"
+  fi
+}
+
+# A3 fleet-gaps (2026-09-03) — per-RUN sidecar bookkeeping.
+#
+# `RL_TEST_REDIS_CNAME` holds the container name THIS run created (empty when
+# none). Teardown reads it instead of recomputing `rl-test-redis-${slot}`, so a
+# run can only ever remove its own sidecar. Before this, two validate-ci runs on
+# one slot shared a name and the first to exit (usually a cancelled one) killed
+# the live run's Redis — BullMQ then looped on `getaddrinfo ENOTFOUND
+# rl-test-redis-2` for 16.5k lines and the suite stalled at spec 34/151.
+RL_TEST_REDIS_CNAME=""
+
+# Idempotent teardown of THIS run's sidecar. Clears the name first so a second
+# call (explicit + EXIT trap, or two chained handlers) is a silent no-op.
+_cleanup_redis_sidecar() {
+  local cname="${RL_TEST_REDIS_CNAME:-}"
+  [ -n "$cname" ] || return 0
+  RL_TEST_REDIS_CNAME=""
+  docker stop "$cname" >/dev/null 2>&1 || true
+  docker rm -f "$cname" >/dev/null 2>&1 || true
+}
+
+# Single EXIT handler installed once a sidecar exists. It must NOT clobber the
+# `trap _perf_validate_end EXIT` main() installed — bash keeps exactly one EXIT
+# trap, so the old bare `trap "docker rm ..." EXIT` silently swallowed the
+# validate.end perf event for every fleet integration run. Re-establish `$?` via
+# a throwaway subshell before delegating, because _perf_validate_end reads it as
+# its first statement, then return it so the script's exit status is unchanged.
+_validate_ci_on_exit() {
+  local rc="$?"
+  # `set +e` for the duration: this script runs under `set -e`, and the
+  # `( exit "$rc" )` below is a non-zero compound command — with -e still on it
+  # aborts the handler and _perf_validate_end never runs (silently, since we're
+  # already exiting). An exit handler must always run to completion.
+  set +e
+  _cleanup_redis_sidecar
+  if declare -F _perf_validate_end >/dev/null 2>&1; then
+    ( exit "$rc" )
+    _perf_validate_end
+  fi
+  return "$rc"
+}
+
+# Remove sidecars for this slot older than RL_TEST_REDIS_MAX_AGE_S (6h default).
+# Per-run names mean a SIGKILLed run can no longer be cleaned up by name reuse,
+# so orphans need a sweeper — age-gated, because a validate-ci run never lasts
+# 6h and we must never touch a concurrently running run's sidecar.
+_sweep_stale_redis_sidecars() {
+  local slot="$1" now_s cid started started_s
+  local max_age="${RL_TEST_REDIS_MAX_AGE_S:-21600}"
+  now_s=$(date +%s)
+  for cid in $(docker ps -q --filter "label=rl.role=test-redis" --filter "label=rl.slot=${slot}" 2>/dev/null); do
+    started=$(docker inspect -f '{{.State.StartedAt}}' "$cid" 2>/dev/null || echo "")
+    started_s=$(date -d "$started" +%s 2>/dev/null || echo 0)
+    [ "$started_s" -gt 0 ] 2>/dev/null || continue
+    if [ "$(( now_s - started_s ))" -gt "$max_age" ]; then
+      echo "[rl-test-redis] sweeping orphaned sidecar ${cid} on slot ${slot} (age > ${max_age}s)"
+      docker rm -f "$cid" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+# ROK-1331 M9 — per-slot Redis sidecar for fleet integration tests.
+# Idempotent (docker rm -f any stale container first), bounded ping-wait
+# (30s), trap-cleaned on EXIT. Local mode is a no-op so deploy_dev.sh's
+# Redis on localhost:6379 stays authoritative.
+#
+# ROK-1331 dogfood fix (2026-05-20): when validate-ci.sh runs INSIDE the
+# fleet runner (post-ssh-dispatch), the runner does NOT inherit the laptop's
+# RL_TARGET=remote. Detect "am I in the runner that should spawn a sidecar?"
+# via /workspace bind-mount + RL_SLOT (both set by the orchestrator's
+# docker-compose runner config). Local laptop runs lack both → no-op.
+_spawn_redis_sidecar_if_remote() {
+  # Skip if NEITHER inside-runner signals nor explicit remote flag are present.
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  local slot="${RL_SLOT:-}"
+  if [ -z "$slot" ]; then
+    echo -e "${YELLOW}[rl-test-redis] inside-runner detected but RL_SLOT unset — skipping sidecar spawn${NC}" >&2
+    return 0
+  fi
+
+  # Per-RUN container name: `$$` is this validate-ci.sh's pid, so two runs on
+  # the same slot can never collide on a name — and therefore can never tear
+  # down each other's sidecar. Container name pattern: rl-test-redis-<slot>-<pid>.
+  local cname="rl-test-redis-${slot}-$$"
+  echo "[rl-test-redis] spawning sidecar ${cname} on rl-net (slot=${slot})"
+
+  # Orphan hygiene: age-gated sweep of THIS slot's abandoned sidecars (a
+  # SIGKILLed run's trap never fires). Never touches a live run — see helper.
+  _sweep_stale_redis_sidecars "$slot"
+
+  # Idempotency: clear any stale container by that name (previous crash, etc.).
+  docker rm -f "$cname" >/dev/null 2>&1 || true
+
+  # Teardown on EXIT — even on jest panic / set -e abort. --rm on the run
+  # call means `docker stop` removes the container too, but we also issue
+  # an explicit `docker rm -f` for the rare case where stop times out.
+  # Record the name BEFORE installing the trap so an abort between the two
+  # still cleans up via main()'s handler.
+  RL_TEST_REDIS_CNAME="$cname"
+  trap _validate_ci_on_exit EXIT
+
+  docker run -d --rm \
+    --name "$cname" \
+    --network rl-net \
+    --label "rl.role=test-redis" \
+    --label "rl.slot=${slot}" \
+    redis:7-alpine \
+    redis-server --save "" --appendonly no >/dev/null
+
+  # Bounded ping-wait (30s). The sidecar typically answers within 1s, but
+  # cold image pulls can stretch this to ~10s on a freshly-claimed slot.
+  local elapsed=0
+  while ! docker exec "$cname" redis-cli ping 2>/dev/null | grep -q PONG; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if [ "$elapsed" -ge 30 ]; then
+      echo -e "${RED}[rl-test-redis] sidecar ${cname} failed PING after 30s${NC}" >&2
+      docker logs "$cname" --tail 30 >&2 || true
+      return 1
+    fi
+  done
+
+  # On rl-net the sidecar's DNS name IS its container name, so REDIS_URL must
+  # be derived from $cname — never recomputed — or the two drift and the app
+  # dials a container that doesn't exist.
+  export REDIS_URL="redis://${cname}:6379"
+  echo "[rl-test-redis] ${cname} ready after ${elapsed}s — REDIS_URL=${REDIS_URL}"
+}
+
+run_migration_validation() {
+  if ! $migrations_changed; then
+    echo -e "No migration files changed — skipping"
+    skip_step
+    return 0
+  fi
+  # ROK-1693: a new migration stamped at or before main's newest entry is
+  # silently SKIPPED by Drizzle on every DB past that entry (0176 never reached
+  # prod). `|| return 1` so the guard's exit 3 is never read as a run_step code.
+  node "$REPO_ROOT/scripts/check-migration-merge-order.mjs" || return 1
+  # TDB:1150: each snapshot's prevId must be the previous snapshot's id —
+  # drizzle-kit never checks the link, only prevId collisions.
+  node "$REPO_ROOT/scripts/check-migration-snapshot-chain.mjs" || return 1
+  # ROK-1343 / TDB:654: Mutagen strips POSIX exec bits on the fleet runner even
+  # though git stores this file 100755, so run it through bash instead of by
+  # mode. That works in every environment and never chmods the working tree
+  # (same convention as scripts/test/run-all.sh).
+  bash "$REPO_ROOT/scripts/validate-migrations.sh"
+}
+
+run_container_validation() {
+  if ! $container_changed; then
+    echo -e "No container files changed — skipping"
+    skip_step
+    return 0
+  fi
+
+  local cname="rl-ci-test-$$"
+  # Ensure cleanup on any exit path. The double quotes expand $cname NOW, on
+  # purpose: a RETURN trap stays set after this function returns and can fire
+  # again on a later return, where this local no longer exists and `set -u`
+  # would abort the script.
+  # shellcheck disable=SC2064
+  trap "docker stop '$cname' >/dev/null 2>&1 || true" RETURN
+
+  # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
+  # The fleet VM's rl-dashboard service permanently occupies :8080, so the
+  # legacy `docker run -p 8080:80` fails with "port is already allocated".
+  # Resolution order: explicit RL_CONTAINER_STARTUP_PORT > fleet default 8090
+  # (detected via /workspace mount) > laptop default 8080.
+  local host_port="${RL_CONTAINER_STARTUP_PORT:-}"
+  if [ -z "$host_port" ]; then
+    if [ -d /workspace ]; then
+      host_port=8090
+    else
+      host_port=8080
+    fi
+  fi
+
+  docker build -f Dockerfile.allinone -t rl:ci-test .
+  docker run --rm -d \
+    --name "$cname" \
+    -p "${host_port}:80" \
+    -e ADMIN_PASSWORD=ci-test \
+    -e ENABLE_TELEMETRY=false \
+    rl:ci-test
+
+  _wait_for_container_health "$cname" "$host_port"
+}
+
+_wait_for_container_health() {
+  local cname="$1"
+  local host_port="${2:-8080}"
+  local elapsed=0
+
+  # Wait for API health (port 3000 direct — matches GitHub CI)
+  while ! docker exec "$cname" \
+    wget -qO- http://127.0.0.1:3000/health 2>/dev/null \
+    | grep -q '"status":"ok"'; do
+    sleep 2
+    elapsed=$((elapsed + 2))
+    if [ "$elapsed" -ge 120 ]; then
+      echo -e "${RED}API health check failed after 120s${NC}"
+      docker logs "$cname" --tail 30
+      return 1
+    fi
+  done
+  echo -e "${GREEN}API healthy after ${elapsed}s${NC}"
+
+  # Verify Redis via Unix socket
+  if ! docker exec "$cname" redis-cli -s /tmp/redis.sock ping \
+    | grep -q PONG; then
+    echo -e "${RED}Redis ping failed${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}Redis: PONG${NC}"
+
+  # Verify nginx proxy.
+  # Laptop path: curl from host, the `-p 8080:80` mapping is visible on
+  # localhost. Github CI same shape.
+  # ROK-1331 dogfood fix (2026-05-20): on the fleet, validate-ci.sh runs
+  # INSIDE the runner container. The host port mapping is bound on the VM
+  # host, not on runner-1's localhost — curl-from-runner-1 returns HTTP
+  # 000. Docker-exec into the test container itself and curl nginx on
+  # its internal port 80 to validate the proxy without depending on
+  # cross-container port visibility.
+  local http_code
+  if [ -d /workspace ]; then
+    http_code=$(docker exec "$cname" sh -c \
+      "wget -qS -O /dev/null http://127.0.0.1:80/api/health 2>&1 | awk '/HTTP/{print \$2; exit}'" \
+      2>/dev/null || echo 000)
+  else
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+      "http://127.0.0.1:${host_port}/api/health")
+  fi
+  if [ "$http_code" != "200" ]; then
+    echo -e "${RED}Nginx proxy returned $http_code${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}Nginx proxy: healthy${NC}"
+
+  # Verify pgvector extension is loaded (ROK-948). Indirectly covered by the
+  # migration run during startup — but an explicit check catches silent-success
+  # bugs (e.g. build step swapped to a different Postgres major with no pgvector).
+  if ! docker exec "$cname" su-exec postgres \
+    psql -d raid_ledger -tAc "SELECT extname FROM pg_extension WHERE extname='vector'" \
+    | grep -q '^vector$'; then
+    echo -e "${RED}pgvector extension not loaded in allinone DB${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}pgvector: loaded${NC}"
+
+  # Verify pg_stat_statements extension is loaded (ROK-1156). The migration is a
+  # no-op IF NOT EXISTS, so a missing shared_preload_libraries flag would not
+  # surface as a migration failure — but the slow-query digest cron (PR B) would
+  # silently see empty stats. Explicit check catches that.
+  if ! docker exec "$cname" su-exec postgres \
+    psql -d raid_ledger -tAc "SELECT extname FROM pg_extension WHERE extname='pg_stat_statements'" \
+    | grep -q '^pg_stat_statements$'; then
+    echo -e "${RED}pg_stat_statements extension not loaded in allinone DB${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}pg_stat_statements: loaded${NC}"
+
+  _check_container_security_headers "$host_port" "$cname" || return 1
+}
+
+# ROK-1158: verify the 6 security headers are present on every response surface
+# (SPA index, /api proxy, AND a static bundle). The bundle URL specifically
+# guards against the nginx `add_header` inheritance trap — the static-asset
+# location block defines its own `add_header Cache-Control`, which kills
+# parent-scope inheritance, so the snippet must be `include`d there too.
+#
+# ROK-1331 dogfood fix (2026-05-21): on the fleet, validate-ci.sh runs INSIDE
+# the runner container. `-p ${host_port}:80` binds the test container's port
+# on the VM HOST, not on runner-1's localhost — `curl -sI http://127.0.0.1:8090/`
+# from inside runner-1 hits the runner's own loopback and returns empty. Use
+# docker-exec-into-cname-and-curl-port-80 (the same shape as the API proxy
+# check in _wait_for_container_health) when /workspace is mounted (i.e. inside
+# a fleet runner).
+
+# ROK-1509 — which Discord channel set should the companion smoke discover?
+#
+# ROK-1469 gave every fleet slot its own channels (slot-N-fleet / slot-N-alt
+# text, slot-N-voice voice) and taught tools/test-bot/src/smoke/channel-set.ts
+# to narrow discovery to `${SMOKE_CHANNEL_SET}-*` — but nothing on this path
+# ever exported the variable, so a slot's smoke discovered the WHOLE guild,
+# orphaned ephemeral ⏰ voice channels included (fleet task 2a94d5bc2d24:
+# default channel resolved to a leftover ⏰ channel, 19/124 failures).
+#
+# Pure decision (stdout is the value, never exports):
+#   * SMOKE_CHANNEL_SET already set (non-blank) → that value, untouched. An
+#     operator pointing a run at a custom set must win over the slot default.
+#   * inside a fleet runner — the SAME predicate the Redis sidecar uses
+#     (/workspace bind-mount OR RL_TARGET=remote) — with a numeric RL_SLOT
+#     → "slot-${RL_SLOT}".
+#   * anything else (laptop, RL_SLOT unset, RL_SLOT non-numeric) → empty.
+#     Non-numeric is a warning, not a failure: smoke still runs, just on the
+#     whole guild, and the lock helper below keeps it serialized.
+smoke_channel_set_for_slot() {
+  local preset="${SMOKE_CHANNEL_SET:-}"
+  if [ -n "${preset//[[:space:]]/}" ]; then
+    printf '%s' "$preset"
+    return 0
+  fi
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  local slot="${RL_SLOT:-}"
+  [ -n "$slot" ] || return 0
+  if ! [[ "$slot" =~ ^[0-9]+$ ]]; then
+    echo -e "${YELLOW:-}[smoke-channel-set] RL_SLOT='${slot}' is not numeric — no slot channel set derived; smoke discovers the whole guild${NC:-}" >&2
+    return 0
+  fi
+  printf 'slot-%s' "$slot"
+}
+
+# Export the decision for `npm run smoke` and say, on ONE line, which set is
+# in use. Must run BEFORE _discord_lock_required: exporting the set is what
+# lets a slot with its own bot identity skip the fleet-wide lock.
+_export_smoke_channel_set() {
+  local set
+  set="$(smoke_channel_set_for_slot)"
+  if [ -n "$set" ]; then
+    export SMOKE_CHANNEL_SET="$set"
+    echo -e "${YELLOW}Discord smoke channel set: ${SMOKE_CHANNEL_SET} (discovery narrowed to ${SMOKE_CHANNEL_SET}-* channels)${NC}"
+  else
+    echo "Discord smoke channel set: none (whole-guild discovery — laptop run or RL_SLOT unset)"
+  fi
+}
+
+# ROK-1469 D5 — does this Discord smoke run need the fleet-wide lock?
+#
+# The lock exists for two collisions: one shared bot token (two gateway
+# sessions fight) and one shared channel set (two runs assert on each other's
+# embeds). Per-slot Discord apps (D1) fix the first; SMOKE_CHANNEL_SET=slot-N
+# (D5, exported on the fleet by _export_smoke_channel_set above — ROK-1509)
+# fixes the second. A run WITHOUT a channel set still shares channels with
+# its siblings and must still serialize — so the narrowing is keyed on the
+# channel set, never on "we're on the fleet".
+#
+# RL_DISCORD_LOCK_ALWAYS=1 forces serialization back on (debugging a suspected
+# cross-slot interaction, or a guild whose slot-N channels aren't built yet).
+_discord_lock_required() {
+  [[ "${RL_DISCORD_LOCK_ALWAYS:-0}" == "1" ]] && return 0
+  local set="${SMOKE_CHANNEL_SET:-}"
+  local identity="${RL_SLOT_DISCORD_CLIENT_ID:-}"
+  # Strip whitespace — "   " is neither a channel set nor an identity.
+  set="${set//[[:space:]]/}"
+  identity="${identity//[[:space:]]/}"
+  # BOTH conditions must hold to skip. A slot with `configured:false` still
+  # runs on the operator's legacy shared token, so disjoint channels alone
+  # leave the gateway-session collision in place (review B3). The identity is
+  # read from the same env var env-spin injects into the env container.
+  [[ -z "$set" || -z "$identity" ]]
+}
+
+# Fail loud when a fleet runner is missing the /state-locks mount. The
+# runner/laptop decision is the SAME predicate smoke_channel_set_for_slot uses
+# (/workspace present OR RL_TARGET=remote); off the runner this is a no-op.
+# On a runner, check-state-locks.sh keys on RL_SLOT: a runner without the
+# mount exits 98 instead of letting smoke run unsynchronized and report
+# success. The guard here matters because the script alone would also fire on
+# a laptop that happens to export RL_SLOT. Invoked with `bash`, never ./ —
+# Mutagen strips the exec bit.
+_check_state_locks_mount() {
+  local dir="$1"
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  bash "$REPO_ROOT/rl-infra/runner/check-state-locks.sh" "$dir"
+}
+
+# ROK-1689 — fleet Discord smoke runs the way GitHub CI does.
+#
+# discord-smoke.yml's job-level env: runs the companion bot with concurrency 1,
+# 2 retries, a 90s per-test timeout, a 15s Discord API timeout and voice-join
+# skipped. The fleet ran on test-bot defaults (concurrency 5, 0 retries, 60s)
+# and saw 14–16 failures CI never did. The values are READ from the workflow
+# at run time, so the two can't drift. DISCORD_API_TIMEOUT_MS is read by the
+# API, so the runner export is informational — env-spin sets it on the env
+# container. Pinned by scripts/validate-ci-smoke-ci-parity.spec.mjs.
+CI_SMOKE_WORKFLOW_REL=".github/workflows/discord-smoke.yml"
+CI_SMOKE_ENV_KEYS="SMOKE_CONCURRENCY SMOKE_RETRY_COUNT SMOKE_TIMEOUT_MS DISCORD_API_TIMEOUT_MS SMOKE_SKIP_VOICE_JOIN"
+
+# First `  KEY: value` line in a workflow, quotes and trailing comment stripped.
+# Empty output (never a failure) when the key is absent.
+_ci_workflow_env_value() {
+  local file="$1" key="$2"
+  sed -n -E "s/^[[:space:]]+${key}:[[:space:]]*['\"]?([^'\"#[:space:]]*)['\"]?[[:space:]]*(#.*)?\$/\\1/p" "$file" | head -n 1
+}
+
+_print_ci_smoke_env() {
+  local src="$1"
+  echo "Discord smoke CI parity: concurrency=${SMOKE_CONCURRENCY:-default}" \
+    "retries=${SMOKE_RETRY_COUNT:-default} timeout=${SMOKE_TIMEOUT_MS:-default}ms" \
+    "api_timeout=${DISCORD_API_TIMEOUT_MS:-default}ms(env container, via env-spin)" \
+    "skip_voice_join=${SMOKE_SKIP_VOICE_JOIN:-0} (from ${src})"
+}
+
+# Export the five keys from the workflow. A value the caller already exported
+# wins (operator override). An unreadable workflow or a missing key is a yellow
+# warning, never a failure — smoke still runs, on test-bot defaults for it.
+_export_ci_smoke_env() {
+  local file="${CI_SMOKE_WORKFLOW:-$REPO_ROOT/$CI_SMOKE_WORKFLOW_REL}" key val
+  if [ ! -r "$file" ]; then
+    echo -e "${YELLOW}[smoke-ci-parity] cannot read ${file} — Discord smoke runs on test-bot defaults${NC}" >&2
+    return 0
+  fi
+  for key in $CI_SMOKE_ENV_KEYS; do
+    [ -n "${!key:-}" ] && continue
+    val="$(_ci_workflow_env_value "$file" "$key")"
+    if [ -z "$val" ]; then
+      echo -e "${YELLOW}[smoke-ci-parity] ${key} not found or unparseable in ${file} — left at the test-bot default${NC}" >&2
+      continue
+    fi
+    export "${key}=${val}"
+  done
+  _print_ci_smoke_env "$file"
+}
+
+# Scope: the fleet runner only — the SAME predicate the Redis sidecar and
+# smoke_channel_set_for_slot use (/workspace bind-mount OR RL_TARGET=remote).
+# A laptop run keeps the test-bot defaults: it can make real voice
+# connections, so skipping voice-join there would drop coverage CI can't give.
+_apply_ci_smoke_parity() {
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  _export_ci_smoke_env
+}
+
+_check_container_security_headers() {
+  local host_port="${1:-8080}" cname="${2-}"
+  local headers
+  local index_url="http://127.0.0.1:${host_port}/"
+  local health_url="http://127.0.0.1:${host_port}/api/health"
+
+  # $2 (optional) — a value for X-Forwarded-Proto, to probe the response as a
+  # TLS-terminating proxy would see it (ROK-1577).
+  _fetch_headers() {
+    local url="$1" fwd="${2-}" path
+    if [ -d /workspace ] && [ -n "$cname" ]; then
+      path="${url#"http://127.0.0.1:${host_port}"}"
+      docker exec "$cname" wget -qS -O /dev/null ${fwd:+--header="X-Forwarded-Proto: $fwd"} "http://127.0.0.1:80${path}" 2>&1 \
+        | sed -E 's/^[[:space:]]+//' \
+        | grep -E '^(HTTP|[A-Za-z][A-Za-z0-9-]+:)'
+    else
+      curl -sI ${fwd:+-H "X-Forwarded-Proto: $fwd"} "$url"
+    fi
+  }
+  _fetch_body() {
+    local url="$1" path
+    if [ -d /workspace ] && [ -n "$cname" ]; then
+      path="${url#"http://127.0.0.1:${host_port}"}"
+      docker exec "$cname" wget -qO- "http://127.0.0.1:80${path}" 2>/dev/null
+    else
+      curl -s "$url"
+    fi
+  }
+
+  for url in "$index_url" "$health_url"; do
+    headers=$(_fetch_headers "$url")
+    _assert_security_headers "$headers" "$url" plain || return 1
+  done
+  # ROK-1577: the HTTPS-only CSP directive (upgrade-insecure-requests) appears
+  # exactly when the request arrived over HTTPS — here, as a proxy forwarding
+  # it. HSTS is on both sides (ROK-1578). Prove both sides on the SPA shell.
+  headers=$(_fetch_headers "$index_url" https)
+  _assert_security_headers "$headers" "$index_url (X-Forwarded-Proto: https)" https || return 1
+
+  local html bundle_path bundle_url
+  html=$(_fetch_body "$index_url")
+  bundle_path=$(echo "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | head -1)
+  if [ -z "$bundle_path" ]; then
+    echo -e "${RED}Could not locate /assets/*.js bundle URL in index.html${NC}"
+    return 1
+  fi
+  bundle_url="http://127.0.0.1:${host_port}${bundle_path}"
+  headers=$(_fetch_headers "$bundle_url")
+  _assert_security_headers "$headers" "$bundle_url" plain || return 1
+
+  if echo "$headers" | grep -qi '^x-xss-protection:'; then
+    echo -e "${RED}X-XSS-Protection must not be present (deprecated)${NC}"
+    return 1
+  fi
+
+  # ROK-1763: every route that serves the SPA shell revalidates (no-cache) and
+  # still carries the security headers; hashed bundles stay immutable.
+  local shell_url
+  for shell_url in "$index_url" "http://127.0.0.1:${host_port}/index.html" \
+    "http://127.0.0.1:${host_port}/events/123" "http://127.0.0.1:${host_port}/i/rok1763probe"; do
+    headers=$(_fetch_headers "$shell_url")
+    if ! echo "$headers" | grep -qiE '^cache-control:[[:space:]]*no-cache'; then
+      echo -e "${RED}index.html at ${shell_url} must be served with Cache-Control: no-cache${NC}"
+      return 1
+    fi
+    _assert_security_headers "$headers" "$shell_url" plain || return 1
+  done
+  headers=$(_fetch_headers "$bundle_url")
+  if ! echo "$headers" | grep -qiE '^cache-control:.*immutable'; then
+    echo -e "${RED}${bundle_path} must keep Cache-Control: public, immutable${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}Security headers: present on /, /api/health, SPA deep links and ${bundle_path}; index.html no-cache; HSTS always, upgrade-insecure-requests only behind HTTPS${NC}"
+}
+
+# ---------------------------------------------------------------------------
+# ROK-1565 — Playwright scoping
+#
+# GitHub runs the whole suite (desktop + mobile, 5 shards) and blocks the merge
+# on it. The local/fleet run exists to catch YOUR break early, so it only needs
+# the specs covering the surfaces the diff touched. Measured 2026-09-14: a
+# 5-line web fix spent 15-25 min in the fleet Playwright tier, queued behind two
+# branches, and found nothing the GitHub suite would not have found 45 min later.
+#
+# Every uncertain case falls back to the FULL suite: ALL from scope-specs.sh, a
+# missing or failing script, or any scope other than `auto`. A gate may only
+# fail toward MORE coverage.
+# ---------------------------------------------------------------------------
+
+# Echo the effective scope: auto (default) | all | none. An unrecognised value
+# is a typo, not an instruction to skip — warn and run the auto scope.
+_resolve_e2e_scope() {
+  # Memoized in E2E_SCOPE_RESOLVED: both the summary label and the step body ask,
+  # and the typo warning should be printed once per run, not once per caller.
+  # Call it as `_resolve_e2e_scope >/dev/null` (NOT in a $( ) subshell) when you
+  # want the global set.
+  if [ -n "${E2E_SCOPE_RESOLVED:-}" ]; then
+    printf '%s\n' "$E2E_SCOPE_RESOLVED"
+    return 0
+  fi
+  case "${E2E_SCOPE:-auto}" in
+    all) E2E_SCOPE_RESOLVED="all" ;;
+    none) E2E_SCOPE_RESOLVED="none" ;;
+    auto) E2E_SCOPE_RESOLVED="auto" ;;
+    *)
+      echo -e "${YELLOW}Unrecognised E2E_SCOPE='${E2E_SCOPE:-}' (expected auto|all|none) — using auto${NC}" >&2
+      E2E_SCOPE_RESOLVED="auto"
+      ;;
+  esac
+  printf '%s\n' "$E2E_SCOPE_RESOLVED"
+}
+
+# Echo the specs scope-specs.sh maps the branch diff to, one per line — or
+# NOTHING, which every caller reads as "run the full suite" — or exactly NONE
+# when the script says no spec covers the diff (ROK-1792), which the caller
+# reads as "skip the tier".
+_scoped_playwright_specs() {
+  local script="$REPO_ROOT/scripts/smoke/scope-specs.sh" out
+  if [ ! -f "$script" ]; then
+    return 0
+  fi
+  if ! out=$(bash "$script" 2>/dev/null); then
+    return 0
+  fi
+  # `grep -qx ALL`, not `[ "$out" = ALL ]`: scope-specs.sh prints a changed
+  # smoke spec AND then `ALL` when another changed file maps to nothing. Equality
+  # missed that, and `npx playwright test <spec> ALL` NARROWS the run (ALL names
+  # no file) exactly when the script asked to widen it.
+  if [ -z "$out" ] || printf '%s\n' "$out" | grep -qx ALL; then
+    return 0
+  fi
+  # Exactly NONE, alone. NONE beside a spec path is not a shape the script
+  # emits; it is passed through as a list and would fail loudly, not skip.
+  if [ "$out" = NONE ]; then
+    echo NONE
+    return 0
+  fi
+  printf '%s\n' "$out"
+}
+
+# ROK-1792 — parse and validate E2E_SPECS into E2E_SPECS_LIST. Returns 2 (with
+# every bad path named on stderr) on any invalid entry, so main can exit 2 before
+# a step runs: a typo in an explicit list must never silently run nothing or,
+# worse, fall back to a different selection.
+_parse_e2e_specs() {
+  E2E_SPECS_LIST=""
+  local raw="${E2E_SPECS:-}" spec bad=0 out="" specs=()
+  raw="${raw//,/ }"
+  # `read -a` stops at the first newline, so fold newlines/CRs into spaces first:
+  # a multi-line E2E_SPECS must not silently drop every spec after line one.
+  raw="${raw//$'\n'/ }"
+  raw="${raw//$'\r'/ }"
+  # Split with `read -a`, NOT an unquoted `for spec in $raw`: that would
+  # pathname-expand `scripts/smoke/*.smoke.spec.ts` into real files before the
+  # check below ever saw the wildcard (Codex P2, ROK-1792).
+  IFS=$' \t\n' read -r -a specs <<<"$raw" || true
+  for spec in ${specs[@]+"${specs[@]}"}; do
+    case "$spec" in
+      *[\*\?\[]*)
+        echo -e "${RED}E2E_SPECS: '${spec}' contains a glob character — name each spec file${NC}" >&2
+        bad=1; continue ;;
+    esac
+    # playwright.config.ts: testDir ./scripts/smoke, testMatch /\.smoke\.spec\.ts$/.
+    # A plain *.spec.ts there is a Vitest file Playwright never selects.
+    if ! [[ "$spec" =~ ^scripts/smoke/[A-Za-z0-9_./-]+\.smoke\.spec\.ts$ ]] || [[ "/$spec/" == */../* ]]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' is not a scripts/smoke/<name>.smoke.spec.ts path${NC}" >&2
+      bad=1
+    elif [ ! -f "$REPO_ROOT/$spec" ]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' does not exist in this checkout${NC}" >&2
+      bad=1
+    else
+      case " $out " in *" $spec "*) ;; *) out="${out:+$out }$spec" ;; esac
+    fi
+  done
+  if [ "$bad" = 1 ]; then return 2; fi
+  E2E_SPECS_LIST="$out"
+}
+
+# Resolve the scope ONCE, before run_step is called, because the summary row
+# name has to carry the spec count. The row keeps its
+# `Playwright (desktop + mobile` prefix in every case — the pre-push sentinel
+# parser (tools/mcp-rl-fleet/src/gate-summary.ts), the orchestrator's steps[]
+# regex (rl-infra/orchestrator/bin/_parser.sh, whose name class had to learn `,`
+# and `:` for this) and the CI greps all key on it. print_summary's two-space
+# separator is the other half of that contract: the scoped name is 45 chars, so
+# `%-30s` pads nothing and a single-space format would leave only one space
+# between a name containing spaces and its status.
+_prepare_playwright_scope() {
+  PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
+  PLAYWRIGHT_SCOPED_SPECS=""
+  PLAYWRIGHT_SCOPE_NONE=false
+  _resolve_e2e_scope >/dev/null
+  if [ "$E2E_SCOPE_RESOLVED" != "auto" ] || [ "$e2e_mode" = "off" ]; then
+    return 0
+  fi
+  local specs count
+  # ROK-1792: an explicit E2E_SPECS list wins over the diff mapping.
+  if [ -n "${E2E_SPECS_LIST:-}" ]; then
+    # shellcheck disable=SC2086
+    count=$(printf '%s\n' $E2E_SPECS_LIST | grep -c .)
+    PLAYWRIGHT_SCOPED_SPECS="$E2E_SPECS_LIST"
+    PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, explicit: ${count} specs)"
+    echo -e "${YELLOW}Playwright limited to ${count} spec(s) named by E2E_SPECS${NC}"
+    return 0
+  fi
+  specs=$(_scoped_playwright_specs)
+  if [ -z "$specs" ]; then
+    return 0
+  fi
+  if [ "$specs" = NONE ] && [ "${e2e_explicit:-false}" = true ]; then
+    # --with-e2e is an explicit request; NONE is a diff inference. Run the
+    # full suite rather than skip (Codex P2, ROK-1792).
+    echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec, but --with-e2e forces the full Playwright suite${NC}"
+    return 0
+  fi
+  if [ "$specs" = NONE ]; then
+    # Same `Playwright (desktop + mobile` prefix as every other label, so the
+    # sentinel parser still finds the row — and reads its SKIPPED as "no
+    # playwright-tier sentinel" (only a PASS writes one).
+    PLAYWRIGHT_SCOPE_NONE=true
+    PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, no specs in scope)"
+    return 0
+  fi
+  count=$(printf '%s\n' "$specs" | grep -c .)
+  PLAYWRIGHT_SCOPED_SPECS="$specs"
+  PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, scoped: ${count} specs)"
+  echo -e "${YELLOW}Playwright scoped to ${count} spec(s) by scripts/smoke/scope-specs.sh (E2E_SCOPE=all forces the full suite)${NC}"
+}
+
+run_playwright_e2e() {
+  _resolve_e2e_scope >/dev/null
+  if [ "$E2E_SCOPE_RESOLVED" = "none" ]; then
+    if [ "${e2e_explicit:-false}" = true ]; then
+      # --with-e2e is an explicit request from the invoking human/agent;
+      # E2E_SCOPE is ambient. The flag wins, loudly.
+      echo -e "${YELLOW}E2E_SCOPE=none is overridden by --with-e2e — running the full Playwright suite${NC}"
+    elif [ "$e2e_mode" = "on" ]; then
+      # --fleet turns e2e on by implication only; an explicit none still wins.
+      echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright under --fleet (pass --with-e2e to force it; GitHub CI still runs the full suite)${NC}"
+      skip_step
+      return 0
+    else
+      echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
+      skip_step
+      return 0
+    fi
+  fi
+  # ROK-1792: scope-specs.sh mapped the diff to zero smoke specs (a /dev/**
+  # wireframe route, a new ui file nothing imports yet). E2E_SPECS and
+  # E2E_SCOPE=all never reach here — _prepare_playwright_scope leaves the flag
+  # false for both.
+  # An explicit --with-e2e still wins (as it does over E2E_SCOPE=none):
+  # _prepare_playwright_scope already left the full suite selected for it.
+  if [ "${PLAYWRIGHT_SCOPE_NONE:-false}" = true ] && [ "${e2e_explicit:-false}" != true ]; then
+    echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec — skipping Playwright (E2E_SCOPE=all forces the full suite; GitHub CI still runs it)${NC}"
+    skip_step
+    return 0
+  fi
+  # ROK-1792: an explicit E2E_SPECS list is a request, not a diff inference —
+  # it bypasses the changed-files gate and FAILs (never skips) on a down env.
+  local mode="$e2e_mode"
+  if [ -n "${E2E_SPECS_LIST:-}" ] && [ "$mode" = "auto" ]; then mode="on"; fi
+  case "$mode" in
+    off)
+      echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
+      skip_step
+      return 0
+      ;;
+    auto)
+      if ! $playwright_relevant; then
+        echo -e "No Playwright-relevant files changed — skipping"
+        skip_step
+        return 0
+      fi
+      if ! check_env_up; then
+        echo -e "${YELLOW}Dev env not responding at $(_resolve_health_url) — skipping Playwright${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
+        fi
+        skip_step
+        return 0
+      fi
+      ;;
+    on)
+      if ! check_env_up; then
+        echo -e "${RED}--with-e2e requested but dev env is not responding at $(_resolve_health_url).${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        fi
+        return 1
+      fi
+      ;;
+  esac
+
+  # Bind BASE_URL / PLAYWRIGHT_BASE_URL / API_URL to the target the env probe
+  # just validated (codex round-3 HIGH; widened to all three in ROK-1466).
+  _export_e2e_target
+
+  # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
+  # Never narrowed with --project; only the SPEC LIST is scoped (ROK-1565).
+  if [ -n "$PLAYWRIGHT_SCOPED_SPECS" ]; then
+    echo "Scoped spec list:"
+    # Deliberate word splitting on both lines: the list is space-separated and
+    # spec paths never contain spaces.
+    # shellcheck disable=SC2086
+    printf '  %s\n' $PLAYWRIGHT_SCOPED_SPECS
+    # shellcheck disable=SC2086
+    npx playwright test $PLAYWRIGHT_SCOPED_SPECS
+  else
+    npx playwright test
+  fi
+}
+
+# ROK-1203: report-only light-mode contrast sweep. Replaces the Playwright and
+# Discord-smoke steps under --only-e2e --contrast-audit. Reports violations but
+# never fails on them: PASS = sweep AND aggregator both exit 0.
+run_contrast_audit() {
+  if ! check_env_up; then
+    echo -e "${RED}--contrast-audit needs a live target but the env is not responding at $(_resolve_health_url).${NC}"
+    return 1
+  fi
+  # Same BASE_URL / PLAYWRIGHT_BASE_URL / API_URL / auth-dir wiring as the
+  # normal Playwright step, so global setup logs in against the same host.
+  _export_e2e_target || return 1
+  export CONTRAST_AUDIT=1
+  npx playwright test -c scripts/smoke/contrast-audit.config.ts --project=desktop --workers=2 || return $?
+  node scripts/smoke/contrast-audit.aggregate.mjs
+}
+
+run_discord_smoke() {
+  case "$e2e_mode" in
+    off)
+      echo -e "${YELLOW}--no-e2e passed — skipping Discord smoke${NC}"
+      skip_step
+      return 0
+      ;;
+    auto)
+      if ! $discord_smoke_relevant; then
+        echo -e "No Discord-smoke-relevant files changed — skipping"
+        skip_step
+        return 0
+      fi
+      if ! check_env_up; then
+        echo -e "${YELLOW}Dev env not responding at $(_resolve_health_url) — skipping Discord smoke${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
+        fi
+        skip_step
+        return 0
+      fi
+      ;;
+    on)
+      if ! check_env_up; then
+        echo -e "${RED}--with-e2e requested but dev env is not responding at $(_resolve_health_url).${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        fi
+        return 1
+      fi
+      ;;
+  esac
+
+  # A checkout with no companion-bot credentials cannot run this tier, and the
+  # tier failing poisons everything downstream of it: validate-ci.sh stops at
+  # the first failing step, so an `--only-e2e` run on a fresh worktree reported
+  # the whole task as failed even when Playwright had already passed — which is
+  # exactly what kept the pre-push sentinel shut (four ROK-1533 tiers in a row).
+  # A missing credential is a property of the checkout, not a product failure,
+  # so report it the way the pg_dump backup-integration skip does: yellow
+  # warning + SKIPPED locally, hard FAIL under --ci where the credential is
+  # always provisioned and a silent skip would mean lost coverage.
+  # Playwright is deliberately untouched by this — it needs no bot token.
+  if ! check_test_bot_env; then
+    return 1
+  fi
+  if [[ -n "${SKIP_DISCORD_SMOKE_NO_BOT_ENV:-}" ]]; then
+    skip_step
+    return 0
+  fi
+
+  # ROK-1466: the companion bot reads API_URL. Bind it to the same target the
+  # probe just validated so a fleet run drives the env's API rather than a
+  # localhost:3000 that does not exist inside the runner container.
+  _export_e2e_target
+
+  # ROK-1509: on the fleet, point the companion bot at THIS slot's channel set
+  # (slot-N-*) so it never discovers a sibling's channels or an orphaned
+  # ephemeral voice channel. Local runs stay on whole-guild discovery.
+  _export_smoke_channel_set
+
+  # ROK-1689: on the fleet, run with discord-smoke.yml's concurrency / retries
+  # / timeouts / voice-join skip so a fleet gate agrees with GitHub CI.
+  _apply_ci_smoke_parity
+
+  _ensure_test_bot_deps || return 1
+
+  # tools/test-bot reads its own .env (companion-bot token + guild ID).
+  # Missing config there surfaces as a clean failure inside `npm run smoke`,
+  # not something this script needs to pre-flight.
+  #
+  # Fleet-wide Discord serialization. The companion bot's Discord token and
+  # the Raid Ledger bot's token each only allow ONE active session at a
+  # time across Discord — two slots running smoke concurrently cause a
+  # bot disconnect war and non-deterministic test failures. Acquire a
+  # flock on /state-locks/discord.lock (bind-mounted into the runner from
+  # /srv/rl-infra/state/locks/) before running smoke, release after.
+  #
+  # Runner vs laptop is decided by the /workspace-or-RL_TARGET=remote
+  # predicate plus RL_SLOT (rl-infra/runner/check-state-locks.sh), not by the
+  # lock dir's existence. A laptop runs unsynchronized (single host = no
+  # cross-slot contention); on a runner missing the mount the check exits 98
+  # (a named FATAL) and the step fails instead of running unsynchronized.
+  local lock_dir="${RL_DISCORD_LOCK_DIR:-/state-locks}"
+  _check_state_locks_mount "$lock_dir" || return 1
+  if [[ -d "$lock_dir" ]] && _discord_lock_required; then
+    local lock_file="$lock_dir/discord.lock"
+    echo "Acquiring fleet Discord lock at $lock_file (up to 45 min)..."
+    local wait_start
+    wait_start=$(date +%s)
+    # flock fd 9 against the lock file. -w 2700 waits up to 45 min before
+    # timing out. Subshell scopes the fd so the lock auto-releases when smoke
+    # exits. ROK-1689: CI parity (concurrency 1, 2 retries, 90s timeouts) makes
+    # a sibling slot's ~126-test run hold the lock far longer than 10 min.
+    (
+      exec 9>"$lock_file"
+      if ! flock -w 2700 9; then
+        echo -e "${RED}Timed out (45 min) waiting for Discord lock. Another slot is hogging it.${NC}" >&2
+        echo -e "${RED}  Check: docker exec <runner> cat /state-locks/discord.lock — empty file but a flock holder.${NC}" >&2
+        exit 75   # sysexits.h EX_TEMPFAIL — signals lock-acquisition failure to outer shell
+      fi
+      local wait_end
+      wait_end=$(date +%s)
+      echo "Got Discord lock (waited $((wait_end - wait_start))s); running smoke."
+      cd "$REPO_ROOT/tools/test-bot" && npm run smoke
+    )
+    local rc=$?
+    if (( rc == 75 )); then
+      return 1   # lock-timeout → fail the step
+    fi
+    return $rc
+  fi
+
+  (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
+}
+
+# $3 — `plain` (the request arrived over http: no CSP upgrade-insecure-requests
+# — ROK-1577, a plain-HTTP LAN deploy must not go blank) or `https` (direct TLS
+# or X-Forwarded-Proto: https — the directive present). HSTS is required in BOTH
+# modes (ROK-1578): browsers ignore it over http, and a proxy hop that drops
+# X-Forwarded-Proto must not be able to strip it from an HTTPS site.
+_assert_security_headers() {
+  local headers="$1" target="$2" mode="${3:-https}"
+  local h required='Content-Security-Policy Strict-Transport-Security X-Content-Type-Options X-Frame-Options Referrer-Policy Permissions-Policy'
+  for h in $required; do
+    if ! echo "$headers" | grep -qi "^${h}:"; then
+      echo -e "${RED}Missing header ${h} on ${target}${NC}"
+      echo "$headers"
+      return 1
+    fi
+  done
+  if [ "$mode" = https ]; then
+    if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
+      echo -e "${RED}CSP missing upgrade-insecure-requests on ${target} (HTTPS request)${NC}"
+      return 1
+    fi
+  else
+    if echo "$headers" | grep -qi "^Content-Security-Policy:.*upgrade-insecure-requests"; then
+      echo -e "${RED}CSP carries upgrade-insecure-requests on a plain-HTTP request to ${target} — a LAN deploy would render blank (ROK-1577)${NC}"
+      return 1
+    fi
+  fi
+  if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*report-uri /api/csp-report"; then
+    echo -e "${RED}CSP missing report-uri on ${target}${NC}"
+    return 1
+  fi
+  if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*frame-ancestors 'none'"; then
+    echo -e "${RED}CSP missing frame-ancestors 'none' on ${target}${NC}"
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+print_summary() {
+  echo ""
+  echo -e "${YELLOW}========== Summary ==========${NC}"
+  # TWO spaces after the padded name, not one (ROK-1565). `%-30s` pads only
+  # SHORT names, so a long one — `Playwright (desktop + mobile, scoped: 2
+  # specs)` is 45 chars — collapsed the separator to a single space and the
+  # sentinel parser (tools/mcp-rl-fleet/src/gate-summary.ts), which keys on the
+  # gap, stopped seeing the row at all.
+  printf "%-30s  %s\n" "Check" "Result"
+  printf "%-30s  %s\n" "-----" "------"
+  for i in "${!CHECK_NAMES[@]}"; do
+    local color="$GREEN"
+    if [ "${CHECK_RESULTS[$i]}" = "FAIL" ]; then
+      color="$RED"
+    elif [ "${CHECK_RESULTS[$i]}" = "SKIPPED" ]; then
+      color="$YELLOW"
+    fi
+    local note="${CHECK_NOTES[$i]:-}"
+    printf "%-30s  ${color}%s${NC}%s\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}" \
+      "${note:+ — $note}"
+  done
+  echo ""
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+# Record an --only-<mode> selection. A second, different --only-* flag is a
+# contradiction rather than something to merge, so it exits 2 — the invocation
+# error code, distinct from the exit 1 the pipeline uses for a failing check.
+# Args: $1 - e2e | integration | unit.
+_set_only_mode() {
+  if [ -n "$only_mode" ] && [ "$only_mode" != "$1" ]; then
+    echo -e "${RED}--only-${only_mode} and --only-$1 are mutually exclusive.${NC}" >&2
+    exit 2
+  fi
+  only_mode="$1"
+  if [ "$1" = "e2e" ]; then only_e2e=true; fi
+  return 0
+}
+
+# --only-integration / --only-unit gate. Runs exactly one step for real and
+# stamps EVERY other step SKIPPED, in run_default_gate's order, so a narrowed
+# summary is a complete list. Completeness is the point: an earlier revision
+# omitted the rows it never reached, so --only-integration on a
+# migration-touching branch ended green with no "Migration validation" row at
+# all — a gate quietly missing a check it normally performs.
+#
+# Entries are "<summary row>|<selector>"; a non-empty selector matching $1 runs
+# `run_<selector>_tests` for real, everything else is stamped by the flag.
+# Args: $1 - integration | unit.
+run_narrowed_gate() {
+  local selected="$1" flag="--only-$1" entry name selector
+  for entry in \
+    "Build (all workspaces)|" \
+    "TypeScript (all)|" \
+    "Lint (all)|" \
+    "Bundle size budget|" \
+    "Shell parse check (scripts/*.sh)|" \
+    "${unit_step_label}|unit" \
+    "Tools unit tests (mcp servers)|" \
+    "Integration tests (api)|integration" \
+    "Migration validation|" \
+    "Container startup|" \
+    "Playwright (desktop + mobile)|" \
+    "Discord smoke (companion bot)|"; do
+    name="${entry%|*}"
+    selector="${entry##*|}"
+    if [ -n "$selector" ] && [ "$selector" = "$selected" ]; then
+      run_step "$name" "run_${selector}_tests"
+    else
+      run_step "$name" skip_by_flag "$flag"
+    fi
+  done
+}
+
+# The default gate: everything, modulo --static / --only-e2e / diff+env scoping.
+run_default_gate() {
+  if ! $only_e2e; then
+    run_step "Build (all workspaces)" run_build
+    run_step "TypeScript (all)" run_typecheck
+    run_step "Lint (all)" run_lint
+    # Static, deterministic check on the build output — BOTH static and full.
+    # After typecheck + lint: run_step stops on the first FAIL, so an overrun
+    # placed earlier would hide their results.
+    run_step "Bundle size budget" run_bundle_budget
+    # Static, deterministic check — runs in BOTH static and full gates.
+    run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
+    run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
+
+    # Unit + integration are the slow, behavioral checks. In --static (lite
+    # gate) mode they're deferred to GitHub CI, which runs them sharded +
+    # randomized on every PR. Full mode keeps them local.
+    if ! $static_mode; then
+      # ROK-1793 S1: --fleet on a single-workspace diff skips the other
+      # workspace's suites, each with its own SKIPPED row naming the reason.
+      if _fleet_skips api; then
+        run_step "Unit tests (api jest)" skip_by_fleet_scope \
+          "only the api specs that read web/ or every tracked file ran (in the unit step)"
+      fi
+      if _fleet_skips web; then run_step "Unit tests (web vitest)" skip_by_fleet_scope; fi
+      run_step "$unit_step_label" run_unit_tests
+      run_step "Tools unit tests (mcp servers)" run_tools_tests
+      run_step "Contract schema specs (packages/contract)" run_contract_specs
+      if _fleet_skips api; then
+        run_step "Integration tests (api)" skip_by_fleet_scope
+      else
+        run_step "Integration tests (api)" run_integration_tests
+      fi
+    fi
+
+    # Migration and container checks handle their own SKIPPED/PASS/FAIL
+    # recording. They run in BOTH static and full modes: cheap (auto-SKIP)
+    # when no migration/infra files changed, and critical local-validation
+    # carve-outs when they DID change — a bad migration can wedge a deploy
+    # and a bad allinone image caused a prod outage (CLAUDE.md STRICT).
+    run_step "Migration validation" run_migration_validation
+    run_step "Container startup" run_container_validation
+  fi
+
+  # E2E checks are auto-scoped (diff + env gated). They SKIP cleanly when the
+  # diff doesn't touch their surface or when the dev env isn't running.
+  # In --static mode they're skipped entirely (deferred to GitHub CI).
+  if $contrast_audit; then
+    run_step "Contrast audit (report-only)" run_contrast_audit
+  elif ! $static_mode; then
+    _prepare_playwright_scope
+    RUN_STEP_DEFER_FAIL=1
+    run_step "$PLAYWRIGHT_STEP_LABEL" run_playwright_e2e
+    RUN_STEP_DEFER_FAIL=0
+    run_step "Discord smoke (companion bot)" run_discord_smoke
+    _exit_if_deferred_fail
+  fi
+}
+
+# A Playwright FAIL is deferred (see RUN_STEP_DEFER_FAIL) so the Discord smoke
+# row still reports. Nothing may print "All checks passed!" after it.
+_exit_if_deferred_fail() {
+  if [ "${GATE_DEFERRED_FAIL:-0}" = 1 ]; then
+    print_summary
+    echo -e "${RED}Playwright FAILED (Discord smoke row: $(_recorded_result "Discord smoke (companion bot)")).${NC}"
+    exit 1
+  fi
+}
+
+# _recorded_result <step name>: the last result record_result stored for that
+# step, or "not reported" when the step never recorded one.
+_recorded_result() {
+  local i
+  for ((i = ${#CHECK_NAMES[@]} - 1; i >= 0; i--)); do
+    if [ "${CHECK_NAMES[$i]}" = "$1" ]; then
+      echo "${CHECK_RESULTS[$i]}"
+      return 0
+    fi
+  done
+  echo "not reported"
+}
+
+main() {
+  # Accept --full for explicitness (default behavior).
+  # --ci hard-fails on missing local prereqs (pg_dump) instead of skipping
+  # so CI never silently skips backup integration tests.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --full) shift ;;
+      --static) static_mode=true; shift ;;
+      --scope=*) scope_mode="${1#--scope=}"; shift ;;
+      --ci) ci_mode=true; shift ;;
+      --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
+      --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
+      --only-e2e) _set_only_mode e2e; shift ;;
+      --contrast-audit) contrast_audit=true; shift ;;
+      --only-integration) _set_only_mode integration; shift ;;
+      --only-unit) _set_only_mode unit; shift ;;
+      --no-coverage) no_coverage=true; shift ;;
+      --fleet) fleet_mode=true; no_coverage=true; shift ;;
+      # ROK-1793: the fleet runner gets only RL_SLOT/RL_TARGET from the laptop
+      # env, so INTEGRATION_PARALLEL rides in as a flag (rl_validate_ci args).
+      --integration-parallel=*) export INTEGRATION_PARALLEL="${1#--integration-parallel=}"; shift ;;
+      *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
+    esac
+  done
+
+  if $no_coverage; then
+    unit_step_label="Unit tests (no coverage)"
+  fi
+
+  # ROK-1466: --fleet is the whole gate against a remote env, so it contradicts
+  # both narrowing families, and it REFUSES to run without an explicit target.
+  # Falling back to localhost inside a runner container is the failure this flag
+  # exists to prevent: check_env_up would probe a :3000 nothing listens on, and
+  # (with --with-e2e) Playwright's webServer block would spend 120s trying to
+  # spawn Vite before failing with an error that names neither cause.
+  if $fleet_mode; then
+    if [ -n "$only_mode" ]; then
+      echo -e "${RED}--fleet and --only-${only_mode} are mutually exclusive (--fleet runs every step).${NC}" >&2
+      exit 2
+    fi
+    if $static_mode; then
+      echo -e "${RED}--fleet and --static are mutually exclusive (--fleet includes the behavioral suites --static defers).${NC}" >&2
+      exit 2
+    fi
+    if [ -z "${BASE_URL:-}" ] && [ -z "${PLAYWRIGHT_BASE_URL:-}" ]; then
+      echo -e "${RED}--fleet requires an explicit target: export BASE_URL (or PLAYWRIGHT_BASE_URL) pointing at the deployed env, e.g. BASE_URL=http://rl-env-<slug>-allinone${NC}" >&2
+      exit 2
+    fi
+    _reject_internal_http_target "${BASE_URL:-${PLAYWRIGHT_BASE_URL:-}}" || exit 2
+
+    # Running e2e against the deployed env IS the point of --fleet. Left on
+    # "auto" the steps were diff-gated and SKIPped on any branch that happened
+    # not to touch web/**, contradicting the flag's own documentation.
+    # --no-e2e still wins: an explicit opt-out beats an implied opt-in.
+    if [ "$e2e_mode" = "auto" ]; then
+      e2e_mode="on"
+      echo -e "${YELLOW}--fleet: e2e steps enabled against the explicit target (pass --no-e2e to opt out)${NC}"
+    fi
+  fi
+
+  # --static already skips unit, integration AND e2e, so pairing it with any
+  # narrowing flag asks for two contradictory things. EVERY --static/--only-*
+  # conflict exits 2 (invocation error) — including --only-e2e, which predates
+  # only_mode and used to fall through to an exit 1 here, contradicting the
+  # usage text and making the failure indistinguishable from a failed check.
+  if $static_mode && [ -n "$only_mode" ]; then
+    # NOT `[ ... ] && detail=...`: a false test makes that list return 1, and
+    # `set -e` would abort the script with exit 1 — the very code this guard
+    # exists to avoid.
+    local detail=""
+    if [ "$only_mode" = "e2e" ]; then detail=" (static skips all e2e)"; fi
+    echo -e "${RED}--static and --only-${only_mode} are mutually exclusive${detail}.${NC}" >&2
+    exit 2
+  fi
+
+  if $contrast_audit && ! $only_e2e; then
+    echo -e "${RED}--contrast-audit is only valid together with --only-e2e.${NC}" >&2
+    exit 2
+  fi
+
+  if $only_e2e && [ "$e2e_mode" = "off" ]; then
+    echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}" >&2
+    exit 2
+  fi
+
+  if $static_mode && [ "$e2e_mode" = "on" ]; then
+    echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}" >&2
+    exit 2
+  fi
+
+  # ROK-1792 — an explicit spec list. Validated up front (exit 2, invocation
+  # error) and checked against everything that would leave it unrun.
+  _parse_e2e_specs || exit 2
+  if [ -n "$E2E_SPECS_LIST" ]; then
+    local specs_conflict=""
+    case "${E2E_SCOPE:-auto}" in
+      auto|"") ;;
+      *) specs_conflict="E2E_SCOPE=${E2E_SCOPE}" ;;
+    esac
+    # Every mode that never reaches run_playwright_e2e (Codex P2, ROK-1792):
+    # --static, --no-e2e, --only-unit, --only-integration, and --contrast-audit
+    # (which swaps the Playwright tier for the sweep under --only-e2e).
+    if $static_mode; then specs_conflict="--static"; fi
+    if [ "$e2e_mode" = "off" ]; then specs_conflict="--no-e2e"; fi
+    case "$only_mode" in unit|integration) specs_conflict="--only-${only_mode}" ;; esac
+    if $contrast_audit; then specs_conflict="--contrast-audit"; fi
+    if [ -n "$specs_conflict" ]; then
+      echo -e "${RED}E2E_SPECS and ${specs_conflict} are mutually exclusive.${NC}" >&2
+      exit 2
+    fi
+  fi
+
+  echo -e "${GREEN}Starting local CI validation...${NC}"
+  detect_scope
+
+  # Resolve --scope into effective_scope (auto → detected_workspace from detect_scope).
+  case "$scope_mode" in
+    auto) effective_scope="$detected_workspace" ;;
+    all|api|web) effective_scope="$scope_mode" ;;
+    *) echo -e "${RED}Invalid --scope=${scope_mode} (expected all|api|web|auto)${NC}"; exit 1 ;;
+  esac
+  if [ "$effective_scope" != "all" ]; then
+    echo -e "${YELLOW}Scope-narrowed gate: build/typecheck/lint for '${effective_scope}' workspace (+contract) only — GitHub CI still runs the full path-filtered suite.${NC}"
+  fi
+
+  # ROK-1331 M11 — bookend the full validate-ci run with paired events so
+  # dashboards can show "last validate-ci on branch X took T seconds, exit
+  # code C". validate.end fires from an EXIT trap so abort paths (set -e,
+  # ctrl-C, run_step's fail-fast exit) still produce a terminal event.
+  #
+  # ROK-1336 fix: validate_start_ms + ci_flags must be SCRIPT-SCOPE, not
+  # `local` to main(). The EXIT trap fires AFTER main() returns, at which
+  # point locals are out of scope — under set -u the trap aborted with
+  # `validate_start_ms: unbound variable` and validate.end never landed
+  # in the perf log. (Discovered by running validate-ci --only-e2e directly
+  # on the runner and reading the trap's error to stderr.)
+  validate_start_ms=$(perf_now_ms)
+  validate_ci_flags="$*"
+  perf_emit_local "validate.start" "$(python3 -c "
+import json, sys
+print(json.dumps({'ci_flags': sys.argv[1]}))
+" "$validate_ci_flags" 2>/dev/null || echo '{}')"
+  _perf_validate_end() {
+    local rc="$?"
+    _cleanup_playwright_auth_dir
+    local end_ms dur
+    end_ms=$(perf_now_ms)
+    dur=$(( end_ms - validate_start_ms ))
+    perf_emit_local "validate.end" "$(python3 -c "
+import json, sys
+print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2]), 'ci_flags': sys.argv[3]}))
+" "$dur" "$rc" "$validate_ci_flags" 2>/dev/null || echo '{}')"
+  }
+  # A3 (2026-09-03): install the COMBINED handler, not _perf_validate_end
+  # directly. bash keeps exactly one EXIT trap, and the Redis sidecar used to
+  # overwrite this one — losing every validate.end event on fleet integration
+  # runs. _validate_ci_on_exit tears down this run's sidecar and then delegates
+  # here with $? preserved.
+  trap _validate_ci_on_exit EXIT
+
+  case "$only_mode" in
+    integration|unit) run_narrowed_gate "$only_mode" ;;
+    *) run_default_gate ;;
+  esac
+
+  _exit_if_deferred_fail
+  print_summary
+  echo -e "${GREEN}All checks passed!${NC}"
+}
+
+# ROK-1331 M6b: when sourced with RL_VALIDATE_CI_DRY=1, expose all
+# functions without auto-running the main pipeline. Lets bash test
+# harnesses source the script and invoke `run_unit_tests` directly with
+# stubbed npm/npx in PATH. Production callers (operators, /push, CI) do
+# NOT set this var so the existing behavior is unchanged.
+if [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  main "$@"
+fi

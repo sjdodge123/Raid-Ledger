@@ -1,0 +1,444 @@
+/**
+ * Read-side helpers for LFG intents (ROK-1451).
+ *
+ * Every query here applies the two eligibility rules from the spec:
+ *   1. "Active" means `status = 'active'` AND `expires_at > now()` — the cron
+ *      is bookkeeping, never the source of truth.
+ *   2. Deactivated / banned holders are excluded from counts, members and
+ *      state derivation (ROK-313 guard family).
+ */
+import { NotFoundException } from '@nestjs/common';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  min,
+  notInArray,
+  sql,
+} from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  effectiveViabilityThreshold,
+  type LfgGroupSummaryDto,
+  type LfgHeartedGameDto,
+  type LfgMemberDto,
+  type LfgPlayingNowDto,
+  type LfgState,
+} from '@raid-ledger/contract';
+import * as schema from '../drizzle/schema';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
+import { MEMBER_COLUMNS, toMemberDto } from './lfg-member-projection.helpers';
+import { readPlayingNow } from './lfg-playing.helpers';
+import { LFG_LIST_LIMIT } from './lfg.constants';
+
+export type LfgDb = PostgresJsDatabase<typeof schema>;
+
+/** Raw aggregate shape shared by the group list and single-group reads. */
+export interface LfgGroupAggregate {
+  gameId: number;
+  gameName: string;
+  gameSlug: string;
+  gameCoverUrl: string | null;
+  viabilityThreshold: number | null;
+  /** Every eligible active intent — BOTH urgency classes (ROK-1479 D2). */
+  activeCount: number;
+  soonestExpiresAt: Date | null;
+  hasOwnIntent: boolean;
+  /** The `urgency = 'now'` subset of {@link LfgGroupAggregate.activeCount}. */
+  nowCount: number;
+  soonestNowExpiresAt: Date | null;
+  /**
+   * The group's live spawned session (ROK-1494 D9), when one exists.
+   * Optional on the aggregate because the SQL group-by does not produce it —
+   * it is attached by the caller from `readPlayingNow`, and absent means the
+   * same thing as null.
+   */
+  playingNow?: LfgPlayingNowDto | null;
+}
+
+/**
+ * Derive the group state from the number of eligible active intents.
+ *
+ * @param activeCount - Eligible active intents on the game.
+ * @returns `'lfg'` at 1, `'lfm'` at 2+, `null` at 0.
+ */
+export function deriveLfgState(activeCount: number): LfgState {
+  if (activeCount >= 2) return 'lfm';
+  if (activeCount === 1) return 'lfg';
+  return null;
+}
+
+/**
+ * Derive the viability signal. Exposed for consumers to render; never acted on.
+ *
+ * The stored threshold is floored at `DEFAULT_VIABILITY_THRESHOLD` through the
+ * SHARED `effectiveViabilityThreshold` the copy uses (ROK-1532), because
+ * `cooptimus_online_max` carries `0` as the sync's "no Co-Optimus co-op entry"
+ * marker and can carry `1` for a matched entry. Without the floor a group of
+ * one reported `isViable`, and the page rendered "You have a full group"
+ * underneath "one more makes it a group".
+ *
+ * @param activeCount - Eligible active intents on the game.
+ * @param threshold - `games.cooptimusOnlineMax`, or null when unknown.
+ * @returns True only when a real threshold exists and the group has met the
+ *   floored version of it.
+ */
+export function deriveViability(
+  activeCount: number,
+  threshold: number | null,
+): boolean {
+  if (threshold === null) return false;
+  if (activeCount < 1) return false;
+  return activeCount >= effectiveViabilityThreshold(threshold);
+}
+
+/**
+ * SQL predicate: a `users` row every LFG read still counts (ROK-313 family).
+ *
+ * Shared by all four LFG reads so the eligibility rule lives in ONE place —
+ * the owner / heart / activity queries elsewhere in the codebase each omit it
+ * (`igdb-steam-interest.helpers.ts`, `availability.service.ts`), so anything
+ * reading those tables from LFG has to add it back.
+ *
+ * Requires `users` to be joined into the query.
+ */
+export function eligibleUser() {
+  return and(isNull(schema.users.deactivatedAt), isNull(schema.users.bannedAt));
+}
+
+/**
+ * SQL predicate: an intent row that genuinely counts right now.
+ *
+ * Exported so the group-page reads share ONE definition of "live" with the
+ * list/detail reads (S3) — a second inline copy is how the two drift.
+ *
+ * Requires `lfg_intents` AND `users` to be joined into the query.
+ *
+ *
+ * Deliberately says nothing about the GAME: `listGroupMembers` shares this
+ * predicate and does not join `games`, so a `VISIBILITY_FILTER()` in here
+ * would inject a silent cross join. The two list reads that DO join `games`
+ * apply the filter themselves (ROK-1453).
+ *
+ * @param now - Instant to measure expiry against.
+ */
+export function liveIntent(now: Date) {
+  return and(
+    eq(schema.lfgIntents.status, 'active'),
+    gt(schema.lfgIntents.expiresAt, now),
+    eligibleUser(),
+  );
+}
+
+/** Project a raw aggregate row into the wire DTO. */
+export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
+  return {
+    gameId: row.gameId,
+    gameName: row.gameName,
+    gameSlug: row.gameSlug,
+    gameCoverUrl: row.gameCoverUrl,
+    activeCount: row.activeCount,
+    state: deriveLfgState(row.activeCount),
+    viabilityThreshold: row.viabilityThreshold,
+    isViable: deriveViability(row.activeCount, row.viabilityThreshold),
+    hasOwnIntent: row.hasOwnIntent,
+    soonestExpiresAt: row.soonestExpiresAt?.toISOString() ?? null,
+    nowCount: row.nowCount,
+    soonestNowExpiresAt: row.soonestNowExpiresAt?.toISOString() ?? null,
+    playingNow: row.playingNow ?? null,
+  };
+}
+
+/**
+ * Columns every group aggregate selects. A `null` viewer (a channel post with
+ * no reader, ROK-1435) makes `hasOwnIntent` a constant `false` rather than
+ * computing it against somebody's id.
+ */
+export function groupColumns(viewerId: number | null) {
+  return {
+    gameId: schema.games.id,
+    gameName: schema.games.name,
+    gameSlug: schema.games.slug,
+    gameCoverUrl: schema.games.coverUrl,
+    viabilityThreshold: schema.games.cooptimusOnlineMax,
+    activeCount: count(),
+    soonestExpiresAt: min(schema.lfgIntents.expiresAt),
+    hasOwnIntent:
+      viewerId === null
+        ? sql<boolean>`false`
+        : sql<boolean>`bool_or(${schema.lfgIntents.userId} = ${viewerId})`,
+    // Aggregate FILTERs rather than a second query: both land in the same
+    // GROUP BY the counts already use, so a now-count costs no extra scan.
+    // `.mapWith` reuses the columns' own decoders, so these two agree with
+    // `count()` / `min()` on types instead of leaking raw driver values.
+    nowCount:
+      sql<number>`count(*) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+        Number,
+      ),
+    soonestNowExpiresAt:
+      sql<Date | null>`min(${schema.lfgIntents.expiresAt}) FILTER (WHERE ${schema.lfgIntents.urgency} = 'now')`.mapWith(
+        schema.lfgIntents.expiresAt,
+      ),
+  };
+}
+
+/**
+ * `GET /lfg` — every game with at least one eligible active intent.
+ *
+ * @param db - Drizzle handle.
+ * @param viewerId - Caller, used to compute `hasOwnIntent`.
+ * @returns Group summaries ordered by `activeCount` desc, then soonest expiry.
+ */
+export async function listActiveGroups(
+  db: LfgDb,
+  viewerId: number,
+): Promise<LfgGroupSummaryDto[]> {
+  const rows = await queryActiveGroups(db, viewerId);
+  return rows.map((r) => toGroupSummary(r));
+}
+
+/**
+ * Viewer-free twin of {@link listActiveGroups} for channel posts (ROK-1435
+ * weekly digest). Same query, same order, same limit — but no viewer id ever
+ * enters it, so there is no per-reader fact to strip afterwards (the
+ * ROK-1626 failure mode). Returns the raw aggregates; callers project only
+ * the viewer-independent fields they need.
+ *
+ * @param db - Drizzle handle.
+ */
+export function listActiveGroupsForChannel(
+  db: LfgDb,
+): Promise<LfgGroupAggregate[]> {
+  return queryActiveGroups(db, null);
+}
+
+/** The one definition of "the live group list", shared by both reads. */
+async function queryActiveGroups(
+  db: LfgDb,
+  viewerId: number | null,
+): Promise<LfgGroupAggregate[]> {
+  return (
+    db
+      .select(groupColumns(viewerId))
+      .from(schema.lfgIntents)
+      .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+      .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
+      // The `?lfg=1` grid renders whatever this returns, so an admin-hidden or
+      // banned game with a live intent would walk straight back onto the
+      // Library. Every other game-listing query applies the shared filter
+      // (`igdb-discover-deals.helpers.ts` and siblings); this read was the gap.
+      .where(and(liveIntent(new Date()), VISIBILITY_FILTER()))
+      .groupBy(schema.games.id)
+      .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
+      .limit(LFG_LIST_LIMIT)
+  );
+}
+
+/**
+ * Aggregate a single game's group. Returns a zero-count summary when the game
+ * exists but nobody is looking — an empty group is a valid read, not an error.
+ *
+ * @param db - Drizzle handle.
+ * @param game - The already-loaded game row.
+ * @param viewerId - Caller, used to compute `hasOwnIntent`.
+ */
+export async function getGroupSummary(
+  db: LfgDb,
+  game: typeof schema.games.$inferSelect,
+  viewerId: number,
+): Promise<LfgGroupSummaryDto> {
+  const [row] = await db
+    .select(groupColumns(viewerId))
+    .from(schema.lfgIntents)
+    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+    .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
+    .where(and(eq(schema.lfgIntents.gameId, game.id), liveIntent(new Date())))
+    .groupBy(schema.games.id);
+  // Read the session on BOTH branches: once the spawn converts every intent
+  // the aggregate row disappears entirely, and that zero-count branch is
+  // exactly AC3's state (D9).
+  const playingNow = await readPlayingNow(db, game.id);
+  if (!row) {
+    return toGroupSummary({
+      gameId: game.id,
+      gameName: game.name,
+      gameSlug: game.slug,
+      gameCoverUrl: game.coverUrl,
+      viabilityThreshold: game.cooptimusOnlineMax,
+      activeCount: 0,
+      soonestExpiresAt: null,
+      hasOwnIntent: false,
+      nowCount: 0,
+      soonestNowExpiresAt: null,
+      playingNow,
+    });
+  }
+  return toGroupSummary({ ...row, playingNow });
+}
+
+/**
+ * Roster for a group — eligible active holders only, oldest intent first.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose group to read.
+ */
+export async function listGroupMembers(
+  db: LfgDb,
+  gameId: number,
+): Promise<LfgMemberDto[]> {
+  const rows = await db
+    .select(MEMBER_COLUMNS)
+    .from(schema.lfgIntents)
+    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date())))
+    .orderBy(asc(schema.lfgIntents.createdAt), asc(schema.lfgIntents.id));
+  return rows.map(toMemberDto);
+}
+
+/** Correlated count of eligible active intents for the joined `games` row.
+ * The instant is passed as an ISO string: drizzle hands raw template params
+ * straight to postgres.js, which cannot Bind a bare `Date`. */
+function eligibleCountSubquery(now: Date) {
+  return sql<number>`(
+    SELECT COUNT(*)::int FROM lfg_intents li
+    JOIN users lu ON lu.id = li.user_id
+    WHERE li.game_id = ${schema.games.id}
+      AND li.status = 'active' AND li.expires_at > ${now.toISOString()}
+      AND lu.deactivated_at IS NULL AND lu.banned_at IS NULL
+  )`;
+}
+
+/** Project a hearted-game row onto the wire DTO. */
+function toHeartedGame(row: {
+  gameId: number;
+  gameName: string;
+  gameSlug: string;
+  gameCoverUrl: string | null;
+  heartedAt: Date;
+  activeCount: number;
+}): LfgHeartedGameDto {
+  return {
+    gameId: row.gameId,
+    gameName: row.gameName,
+    gameSlug: row.gameSlug,
+    gameCoverUrl: row.gameCoverUrl,
+    heartedAt: row.heartedAt.toISOString(),
+    activeCount: Number(row.activeCount),
+  };
+}
+
+/** Games the viewer already holds a live intent for — excluded from hearts. */
+export function ownLiveIntents(db: LfgDb, viewerId: number, now: Date) {
+  return db
+    .select({ gameId: schema.lfgIntents.gameId })
+    .from(schema.lfgIntents)
+    .where(
+      and(
+        eq(schema.lfgIntents.userId, viewerId),
+        eq(schema.lfgIntents.status, 'active'),
+        gt(schema.lfgIntents.expiresAt, now),
+      ),
+    );
+}
+
+/**
+ * `GET /lfg/hearted` — the caller's manual hearts with no active intent of
+ * their own. Strictly read-only: LFG never writes to `game_interests`.
+ *
+ * @param db - Drizzle handle.
+ * @param viewerId - Caller whose hearts to read.
+ */
+export async function listHeartedWithoutIntent(
+  db: LfgDb,
+  viewerId: number,
+): Promise<LfgHeartedGameDto[]> {
+  const now = new Date();
+  const rows = await db
+    .select({
+      gameId: schema.games.id,
+      gameName: schema.games.name,
+      gameSlug: schema.games.slug,
+      gameCoverUrl: schema.games.coverUrl,
+      heartedAt: schema.gameInterests.createdAt,
+      activeCount: eligibleCountSubquery(now),
+    })
+    .from(schema.gameInterests)
+    .innerJoin(schema.games, eq(schema.games.id, schema.gameInterests.gameId))
+    .where(
+      and(
+        eq(schema.gameInterests.userId, viewerId),
+        eq(schema.gameInterests.source, 'manual'),
+        // Same leak, other read: a hearted game the admin later hid must not
+        // come back as a cold-start suggestion.
+        VISIBILITY_FILTER(),
+        notInArray(
+          schema.gameInterests.gameId,
+          ownLiveIntents(db, viewerId, now),
+        ),
+      ),
+    )
+    .orderBy(desc(schema.gameInterests.createdAt))
+    .limit(LFG_LIST_LIMIT);
+  return rows.map(toHeartedGame);
+}
+
+/**
+ * Load a game row or 404 — every `/lfg/:gameId/*` read and write starts here,
+ * so an unknown id is a `NotFoundException` about the GAME rather than a
+ * missing-route 404 or an FK error further down.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Route parameter.
+ */
+export async function requireGame(
+  db: LfgDb,
+  gameId: number,
+): Promise<typeof schema.games.$inferSelect> {
+  const [game] = await db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  if (!game) throw new NotFoundException('Game not found');
+  return game;
+}
+
+/**
+ * The live forum thread of a game's LFG group, or null.
+ *
+ * ROK-1483 A10: `LfgGroupDetailDto.threadId` is how the web learns which
+ * thread the conversation panel should read — the alternative was a second
+ * endpoint and a second round trip on every group-page load.
+ *
+ * Scoped to the `open` row on purpose: the group PAGE shows the live group, so
+ * a closed group's old thread must not surface under a new one. The read
+ * endpoint's own resolver is deliberately broader, because history stays
+ * readable after a group closes (D12).
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - The game whose group is being read.
+ * @returns The Discord thread id, or null when the group has no forum post.
+ */
+export async function findOpenForumThreadId(
+  db: LfgDb,
+  gameId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ threadId: schema.lfgGroupMessages.threadId })
+    .from(schema.lfgGroupMessages)
+    .where(
+      and(
+        eq(schema.lfgGroupMessages.gameId, gameId),
+        eq(schema.lfgGroupMessages.state, 'open'),
+        eq(schema.lfgGroupMessages.postKind, 'forum'),
+        isNotNull(schema.lfgGroupMessages.threadId),
+      ),
+    )
+    .limit(1);
+  return row?.threadId ?? null;
+}

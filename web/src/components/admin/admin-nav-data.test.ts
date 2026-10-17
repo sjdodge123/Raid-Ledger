@@ -1,0 +1,389 @@
+/**
+ * Unit tests for admin navigation data builder functions (ROK-359, ROK-267).
+ * Tests consolidation: core items, demo data conditional, plugin integration items.
+ * Discord integration is now plugin-managed (ROK-267), not a core integration.
+ */
+import { describe, it, expect } from 'vitest';
+import {
+    buildCoreIntegrationItems,
+    buildPluginIntegrationItems,
+    buildDiscordNavItems,
+    buildNavSections,
+} from './admin-nav-data';
+import type { PluginInfoDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
+
+const allOfflineStatuses = {
+    igdb: { configured: false, loading: false },
+    steam: { configured: false, loading: false },
+};
+
+describe('buildCoreIntegrationItems', () => {
+    it('returns 5 items (IGDB, Steam, ITAD, Co-Optimus and Calendar Sync)', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        expect(items).toHaveLength(5);
+        expect(items.map((i) => i.label)).toEqual(['IGDB / Twitch', 'Steam', 'ITAD', 'Co-Optimus', 'Calendar Sync']);
+    });
+
+    it('includes Co-Optimus with correct path (ROK-1397)', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const cooptimus = items.find((i) => i.label === 'Co-Optimus');
+        expect(cooptimus).toBeDefined();
+        expect(cooptimus!.to).toBe('/admin/settings/integrations/cooptimus');
+    });
+
+    it('includes IGDB with correct path', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const igdb = items.find((i) => i.label === 'IGDB / Twitch');
+        expect(igdb).toBeDefined();
+        expect(igdb!.to).toBe('/admin/settings/integrations/igdb');
+    });
+
+    it('sets IGDB status to offline when not configured', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const igdb = items.find((i) => i.label === 'IGDB / Twitch');
+        expect(igdb!.status).toBe('offline');
+    });
+
+    it('sets IGDB status to online when configured', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: true, loading: false },
+            steam: { configured: false, loading: false },
+        });
+        const igdb = items.find((i) => i.label === 'IGDB / Twitch');
+        expect(igdb!.status).toBe('online');
+    });
+
+    it('sets IGDB status to loading when loading', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: false, loading: true },
+            steam: { configured: false, loading: false },
+        });
+        const igdb = items.find((i) => i.label === 'IGDB / Twitch');
+        expect(igdb!.status).toBe('loading');
+    });
+
+    it('includes Steam with correct path', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam).toBeDefined();
+        expect(steam!.to).toBe('/admin/settings/integrations/steam');
+    });
+
+    it('sets Steam status to offline when not configured', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam!.status).toBe('offline');
+    });
+
+    it('sets Steam status to online when configured', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: false, loading: false },
+            steam: { configured: true, loading: false },
+        });
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam!.status).toBe('online');
+    });
+
+    it('sets Steam status to loading when loading', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: false, loading: false },
+            steam: { configured: false, loading: true },
+        });
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam!.status).toBe('loading');
+    });
+});
+
+function makePlugin(overrides: Partial<PluginInfoDto> & { slug: string; name: string; status: PluginInfoDto['status'] }): PluginInfoDto {
+    return {
+        version: '1.0.0',
+        description: 'Test plugin',
+        author: { name: 'Test Author' },
+        gameSlugs: [],
+        capabilities: [],
+        integrations: [],
+        installedAt: null,
+        ...overrides,
+    };
+}
+
+describe('buildCoreIntegrationItems — Calendar Sync (ROK-1591)', () => {
+    it('includes Calendar Sync with correct path, offline by default (ROK-1591)', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const calendarSync = items.find((i) => i.label === 'Calendar Sync');
+        expect(calendarSync?.to).toBe('/admin/settings/integrations/calendar-sync');
+        expect(calendarSync?.status).toBe('offline');
+    });
+
+    it('sets Calendar Sync online when the kill switch is on, loading while loading (ROK-1591)', () => {
+        const on = buildCoreIntegrationItems({ ...allOfflineStatuses, calendarSync: { configured: true, loading: false } });
+        expect(on.find((i) => i.label === 'Calendar Sync')?.status).toBe('online');
+        const loading = buildCoreIntegrationItems({ ...allOfflineStatuses, calendarSync: { configured: false, loading: true } });
+        expect(loading.find((i) => i.label === 'Calendar Sync')?.status).toBe('loading');
+    });
+});
+
+describe('buildPluginIntegrationItems — part 1', () => {
+    it('returns empty array for empty plugin list', () => {
+        expect(buildPluginIntegrationItems([])).toHaveLength(0);
+    });
+
+    it('skips plugins that are not active', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'wow',
+                name: 'World of Warcraft',
+                status: 'inactive',
+                integrations: [{ key: 'bnet', name: 'Battle.net', configured: false, description: '', credentialLabels: [] }],
+            }),
+        ];
+        expect(buildPluginIntegrationItems(plugins)).toHaveLength(0);
+    });
+
+    it('returns items for active plugin integrations', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'wow',
+                name: 'World of Warcraft',
+                status: 'active',
+                integrations: [{ key: 'bnet', name: 'Battle.net', configured: true, description: '', credentialLabels: [] }],
+            }),
+        ];
+        const items = buildPluginIntegrationItems(plugins);
+        expect(items).toHaveLength(1);
+        expect(items[0]?.label).toBe('Battle.net');
+        expect(items[0]?.to).toBe('/admin/settings/integrations/plugin/wow/bnet');
+        expect(items[0]?.status).toBe('online');
+        expect(items[0]?.pluginSource).toBe('World of Warcraft');
+        expect(items[0]?.pluginSlug).toBe('wow');
+    });
+
+    it('excludes Discord plugin from integration items (ROK-430: Discord has its own section)', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'discord',
+                name: 'Discord Authentication',
+                status: 'active',
+                integrations: [{ key: 'discord-oauth', name: 'Discord', configured: true, description: '', credentialLabels: [] }],
+            }),
+        ];
+        const items = buildPluginIntegrationItems(plugins);
+        expect(items).toHaveLength(0);
+    });
+
+    it('sets newBadgeKey for plugin integration items', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'wow',
+                name: 'World of Warcraft',
+                status: 'active',
+                integrations: [{ key: 'bnet', name: 'Battle.net', configured: false, description: '', credentialLabels: [] }],
+            }),
+        ];
+        const items = buildPluginIntegrationItems(plugins);
+        expect(items[0]?.newBadgeKey).toBe('integration-nav-seen:wow:bnet');
+    });
+
+});
+
+describe('buildPluginIntegrationItems — part 2', () => {
+    it('returns offline status for unconfigured plugin integration', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'wow',
+                name: 'World of Warcraft',
+                status: 'active',
+                integrations: [{ key: 'bnet', name: 'Battle.net', configured: false, description: '', credentialLabels: [] }],
+            }),
+        ];
+        const items = buildPluginIntegrationItems(plugins);
+        expect(items[0]?.status).toBe('offline');
+    });
+
+    it('handles plugin with multiple integrations', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'wow',
+                name: 'World of Warcraft',
+                status: 'active',
+                integrations: [
+                    { key: 'bnet', name: 'Battle.net', configured: true, description: '', credentialLabels: [] },
+                    { key: 'raiderio', name: 'Raider.IO', configured: false, description: '', credentialLabels: [] },
+                ],
+            }),
+        ];
+        const items = buildPluginIntegrationItems(plugins);
+        expect(items).toHaveLength(2);
+    });
+
+});
+
+describe('buildDiscordNavItems — part 1', () => {
+    it('returns 3 items when bot is offline: Overview, Authentication, Bot', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: false, loading: false },
+        );
+        expect(items).toHaveLength(3);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot']);
+    });
+
+    it('returns 5 items when bot is connected: Overview, Authentication, Bot, Channels, Features', () => {
+        const items = buildDiscordNavItems(
+            { connected: true, connecting: false },
+            { configured: true, loading: false },
+        );
+        expect(items).toHaveLength(5);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Features']);
+    });
+
+    it('Authentication item shows online status when OAuth configured', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: true, loading: false },
+        );
+        const auth = items.find((i) => i.label === 'Authentication')!;
+        expect(auth.status).toBe('online');
+    });
+
+    it('Authentication item shows offline status when OAuth not configured', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: false, loading: false },
+        );
+        const auth = items.find((i) => i.label === 'Authentication')!;
+        expect(auth.status).toBe('offline');
+    });
+
+    it('Bot item shows online status when connected', () => {
+        const items = buildDiscordNavItems(
+            { connected: true, connecting: false },
+            { configured: true, loading: false },
+        );
+        const bot = items.find((i) => i.label === 'Bot')!;
+        expect(bot.status).toBe('online');
+    });
+
+    it('Bot item shows offline status when not connected', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: false, loading: false },
+        );
+        const bot = items.find((i) => i.label === 'Bot')!;
+        expect(bot.status).toBe('offline');
+    });
+
+    it('Bot item shows loading status when connecting', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: true },
+            { configured: true, loading: false },
+        );
+        const bot = items.find((i) => i.label === 'Bot')!;
+        expect(bot.status).toBe('loading');
+    });
+
+});
+
+describe('buildDiscordNavItems — part 2', () => {
+    it('Channels and Features hidden when bot is offline', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: true, loading: false },
+        );
+        expect(items.find((i) => i.label === 'Channels')).toBeUndefined();
+        expect(items.find((i) => i.label === 'Features')).toBeUndefined();
+    });
+
+});
+
+describe('buildNavSections — part 1', () => {
+    it('returns exactly 2 sections when no Discord items: General and Integrations', () => {
+        const sections = buildNavSections([], []);
+        expect(sections).toHaveLength(2);
+        expect(sections[0]?.id).toBe('general');
+        expect(sections[1]?.id).toBe('integrations');
+    });
+
+    it('returns 3 sections when Discord items provided', () => {
+        const discordItems = buildDiscordNavItems(
+            { connected: true, connecting: false },
+            { configured: true, loading: false },
+        );
+        const sections = buildNavSections([], [], discordItems);
+        expect(sections).toHaveLength(3);
+        expect(sections[0]?.id).toBe('general');
+        expect(sections[1]?.id).toBe('discord');
+        expect(sections[2]?.id).toBe('integrations');
+    });
+
+    it('General section has 6 items (including Demo Data and Logs)', () => {
+        const sections = buildNavSections([], []);
+        const general = sections.find((s) => s.id === 'general')!;
+        expect(general.children).toHaveLength(6);
+    });
+
+    it('Demo Data item is at index 2 (after Site Settings, User Management)', () => {
+        const sections = buildNavSections([], []);
+        const general = sections.find((s) => s.id === 'general')!;
+        expect(general.children[2]?.label).toBe('Demo Data');
+        expect(general.children[2]?.to).toBe('/admin/settings/general/data');
+    });
+
+    it('General section includes Site Settings, User Management, Scheduled Jobs, Backups, Logs', () => {
+        const sections = buildNavSections([], []);
+        const general = sections.find((s) => s.id === 'general')!;
+        const labels = general.children.map((c) => c.label);
+        expect(labels).toContain('Site Settings');
+        expect(labels).toContain('User Management');
+        expect(labels).toContain('Scheduled Jobs');
+        expect(labels).toContain('Backups');
+        expect(labels).toContain('Logs');
+    });
+
+    it('Integrations section includes Manage Plugins at the end', () => {
+        const sections = buildNavSections([], []);
+        const integrations = sections.find((s) => s.id === 'integrations')!;
+        const last = at(integrations.children, -1);
+        expect(last.label).toBe('Manage Plugins');
+        expect(last.to).toBe('/admin/settings/plugins');
+    });
+
+    it('Integrations section includes provided core integration items', () => {
+        const coreItems = buildCoreIntegrationItems(allOfflineStatuses);
+        const sections = buildNavSections(coreItems, []);
+        const integrations = sections.find((s) => s.id === 'integrations')!;
+        const labels = integrations.children.map((c) => c.label);
+        expect(labels).toContain('IGDB / Twitch');
+    });
+
+});
+
+describe('buildNavSections — part 2', () => {
+    it('Integrations section includes plugin items before Manage Plugins', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'wow',
+                name: 'World of Warcraft',
+                status: 'active',
+                integrations: [{ key: 'bnet', name: 'Battle.net', configured: true, description: '', credentialLabels: [] }],
+            }),
+        ];
+        const pluginItems = buildPluginIntegrationItems(plugins);
+        const sections = buildNavSections([], pluginItems);
+        const integrations = sections.find((s) => s.id === 'integrations')!;
+        const labels = integrations.children.map((c) => c.label);
+        const bnetIdx = labels.indexOf('Battle.net');
+        const pluginsIdx = labels.indexOf('Manage Plugins');
+        expect(bnetIdx).toBeGreaterThanOrEqual(0);
+        expect(bnetIdx).toBeLessThan(pluginsIdx);
+    });
+
+    it('General section has ≤6 core nav items', () => {
+        const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), []);
+        const general = sections.find((s) => s.id === 'general')!;
+        expect(general.children.length).toBeLessThanOrEqual(7);
+        expect(general.children.length).toBe(6);
+    });
+
+});

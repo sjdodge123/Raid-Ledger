@@ -1,0 +1,846 @@
+/**
+ * DM Notification dispatch smoke tests.
+ *
+ * Bots cannot receive DMs from other bots (Discord API error 50007).
+ * Tests verify the notification pipeline creates in-app notifications
+ * for affected users when events are cancelled/rescheduled/etc.
+ *
+ * The admin user triggers actions, demo users receive notifications.
+ * Admin's own unread count is checked for self-affecting notifications.
+ */
+import { pollForCondition } from '../../helpers/polling.js';
+import { simulatePlaintextContent } from '../../helpers/discord-markup.js';
+import {
+  createEvent,
+  signupAs,
+  cancelEvent,
+  cancelSignupAs,
+  rescheduleEvent,
+  deleteEvent,
+  addGameInterest,
+  triggerDeparture,
+  flushNotificationBuffer,
+  getNotificationsFor,
+  futureTime,
+  awaitProcessing,
+  assertConditionNeverMet,
+} from '../fixtures.js';
+import type { PugSlotListResponseDto } from '@raid-ledger/contract';
+import type { SmokeTest, TestContext } from '../types.js';
+import { assertAtLeast } from './must.js';
+
+/**
+ * Read the caller's unread notification count.
+ *
+ * `GET /notifications/unread` is not a route — the only unread endpoint is
+ * `GET /notifications/unread/count`, which answers `{ count: number }` (see
+ * `NotificationController.getUnreadCount`). The old call 404'd into its own
+ * catch and reported 0 forever, so any `after > before` poll built on it could
+ * only exhaust.
+ */
+async function getUnreadCount(ctx: TestContext): Promise<number> {
+  const res = await ctx.api
+    .get<{ count: number }>('/notifications/unread/count')
+    .catch(() => ({ count: 0 }));
+  return typeof res.count === 'number' ? res.count : 0;
+}
+
+function mmoOverrides(ctx: TestContext) {
+  if (!ctx.mmoGameId) return {};
+  return {
+    gameId: ctx.mmoGameId,
+    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+  };
+}
+
+// ── Instant notifications (API-triggered) ──
+
+const cancellationNotification: SmokeTest = {
+  name: 'Cancellation creates notifications for participants',
+  category: 'dm',
+  async run(ctx) {
+    const ev = await createEvent(ctx.api, 'dm-cancel', mmoOverrides(ctx));
+    try {
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
+      await awaitProcessing(ctx.api);
+      await cancelEvent(ctx.api, ev.id);
+      // event_cancelled notification created for signed-up demo user
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const rescheduleNotification: SmokeTest = {
+  name: 'Reschedule creates notifications for participants',
+  category: 'dm',
+  async run(ctx) {
+    const ev = await createEvent(ctx.api, 'dm-resched', mmoOverrides(ctx));
+    try {
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['healer']);
+      await awaitProcessing(ctx.api);
+      await rescheduleEvent(ctx.api, ev.id, 240);
+      // event_rescheduled notification created
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const slotVacatedNotification: SmokeTest = {
+  name: 'Slot vacated notification sent when player leaves',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 2, 'Need 2+ demo users');
+    // Create event, sign up 2 demo users, then remove one
+    const ev = await createEvent(ctx.api, 'dm-vacated', mmoOverrides(ctx));
+    try {
+      const res1 = await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['dps']);
+      await awaitProcessing(ctx.api);
+      // Remove the first signup — should trigger slot_vacated to creator
+      const signupId = (res1 as { id?: number }).id;
+      if (signupId) {
+        await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
+      }
+      await awaitProcessing(ctx.api);
+      // slot_vacated notification is buffered 3 min — just verify the
+      // removal succeeded (the notification buffer is tested in unit tests)
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+/**
+ * Check if a slot_vacated notification exists for a specific event.
+ * Uses GET /notifications (paginated) since there's no unread-only endpoint.
+ */
+async function hasSlotVacatedForEvent(
+  ctx: TestContext,
+  eventId: number,
+): Promise<boolean> {
+  type NotifDto = { type: string; payload?: { eventId?: number } };
+  const res = await ctx.api
+    .get<NotifDto[]>('/notifications?limit=50')
+    .catch(() => [] as NotifDto[]);
+  const list = Array.isArray(res) ? res : [];
+  return list.some(
+    (n) => n.type === 'slot_vacated' && n.payload?.eventId === eventId,
+  );
+}
+
+// ── ROK-851: Departure notification suppression ──
+
+const departureNotifSuppressedNotFull: SmokeTest = {
+  name: 'Departure notification suppressed when event not full (ROK-851)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 2, 'Need 2+ demo users');
+    // LIVE event with capacity 10, only 2 signups → not full
+    const ev = await createEvent(ctx.api, 'depart-notfull', {
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      maxAttendees: 10,
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['dps']);
+      await signupAs(ctx.api, ev.id, users[1], ['dps']);
+      await awaitProcessing(ctx.api);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-1');
+      await awaitProcessing(ctx.api);
+      // Assert NO notification appears (negative check)
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
+        10_000,
+        'slot_vacated notification was sent for a non-full event',
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSentWhenFull: SmokeTest = {
+  name: 'Departure notification sent when event was full (ROK-851)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 5, 'Need 5+ demo users');
+    // LIVE event with capacity 5 (tank:1, healer:1, dps:3), 5 signups → full
+    const ev = await createEvent(ctx.api, 'depart-full', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await signupAs(ctx.api, ev.id, users[3], ['dps']);
+      await signupAs(ctx.api, ev.id, users[4], ['dps']);
+      await awaitProcessing(ctx.api);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-2');
+      await awaitProcessing(ctx.api);
+      // Poll until slot_vacated notification appears
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated notification for a full event — suppression too aggressive',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+type DisplacedNotif = {
+  type: string;
+  message?: string;
+  payload?: Record<string, unknown>;
+};
+
+/**
+ * ROK-1729: poll the displaced tentative player's notifications for a
+ * `tentative_displaced` row on THIS event (payload.eventId — users[4] is also
+ * displaced by the roster-calculation smoke), then require the bench wording.
+ * Fails with every notification the user actually received.
+ */
+async function assertDisplacedToBench(
+  ctx: TestContext,
+  eventId: number,
+  userId: number,
+): Promise<void> {
+  let seen: DisplacedNotif[] = [];
+  const notif = await pollForCondition(
+    async () => {
+      const list = await getNotificationsFor(ctx.api, userId, undefined, 20);
+      seen = Array.isArray(list) ? (list as DisplacedNotif[]) : [];
+      return seen.find((n) => n.type === 'tentative_displaced' &&
+        Number(n.payload?.eventId) === eventId) ?? null;
+    },
+    ctx.config.timeoutMs,
+    { intervalMs: 2000 },
+  ).catch(() => {
+    const got = seen.map((n) => `${n.type}@${String(n.payload?.eventId)}`);
+    throw new Error(
+      `No tentative_displaced notification for user ${userId} on event ` +
+        `${eventId}; received [${got.join(', ')}]`,
+    );
+  });
+  if (!/moved to the bench/i.test(notif.message ?? '')) {
+    throw new Error(
+      `tentative_displaced should say "moved to the bench" on a full ` +
+        `roster, got: ${JSON.stringify(notif.message)}`,
+    );
+  }
+}
+
+const tentativeDisplacedNotification: SmokeTest = {
+  name: 'Tentative displaced notification on roster overflow',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 6, 'Need 6+ demo users');
+    // Fill roster with 4 confirmed + 1 tentative, then add 1 more confirmed.
+    // ROK-1729: `flex: 0` is load-bearing — omitting it defaults flex to 5,
+    // so the roster would never be full and only the role-full path ran.
+    const ev = await createEvent(ctx.api, 'dm-tentative-displace', {
+      ...mmoOverrides(ctx),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await signupAs(ctx.api, ev.id, users[3], ['dps']);
+      await signupAs(ctx.api, ev.id, users[4], ['dps'], {
+        status: 'tentative',
+      });
+      await awaitProcessing(ctx.api);
+      // 6th confirmed signup should displace tentative
+      await signupAs(ctx.api, ev.id, users[5], ['dps']);
+      await awaitProcessing(ctx.api);
+      await assertDisplacedToBench(ctx, ev.id, users[4]);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const rosterReassignmentNotification: SmokeTest = {
+  name: 'Roster reassignment triggers notification',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 2, 'Need 2+ demo users');
+    const ev = await createEvent(ctx.api, 'dm-reassign', mmoOverrides(ctx));
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['dps']);
+      await awaitProcessing(ctx.api);
+      // Reassign user from tank to healer
+      await ctx.api.patch(`/events/${ev.id}/roster`, {
+        assignments: [
+          { userId: users[0], slot: 'healer', position: 1 },
+        ],
+      });
+      await awaitProcessing(ctx.api);
+      // roster_reassigned notification buffered for creator
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+/**
+ * ROK-1462 AC6 — PUG fill-request dispatch.
+ *
+ * The case used to `.catch(() => {})` the create call and assert nothing at
+ * all, so a 500 from `POST /events/:id/pugs` passed. It now asserts the slot
+ * the DM is built from: the create must succeed, and the persisted slot must
+ * carry the role, the `pending` status and the invite code that
+ * `buildPugInviteEmbed` renders.
+ *
+ * The DM embed's own chrome is NOT asserted here: the companion bot cannot
+ * observe a sent invite DM (`sendEmbedDM` posts straight to Discord, a PUG
+ * invite writes no `notifications` row, and Discord refuses bot-to-bot DMs,
+ * 50007), so this file still asserts only the slot's API state.
+ *
+ * Smoke tier (`render-pug-invite-embed` in `dm-embed-render.test.ts`, through
+ * `POST /admin/test/render-pug-invite-embed`) proves the amber `needs_you`
+ * colour, the `◌ FILL NEEDED · starts in …` author line, the role footer, no
+ * masked link in the description, and the Accept / Decline / View Event row
+ * with its event URL. The ≤2 personalized-field cap and the absent Voice
+ * Channel field are pinned at unit tier only
+ * (`api/src/discord-bot/services/pug-invite.helpers.spec.ts` and the render
+ * seam's controller spec, "caps three personalized fields at two"): the seam
+ * never resolves a voice channel, the loader trims fields upstream, and the
+ * smoke seeds no library rows for the test bot.
+ */
+const pugInviteNotification: SmokeTest = {
+  name: 'PUG invite creates a fill-request slot for the invited user',
+  category: 'dm',
+  async run(ctx) {
+    type PugSlot = {
+      id?: string;
+      role?: string;
+      status?: string;
+      inviteCode?: string;
+      discordUsername?: string | null;
+    };
+    const ev = await createEvent(ctx.api, 'dm-pug', mmoOverrides(ctx));
+    try {
+      // No .catch() — a failing create is a failing test, not a silent pass.
+      const created = await ctx.api.post<PugSlot>(`/events/${ev.id}/pugs`, {
+        discordUsername: 'SmokeTestTarget',
+        role: 'healer',
+      });
+      if (created?.role !== 'healer' || created?.status !== 'pending') {
+        throw new Error(
+          `PUG create: expected a pending healer slot, got: ${JSON.stringify(created)}`,
+        );
+      }
+      if (!created.inviteCode) {
+        throw new Error(
+          `PUG create: slot has no invite code — the DM would have no route ` +
+            `to the event: ${JSON.stringify(created)}`,
+        );
+      }
+      await awaitProcessing(ctx.api);
+      // The dispatch path reads the slot back; prove it is there to be read.
+      const slots = await pollForCondition(
+        async () => {
+          // GET /events/:id/pugs answers `{ pugs: [...] }` — see
+          // `PugsService.findAll`. The previous unwrap reached for a `data`
+          // key that never exists, so the list was always empty and this poll
+          // could only ever exhaust. Typing the read against the contract DTO
+          // makes any other envelope a compile error.
+          const res = await ctx.api.get<PugSlotListResponseDto>(
+            `/events/${ev.id}/pugs`,
+          );
+          const list = res.pugs;
+          return list.some((s) => s.id === created.id) ? list : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 1000 },
+      ).catch(() => {
+        throw new Error('PUG slot never appeared on GET /events/:id/pugs');
+      });
+      const slot = slots.find((s) => s.id === created.id);
+      if (slot?.discordUsername !== 'SmokeTestTarget') {
+        throw new Error(
+          `PUG slot lost its invite target — the fill request has nobody to ` +
+            `DM: ${JSON.stringify(slot)}`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+// ── Slow / cron-dependent notifications ──
+
+const reminderNotification: SmokeTest = {
+  name: 'Event reminder creates notification (15min)',
+  category: 'dm',
+  async run(ctx) {
+    const before = await getUnreadCount(ctx);
+    const ev = await createEvent(ctx.api, 'dm-reminder', {
+      startTime: futureTime(14),
+      endTime: futureTime(74),
+      reminder15min: true,
+    });
+    try {
+      await pollForCondition(
+        async () => {
+          const after = await getUnreadCount(ctx);
+          return after > before ? true : null;
+        },
+        60_000,
+        { intervalMs: 2000, backoff: false },
+      ).catch(() => {
+        throw new Error('No new reminder within 60s');
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const gameAffinityNotification: SmokeTest = {
+  name: 'Game affinity DM sent for subscribed game event',
+  category: 'dm',
+  async run(ctx) {
+    const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
+    if (gameId === undefined) {
+      throw new Error(
+        'Game affinity precondition missing: ctx.mmoGameId and ctx.games are ' +
+          "both empty. Both derive from the smoke admin's " +
+          '/users/me/characters (setup.ts setupCharacters/buildDemoData), so ' +
+          'there is no game to subscribe the DM recipient to. This test must ' +
+          'not report PASS without asserting the affinity dispatch path.',
+      );
+    }
+    await addGameInterest(ctx.api, ctx.dmRecipientUserId, gameId);
+    await awaitProcessing(ctx.api);
+    // Create event within lead-time window (admin is creator → excluded)
+    const ev = await createEvent(ctx.api, 'dm-affinity', {
+      gameId,
+      startTime: futureTime(60),
+      endTime: futureTime(120),
+    });
+    try {
+      // Poll until event has the correct game (confirms dispatch path ran)
+      await pollForCondition(
+        async () => {
+          const fetched = await ctx.api.get<{ game?: { id: number } }>(
+            `/events/${ev.id}`,
+          );
+          return fetched.game?.id === gameId ? true : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          `Event game.id mismatch: expected ${gameId}`,
+        );
+      });
+      // TODO: Assert notification record exists for dmRecipientUserId once
+      // an admin endpoint for querying other users' notifications is added.
+      // Bot-to-bot DMs fail with 50007, but the dispatch path ran.
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const welcomeDmNotification: SmokeTest = {
+  name: 'Welcome DM sent on first Discord enable',
+  category: 'dm',
+  async run(ctx) {
+    // The welcome DM is sent when a user first enables Discord notifications.
+    // We already enabled them during setup — check Redis dedup key exists.
+    // This is a lightweight verification that the welcome path was triggered.
+    await ctx.api
+      .post('/admin/test/enable-discord-notifications', {
+        userId: ctx.dmRecipientUserId,
+      });
+    await awaitProcessing(ctx.api);
+    // Welcome DM was attempted (may fail with 50007 for bot users,
+    // but the dispatch path was exercised)
+  },
+};
+
+// Slow tests gated behind SMOKE_INCLUDE_SLOW=1
+const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
+
+const rescheduleDmHasDate: SmokeTest = {
+  name: 'Reschedule DM plaintext includes new date, not empty parens (ROK-918)',
+  category: 'dm',
+  async run(ctx) {
+    const recipientId = ctx.dmRecipientUserId;
+    const ev = await createEvent(ctx.api, 'dm-resched-date', mmoOverrides(ctx));
+    try {
+      // Sign up a demo user (NOT admin) — admin is excluded as rescheduler
+      await signupAs(ctx.api, ev.id, recipientId, ['dps']);
+      await awaitProcessing(ctx.api);
+      await rescheduleEvent(ctx.api, ev.id, 300);
+      // Poll until the demo user gets the reschedule notification
+      type NotifDto = { type: string; title?: string; message?: string };
+      const reschedNotif = await pollForCondition(
+        async () => {
+          const notifs = await getNotificationsFor(
+            ctx.api, recipientId, 'event_rescheduled', 5,
+          ) as NotifDto[];
+          const list = Array.isArray(notifs) ? notifs : [];
+          return list.find((n) => n.type === 'event_rescheduled') ?? null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error('No reschedule notification for demo user within timeout');
+      });
+      if (!reschedNotif?.message) {
+        throw new Error('Reschedule notification has no message');
+      }
+      const plaintext = simulatePlaintextContent(
+        reschedNotif.title ?? '', reschedNotif.message,
+      );
+      if (plaintext.includes('()')) {
+        throw new Error(
+          `Plaintext DM contains empty parens "()" — ` +
+          `stripDiscordMarkup bug. Plaintext: "${plaintext}"`,
+        );
+      }
+      const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
+      if (!monthPattern.test(plaintext)) {
+        throw new Error(
+          `Plaintext DM missing formatted date. ` +
+          `Raw message: "${reschedNotif.message}" → Plaintext: "${plaintext}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+// ── ROK-919: Slot vacated relevance filter ──
+
+const departureNotifSuppressedDpsFull: SmokeTest = {
+  name: 'DPS departure from full MMO event suppressed (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 5, 'Need 5+ demo users');
+    // LIVE full MMO event: tank:1, healer:1, dps:3 = 5 total
+    const ev = await createEvent(ctx.api, 'depart-dps-mmo', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      const dpsRes = await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await signupAs(ctx.api, ev.id, users[3], ['dps']);
+      await signupAs(ctx.api, ev.id, users[4], ['dps']);
+      await awaitProcessing(ctx.api);
+      const signupId = (dpsRes as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      // Depart a DPS — should NOT trigger notification (DPS is not critical)
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-dps-depart');
+      await awaitProcessing(ctx.api);
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
+        10_000,
+        'slot_vacated notification sent for DPS departure — role filter not applied',
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSentHealerMmo: SmokeTest = {
+  name: 'Healer departure from MMO event sends notification (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 3, 'Need 3+ demo users');
+    // LIVE MMO event, NOT full (3/5) — healer should still trigger
+    const ev = await createEvent(ctx.api, 'depart-healer-mmo', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      const healRes = await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
+      const signupId = (healRes as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      // Depart healer — should trigger even though event is NOT full
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-heal-depart');
+      await awaitProcessing(ctx.api);
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated for healer departure — critical role filter broken',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSentGenericFull: SmokeTest = {
+  name: 'Departure from full generic event sends notification (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 3, 'Need 3+ demo users');
+    // LIVE generic event at capacity (3/3)
+    const ev = await createEvent(ctx.api, 'depart-generic-full', {
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'generic', player: 3 },
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await signupAs(ctx.api, ev.id, users[2], ['player']);
+      await awaitProcessing(ctx.api);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-depart');
+      await awaitProcessing(ctx.api);
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated for departure from full generic event',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSuppressedGenericNotFull: SmokeTest = {
+  name: 'Departure from non-full generic event suppressed (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 2, 'Need 2+ demo users');
+    // LIVE generic event NOT full (2/10)
+    const ev = await createEvent(ctx.api, 'depart-generic-notfull', {
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'generic', player: 10 },
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await awaitProcessing(ctx.api);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-notfull');
+      await awaitProcessing(ctx.api);
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
+        10_000,
+        'slot_vacated sent for departure from non-full generic event',
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+// ── ROK-919: Signup cancellation path (buffer + flush) ──
+
+const cancelSuppressedGenericNotFull: SmokeTest = {
+  name: 'Cancel from non-full generic event suppressed via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 2, 'Need 2+ demo users');
+    // Future generic event with capacity 10, only 2 signups → NOT full
+    const ev = await createEvent(ctx.api, 'cancel-gen-notfull', {
+      slotConfig: { type: 'generic', player: 10 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await awaitProcessing(ctx.api);
+      // Cancel user's signup (triggers bufferLeave → 3 min timer)
+      await cancelSignupAs(ctx.api, ev.id, users[0]);
+      // Immediately flush the buffer (bypasses 3-min wait)
+      await flushNotificationBuffer(ctx.api);
+      await awaitProcessing(ctx.api);
+      // Verify NO slot_vacated notification (event was NOT full)
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
+        8_000,
+        'slot_vacated sent after cancel from non-full generic event — the Palworld bug is back',
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelSuppressedDpsMmo: SmokeTest = {
+  name: 'Cancel DPS from MMO event suppressed via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 3, 'Need 3+ demo users');
+    // Future MMO event — always pass slotConfig explicitly for CI
+    const ev = await createEvent(ctx.api, 'cancel-dps-mmo', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
+      // Cancel the DPS signup (not a critical role)
+      await cancelSignupAs(ctx.api, ev.id, users[2]);
+      await flushNotificationBuffer(ctx.api);
+      await awaitProcessing(ctx.api);
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
+        8_000,
+        'slot_vacated sent after DPS cancel from MMO event — role filter not applied on cancel path',
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelFiredTankMmo: SmokeTest = {
+  name: 'Cancel Tank from MMO event sends notification via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    assertAtLeast(users, 3, 'Need 3+ demo users');
+    // Future MMO event — always pass slotConfig so roster assignments work
+    // even in CI where mmoGameId may not exist
+    const ev = await createEvent(ctx.api, 'cancel-tank-mmo', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
+      // Cancel the TANK signup (critical role — should notify)
+      await cancelSignupAs(ctx.api, ev.id, users[0]);
+      await flushNotificationBuffer(ctx.api);
+      await awaitProcessing(ctx.api);
+      // Poll for slot_vacated notification (should appear)
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated after tank cancel — critical role notification broken',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+/**
+ * ROK-1462 — game-affinity is UNREGISTERED by default, and that is deliberate.
+ *
+ * Its precondition (a game the DM recipient can subscribe to) is read from
+ * `ctx.mmoGameId ?? ctx.games[0]?.id`. Both derive from ONE source: the smoke
+ * admin's own character list — `setup.ts::setupCharacters` GETs
+ * `/users/me/characters`, and `setup.ts::buildDemoData` seeds `ctx.games` from
+ * that `mmoGameId` and nothing else. The demo installer only attaches
+ * characters to seeded demo users (`buildOriginalCharValues` in
+ * `api/src/admin/demo-data-install-core.helpers.ts` walks `CHARACTERS_CONFIG`
+ * keyed by demo username); the smoke admin is not one of them. So the
+ * collection is empty on every fleet env — confirmed by three runs today
+ * (ea45e9e4c515, 864f2d702a97, 35acd08203d7), each logging the old
+ * 'no characters in CI' line and finishing in 0.0s.
+ *
+ * It previously `return`ed on that miss and reported a 0.0s PASS having
+ * asserted nothing. The harness has no SKIP status — `TestResult.status` is
+ * `'PASS' | 'FAIL'` only (`types.ts`) and `run.ts::buildResult` can emit
+ * nothing else — so the harness's real skip mechanism is registration-time
+ * exclusion with a stated reason, exactly as the voice-join tests do with
+ * `SMOKE_SKIP_VOICE_JOIN` (`voice-activity.test.ts`). This is that mechanism:
+ * excluded by default, the reason printed at startup, and opted back in with
+ * `SMOKE_INCLUDE_GAME_AFFINITY=1` once a fixture gives the smoke admin a
+ * character (or `ctx.games` an independent source). If it IS opted in and the
+ * game is still absent, `run` now throws instead of passing.
+ */
+const includeGameAffinity = process.env.SMOKE_INCLUDE_GAME_AFFINITY === '1';
+if (!includeGameAffinity) {
+  console.log(
+    '  SKIP (unregistered): "Game affinity DM sent for subscribed game event" ' +
+      '— no game fixture: ctx.games/ctx.mmoGameId derive from the smoke ' +
+      "admin's characters, which the demo seed never creates. Set " +
+      'SMOKE_INCLUDE_GAME_AFFINITY=1 once that fixture exists (ROK-1462).',
+  );
+}
+
+export const dmNotificationTests: SmokeTest[] = [
+  cancellationNotification,
+  rescheduleNotification,
+  slotVacatedNotification,
+  departureNotifSuppressedNotFull,
+  departureNotifSentWhenFull,
+  tentativeDisplacedNotification,
+  rosterReassignmentNotification,
+  pugInviteNotification,
+  ...(includeGameAffinity ? [gameAffinityNotification] : []),
+  welcomeDmNotification,
+  rescheduleDmHasDate,
+  departureNotifSuppressedDpsFull,
+  departureNotifSentHealerMmo,
+  departureNotifSentGenericFull,
+  departureNotifSuppressedGenericNotFull,
+  cancelSuppressedGenericNotFull,
+  cancelSuppressedDpsMmo,
+  cancelFiredTankMmo,
+  ...(includeSlow ? [reminderNotification] : []),
+];

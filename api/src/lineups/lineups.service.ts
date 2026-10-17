@@ -1,0 +1,404 @@
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  AbortLineupDto,
+  BandwagonJoinResponseDto,
+  CommonGroundQueryDto,
+  CommonGroundResponseDto,
+  CreateLineupDto,
+  GroupedMatchesResponseDto,
+  LineupBannerResponseDto,
+  LineupDetailResponseDto,
+  LineupSummaryResponseDto,
+  NominateGameDto,
+  UpdateLineupMetadataDto,
+  UpdateLineupStatusDto,
+} from '@raid-ledger/contract';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
+import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { LineupNotificationService } from './lineup-notification.service';
+import {
+  runAddInvitees,
+  runRemoveInvitee,
+} from './lineups-invitees-actions.helpers';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
+import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
+import { buildDetailResponse } from './lineups-response.helpers';
+import { getParticipantsResponse } from './lineups-participants.helpers';
+import { buildCohortMemoryResponse } from './cohort-memory-query.helpers';
+import { loadGamesPageBanner } from './lineups-banner.helpers';
+import { buildActiveLineupSummaries } from './lineups-summary.helpers';
+import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
+import { runMetadataUpdate } from './lineups-metadata.helpers';
+import { runStatusTransition } from './lineups-transition.helpers';
+import { runLineupAbort } from './lineups-abort.helpers';
+import { TiebreakerService } from './tiebreaker/tiebreaker.service';
+// prettier-ignore
+import { runBandwagonJoin, runAdvanceMatch } from './lineups-match-actions.helpers';
+import {
+  runCreateLineup,
+  runToggleVote,
+  runNominate,
+  runRemoveNomination,
+} from './lineups-actions.helpers';
+import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
+import { togglePublicShare } from './lineups-public-share.helpers';
+import { LineupsGateway } from './lineups.gateway';
+
+/** Caller identity for authorization checks. */
+export interface CallerIdentity {
+  id: number;
+  role: string;
+}
+
+@Injectable()
+export class LineupsService {
+  private readonly logger = new Logger(LineupsService.name);
+
+  /**
+   * Defensive wrapper around `AiSuggestionsCacheInvalidator` calls
+   * (ROK-931 reviewer finding). The invalidator already swallows
+   * errors in its own implementation, but a test mock or future
+   * reimplementation could throw — wrapping at the service boundary
+   * guarantees the parent mutation's return value is never blocked
+   * by cache hygiene.
+   */
+  private async invalidateAiCache(lineupId: number): Promise<void> {
+    try {
+      await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `AI suggestions cache invalidation failed for lineup ${lineupId}: ${msg}`,
+      );
+    }
+  }
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly activityLog: ActivityLogService,
+    private readonly settings: SettingsService,
+    private readonly phaseQueue: LineupPhaseQueueService,
+    private readonly steamNudge: LineupSteamNudgeService,
+    private readonly lineupNotifications: LineupNotificationService,
+    private readonly botClient: DiscordBotClientService,
+    private readonly tasteProfile: TasteProfileService,
+    private readonly aiSuggestionsCache: AiSuggestionsCacheInvalidator,
+    private readonly lineupsGateway: LineupsGateway,
+    @Inject(forwardRef(() => TiebreakerService))
+    private readonly tiebreaker: TiebreakerService,
+    /** ROK-1370: embed heal on archive-clears (see TransitionDeps). */
+    private readonly embedSyncQueue: EmbedSyncQueueService,
+    /** ROK-1473: carries the entered-scheduling hook (poll card post). */
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
+  private resolveChannelName = (channelId: string): string | null =>
+    this.botClient.getGuild()?.channels?.cache?.get(channelId)?.name ?? null;
+
+  /** Create a new lineup (ROK-1065). */
+  create(
+    dto: CreateLineupDto,
+    userId: number,
+  ): Promise<LineupDetailResponseDto> {
+    return runCreateLineup(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        phaseQueue: this.phaseQueue,
+        steamNudge: this.steamNudge,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+        resolveChannelName: this.resolveChannelName,
+      },
+      dto,
+      userId,
+    );
+  }
+
+  /**
+   * Get every active lineup (ROK-1065).
+   *
+   * Returns `LineupSummaryResponseDto[]`. ROK-1065 changed this from a
+   * singular detail object to an array — private lineups coexist with
+   * public ones, so the client receives all in-flight lineups. Never
+   * filtered by viewer; private participation is gated at mutation time.
+   */
+  async findActive(): Promise<LineupSummaryResponseDto[]> {
+    return buildActiveLineupSummaries(this.db);
+  }
+
+  /** Get a lineup by ID with full detail. */
+  async findById(
+    id: number,
+    userId?: number,
+  ): Promise<LineupDetailResponseDto> {
+    return buildDetailResponse(this.db, id, userId, this.resolveChannelName);
+  }
+
+  /**
+   * Get the participant roster for a lineup (ROK-1346).
+   *
+   * Read-open, mirroring `findById`: any authenticated viewer may read the
+   * roster (private participation is gated at mutation time, not read time).
+   * 404 only when the lineup id does not exist.
+   *
+   * ROK-1557: `matchId` scopes the roster to a scheduling poll (creator +
+   * match members + schedule voters, `voted` from that match's slot votes).
+   */
+  getParticipants = (id: number, matchId?: number) =>
+    getParticipantsResponse(this.db, id, matchId);
+
+  /**
+   * Cohort memory for a lineup (ROK-1309) — games this exact engaged
+   * participant set has resolved before. All logic lives in the helpers file;
+   * this stays a delegation so the service keeps clear of the 300-line cap.
+   */
+  getCohortMemory = (id: number) => buildCohortMemoryResponse(this.db, id);
+
+  /** Toggle a vote for a game in a lineup (ROK-936). */
+  async toggleVote(
+    lineupId: number,
+    gameId: number,
+    userId: number,
+    callerRole?: string,
+  ): Promise<LineupDetailResponseDto> {
+    const result = await runToggleVote(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        resolveChannelName: this.resolveChannelName,
+      },
+      lineupId,
+      gameId,
+      userId,
+      callerRole,
+    );
+    // ROK-1316: votes change the voter set → debounced pre-gen refresh.
+    await this.invalidateAiCache(lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    return result;
+  }
+
+  /** Build deps for the auto-advance helper (ROK-1118). Public so the
+   *  ROK-1253 grace integration spec can drive `maybeAutoAdvance` directly. */
+  public autoAdvanceDeps() {
+    return {
+      db: this.db,
+      activityLog: this.activityLog,
+      settings: this.settings,
+      phaseQueue: this.phaseQueue,
+      lineupNotifications: this.lineupNotifications,
+      lineupsGateway: this.lineupsGateway,
+      logger: this.logger,
+      eventEmitter: this.eventEmitter,
+      embedSyncQueue: this.embedSyncQueue,
+    };
+  }
+
+  /** Transition a lineup to a new status. ROK-1253: `actorId` for revert audit. */
+  transitionStatus(id: number, dto: UpdateLineupStatusDto, actorId?: number) {
+    return runStatusTransition(this.autoAdvanceDeps(), id, dto, actorId);
+  }
+
+  /** ROK-1062: Force-archive a lineup with optional reason (admin/operator). */
+  abort(
+    id: number,
+    dto: AbortLineupDto,
+    actor: { id: number },
+  ): Promise<LineupDetailResponseDto> {
+    return runLineupAbort(
+      { ...this.autoAdvanceDeps(), tiebreaker: this.tiebreaker },
+      id,
+      dto.reason ?? null,
+      actor.id,
+    );
+  }
+
+  /**
+   * Get Common Ground games — ownership overlap + taste scoring (ROK-950).
+   * `viewerId` (ROK-1314) drives the per-viewer own/wishlist badge flags and
+   * is `null` for an anonymous caller.
+   */
+  getCommonGround(
+    filters: CommonGroundQueryDto,
+    viewerId: number | null = null,
+  ): Promise<CommonGroundResponseDto> {
+    return runCommonGroundForBuildingLineup(
+      this.db,
+      filters,
+      this.tasteProfile,
+      this.settings,
+      viewerId,
+    );
+  }
+
+  /** Nominate a game into a lineup. */
+  async nominate(
+    lineupId: number,
+    dto: NominateGameDto,
+    userId: number,
+    callerRole?: string,
+  ): Promise<LineupDetailResponseDto> {
+    return runNominate(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+        resolveChannelName: this.resolveChannelName,
+        afterMutate: () => this.afterNominationChange(lineupId),
+      },
+      lineupId,
+      dto,
+      userId,
+      callerRole,
+    );
+  }
+
+  /** ROK-1444: cache invalidation + auto-advance, run before any response is
+   *  built so callers never receive a stale phase. */
+  private async afterNominationChange(lineupId: number): Promise<void> {
+    await this.invalidateAiCache(lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+  }
+
+  /** Remove a nomination. */
+  async removeNomination(
+    lineupId: number,
+    gameId: number,
+    caller: CallerIdentity,
+  ) {
+    await runRemoveNomination(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+      },
+      lineupId,
+      gameId,
+      caller,
+    );
+    await this.afterNominationChange(lineupId);
+  }
+
+  /** Get banner data for the Games page. Returns null if no eligible lineup. */
+  async findBanner(scope?: string): Promise<LineupBannerResponseDto | null> {
+    return loadGamesPageBanner(this.db, scope, this.settings);
+  }
+
+  /** Get grouped matches for decided view (ROK-937). */
+  async getGroupedMatches(id: number): Promise<GroupedMatchesResponseDto> {
+    return buildGroupedMatchesResponse(this.db, id);
+  }
+
+  /**
+   * Bandwagon join a match (ROK-937, ROK-1065).
+   * `callerRole` is used to enforce the private-lineup eligibility gate
+   * (non-invitees may not bandwagon onto a private lineup's match).
+   */
+  bandwagonJoin(
+    lineupId: number,
+    matchId: number,
+    userId: number,
+    callerRole?: string,
+  ): Promise<BandwagonJoinResponseDto> {
+    return runBandwagonJoin(
+      this.autoAdvanceDeps(),
+      lineupId,
+      matchId,
+      userId,
+      callerRole,
+    );
+  }
+
+  /** Advance a suggested match to scheduling (ROK-937). */
+  advanceMatch(
+    lineupId: number,
+    matchId: number,
+  ): Promise<{ promoted: boolean }> {
+    return runAdvanceMatch(this.autoAdvanceDeps(), lineupId, matchId);
+  }
+
+  /** Update a lineup's title and/or description (ROK-1063). */
+  async updateMetadata(
+    id: number,
+    dto: UpdateLineupMetadataDto,
+    caller: CallerIdentity,
+  ): Promise<LineupDetailResponseDto> {
+    return runMetadataUpdate(
+      this.db,
+      this.lineupNotifications,
+      this.logger,
+      id,
+      dto,
+      caller,
+    );
+  }
+
+  /**
+   * Add one or more invitees to a lineup (ROK-1065).
+   * 404s if any userId is unknown (the helper probes users first). Idempotent
+   * for already-invited users via ON CONFLICT DO NOTHING.
+   */
+  async addInvitees(
+    lineupId: number,
+    userIds: number[],
+    callerId: number,
+  ): Promise<LineupDetailResponseDto> {
+    const result = await runAddInvitees(
+      this.db,
+      this.resolveChannelName,
+      lineupId,
+      userIds,
+      callerId,
+    );
+    await this.invalidateAiCache(lineupId);
+    // ROK-1296: under submission-based quorum, a new invitee who has not
+    // submitted can break a pending grace window. Mirror removeInvitee so
+    // pending_advance_at clears synchronously when the gating set grows.
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    return result;
+  }
+
+  // prettier-ignore
+  togglePublicShare = (id: number, enabled: boolean, actorId: number) =>
+    togglePublicShare(this.db, this.activityLog, this.resolveChannelName, id, enabled, actorId);
+
+  /**
+   * Remove a single invitee (ROK-1065).
+   *
+   * ROK-1258: triggers `maybeAutoAdvance` so creator-driven removal of
+   * non-voting invitees can immediately unblock a private lineup whose
+   * quorum was stuck because the dropped users would never vote.
+   * `maybeAutoAdvance` has internal try/catch, so this is fire-safe and
+   * will not fail the mutation if the advance attempt errors.
+   */
+  async removeInvitee(
+    lineupId: number,
+    userId: number,
+    callerId: number,
+  ): Promise<LineupDetailResponseDto> {
+    const result = await runRemoveInvitee(
+      this.db,
+      this.resolveChannelName,
+      lineupId,
+      userId,
+      callerId,
+    );
+    await this.invalidateAiCache(lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    return result;
+  }
+}

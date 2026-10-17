@@ -1,0 +1,101 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { EventsService } from './events.service';
+import { SignupsService } from './signups.service';
+import { PugsService } from './pugs.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import type {
+  EventDetailResponseDto,
+  PublicEventDetailResponseDto,
+} from '@raid-ledger/contract';
+import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
+import { findConflictingEvents } from './event-conflict.helpers';
+import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
+import {
+  isMemberViewer,
+  projectEventDetailForViewer,
+} from './roster-public-projection.helpers';
+import { isOperatorOrAdmin } from './controller.helpers';
+import type { PugViewer } from './pugs-visibility.helpers';
+import type { UserRole } from '@raid-ledger/contract';
+
+/** The caller as OptionalJwtGuard leaves it: null for anonymous. */
+export type DetailViewer = {
+  id: number;
+  role?: UserRole;
+  deactivatedAt?: Date | string | null;
+} | null;
+
+/** ROK-1825: the PUG list's manager check needs the active viewer's role. */
+function toPugViewer(viewer: DetailViewer, isMember: boolean): PugViewer {
+  if (!isMember || !viewer) return null;
+  const isAdmin = viewer.role ? isOperatorOrAdmin(viewer.role) : false;
+  return { id: viewer.id, isAdmin };
+}
+
+@Injectable()
+export class EventDetailService {
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly eventsService: EventsService,
+    private readonly signupsService: SignupsService,
+    private readonly pugsService: PugsService,
+    private readonly channelResolverService: ChannelResolverService,
+    private readonly discordBotClientService: DiscordBotClientService,
+  ) {}
+
+  /**
+   * ROK-1629: the bundle embeds the roster + assignments, so it carries the
+   * same per-viewer projection as the standalone routes (deactivated = anon).
+   * A deactivated viewer is built as anonymous too, so the PUG, voice and
+   * conflict branches never see their id.
+   */
+  async findDetail(
+    id: number,
+    viewer: DetailViewer,
+  ): Promise<EventDetailResponseDto | PublicEventDetailResponseDto> {
+    const isMember = isMemberViewer(viewer);
+    const detail = await this.buildDetail(id, toPugViewer(viewer, isMember));
+    return projectEventDetailForViewer(detail, isMember);
+  }
+
+  /** The full member-shape bundle; never returned to a caller unprojected. */
+  private async buildDetail(
+    id: number,
+    pugViewer: PugViewer,
+  ): Promise<EventDetailResponseDto> {
+    const event = await this.eventsService.findOne(id);
+    const userId = pugViewer?.id ?? null;
+    // ROK-1189: the conflict enrichment only needs the event + userId, both of
+    // which are in hand here, so it joins the parallel batch instead of adding
+    // a serial round-trip after it.
+    const [roster, rosterAssignments, pugList, voiceChannel, enriched] =
+      await Promise.all([
+        this.signupsService.getRoster(id),
+        this.signupsService.getRosterWithAssignments(id),
+        this.pugsService.findAll(id, pugViewer),
+        resolveVoiceChannelForEvent(
+          {
+            channelResolver: this.channelResolverService,
+            bot: this.discordBotClientService,
+          },
+          event,
+          userId !== null,
+        ),
+        enrichEventWithConflicts(event, userId, (p) =>
+          findConflictingEvents(this.db, p),
+        ),
+      ]);
+    return {
+      event: enriched,
+      roster,
+      rosterAssignments,
+      pugs: pugList.pugs,
+      voiceChannel,
+    };
+  }
+}

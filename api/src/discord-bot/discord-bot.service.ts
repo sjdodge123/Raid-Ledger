@@ -1,0 +1,253 @@
+import { defined } from '../common/defined.helpers';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { DiscordBotClientService } from './discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
+import type { DiscordBotConfig } from '../settings/settings.types';
+import { SETTINGS_EVENTS } from '../settings/settings.types';
+import { friendlyDiscordErrorMessage } from './discord-bot.constants';
+import type {
+  DiscordBotStatusResponse,
+  DiscordSetupStatus,
+} from '@raid-ledger/contract';
+
+@Injectable()
+export class DiscordBotService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
+  private readonly logger = new Logger(DiscordBotService.name);
+
+  constructor(
+    private readonly clientService: DiscordBotClientService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  /**
+   * Auto-connect on startup if configured and enabled.
+   * Uses OnApplicationBootstrap (not OnModuleInit) so that @OnEvent listeners
+   * from EventEmitterModule are registered before the CONNECTED event fires.
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const config = await this.settingsService.getDiscordBotConfig();
+      if (config?.enabled) {
+        this.logger.log('Discord bot is configured and enabled, connecting...');
+        await this.clientService.connect(config.token);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Failed to auto-connect Discord bot on startup:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Graceful shutdown.
+   */
+  async onModuleDestroy(): Promise<void> {
+    await this.clientService.disconnect();
+  }
+
+  /**
+   * Hot-reload: reconnect or disconnect when settings change.
+   */
+  @OnEvent(SETTINGS_EVENTS.DISCORD_BOT_UPDATED)
+  async handleConfigUpdate(config: DiscordBotConfig | null): Promise<void> {
+    this.logger.log(
+      `handleConfigUpdate called with config: ${config ? `enabled=${String(config.enabled)}` : 'null'}`,
+    );
+
+    if (!config || !config.enabled) {
+      this.logger.log(
+        'Discord bot config cleared or disabled, disconnecting...',
+      );
+      await this.clientService.disconnect();
+      return;
+    }
+
+    try {
+      this.logger.log('Discord bot config updated, reconnecting...');
+      await this.clientService.connect(config.token);
+      this.logger.log('Discord bot connected successfully after config update');
+    } catch (error) {
+      this.logger.error(
+        'Failed to reconnect Discord bot after config update:',
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  /**
+   * Directly trigger connection with the given config.
+   * Used by the controller as a reliable connection path that does not
+   * depend on the event bus.  Skips if already connected or connecting.
+   */
+  async ensureConnected(config: DiscordBotConfig): Promise<void> {
+    if (!config.enabled) return;
+    if (this.clientService.isConnected() || this.clientService.isConnecting()) {
+      this.logger.debug(
+        'ensureConnected: already connected or connecting, skipping',
+      );
+      return;
+    }
+
+    try {
+      this.logger.log('ensureConnected: starting bot connection...');
+      await this.clientService.connect(config.token);
+      this.logger.log('ensureConnected: bot connected successfully');
+    } catch (error) {
+      this.logger.error(
+        'ensureConnected: failed to connect bot:',
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  /**
+   * Send a DM to a user by their Discord ID.
+   */
+  async sendDm(discordId: string, content: string): Promise<void> {
+    await this.clientService.sendDirectMessage(discordId, content);
+  }
+
+  /**
+   * Get current bot status for admin panel.
+   */
+  async getStatus(): Promise<DiscordBotStatusResponse> {
+    const config = await this.settingsService.getDiscordBotConfig();
+    const configured = config !== null;
+    const connected = this.clientService.isConnected();
+    const connecting = this.clientService.isConnecting();
+
+    const guildInfo = connected ? this.clientService.getGuildInfo() : null;
+    // ROK-1469: identify WHICH Discord app this instance is running as. Only
+    // when connected — an id from a previous session would be worse than none
+    // for the smoke bot's author filter.
+    const botUser = connected ? this.clientService.getBotUser() : null;
+    const setupCompleted =
+      await this.settingsService.isDiscordBotSetupCompleted();
+    const adHocEventsEnabled =
+      await this.settingsService.getAdHocEventsEnabled();
+
+    return {
+      configured,
+      connected,
+      enabled: config?.enabled,
+      connecting,
+      guildName: guildInfo?.name,
+      memberCount: guildInfo?.memberCount,
+      setupCompleted,
+      adHocEventsEnabled,
+      ...(botUser
+        ? { botUserId: botUser.id, botUsername: botUser.username }
+        : {}),
+    };
+  }
+
+  /**
+   * ROK-430: Aggregated setup status for the Discord Overview dashboard.
+   */
+  async getSetupStatus(): Promise<DiscordSetupStatus> {
+    const [oauthOk, botOk, defaultCh, tz] = await Promise.all([
+      this.settingsService.isDiscordConfigured(),
+      this.settingsService.isDiscordBotConfigured(),
+      this.settingsService.getDiscordBotDefaultChannel(),
+      this.settingsService.getDiscordBotTimezone(),
+    ]);
+    const steps = buildSetupSteps([
+      oauthOk,
+      botOk,
+      this.clientService.isConnected(),
+      defaultCh !== null,
+      tz !== null,
+    ]);
+    const completedCount = steps.filter((s) => s.completed).length;
+    return {
+      steps,
+      overallComplete: completedCount === steps.length,
+      completedCount,
+      totalCount: steps.length,
+    };
+  }
+
+  /**
+   * Check whether the bot has the required permissions in the guild.
+   */
+  checkPermissions(): {
+    allGranted: boolean;
+    permissions: { name: string; granted: boolean }[];
+  } {
+    const permissions = this.clientService.checkPermissions();
+    const allGranted = permissions.every((p) => p.granted);
+    return { allGranted, permissions };
+  }
+
+  /**
+   * Test a bot token by temporarily connecting.
+   */
+  async testToken(token: string): Promise<{
+    success: boolean;
+    guildName?: string;
+    message: string;
+  }> {
+    const testClient = new DiscordBotClientService(
+      // Create a minimal event emitter that does nothing — test-only
+      { emit: () => false } as never,
+    );
+
+    try {
+      await testClient.connect(token);
+      const guildInfo = testClient.getGuildInfo();
+      await testClient.disconnect();
+
+      return {
+        success: true,
+        ...(guildInfo ? { guildName: guildInfo.name } : {}),
+        message: guildInfo
+          ? `Connected to ${guildInfo.name} (${guildInfo.memberCount} members)`
+          : 'Bot token is valid! Almost done — save the token, enable the bot, then use the Invite URL under "Invite Bot to Your Server" above to add it to your Discord server.',
+      };
+    } catch (error) {
+      await testClient.disconnect();
+      return { success: false, message: friendlyDiscordErrorMessage(error) };
+    }
+  }
+}
+
+type SetupStep = {
+  key: string;
+  label: string;
+  completed: boolean;
+  settingsPath: string;
+};
+
+const SETUP_STEP_DEFS: [string, string, string][] = [
+  ['oauth', 'Configure Discord OAuth', '/admin/settings/discord/auth'],
+  ['bot-token', 'Set bot token', '/admin/settings/discord/connection'],
+  [
+    'bot-connected',
+    'Bot connected to server',
+    '/admin/settings/discord/connection',
+  ],
+  [
+    'default-channel',
+    'Set default notification channel',
+    '/admin/settings/discord/channels',
+  ],
+  ['timezone', 'Configure timezone', '/admin/settings/general'],
+];
+
+function buildSetupSteps(completions: boolean[]): SetupStep[] {
+  return SETUP_STEP_DEFS.map(([key, label, path], i) => ({
+    key,
+    label,
+    completed: defined(completions[i], `setup step ${key}`),
+    settingsPath: path,
+  }));
+}

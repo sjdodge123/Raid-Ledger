@@ -1,0 +1,233 @@
+/**
+ * ROK-1471 D10 — the DEMO_MODE-only debounce flush.
+ *
+ * Two claims worth pinning: the endpoint is genuinely gated (it drives Discord
+ * writes, so an open one is a rate-limit gun aimed at production), and it goes
+ * through `emitAsync` — the smoke test's whole reason for existing is that the
+ * HTTP response must not return until the rename has actually landed.
+ */
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SettingsService } from '../settings/settings.service';
+import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
+import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
+import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
+import { readBoardThreadMembers } from './demo-test-lfg-thread-members.helpers';
+import { at } from '../common/testing/narrow';
+import { DemoTestLfgController } from './demo-test-lfg.controller';
+
+jest.mock('../lfg/lfg-playing.helpers', () => ({
+  findOpenLfgNowEventId: jest.fn(),
+}));
+jest.mock('./demo-test-lfg-thread-members.helpers', () => ({
+  readBoardThreadMembers: jest.fn(),
+}));
+jest.mock('../discord-bot/services/ad-hoc-event.helpers', () => ({
+  setGracePeriodStatus: jest.fn(),
+}));
+
+const emitter = { emitAsync: jest.fn() };
+const settings = { getDemoMode: jest.fn() };
+const invites = { decline: jest.fn() };
+const adHoc = { finalizeEvent: jest.fn() };
+const discordClient = { getGuild: jest.fn() };
+const ephemeralVoice = { destroyById: jest.fn() };
+
+function controller(
+  { voice }: { voice?: typeof ephemeralVoice | undefined } = {
+    voice: ephemeralVoice,
+  },
+): DemoTestLfgController {
+  return new DemoTestLfgController(
+    settings as unknown as SettingsService,
+    emitter as unknown as EventEmitter2,
+    invites as never,
+    adHoc as never,
+    {} as never,
+    discordClient as never,
+    voice as never,
+  );
+}
+
+const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.DEMO_MODE = 'true';
+  settings.getDemoMode.mockResolvedValue(true);
+  emitter.emitAsync.mockResolvedValue([]);
+  invites.decline.mockResolvedValue(true);
+  adHoc.finalizeEvent.mockResolvedValue(undefined);
+  ephemeralVoice.destroyById.mockResolvedValue(true);
+  jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
+  jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
+  jest.mocked(readBoardThreadMembers).mockResolvedValue({
+    threadId: 't1',
+    memberIds: ['111'],
+    botCanManageThreads: true,
+    guildId: 'g1',
+    botUserId: 'bot',
+  });
+});
+
+afterAll(() => {
+  process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
+});
+
+describe('DemoTestLfgController.flushBoardEdits', () => {
+  it('awaits the FLUSH listeners so a smoke test can assert the thread name', async () => {
+    expect(await controller().flushBoardEdits()).toEqual({ success: true });
+    expect(emitter.emitAsync).toHaveBeenCalledWith(LFG_BOARD_EVENTS.FLUSH);
+  });
+
+  it('refuses when the process is not in DEMO_MODE', async () => {
+    process.env.DEMO_MODE = 'false';
+
+    await expect(controller().flushBoardEdits()).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(emitter.emitAsync).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the DEMO_MODE setting is off, even with the env var set', async () => {
+    settings.getDemoMode.mockResolvedValue(false);
+
+    await expect(controller().flushBoardEdits()).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(emitter.emitAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('DemoTestLfgController.declineLfgInvite (ROK-1455 D15)', () => {
+  it('presses the decline for the named user through LfgInviteService.decline', async () => {
+    expect(
+      await controller().declineLfgInvite({ userId: 7, gameId: 42 }),
+    ).toEqual({ declined: true });
+    expect(invites.decline).toHaveBeenCalledWith(7, 42);
+  });
+
+  it('rejects a body without positive integer ids', async () => {
+    await expect(
+      controller().declineLfgInvite({ userId: 'x', gameId: 42 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(invites.decline).not.toHaveBeenCalled();
+  });
+
+  it('refuses outside DEMO_MODE', async () => {
+    process.env.DEMO_MODE = 'false';
+
+    await expect(
+      controller().declineLfgInvite({ userId: 7, gameId: 42 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(invites.decline).not.toHaveBeenCalled();
+  });
+});
+
+describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
+  it("drives the real finalize path for the game's open session", async () => {
+    expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
+      ended: true,
+      eventId: 77,
+      channelDestroyed: true,
+    });
+    // grace_period FIRST: `claimAndEndEvent` claims nothing otherwise, so a
+    // reversed order would silently no-op and leak the session it promised to
+    // end.
+    expect(setGracePeriodStatus).toHaveBeenCalledWith({}, 77);
+    expect(adHoc.finalizeEvent).toHaveBeenCalledWith(77);
+  });
+
+  it("force-destroys the session's temp voice channel after the end", async () => {
+    await controller().endLfgSession({ gameId: 42 });
+
+    // `force`: a smoke run's seeded occupant must not keep the channel alive,
+    // or every CI spawn orphans a `⏰ … — Playing now` channel in the guild.
+    expect(ephemeralVoice.destroyById).toHaveBeenCalledWith(77, {
+      force: true,
+    });
+    // The reaper's order — end first, so the destroy's attendance flush and
+    // Scheduled Event re-point see the ended session.
+    expect(adHoc.finalizeEvent.mock.invocationCallOrder[0]).toBeLessThan(
+      at(ephemeralVoice.destroyById.mock.invocationCallOrder, 0),
+    );
+  });
+
+  // TDB:1917 — `ended: true` alone hid a leaked channel from the smoke.
+  it('reports channelDestroyed false when the channel was not deleted', async () => {
+    ephemeralVoice.destroyById.mockResolvedValue(false);
+
+    expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
+      ended: true,
+      eventId: 77,
+      channelDestroyed: false,
+    });
+  });
+
+  it('reports channelDestroyed false (not undefined) without the voice service', async () => {
+    const res = await controller({ voice: undefined }).endLfgSession({
+      gameId: 42,
+    });
+
+    expect(res.channelDestroyed).toBe(false);
+    expect(res).toEqual({ ended: true, eventId: 77, channelDestroyed: false });
+    expect(adHoc.finalizeEvent).toHaveBeenCalledWith(77);
+  });
+
+  it('is a no-op when the game has no open session', async () => {
+    jest.mocked(findOpenLfgNowEventId).mockResolvedValue(null);
+
+    expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
+      ended: false,
+      eventId: null,
+      channelDestroyed: false,
+    });
+    expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+    expect(ephemeralVoice.destroyById).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body without a positive integer gameId', async () => {
+    await expect(
+      controller().endLfgSession({ gameId: 'x' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+  });
+
+  it('refuses outside DEMO_MODE', async () => {
+    process.env.DEMO_MODE = 'false';
+
+    await expect(
+      controller().endLfgSession({ gameId: 42 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('DemoTestLfgController.getBoardThreadMembers (ROK-1541)', () => {
+  it("reads the game's post through the API bot", async () => {
+    expect(await controller().getBoardThreadMembers('42')).toEqual({
+      threadId: 't1',
+      memberIds: ['111'],
+      botCanManageThreads: true,
+      guildId: 'g1',
+      botUserId: 'bot',
+    });
+    expect(readBoardThreadMembers).toHaveBeenCalledWith({}, discordClient, 42);
+  });
+
+  it('rejects a gameId that is not a positive integer', async () => {
+    await expect(
+      controller().getBoardThreadMembers('abc'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(readBoardThreadMembers).not.toHaveBeenCalled();
+  });
+
+  it('refuses outside DEMO_MODE', async () => {
+    process.env.DEMO_MODE = 'false';
+
+    await expect(
+      controller().getBoardThreadMembers('42'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(readBoardThreadMembers).not.toHaveBeenCalled();
+  });
+});

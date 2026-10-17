@@ -1,0 +1,451 @@
+import { z } from 'zod';
+
+// ============================================================
+// LFG Intents (ROK-1451)
+// ============================================================
+//
+// LFG vs LFM is DERIVED, never stored: count the active intents for a game —
+// 1 → 'lfg', >= 2 → 'lfm', 0 → null. There is no state column and no join
+// mechanic; player B posting an intent on a game where A already has one IS
+// the LFG → LFM transition.
+
+/** Lifecycle states an intent row can hold (mirrors the DB CHECK constraint). */
+export const LfgIntentStatusSchema = z.enum([
+    'active',
+    'cleared',
+    'converted',
+    'expired',
+]);
+export type LfgIntentStatus = z.infer<typeof LfgIntentStatusSchema>;
+
+/** Relay seam (ROK-274). Only `local` is implemented in v1. */
+export const LfgVisibilitySchema = z.enum(['local', 'cross-community']);
+export type LfgVisibility = z.infer<typeof LfgVisibilitySchema>;
+
+/** Derived group state. `null` when nobody is actively looking. */
+export const LfgStateSchema = z.enum(['lfg', 'lfm']).nullable();
+export type LfgState = z.infer<typeof LfgStateSchema>;
+
+/**
+ * How urgently the holder wants to play (ROK-1479, extended by ROK-1616).
+ *
+ * Three horizons, one vocabulary on every surface — `Right now` · `Tonight` ·
+ * `This week`:
+ *
+ * - `week` is the original ROK-1451 semantics — a quiet intent on the API's
+ *   `LFG_EXPIRY_DAYS` horizon (7 days since ROK-1691).
+ * - `now` is an on-demand intent that lapses in 30 or 60 minutes and is
+ *   refreshed only on ITS OWN horizon, never to the weekly 7 days.
+ * - `tonight` (ROK-1616) means "later today": it expires at 04:00 local the
+ *   NEXT day in the community timezone, so a hand raised at 3pm outlives a
+ *   games night that runs past midnight. It is emphatically NOT a 60-minute
+ *   hand despite taking the retired `Right now · 1 hour` picker slot.
+ *
+ * Order is `now` > `tonight` > `week`, most urgent first — see
+ * `lfg-group-horizon.helpers.ts`.
+ */
+export const LfgUrgencySchema = z.enum(['week', 'now', 'tonight']);
+export type LfgUrgency = z.infer<typeof LfgUrgencySchema>;
+
+/** The only TTLs a `now` intent may take, in minutes. */
+export const LfgNowTtlSchema = z.union([z.literal(30), z.literal(60)]);
+export type LfgNowTtl = z.infer<typeof LfgNowTtlSchema>;
+
+/**
+ * Request body for `POST /lfg`.
+ * `visibility` is deliberately NOT accepted — every intent ships as `local`
+ * until ROK-274 wires the cross-community relay toggle.
+ *
+ * `urgency` defaults to `week`, so a client that sends only `gameId` keeps
+ * exactly the ROK-1451 behaviour. `ttlMinutes` is meaningful ONLY for
+ * `urgency: 'now'` (absent means 30) and is REJECTED alongside `week` rather
+ * than silently dropped — a dropped TTL is a client bug that never surfaces.
+ */
+export const CreateLfgIntentSchema = z
+    .object({
+        /** ID of the game the caller wants to play. Must exist in `games`. */
+        gameId: z.number().int().positive(),
+        /**
+         * `week` (default, 7 days), `now` (30/60 minutes) or `tonight`
+         * (ROK-1616 — 04:00 local next day, community timezone).
+         */
+        urgency: LfgUrgencySchema.default('week'),
+        /** Lifetime of a `now` intent. Absent means 30. */
+        ttlMinutes: LfgNowTtlSchema.optional(),
+    })
+    .superRefine((v, ctx) => {
+        // ROK-1616: the guard is `!== 'now'`, NOT `=== 'week'`. `ttl_minutes`
+        // is a now-only column, and a `tonight` hand's clock is an absolute
+        // wall-clock instant with no TTL bucket — accepting one here would let
+        // a caller write a TTL the expiry path then ignores, which is exactly
+        // the silent disagreement this refinement exists to prevent.
+        if (v.urgency !== 'now' && v.ttlMinutes !== undefined) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['ttlMinutes'],
+                message: "ttlMinutes is only valid with urgency 'now'",
+            });
+        }
+    });
+export type CreateLfgIntentDto = z.infer<typeof CreateLfgIntentSchema>;
+
+/**
+ * Request body for `POST /lfg/:gameId/convert`.
+ * Exactly one of `pollId` / `eventId` is required — the caller creates the
+ * poll or event first and reports the provenance here.
+ */
+export const ConvertLfgIntentsSchema = z
+    .object({
+        /** `community_lineup_matches.id` the group converted into. */
+        pollId: z.number().int().positive().optional(),
+        /** `events.id` the group converted into. */
+        eventId: z.number().int().positive().optional(),
+    })
+    .refine((v) => (v.pollId === undefined) !== (v.eventId === undefined), {
+        message: 'Supply exactly one of pollId or eventId',
+    });
+export type ConvertLfgIntentsDto = z.infer<typeof ConvertLfgIntentsSchema>;
+
+/** Response from `POST /lfg/:gameId/convert`. */
+export const LfgConvertResponseSchema = z.object({
+    /** How many active intents flipped to `converted`. Zero is not an error. */
+    converted: z.number().int().nonnegative(),
+});
+export type LfgConvertResponseDto = z.infer<typeof LfgConvertResponseSchema>;
+
+/**
+ * Response from `POST /lfg/:gameId/start-now` (ROK-1613).
+ *
+ * `spawned: false` means the press ATTACHED to a session that was already live
+ * on this game (AC5) — not an error, and the same 200 either way.
+ */
+export const LfgStartNowResponseSchema = z.object({
+    /** The live ad-hoc event the starter is now rostered on. */
+    eventId: z.number().int().positive(),
+    /** True when this press minted the session; false when it attached. */
+    spawned: z.boolean(),
+    /** How many OTHER +1s were invited (AC4). Zero when nobody else is in. */
+    invited: z.number().int().nonnegative(),
+});
+export type LfgStartNowResponseDto = z.infer<typeof LfgStartNowResponseSchema>;
+
+/** A single LFG intent row as returned to clients. */
+export const LfgIntentSchema = z.object({
+    id: z.number(),
+    userId: z.number(),
+    gameId: z.number(),
+    status: LfgIntentStatusSchema,
+    visibility: LfgVisibilitySchema,
+    createdAt: z.string(),
+    expiresAt: z.string(),
+    /** `week` or `now` (ROK-1479). Stored, never derived from `expiresAt`. */
+    urgency: LfgUrgencySchema,
+    /**
+     * The horizon a `now` row refreshes on, in minutes. `null` for `week` rows,
+     * whose horizon is the global `LFG_EXPIRY_DAYS`.
+     */
+    ttlMinutes: z.number().nullable(),
+    /** Provenance — set when the group converted into a scheduling poll. */
+    convertedToPollId: z.number().nullable(),
+    /** Provenance — set when the group converted into an event. */
+    convertedToEventId: z.number().nullable(),
+});
+export type LfgIntentDto = z.infer<typeof LfgIntentSchema>;
+
+/**
+ * A live "playing now" session for a group (ROK-1494).
+ *
+ * Present ONLY while a now-group's spawned ad-hoc event is open, and it is the
+ * signal the group page keys off — NOT `activeCount`, which is 0 once the
+ * intents converted. `voiceChannelId` / `voiceInviteUrl` are nullable on
+ * purpose: the temp channel is created AFTER the spawn transaction commits, so
+ * a read landing in that window says "event yes, channel not yet" rather than
+ * lying or failing.
+ */
+export const LfgPlayingNowSchema = z.object({
+    /** The spawned ad-hoc event. */
+    eventId: z.number().int().positive(),
+    /** ISO start — the lower bound of `events.duration`. */
+    startsAt: z.string(),
+    /** Discord voice channel id, or null until `createForEvent` lands. */
+    voiceChannelId: z.string().nullable(),
+    /** `https://discord.com/channels/<guild>/<channel>`, null without a guild. */
+    voiceInviteUrl: z.string().nullable(),
+    /** Live head-count: ad-hoc participants who have not left. */
+    participantCount: z.number().int().nonnegative(),
+});
+export type LfgPlayingNowDto = z.infer<typeof LfgPlayingNowSchema>;
+
+/** Derived per-game group summary. Everything here is computed, never stored. */
+export const LfgGroupSummarySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    /** `games.slug` (NOT NULL UNIQUE) — chips link to `/lfg/:gameSlug`. */
+    gameSlug: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    /**
+     * Active intents held by non-deactivated, non-banned users.
+     * Counts BOTH urgencies — ROK-1479 deliberately did not split it, so every
+     * existing chip, threshold and embed keeps its exact meaning.
+     */
+    activeCount: z.number(),
+    /** How many of {@link activeCount} are `now` intents (ROK-1479). */
+    nowCount: z.number(),
+    state: LfgStateSchema,
+    /** `games.cooptimusOnlineMax`, or null when there is no Co-Optimus data. */
+    viabilityThreshold: z.number().nullable(),
+    /** `threshold !== null && activeCount >= threshold`. Never acted on. */
+    isViable: z.boolean(),
+    hasOwnIntent: z.boolean(),
+    soonestExpiresAt: z.string().nullable(),
+    /** Soonest expiry among the `now` intents only. Null when there are none. */
+    soonestNowExpiresAt: z.string().nullable(),
+    /**
+     * The live session this now-group spawned (ROK-1494), or null.
+     * Additive: every existing field keeps its exact ROK-1451/1479 meaning.
+     */
+    playingNow: LfgPlayingNowSchema.nullable(),
+});
+export type LfgGroupSummaryDto = z.infer<typeof LfgGroupSummarySchema>;
+
+/** A visible member of an LFG/LFM group. */
+export const LfgMemberSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    displayName: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    expiresAt: z.string(),
+    joinedAt: z.string(),
+    /** `week` or `now` — the group page orders `now` members first. */
+    urgency: LfgUrgencySchema,
+});
+export type LfgMemberDto = z.infer<typeof LfgMemberSchema>;
+
+/**
+ * ROK-1573: the scheduled event the group was converted into — the soonest
+ * non-ad-hoc, uncancelled event on the game that has not ended and that some
+ * `lfg_intents` row points at. The scheduled twin of {@link LfgPlayingNowSchema}
+ * (which only ever matches a live ad-hoc session), so the two never overlap.
+ */
+export const LfgConvertedEventSchema = z.object({
+    eventId: z.number(),
+    title: z.string(),
+    /** ISO start — the lower bound of `events.duration`. */
+    startTime: z.string(),
+    /** Roster head-count, same predicate as the event page's `signupCount`. */
+    signupCount: z.number(),
+});
+export type LfgConvertedEventDto = z.infer<typeof LfgConvertedEventSchema>;
+
+/** `GET /lfg/:gameId` — the summary plus the roster and the caller's own row. */
+export const LfgGroupDetailSchema = LfgGroupSummarySchema.extend({
+    members: z.array(LfgMemberSchema),
+    ownIntent: LfgIntentSchema.nullable(),
+    /**
+     * ROK-1483 (A10): the live forum thread id, from the `state = 'open' AND
+     * post_kind = 'forum'` row. Null when the board is off, the post failed, or
+     * the group lives on the text surface — the conversation panel renders
+     * nothing at all in that case rather than an empty shell.
+     */
+    threadId: z.string().nullable(),
+    /** ROK-1573: the group's upcoming converted event, or null. Detail only. */
+    convertedEvent: LfgConvertedEventSchema.nullable(),
+    /**
+     * ROK-1619 AC7: would THIS viewer's `Right now` hand form the group — cross
+     * the spawn threshold and start a live session? Computed server-side by the
+     * one shared predicate (`pressWouldSpawnNow`), never re-derived on the web.
+     * Optional so an older API reads as "no indicator"; absent means false.
+     */
+    pressWouldSpawnNow: z.boolean().optional(),
+    /**
+     * ROK-1619: the indicator glyph to draw beside the spawning pick — the
+     * admin setting through the shared resolver, 🎉 by default. Present only
+     * when `pressWouldSpawnNow` is true; always Unicode, never `<:name:id>`.
+     */
+    spawnIndicatorEmoji: z.string().optional(),
+});
+export type LfgGroupDetailDto = z.infer<typeof LfgGroupDetailSchema>;
+
+/** `POST /lfg` — the intent plus the derived group, so callers render at once. */
+export const LfgIntentResponseSchema = LfgIntentSchema.extend({
+    group: LfgGroupSummarySchema,
+});
+export type LfgIntentResponseDto = z.infer<typeof LfgIntentResponseSchema>;
+
+/** `GET /lfg/hearted` — cold-start suggestions from the caller's manual hearts. */
+export const LfgHeartedGameSchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    /** `games.slug` (NOT NULL UNIQUE) — prompt entries link to `/lfg/:gameSlug`. */
+    gameSlug: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    heartedAt: z.string(),
+    /** How many other people are already looking for this game. */
+    activeCount: z.number(),
+});
+export type LfgHeartedGameDto = z.infer<typeof LfgHeartedGameSchema>;
+
+/**
+ * `GET /lfg/offers` — a Quick Play session the caller took part in AFTER
+ * raising their hand for that game (ROK-1451 AC7).
+ *
+ * Fully DERIVED: no column, no table, no dismissal state. The offer is inert —
+ * clearing happens only when the player calls `DELETE /lfg/:gameId`, so a
+ * dismissed offer is simply one that was never acted on.
+ */
+export const LfgClearOfferSchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    /** The still-active intent this offer would clear. */
+    intentId: z.number(),
+    /** The ad-hoc / Quick Play event that triggered the offer. */
+    eventId: z.number(),
+    /** When the caller was recorded as a participant in that session. */
+    playedAt: z.string(),
+});
+export type LfgClearOfferDto = z.infer<typeof LfgClearOfferSchema>;
+
+// ============================================================
+// LFG group-page reads (ROK-1463)
+// ============================================================
+//
+// Three derived reads for the group page. All are read-only projections over
+// existing tables — nothing here creates, clears or converts an intent.
+
+/**
+ * One contiguous block of time the group could play in.
+ * `start` / `end` are offset-bearing ISO instants, so `start` can be seeded
+ * straight into `SuggestSlotSchema.proposedTime`.
+ *
+ * The underlying game-time grid stores each member's LOCAL wall clock, so the
+ * instants here are the result of converting every member's hours out of
+ * THEIR timezone (`user_preferences.timezone`, falling back to
+ * `app_settings.default_timezone`). Render them in the viewer's zone.
+ */
+export const LfgOverlapWindowSchema = z.object({
+    start: z.string(),
+    end: z.string(),
+    /** Members free for EVERY hour of the window. */
+    availableCount: z.number(),
+    /** Live roster size — `availableCount < totalCount` marks a fallback window. */
+    totalCount: z.number(),
+    /** The `availableCount` member ids, ascending. */
+    members: z.array(z.number()),
+});
+export type LfgOverlapWindowDto = z.infer<typeof LfgOverlapWindowSchema>;
+
+/** `GET /lfg/:gameId/overlap` — "when everyone's free". */
+export const LfgOverlapResponseSchema = z.object({
+    gameId: z.number(),
+    /** Live roster size the windows were computed against. */
+    memberCount: z.number(),
+    /** Days of grid projected forward from now. */
+    horizonDays: z.number(),
+    /** Best windows, ranked. Empty below two live members. */
+    windows: z.array(LfgOverlapWindowSchema),
+});
+export type LfgOverlapResponseDto = z.infer<typeof LfgOverlapResponseSchema>;
+
+/**
+ * One past session for the game — a scheduled event or a Quick Play run.
+ *
+ * Quick Play entries appear only once the session is finalised (`ended`); a
+ * session still live or in its grace period is not history yet.
+ */
+export const LfgHistoryEntrySchema = z.object({
+    eventId: z.number(),
+    title: z.string(),
+    /** True for a Quick Play (ad-hoc) session. */
+    isAdHoc: z.boolean(),
+    startedAt: z.string(),
+    endedAt: z.string(),
+    durationMinutes: z.number(),
+    /** Eligible users recorded as having actually played. */
+    attendedCount: z.number(),
+    /** Eligible users who signed up — the fallback when attendance was never recorded. */
+    signedUpCount: z.number(),
+    /**
+     * Ids behind `attendedCount`, falling back to the signed-up roster ONLY
+     * when no attendance was ever recorded on the event (N2 / Codex #12).
+     *
+     * The two sources are NOT interchangeable, and the count alone does not
+     * tell them apart: an EMPTY list with `signedUpCount > 0` means attendance
+     * WAS taken and nobody turned up, while a non-empty list with
+     * `attendedCount === 0` means these are people who said they would come,
+     * not people confirmed to have played. `attendedCount === participantIds
+     * .length` is the "confirmed" case.
+     */
+    participantIds: z.array(z.number()),
+});
+export type LfgHistoryEntryDto = z.infer<typeof LfgHistoryEntrySchema>;
+
+/**
+ * `GET /lfg/:gameId/history` — "played here before".
+ *
+ * Ordered by the session's END instant, newest first (S5) — NOT by start. A
+ * long event that began earlier therefore outranks a short one that began
+ * later but finished first, which is the ordering "most recently played
+ * together" actually means.
+ */
+export const LfgHistoryResponseSchema = z.object({
+    gameId: z.number(),
+    entries: z.array(LfgHistoryEntrySchema),
+});
+export type LfgHistoryResponseDto = z.infer<typeof LfgHistoryResponseSchema>;
+
+/** Why a player was suggested. A player may carry several reasons. */
+export const LfgSuggestionReasonSchema = z.enum(['played', 'owns', 'hearted']);
+export type LfgSuggestionReason = z.infer<typeof LfgSuggestionReasonSchema>;
+
+/**
+ * Whether this group already invited the player (ROK-1455 D7). `declined`
+ * deliberately collapses into `sent` — a refusal is the recipient's, never
+ * published to whoever clicks Invite.
+ */
+export const LfgInviteStateSchema = z.enum(['none', 'sent']);
+export type LfgInviteState = z.infer<typeof LfgInviteStateSchema>;
+
+/** A player who might want in on this group. */
+export const LfgSuggestionSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    displayName: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    /** At least one. Ordered played → owns → hearted. */
+    reasons: z.array(LfgSuggestionReasonSchema),
+    /** Null when they never played it, or opted out of activity sharing. */
+    lastPlayedAt: z.string().nullable(),
+    /** ROK-1455 D7 — `sent` while a live invite (declined or not) exists. */
+    inviteState: LfgInviteStateSchema,
+});
+export type LfgSuggestionDto = z.infer<typeof LfgSuggestionSchema>;
+
+/** `GET /lfg/:gameId/suggestions` — "might want in". */
+export const LfgSuggestionsResponseSchema = z.object({
+    gameId: z.number(),
+    suggestions: z.array(LfgSuggestionSchema),
+});
+export type LfgSuggestionsResponseDto = z.infer<
+    typeof LfgSuggestionsResponseSchema
+>;
+
+/** `POST /lfg/:gameId/invites` body — one recipient per request (ROK-1455 D6). */
+export const LfgInviteRequestSchema = z.object({
+    userId: z.number().int().positive(),
+});
+export type LfgInviteRequestDto = z.infer<typeof LfgInviteRequestSchema>;
+
+export const LfgInviteOutcomeSchema = z.enum(['sent', 'skipped']);
+export type LfgInviteOutcome = z.infer<typeof LfgInviteOutcomeSchema>;
+
+/**
+ * `POST /lfg/:gameId/invites` 200 body. Every recipient-scoped refusal (opted
+ * out, already invited, declined, ineligible, budget spent) is the ONE opaque
+ * `unavailable` (D13); the group cap is a 429 instead.
+ */
+export const LfgInviteResponseSchema = z.object({
+    status: LfgInviteOutcomeSchema,
+    reason: z.literal('unavailable').nullable(),
+});
+export type LfgInviteResponseDto = z.infer<typeof LfgInviteResponseSchema>;

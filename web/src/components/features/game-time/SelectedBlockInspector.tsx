@@ -1,0 +1,168 @@
+import type { JSX } from 'react';
+import { FULL_DAYS, formatHour } from './game-time-grid.utils';
+import type { SlotBlock } from './slot-blocks.utils';
+import { blockEndHour, maxEndIndex, minStartIndex } from './slot-blocks.utils';
+import type { GameTimeSlot } from '@raid-ledger/contract';
+import { presetIndices, type BlockPreset } from './block-presets';
+
+interface SelectedBlockInspectorProps {
+    selection: SlotBlock;
+    slots: GameTimeSlot[];
+    hours: number[];
+    onAdjust: (edge: 'start' | 'end', delta: number) => void;
+    onRemove: () => void;
+    onDone: () => void;
+    /** Coarse ranges (ROK-1579); the profile passes Evening / Whole day. */
+    presets?: BlockPreset[] | undefined;
+    /** Apply one — the caller decides whether the window has to grow first. */
+    onPreset?: (preset: BlockPreset) => void;
+}
+
+/** The selection's start and (exclusive) end hour; null when it sits outside `hours`. */
+function selectionHours({ startIndex, endIndex }: SlotBlock, hours: number[]): [number, number] | null {
+    const start = hours[startIndex];
+    const end = blockEndHour(endIndex, hours);
+    return start === undefined || end === undefined ? null : [start, end];
+}
+
+/**
+ * Pinned, so selecting a block never puts its own controls out of reach.
+ *
+ * In normal flow the inspector sits below a 17-row grid: it rendered at y=733 in
+ * a 727px mobile viewport (everything below the fold, no cue it existed), and at
+ * 681-771 in a 720px-tall desktop window, which keeps the day name and buttons
+ * but cuts off both steppers. Since the stepper is meant to be the precise AND
+ * accessible path, either one defeats it.
+ *
+ * Mobile clears the h-14 bottom tab bar plus its safe-area inset; desktop has no
+ * tab bar, so it sits flush. Opaque either way — it overlays the grid.
+ */
+const STICKY = 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 '
+    + 'bg-panel/95 backdrop-blur-sm shadow-lg md:bottom-0';
+
+/**
+ * Editor for the selected block (ROK-1426).
+ *
+ * The steppers are the precise path — a day column is far narrower than the 44px
+ * touch guideline even when a selected block widens — and the accessible one:
+ * real buttons, reachable by keyboard, where dragging a handle is not.
+ */
+export function SelectedBlockInspector({
+    selection, slots, hours, onAdjust, onRemove, onDone, presets, onPreset,
+}: SelectedBlockInspectorProps): JSX.Element | null {
+    const { dayOfWeek, startIndex, endIndex } = selection;
+    const span = selectionHours(selection, hours);
+    if (!span) return null;
+    const floor = minStartIndex(slots, dayOfWeek, endIndex, hours);
+    const ceiling = maxEndIndex(slots, dayOfWeek, startIndex, hours);
+
+    return (
+        <div className={`mt-2 p-2.5 rounded-lg border border-edge flex flex-col gap-2 ${STICKY}`} data-testid="selected-block-inspector">
+            <InspectorHeader dayOfWeek={dayOfWeek} onRemove={onRemove} onDone={onDone} />
+            <div className="flex gap-2">
+                <Stepper
+                    label="Start" value={formatHour(span[0])} testId="start"
+                    onDown={() => onAdjust('start', -1)} onUp={() => onAdjust('start', 1)}
+                    downDisabled={startIndex <= floor} upDisabled={startIndex >= endIndex - 1}
+                />
+                <Stepper
+                    label="End" value={formatHour(span[1])} testId="end"
+                    onDown={() => onAdjust('end', -1)} onUp={() => onAdjust('end', 1)}
+                    downDisabled={endIndex <= startIndex + 1} upDisabled={endIndex >= ceiling}
+                />
+            </div>
+            {presets && onPreset && (
+                <PresetChips presets={presets} hours={hours} selection={selection} onPreset={onPreset} />
+            )}
+        </div>
+    );
+}
+
+/**
+ * The coarse path: one tap for a range the steppers would take sixteen to reach
+ * (ROK-1579 frame 3). 44px targets, and `aria-pressed` when the selected block
+ * ALREADY spans exactly that range — so the chip reads as state, not just as a
+ * button. A preset whose start hour is off the current window still renders:
+ * the mount expands the window and applies it (that is the "Whole day" case).
+ */
+function PresetChips({ presets, hours, selection, onPreset }: {
+    presets: BlockPreset[]; hours: number[]; selection: SlotBlock;
+    onPreset: (preset: BlockPreset) => void;
+}): JSX.Element {
+    return (
+        <div className="flex gap-2">
+            {presets.map((preset) => {
+                const range = presetIndices(hours, preset);
+                const pressed = !!range
+                    && range.start === selection.startIndex && range.end === selection.endIndex;
+                return (
+                    <button
+                        key={preset.testId} type="button" data-testid={preset.testId}
+                        aria-pressed={pressed} onClick={() => onPreset(preset)}
+                        className={`min-h-[44px] flex-1 rounded-md border text-xs font-medium transition-colors
+                            ${pressed
+                                ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                                : 'border-edge bg-surface text-foreground hover:bg-overlay'}`}
+                    >
+                        {preset.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+/** The day name, Remove and Done — the row above the steppers. */
+function InspectorHeader({ dayOfWeek, onRemove, onDone }: {
+    dayOfWeek: number; onRemove: () => void; onDone: () => void;
+}): JSX.Element {
+    return (
+        <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-foreground">{FULL_DAYS[dayOfWeek]}</span>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button" onClick={onRemove}
+                    className="px-2 py-1 text-xs font-medium rounded border border-danger/40 text-danger hover:bg-danger/10 transition-colors"
+                    data-testid="remove-block"
+                >
+                    Remove
+                </button>
+                <button
+                    type="button" onClick={onDone}
+                    className="px-2 py-1 text-xs font-medium rounded border border-edge text-muted hover:text-foreground transition-colors"
+                    data-testid="deselect-block"
+                >
+                    Done
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function Stepper({ label, value, testId, onDown, onUp, downDisabled, upDisabled }: {
+    label: string; value: string; testId: string;
+    onDown: () => void; onUp: () => void; downDisabled: boolean; upDisabled: boolean;
+}): JSX.Element {
+    return (
+        <div className="flex-1 flex items-center gap-1.5 px-1.5 py-1 rounded-md border border-edge bg-surface">
+            <span className="text-[10px] uppercase tracking-wide text-muted w-8 shrink-0">{label}</span>
+            <StepButton onClick={onDown} disabled={downDisabled} label={`Move ${label.toLowerCase()} one hour earlier`} testId={`${testId}-earlier`}>&minus;</StepButton>
+            <span className="flex-1 text-center text-xs tabular-nums text-foreground" data-testid={`${testId}-value`}>{value}</span>
+            <StepButton onClick={onUp} disabled={upDisabled} label={`Move ${label.toLowerCase()} one hour later`} testId={`${testId}-later`}>+</StepButton>
+        </div>
+    );
+}
+
+function StepButton({ onClick, disabled, label, testId, children }: {
+    onClick: () => void; disabled: boolean; label: string; testId: string; children: React.ReactNode;
+}): JSX.Element {
+    return (
+        <button
+            type="button" onClick={onClick} disabled={disabled} aria-label={label}
+            className="w-6 h-6 shrink-0 rounded border border-edge bg-panel text-foreground text-sm leading-none font-bold disabled:opacity-35 disabled:cursor-default hover:enabled:bg-overlay transition-colors"
+            data-testid={testId}
+        >
+            {children}
+        </button>
+    );
+}

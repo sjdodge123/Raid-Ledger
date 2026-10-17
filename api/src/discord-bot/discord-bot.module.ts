@@ -1,0 +1,269 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { SettingsModule } from '../settings/settings.module';
+import { AuthModule } from '../auth/auth.module';
+import { EventsModule } from '../events/events.module';
+import { UsersModule } from '../users/users.module';
+import { CharactersModule } from '../characters/characters.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
+import { NotificationModule } from '../notifications/notification.module';
+import { ItadModule } from '../itad/itad.module';
+import { GameTasteModule } from '../game-taste/game-taste.module';
+import { DiscordBotService } from './discord-bot.service';
+import { DiscordBotClientService } from './discord-bot-client.service';
+import { DiscordBotSettingsController } from './discord-bot-settings.controller';
+import { DiscordBotInviteController } from './discord-bot-invite.controller';
+import { LfgBoardSettingsController } from './lfg-board-settings.controller';
+import { WeeklyDigestSettingsController } from './weekly-digest-settings.controller';
+import { JoinPostSettingsController } from './join-post-settings.controller';
+import { JoinPostService } from './join-post/join-post.service';
+import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
+import { DiscordChannelsController } from './discord-channels.controller';
+import { DiscordMemberController } from './discord-member.controller';
+import { DiscordUserController } from './discord-user.controller';
+import { ChannelBindingsController } from './channel-bindings.controller';
+import { DiscordEmbedFactory } from './services/discord-embed.factory';
+import { ChannelResolverService } from './services/channel-resolver.service';
+import { ChannelBindingsService } from './services/channel-bindings.service';
+import { PugInviteService } from './services/pug-invite.service';
+import { GameActivityService } from './services/game-activity.service';
+import { AdHocEventService } from './services/ad-hoc-event.service';
+import { QuickPlayHealthService } from './services/quick-play-health.service';
+import { AdHocParticipantService } from './services/ad-hoc-participant.service';
+import { AdHocServerPresenceService } from './services/ad-hoc-server-presence.service';
+import { AdHocNotificationService } from './services/ad-hoc-notification.service';
+import { ChannelPresenceEmbedService } from './services/channel-presence-embed.service';
+import { ServerPresenceRosterService } from './services/server-presence-roster.service';
+import { DiscordEventListener } from './listeners/event.listener';
+import { DiscordSyncListener } from './listeners/discord-sync.listener';
+import { InteractionListener } from './listeners/interaction.listener';
+import { SignupInteractionListener } from './listeners/signup-interaction.listener';
+import { RescheduleResponseListener } from './listeners/reschedule-response.listener';
+import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
+import { RunningLateInteractionListener } from './listeners/running-late-interaction.listener';
+import { PostEventFollowupInteractionListener } from './listeners/post-event-followup-interaction.listener';
+import { DeparturePromoteListener } from './listeners/departure-promote.listener';
+import { PugInviteListener } from './listeners/pug-invite.listener';
+import { GuildMemberAddListener } from './listeners/guild-member-add.listener';
+import { ActivityListener } from './listeners/activity.listener';
+import { VoiceStateListener } from './listeners/voice-state.listener';
+import {
+  EmbedSyncQueueService,
+  EMBED_SYNC_QUEUE,
+} from './queues/embed-sync.queue';
+import {
+  AdHocGracePeriodQueueService,
+  AD_HOC_GRACE_QUEUE,
+} from './queues/ad-hoc-grace-period.queue';
+import {
+  DepartureGraceQueueService,
+  DEPARTURE_GRACE_QUEUE,
+} from './queues/departure-grace.queue';
+import {
+  EventLifecycleQueueService,
+  EVENT_LIFECYCLE_QUEUE,
+} from './queues/event-lifecycle.queue';
+import { EmbedSyncProcessor } from './processors/embed-sync.processor';
+import { AdHocGracePeriodProcessor } from './processors/ad-hoc-grace-period.processor';
+import { DepartureGraceProcessor } from './processors/departure-grace.processor';
+import { EventLifecycleProcessor } from './processors/event-lifecycle.processor';
+import { DepartureGraceService } from './services/departure-grace.service';
+import { RegisterCommandsService } from './commands/register-commands';
+import { EventCreateCommand } from './commands/event-create.command';
+import { EventsListCommand } from './commands/events-list.command';
+import { RosterViewCommand } from './commands/roster-view.command';
+import { BindCommand } from './commands/bind.command';
+import { UnbindCommand } from './commands/unbind.command';
+import { BindingsCommand } from './commands/bindings.command';
+import { InviteCommand } from './commands/invite.command';
+import { HelpCommand } from './commands/help.command';
+import { EventLinkListener } from './listeners/event-link.listener';
+import { SteamLinkListener } from './listeners/steam-link.listener';
+import { DiscordEmojiService } from './services/discord-emoji.service';
+import { EmbedPosterService } from './services/embed-poster.service';
+import { EmbedSchedulerService } from './services/embed-scheduler.service';
+import { ScheduledEventService } from './services/scheduled-event.service';
+import { ScheduledEventReconciliationService } from './services/scheduled-event.reconciliation';
+import { PresenceGameDetectorService } from './services/presence-game-detector.service';
+import { VoiceAttendanceService } from './services/voice-attendance.service';
+import { EventAutoExtendService } from './services/event-auto-extend.service';
+import { AdHocReaperService } from './services/ad-hoc-reaper.service';
+import { EphemeralVoiceService } from './services/ephemeral-voice.service';
+import { LfgNowSpawnService } from './lfg-now/lfg-now-spawn.service';
+import { EphemeralVoiceScheduler } from './services/ephemeral-voice.scheduler';
+import { EphemeralVoiceReaper } from './services/ephemeral-voice.reaper';
+import { EphemeralVoiceIdleCoordinator } from './services/ephemeral-voice-idle.coordinator';
+import {
+  EphemeralVoiceIdleQueueService,
+  EPHEMERAL_VOICE_IDLE_QUEUE,
+} from './queues/ephemeral-voice-idle.queue';
+import { EphemeralVoiceIdleProcessor } from './processors/ephemeral-voice-idle.processor';
+import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.controller';
+import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
+import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.controller';
+import { PlayingCommand } from './commands/playing.command';
+import { LfgCommand } from './commands/lfg.command';
+import { LfgLeaveCommand } from './commands/lfg-leave.command';
+import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
+import { LfgLeaveListener } from './listeners/lfg-leave.listener';
+import { LfgJoinListener } from './listeners/lfg-join.listener';
+import { LfgComposerListener } from './lfg-composer/lfg-composer.listener';
+import { LfgInviteDeclineListener } from './listeners/lfg-invite-decline.listener';
+import { LfgModule } from '../lfg/lfg.module';
+import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { GameRolesSettingsController } from './game-roles/game-roles-settings.controller';
+import { GameRoleReconcileService } from './game-roles/game-role-reconcile.service';
+import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-delete.listener';
+
+@Module({
+  imports: [
+    EventEmitterModule,
+    SettingsModule,
+    forwardRef(() => UsersModule),
+    forwardRef(() => EventsModule),
+    forwardRef(() => AuthModule),
+    forwardRef(() => NotificationModule),
+    CharactersModule,
+    CronJobModule,
+    ItadModule,
+    GameTasteModule,
+    ActivityLogModule,
+    // ROK-1454 D10: /lfg writes through LfgService. LfgModule imports only
+    // Drizzle/Cron/Settings, so this cannot cycle back into the bot.
+    LfgModule,
+    BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
+    BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
+    BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
+    BullModule.registerQueue({ name: EVENT_LIFECYCLE_QUEUE }),
+    BullModule.registerQueue({ name: EPHEMERAL_VOICE_IDLE_QUEUE }),
+  ],
+  controllers: [
+    DiscordBotSettingsController,
+    DiscordBotInviteController,
+    LfgBoardSettingsController,
+    WeeklyDigestSettingsController,
+    GameRolesSettingsController,
+    JoinPostSettingsController,
+    LineupChannelSettingsController,
+    DiscordChannelsController,
+    DiscordMemberController,
+    DiscordUserController,
+    ChannelBindingsController,
+    EphemeralVoiceSettingsController,
+    DemoTestEphemeralVoiceController,
+    DemoTestLobbyPresenceController,
+    LfgNowStartController,
+  ],
+  providers: [
+    DiscordBotService,
+    JoinPostService,
+    DiscordBotClientService,
+    DiscordEmbedFactory,
+    DiscordEmojiService,
+    ChannelResolverService,
+    ChannelBindingsService,
+    PugInviteService,
+    AdHocEventService,
+    // ROK-1800: the Pelican presence sink (exposed globally by
+    // AdHocServerPresenceModule under SERVER_PRESENCE_SINK).
+    AdHocServerPresenceService,
+    QuickPlayHealthService,
+    AdHocParticipantService,
+    AdHocNotificationService,
+    ChannelPresenceEmbedService,
+    ServerPresenceRosterService,
+    DiscordEventListener,
+    DiscordSyncListener,
+    EmbedSyncQueueService,
+    EmbedSyncProcessor,
+    AdHocGracePeriodQueueService,
+    AdHocGracePeriodProcessor,
+    DepartureGraceQueueService,
+    DepartureGraceProcessor,
+    EventLifecycleQueueService,
+    EventLifecycleProcessor,
+    DepartureGraceService,
+    InteractionListener,
+    SignupInteractionListener,
+    RescheduleResponseListener,
+    RoachOutInteractionListener,
+    RunningLateInteractionListener,
+    PostEventFollowupInteractionListener,
+    DeparturePromoteListener,
+    PugInviteListener,
+    GuildMemberAddListener,
+    ActivityListener,
+    VoiceStateListener,
+    GameActivityService,
+    // ROK-1767: auto-maintained per-game Discord roles.
+    GameRoleReconcileService,
+    GameRoleAccountDeleteListener,
+    PresenceGameDetectorService,
+    VoiceAttendanceService,
+    EventAutoExtendService,
+    AdHocReaperService,
+    EphemeralVoiceService,
+    // ROK-1494: the LFG "playing now" trigger. Registered here rather than in
+    // its own module because it injects EphemeralVoiceService and
+    // SettingsService, which this module provides and does not export.
+    LfgNowSpawnService,
+    EphemeralVoiceScheduler,
+    EphemeralVoiceReaper,
+    EphemeralVoiceIdleCoordinator,
+    EphemeralVoiceIdleQueueService,
+    EphemeralVoiceIdleProcessor,
+    EventLinkListener,
+    SteamLinkListener,
+    EmbedPosterService,
+    EmbedSchedulerService,
+    ScheduledEventService,
+    ScheduledEventReconciliationService,
+    RegisterCommandsService,
+    EventCreateCommand,
+    EventsListCommand,
+    RosterViewCommand,
+    BindCommand,
+    UnbindCommand,
+    BindingsCommand,
+    InviteCommand,
+    HelpCommand,
+    PlayingCommand,
+    LfgCommand,
+    LfgLeaveCommand,
+    LfgWithdrawListener,
+    LfgLeaveListener,
+    LfgJoinListener,
+    LfgComposerListener,
+    LfgInviteDeclineListener,
+  ],
+  exports: [
+    DiscordBotService,
+    // ROK-1740: the DEMO join-post fixture reuses the service.
+    JoinPostService,
+    DiscordBotClientService,
+    DiscordEmbedFactory,
+    DiscordEmojiService,
+    DiscordEventListener,
+    ChannelBindingsService,
+    ChannelResolverService,
+    PugInviteService,
+    AdHocEventService,
+    AdHocServerPresenceService,
+    VoiceAttendanceService,
+    // ROK-1446: the voice listeners and the ad-hoc suppression gate both
+    // inject the channel presence service (D6/D9).
+    ChannelPresenceEmbedService,
+    // ROK-1370: lineups' poll-expiry path enqueues an embed re-sync after
+    // clearing reschedulingPollId (heals the stuck RESCHEDULING card).
+    EmbedSyncQueueService,
+    // The DEMO_MODE LFG-now voice endpoints (DemoTestLfgNowVoiceController)
+    // record a seeded join/leave through the listener's own roster helpers.
+    AdHocParticipantService,
+    // The DEMO_MODE lfg/end-session endpoint (DemoTestLfgController) tears down
+    // the session's temp channel, which a CI run would otherwise orphan.
+    EphemeralVoiceService,
+  ],
+})
+export class DiscordBotModule {}

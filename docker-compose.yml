@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: raid-ledger-db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: raid_ledger
+    # ROK-1156: mirror the allinone Postgres flags so dev surfaces slow queries the same way prod does.
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c log_min_duration_statement=200ms
+      -c pg_stat_statements.track=all
+    # ROK-1292 PR1: bind to loopback only — local DB holds prod-clone data after `clone-prod-to-local.sh`.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d raid_ledger" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: raid-ledger-redis
+    restart: always
+    # ROK-1292 PR1: loopback-only — Redis runs without auth and carries BullMQ payloads.
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # API service (NestJS)
+  # Profile: test - Full stack for UI testing
+  # =============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: raid-ledger-api
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/raid_ledger
+      REDIS_URL: redis://redis:6379
+      # ROK-1292 PR1: this literal is also rejected by the allinone guard (Dockerfile.allinone + docker-entrypoint.sh) — keep them in sync.
+      JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-prod}"
+      CLIENT_URL: http://localhost:80
+      CORS_ORIGIN: http://localhost:80
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      BACKUP_DIR: /data/backups
+      # ROK-306/ROK-1838: Sentry error reporting is ON by default for the API
+      # and (via /system/status) the web app. This dev stack opts out so it
+      # doesn't spend the maintainers' quota; remove the line to report.
+      # DISABLE_TELEMETRY: "true" also forces it off.
+      ENABLE_TELEMETRY: "false"
+    volumes:
+      - avatar_data:/data
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    profiles:
+      - test
+
+  # =============================================================================
+  # Web service (Nginx serving production build)
+  # Profile: test - Serves on port 80 for Playwright verification
+  # =============================================================================
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      target: production
+    container_name: raid-ledger-web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "${PORT:-80}:80"
+    profiles:
+      - test
+
+  # =============================================================================
+  # Ollama (self-hosted LLM inference)
+  # Profile: ai - Only started with --profile ai
+  # =============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: raid-ledger-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles:
+      - ai
+
+volumes:
+  db_data:
+  avatar_data:
+  ollama_data:
+
+

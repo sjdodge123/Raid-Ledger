@@ -1,0 +1,417 @@
+import { z } from 'zod';
+import { WowForeverRulesetSchema, WowForeverSelectableRulesetSchema } from './blizzard.schema.js';
+import { CharacterLockoutsSchema } from './character-lockouts.schema.js';
+
+// ==========================================
+// Character Role Enum
+// ==========================================
+
+export const CharacterRoleSchema = z.enum(['tank', 'healer', 'dps']);
+export type CharacterRole = z.infer<typeof CharacterRoleSchema>;
+
+/** The canonical list of MMO roles (tank, healer, dps). */
+export const CHARACTER_ROLES: readonly CharacterRole[] = CharacterRoleSchema.options;
+
+// ==========================================
+// Equipment Types (Character Detail Page)
+// ==========================================
+
+export const EquipmentItemSchema = z.object({
+    slot: z.string(),
+    name: z.string(),
+    itemId: z.number().int(),
+    quality: z.string(),
+    itemLevel: z.number().int(),
+    itemSubclass: z.string().nullable(),
+    enchantments: z.array(z.object({
+        displayString: z.string(),
+        enchantmentId: z.number().int().optional(),
+    })).optional(),
+    sockets: z.array(z.object({
+        socketType: z.string(),
+        itemId: z.number().int().optional(),
+    })).optional(),
+    /** Stat values for fallback tooltip */
+    stats: z.array(z.object({
+        type: z.string(),
+        name: z.string(),
+        value: z.number(),
+    })).optional(),
+    /** Armor value */
+    armor: z.number().int().optional(),
+    /** Binding type: "ON_EQUIP" | "ON_ACQUIRE" etc. */
+    binding: z.string().optional(),
+    /** Required character level */
+    requiredLevel: z.number().int().optional(),
+    /** Weapon damage/speed info */
+    weapon: z.object({
+        damageMin: z.number(),
+        damageMax: z.number(),
+        attackSpeed: z.number(),
+        dps: z.number(),
+    }).optional(),
+    /** Flavor text / item description */
+    description: z.string().optional(),
+    /** Set name if item is part of a set */
+    setName: z.string().optional(),
+    /** Item icon URL from Blizzard media API */
+    iconUrl: z.string().optional(),
+    /**
+     * ROK-1727: Wowhead data env the item's name/icon came from
+     * (16 = WoW: Forever, 4 = Classic fallback). Absent ⇒ the
+     * character variant's default Wowhead domain.
+     */
+    wowheadEnv: z.union([z.literal(16), z.literal(4)]).optional(),
+    /**
+     * ROK-1727: false when name/quality/icon are placeholders
+     * (`Item #<id>`) because the item metadata is not resolved yet.
+     * Absent ⇒ resolved (Blizzard Armory data).
+     */
+    resolved: z.boolean().optional(),
+});
+
+export type EquipmentItemDto = z.infer<typeof EquipmentItemSchema>;
+
+export const CharacterEquipmentSchema = z.object({
+    equippedItemLevel: z.number().int().nullable(),
+    items: z.array(EquipmentItemSchema),
+    syncedAt: z.string().datetime(),
+    /**
+     * ROK-1727: where the equipment came from. Absent ⇒ 'armory'
+     * (back-compat for stored Blizzard jsonb).
+     */
+    source: z.enum(['armory', 'addon']).optional(),
+});
+
+export type CharacterEquipmentDto = z.infer<typeof CharacterEquipmentSchema>;
+
+// ==========================================
+// Forever Talents (ROK-1744) — addon-sourced talent display DTO.
+// Additive: CharacterSchema.talents stays z.unknown() (D2).
+// ==========================================
+
+/** One talent node from a LedgerLink snapshot, with its resolved grid slot. */
+export const ForeverTalentNodeSchema = z.object({
+    nodeId: z.number().int().positive(),
+    rank: z.number().int().min(0),
+    maxRanks: z.number().int().min(1).max(255).optional(),
+    name: z.string().max(64).optional(),
+    spellId: z.number().int().positive().optional(),
+    /** Resolved sub-tree (addon hint or server-derived). */
+    tree: z.number().int().min(0).max(2).optional(),
+    row: z.number().int().min(0).max(9).optional(),
+    col: z.number().int().min(0).max(3).optional(),
+});
+
+export type ForeverTalentNodeDto = z.infer<typeof ForeverTalentNodeSchema>;
+
+/** Forever talents as rendered on the character page (`format: 'forever'`). */
+export const ForeverTalentsSchema = z.object({
+    format: z.literal('forever'),
+    source: z.literal('addon'),
+    /** Snapshot capturedAt. */
+    syncedAt: z.string().datetime(),
+    configId: z.number().int().optional(),
+    /** Carried, not used (non-goal). */
+    importString: z.string().max(2048).optional(),
+    /** grid ⇔ every node has tree/row/col. */
+    layout: z.enum(['grid', 'list']),
+    /** [] when layout = 'list'. */
+    trees: z
+        .array(
+            z.object({
+                index: z.number().int().min(0).max(2),
+                spent: z.number().int().min(0),
+            }),
+        )
+        .max(3),
+    nodes: z.array(ForeverTalentNodeSchema).max(200),
+});
+
+export type ForeverTalentsDto = z.infer<typeof ForeverTalentsSchema>;
+
+// ==========================================
+// Profession Types (Character Detail Page)
+// ==========================================
+
+export const ProfessionTierSchema = z.object({
+    id: z.number().int(),
+    name: z.string(),
+    skillLevel: z.number().int(),
+    maxSkillLevel: z.number().int(),
+});
+
+export type ProfessionTierDto = z.infer<typeof ProfessionTierSchema>;
+
+export const ProfessionEntrySchema = z.object({
+    id: z.number().int(),
+    name: z.string(),
+    /** Lowercased name with spaces replaced by '-' (e.g. 'tailoring', 'inscription') */
+    slug: z.string(),
+    skillLevel: z.number().int(),
+    maxSkillLevel: z.number().int(),
+    tiers: z.array(ProfessionTierSchema),
+});
+
+export type ProfessionEntryDto = z.infer<typeof ProfessionEntrySchema>;
+
+export const CharacterProfessionsSchema = z.object({
+    primary: z.array(ProfessionEntrySchema),
+    secondary: z.array(ProfessionEntrySchema),
+    syncedAt: z.string().datetime(),
+});
+
+export type CharacterProfessionsDto = z.infer<typeof CharacterProfessionsSchema>;
+
+// ==========================================
+// WoW region
+// ==========================================
+
+/** WoW regions supported by the Blizzard API */
+export const WowRegionSchema = z.enum(['us', 'eu', 'kr', 'tw']);
+export type WowRegion = z.infer<typeof WowRegionSchema>;
+
+// ==========================================
+// Character DTOs
+// ==========================================
+
+/**
+ * Full character DTO for API responses.
+ */
+export const CharacterSchema = z.object({
+    id: z.string().uuid(),
+    userId: z.number().int(),
+    /** ROK-400: games.id (integer) — was UUID referencing game_registry */
+    gameId: z.number().int(),
+    name: z.string().min(1).max(100),
+    realm: z.string().max(100).nullable(),
+    class: z.string().max(50).nullable(),
+    spec: z.string().max(50).nullable(),
+    role: CharacterRoleSchema.nullable(),
+    roleOverride: CharacterRoleSchema.nullable(),
+    effectiveRole: CharacterRoleSchema.nullable(),
+    isMain: z.boolean(),
+    /** ROK-1756: true when the character is bound to a LedgerLink GUID (the GUID itself is never exposed). */
+    addonLinked: z.boolean().optional(),
+    itemLevel: z.number().int().nullable(),
+    externalId: z.string().max(255).nullable(),
+    avatarUrl: z.string().url().nullable(),
+    renderUrl: z.string().nullable(),
+    level: z.number().int().nullable(),
+    race: z.string().max(50).nullable(),
+    /** ROK-1742: from the WoW addon's `who.gender`; absent/null = unknown. */
+    gender: z.enum(['male', 'female']).nullable().optional(),
+    faction: z.enum(['alliance', 'horde']).nullable(),
+    lastSyncedAt: z.string().datetime().nullable(),
+    profileUrl: z.string().url().nullable(),
+    region: z.string().max(10).nullable(),
+    /** ROK-1721: WoW: Forever ruleset (null for every other game). */
+    ruleset: WowForeverRulesetSchema.nullable(),
+    gameVariant: z.string().max(30).nullable(),
+    equipment: CharacterEquipmentSchema.nullable(),
+    talents: z.unknown().nullable(),
+    /** ROK-1743: addon saved instances (read-time, Forever only). */
+    lockouts: CharacterLockoutsSchema.optional(),
+    professions: CharacterProfessionsSchema.nullable(),
+    /** Cached enrichment data from third-party APIs (ROK-269) */
+    enrichments: z.array(z.object({
+        enricherKey: z.string(),
+        data: z.unknown(),
+        fetchedAt: z.string().datetime(),
+    })).optional(),
+    displayOrder: z.number().int(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+});
+
+export type CharacterDto = z.infer<typeof CharacterSchema>;
+
+// ==========================================
+// Create Character
+// ==========================================
+
+/**
+ * Request body for POST /users/me/characters
+ */
+export const CreateCharacterSchema = z.object({
+    /** ROK-400: games.id (integer) */
+    gameId: z.number().int().positive(),
+    name: z.string().min(1).max(100),
+    realm: z.string().max(100).optional(),
+    class: z.string().max(50).optional(),
+    spec: z.string().max(50).optional(),
+    role: CharacterRoleSchema.optional(),
+    isMain: z.boolean().optional().default(false),
+    itemLevel: z.number().int().positive().optional(),
+    avatarUrl: z.string().url().optional(),
+    /** ROK-1721: required for WoW: Forever (server-checked), rejected for other games. */
+    region: WowRegionSchema.optional(),
+    /** ROK-1721: required for WoW: Forever (server-checked), rejected for other games. */
+    ruleset: WowForeverSelectableRulesetSchema.optional(),
+});
+
+/** Type after Zod parsing (isMain has default applied) */
+export type CreateCharacterDto = z.infer<typeof CreateCharacterSchema>;
+
+/** Type for input before Zod parsing (isMain is optional) */
+export type CreateCharacterInput = z.input<typeof CreateCharacterSchema>;
+
+// ==========================================
+// Update Character
+// ==========================================
+
+/**
+ * Request body for PATCH /users/me/characters/:id
+ */
+export const UpdateCharacterSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    realm: z.string().max(100).nullable().optional(),
+    class: z.string().max(50).nullable().optional(),
+    spec: z.string().max(50).nullable().optional(),
+    roleOverride: CharacterRoleSchema.nullable().optional(),
+    itemLevel: z.number().int().positive().nullable().optional(),
+    avatarUrl: z.string().url().nullable().optional(),
+    displayOrder: z.number().int().optional(),
+    /** ROK-1130: manual profession entry (Classic players, retail overrides). */
+    professions: CharacterProfessionsSchema.nullable().optional(),
+    /** ROK-1721: WoW: Forever only — editable (ruleset moves are allowed in-game). */
+    ruleset: WowForeverSelectableRulesetSchema.optional(),
+    /** ROK-1721: region is part of a Forever identity — never editable; delete and re-add. */
+    region: z.never({ error: 'Region cannot be changed after creation' }).optional(),
+});
+
+export type UpdateCharacterDto = z.infer<typeof UpdateCharacterSchema>;
+
+// ==========================================
+// Response Schemas
+// ==========================================
+
+/**
+ * Response for GET /users/me/characters
+ */
+export const CharacterListResponseSchema = z.object({
+    data: z.array(CharacterSchema),
+    meta: z.object({
+        total: z.number().int(),
+    }),
+});
+
+export type CharacterListResponseDto = z.infer<typeof CharacterListResponseSchema>;
+
+/** Query params for GET /users/me/characters (ROK-428) */
+export const CharacterListQuerySchema = z.object({
+    gameId: z.coerce.number().int().positive().optional(),
+});
+
+export type CharacterListQueryDto = z.infer<typeof CharacterListQuerySchema>;
+
+/**
+ * Group characters by game for UI display.
+ * Used by frontend to organize characters into collapsible game sections.
+ */
+export const CharactersByGameSchema = z.object({
+    gameId: z.number().int(),
+    gameName: z.string(),
+    gameSlug: z.string(),
+    characters: z.array(CharacterSchema),
+});
+
+export type CharactersByGameDto = z.infer<typeof CharactersByGameSchema>;
+
+/**
+ * Response for GET /users/me/characters?grouped=true
+ */
+export const CharactersGroupedResponseSchema = z.object({
+    data: z.array(CharactersByGameSchema),
+    meta: z.object({
+        totalCharacters: z.number().int(),
+        totalGames: z.number().int(),
+    }),
+});
+
+export type CharactersGroupedResponseDto = z.infer<typeof CharactersGroupedResponseSchema>;
+
+// ==========================================
+// WoW Armory Import (ROK-234)
+// ==========================================
+
+/**
+ * WoW game variant — determines which Blizzard API namespace to use.
+ * @deprecated ROK-790: Namespace resolution now uses games.apiNamespacePrefix.
+ * This schema is kept for backward compatibility with the frontend import/refresh DTOs.
+ * ROK-791 (frontend) will clean up usage; ROK-789 will drop the character.gameVariant column.
+ */
+export const WowGameVariantSchema = z.enum([
+    'retail',
+    'classic_era',
+    'classic',
+    'classic_anniversary',
+    /** ROK-1563: WoW: Forever — Blizzard namespace still pending (beta 2026-09-17). */
+    'wow_forever',
+]);
+/** @deprecated Use games.apiNamespacePrefix instead (ROK-790). */
+export type WowGameVariant = z.infer<typeof WowGameVariantSchema>;
+
+/**
+ * Request body for POST /users/me/characters/import/wow
+ */
+export const ImportWowCharacterSchema = z.object({
+    name: z.string().min(1).max(100),
+    realm: z.string().min(1).max(100),
+    region: WowRegionSchema,
+    gameVariant: WowGameVariantSchema.optional().default('retail'),
+    isMain: z.boolean().optional().default(false),
+});
+
+export type ImportWowCharacterDto = z.infer<typeof ImportWowCharacterSchema>;
+export type ImportWowCharacterInput = z.input<typeof ImportWowCharacterSchema>;
+
+/**
+ * Request body for POST /users/me/characters/:id/refresh
+ */
+export const RefreshCharacterSchema = z.object({
+    region: WowRegionSchema,
+    gameVariant: WowGameVariantSchema.optional().default('retail'),
+});
+
+export type RefreshCharacterDto = z.infer<typeof RefreshCharacterSchema>;
+/** Input type for frontend — gameVariant is optional (backend defaults to 'retail') */
+export type RefreshCharacterInput = z.input<typeof RefreshCharacterSchema>;
+
+// ==========================================
+// WoW Realm List (ROK-234 UX refinements)
+// ==========================================
+
+export const WowRealmSchema = z.object({
+    name: z.string(),
+    slug: z.string(),
+    id: z.number().int(),
+});
+
+export type WowRealmDto = z.infer<typeof WowRealmSchema>;
+
+export const WowRealmListResponseSchema = z.object({
+    data: z.array(WowRealmSchema),
+});
+
+export type WowRealmListResponseDto = z.infer<typeof WowRealmListResponseSchema>;
+
+// ==========================================
+// Blizzard Character Preview (ROK-234 UX refinements)
+// ==========================================
+
+export const BlizzardCharacterPreviewSchema = z.object({
+    name: z.string(),
+    realm: z.string(),
+    class: z.string(),
+    spec: z.string().nullable(),
+    role: z.enum(['tank', 'healer', 'dps']).nullable(),
+    level: z.number().int(),
+    race: z.string(),
+    faction: z.enum(['alliance', 'horde']),
+    itemLevel: z.number().int().nullable(),
+    avatarUrl: z.string().nullable(),
+    profileUrl: z.string().nullable(),
+});
+
+export type BlizzardCharacterPreviewDto = z.infer<typeof BlizzardCharacterPreviewSchema>;

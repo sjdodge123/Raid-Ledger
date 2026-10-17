@@ -1,0 +1,336 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { BindingPurpose } from '@raid-ledger/contract';
+import {
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type AutocompleteInteraction,
+  type RESTPostAPIChatInputApplicationCommandsJSONBody,
+} from 'discord.js';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { APP_EVENT_EVENTS } from '../discord-bot.constants';
+import type { SlashCommandHandler } from './register-commands';
+import type { CommandInteractionHandler } from '../listeners/interaction.listener';
+import {
+  buildBindSuccessEmbed,
+  buildEventBindEmbed,
+  autocompleteGames,
+  autocompleteSeries,
+  autocompleteEvents,
+  buildEventUpdatePayload,
+  applyEventChanges,
+  findSeriesEventIds,
+  findSeriesGame,
+  shouldDeriveSeriesGame,
+  type OtherSlotState,
+} from './bind.helpers';
+import {
+  resolveChannel,
+  resolveGame,
+  resolveSeries,
+  lookupEvent,
+  checkEventPermission,
+  checkBindingPermission,
+  type ResolvedChannel,
+} from './bind.resolvers';
+import { confirmMultiMonitor } from './bind.confirmation';
+import { buildBindDefinition } from './bind.definition';
+import {
+  bindErrorReply,
+  parsePurposeOption,
+  PURPOSE_WITH_EVENT_ERROR,
+  resolvePurpose,
+  type ExplicitTextPurpose,
+} from './bind.purpose';
+
+@Injectable()
+export class BindCommand
+  implements SlashCommandHandler, CommandInteractionHandler
+{
+  readonly commandName = 'bind';
+  private readonly logger = new Logger(BindCommand.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly channelBindingsService: ChannelBindingsService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
+    return buildBindDefinition();
+  }
+
+  async handleInteraction(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply('This command can only be used in a server.');
+      return;
+    }
+    const eventValue = interaction.options.getString('event');
+    if (eventValue) {
+      // ROK-1768: the event path never reads `purpose`; ignoring it would mislead.
+      if (parsePurposeOption(interaction)) {
+        await interaction.editReply(PURPOSE_WITH_EVENT_ERROR);
+        return;
+      }
+      await this.handleEventBind(interaction, guildId, eventValue);
+      return;
+    }
+    await this.handleChannelBind(interaction, guildId);
+  }
+
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction,
+  ): Promise<void> {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name === 'event') {
+      await interaction.respond(
+        await autocompleteEvents(this.db, interaction.user.id, focused.value),
+      );
+    } else if (focused.name === 'game') {
+      await interaction.respond(
+        await autocompleteGames(this.db, focused.value),
+      );
+    } else if (focused.name === 'series') {
+      await interaction.respond(
+        await autocompleteSeries(this.db, focused.value),
+      );
+    }
+  }
+
+  // ─── Channel binding ──────────────────────────────────
+
+  private async handleChannelBind(
+    interaction: ChatInputCommandInteraction,
+    guildId: string,
+  ): Promise<void> {
+    // ROK-1628: checked before any lookup or write, so a refused caller
+    // changes nothing and announces nothing.
+    if (!(await checkBindingPermission(this.db, interaction))) return;
+    const resolved = resolveChannel(interaction);
+    if (!resolved.channelId) {
+      await interaction.editReply('Could not determine the target channel.');
+      return;
+    }
+    let game = await resolveGame(this.db, interaction);
+    if (game === false) return;
+    const series = await resolveSeries(this.db, interaction);
+    if (series === false) return;
+    game = await this.deriveSeriesGame(resolved, game, series);
+    const purpose = await resolvePurpose(interaction, resolved, game, series);
+    if (purpose === false) return;
+    await this.tryBindChannel(
+      interaction,
+      guildId,
+      resolved as ResolvedChannel & { channelId: string },
+      game,
+      series,
+      purpose,
+    );
+  }
+
+  /**
+   * ROK-1372: voice binds must NOT auto-derive a series game — a variety
+   * series would get locked to one arbitrary game (game-voice-monitor) and
+   * mislabel every quick-play. See shouldDeriveSeriesGame.
+   */
+  private async deriveSeriesGame(
+    resolved: ResolvedChannel,
+    game: { id: number; name: string } | null,
+    series: { id: string; title: string } | null,
+  ): Promise<{ id: number; name: string } | null> {
+    if (
+      !series ||
+      !shouldDeriveSeriesGame(resolved.bindingChannelType, game !== null)
+    ) {
+      return game;
+    }
+    return findSeriesGame(this.db, series.id);
+  }
+
+  private async tryBindChannel(
+    interaction: ChatInputCommandInteraction,
+    guildId: string,
+    ch: ResolvedChannel & { channelId: string },
+    game: { id: number; name: string } | null,
+    series: { id: string; title: string } | null,
+    purpose: ExplicitTextPurpose | null,
+  ): Promise<void> {
+    const behavior =
+      purpose ??
+      this.channelBindingsService.detectBehavior(
+        ch.bindingChannelType,
+        game?.id ?? null,
+      );
+    const confirmed = await confirmMultiMonitor(
+      this.db,
+      interaction,
+      guildId,
+      ch.channelId,
+      behavior,
+      game?.id ?? null,
+    );
+    if (!confirmed) return;
+    try {
+      await this.executeBindAndReply(
+        interaction,
+        guildId,
+        ch,
+        behavior,
+        game,
+        series,
+      );
+      if (series) await this.resyncSeriesEvents(series.id);
+    } catch (err: unknown) {
+      this.logger.error('Failed to create channel binding:', err);
+      // ROK-1415: surface the guard's own sentence (e.g. "gameId: A Game Voice
+      // Monitor binding must have a game…") so Discord and the web admin show
+      // the identical message from the identical classifier. ROK-1768: a 409
+      // QP-game-taken names the channel that already posts.
+      await interaction.editReply(
+        bindErrorReply(err) ??
+          'Failed to bind channel. Please try again or use the web admin panel.',
+      );
+    }
+  }
+
+  private async executeBindAndReply(
+    interaction: ChatInputCommandInteraction,
+    guildId: string,
+    ch: ResolvedChannel & { channelId: string },
+    behavior: BindingPurpose,
+    game: { id: number; name: string } | null,
+    series: { id: string; title: string } | null,
+  ): Promise<void> {
+    const { binding, replacedChannelIds } =
+      await this.channelBindingsService.bind(
+        guildId,
+        ch.channelId,
+        ch.bindingChannelType,
+        behavior,
+        game?.id ?? null,
+        undefined,
+        series?.id ?? null,
+      );
+    // ROK-1351: surface the OTHER slot so the embed shows full dual-binding state.
+    const otherSlot = await this.resolveOtherSlot(
+      guildId,
+      ch.bindingChannelType,
+      series?.id ?? null,
+    );
+    const { embed, components } = buildBindSuccessEmbed(
+      ch.channelName,
+      behavior,
+      series?.title ?? null,
+      game?.name ?? null,
+      replacedChannelIds,
+      otherSlot,
+      // ROK-1462 D6: the reply states the settings the binding actually
+      // carries, in the same words as the admin form.
+      binding.config ?? null,
+    );
+    await interaction.editReply({ embeds: [embed], components });
+  }
+
+  /**
+   * Look up the OTHER slot's current channel for a series bind (ROK-1351), so
+   * the success embed can show the full dual-binding state. After a voice bind
+   * we report the text announce slot; after a text bind, the voice host slot.
+   * Returns null for non-series binds (single-channel embed unchanged).
+   */
+  private async resolveOtherSlot(
+    guildId: string,
+    boundType: ResolvedChannel['bindingChannelType'],
+    seriesId: string | null,
+  ): Promise<OtherSlotState | null> {
+    if (!seriesId) return null;
+    if (boundType === 'voice') {
+      const channelId = await this.channelBindingsService.getChannelForSeries(
+        guildId,
+        seriesId,
+      );
+      return { channelType: 'text', channelId };
+    }
+    const channelId =
+      await this.channelBindingsService.getVoiceChannelForSeries(
+        guildId,
+        seriesId,
+      );
+    return { channelType: 'voice', channelId };
+  }
+
+  /** Re-syncs Discord embeds/scheduled events for all events in a series. */
+  private async resyncSeriesEvents(recurrenceGroupId: string): Promise<void> {
+    const ids = await findSeriesEventIds(this.db, recurrenceGroupId);
+    for (const id of ids) {
+      const payload = await buildEventUpdatePayload(this.db, id);
+      if (payload) {
+        this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, payload);
+      }
+    }
+    this.logger.log(
+      `Re-synced ${ids.length} events for series ${recurrenceGroupId}`,
+    );
+  }
+
+  // ─── Event binding ────────────────────────────────────
+
+  private async handleEventBind(
+    interaction: ChatInputCommandInteraction,
+    guildId: string,
+    eventIdStr: string,
+  ): Promise<void> {
+    const eventId = parseInt(eventIdStr, 10);
+    if (isNaN(eventId)) {
+      await interaction.editReply('Invalid event. Use autocomplete.');
+      return;
+    }
+    const event = await lookupEvent(this.db, eventId);
+    if (!event) {
+      await interaction.editReply('Event not found.');
+      return;
+    }
+    const allowed = await checkEventPermission(
+      this.db,
+      interaction,
+      event.creatorId,
+    );
+    if (!allowed) return;
+    await this.applyAndReplyEventBind(interaction, eventId, event.title);
+  }
+
+  private async applyAndReplyEventBind(
+    interaction: ChatInputCommandInteraction,
+    eventId: number,
+    eventTitle: string,
+  ): Promise<void> {
+    const channelOption = interaction.options.getChannel('channel');
+    const gameName = interaction.options.getString('game');
+    if (!channelOption && !gameName) {
+      await interaction.editReply(
+        'Provide `channel` and/or `game` when using `/bind event`.',
+      );
+      return;
+    }
+    const changes = await applyEventChanges(
+      this.db,
+      eventId,
+      channelOption,
+      gameName,
+      interaction,
+    );
+    if (!changes) return;
+    const payload = await buildEventUpdatePayload(this.db, eventId);
+    if (payload) this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, payload);
+    await interaction.editReply({
+      embeds: [buildEventBindEmbed(eventTitle, changes)],
+    });
+  }
+}

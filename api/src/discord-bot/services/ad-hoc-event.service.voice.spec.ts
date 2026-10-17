@@ -1,0 +1,373 @@
+/**
+ * AdHocEventService — isEnabled, handleVoiceJoin, handleVoiceLeave tests.
+ */
+import { SETTING_KEYS } from '../../drizzle/schema';
+import {
+  baseMember,
+  baseBinding,
+  setupAdHocTestModule,
+  type AdHocMocks,
+} from './ad-hoc-event.service.spec-helpers';
+import type { AdHocEventService } from './ad-hoc-event.service';
+import * as helpers from './ad-hoc-event.helpers';
+
+describe('AdHocEventService — voice', () => {
+  let service: AdHocEventService;
+  let mocks: AdHocMocks;
+
+  beforeEach(async () => {
+    const setup = await setupAdHocTestModule();
+    service = setup.service;
+    mocks = setup.mocks;
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  function mockNewEventCreation(
+    id: number,
+    bindingId: string,
+    gameName: string,
+  ) {
+    mocks.db.limit.mockResolvedValueOnce([]);
+    mocks.db.limit.mockResolvedValueOnce([{ name: gameName }]);
+    mocks.db.returning.mockResolvedValueOnce([{ id }]);
+    mocks.db.limit.mockResolvedValueOnce([
+      {
+        id,
+        title: `${gameName} — Quick Play`,
+        gameId: 1,
+        channelBindingId: bindingId,
+      },
+    ]);
+    mocks.db.limit.mockResolvedValueOnce([{ name: gameName }]);
+  }
+
+  describe('isEnabled', () => {
+    it('returns true when setting is "true"', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      const result = await service.isEnabled();
+      expect(result).toBe(true);
+      expect(mocks.settingsService.get).toHaveBeenCalledWith(
+        SETTING_KEYS.AD_HOC_EVENTS_ENABLED,
+      );
+    });
+
+    it('returns false when setting is not "true"', async () => {
+      mocks.settingsService.get.mockResolvedValue('false');
+      expect(await service.isEnabled()).toBe(false);
+    });
+
+    it('returns false when setting is null', async () => {
+      mocks.settingsService.get.mockResolvedValue(null);
+      expect(await service.isEnabled()).toBe(false);
+    });
+  });
+
+  describe('handleVoiceJoin — disabled and suppressed', () => {
+    it('does nothing when feature is disabled', async () => {
+      mocks.settingsService.get.mockResolvedValue('false');
+      await service.handleVoiceJoin('binding-1', baseMember, baseBinding);
+      expect(mocks.db.insert).not.toHaveBeenCalled();
+      expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
+    });
+
+    it('suppresses ad-hoc creation when a scheduled event is active', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      // ROK-1418: findActiveScheduledEvent returns the restored projection
+      // { id, extendedUntil, scheduledEnd, matchedBy }. A null window + future
+      // end means the suppressed join must extend it → db.update fires.
+      mocks.db.limit.mockResolvedValueOnce([
+        {
+          id: 42,
+          extendedUntil: null,
+          // ROK-1696: inside the 60m window, so the write lands past the end.
+          scheduledEnd: new Date(Date.now() + 30 * 60_000),
+          matchedBy: 'game',
+        },
+      ]);
+      mocks.db.returning.mockResolvedValueOnce([{ id: 42 }]);
+      await service.handleVoiceJoin(
+        'binding-suppress',
+        baseMember,
+        baseBinding,
+      );
+      expect(mocks.db.insert).not.toHaveBeenCalled();
+      expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
+      expect(mocks.db.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleVoiceJoin — event creation', () => {
+    it('creates a new ad-hoc event when no active event exists', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(100, 'binding-1', 'World of Warcraft');
+      await service.handleVoiceJoin('binding-1', baseMember, baseBinding);
+      expect(mocks.db.insert).toHaveBeenCalled();
+      expect(mocks.participantService.addParticipant).toHaveBeenCalledWith(
+        100,
+        baseMember,
+      );
+    });
+
+    it('creates event with "Gaming" title when no game is bound', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      const noGameBinding = { ...baseBinding, gameId: null };
+      mocks.db.limit.mockResolvedValueOnce([]);
+      mocks.db.returning.mockResolvedValueOnce([{ id: 101 }]);
+      mocks.db.limit.mockResolvedValueOnce([
+        {
+          id: 101,
+          title: 'Gaming — Quick Play',
+          gameId: null,
+          channelBindingId: 'binding-2',
+        },
+      ]);
+      await service.handleVoiceJoin('binding-2', baseMember, noGameBinding);
+      expect(mocks.db.values).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Gaming — Quick Play' }),
+      );
+    });
+
+    it('sets event reminders to false for ad-hoc events', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(300, 'binding-6', 'Game');
+      await service.handleVoiceJoin('binding-6', baseMember, baseBinding);
+      expect(mocks.db.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isAdHoc: true,
+          adHocStatus: 'live',
+          reminder15min: false,
+          reminder1hour: false,
+          reminder24hour: false,
+        }),
+      );
+    });
+  });
+
+  describe('handleVoiceJoin — anonymous and existing events', () => {
+    it('falls back to admin user when member has no linked account', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      const anonymousMember = { ...baseMember, userId: null };
+      mocks.db.limit.mockResolvedValueOnce([]);
+      mocks.db.limit.mockResolvedValueOnce([{ id: 99 }]);
+      mocks.db.limit.mockResolvedValueOnce([{ name: 'FFXIV' }]);
+      mocks.db.returning.mockResolvedValueOnce([{ id: 102 }]);
+      mocks.db.limit.mockResolvedValueOnce([
+        {
+          id: 102,
+          title: 'FFXIV — Quick Play',
+          gameId: 1,
+          channelBindingId: 'binding-3',
+        },
+      ]);
+      mocks.db.limit.mockResolvedValueOnce([{ name: 'FFXIV' }]);
+      await service.handleVoiceJoin('binding-3', anonymousMember, baseBinding);
+      expect(mocks.db.returning).toHaveBeenCalled();
+      expect(mocks.participantService.addParticipant).toHaveBeenCalledWith(
+        102,
+        anonymousMember,
+      );
+    });
+
+    it('returns null when no admin found and no linked user', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      const anonymousMember = { ...baseMember, userId: null };
+      mocks.db.limit.mockResolvedValueOnce([]);
+      mocks.db.limit.mockResolvedValueOnce([]);
+      await service.handleVoiceJoin('binding-4', anonymousMember, baseBinding);
+      expect(mocks.db.returning).not.toHaveBeenCalled();
+      expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
+    });
+
+    it('adds joiner to existing live event and cancels grace period', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(200, 'binding-5', 'WoW');
+      await service.handleVoiceJoin('binding-5', baseMember, baseBinding);
+      mocks.settingsService.get.mockResolvedValue('true');
+      const secondMember = {
+        ...baseMember,
+        discordUserId: 'discord-456',
+        discordUsername: 'Player2',
+      };
+      mocks.db.limit.mockResolvedValueOnce([
+        { id: 200, adHocStatus: 'live', channelBindingId: 'binding-5' },
+      ]);
+      mocks.db.returning.mockResolvedValueOnce([]);
+      await service.handleVoiceJoin('binding-5', secondMember, baseBinding);
+      expect(mocks.gracePeriodQueue.cancel).toHaveBeenCalledWith(200);
+      expect(mocks.participantService.addParticipant).toHaveBeenCalledWith(
+        200,
+        secondMember,
+      );
+    });
+  });
+
+  describe('handleVoiceJoin — sibling binding suppression (ROK-959)', () => {
+    it('threads channelId to findActiveScheduledEvent (AC4)', async () => {
+      // AC4: handleVoiceJoin called with channelId must thread it
+      // through ensureNotSuppressed to findActiveScheduledEvent.
+      // We spy on findActiveScheduledEvent to verify channelId arrives
+      // as the 5th argument.
+      mocks.settingsService.get.mockResolvedValue('true');
+
+      const spy = jest
+        .spyOn(helpers, 'findActiveScheduledEvent')
+        // ROK-1418: widen to the restored projection. A fresh window keeps this
+        // case focused on arg-threading (the write path is not exercised here).
+        .mockResolvedValueOnce({
+          id: 55,
+          extendedUntil: new Date(Date.now() + 40 * 60_000),
+          // ROK-1696: the window ends past the scheduled end, so it is left alone.
+          scheduledEnd: new Date(Date.now() + 30 * 60_000),
+          matchedBy: 'game',
+        } as never);
+
+      const siblingBinding = {
+        ...baseBinding,
+        gameId: 10,
+      };
+
+      // Call handleVoiceJoin with the new channelId parameter (6th arg)
+      await service.handleVoiceJoin(
+        'binding-A',
+        baseMember,
+        siblingBinding,
+        undefined,
+        undefined,
+        'voice-channel-shared', // channelId — the new param
+      );
+
+      // Verify findActiveScheduledEvent was called with channelId
+      // as the 5th positional argument
+      expect(spy).toHaveBeenCalledWith(
+        expect.anything(), // db
+        'binding-A', // bindingId
+        10, // effectiveGameId
+        expect.any(Date), // now
+        'voice-channel-shared', // channelId — must be threaded
+      );
+
+      spy.mockRestore();
+    });
+  });
+
+  describe('handleVoiceJoin — bounded extension (ROK-1418)', () => {
+    it('does NOT rewrite a fresh suppression window on a suppressed join (skip-fresh)', async () => {
+      // RED today: the pre-fix path calls extendScheduledEventWindow with a
+      // hardcoded null currentExtended, so it ALWAYS writes — even when the
+      // window is still fresh. Post-fix, planSuppressionExtension skips the
+      // write, so db.update is never touched on this join.
+      mocks.settingsService.get.mockResolvedValue('true');
+      const spy = jest
+        .spyOn(helpers, 'findActiveScheduledEvent')
+        .mockResolvedValueOnce({
+          id: 55,
+          extendedUntil: new Date(Date.now() + 40 * 60_000), // fresh (>= now+15m)
+          // ROK-1696: past the scheduled end, so no below-schedule repair applies.
+          scheduledEnd: new Date(Date.now() + 30 * 60_000),
+          matchedBy: 'game',
+        } as never);
+
+      await service.handleVoiceJoin(
+        'binding-A',
+        baseMember,
+        { ...baseBinding, gameId: 10 },
+        undefined,
+        undefined,
+        'voice-channel-shared',
+      );
+
+      expect(mocks.db.update).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('writes extended_until as a Date, never null, when the window must extend', async () => {
+      // Pin: the value written to extended_until is always a Date. The pre-fix
+      // bug passed null as the currentExtended *argument*, but the persisted
+      // value was still a Date; this locks that the write shape stays a Date.
+      mocks.settingsService.get.mockResolvedValue('true');
+      mocks.db.returning.mockResolvedValueOnce([{ id: 55 }]);
+      const spy = jest
+        .spyOn(helpers, 'findActiveScheduledEvent')
+        .mockResolvedValueOnce({
+          id: 55,
+          extendedUntil: null, // no live window ⇒ must extend
+          // ROK-1696: inside the 60m window, so the write lands past the end.
+          scheduledEnd: new Date(Date.now() + 30 * 60_000),
+          matchedBy: 'game',
+        } as never);
+
+      await service.handleVoiceJoin(
+        'binding-A',
+        baseMember,
+        { ...baseBinding, gameId: 10 },
+        undefined,
+        undefined,
+        'voice-channel-shared',
+      );
+
+      expect(mocks.db.set).toHaveBeenCalledWith(
+        expect.objectContaining({ extendedUntil: expect.any(Date) }),
+      );
+      expect(mocks.db.set).not.toHaveBeenCalledWith(
+        expect.objectContaining({ extendedUntil: null }),
+      );
+      spy.mockRestore();
+    });
+  });
+
+  describe('handleVoiceLeave', () => {
+    it('does nothing when no active event for binding', async () => {
+      await service.handleVoiceLeave('nonexistent-binding', 'discord-123');
+      expect(mocks.participantService.markLeave).not.toHaveBeenCalled();
+    });
+
+    it('marks participant as left and starts grace period when channel empties', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(400, 'binding-leave', 'WoW');
+      await service.handleVoiceJoin('binding-leave', baseMember, baseBinding);
+      mocks.db.limit.mockResolvedValueOnce([
+        { id: 400, adHocStatus: 'live', channelBindingId: 'binding-leave' },
+      ]);
+      mocks.channelBindingsService.getBindingById.mockResolvedValue({
+        id: 'binding-leave',
+        config: { gracePeriod: 5 },
+      });
+      await service.handleVoiceLeave('binding-leave', 'discord-123');
+      expect(mocks.participantService.markLeave).toHaveBeenCalledWith(
+        400,
+        'discord-123',
+      );
+      expect(mocks.gracePeriodQueue.enqueue).toHaveBeenCalledWith(
+        400,
+        5 * 60 * 1000,
+      );
+    });
+
+    it('uses default 5 minute grace period when not configured', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(401, 'binding-default-grace', 'WoW');
+      await service.handleVoiceJoin(
+        'binding-default-grace',
+        baseMember,
+        baseBinding,
+      );
+      mocks.db.limit.mockResolvedValueOnce([
+        {
+          id: 401,
+          adHocStatus: 'live',
+          channelBindingId: 'binding-default-grace',
+        },
+      ]);
+      mocks.channelBindingsService.getBindingById.mockResolvedValue({
+        id: 'binding-default-grace',
+        config: null,
+      });
+      await service.handleVoiceLeave('binding-default-grace', 'discord-123');
+      expect(mocks.gracePeriodQueue.enqueue).toHaveBeenCalledWith(
+        401,
+        5 * 60 * 1000,
+      );
+    });
+  });
+});

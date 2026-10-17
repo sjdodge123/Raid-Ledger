@@ -1,0 +1,191 @@
+/**
+ * Match response mapping helpers for decided view (ROK-937).
+ * Groups matches into tiers and builds the grouped response.
+ */
+import { NotFoundException } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  CarriedForwardEntryDto,
+  GroupedMatchesResponseDto,
+  MatchDetailResponseDto,
+} from '@raid-ledger/contract';
+import * as schema from '../drizzle/schema';
+import {
+  countDistinctVoters,
+  countVotesPerGame,
+  findEntriesWithGames,
+  findLineupById,
+} from './lineups-query.helpers';
+import {
+  findMatchesByLineup,
+  findMatchMembers,
+  type MatchMemberRow,
+} from './lineups-match-query.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Classify a match into a display tier. */
+export function classifyMatch(
+  status: string,
+  votePercentage: number,
+  threshold: number,
+): 'scheduling' | 'almostThere' | 'rallyYourCrew' {
+  if (status === 'scheduling') return 'scheduling';
+  const almostThreshold = threshold * 0.7;
+  if (votePercentage >= almostThreshold) return 'almostThere';
+  return 'rallyYourCrew';
+}
+
+/**
+ * ROK-1411: resolve the per-game player cap for the "X of Y players" / "group
+ * is full" copy, following the ROK-1397 precedence documented in
+ * games.ts:128-159: `cooptimus_online_max` WINS over `player_count.max` when
+ * non-null — EXCEPT a ZERO cooptimus value is a co-op-capability claim (this
+ * game has no online co-op), NOT a capacity of zero, so we treat it as absent
+ * and fall through to `player_count.max`. Null both → no cap.
+ */
+export function resolvePlayerCap(
+  cooptimusOnlineMax: number | null,
+  playerCountMax: number | null,
+): number | null {
+  if (cooptimusOnlineMax != null && cooptimusOnlineMax > 0) {
+    return cooptimusOnlineMax;
+  }
+  return playerCountMax ?? null;
+}
+
+/** Map a single member row to the response shape. */
+function mapMemberRow(m: MatchMemberRow) {
+  return {
+    id: m.id,
+    matchId: m.matchId,
+    userId: m.userId,
+    source: m.source as 'voted' | 'bandwagon',
+    createdAt: m.createdAt.toISOString(),
+    // ROK-1545 (F-05): enrolment time, named for the late-joiner catch-up line.
+    joinedAt: m.createdAt.toISOString(),
+    displayName: m.displayName,
+    avatar: m.avatar,
+    discordId: m.discordId,
+    customAvatarUrl: m.customAvatarUrl,
+    // ROK-1296: per-match scheduling submission timestamp (null = not yet).
+    schedulingSubmittedAt: m.schedulingSubmittedAt?.toISOString() ?? null,
+  };
+}
+
+/** Map a raw match row + its members to a MatchDetailResponseDto. */
+export function mapMatchToDto(
+  match: Awaited<ReturnType<typeof findMatchesByLineup>>[0],
+  memberRows: MatchMemberRow[],
+): MatchDetailResponseDto {
+  const members = memberRows
+    .filter((m) => m.matchId === match.id)
+    .map(mapMemberRow);
+
+  return {
+    id: match.id,
+    lineupId: match.lineupId,
+    gameId: match.gameId,
+    status: match.status,
+    thresholdMet: match.thresholdMet,
+    voteCount: match.voteCount,
+    votePercentage: match.votePercentage ? Number(match.votePercentage) : null,
+    fitType: match.fitType,
+    linkedEventId: match.linkedEventId,
+    createdAt: match.createdAt.toISOString(),
+    updatedAt: match.updatedAt.toISOString(),
+    gameName: match.gameName,
+    gameCoverUrl: match.gameCoverUrl,
+    // ROK-1411: cooptimus-aware player cap (see resolvePlayerCap).
+    playerCap: resolvePlayerCap(
+      match.gameCooptimusOnlineMax ?? null,
+      match.gamePlayerCount?.max ?? null,
+    ),
+    // ROK-1401: raw co-op claim alongside playerCap — MatchCard recomputes
+    // the fit badge from this vs the live members.length on every render.
+    cooptimusOnlineMax: match.gameCooptimusOnlineMax ?? null,
+    members,
+  };
+}
+
+/** Build the full grouped matches response for a lineup. */
+export async function buildGroupedMatchesResponse(
+  db: Db,
+  lineupId: number,
+): Promise<GroupedMatchesResponseDto> {
+  const [lineup] = await findLineupById(db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+
+  const threshold = lineup.matchThreshold ?? 35;
+
+  const [matches, voterRows, entries, voteRows] = await Promise.all([
+    findMatchesByLineup(db, lineupId),
+    countDistinctVoters(db, lineupId),
+    findEntriesWithGames(db, lineupId),
+    countVotesPerGame(db, lineupId),
+  ]);
+
+  const totalVoters = voterRows[0]?.total ?? 0;
+  const matchIds = matches.map((m) => m.id);
+  const matchMemberRows = await findMatchMembers(db, matchIds);
+  const voteMap = new Map(voteRows.map((v) => [v.gameId, v.voteCount]));
+
+  return groupMatchesIntoTiers(
+    matches,
+    matchMemberRows,
+    threshold,
+    totalVoters,
+    mapCarriedForwardEntries(entries, voteMap),
+  );
+}
+
+/**
+ * Build the `carriedForward` chip-strip payload (ROK-1274).
+ * Filters entries with a non-null `carriedOverFrom` back-reference and maps
+ * each to the contract shape. `voteMap` is the per-game tally already
+ * computed for the decided view's tier counts, so we reuse it here.
+ */
+export function mapCarriedForwardEntries(
+  entries: Awaited<ReturnType<typeof findEntriesWithGames>>,
+  voteMap: Map<number, number>,
+): CarriedForwardEntryDto[] {
+  return entries
+    .filter((e) => e.carriedOverFrom !== null)
+    .map((e) => ({
+      gameId: e.gameId,
+      gameName: e.gameName,
+      gameCoverUrl: e.gameCoverUrl,
+      voteCount: voteMap.get(e.gameId) ?? 0,
+      nominatedBy: {
+        id: e.nominatedById,
+        displayName: e.nominatedByName,
+      },
+    }));
+}
+
+/** Group matches into scheduling/almostThere/rallyYourCrew tiers. */
+function groupMatchesIntoTiers(
+  matches: Awaited<ReturnType<typeof findMatchesByLineup>>,
+  memberRows: MatchMemberRow[],
+  threshold: number,
+  totalVoters: number,
+  carriedForward: CarriedForwardEntryDto[],
+): GroupedMatchesResponseDto {
+  const result: GroupedMatchesResponseDto = {
+    scheduling: [],
+    almostThere: [],
+    rallyYourCrew: [],
+    carriedForward,
+    matchThreshold: threshold,
+    totalVoters,
+  };
+
+  for (const match of matches) {
+    const dto = mapMatchToDto(match, memberRows);
+    const pct = match.votePercentage ? Number(match.votePercentage) : 0;
+    const tier = classifyMatch(match.status, pct, threshold);
+    result[tier].push(dto);
+  }
+
+  return result;
+}

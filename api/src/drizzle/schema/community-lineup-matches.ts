@@ -1,0 +1,210 @@
+import { sql } from 'drizzle-orm';
+import {
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  integer,
+  boolean,
+  numeric,
+  unique,
+  foreignKey,
+  check,
+} from 'drizzle-orm/pg-core';
+import { communityLineups } from './community-lineups';
+import { games } from './games';
+import { events } from './events';
+import { users } from './users';
+
+// ============================================================
+// Lineup Match Tables (ROK-964)
+// ============================================================
+
+/**
+ * Game match groups derived from voting results.
+ *
+ * Each match represents a game that met (or nearly met) the lineup's
+ * match threshold. Status flow: suggested -> scheduling -> scheduled -> archived.
+ */
+export const communityLineupMatches = pgTable(
+  'community_lineup_matches',
+  {
+    id: serial('id').primaryKey(),
+    lineupId: integer('lineup_id')
+      .references(() => communityLineups.id, { onDelete: 'cascade' })
+      .notNull(),
+    gameId: integer('game_id')
+      .references(() => games.id, { onDelete: 'cascade' })
+      .notNull(),
+    status: text('status', {
+      enum: ['suggested', 'scheduling', 'scheduled', 'archived'],
+    })
+      .default('suggested')
+      .notNull(),
+    thresholdMet: boolean('threshold_met').default(false).notNull(),
+    voteCount: integer('vote_count').default(0).notNull(),
+    votePercentage: numeric('vote_percentage', {
+      precision: 5,
+      scale: 2,
+    }),
+    fitType: text('fit_type', {
+      enum: ['perfect', 'normal', 'oversubscribed', 'undersubscribed'],
+    }),
+    linkedEventId: integer('linked_event_id').references(() => events.id, {
+      onDelete: 'set null',
+    }),
+    embedMessageId: text('embed_message_id'),
+    embedChannelId: text('embed_channel_id'),
+    /** Minimum unique voters before organizer is notified (ROK-1015). */
+    minVoteThreshold: integer('min_vote_threshold'),
+    /** Timestamp when the threshold notification was sent (ROK-1015). */
+    thresholdNotifiedAt: timestamp('threshold_notified_at', {
+      withTimezone: true,
+    }),
+    /**
+     * Operator's reason for cancelling the poll (ROK-1545). Collected by
+     * `CancelPollModal`, DM'd to voters, and — since ROK-1545 — persisted so
+     * the page voters land on can say WHY it ended (audit F-02). Null when the
+     * poll was never cancelled, or cancelled without a reason.
+     */
+    cancellationReason: text('cancellation_reason'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [unique('uq_lineup_match_game').on(table.lineupId, table.gameId)],
+);
+
+/**
+ * Members assigned to a match group.
+ *
+ * Source tracks whether the member voted for the game directly, was added
+ * via the bandwagon (interest-based) algorithm, or — ROK-1440 — was enrolled
+ * explicitly by the lineup creator or an operator (`added`).
+ *
+ * The column is plain `text` in the database with no CHECK constraint (see
+ * `0104_community_lineup_voting.sql` / `0113_ensure_community_lineup_tables.sql`),
+ * so this enum is a TypeScript-level narrowing only and widening it needs no
+ * migration.
+ */
+export const communityLineupMatchMembers = pgTable(
+  'community_lineup_match_members',
+  {
+    id: serial('id').primaryKey(),
+    matchId: integer('match_id').notNull(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    source: text('source', {
+      enum: ['voted', 'bandwagon', 'added'],
+    }).notNull(),
+    /**
+     * Stamped when the user submits scheduling for THIS match
+     * (ROK-1296, U4 SubmitBar). Per-match: a user can submit one match while
+     * leaving others autosaving. Re-submission overwrites to `now()`.
+     */
+    schedulingSubmittedAt: timestamp('scheduling_submitted_at', {
+      withTimezone: true,
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    unique('uq_match_member_user').on(table.matchId, table.userId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.matchId],
+      foreignColumns: [communityLineupMatches.id],
+      name: 'cl_match_members_match_id_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * Proposed time slots for scheduling a match.
+ *
+ * Slots can be system-generated (from availability overlap) or
+ * manually proposed by a user.
+ */
+export const communityLineupScheduleSlots = pgTable(
+  'community_lineup_schedule_slots',
+  {
+    id: serial('id').primaryKey(),
+    matchId: integer('match_id').notNull(),
+    proposedTime: timestamp('proposed_time', { withTimezone: true }).notNull(),
+    overlapScore: numeric('overlap_score', {
+      precision: 5,
+      scale: 2,
+    }),
+    suggestedBy: text('suggested_by', {
+      enum: ['system', 'user'],
+    }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.matchId],
+      foreignColumns: [communityLineupMatches.id],
+      name: 'cl_schedule_slots_match_id_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * User votes on proposed schedule time slots.
+ *
+ * Each user may vote once per slot.
+ */
+export const communityLineupScheduleVotes = pgTable(
+  'community_lineup_schedule_votes',
+  {
+    id: serial('id').primaryKey(),
+    slotId: integer('slot_id').notNull(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    /**
+     * ROK-1617: the vote's polarity. Before this column the existence of a row
+     * WAS the yes-vote, so `'yes'` is both the default and exactly what every
+     * pre-existing row already meant — the backfill reinterprets no data.
+     *
+     * "Not answered" is the ABSENCE of a row, never a third enum value: the
+     * `uq_schedule_vote_user` unique already gives one row per (slot, user),
+     * so a stance change is an UPDATE and clearing a stance is a DELETE.
+     */
+    stance: text('stance', { enum: ['yes', 'no'] })
+      .default('yes')
+      .notNull(),
+    /**
+     * ROK-1550: where the action that produced this answer was initiated.
+     *
+     * `'discord'` means the voter arrived through a poll-card link carrying
+     * `?src=discord`; `'web'` is everything else, including every row written
+     * before this column existed and every client too old to send the field.
+     * The default is therefore not merely a convenience — it is the honest
+     * reading of a row with no provenance.
+     *
+     * Written on INSERT and OVERWRITTEN by a stance flip, so the value always
+     * describes the action behind the row's CURRENT answer. Clearing a vote
+     * deletes the row, so there is nothing to record.
+     */
+    source: text('source', { enum: ['web', 'discord'] })
+      .default('web')
+      .notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    unique('uq_schedule_vote_user').on(table.slotId, table.userId),
+    // ROK-1550: declared here (not hand-added to the SQL like ROK-1617's
+    // stance check) so drizzle-kit emits it and the snapshot stays truthful.
+    check(
+      'cl_schedule_votes_source_check',
+      sql`${table.source} IN ('web', 'discord')`,
+    ),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.slotId],
+      foreignColumns: [communityLineupScheduleSlots.id],
+      name: 'cl_schedule_votes_slot_id_fk',
+    }).onDelete('cascade'),
+  ],
+);

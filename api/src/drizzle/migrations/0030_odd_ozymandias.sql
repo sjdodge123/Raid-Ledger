@@ -1,0 +1,1 @@
+ALTER TABLE "characters" ADD COLUMN "role_override" varchar(20);

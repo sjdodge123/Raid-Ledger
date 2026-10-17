@@ -1,0 +1,223 @@
+/**
+ * Avatar resolution utility for ROK-194: Dynamic Avatar Resolution
+ * Updated for ROK-220: Custom Avatar Upload (highest priority)
+ * Updated for ROK-222: Unified avatar helpers (buildDiscordAvatarUrl, toAvatarUser)
+ * Updated for ROK-352: Current user avatar preference sync across all components
+ *
+ * Resolves avatars based on context:
+ * - Custom upload: Always highest priority when set
+ * - Game context: Show character portrait if available
+ * - General context: Show Discord avatar
+ * - Fallback: Initials (handled by component)
+ */
+
+import { API_BASE_URL } from './config';
+
+export type AvatarType = 'custom' | 'character' | 'discord' | 'initials';
+
+export interface ResolvedAvatar {
+    /** Avatar URL or null if no avatar available */
+    url: string | null;
+    /** Type of avatar resolved */
+    type: AvatarType;
+}
+
+/**
+ * User object with avatar and optional character data.
+ * Used by resolveAvatar to determine the most appropriate avatar to display.
+ */
+export interface AvatarPreference {
+    type: AvatarType;
+    characterName?: string | undefined;
+}
+
+export interface AvatarUser {
+    /** Discord avatar URL (full URL, not hash) */
+    avatar: string | null;
+    /** Custom uploaded avatar (relative path like /avatars/...) */
+    customAvatarUrl?: string | null | undefined;
+    /** User's characters (optional). gameId is number (games.id) or '__resolved__' sentinel. */
+    characters?: Array<{
+        gameId: number | string;
+        name?: string | undefined;
+        avatarUrl: string | null;
+    }> | undefined;
+    /** Server-persisted avatar preference from user_preferences table */
+    avatarPreference?: AvatarPreference | null | undefined;
+}
+
+// ============================================================
+// Current User Overlay (ROK-352, ROK-414)
+// ============================================================
+// Module-level cache of the current user's avatar preference and resolved avatar URL.
+// Set by CurrentUserAvatarSync (mounted in Layout) so that toAvatarUser()
+// can automatically overlay the current user's preference data onto any
+// user DTO that matches by id — without every component needing useAuth().
+
+interface CurrentUserAvatarData {
+    id: number;
+    avatarPreference?: AvatarPreference | null | undefined;
+    /** Server-resolved avatar URL for character preference (ROK-414) */
+    resolvedAvatarUrl?: string | null | undefined;
+    customAvatarUrl?: string | null | undefined;
+}
+
+let _currentUserAvatarData: CurrentUserAvatarData | null = null;
+
+/**
+ * Set the current user's avatar data for global overlay.
+ * Called by CurrentUserAvatarSync whenever the auth user changes.
+ * Pass null to clear (e.g., on logout).
+ */
+export function setCurrentUserAvatarData(data: CurrentUserAvatarData | null): void {
+    _currentUserAvatarData = data;
+}
+
+/**
+ * Get the current user avatar data (for testing/inspection).
+ */
+export function getCurrentUserAvatarData(): CurrentUserAvatarData | null {
+    return _currentUserAvatarData;
+}
+
+/**
+ * Check if a discordId represents a real linked Discord account.
+ * Returns false for local-only accounts (local:xxx) and unlinked accounts (unlinked:xxx).
+ */
+export function isDiscordLinked(discordId: string | null | undefined): boolean {
+    return Boolean(discordId && !discordId.startsWith('local:') && !discordId.startsWith('unlinked:'));
+}
+
+/**
+ * Build a full Discord CDN avatar URL from a discordId and avatar hash.
+ * If the hash is already a full URL, returns it as-is — even with no discordId:
+ * anonymous viewers of public roster routes get no Discord id, and an avatar
+ * that is null, or a custom non-Discord URL (ROK-1827). Otherwise returns null
+ * if either value is missing.
+ */
+export function buildDiscordAvatarUrl(
+    discordId: string | null | undefined,
+    avatarHash: string | null | undefined,
+): string | null {
+    if (avatarHash?.startsWith('http')) return avatarHash;
+    if (!discordId || !avatarHash) return null;
+    return `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png`;
+}
+
+/**
+ * Bridge function that converts API response shapes (which store Discord avatar
+ * as a hash) into the AvatarUser interface expected by resolveAvatar().
+ *
+ * Use this when passing data from API DTOs (SignupUserDto, User, RosterAssignmentResponse)
+ * that have `avatar` as a Discord hash and `discordId` as a separate field.
+ *
+ * ROK-352: When the user's `id` matches the current logged-in user, automatically
+ * overlays `avatarPreference` and `resolvedAvatarUrl` from the cached auth data so the
+ * current user's avatar preference is honored everywhere — not just in components
+ * that use useAuth() directly.
+ *
+ * ROK-414: The overlay now uses `resolvedAvatarUrl` (server-resolved) instead of
+ * a full characters array, avoiding heavy JSONB payloads on /auth/me.
+ */
+type AvatarUserInput = {
+    id?: number | undefined;
+    avatar: string | null;
+    discordId?: string | null | undefined;
+    customAvatarUrl?: string | null | undefined;
+    characters?: Array<{ gameId: number | string; name?: string | undefined; avatarUrl: string | null }> | undefined;
+    avatarPreference?: AvatarPreference | null | undefined;
+};
+
+function getOverlay(userId?: number): CurrentUserAvatarData | null {
+    return _currentUserAvatarData && userId != null && userId === _currentUserAvatarData.id
+        ? _currentUserAvatarData
+        : null;
+}
+
+function buildOverlayResult(
+    overlay: CurrentUserAvatarData,
+    user: AvatarUserInput,
+    avatar: string | null,
+): AvatarUser {
+    const pref = overlay.avatarPreference !== undefined ? overlay.avatarPreference : user.avatarPreference;
+    let characters = user.characters;
+    if (pref?.type === 'character' && pref.characterName && overlay.resolvedAvatarUrl) {
+        characters = [{ gameId: '__resolved__', name: pref.characterName, avatarUrl: overlay.resolvedAvatarUrl }];
+    }
+    return {
+        avatar,
+        customAvatarUrl: overlay.customAvatarUrl !== undefined ? overlay.customAvatarUrl : user.customAvatarUrl,
+        characters,
+        avatarPreference: pref,
+    };
+}
+
+/**
+ * Bridge function that converts API response shapes into AvatarUser.
+ * ROK-352/414: Overlays current user's preference data when IDs match.
+ */
+export function toAvatarUser(user: AvatarUserInput): AvatarUser {
+    const overlay = getOverlay(user.id);
+    const avatar = buildDiscordAvatarUrl(user.discordId, user.avatar)
+        ?? (user.avatar?.startsWith('http') ? user.avatar : null);
+
+    if (overlay) return buildOverlayResult(overlay, user, avatar);
+
+    return {
+        avatar,
+        customAvatarUrl: user.customAvatarUrl,
+        characters: user.characters,
+        avatarPreference: user.avatarPreference,
+    };
+}
+
+/**
+ * Resolves the most appropriate avatar for a user based on context.
+ *
+ * Priority:
+ * 1. Custom uploaded avatar (ROK-220)
+ * 2. Character portrait (if gameId provided and character exists for that game)
+ * 3. Discord avatar
+ * 4. Initials (returns null, component handles initials)
+ */
+const INITIALS_RESULT: ResolvedAvatar = { url: null, type: 'initials' };
+
+function resolveFromPreference(user: AvatarUser): ResolvedAvatar | null {
+    const pref = user.avatarPreference;
+    if (!pref) return null;
+    if (pref.type === 'custom' && user.customAvatarUrl) {
+        return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
+    }
+    if (pref.type === 'discord' && user.avatar) {
+        return { url: user.avatar, type: 'discord' };
+    }
+    if (pref.type === 'character' && pref.characterName && user.characters) {
+        const character = user.characters.find(c => c.name === pref.characterName);
+        if (character?.avatarUrl) return { url: character.avatarUrl, type: 'character' };
+    }
+    return null;
+}
+
+function resolveByDefault(user: AvatarUser, gameId?: number | string): ResolvedAvatar {
+    if (user.customAvatarUrl) {
+        return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
+    }
+    if (gameId && user.characters?.length) {
+        const character = user.characters.find(c => c.gameId === gameId);
+        if (character?.avatarUrl) return { url: character.avatarUrl, type: 'character' };
+    }
+    if (user.avatar) return { url: user.avatar, type: 'discord' };
+    return INITIALS_RESULT;
+}
+
+/**
+ * Resolves the most appropriate avatar for a user based on context.
+ * Priority: Custom > Character (by preference or gameId) > Discord > Initials
+ */
+export function resolveAvatar(
+    user: AvatarUser | null | undefined,
+    gameId?: number | string
+): ResolvedAvatar {
+    if (!user) return INITIALS_RESULT;
+    return resolveFromPreference(user) ?? resolveByDefault(user, gameId);
+}

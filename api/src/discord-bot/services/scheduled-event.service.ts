@@ -1,0 +1,345 @@
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { ChannelResolverService } from './channel-resolver.service';
+import { SettingsService } from '../../settings/settings.service';
+import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { ActiveEventCacheService } from '../../events/active-event-cache.service';
+import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
+import {
+  buildDescriptionText,
+  formatApiError,
+  getCreateSkipReason,
+  type ScheduledEventData,
+} from './scheduled-event.helpers';
+import {
+  findStartCandidates,
+  getScheduledEventId,
+  getEventWithOverride,
+  clearScheduledEventId,
+  type ScheduledEventRecord,
+} from './scheduled-event.db-helpers';
+import {
+  isUnknownEventError,
+  tryStartEvent,
+  tryDeleteEvent,
+  tryEditEndTime,
+  tryEditDescription,
+  tryEditFullEvent,
+  resolveVoiceForEdit,
+  resolveEditedScheduledEventName,
+} from './scheduled-event.discord-ops';
+import {
+  createScheduledEventIdempotent,
+  type GuildSECache,
+} from './scheduled-event.create';
+import {
+  completeScheduledEventWithOutcome,
+  type SECompletionOutcome,
+  type SECompletionRun,
+} from './scheduled-event.completion';
+import { completeAndSweep } from './scheduled-event.embed-completion';
+
+async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
+  return buildDescriptionText(id, d, await s.getClientUrl());
+}
+
+/** Manages Discord Scheduled Events for Raid Ledger events (ROK-471). */
+@Injectable()
+export class ScheduledEventService {
+  private readonly logger = new Logger(ScheduledEventService.name);
+
+  /** Test-only toggle — when false, createScheduledEvent is a no-op (ROK-969). */
+  private scheduledEventsEnabled = true;
+  setScheduledEventsEnabled(enabled: boolean): void {
+    this.scheduledEventsEnabled = enabled;
+  }
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly clientService: DiscordBotClientService,
+    private readonly channelResolver: ChannelResolverService,
+    private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(EmbedSyncQueueService)
+    private readonly embedSyncQueue: EmbedSyncQueueService | null,
+  ) {}
+
+  /** Cron: auto-start Discord Scheduled Events whose start time has passed. */
+  @Cron('0 * * * * *', {
+    name: 'ScheduledEventService_startScheduledEvents',
+  })
+  async handleStartScheduledEvents(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'ScheduledEventService_startScheduledEvents',
+      () => this.startScheduledEvents(),
+    );
+  }
+
+  /** Find and start scheduled events (ROK-573). */
+  async startScheduledEvents(): Promise<void | false> {
+    if (!this.clientService.isConnected()) return false;
+    const guild = this.clientService.getGuild();
+    if (!guild) return false;
+    if (
+      this.eventCache &&
+      this.eventCache.getActiveEvents(new Date()).length === 0
+    )
+      return false;
+    const candidates = await findStartCandidates(this.db);
+    if (candidates.length === 0) return false;
+    for (const c of candidates) {
+      const result = await tryStartEvent(guild, c);
+      if (result.cleared) await clearScheduledEventId(this.db, c.id);
+      else if (result.error)
+        this.logger.error(formatApiError('start', c.id, result.error));
+    }
+  }
+
+  /** Cron: auto-complete Discord Scheduled Events past end time (ROK-717, ROK-860). */
+  @Cron('0 */5 * * * *', {
+    name: 'ScheduledEventService_completeScheduledEvents',
+  })
+  async handleCompleteScheduledEvents(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'ScheduledEventService_completeScheduledEvents',
+      () => this.completeExpiredEvents(),
+    );
+  }
+
+  /** Find and complete events past their effective end time (ROK-717, ROK-944). */
+  async completeExpiredEvents(): Promise<void | false> {
+    const run = await this.completeExpiredEventsDetailed();
+    if (run.reason && !run.embedOnlyEventIds) return false;
+  }
+
+  /**
+   * One completion pass with a per-event outcome — the smoke trigger reads it
+   * (ROK-944). ROK-1818: then sweeps ended events that have NO Discord SE, so
+   * their embed still reaches COMPLETED; it runs whatever the pass's skip
+   * reason, and skips the ids the pass already enqueued.
+   */
+  async completeExpiredEventsDetailed(): Promise<SECompletionRun> {
+    return completeAndSweep({
+      db: this.db,
+      client: this.clientService,
+      queue: this.embedSyncQueue,
+      completeOne: (id) => this.completeScheduledEvent(id),
+      warn: (message) => this.logger.warn(message),
+    });
+  }
+
+  /** Create a Discord Scheduled Event. `cache` (ROK-1347) is an optional
+   *  per-batch guild-SE cache the reconciliation cron passes so the idempotent
+   *  pre-check doesn't re-fetch all guild SEs once per candidate. */
+  async createScheduledEvent(
+    eventId: number,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+    isAdHoc?: boolean,
+    voiceChannelOverride?: string | null,
+    cache?: GuildSECache,
+  ): Promise<void> {
+    if (!this.scheduledEventsEnabled) return;
+    try {
+      const skip = getCreateSkipReason(
+        eventId,
+        eventData.startTime,
+        isAdHoc,
+        this.clientService.isConnected(),
+      );
+      if (skip) {
+        this.logger.warn(skip);
+        return;
+      }
+      const existing = await getScheduledEventId(this.db, eventId);
+      if (existing) {
+        this.logger.warn(`Skip SE ${eventId}: already exists`);
+        return;
+      }
+      const guild = this.clientService.getGuild();
+      if (!guild) {
+        this.logger.warn(`Skip SE ${eventId}: no guild`);
+        return;
+      }
+      // ROK-1332/1347: idempotent create — resolve voice + description, pre-check
+      // the guild for an existing SE, wrap create in capacity-recovery (30038 →
+      // GC + retry), and adopt the SE id on a timeout-after-success.
+      await createScheduledEventIdempotent(
+        guild,
+        this.db,
+        this.logger,
+        eventId,
+        eventData,
+        {
+          ...(gameId !== undefined ? { gameId } : {}),
+          ...(voiceChannelOverride !== undefined
+            ? { voiceChannelOverride }
+            : {}),
+          channelResolver: this.channelResolver,
+          describe: (id, data) => desc(this.settingsService, id, data),
+        },
+        cache,
+      );
+    } catch (error) {
+      this.logger.error(formatApiError('create', eventId, error));
+      throw error;
+    }
+  }
+
+  /** Update a Discord Scheduled Event. */
+  async updateScheduledEvent(
+    eventId: number,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+    isAdHoc?: boolean,
+  ): Promise<void> {
+    try {
+      if (isAdHoc || !this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const event = await getEventWithOverride(this.db, eventId);
+      if (!event?.discordScheduledEventId) {
+        await this.createScheduledEvent(
+          eventId,
+          eventData,
+          gameId,
+          isAdHoc,
+          event?.notificationChannelOverride,
+        );
+        return;
+      }
+      await this.tryEdit(guild, eventId, event, eventData, gameId);
+    } catch (error) {
+      this.logger.error(formatApiError('update', eventId, error));
+    }
+  }
+
+  /** Delete a Discord Scheduled Event. */
+  async deleteScheduledEvent(eventId: number): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await getScheduledEventId(this.db, eventId);
+      if (!seId) return;
+
+      // ROK-1347: tryDeleteEvent now returns an outcome instead of throwing on
+      // non-10070. Only clear the DB binding when Discord confirmed the delete
+      // (or the SE was already gone) so a transient 429/50013 leaves the id in
+      // place for the next attempt.
+      const outcome = await tryDeleteEvent(guild, eventId, seId);
+      if (outcome.deleted) {
+        await clearScheduledEventId(this.db, eventId);
+      } else {
+        this.logger.warn(
+          `Delete SE ${eventId} (${seId}) failed: code=${outcome.code ?? 'unknown'}${
+            outcome.retryAfter ? ` retryAfter=${outcome.retryAfter}s` : ''
+          }`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(formatApiError('delete', eventId, error));
+    }
+  }
+
+  /** Complete a Discord Scheduled Event and report what happened (ROK-577, ROK-944). */
+  async completeScheduledEvent(eventId: number): Promise<SECompletionOutcome> {
+    return completeScheduledEventWithOutcome(
+      this.db,
+      this.clientService,
+      eventId,
+      (error) => this.logger.error(formatApiError('complete', eventId, error)),
+    );
+  }
+
+  /** Update only the end time of a scheduled event (ROK-576). */
+  async updateEndTime(eventId: number, newEndTime: Date): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await getScheduledEventId(this.db, eventId);
+      if (!seId) return;
+
+      const cleared = await tryEditEndTime(guild, eventId, seId, newEndTime);
+      if (cleared) await clearScheduledEventId(this.db, eventId);
+    } catch (error) {
+      this.logger.error(formatApiError('updateEndTime', eventId, error));
+    }
+  }
+
+  /** Update only the description of a scheduled event. */
+  async updateDescription(
+    eventId: number,
+    eventData: ScheduledEventData,
+  ): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await getScheduledEventId(this.db, eventId);
+      if (!seId) return;
+
+      const description = await desc(this.settingsService, eventId, eventData);
+      const cleared = await tryEditDescription(
+        guild,
+        eventId,
+        seId,
+        description,
+      );
+      if (cleared) await clearScheduledEventId(this.db, eventId);
+    } catch (error) {
+      this.logger.error(formatApiError('updateDescription', eventId, error));
+    }
+  }
+
+  // ─── Private helpers ──────────────────────────────────────
+
+  private async tryEdit(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    eventId: number,
+    event: ScheduledEventRecord,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+  ): Promise<void> {
+    const d = await desc(this.settingsService, eventId, eventData);
+    const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
+    const name = await resolveEditedScheduledEventName(event, eventData, () =>
+      this.settingsService.getDefaultTimezone(),
+    );
+    try {
+      await tryEditFullEvent(
+        guild,
+        eventId,
+        event.discordScheduledEventId!,
+        eventData,
+        d,
+        vc,
+        name,
+      );
+    } catch (err) {
+      if (!isUnknownEventError(err)) throw err;
+      await clearScheduledEventId(this.db, eventId);
+      await this.createScheduledEvent(
+        eventId,
+        eventData,
+        gameId,
+        false,
+        event.notificationChannelOverride,
+      );
+    }
+  }
+}

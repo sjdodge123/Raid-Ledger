@@ -1,0 +1,126 @@
+import { useQuery } from '@tanstack/react-query';
+import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, ActivityPeriod, GameActivityResponseDto, GameNowPlayingResponseDto, PublicGameActivityResponseDto, PublicGameNowPlayingResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
+import { API_BASE_URL } from '../lib/config';
+import { getAuthToken, useViewerCacheScope } from './use-auth';
+import { getGameActivity, getGameNowPlaying, getGamePricing } from '../lib/api-client';
+import { nativeFetch } from '../lib/api/native-fetch';
+
+const getHeaders = () => {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    };
+    const token = getAuthToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+};
+
+/**
+ * Hook for fetching game discovery rows (carousels).
+ */
+export function useGamesDiscover() {
+    // ROK-1314: viewer-scoped — the response carries personalization.
+    const viewer = useViewerCacheScope();
+    return useQuery<GameDiscoverResponseDto>({
+        queryKey: ['games', 'discover', viewer],
+        queryFn: async () => {
+            const response = await nativeFetch(`${API_BASE_URL}/games/discover`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to load game discovery');
+            return response.json();
+        },
+        staleTime: 1000 * 60 * 5,
+    });
+}
+
+/**
+ * Hook for fetching a single game's full detail.
+ */
+export function useGameDetail(id: number | undefined) {
+    // ROK-1314: viewer-scoped — the response carries personalization.
+    const viewer = useViewerCacheScope();
+    return useQuery<GameDetailDto>({
+        queryKey: ['games', 'detail', id, viewer],
+        queryFn: async () => {
+            const response = await nativeFetch(`${API_BASE_URL}/games/${id}`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to load game details');
+            return response.json();
+        },
+        enabled: !!id,
+        staleTime: 1000 * 60 * 10,
+    });
+}
+
+/**
+ * Hook for fetching live Twitch streams for a game.
+ */
+export function useGameStreams(id: number | undefined) {
+    return useQuery<GameStreamsResponseDto>({
+        queryKey: ['games', 'streams', id],
+        queryFn: async () => {
+            const response = await nativeFetch(`${API_BASE_URL}/games/${id}/streams`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to load streams');
+            return response.json();
+        },
+        enabled: !!id,
+        staleTime: 1000 * 60, // 1 minute
+        refetchInterval: 60_000, // Refresh every 60 seconds
+    });
+}
+
+/**
+ * ROK-443: Hook for fetching community activity for a game.
+ */
+export function useGameActivity(gameId: number | undefined, period: ActivityPeriod) {
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
+    return useQuery<GameActivityResponseDto | PublicGameActivityResponseDto>({
+        queryKey: ['games', 'activity', gameId, period, viewer],
+        queryFn: async () => {
+            if (!gameId) throw new Error('Game ID required');
+            return getGameActivity(gameId, period);
+        },
+        enabled: !!gameId,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+/**
+ * ROK-443: Hook for fetching users currently playing a game.
+ */
+export function useGameNowPlaying(gameId: number | undefined) {
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
+    return useQuery<GameNowPlayingResponseDto | PublicGameNowPlayingResponseDto>({
+        queryKey: ['games', 'nowPlaying', gameId, viewer],
+        queryFn: async () => {
+            if (!gameId) throw new Error('Game ID required');
+            return getGameNowPlaying(gameId);
+        },
+        enabled: !!gameId,
+        staleTime: 1000 * 60,
+        refetchInterval: 60_000,
+    });
+}
+
+/**
+ * ROK-419: Hook for fetching ITAD pricing data for a game.
+ * Only enabled when the game has an ITAD game ID.
+ */
+export function useGamePricing(gameId: number | undefined, hasItadId: boolean) {
+    return useQuery<{ data: ItadGamePricingDto | null }>({
+        queryKey: ['games', 'pricing', gameId],
+        queryFn: async () => {
+            if (!gameId) throw new Error('Game ID required');
+            return getGamePricing(gameId);
+        },
+        enabled: !!gameId && hasItadId,
+        staleTime: 1000 * 60 * 30, // 30 minutes (data is cached server-side)
+    });
+}

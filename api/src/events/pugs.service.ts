@@ -1,0 +1,257 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { eq, and, ne } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { PUG_SLOT_EVENTS } from '../discord-bot/discord-bot.constants';
+import {
+  generateUniqueInviteCode,
+  toPugSlotResponse,
+  findPugSlotOrThrow,
+  verifyEventPermission,
+  verifyEventExists,
+  handleUniqueConstraint,
+} from './pugs.helpers';
+import type {
+  EventInviteLinkResponseDto,
+  CreatePugSlotDto,
+  UpdatePugSlotDto,
+  PugSlotResponseDto,
+  PugSlotListResponseDto,
+} from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
+import {
+  findEventCreatorIdOrThrow,
+  projectPugSlotsForViewer,
+  type PugViewer,
+} from './pugs-visibility.helpers';
+
+export interface PugSlotCreatedPayload {
+  pugSlotId: string;
+  eventId: number;
+  discordUsername: string | null;
+  creatorUserId: number;
+}
+
+@Injectable()
+export class PugsService {
+  private readonly logger = new Logger(PugsService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  async create(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: CreatePugSlotDto,
+  ): Promise<PugSlotResponseDto> {
+    await verifyEventExists(this.db, eventId);
+    const inviteCode = await generateUniqueInviteCode(this.db);
+    try {
+      const inserted = await this.insertPugSlot(
+        eventId,
+        userId,
+        dto,
+        inviteCode,
+      );
+      this.emitIfNamed(inserted, eventId, userId);
+      return toPugSlotResponse(inserted);
+    } catch (error: unknown) {
+      handleUniqueConstraint(error, dto.discordUsername);
+    }
+  }
+
+  private async insertPugSlot(
+    eventId: number,
+    userId: number,
+    dto: CreatePugSlotDto,
+    inviteCode: string,
+  ) {
+    const [row] = await this.db
+      .insert(schema.pugSlots)
+      .values({
+        eventId,
+        discordUsername: dto.discordUsername ?? null,
+        role: dto.role,
+        class: dto.class ?? null,
+        spec: dto.spec ?? null,
+        notes: dto.notes ?? null,
+        status: 'pending',
+        inviteCode,
+        createdBy: userId,
+      })
+      .returning();
+    const inserted = defined(row, 'inserted pug slot row');
+    const label = inserted.discordUsername ?? `anonymous (${inviteCode})`;
+    this.logger.log(
+      `PUG slot created: ${label} as ${dto.role} for event ${eventId}`,
+    );
+    return inserted;
+  }
+
+  private emitIfNamed(
+    inserted: typeof schema.pugSlots.$inferSelect,
+    eventId: number,
+    userId: number,
+  ): void {
+    if (!inserted.discordUsername) return;
+    this.eventEmitter.emit(PUG_SLOT_EVENTS.CREATED, {
+      pugSlotId: inserted.id,
+      eventId,
+      discordUsername: inserted.discordUsername,
+      creatorUserId: userId,
+    } satisfies PugSlotCreatedPayload);
+  }
+
+  /**
+   * Generate (or reuse) the event's share invite link code (ROK-1621).
+   *
+   * Copying a share link must not materialise a roster occupant, so the code
+   * lives on the event row. A `pug_slots` row is only written when somebody
+   * actually claims the link.
+   *
+   * @returns the event's invite code, stable across repeated calls.
+   */
+  async createEventInviteLink(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<EventInviteLinkResponseDto> {
+    // ROK-1621 keeps the PRIOR permission semantics deliberately. The path it
+    // replaces (`create` with no username) called `verifyEventExists`, so any
+    // member could generate a share link; `verifyEventPermission` silently
+    // narrowed that to creator/admin and broke the `/invite` smoke test. This
+    // story is about not creating a phantom guest, not about who may share an
+    // event.
+    //
+    // OPEN QUESTION for the operator: the code now lives on `events`, so
+    // writing it mutates the event rather than adding a child row — tightening
+    // to creator/admin is defensible, but it is a product decision and gets its
+    // own change, not a silent ride-along here.
+    void userId;
+    void isAdmin;
+    await verifyEventExists(this.db, eventId);
+    const [existing] = await this.db
+      .select({ inviteCode: schema.events.inviteCode })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    if (existing?.inviteCode) return { inviteCode: existing.inviteCode };
+    const inviteCode = await generateUniqueInviteCode(this.db);
+    await this.db
+      .update(schema.events)
+      .set({ inviteCode, updatedAt: new Date() })
+      .where(eq(schema.events.id, eventId));
+    this.logger.log(`Event invite link generated for event ${eventId}`);
+    return { inviteCode };
+  }
+
+  async regenerateInviteCode(
+    eventId: number,
+    pugId: string,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<PugSlotResponseDto> {
+    await verifyEventPermission(this.db, eventId, userId, isAdmin);
+    await findPugSlotOrThrow(this.db, eventId, pugId);
+    const newCode = await generateUniqueInviteCode(this.db);
+    const [updated] = await this.db
+      .update(schema.pugSlots)
+      .set({ inviteCode: newCode, updatedAt: new Date() })
+      .where(eq(schema.pugSlots.id, pugId))
+      .returning();
+    this.logger.log(
+      `Regenerated invite code for PUG slot ${pugId}: ${newCode}`,
+    );
+    return toPugSlotResponse(defined(updated, 'updated pug slot row'));
+  }
+
+  async findByInviteCode(
+    code: string,
+  ): Promise<typeof schema.pugSlots.$inferSelect | null> {
+    const [slot] = await this.db
+      .select()
+      .from(schema.pugSlots)
+      .where(eq(schema.pugSlots.inviteCode, code))
+      .limit(1);
+    return slot ?? null;
+  }
+
+  /**
+   * Non-claimed PUG slots for an event. ROK-1825: invite credentials are
+   * served only to the event's managers; a null viewer gets them stripped.
+   */
+  async findAll(
+    eventId: number,
+    viewer: PugViewer = null,
+  ): Promise<PugSlotListResponseDto> {
+    const creatorId = await findEventCreatorIdOrThrow(this.db, eventId);
+    const pugs = await this.db
+      .select()
+      .from(schema.pugSlots)
+      .where(
+        and(
+          eq(schema.pugSlots.eventId, eventId),
+          ne(schema.pugSlots.status, 'claimed'),
+        ),
+      )
+      .orderBy(schema.pugSlots.createdAt);
+    const slots = pugs.map(toPugSlotResponse);
+    return { pugs: projectPugSlotsForViewer(slots, creatorId, viewer) };
+  }
+
+  async update(
+    eventId: number,
+    pugId: string,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdatePugSlotDto,
+  ): Promise<PugSlotResponseDto> {
+    await verifyEventPermission(this.db, eventId, userId, isAdmin);
+    await findPugSlotOrThrow(this.db, eventId, pugId);
+    const updateData = buildPugUpdateData(dto);
+    try {
+      const [updated] = await this.db
+        .update(schema.pugSlots)
+        .set(updateData)
+        .where(eq(schema.pugSlots.id, pugId))
+        .returning();
+      this.logger.log(`PUG slot ${pugId} updated for event ${eventId}`);
+      return toPugSlotResponse(defined(updated, 'updated pug slot row'));
+    } catch (error: unknown) {
+      handleUniqueConstraint(error, dto.discordUsername);
+    }
+  }
+
+  async remove(
+    eventId: number,
+    pugId: string,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const existing = await findPugSlotOrThrow(this.db, eventId, pugId);
+    if (existing.createdBy !== userId) {
+      await verifyEventPermission(this.db, eventId, userId, isAdmin);
+    }
+    await this.db.delete(schema.pugSlots).where(eq(schema.pugSlots.id, pugId));
+    this.logger.log(
+      `PUG slot ${pugId} (${existing.discordUsername}) removed from event ${eventId}`,
+    );
+  }
+}
+
+function buildPugUpdateData(dto: UpdatePugSlotDto): Record<string, unknown> {
+  const data: Record<string, unknown> = { updatedAt: new Date() };
+  if (dto.discordUsername !== undefined)
+    data.discordUsername = dto.discordUsername;
+  if (dto.role !== undefined) data.role = dto.role;
+  if (dto.class !== undefined) data.class = dto.class;
+  if (dto.spec !== undefined) data.spec = dto.spec;
+  if (dto.notes !== undefined) data.notes = dto.notes;
+  return data;
+}

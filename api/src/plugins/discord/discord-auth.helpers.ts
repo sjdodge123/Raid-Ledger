@@ -1,0 +1,307 @@
+/**
+ * Discord auth controller helpers.
+ * Extracted from discord-auth.controller.ts for file size compliance (ROK-711).
+ */
+import { Logger, ExecutionContext } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import * as crypto from 'crypto';
+import type { Response, Request } from 'express';
+import { getRequestOrigin } from '../../common/request-origin.helpers';
+import type { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
+import { setRefreshCookie } from '../../auth/refresh/refresh-cookie.helpers';
+import { rememberVerifiedLoginState } from './discord-verified-login-state';
+
+/**
+ * ROK-1353: mint a Discord refresh family for `userId` and set the httpOnly
+ * `rl_rt` cookie on the OAuth-callback response. Kept here so the controller
+ * stays under the 300-line ESLint cap.
+ */
+export async function issueDiscordRefreshCookie(
+  refreshService: RefreshTokenService,
+  req: Request,
+  res: Response,
+  userId: number,
+): Promise<void> {
+  const issued = await refreshService.issue(userId, {
+    authMethod: 'discord',
+    userAgent: req.headers['user-agent'] ?? null,
+  });
+  setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
+}
+
+/**
+ * Custom DiscordAuthGuard that catches OAuth errors (e.g. InternalOAuthError
+ * from passport-oauth2) and redirects to the login page instead of returning
+ * a raw JSON 401 response. (ROK-668)
+ */
+export class DiscordAuthGuard extends AuthGuard('discord') {
+  private readonly guardLogger = new Logger('DiscordAuthGuard');
+
+  /**
+   * Pass prompt=none to skip Discord's consent screen for returning users.
+   * If the user hasn't authorized before, Discord returns consent_required
+   * and we retry without it (see handleRequest).
+   */
+  getAuthenticateOptions(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest<Request>();
+    if (req.query.consent !== '1') {
+      return { prompt: 'none' };
+    }
+    return {};
+  }
+
+  /** Handle authentication result, redirecting on failure. */
+  handleRequest<TUser>(
+    err: Error | null,
+    user: TUser | false,
+    info: unknown,
+    context: ExecutionContext,
+  ): TUser {
+    if (err || !user) {
+      const errorMessage = err?.message || 'Unknown OAuth error';
+      const errorName = err?.constructor?.name || 'UnknownError';
+      this.guardLogger.warn(
+        `Discord OAuth callback failed: [${errorName}] ${errorMessage}`,
+      );
+      const httpCtx = context.switchToHttp();
+      redirectOnOAuthFailure(
+        httpCtx.getRequest<Request>(),
+        httpCtx.getResponse<Response>(),
+        err,
+      );
+      return undefined as unknown as TUser;
+    }
+    rememberVerifiedLoginState(
+      context.switchToHttp().getRequest<Request>(),
+      info,
+    );
+    return user;
+  }
+}
+
+/**
+ * ROK-313 §9.7 / AC4: extract the reason from a structured auth-status error
+ * thrown in the OAuth verify path — USER_SUSPENDED (ban, from `assertNotBanned`)
+ * or USER_KICKED (kick cooldown, from `assertKickCooldownOrClear`) — so the copy
+ * renders on the login screen. Returns the reason string (`''` when the ban
+ * carried none) or null when this isn't a suspension/kick error.
+ */
+export function suspendedRedirectReason(err: Error | null): string | null {
+  const resp = (err as { getResponse?: () => unknown } | null)?.getResponse?.();
+  if (resp && typeof resp === 'object') {
+    const body = resp as Record<string, unknown>;
+    if (body.code === 'USER_SUSPENDED') {
+      return typeof body.reason === 'string' ? body.reason : '';
+    }
+    if (body.code === 'USER_KICKED') {
+      return typeof body.reason === 'string' ? body.reason : '';
+    }
+  }
+  return null;
+}
+
+/** Resolve the external origin for OAuth-failure redirects. */
+function failureClientUrl(req: Request): string {
+  return (
+    process.env.CLIENT_URL ||
+    `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`
+  );
+}
+
+/**
+ * Pick the right failure redirect: silent (`prompt=none`) re-auth falls
+ * through to the one-shot client guard (ROK-1353); consent/interaction errors
+ * retry with the consent screen; everything else is a login error.
+ */
+function redirectOnOAuthFailure(
+  req: Request,
+  res: Response,
+  err: Error | null,
+): void {
+  const clientUrl = failureClientUrl(req);
+  if (isSilentOAuthState(req.query?.state)) {
+    res.redirect(`${clientUrl}/auth/success?silent_failed=1`);
+    return;
+  }
+  const suspendedReason = suspendedRedirectReason(err);
+  if (suspendedReason !== null) {
+    res.redirect(
+      `${clientUrl}/login?error=suspended&reason=${encodeURIComponent(suspendedReason)}`,
+    );
+    return;
+  }
+  const errCode = (err as unknown as Record<string, unknown>)?.code;
+  if (errCode === 'consent_required' || errCode === 'interaction_required') {
+    res.redirect('/auth/discord?consent=1');
+    return;
+  }
+  res.redirect(`${clientUrl}/login?error=oauth_failed`);
+}
+
+/** Append `prompt=none` to an authorize URL for silent re-auth (ROK-1353). */
+export function buildSilentOAuthRedirect(authorizeUrl: string): string {
+  return `${authorizeUrl}&prompt=none`;
+}
+
+/**
+ * ROK-1353: build the full silent-login redirect target. Returns the Discord
+ * authorize URL (+ prompt=none) on success, or the `silent_failed` fall-through
+ * when OAuth isn't configured. Keeps the controller method thin (300-line cap).
+ */
+export function buildSilentLoginRedirect(args: {
+  oauthConfig: { clientId: string; callbackUrl: string } | null;
+  /** Signs a browser-bound login state (ROK-1808). */
+  signState: (payload: Record<string, unknown>) => string;
+  returnTo: string;
+  clientUrl: string;
+}): string {
+  if (!args.oauthConfig) {
+    return `${args.clientUrl}/auth/success?silent_failed=1`;
+  }
+  const state = args.signState({ action: 'silent', returnTo: args.returnTo });
+  const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${args.oauthConfig.clientId}&redirect_uri=${encodeURIComponent(args.oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+  return buildSilentOAuthRedirect(authorizeUrl);
+}
+
+/**
+ * Best-effort: is this OAuth callback part of a silent (`prompt=none`) flow?
+ * Decodes the (signed) state WITHOUT verifying — used only to choose the
+ * failure redirect target, never to grant auth. ROK-1353.
+ */
+export function isSilentOAuthState(stateParam: unknown): boolean {
+  if (typeof stateParam !== 'string' || !stateParam) return false;
+  try {
+    const { data } = JSON.parse(
+      Buffer.from(stateParam, 'base64').toString(),
+    ) as { data: string };
+    const parsed = JSON.parse(data) as { action?: string };
+    return parsed.action === 'silent';
+  } catch {
+    return false;
+  }
+}
+
+/** Sign OAuth state parameter to prevent tampering. */
+export function signOAuthState(payload: object, secret: string): string {
+  const data = JSON.stringify(payload);
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(data)
+    .digest('hex');
+  return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
+}
+
+/** Verify HMAC signature on state data. Returns null if invalid. */
+function verifySignature(
+  data: string,
+  signature: string,
+  secret: string,
+): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(data)
+    .digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+/** Verify and decode signed OAuth state parameter. */
+export function verifyOAuthState(
+  state: string,
+  secret: string,
+  logger: Logger,
+): Record<string, unknown> | null {
+  try {
+    const { data, signature } = JSON.parse(
+      Buffer.from(state, 'base64').toString(),
+    ) as { data: string; signature: string };
+    if (!verifySignature(data, signature, secret)) return null;
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    const MAX_STATE_AGE_MS = 10 * 60 * 1000;
+    const timestamp = parsed.timestamp as number | undefined;
+    if (!timestamp || Date.now() - timestamp > MAX_STATE_AGE_MS) {
+      logger.warn('OAuth state parameter expired');
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Derive the external origin from request headers (request-local only). */
+export function getOriginUrl(req: Request): string {
+  return getRequestOrigin(req);
+}
+
+/** Common User-Agent header for Discord API requests. */
+const DISCORD_USER_AGENT =
+  'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)';
+
+/** Build the token exchange request body. */
+function buildTokenParams(
+  code: string,
+  redirectUri: string,
+  clientId: string,
+  clientSecret: string,
+): URLSearchParams {
+  return new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+  });
+}
+
+/** Exchange Discord OAuth code for access token. */
+export async function exchangeCodeForToken(
+  code: string,
+  redirectUri: string,
+  clientId: string,
+  clientSecret: string,
+  discordFetch: (
+    url: string | URL,
+    init?: RequestInit,
+  ) => Promise<globalThis.Response>,
+): Promise<{ access_token: string }> {
+  const tokenResponse = await discordFetch(
+    'https://discord.com/api/oauth2/token',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': DISCORD_USER_AGENT,
+      },
+      body: buildTokenParams(code, redirectUri, clientId, clientSecret),
+    },
+  );
+  if (!tokenResponse.ok) {
+    const errorBody = await tokenResponse.text();
+    throw new Error(
+      `Discord token exchange failed: ${tokenResponse.status} ${errorBody}`,
+    );
+  }
+  return (await tokenResponse.json()) as { access_token: string };
+}
+
+/** Fetch Discord user profile with access token. */
+export async function fetchDiscordProfile(
+  accessToken: string,
+  discordFetch: (
+    url: string | URL,
+    init?: RequestInit,
+  ) => Promise<globalThis.Response>,
+): Promise<{ id: string; username: string; avatar: string | null }> {
+  const userResponse = await discordFetch('https://discord.com/api/users/@me', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'User-Agent': DISCORD_USER_AGENT,
+    },
+  });
+  if (!userResponse.ok) throw new Error('Failed to fetch Discord profile');
+  return (await userResponse.json()) as {
+    id: string;
+    username: string;
+    avatar: string | null;
+  };
+}

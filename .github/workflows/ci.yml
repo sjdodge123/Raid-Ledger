@@ -1,0 +1,1249 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# ROK-1838: error reporting is on by default; nothing CI boots may spend the
+# maintainers' Sentry quota. Every job (and so every api/web process it
+# starts) inherits the opt-out. Containers get it via `-e` below.
+env:
+  ENABLE_TELEMETRY: 'false'
+
+jobs:
+  # ─── Scope Detection ──────────────────────────────────────────────
+  # Determines which jobs need to run based on changed files.
+  # All downstream jobs check these outputs before starting.
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      contract: ${{ steps.filter.outputs.contract }}
+      smoke_tests: ${{ steps.filter.outputs.smoke_tests }}
+      container: ${{ steps.filter.outputs.container }}
+      tools: ${{ steps.filter.outputs.tools }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'api/src/**'
+              - 'web/src/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              # Workspace manifests too (cycle-19 chore): a deps bump in
+              # api/web/contract must run lint + build, not just the root one.
+              - 'api/package.json'
+              - 'web/package.json'
+              - 'packages/*/package.json'
+              - 'tsconfig*.json'
+              - '.eslintrc*'
+              - '**/eslint.config.*'
+              # ROK-1516: test-bot is not a workspace; the lint job runs its
+              # eslint in a dedicated step below.
+              - 'tools/test-bot/**'
+              - 'vitest.config.*'
+              - 'playwright.config.*'
+              # scripts/** was in NO filter, so the lint job — which owns the
+              # shell parse check AND the scripts/test suite — was skipped for
+              # a scripts-only diff, i.e. exactly the changes those checks
+              # exist to protect. Observed on PR #1060, a scripts-only change
+              # that got no shell checking in CI at all.
+              - 'scripts/**'
+              # Same class of hole as scripts/** above, found by the 2026-09-07
+              # CI-coverage audit: api/scripts/** holds the boot-time scripts
+              # CLAUDE.md governs as STRICT (run-migrations-with-sentry,
+              # bootstrap-admin, reencrypt-settings, apply-settings-overlay) and
+              # was in NO filter, so editing one ran no lint, no build, no
+              # typecheck and no tests. Only api/scripts/docker-entrypoint.sh
+              # was covered, via the `container` filter.
+              - 'api/scripts/**'
+              # web/ root files sit outside web/src/** and were likewise
+              # unfiltered: a vite config or index.html change got no build.
+              - 'web/index.html'
+              - 'web/vite.config.*'
+              # scripts/validate-ci-smoke-ci-parity.spec.mjs (run by the lint
+              # job) pins values read from these two files, so a PR editing
+              # only one of them must still run it to catch the drift.
+              - '.github/workflows/discord-smoke.yml'
+              - 'rl-infra/orchestrator/bin/env-spin'
+              # TDB:552: the lint job runs
+              # scripts/test/runner-playwright-pin.test.sh, which pins this
+              # file's Playwright tag to package-lock.json.
+              - 'rl-infra/runner/Dockerfile'
+              # The lint job runs the rl-infra dashboard node:test suite.
+              - 'rl-infra/dashboard/**'
+            api:
+              - 'api/package.json'
+              - 'package-lock.json'
+              - 'api/src/**'
+              - 'api/jest*.config.*'
+              - 'packages/contract/**'
+            web:
+              - 'web/package.json'
+              - 'package-lock.json'
+              - 'web/src/**'
+              - 'web/vitest.config.*'
+              - 'packages/contract/**'
+            contract:
+              - 'packages/*/package.json'
+              - 'package-lock.json'
+              - 'packages/contract/**'
+            smoke_tests:
+              - 'web/src/**'
+              - 'scripts/smoke/**'
+              - 'playwright.config.*'
+              - 'packages/contract/**'
+              # 2026-09-07 CI-coverage audit: CLAUDE.md documents these two as
+              # Playwright triggers and validate-ci.sh gates on them locally,
+              # but this filter omitted them — so an auth-only change got ZERO
+              # Playwright coverage in CI even though every smoke test logs in,
+              # and the demo-test controllers are what the fixtures call.
+              - 'api/src/auth/**'
+              - 'api/src/admin/demo-test*'
+            container:
+              - 'Dockerfile*'
+              - 'api/Dockerfile'
+              - 'api/scripts/docker-entrypoint.sh'
+              - 'nginx/**'
+              - 'api/src/ai/providers/ollama-docker*'
+              - 'api/src/ai/providers/ollama-setup*'
+            tools:
+              - 'tools/mcp-rl-fleet/**'
+              - 'tools/mcp-env/**'
+              - 'tools/mcp-discord/**'
+              - 'tools/test-bot/**'
+
+  # ─── Lint + Build ──────────────────────────────────────────────────
+  # Skipped for docs/skills-only PRs (no code changes)
+  lint:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.code == 'true'
+    # reconcile-migrations-trust-probe.test.sh pulls the pgvector image from the
+    # private GHCR mirror (Docker Hub's anonymous rate limit reddened CI).
+    permissions:
+      contents: read
+      packages: read
+    env:
+      RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # HEAD^1 (the PR base) for the migration merge-order guard below.
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Build API
+        run: npm run build -w api
+
+      - name: Build web
+        run: npm run build -w web
+
+      # ROK-1136: `nest build` uses api/tsconfig.build.json, which EXCLUDES
+      # **/*.spec*.ts and src/common/testing/**, so type errors inside test
+      # files (e.g. against the shared drizzle-mock) slip past the build step.
+      # Run the full-project typecheck — same command validate-ci.sh uses —
+      # so test-file tsc errors fail the PR instead of leaking to main.
+      # ROK-1161: noUncheckedIndexedAccess is on in api/tsconfig.json itself,
+      # so this step gates specs + test infra under it as well as shipped code.
+      - name: Typecheck (full project, incl. tests)
+        run: npx tsc --noEmit -p api/tsconfig.json
+
+      # Playwright transpiles the smoke specs without typechecking them, so a
+      # type error in scripts/smoke/**, scripts/*.ts or playwright.config.ts
+      # surfaced only when a smoke shard loaded the file. scripts/** and
+      # playwright.config.* are in the `code` filter, so a smoke-only PR runs
+      # this job. Same command validate-ci.sh's TypeScript step uses.
+      - name: Typecheck (smoke specs + scripts)
+        run: npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json
+
+      # vitest transpiles without typechecking, and the web build project
+      # (tsconfig.app.json) excludes the specs and src/test/**, so a type
+      # error in a web spec or a fixture that drifted from a contract DTO
+      # failed no gate. tsconfig.test.json covers them. Same command
+      # validate-ci.sh's TypeScript step uses.
+      - name: Typecheck (web specs)
+        run: npx tsc --noEmit -p web/tsconfig.test.json
+
+      - name: Lint
+        run: npm run lint --workspaces
+
+      # ROK-1516: tools/test-bot is NOT an npm workspace, so --workspaces skips
+      # it. Its eslint.config.js resolves eslint + plugins from the root
+      # node_modules installed by `npm ci` above — no test-bot install needed.
+      - name: Lint (tools/test-bot)
+        run: npm run lint --prefix tools/test-bot
+
+      # ROK-1154: gzip budget per web chunk class (entry / vendor / lazy) on
+      # the dist built above; an overrun fails the job. It runs AFTER typecheck and
+      # lint so an overrun never hides their results. Budgets and the reason
+      # for each: scripts/bundle-budget.config.mjs (scripts/** is in the `code`
+      # filter, so raising one re-runs this job). Same command validate-ci.sh
+      # runs. Runbook: docs/runbooks/bundle-budget.md.
+      - name: Bundle size budget
+        run: node scripts/check-bundle-size.mjs
+
+      # 2026-09-07 CI-coverage audit: tools/test-bot's pure assertion specs ran
+      # in NO GitHub job. Locally they run only under `validate-ci.sh --full`,
+      # which the lite-gate default tells everyone to skip — so 63 assertions
+      # were gated by nothing on a normal PR. They need no Discord, no API and
+      # no env, and resolve tsx from the root node_modules installed above (the
+      # same trick the lint step uses), so they belong here rather than in
+      # tools-test-shard, which matrixes over npm workspaces test-bot is not.
+      - name: Test (tools/test-bot unit specs)
+        run: npm test --prefix tools/test-bot
+
+      - name: Prettier check (api)
+        run: npm run prettier:check -w api
+
+      # Shell parse-lint: bash-3.2 parse breaks have shipped before
+      # (sync-local-to-env.sh) because shell scripts are never syntax-checked.
+      # `bash -n` parses each scripts/*.sh without executing it. Scope is
+      # scripts/*.sh only — rl-infra/** is a larger surface, out of scope here.
+      - name: Shell parse check (bash -n on scripts/*.sh)
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" || exit 1
+          done
+
+      # The trust-probe shell test pulls RL_PGVECTOR_IMAGE (the private GHCR mirror)
+      # through the runner's docker daemon, which needs a ghcr.io login —
+      # anonymous Docker Hub pulls hit `toomanyrequests` on shared runners.
+      - name: Log in to GHCR (pgvector mirror)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Behavioral shell tests. `bash -n` only proves a script PARSES — it
+      # cannot catch a logic bug like validate-ci.sh's run_step reading exit
+      # code 2 as SKIPPED, which silently reported broken builds as passing
+      # and survived two backlog reports. The suite runs in ~5s.
+      - name: Shell behavior tests (scripts/test)
+        run: ./scripts/test/run-all.sh
+
+      # node:test specs for the CI/fleet scripts. validate-ci.sh runs them in
+      # both --static and --full, but until now no GitHub job did, so the real
+      # gate never exercised them. restore-drill-corruption.spec.mjs imports
+      # packages/contract/dist, built above.
+      - name: Script node:test specs (scripts/*.spec.mjs)
+        run: node --test scripts/*.spec.mjs
+
+      # 2026-10-04: the rl-infra dashboard suite ran in no CI job. Pass the
+      # glob, not the directory: Node >=21 reads `node --test <dir>` as a
+      # module path and fails with MODULE_NOT_FOUND.
+      - name: rl-infra dashboard node:test specs
+        run: node --test rl-infra/dashboard/test/*.test.js
+
+      # ROK-1693: a migration whose journal `when` is <= the newest entry
+      # already on main is silently SKIPPED by Drizzle on every DB that ran
+      # that entry (0176_lfg_invites never reached prod). HEAD^1 is the base:
+      # the merge ref's first parent on pull_request, the prior main on push.
+      # A no-op when the journal is unchanged.
+      - name: Migration merge-order guard
+        run: node scripts/check-migration-merge-order.mjs --base HEAD^1
+
+      # TDB:1150: every meta/NNNN_snapshot.json's prevId must be the id of the
+      # snapshot before it (numeric order; gaps are normal). drizzle-kit only
+      # aborts on a prevId collision, so a broken link (0102 pointed at a tag
+      # string, 0112 at no snapshot) otherwise survives silently.
+      - name: Migration snapshot prevId chain guard
+        run: node scripts/check-migration-snapshot-chain.mjs
+
+      # TDB:1167: schema.ts must match the latest meta snapshot. Runs
+      # `drizzle-kit generate` against a temp copy of the migrations dir (no
+      # dry-run exists) and fails if it would emit a migration — a schema edit
+      # shipped without `npm run db:generate -w api`. No DB, ~1s.
+      - name: Migration snapshot drift check
+        run: bash scripts/validate-migrations.sh --drift-only
+
+  # ─── Unit Tests (API) ──────────────────────────────────────────────
+  unit-tests-api:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.api == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Test API (with coverage)
+        run: npm run test:cov -w api -- --passWithNoTests
+
+  # ─── Unit Tests (Web) ──────────────────────────────────────────────
+  unit-tests-web:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.web == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Test web (with coverage)
+        run: npx vitest run --coverage
+        working-directory: web
+
+  # TDB:1246: the contract schema specs had no runner anywhere; this job runs them.
+  unit-tests-contract:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.contract == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test contract schemas
+        run: npm test -w @raid-ledger/contract
+
+  # ─── Tools Unit Tests (MCP servers) ───────────────────────────────
+  # The MCP-server workspaces under tools/ each ship a Vitest suite that is the
+  # behavioral gate for tooling changes. Before ROK-1362 only mcp-rl-fleet ran
+  # here; mcp-env + mcp-discord ran NOWHERE in CI (a broken env-lock.test.ts
+  # once shipped CI-green). The matrix runs all three so any tools-workspace
+  # regression fails the PR. test-bot is not an npm workspace (own lockfile), so
+  # its unit specs run elsewhere and its typecheck is tools-typecheck-test-bot.
+  tools-test-shard:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.tools == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - '@raid-ledger/mcp-rl-fleet'
+          - '@raid-ledger/mcp-env'
+          - '@raid-ledger/mcp-discord'
+        include:
+          - workspace: '@raid-ledger/mcp-rl-fleet'
+            dir: mcp-rl-fleet
+          - workspace: '@raid-ledger/mcp-env'
+            dir: mcp-env
+          - workspace: '@raid-ledger/mcp-discord'
+            dir: mcp-discord
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck ${{ matrix.workspace }} (strict flags, ROK-1161)
+        run: npx tsc --noEmit -p tools/${{ matrix.dir }}/tsconfig.json
+
+      - name: Test ${{ matrix.workspace }} (Vitest)
+        run: npm test -w ${{ matrix.workspace }}
+
+  # ─── test-bot typecheck (ROK-1161) ────────────────────────────────
+  # test-bot is not an npm workspace (own lockfile, no vitest gate here), so
+  # nothing typechecked it; its strict flags are enforced by this job.
+  tools-typecheck-test-bot:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.tools == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Install test-bot dependencies
+        working-directory: tools/test-bot
+        run: npm ci
+
+      - name: Typecheck test-bot (strict flags, its own pinned TypeScript)
+        working-directory: tools/test-bot
+        run: npx tsc --noEmit -p tsconfig.json
+
+  # ─── Tools Tests (summary — required status check) ────────────────
+  # Stable required-check context for branch protection. The matrix above
+  # (tools-test-shard) produces per-workspace contexts; this aggregator keeps
+  # the single `tools-tests` check that branch protection requires. Mirrors
+  # the unit-tests / integration-tests / smoke-tests summary pattern.
+  tools-tests:
+    runs-on: ubuntu-latest
+    needs: [tools-test-shard, tools-typecheck-test-bot]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          R="${{ needs.tools-test-shard.result }}"
+          T="${{ needs.tools-typecheck-test-bot.result }}"
+          for X in "$R" "$T"; do
+            if [ "$X" = "failure" ] || [ "$X" = "cancelled" ]; then
+              echo "Tools tests failed (shard=$R, test-bot typecheck=$T)"
+              exit 1
+            fi
+          done
+          echo "Tools tests passed (shard=$R, test-bot typecheck=$T)"
+
+  # ─── Unit Tests (summary — required status check) ─────────────────
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: [unit-tests-api, unit-tests-web, unit-tests-contract]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          API="${{ needs.unit-tests-api.result }}"
+          WEB="${{ needs.unit-tests-web.result }}"
+          CONTRACT="${{ needs.unit-tests-contract.result }}"
+          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ] || [ "$CONTRACT" = "failure" ]; then
+            echo "Unit tests failed (api=$API, web=$WEB, contract=$CONTRACT)"
+            exit 1
+          fi
+          echo "Unit tests passed (api=$API, web=$WEB, contract=$CONTRACT)"
+
+  # ─── Integration Tests (sharded) ───────────────────────────────────
+  integration-test-shard:
+    runs-on: ubuntu-latest
+    # ROK-1352: read the CI service images from the GHCR mirror (private package);
+    # GITHUB_TOKEN needs packages:read to pull them via the service `credentials`.
+    permissions:
+      contents: read
+      packages: read
+    # Fast-lane (2026-06-25): bound a hung/flaky shard. maxWorkers=1 + 108 specs
+    # finish in ~6-7 min; 25 min is generous headroom. Previously unbounded
+    # (GHA default 360 min), so a wedged shard could hang the required check.
+    #
+    # 2026-09-05: four shards, not three. The suite is 154 spec files and each
+    # shard is ONE --runInBand process whose heap grows per NestApp boot (the
+    # ioredis/BullMQ carrier, ROK-1250/1268). At 51 files a shard sits on the
+    # 4 GB edge: main's 3×51 passed, and PR #1093's +2 files put 52 in two
+    # shards, which died on their 51st file with "JavaScript heap out of
+    # memory". ~39 files per shard restores the headroom without touching the
+    # heap size or the leak itself.
+    timeout-minutes: 25
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.api == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/4, 2/4, 3/4, 4/4]
+        # ROK-1058: repeat each shard 3× to surface order-dependent flake.
+        # Combined with `randomize: true` in jest.integration.config.js, the 3×
+        # repeat exercises 12 distinct file-orderings; a leak that only appears
+        # in a third of orderings still fails the matrix.
+        #
+        # Fast-lane (2026-06-25): the 3× repeat now runs ONLY on push-to-main (the
+        # post-merge order-flake sweep) and workflow_dispatch. PRs run each shard
+        # ONCE — 3 jobs, not 9. `randomize: true` still gives every PR a random
+        # ordering, and an order-flake regression is caught same-day on the main
+        # run, so coverage is preserved while a backend PR drops from 9
+        # NestApp-booting integration jobs to 3.
+        run: ${{ github.event_name == 'pull_request' && fromJSON('[1]') || fromJSON('[1, 2, 3]') }}
+
+    services:
+      postgres:
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: raid_ledger_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d raid_ledger_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/raid_ledger_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      CLIENT_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+      # Testcontainer specs (backup.helpers.*) pull this instead of Docker Hub.
+      RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+      # Testcontainers' Ryuk reaper sidecar (testcontainers/ryuk) is another
+      # anonymous Docker Hub pull that hits the same rate limit (HTTP 500 on
+      # auth.docker.io). The specs stop their containers in afterAll and the
+      # runner VM is discarded after the job, so the reaper is not needed here.
+      TESTCONTAINERS_RYUK_DISABLED: 'true'
+
+    steps:
+      # Testcontainer specs pull RL_PGVECTOR_IMAGE (the private GHCR mirror)
+      # through the runner's docker daemon, which needs a ghcr.io login —
+      # anonymous Docker Hub pulls hit `toomanyrequests` on shared runners.
+      - name: Log in to GHCR (pgvector mirror)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ROK-1144: backup.integration.spec.ts shells out to pg_dump/pg_restore.
+      # Today it relies on ubuntu-latest shipping postgresql-client by default;
+      # a future runner-image change could silently drop that binary and skip
+      # all backup coverage with no signal. Install it explicitly so the
+      # dependency is documented in the workflow and pinned to the job.
+      # The runner image ships a Google Chrome apt source we never use, and
+      # `apt-get update` fails HARD (exit 100) when any single source is
+      # inconsistent. On 2026-09-09 dl.google.com served a Packages.gz whose
+      # hash did not match its own Release file for over an hour, which reddened
+      # all four integration shards on PR #1123 AND 19 jobs on main (run
+      # 34381433560) — every one in setup, before a test ran, across three
+      # retries. Nothing here needs Chrome; drop the third-party lists so an
+      # unrelated CDN cannot gate the distro package we actually want.
+      - name: Drop unused third-party apt sources
+        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/microsoft-prod.list
+
+      - name: Install postgresql-client (pg_dump/pg_restore for backup tests)
+        run: sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Bump Postgres max_connections
+        # GHA service containers don't accept `command:`, so we ALTER SYSTEM
+        # and restart the postgres container in place. Default 100 is too
+        # low for the shard's combined NestJS boot + parallel-query load.
+        run: |
+          PG_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/sjdodge123/rl-ci-pgvector:pg16" --format "{{.ID}}" | head -1)
+          if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -c "ALTER SYSTEM SET max_connections = 300;"
+          docker restart "$PG_CONTAINER"
+          for i in $(seq 1 30); do
+            if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger_test >/dev/null 2>&1; then
+              echo "Postgres ready"
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -tAc "SHOW max_connections;"
+
+      - name: Run integration tests (shard ${{ matrix.shard }}, run ${{ matrix.run }})
+        run: npm run test:integration -w api -- --shard=${{ matrix.shard }} --randomize
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, integration-test-shard]
+    if: always()
+    steps:
+      - name: Check shard results
+        run: |
+          RESULT="${{ needs.integration-test-shard.result }}"
+          if [ "$RESULT" = "skipped" ]; then
+            echo "Integration tests skipped (no API changes)"
+            exit 0
+          fi
+          if [ "$RESULT" != "success" ]; then
+            echo "Integration test shards failed"
+            exit 1
+          fi
+
+  # ─── Playwright Smoke Tests (sharded) ──────────────────────────────
+  # Only runs when web/UI files or Playwright config changed
+  smoke-test-shard:
+    runs-on: ubuntu-latest
+    # ROK-1352: pull CI service images from the private GHCR mirror.
+    permissions:
+      contents: read
+      packages: read
+    timeout-minutes: 20
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.smoke_tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/5, 2/5, 3/5, 4/5, 5/5]
+
+    services:
+      postgres:
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: raid_ledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d raid_ledger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/raid_ledger
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      CLIENT_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+      DEMO_MODE: 'true'
+      ADMIN_PASSWORD: playwright-ci-password
+      BASE_URL: http://localhost:5173
+      API_URL: http://localhost:3000
+      # ROK-1156: smoke job runs the API on the GHA runner directly (not in a
+      # container), so the default `/data/logs` is not writable. Point the
+      # LogsService + SlowQueriesService at a runner-writable temp dir so the
+      # admin Logs panel + slow-queries cron actually surface files in tests.
+      LOG_DIR: /tmp/raid-ledger-logs
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+      # Same exposure as the apt step above: `--with-deps` shells out to apt,
+      # so a broken third-party source fails the browser install too
+      # ("Failed to install browsers / exited with code: 100").
+      - name: Drop unused third-party apt sources
+        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/microsoft-prod.list
+
+      # timeout-minutes must exceed the retry budget below, or attempts 2 and 3
+      # never get room — the 5-minute cap used to consume all three.
+      - name: Install Playwright browsers
+        timeout-minutes: 12
+        run: |
+          for i in 1 2 3; do
+            npx playwright install --with-deps chromium && exit 0
+            echo "Attempt $i failed; retrying..."
+            sleep 5
+          done
+          exit 1
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Build API
+        run: npm run build -w api
+
+      - name: Build web
+        run: npm run build -w web
+
+      - name: Create LOG_DIR
+        # ROK-1156: pre-create the runner-writable log directory so the API's
+        # ConfigService + the SlowQueriesService cron both find a usable path.
+        run: mkdir -p /tmp/raid-ledger-logs
+
+      - name: Bump Postgres max_connections
+        # GHA service containers don't accept `command:`, so we ALTER SYSTEM
+        # and restart the postgres container in place. Default 100 is too
+        # low for the boot connection burst + parallel-query test load.
+        run: |
+          PG_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/sjdodge123/rl-ci-pgvector:pg16" --format "{{.ID}}" | head -1)
+          if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger -c "ALTER SYSTEM SET max_connections = 300;"
+          docker restart "$PG_CONTAINER"
+          for i in $(seq 1 30); do
+            if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger >/dev/null 2>&1; then
+              echo "Postgres ready"
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger -tAc "SHOW max_connections;"
+
+      - name: Run database migrations
+        run: npm run db:migrate -w api
+
+      - name: Seed game registry
+        run: npm run db:seed:games -w api
+
+      - name: Bootstrap admin account
+        run: npx ts-node api/scripts/bootstrap-admin.ts
+
+      - name: Start API server
+        run: node api/dist/src/main.js &
+        env:
+          PORT: '3000'
+
+      - name: Wait for API to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              echo "API is ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start within 60s"
+          exit 1
+
+      - name: Start web preview server
+        run: npx vite preview --port 5173 &
+        working-directory: web
+
+      - name: Wait for web server to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+              echo "Web server is ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Web server failed to start within 30s"
+          exit 1
+
+      - name: Run Playwright smoke tests (shard ${{ matrix.shard }})
+        run: npx playwright test --shard=${{ matrix.shard }} --reporter=github
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-shard-${{ strategy.job-index }}
+          path: playwright-report/
+          retention-days: 7
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, smoke-test-shard]
+    if: always()
+    steps:
+      - name: Check shard results
+        run: |
+          RESULT="${{ needs.smoke-test-shard.result }}"
+          if [ "$RESULT" = "skipped" ]; then
+            echo "Smoke tests skipped (no UI changes)"
+            exit 0
+          fi
+          if [ "$RESULT" != "success" ]; then
+            echo "Smoke test shards failed"
+            exit 1
+          fi
+
+  # ─── Container Startup Validation ──────────────────────────────────
+  # Only runs on PRs that touch Docker, entrypoint, nginx, or CI files
+  container-startup:
+    needs: detect-changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.detect-changes.outputs.container == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build allinone image
+        run: docker build -f Dockerfile.allinone -t raid-ledger:ci-test --build-arg COMMIT_SHA=${{ github.sha }} .
+
+      - name: Start container
+        run: |
+          docker run -d --name rl-ci-test \
+            -p 8080:80 \
+            -e ADMIN_PASSWORD=ci-test-password \
+            -e ENABLE_TELEMETRY=false \
+            raid-ledger:ci-test
+
+      - name: Wait for API to start (max 120s)
+        run: |
+          echo "Waiting for API to respond..."
+          for i in $(seq 1 120); do
+            # Check if container exited
+            RUNNING=$(docker inspect rl-ci-test --format '{{.State.Running}}' 2>/dev/null || echo "false")
+            if [ "$RUNNING" = "false" ]; then
+              echo "❌ Container exited unexpectedly"
+              docker logs rl-ci-test --tail 50
+              exit 1
+            fi
+            # Poll API health directly inside the container (bypasses nginx IPv6 issues)
+            if docker exec rl-ci-test wget -qO- http://127.0.0.1:3000/health 2>/dev/null | grep -q '"status":"ok"'; then
+              echo "✅ API healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Timed out waiting for API"
+          docker logs rl-ci-test --tail 50
+          exit 1
+
+      - name: Verify Redis connectivity
+        run: |
+          docker exec rl-ci-test redis-cli -s /tmp/redis.sock ping | grep -q PONG
+          echo "✅ Redis responding on Unix socket"
+
+      - name: Verify nginx proxy
+        run: |
+          # Use 127.0.0.1 to avoid IPv6 resolution issues in CI
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/health)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Nginx proxy to API working"
+          else
+            echo "❌ Nginx proxy returned $HTTP_CODE"
+            docker logs rl-ci-test --tail 30
+            exit 1
+          fi
+
+      - name: Verify JWT guard rejects known dev defaults (ROK-1292)
+        # Negative-path test: start a fresh container with each banned literal
+        # as JWT_SECRET and assert start-api.sh logs the FATAL guard message.
+        # Uses a separate container per literal so prior cached state (e.g.
+        # /data/.jwt_secret) from the previous step doesn't influence the
+        # guard's env-var-priority branch.
+        run: |
+          for SECRET in "raid-ledger-default-secret-change-in-production" "dev-secret-change-in-prod"; do
+            CONTAINER="rl-jwt-guard-$(echo "$SECRET" | tr -c 'a-z0-9' '-' | head -c 30)"
+            echo "── Testing JWT_SECRET=$SECRET should be rejected ──"
+            docker run -d --name "$CONTAINER" \
+              -e JWT_SECRET="$SECRET" \
+              -e ADMIN_PASSWORD=ci-test-password \
+              -e ENABLE_TELEMETRY=false \
+              raid-ledger:ci-test
+            FOUND=0
+            for i in $(seq 1 60); do
+              if docker logs "$CONTAINER" 2>&1 | grep -q "FATAL: JWT_SECRET is still an insecure hardcoded default"; then
+                echo "✅ Guard rejected '$SECRET' after ${i}s"
+                FOUND=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$FOUND" != "1" ]; then
+              echo "❌ Guard did NOT reject '$SECRET' within 60s — dumping diagnostics:"
+              echo "─── docker inspect ───"
+              docker inspect "$CONTAINER" --format '{{.State.Status}} (exit {{.State.ExitCode}})' 2>&1 || true
+              echo "─── docker logs (tail 200) ───"
+              docker logs "$CONTAINER" --tail 200 2>&1 || true
+              docker stop "$CONTAINER" 2>/dev/null || true
+              docker rm -f "$CONTAINER" 2>/dev/null || true
+              exit 1
+            fi
+            docker stop "$CONTAINER" 2>/dev/null || true
+            docker rm -f "$CONTAINER" 2>/dev/null || true
+          done
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop rl-ci-test 2>/dev/null || true
+          docker rm rl-ci-test 2>/dev/null || true
+          # Defensive: the JWT-guard step cleans up its own containers, but
+          # if it errored mid-loop one might still be around.
+          for SECRET in "raid-ledger-default-secret-change-in-production" "dev-secret-change-in-prod"; do
+            CONTAINER="rl-jwt-guard-$(echo "$SECRET" | tr -c 'a-z0-9' '-' | head -c 30)"
+            docker stop "$CONTAINER" 2>/dev/null || true
+            docker rm -f "$CONTAINER" 2>/dev/null || true
+          done
+
+  # ─── Synthetic Production Volume Gate (ROK-1036) ───────────────────
+  # Boots the allinone image against a pre-populated volume that mimics a
+  # pre-1036 production /data tree: root-owned .jwt_secret, root-owned log
+  # files, postgres-owned PGDATA, ~50 root-owned avatar PNGs, and a
+  # root-owned dump in /data/backups/daily/. Asserts the privilege-drop
+  # entrypoint chowns the right paths, that postgresql.log and redis.log
+  # retain their original owners, that nginx workers and node drop to `app`,
+  # and that no `PERMISSION DENIED` lines leak into docker logs.
+  container-upgrade-path:
+    needs: detect-changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.detect-changes.outputs.container == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build allinone image
+        run: docker build -f Dockerfile.allinone -t raid-ledger:ci-upgrade --build-arg COMMIT_SHA=${{ github.sha }} .
+
+      - name: Seed synthetic production volume
+        # UIDs/GIDs hard-coded to match the production image's apk-installed
+        # users (postgres=70:70, redis=101:102). Numeric chown avoids relying
+        # on the seed-side alpine container having those named users.
+        run: |
+          docker volume create rl-priv-test
+          docker run --rm -v rl-priv-test:/data alpine sh -c '
+            set -e
+            mkdir -p /data/postgresql /data/redis /data/backups/daily \
+                     /data/backups/migrations /data/logs /data/avatars \
+                     /data/uploads/branding
+            # Root-owned secret (pre-1036 state from ROK-1035)
+            printf "test-secret-value" > /data/.jwt_secret
+            chmod 600 /data/.jwt_secret
+            touch /data/.jwt_secret_migrated
+            # Root-owned log files (pre-1036 state — entrypoint must flip
+            # api.log + nginx.log to app and KEEP postgresql.log/redis.log on
+            # their respective UIDs).
+            printf "old api log\n"        > /data/logs/api.log
+            printf "old nginx log\n"      > /data/logs/nginx.log
+            printf "old postgresql log\n" > /data/logs/postgresql.log
+            printf "old redis log\n"      > /data/logs/redis.log
+            # 50 dummy avatar PNGs to exercise the recursive chown on a
+            # non-empty tree.
+            for i in $(seq 1 50); do
+              printf "\x89PNG\r\n\x1a\ndummy" > /data/avatars/avatar-${i}.png
+            done
+            # Small backup dump in /data/backups/daily/
+            printf "dummy dump\n" > /data/backups/daily/snapshot.dump
+            # PGDATA + redis dir ownership (numeric — matches prod image users)
+            chown -R 70:70   /data/postgresql
+            chown -R 101:102 /data/redis
+            chown 70:70   /data/logs/postgresql.log
+            chown 101:102 /data/logs/redis.log
+          '
+          echo "✅ Synthetic volume seeded"
+
+      - name: Start container against synthetic volume
+        run: |
+          docker run -d --name rl-upgrade-test \
+            -v rl-priv-test:/data \
+            -p 8080:80 \
+            -e ADMIN_PASSWORD=ci-test-password \
+            -e ENABLE_TELEMETRY=false \
+            raid-ledger:ci-upgrade
+
+      - name: Wait for /api/health (max 90s)
+        run: |
+          for i in $(seq 1 90); do
+            RUNNING=$(docker inspect rl-upgrade-test --format '{{.State.Running}}' 2>/dev/null || echo "false")
+            if [ "$RUNNING" = "false" ]; then
+              echo "❌ Container exited unexpectedly"
+              docker logs rl-upgrade-test --tail 80
+              exit 1
+            fi
+            if curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"status":"ok"'; then
+              echo "✅ /api/health OK after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Timed out waiting for /api/health"
+          docker logs rl-upgrade-test --tail 80
+          exit 1
+
+      - name: Assert privilege-drop process topology
+        run: |
+          PS=$(docker exec rl-upgrade-test ps -o user,comm)
+          echo "$PS"
+          # nginx master must be root
+          echo "$PS" | grep -E '^root[[:space:]]+nginx' >/dev/null || {
+            echo "❌ No root nginx master found"; exit 1; }
+          # nginx workers must be app
+          echo "$PS" | grep -E '^app[[:space:]]+nginx' >/dev/null || {
+            echo "❌ No app nginx worker found"; exit 1; }
+          # node must be app
+          echo "$PS" | grep -E '^app[[:space:]]+node' >/dev/null || {
+            echo "❌ Node is not running as app"; exit 1; }
+          echo "✅ Process topology correct"
+
+      - name: Assert /data/.jwt_secret is app:app 600
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/.jwt_secret)
+          echo "$LINE"
+          echo "$LINE" | grep -E '^-rw-------[^ ]*[[:space:]]+[0-9]+[[:space:]]+app[[:space:]]+app' >/dev/null || {
+            echo "❌ .jwt_secret is not app:app 600"; exit 1; }
+
+      - name: Assert postgresql.log retained postgres:postgres
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/logs/postgresql.log)
+          echo "$LINE"
+          echo "$LINE" | grep -E '[[:space:]]postgres[[:space:]]+postgres[[:space:]]' >/dev/null || {
+            echo "❌ postgresql.log is NOT postgres:postgres after recursive chown (regression)"
+            exit 1; }
+
+      - name: Assert redis.log retained redis:redis
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/logs/redis.log)
+          echo "$LINE"
+          echo "$LINE" | grep -E '[[:space:]]redis[[:space:]]+redis[[:space:]]' >/dev/null || {
+            echo "❌ redis.log is NOT redis:redis after recursive chown (regression)"
+            exit 1; }
+
+      - name: Assert api.log is app:app
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/logs/api.log)
+          echo "$LINE"
+          echo "$LINE" | grep -E '[[:space:]]app[[:space:]]+app[[:space:]]' >/dev/null || {
+            echo "❌ api.log is not app:app"; exit 1; }
+
+      - name: Assert avatars chowned to app:app
+        run: |
+          docker exec rl-upgrade-test sh -c 'ls -l /data/avatars/avatar-1.png /data/avatars/avatar-25.png /data/avatars/avatar-50.png' | tee /tmp/avatar-listing
+          COUNT=$(grep -E '[[:space:]]app[[:space:]]+app[[:space:]]' /tmp/avatar-listing | wc -l)
+          if [ "$COUNT" -lt 1 ]; then
+            echo "❌ No avatar PNG was chowned to app:app — recursive chown did not run"
+            exit 1
+          fi
+
+      - name: Assert privilege-drop diagnostics + no PERMISSION DENIED
+        run: |
+          LOGS=$(docker logs rl-upgrade-test 2>&1)
+          echo "$LOGS" | grep -E '🔒 API running as: uid=1001' >/dev/null || {
+            echo "❌ Missing '🔒 API running as: uid=1001' diagnostic"
+            echo "--- last 50 log lines ---"
+            echo "$LOGS" | tail -50
+            exit 1; }
+          if echo "$LOGS" | grep -i 'PERMISSION DENIED' >/dev/null; then
+            echo "❌ Found PERMISSION DENIED lines in docker logs:"
+            echo "$LOGS" | grep -i 'PERMISSION DENIED'
+            exit 1
+          fi
+          echo "✅ Diagnostics present, no PERMISSION DENIED"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop rl-upgrade-test 2>/dev/null || true
+          docker rm rl-upgrade-test 2>/dev/null || true
+          docker volume rm rl-priv-test 2>/dev/null || true
+
+  # ─── Docker Image Build (main only) ───────────────────────────────
+  docker-build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [unit-tests, integration-tests, smoke-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # ROK-1475 (OQ-1): full history + tags so `git describe` can find
+          # the latest v* release tag reachable from main. Blobless: the
+          # tag walk needs commits + tags only, not file contents.
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Lowercase image name
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      # ROK-1475 (OQ-1, operator ruling 2026-09-22): bake APP_VERSION into
+      # the :main image so its feature-level update check compares the
+      # latest GitHub release against the release this build descends from,
+      # not api/package.json. Empty when no v* tag exists — the API then
+      # falls back to package.json, same as before.
+      - name: Resolve APP_VERSION from the latest v* tag
+        id: appver
+        run: echo "version=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile.allinone
+          platforms: linux/amd64
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            APP_VERSION=${{ steps.appver.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=allinone
+          cache-to: type=gha,mode=max,scope=allinone
+          push: true

@@ -1,0 +1,304 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
+import { DiscordNotificationService } from './discord-notification.service';
+import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { NotificationDedupService } from './notification-dedup.service';
+
+describe('DiscordNotificationService', () => {
+  let service: DiscordNotificationService;
+
+  let mockDb: MockDb;
+
+  const mockQueue = {
+    add: jest.fn().mockResolvedValue({ id: 'job-1' }),
+  };
+
+  const mockClientService = {
+    isConnected: jest.fn().mockReturnValue(true),
+    sendEmbedDM: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const mockEmbedService = {
+    buildWelcomeEmbed: jest.fn().mockResolvedValue({
+      embed: { toJSON: () => ({}) },
+      row: { toJSON: () => ({}) },
+    }),
+    buildUnreachableNotificationMessage: jest.fn().mockReturnValue({
+      title: 'Discord DMs Unreachable',
+      message: 'Test message',
+    }),
+  };
+
+  const mockSettingsService = {
+    getBranding: jest.fn().mockResolvedValue({
+      communityName: 'Test Community',
+    }),
+  };
+
+  const mockRedis = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    del: jest.fn().mockResolvedValue(1),
+    incr: jest.fn().mockResolvedValue(1),
+    expire: jest.fn().mockResolvedValue(1),
+  };
+
+  const mockDedupService = {
+    checkAndMarkSent: jest.fn().mockResolvedValue(false),
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([]);
+    mockDb.returning.mockResolvedValue([]);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        DiscordNotificationService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+        {
+          provide: getQueueToken(DISCORD_NOTIFICATION_QUEUE),
+          useValue: mockQueue,
+        },
+        { provide: DiscordBotClientService, useValue: mockClientService },
+        {
+          provide: DiscordNotificationEmbedService,
+          useValue: mockEmbedService,
+        },
+        { provide: SettingsService, useValue: mockSettingsService },
+        { provide: NotificationDedupService, useValue: mockDedupService },
+        { provide: REDIS_CLIENT, useValue: mockRedis },
+      ],
+    }).compile();
+
+    service = module.get<DiscordNotificationService>(
+      DiscordNotificationService,
+    );
+  });
+
+  describe('dispatch', () => {
+    it('should skip when user has no Discord linked', async () => {
+      mockDb.limit.mockResolvedValueOnce([{ discordId: null }]);
+
+      const result = await service.dispatch({
+        notificationId: 'notif-1',
+        userId: 1,
+        type: 'event_reminder',
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(result).toBe(false);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    // ROK-1115: skip non-snowflake discord IDs (e.g. local:admin@local)
+    // — they cause the queue to retry forever on Discord's NUMBER_TYPE_COERCE
+    it.each([
+      ['local:admin@local'],
+      ['admin@example.com'],
+      ['short'],
+      ['123'],
+      ['12345678901234567890'],
+    ])(
+      'should skip when discord_id "%s" is not a Discord snowflake',
+      async (badId) => {
+        mockDb.limit.mockResolvedValueOnce([{ discordId: badId }]);
+
+        const result = await service.dispatch({
+          notificationId: 'notif-1',
+          userId: 1,
+          type: 'event_reminder',
+          title: 'Test',
+          message: 'Test message',
+        });
+
+        expect(result).toBe(false);
+        expect(mockQueue.add).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should skip when Discord is disabled in preferences', async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
+        .mockResolvedValueOnce([
+          {
+            channelPrefs: {
+              event_reminder: { inApp: true, push: true, discord: false },
+            },
+          },
+        ]);
+
+      const result = await service.dispatch({
+        notificationId: 'notif-1',
+        userId: 1,
+        type: 'event_reminder',
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(result).toBe(false);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('should skip when bot is not connected', async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
+        .mockResolvedValueOnce([]);
+      mockClientService.isConnected.mockReturnValue(false);
+
+      const result = await service.dispatch({
+        notificationId: 'notif-1',
+        userId: 1,
+        type: 'event_reminder',
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(result).toBe(false);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('should skip when rate limited', async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
+        .mockResolvedValueOnce([]);
+      mockClientService.isConnected.mockReturnValue(true);
+      mockRedis.get.mockResolvedValueOnce('1');
+
+      const result = await service.dispatch({
+        notificationId: 'notif-1',
+        userId: 1,
+        type: 'event_reminder',
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(result).toBe(false);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('should enqueue when all checks pass', async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
+        .mockResolvedValueOnce([]);
+      mockClientService.isConnected.mockReturnValue(true);
+      mockRedis.get.mockResolvedValueOnce(null);
+
+      const result = await service.dispatch({
+        notificationId: 'notif-1',
+        userId: 1,
+        type: 'event_reminder',
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(result).toBe(true);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'send-dm',
+        expect.objectContaining({
+          notificationId: 'notif-1',
+          userId: 1,
+          discordId: '123456789012345678',
+          type: 'event_reminder',
+        }),
+        expect.objectContaining({
+          attempts: 3,
+          backoff: expect.objectContaining({ type: 'exponential' }) as Record<
+            string,
+            unknown
+          >,
+        }),
+      );
+    });
+  });
+
+  describe('sendWelcomeDM', () => {
+    it('should skip when user has no Discord linked', async () => {
+      mockDb.limit.mockResolvedValueOnce([{ discordId: null }]);
+
+      await service.sendWelcomeDM(1);
+
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('should skip when already sent (DB-backed dedup)', async () => {
+      mockDb.limit.mockResolvedValueOnce([{ discordId: '123456789012345678' }]);
+      mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
+
+      await service.sendWelcomeDM(1);
+
+      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+        'discord-notif:welcome:1',
+        null,
+      );
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('should send welcome DM and mark via dedup service', async () => {
+      mockDb.limit.mockResolvedValueOnce([{ discordId: '123456789012345678' }]);
+      mockDedupService.checkAndMarkSent.mockResolvedValueOnce(false);
+
+      await service.sendWelcomeDM(1);
+
+      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+        'discord-notif:welcome:1',
+        null,
+      );
+      expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
+        '123456789012345678',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('recordFailure', () => {
+    it('should increment failure count in Redis', async () => {
+      mockRedis.incr.mockResolvedValue(1);
+
+      await service.recordFailure(1);
+
+      expect(mockRedis.incr).toHaveBeenCalledWith('discord-notif:failures:1');
+      expect(mockRedis.expire).toHaveBeenCalledWith(
+        'discord-notif:failures:1',
+        86400,
+      );
+    });
+
+    it('should auto-disable Discord after 3 consecutive failures', async () => {
+      mockRedis.incr.mockResolvedValue(3);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          channelPrefs: {
+            event_reminder: { inApp: true, push: true, discord: true },
+            new_event: { inApp: true, push: false, discord: true },
+          },
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([]);
+
+      await service.recordFailure(1);
+
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockRedis.del).toHaveBeenCalledWith('discord-notif:failures:1');
+    });
+  });
+
+  describe('resetFailures', () => {
+    it('should clear failure count in Redis', async () => {
+      await service.resetFailures(1);
+
+      expect(mockRedis.del).toHaveBeenCalledWith('discord-notif:failures:1');
+    });
+  });
+});

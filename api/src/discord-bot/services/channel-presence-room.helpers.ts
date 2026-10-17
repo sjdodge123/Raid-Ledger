@@ -1,0 +1,448 @@
+/**
+ * ROK-1446 — room truth for the channel-level Quick Play presence embed.
+ *
+ * D4 — render from truth, never from deltas: every flush re-derives the room
+ * from `humanMembers` + `detectGames` + `partitionLobbyGroups` + the DB's
+ * live/grace ad-hoc events, so a missed Discord event self-heals on the next
+ * tick and the service never has to import `AdHocEventService` (which would
+ * close the DI cycle Presence → AdHocEvent → AdHocNotification → Presence).
+ *
+ * Nothing here reads `channel.members` directly — `humanMembers` is the ONLY
+ * door into the room, which is what keeps bots out of every roster and every
+ * count (AC3).
+ */
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildMember } from 'discord.js';
+import * as schema from '../../drizzle/schema';
+import type { EmbedEventData } from './discord-embed.factory';
+import type { DiscordBotClientService } from '../discord-bot-client.service';
+import type { PresenceGameDetectorService } from './presence-game-detector.service';
+import {
+  resolveVoiceChannel,
+  type ResolvedBinding,
+} from '../listeners/voice-state.helpers';
+import {
+  humanMembers,
+  partitionLobbyGroups,
+  undetectedMemberIds,
+  type LobbyGameGroup,
+} from '../listeners/voice-lobby-groups.helpers';
+import { mergeServerPresence } from '../listeners/voice-lobby-server-merge.helpers';
+import type {
+  ServerRosterEntry,
+  ServerRosterSource,
+} from './server-presence-roster.helpers';
+import {
+  buildEmbedEventData,
+  type AdHocNotificationDeps,
+} from './ad-hoc-notification.helpers';
+import { fetchGameArt, type GroupGameArt } from './channel-presence-room.art';
+import type {
+  DetectedGame,
+  RoomMembers,
+} from './channel-presence-occupancy.helpers';
+import {
+  namesOf,
+  sortGroups,
+  eventedRoster,
+  withServerAnonymous,
+} from './channel-presence-room.roster.helpers';
+import {
+  snapshotSource,
+  type RoomSnapshot,
+  type RoomSource,
+} from './channel-presence-room.snapshot';
+
+export type {
+  RoomMemberSnapshot,
+  RoomSnapshot,
+} from './channel-presence-room.snapshot';
+export type { GroupGameArt } from './channel-presence-room.art';
+
+/** Ad-hoc statuses whose event is still rendering as a live session (D4). */
+const LIVE_AD_HOC_STATUSES = ['live', 'grace_period'];
+
+/** An ad-hoc event this binding owns, projected to what the renderer needs. */
+export interface LinkedEvent {
+  id: number;
+  gameId: number | null;
+  adHocStatus: string | null;
+}
+
+/**
+ * One detected game group in the room, ready to render.
+ *
+ * `eventId` and `eventData` are non-null together or null together: a group is
+ * "evented" (AC4 — renders `buildQuickPlayEmbed`) exactly when `eventData` is
+ * present. `qualifying` is the SEPARATE threshold fact — a group can be short
+ * yet still evented (the event outlived a departure), so the renderer must read
+ * `eventData` for the evented/short branch and `qualifying` only for the
+ * `◌ NEEDS N MORE` copy.
+ */
+export interface RoomGroup {
+  gameId: number | null;
+  gameName: string;
+  memberIds: string[];
+  /** Display names, index-aligned to `memberIds`. */
+  memberNames: string[];
+  /** Clears the binding's `minPlayers`. */
+  qualifying: boolean;
+  eventId: number | null;
+  eventData: EmbedEventData | null;
+  /**
+   * Cover art + badge inputs, on EVERY group rather than only evented ones
+   * (Lead ruling 1). A short group has no `EmbedEventData` to inherit them
+   * from, and D2 still gives it "same badge fields, thumbnail". `null` when
+   * the group has no game (Just Chatting) or its games row has vanished.
+   */
+  game: GroupGameArt | null;
+  /** ROK-1801: voice members on this game's server — rendered ` 🖥`. */
+  onServerIds?: string[];
+  /** ROK-1801: on the server, not in this channel — `🖥 on server` / `+N`. */
+  serverOnly?: ServerRosterEntry[];
+}
+
+/** The whole room as one flush sees it (D4). */
+export interface ResolvedRoom {
+  channelId: string;
+  /** `null` when the voice channel no longer resolves. */
+  channelName: string | null;
+  /** Human occupants — bots excluded (AC3). */
+  memberCount: number;
+  minPlayers: number;
+  /** Already in render order: evented first, then size desc, then name asc. */
+  groups: RoomGroup[];
+  /**
+   * Names for the lead embed's "In channel · no game detected" field (D3).
+   * Empty when `allowJustChatting` is on, because those members then render as
+   * their own `💬 Just Chatting` group and must not be listed twice.
+   */
+  undetectedNames: string[];
+  /**
+   * Every human in the room right now: `discordUserId` → name + the game
+   * presence detection resolved for them.
+   *
+   * ROK-1499. The occupancy ledger is written from THIS, not from
+   * `groups[].memberIds`, for two reasons: a member whose presence detected no
+   * game has no group at all, and the D12 snapshot seam fills it from the same
+   * `source.names` the live Discord read does — so the smoke test drives the
+   * ledger without a second code path.
+   *
+   * Optional only so hand-built rooms in specs stay terse; `resolveRoom`'s
+   * return type makes it REQUIRED there, exactly as `channelResolved` does.
+   */
+  members?: RoomMembers;
+  /**
+   * Did the Discord voice channel actually resolve on this flush? (S-2)
+   *
+   * `resolveVoiceChannel` returns null for FIVE distinct conditions - no
+   * client, no guild id, guild not cached, channel not cached, channel not
+   * voice-based - and every one of them lands here as `memberCount: 0`, which
+   * is indistinguishable from a genuinely empty room. Without this
+   * discriminator a cold channel cache (which `recover()` maximises the chance
+   * of, by marking every open row dirty at reconnect) stamps `empty_since` and
+   * rewrites a LIVE session's message into a recap. "I could not look" is not
+   * "nobody is there".
+   *
+   * Optional only so hand-built rooms in specs stay terse; `resolveRoom`'s
+   * return type makes it REQUIRED there, so the one real producer cannot omit
+   * it. Absent therefore means "not produced by `resolveRoom`" and is treated
+   * as resolved; only an explicit `false` skips the flush.
+   */
+  channelResolved?: boolean;
+}
+
+/** Everything `resolveRoom` needs: the DB, Discord, and the embed builder's deps. */
+export interface RoomResolveDeps extends AdHocNotificationDeps {
+  clientService: DiscordBotClientService;
+  presenceDetector: PresenceGameDetectorService;
+  /** ROK-1801: game-server roster; absent/null = voice-only card (AC9). */
+  serverRoster?: ServerRosterSource | null;
+}
+
+/** Ad-hoc events under a binding that are still live or in grace (D4). */
+export async function findLinkedEvents(
+  db: PostgresJsDatabase<typeof schema>,
+  bindingId: string,
+): Promise<LinkedEvent[]> {
+  return db
+    .select({
+      id: schema.events.id,
+      gameId: schema.events.gameId,
+      adHocStatus: schema.events.adHocStatus,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        eq(schema.events.isAdHoc, true),
+        eq(schema.events.channelBindingId, bindingId),
+        inArray(schema.events.adHocStatus, LIVE_AD_HOC_STATUSES),
+        isNull(schema.events.cancelledAt),
+      ),
+    );
+}
+
+/**
+ * Every ad-hoc session this message has covered since it opened (D8 recap).
+ *
+ * `>=` is deliberate: a session that started in the same instant the row opened
+ * belongs to this message. `>` would silently drop the very first session of a
+ * room that spawned an event on the same flush that created the row.
+ */
+export async function recapEvents(
+  db: PostgresJsDatabase<typeof schema>,
+  bindingId: string,
+  openedAt: Date,
+): Promise<LinkedEvent[]> {
+  return db
+    .select({
+      id: schema.events.id,
+      gameId: schema.events.gameId,
+      adHocStatus: schema.events.adHocStatus,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        eq(schema.events.isAdHoc, true),
+        eq(schema.events.channelBindingId, bindingId),
+        isNull(schema.events.cancelledAt),
+        // OVERLAP, not "started after" (P2-3). The ad-hoc events row is
+        // written by the voice handler, which runs BEFORE the presence dirty
+        // set drains and stamps `opened_at`. A `lower(duration) >= opened_at`
+        // predicate therefore drops - intermittently, on a few seconds of skew
+        // between two writers with no shared clock - the very session the
+        // message was showing, and the final recap reads "No session started."
+        // A session belongs to this message when its interval INTERSECTS the
+        // window the message was open for; an open-ended upper bound always
+        // does, and `>=` keeps the inclusive boundary the old predicate had.
+        sql`(upper(${schema.events.duration}) is null or upper(${schema.events.duration}) >= ${openedAt.toISOString()}::timestamptz)`,
+      ),
+    );
+}
+
+/**
+ * Match a group to its event the way SQL's `game_id IS NOT DISTINCT FROM
+ * $gameId` would (D4).
+ *
+ * The trap this exists to name: a null-game group must match the row whose
+ * `game_id` is null. SQL `=` never does that, and the equivalent TypeScript bug
+ * is a truthiness guard (`if (!gameId) return null`) that silently strips the
+ * Just Chatting group of its live event.
+ */
+export function matchLinkedEvent(
+  events: LinkedEvent[],
+  gameId: number | null,
+): LinkedEvent | null {
+  return events.find((e) => e.gameId === gameId) ?? null;
+}
+
+/**
+ * `resolveRoom`'s return: the two fields the ONE real producer cannot omit,
+ * even though hand-built rooms in specs may (see `ResolvedRoom`).
+ */
+type ResolvedRoomFromSource = ResolvedRoom & {
+  channelResolved: boolean;
+  members: RoomMembers;
+};
+
+/**
+ * Derive the whole room for one bound lobby channel (D4).
+ *
+ * `override` (DEMO_MODE, D12) stands in for the Discord read + detection step
+ * ONLY; the threshold partition, the linked-event lookup and the roster union
+ * below all still run against the real database.
+ */
+export async function resolveRoom(
+  deps: RoomResolveDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  override?: RoomSnapshot | null,
+): Promise<ResolvedRoomFromSource> {
+  const channel = resolveVoiceChannel(deps.clientService, channelId);
+  const minPlayers = binding.config?.minPlayers ?? 2;
+  const allowJustChatting = binding.config?.allowJustChatting ?? false;
+  const source = override
+    ? await snapshotSource(deps.db, override)
+    : await detectSource(deps, channel ? humanMembers(channel) : []);
+  const base = {
+    channelId,
+    channelName: channel?.name ?? null,
+    // The D12 override path has no Discord channel BY DESIGN, so it must keep
+    // reporting the room as resolvable - the seam is the source of truth
+    // there, not the cache.
+    channelResolved: override ? true : channel !== null,
+    memberCount: source.memberCount,
+    minPlayers,
+    members: memberMapOf(source),
+    undetectedNames: undetectedNamesOf(source, allowJustChatting),
+  };
+  const groups = await buildGroups(deps, binding, source, {
+    allowJustChatting,
+    minPlayers,
+  });
+  return { ...base, groups };
+}
+
+/**
+ * Every occupant with the game the room currently reads them as playing.
+ *
+ * A member in the null group stores NULL in BOTH game fields rather than the
+ * group's rendered name: "Untitled Gaming Session" and "Just Chatting" are
+ * placeholders, not games, and the recap must not sum them as play time.
+ */
+function memberMapOf(source: RoomSource): RoomMembers {
+  const games = new Map<string, DetectedGame>();
+  for (const group of source.detected) {
+    const game: DetectedGame =
+      group.gameId === null
+        ? { gameId: null, activityName: null }
+        : { gameId: group.gameId, activityName: group.gameName };
+    for (const id of group.memberIds) games.set(id, game);
+  }
+  return new Map(
+    [...source.names].map(([id, displayName]) => [
+      id,
+      { displayName, ...(games.get(id) ?? NO_GAME) },
+    ]),
+  );
+}
+
+/** The reading for someone detection produced no group for at all. */
+const NO_GAME: DetectedGame = { gameId: null, activityName: null };
+
+/**
+ * Names for the lead embed's "no game detected" field — empty when Just
+ * Chatting is on, because those members render as their own group instead.
+ */
+function undetectedNamesOf(
+  source: RoomSource,
+  allowJustChatting: boolean,
+): string[] {
+  return allowJustChatting
+    ? []
+    : namesOf(undetectedMemberIds(source.detected), source.names);
+}
+
+/** Partition the detected groups, then attach each one's linked event. */
+async function buildGroups(
+  deps: RoomResolveDeps,
+  binding: ResolvedBinding,
+  source: RoomSource,
+  opts: { allowJustChatting: boolean; minPlayers: number },
+): Promise<RoomGroup[]> {
+  const split = partitionLobbyGroups(
+    source.detected,
+    opts.allowJustChatting,
+    opts.minPlayers,
+  );
+  const pending = [
+    ...split.qualifying.map((g) => ({ group: g, qualifying: true })),
+    ...split.dropped.map((g) => ({ group: g, qualifying: false })),
+  ];
+  if (pending.length === 0) return [];
+  const linked = await findLinkedEvents(deps.db, binding.bindingId);
+  const groups = await Promise.all(
+    pending.map((p) =>
+      toRoomGroup(deps, p.group, p.qualifying, source, linked),
+    ),
+  );
+  return sortGroups(groups);
+}
+
+/** An evented group's embed data, with the anonymous `+N on server` (Q4). */
+async function groupEventData(
+  deps: RoomResolveDeps,
+  eventId: number,
+  group: LobbyGameGroup,
+  source: RoomSource,
+) {
+  const roster = await eventedRoster(deps.db, eventId, group, source);
+  return withServerAnonymous(
+    await buildEmbedEventData(deps, eventId, roster.participants),
+    roster.anonymousOnServer,
+  );
+}
+
+/** Build one renderable group, resolving its event and roster if it has one. */
+async function toRoomGroup(
+  deps: RoomResolveDeps,
+  group: LobbyGameGroup,
+  qualifying: boolean,
+  source: RoomSource,
+  linked: LinkedEvent[],
+): Promise<RoomGroup> {
+  const eventId =
+    matchLinkedEvent(linked, group.gameId)?.id ?? hintedEventId(group, source);
+  const eventData =
+    eventId === null
+      ? null
+      : await groupEventData(deps, eventId, group, source);
+  return {
+    gameId: group.gameId,
+    gameName: group.gameName,
+    memberIds: group.memberIds,
+    memberNames: namesOf(group.memberIds, source.names),
+    qualifying,
+    eventId: eventData ? eventId : null,
+    eventData,
+    game: (group.gameId === null ? null : source.art.get(group.gameId)) ?? null,
+    ...(group.onServerIds ? { onServerIds: group.onServerIds } : {}),
+    ...(group.serverOnly ? { serverOnly: group.serverOnly } : {}),
+  };
+}
+
+/**
+ * The event id a D12 snapshot declared for this group, used ONLY when the real
+ * lookup found nothing — the seam supplements the DB, it never overrides it.
+ */
+function hintedEventId(
+  group: LobbyGameGroup,
+  source: RoomSource,
+): number | null {
+  for (const id of group.memberIds) {
+    const hint = source.eventHints.get(id);
+    if (hint !== undefined) return hint;
+  }
+  return null;
+}
+
+/** The live path: Discord members (bots already filtered) through detection. */
+async function detectSource(
+  deps: RoomResolveDeps,
+  members: GuildMember[],
+): Promise<RoomSource> {
+  const names = new Map(members.map((m) => [m.id, m.displayName]));
+  const detected = await detectWithServer(deps, members);
+  const art = await fetchGameArt(
+    deps.db,
+    detected.map((g) => g.gameId).filter((id): id is number => id !== null),
+  );
+  return {
+    memberCount: members.length,
+    names,
+    detected,
+    art,
+    eventHints: new Map(),
+  };
+}
+
+/**
+ * Rich-presence detection, then the game-server merge (ROK-1801 L3 — the same
+ * `mergeServerPresence` the spawn gate runs). An empty room stays empty: the
+ * card only exists for a voice room, and the recap path must still close it.
+ */
+async function detectWithServer(
+  deps: RoomResolveDeps,
+  members: GuildMember[],
+): Promise<LobbyGameGroup[]> {
+  if (members.length === 0) return [];
+  const detected = await deps.presenceDetector.detectGames(members);
+  if (!deps.serverRoster) return detected;
+  const roster = await deps.serverRoster.snapshot();
+  return mergeServerPresence(
+    detected,
+    members.map((m) => m.id),
+    roster,
+  );
+}

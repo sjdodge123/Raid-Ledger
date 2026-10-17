@@ -1,0 +1,176 @@
+import React from 'react';
+import type { EventResponseDto } from '@raid-ledger/contract';
+import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS_LABELS } from '../../lib/event-utils';
+import type { EventDisplayStatus } from '../../lib/event-utils';
+import { useTimezoneStore } from '../../stores/timezone-store';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { LiveBadge } from './LiveBadge';
+import { SeriesBadge } from './SeriesBadge';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
+
+interface EventCardProps {
+    event: EventResponseDto;
+    signupCount?: number;
+    onClick?: () => void;
+    /** Show a "Fits your schedule" badge when event overlaps with game time */
+    matchesGameTime?: boolean | undefined;
+}
+
+function StatusBadge({ status }: { status: EventDisplayStatus }) {
+    return (
+        <span data-testid="event-status-badge" aria-label={`Event status: ${status}`}
+            className={`badge-overlay px-2 py-0.5 text-xs font-medium rounded-full border ${STATUS_STYLES[status]}`}>
+            {STATUS_LABELS[status]}
+        </span>
+    );
+}
+
+const GENERIC_PLACEHOLDER_PATH = '/placeholders/generic-placeholder.svg';
+
+const GAME_PLACEHOLDER_PATHS: Record<string, string> = {
+    wow: '/placeholders/wow-placeholder.svg',
+    ffxiv: '/placeholders/ffxiv-placeholder.svg',
+    valheim: '/placeholders/valheim-placeholder.svg',
+    'world-of-warcraft': '/placeholders/wow-placeholder.svg',
+    'final-fantasy-xiv-online': '/placeholders/ffxiv-placeholder.svg',
+    generic: GENERIC_PLACEHOLDER_PATH,
+};
+
+function getPlaceholderPath(slug: string | undefined): string {
+    if (slug && GAME_PLACEHOLDER_PATHS[slug]) return GAME_PLACEHOLDER_PATHS[slug];
+    return GENERIC_PLACEHOLDER_PATH;
+}
+
+function GameTimeBadge() {
+    return (
+        <div className="absolute top-2 left-2">
+            <span className="badge-overlay flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Inside Game Time
+            </span>
+        </div>
+    );
+}
+
+/** ROK-1159: the cover itself, extracted so the section stays under the line cap. */
+function CoverArt({ event, showPlaceholder, gameCoverUrl, placeholderPath, onImageError }: {
+    event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
+    placeholderPath: string; onImageError: () => void;
+}) {
+    const className = 'w-full h-full object-cover group-hover:scale-105 transition-transform duration-300';
+    if (showPlaceholder) {
+        return (
+            <img src={placeholderPath} alt={event.game?.name || 'Gaming Event'} className={className}
+                width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async" />
+        );
+    }
+    if (!gameCoverUrl) return null;
+    return (
+        <img src={gameCoverUrl} alt={event.game?.name || 'Event'} className={className}
+            width={COVER_INTRINSIC.width} height={COVER_INTRINSIC.height} loading="lazy" decoding="async"
+            {...coverSrcSetProps(gameCoverUrl, '(max-width: 640px) 50vw, 240px')}
+            onError={onImageError} />
+    );
+}
+
+function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPath, matchesGameTime, status, onImageError }: {
+    event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
+    placeholderPath: string; matchesGameTime?: boolean | undefined; status: EventDisplayStatus; onImageError: () => void;
+}) {
+    return (
+        <div className="aspect-[3/4] relative overflow-hidden bg-panel badge-overlay">
+            <CoverArt event={event} showPlaceholder={showPlaceholder} gameCoverUrl={gameCoverUrl}
+                placeholderPath={placeholderPath} onImageError={onImageError} />
+            {matchesGameTime && <GameTimeBadge />}
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+                {!!event.recurrenceGroupId && <SeriesBadge />}
+                {event.isAdHoc && event.adHocStatus === 'live' ? <LiveBadge /> : <StatusBadge status={status} />}
+            </div>
+            {event.game && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                    <span className="text-sm text-secondary">{event.game.name}</span>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CreatorAvatar({ event }: { event: EventResponseDto }) {
+    const creatorAvatar = resolveAvatar(toAvatarUser(event.creator));
+    return creatorAvatar.url ? (
+        <img src={creatorAvatar.url} alt={event.creator.username}
+            className="w-6 h-6 rounded-full bg-overlay" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+    ) : (
+        <div className="w-6 h-6 rounded-full bg-overlay flex items-center justify-center text-[10px] font-semibold text-muted">
+            {event.creator.username.charAt(0).toUpperCase()}
+        </div>
+    );
+}
+
+function EventInfoSection({ event, signupCount, resolved }: {
+    event: EventResponseDto; signupCount: number; resolved: string;
+}) {
+    const relativeTime = getRelativeTime(event.startTime, event.endTime);
+    const isCancelled = !!event.cancelledAt;
+    return (
+        <div className="p-4">
+            <h3 className={`font-semibold text-foreground text-lg mb-2 line-clamp-2 ${isCancelled ? 'line-through text-muted' : ''}`}>
+                {event.title}
+            </h3>
+            <div className="flex items-center gap-2 mb-3">
+                <p className="text-muted text-sm">{formatEventTime(event.startTime, resolved)}</p>
+                <span className="text-faint" aria-hidden="true">&#8226;</span>
+                <p data-testid="relative-time" className="text-sm text-dim">{relativeTime}</p>
+            </div>
+            <div className="flex items-center justify-between">
+                <span className="text-sm text-emerald-400 font-medium">{signupCount} signed up</span>
+                <div className="flex items-center gap-1">
+                    <CreatorAvatar event={event} />
+                    <span className="text-xs text-dim">by {event.creator.username}</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Event card component displaying event info with game cover.
+ * ROK-222: Uses resolveAvatar() for creator avatar.
+ */
+export const EventCard = React.memo(function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: EventCardProps) {
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const gameCoverUrl = event.game?.coverUrl || null;
+    const isCancelled = !!event.cancelledAt;
+    const status: EventDisplayStatus = isCancelled ? 'cancelled' : getEventStatus(event.startTime, event.endTime);
+    const placeholderPath = getPlaceholderPath(event.game?.slug);
+    const [imageError, setImageError] = React.useState(false);
+    const showPlaceholder = !gameCoverUrl || imageError;
+
+    return (
+        <div onClick={onClick} data-testid="event-card"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+            role="button" tabIndex={0}
+            className={`group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl focus:outline-none transition-all duration-200 ${isCancelled ? 'opacity-60 hover:shadow-danger/10 focus:border-danger' : 'hover:shadow-emerald-500/10 focus:border-emerald-500'}`}>
+            <GameCoverSection event={event} showPlaceholder={showPlaceholder} gameCoverUrl={gameCoverUrl}
+                placeholderPath={placeholderPath} matchesGameTime={matchesGameTime} status={status} onImageError={() => setImageError(true)} />
+            <EventInfoSection event={event} signupCount={signupCount} resolved={resolved} />
+        </div>
+    );
+});
+
+export function EventCardSkeleton() {
+    return (
+        <div className="bg-surface rounded-lg border border-edge overflow-hidden animate-pulse">
+            <div className="aspect-[3/4] bg-panel relative">
+                <div className="absolute top-2 right-2 w-16 h-5 bg-overlay rounded-full" />
+            </div>
+            <div className="p-4 space-y-3">
+                <div className="h-6 bg-panel rounded w-3/4" />
+                <div className="h-4 bg-panel rounded w-1/2" />
+                <div className="h-4 bg-panel rounded w-1/4" />
+            </div>
+        </div>
+    );
+}

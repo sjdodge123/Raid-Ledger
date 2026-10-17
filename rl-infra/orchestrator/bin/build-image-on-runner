@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Build Dockerfile.allinone from the agent's synced /workspace, push to the
+# local registry tagged for the calling agent's branch. Used by
+# rl_env_build_image_from_runner MCP tool and indirectly by rl_env_deploy.
+#
+# Required env: RL_AGENT_ID
+# Required flags: --tag <tag>     (e.g. "rok-1297" or "feat-foo")
+# Optional flags: --no-push       (build only, skip push)
+#                 --commit-sha <sha>  (ROK-1510: laptop worktree HEAD; baked in
+#                                  as --build-arg COMMIT_SHA / APP_VERSION;
+#                                  falls back to the runner's SYNCED_HEAD)
+#
+# Resolves the agent's slot from claims.json, then runs `docker build`
+# inside that runner container. The runner has /var/run/docker.sock
+# bind-mounted, so the build uses the host's Docker daemon with
+# /workspace (= /srv/rl-infra/runners/slot-N/worktree on the host) as the
+# context. Push goes to registry.rl.lan:5000 via the rl-net DNS.
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+TAG=""
+PUSH=1
+COMMIT_SHA=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tag) TAG="$2"; shift 2 ;;
+        --no-push) PUSH=0; shift ;;
+        --commit-sha) COMMIT_SHA="$2"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -z "$TAG" ]] && { echo "--tag <name> required" >&2; exit 2; }
+[[ "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "tag must be [a-zA-Z0-9._-]+" >&2; exit 2; }
+# COMMIT_SHA is spliced into BUILD_CMD, which runs under `bash -c` inside the
+# runner — the shape check is the injection guard, not cosmetics.
+[[ -z "$COMMIT_SHA" || "$COMMIT_SHA" =~ ^[0-9a-f]{7,40}$ ]] || { echo "commit-sha must be [0-9a-f]{7,40}" >&2; exit 2; }
+[[ -z "${RL_AGENT_ID:-}" ]] && { echo "RL_AGENT_ID required" >&2; exit 2; }
+
+SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+[[ -z "$SLOT" ]] && { echo "no slot — run claim first" >&2; exit 2; }
+
+RUNNER="rl-runner-${SLOT}"
+FULL_TAG="registry.rl.lan:5000/rl-allinone:${TAG}"
+
+# ROK-1568 — disk pre-flight. `docker build` here copies the whole workspace
+# into a temp dir inside the runner and then writes a multi-GB image; on
+# 2026-09-14 two of these ran for minutes on a 98%-full host and died at
+# `chmod -R` with ENOSPC, leaving a half-built image and an unusable error.
+# Park + prune first, and fail with a NAMED reason if the pressure never
+# clears. Skipped when an ancestor task already passed the gate
+# (RL_ADMISSION_DISK_HELD — NOT RL_ADMISSION_HELD, which every heavy task
+# carries whether or not it was disk-gated), and it fails
+# OPEN whenever df or the ladder library is unavailable.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_admission.sh"
+if [[ -z "${RL_ADMISSION_DISK_HELD:-}" ]]; then
+    if ! admission::acquire_disk "${RL_TASK_ID:-build-${TAG}}" "" ""; then
+        FREE_GB_NOW="$(disk_pressure::free_gb 2>/dev/null || echo 0)"
+        audit::log build_image failed "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" \
+            --argjson free "${FREE_GB_NOW:-0}" --argjson need "$RL_BUILD_MIN_FREE_GB" \
+            '{slot:$slot, tag:$tag, error:"disk_pressure", free_gb:$free, need_gb:$need}')"
+        jq -nc --arg tag "$TAG" --argjson free "${FREE_GB_NOW:-0}" --argjson need "$RL_BUILD_MIN_FREE_GB" \
+            '{ok: false, error: "disk_pressure", tag: $tag, free_gb: $free, need_gb: $need,
+              hint: "host is out of disk — rl_fleet_prune, or wait for the gc-sweeper ladder"}'
+        # 76 = disk_pressure, same code task-start's supervisor uses (75 is
+        # the memory admission_timeout). One code, one meaning.
+        exit 76
+    fi
+fi
+
+# We build from a TEMP COPY of /workspace inside the runner, not /workspace
+# itself, because we apply a workaround patch to Dockerfile.allinone (see
+# TECH-DEBT-BACKLOG.md 2026-05-18 — `npm run build -w @raid-ledger/contract`
+# emits only .d.ts, web build fails). Patching the source would round-trip
+# through Mutagen back to operator's worktree. Once the repo-side fix
+# ships, the sed below becomes a no-op (pattern won't match).
+PATCH_SED='s|RUN npm run build -w @raid-ledger/contract|RUN cd packages/contract \&\& rm -rf dist *.tsbuildinfo \&\& npx tsc|'
+# TECH-DEBT 2026-06-06: drop sync-guard sentinels BEFORE the copy. The guard
+# unlinks its laptop-side sentinel after a good probe and Mutagen propagates
+# that deletion asynchronously — if it lands mid-`cp -a`, cp dies with
+# "cannot stat '/workspace/./.rl-sync-probe-…'" (set -e ⇒ build failed).
+# Runner-side deletes are safe: the session is one-way laptop→runner, and a
+# file that still exists laptop-side just gets re-created on the next sync.
+# Paired with the post-unlink flush in sync-guard.ts (mcp-rl-fleet).
+# ROK-1357 optional AC7: bake the synced git HEAD into the image as a label so
+# env-spin can surface `built_from_head` (which commit the running env was
+# built from). Resolved inside the runner from /workspace's checkout; empty
+# (label omitted) if /workspace isn't a git repo or rev-parse fails.
+# ROK-1510: the image also gets --build-arg COMMIT_SHA / APP_VERSION so the
+# env's GET /api/system/version reports what it runs. Precedence: the
+# --commit-sha the laptop MCP resolved from its worktree > SYNCED_HEAD (the
+# runner replica's HEAD, which is the BASE sha for a worktree branch) > omit
+# both build-args. The rl.synced_head label stays runner-derived as before.
+BUILD_CMD="set -e; \
+  find /workspace -maxdepth 1 -name '.rl-sync-probe-*' -delete 2>/dev/null || true; \
+  SYNCED_HEAD=\$(git -C /workspace rev-parse HEAD 2>/dev/null || echo ''); \
+  BUILD_SHA='${COMMIT_SHA}'; [ -n \"\$BUILD_SHA\" ] || BUILD_SHA=\"\$SYNCED_HEAD\"; \
+  TMPDIR=\$(mktemp -d /tmp/rl-build-XXXXXX); \
+  cp -a /workspace/. \"\$TMPDIR/\"; \
+  cd \"\$TMPDIR\"; \
+  sed -i '$PATCH_SED' Dockerfile.allinone; \
+  grep -q 'rm -rf dist \*.tsbuildinfo' Dockerfile.allinone || { echo 'PATCH_SED did not match — Dockerfile.allinone source drifted, expected RUN line for @raid-ledger/contract build not found' >&2; exit 3; }; \
+  HEAD_LABEL=\$([ -n \"\$SYNCED_HEAD\" ] && echo \"--label rl.synced_head=\$SYNCED_HEAD\" || echo ''); \
+  VERSION_ARGS=\$([ -n \"\$BUILD_SHA\" ] && echo \"--build-arg COMMIT_SHA=\$BUILD_SHA --build-arg APP_VERSION=fleet-\${BUILD_SHA:0:7}\" || echo ''); \
+  docker build \$HEAD_LABEL \$VERSION_ARGS -f Dockerfile.allinone -t '${FULL_TAG}' ."
+if [[ "$PUSH" == "1" ]]; then
+    BUILD_CMD="${BUILD_CMD} && docker push '${FULL_TAG}'"
+fi
+BUILD_CMD="${BUILD_CMD}; RC=\$?; rm -rf \"\$TMPDIR\"; exit \$RC"
+
+audit::log build_image started "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" '{slot:$slot, tag:$tag}')"
+
+START_TIME=$(date -u +%s)
+# A3 fix 2 — forward the per-task cancellation marker (same contract as
+# run-on-runner). Without it a cancelled image build leaks an in-container
+# docker build that task-cancel's runner sweep cannot find. Omitted when unset.
+TASK_MARKER_FLAGS=()
+if [[ -n "${RL_TASK_ID:-}" ]]; then
+    TASK_MARKER_FLAGS=(-e "RL_TASK_ID=$RL_TASK_ID")
+fi
+
+set +e
+docker exec ${TASK_MARKER_FLAGS[@]+"${TASK_MARKER_FLAGS[@]}"} "$RUNNER" bash -c "$BUILD_CMD" >&2
+RC=$?
+set -e
+END_TIME=$(date -u +%s)
+DURATION=$(( END_TIME - START_TIME ))
+
+if [[ $RC -ne 0 ]]; then
+    audit::log build_image failed "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" --argjson rc "$RC" --argjson duration "$DURATION" '{slot:$slot, tag:$tag, rc:$rc, duration_s:$duration}')"
+    jq -nc --arg tag "$TAG" --argjson rc "$RC" --argjson duration "$DURATION" \
+        '{ok: false, error: "build_failed", tag: $tag, rc: $rc, duration_s: $duration}'
+    exit 1
+fi
+
+audit::log build_image ok "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" --argjson duration "$DURATION" '{slot:$slot, tag:$tag, duration_s:$duration}')"
+
+jq -nc --arg tag "$TAG" --arg full "$FULL_TAG" --argjson slot "$SLOT" --argjson duration "$DURATION" --argjson pushed "$PUSH" \
+    '{ok: true, tag: $tag, image: $full, slot: $slot, duration_s: $duration, pushed: ($pushed == 1)}'

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Raid Ledger</title>
+  <meta name="description" content="Gaming community management — plan raids, track schedules, manage rosters." />
+  <meta name="theme-color" content="#4338ca" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <!-- ROK-1365: disable Zod v4's JIT validator compiler before the app bundle
+       loads. Zod probes `new Function("")` to detect eval support; under our
+       strict CSP that throw is caught (Zod silently falls back to interpreted
+       validation) but the browser still fires a `securitypolicyviolation`
+       report for the blocked eval. Pre-populating `jitless` skips the probe
+       entirely — no eval attempt, no violation, no behavior change. -->
+  <!-- ROK-1754: ONE inline script (zod config, whTooltips config, theme pre-paint, in that
+       order) so the CSP can allow it by a single sha256 hash instead of 'unsafe-inline'.
+       Once the CSP pins that hash, any edit here must update nginx/snippets/security-headers.conf. -->
+  <script>
+    globalThis.__zod_globalConfig = { jitless: true };
+    var whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false };
+    // No-flash theme script — sets data-scheme (+ data-variant) before first paint
+    // (ROK-280, ROK-228, ROK-291)
+    // Space: mode='dark' + darkTheme='space' -> data-scheme='space'.
+    // Quest Log: mode='light' + lightTheme='quest-log' -> data-scheme='light' + data-variant='quest-log'.
+    (function () {
+      var mode = localStorage.getItem('raid_ledger_theme_mode');
+      var darkTheme = localStorage.getItem('raid_ledger_dark_theme') || 'default-dark';
+      var lightTheme = localStorage.getItem('raid_ledger_light_theme') || 'default-light';
+      var scheme;
+      var variant = null;
+      var darkSubSchemes = { space: 'space', underwater: 'underwater' };
+      if (mode === 'light') {
+        scheme = 'light';
+        if (lightTheme === 'quest-log') variant = 'quest-log';
+      } else if (mode === 'dark') {
+        scheme = darkSubSchemes[darkTheme] || 'dark';
+      } else if (mode === 'auto') {
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          scheme = darkSubSchemes[darkTheme] || 'dark';
+        } else {
+          scheme = 'light';
+          if (lightTheme === 'quest-log') variant = 'quest-log';
+        }
+      } else if (mode === 'space') {
+        scheme = 'space';
+      } else {
+        scheme = localStorage.getItem('raid_ledger_scheme');
+        if (!scheme) {
+          scheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+      }
+      document.documentElement.setAttribute('data-scheme', scheme);
+      document.documentElement.style.colorScheme = (scheme === 'space' || scheme === 'underwater') ? 'dark' : scheme;
+      if (variant) {
+        document.documentElement.setAttribute('data-variant', variant);
+      }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+  <!-- ROK-1366: no third-party <script> tag in this file. tooltips.js is
+       injected async by src/lib/wowhead-tooltips-loader.ts, which main.tsx
+       imports straight after the magic-link fragment strip, so no third-party
+       code can read #token= and DOMContentLoaded does not wait on the CDN.
+       The whTooltips config above stays inline so it precedes the script.
+       magic-link-capture.test.ts pins this. -->
+</body>
+
+</html>

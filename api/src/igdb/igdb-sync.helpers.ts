@@ -1,0 +1,202 @@
+import { Logger } from '@nestjs/common';
+import { and, eq, isNotNull } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import Redis from 'ioredis';
+import * as schema from '../drizzle/schema';
+import {
+  IGDB_CONFIG,
+  ADULT_THEME_IDS,
+  type IgdbApiGame,
+} from './igdb.constants';
+import { delay } from './igdb-api.helpers';
+import { upsertGamesFromApi } from './igdb-upsert.helpers';
+import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
+
+const logger = new Logger('IgdbSyncHelpers');
+
+/**
+ * Non-hidden, non-banned rows with an IGDB id. ROK-1715: an igdb-less row
+ * (seed, ITAD) has nothing to refresh, and its NULL joined as an empty slot —
+ * `where id = (1,,2)` — would poison its whole 10-row batch.
+ */
+function selectRefreshableGames(db: PostgresJsDatabase<typeof schema>) {
+  return db
+    .select({ igdbId: schema.games.igdbId })
+    .from(schema.games)
+    .where(
+      and(
+        eq(schema.games.hidden, false),
+        eq(schema.games.banned, false),
+        isNotNull(schema.games.igdbId),
+      ),
+    );
+}
+
+/**
+ * Refresh existing non-hidden, non-banned games that have an IGDB id, in batches.
+ * @param db - Database connection
+ * @param queryIgdb - Function to execute IGDB queries
+ * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @param onGameChanged - ROK-1082: fired per upserted row so the caller can
+ *                        enqueue a game-taste-vector recompute for that id.
+ * @returns Number of games refreshed
+ */
+export async function refreshExistingGames(
+  db: PostgresJsDatabase<typeof schema>,
+  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
+  adultThemeFilter: string,
+  onGameChanged?: (gameId: number) => void,
+): Promise<number> {
+  let refreshed = 0;
+  const games = await selectRefreshableGames(db);
+  if (games.length === 0) return 0;
+
+  for (let i = 0; i < games.length; i += 10) {
+    const ids = games
+      .slice(i, i + 10)
+      .map((g) => g.igdbId)
+      .join(',');
+    try {
+      const apiGames = await queryIgdb(
+        `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids})${adultThemeFilter}; limit 10;`,
+      );
+      await upsertGamesFromApi(db, apiGames, onGameChanged);
+      refreshed += apiGames.length;
+    } catch (err) {
+      logger.warn(`Failed to refresh batch at index ${i}: ${err}`);
+    }
+    await delay(250);
+  }
+
+  return refreshed;
+}
+
+/**
+ * Discover popular multiplayer games from IGDB.
+ * @param db - Database connection
+ * @param queryIgdb - Function to execute IGDB queries
+ * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @param onGameChanged - ROK-1082: fired per upserted row so the caller can
+ *                        enqueue a game-taste-vector recompute for that id.
+ * @returns Number of games discovered
+ */
+export async function discoverPopularGames(
+  db: PostgresJsDatabase<typeof schema>,
+  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
+  adultThemeFilter: string,
+  onGameChanged?: (gameId: number) => void,
+): Promise<number> {
+  try {
+    const popular = await queryIgdb(
+      `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; ` +
+        `where game_modes = (2,3,5) & rating_count > 10${adultThemeFilter}; ` +
+        `sort total_rating desc; limit 100;`,
+    );
+    await upsertGamesFromApi(db, popular, onGameChanged);
+    return popular.length;
+  } catch (err) {
+    logger.warn(`Failed to discover popular games: ${err}`);
+    return 0;
+  }
+}
+
+/**
+ * Clear discovery cache from Redis after sync.
+ * @param redis - Redis client
+ */
+export async function clearDiscoveryCache(redis: Redis): Promise<void> {
+  try {
+    const keys = await redis.keys('games:discover:*');
+    if (keys.length > 0) await redis.del(...keys);
+  } catch {
+    // Non-fatal
+  }
+}
+
+/**
+ * Build the APICALYPSE adult theme filter string.
+ * @param adultFilterEnabled - Whether adult filter is active
+ * @returns Filter string for APICALYPSE queries
+ */
+export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
+  return adultFilterEnabled
+    ? ` & themes != (${ADULT_THEME_IDS.join(',')})`
+    : '';
+}
+
+/**
+ * Enrich games that have a Steam App ID with ITAD metadata.
+ * Re-enriches ALL games every sync (no skip for already-enriched).
+ * @param db - Database connection
+ * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
+ * @param getGameInfo - Function to fetch full game info (including tags) by ITAD ID
+ * @param onGameChanged - ROK-1082: fired per successful update so the caller
+ *                        can enqueue a game-taste-vector recompute for that id.
+ * @returns Number of successfully enriched games
+ */
+export async function enrichSyncedGamesWithItad(
+  db: PostgresJsDatabase<typeof schema>,
+  lookupBySteamAppId: (appId: number) => Promise<ItadGame | null>,
+  getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
+  onGameChanged?: (gameId: number) => void,
+): Promise<number> {
+  const games = await db
+    .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
+    .from(schema.games)
+    .where(isNotNull(schema.games.steamAppId));
+
+  if (games.length === 0) return 0;
+
+  let enriched = 0;
+  for (const game of games) {
+    try {
+      const itadGame = await lookupBySteamAppId(game.steamAppId!);
+      if (!itadGame) continue;
+      const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
+      await updateGameWithItadData(db, game.id, itadGame, info);
+      onGameChanged?.(game.id);
+      enriched++;
+    } catch (err) {
+      logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);
+    }
+  }
+  return enriched;
+}
+
+/** Info extracted from ITAD getGameInfo endpoint. */
+interface ItadEnrichInfo {
+  /** undefined = info unavailable (rate-limited/error): keep existing tags. */
+  tags: string[] | undefined;
+  earlyAccess: boolean | undefined;
+}
+
+/** Fetch tags and earlyAccess via getGameInfo, with safe defaults on failure. */
+async function fetchInfoGracefully(
+  getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
+  itadId: string,
+): Promise<ItadEnrichInfo> {
+  try {
+    const info = await getGameInfo(itadId);
+    return { tags: info?.tags ?? [], earlyAccess: info?.earlyAccess };
+  } catch {
+    return { tags: undefined, earlyAccess: undefined };
+  }
+}
+
+/** Persist ITAD metadata to a game row. */
+async function updateGameWithItadData(
+  db: PostgresJsDatabase<typeof schema>,
+  gameId: number,
+  itadGame: ItadGame,
+  info: ItadEnrichInfo,
+): Promise<void> {
+  const values: Record<string, unknown> = {
+    itadGameId: itadGame.id,
+    itadBoxartUrl: itadGame.assets?.boxart ?? null,
+  };
+  if (info.tags !== undefined) values.itadTags = info.tags;
+  if (info.earlyAccess !== undefined) {
+    values.earlyAccess = info.earlyAccess;
+  }
+  await db.update(schema.games).set(values).where(eq(schema.games.id, gameId));
+}

@@ -1,0 +1,189 @@
+import { z } from 'zod';
+
+// ============================================================
+// Match & Scheduling Enums (ROK-964)
+// ============================================================
+
+/** Match lifecycle: suggested -> scheduling -> scheduled -> archived */
+export const MatchStatusSchema = z.enum([
+    'suggested',
+    'scheduling',
+    'scheduled',
+    'archived',
+]);
+
+export type MatchStatusDto = z.infer<typeof MatchStatusSchema>;
+
+/** How well the match group fills its player requirements. */
+export const FitTypeSchema = z.enum([
+    'perfect',
+    'normal',
+    'oversubscribed',
+    'undersubscribed',
+]);
+
+export type FitTypeDto = z.infer<typeof FitTypeSchema>;
+
+/**
+ * How a member was added to a match group.
+ *
+ * ROK-1440: `added` = pulled in explicitly by the lineup creator or an
+ * operator, rather than derived from voting (`voted`) or interest-based
+ * bandwagon clustering (`bandwagon`). Widening this is type-level only —
+ * `community_lineup_match_members.source` is plain `text` in the database
+ * with no CHECK constraint, so no migration is required.
+ */
+export const MemberSourceSchema = z.enum(['voted', 'bandwagon', 'added']);
+
+export type MemberSourceDto = z.infer<typeof MemberSourceSchema>;
+
+/** Who proposed a schedule slot. */
+export const SlotSuggesterSchema = z.enum(['system', 'user']);
+
+export type SlotSuggesterDto = z.infer<typeof SlotSuggesterSchema>;
+
+// ============================================================
+// Match & Scheduling Response Schemas (ROK-964)
+// ============================================================
+
+/** A game match group within a lineup. */
+export const LineupMatchSchema = z.object({
+    id: z.number(),
+    lineupId: z.number(),
+    gameId: z.number(),
+    status: MatchStatusSchema,
+    thresholdMet: z.boolean(),
+    voteCount: z.number(),
+    votePercentage: z.number().nullable(),
+    fitType: FitTypeSchema.nullable(),
+    linkedEventId: z.number().nullable(),
+    /** Minimum unique voters before organizer is notified (ROK-1015). */
+    minVoteThreshold: z.number().int().nullable().optional(),
+    /** Timestamp when threshold notification was sent (ROK-1015). */
+    thresholdNotifiedAt: z.string().nullable().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+});
+
+export type LineupMatchDto = z.infer<typeof LineupMatchSchema>;
+
+/** A member assigned to a match group. */
+export const LineupMatchMemberSchema = z.object({
+    id: z.number(),
+    matchId: z.number(),
+    userId: z.number(),
+    source: MemberSourceSchema,
+    createdAt: z.string(),
+});
+
+export type LineupMatchMemberDto = z.infer<typeof LineupMatchMemberSchema>;
+
+/**
+ * Request body for POST /lineups/:lineupId/schedule/:matchId/members
+ * (ROK-1440) — explicitly enrol members in a scheduling poll.
+ */
+export const AddMatchMembersSchema = z.object({
+    userIds: z.array(z.number().int().positive()).min(1).max(50),
+});
+
+export type AddMatchMembersDto = z.infer<typeof AddMatchMembersSchema>;
+
+/** A proposed time slot for scheduling a match. */
+export const LineupScheduleSlotSchema = z.object({
+    id: z.number(),
+    matchId: z.number(),
+    proposedTime: z.string(),
+    overlapScore: z.number().nullable(),
+    suggestedBy: SlotSuggesterSchema,
+    createdAt: z.string(),
+});
+
+export type LineupScheduleSlotDto = z.infer<typeof LineupScheduleSlotSchema>;
+
+/** A user vote on a schedule time slot. */
+export const LineupScheduleVoteSchema = z.object({
+    id: z.number(),
+    slotId: z.number(),
+    userId: z.number(),
+    createdAt: z.string(),
+});
+
+export type LineupScheduleVoteDto = z.infer<typeof LineupScheduleVoteSchema>;
+
+// ============================================================
+// Composite DTOs (ROK-964)
+// ============================================================
+
+/** Match detail with game info and enriched members. */
+export const MatchDetailResponseSchema = LineupMatchSchema.extend({
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    /**
+     * ROK-1411: per-match player cap for the "X of Y players" denominator and
+     * "group is full" copy. Sourced via the ROK-1397 precedence: a positive
+     * `games.cooptimus_online_max` wins, else `games.player_count.max`; null
+     * when the game has no known cap.
+     */
+    playerCap: z.number().int().nullable(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max`, alongside — NOT replacing —
+     * `playerCap`. `playerCap` answers capacity (with IGDB fallback); this is
+     * the Co-Optimus-only co-op claim the fit badge recomputes against the
+     * LIVE `members.length` on every render.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
+    /** ROK-1121: lineup creator user ID for early-create override. */
+    lineupCreatedById: z.number().int().optional(),
+    /**
+     * The ended event whose post-event follow-up prompt opened this poll, when
+     * this is a follow-up poll. Drives the create-event prefill on lock-in.
+     * Null/absent for every ordinary scheduling poll.
+     */
+    followupForEventId: z.number().int().positive().nullable().optional(),
+    members: z.array(
+        LineupMatchMemberSchema.extend({
+            displayName: z.string(),
+            avatar: z.string().nullable(),
+            discordId: z.string().nullable(),
+            customAvatarUrl: z.string().nullable(),
+            /**
+             * Per-(match, member) scheduling submission timestamp
+             * (ROK-1296, U4 SubmitBar). ISO 8601 UTC string or null.
+             * ROK-1544: server-derived from the member's votes — the first
+             * vote on the match stamps it, the last withdrawal clears it.
+             * (It was previously written by the retired
+             * POST /lineups/:id/matches/:matchId/submit-scheduling.)
+             */
+            schedulingSubmittedAt: z.string().nullable(),
+            /**
+             * ROK-1545 (F-05): when this member was enrolled in the poll,
+             * ISO 8601. Mirrors `createdAt` on the member row; named for the
+             * late-joiner catch-up line, which compares it against the first
+             * vote cast on the poll.
+             */
+            joinedAt: z.string(),
+        }),
+    ),
+});
+
+export type MatchDetailResponseDto = z.infer<typeof MatchDetailResponseSchema>;
+
+/** Schedule poll with slots and voter details. */
+export const SchedulePollResponseSchema = z.object({
+    matchId: z.number(),
+    slots: z.array(
+        LineupScheduleSlotSchema.extend({
+            votes: z.array(
+                z.object({
+                    userId: z.number(),
+                    displayName: z.string(),
+                    avatar: z.string().nullable(),
+                    discordId: z.string().nullable(),
+                    customAvatarUrl: z.string().nullable(),
+                }),
+            ),
+        }),
+    ),
+});
+
+export type SchedulePollResponseDto = z.infer<typeof SchedulePollResponseSchema>;

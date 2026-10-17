@@ -1,0 +1,299 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AdHocParticipantService } from './ad-hoc-participant.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
+
+describe('AdHocParticipantService', () => {
+  let service: AdHocParticipantService;
+  let mockDb: MockDb;
+  let emitter: { emit: jest.Mock };
+
+  const baseMember = {
+    discordUserId: 'discord-123',
+    discordUsername: 'TestPlayer',
+    discordAvatarHash: 'avatar-hash',
+    userId: 1,
+  };
+
+  beforeEach(async () => {
+    mockDb = createDrizzleMock();
+    emitter = { emit: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AdHocParticipantService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: EventEmitter2, useValue: emitter },
+      ],
+    }).compile();
+
+    service = module.get(AdHocParticipantService);
+  });
+
+  describe('addParticipant', () => {
+    // ROK-1451 AC7: the generic seam LfgQuickPlayListener subscribes to.
+    it('announces a genuinely new join so downstream signals can react', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
+
+      await service.addParticipant(42, baseMember);
+
+      expect(emitter.emit).toHaveBeenCalledWith(
+        AD_HOC_EVENTS.PARTICIPANT_JOINED,
+        { eventId: 42, userId: 1, discordUserId: 'discord-123' },
+      );
+    });
+
+    // M5: a voice re-join updates the existing row. Re-announcing it would
+    // make LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for one session and
+    // spam any future DM consumer.
+    it('stays silent when the same participant re-joins the same session', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
+
+      await service.addParticipant(42, baseMember);
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('still records the re-join on the participant row', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
+      await service.addParticipant(42, baseMember);
+      expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+    });
+
+    it('inserts a new participant with upsert on conflict', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
+      await service.addParticipant(42, baseMember);
+      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 42,
+          discordUserId: 'discord-123',
+          discordUsername: 'TestPlayer',
+          discordAvatarHash: 'avatar-hash',
+          userId: 1,
+          sessionCount: 1,
+        }),
+      );
+    });
+
+    it('handles anonymous participant with null userId', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
+      const anonymousMember = { ...baseMember, userId: null };
+      await service.addParticipant(42, anonymousMember);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: null, discordUserId: 'discord-123' }),
+      );
+    });
+
+    it('handles member with null avatar hash', async () => {
+      mockDb.returning.mockResolvedValueOnce([{ sessionCount: 1 }]);
+      const noAvatarMember = { ...baseMember, discordAvatarHash: null };
+      await service.addParticipant(42, noAvatarMember);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ discordAvatarHash: null }),
+      );
+    });
+  });
+
+  describe('markLeave — basic', () => {
+    it('marks participant as left with computed duration', async () => {
+      jest.useFakeTimers();
+      const joinedAt = new Date('2026-02-10T18:00:00Z');
+      const row = {
+        id: 'uuid-1',
+        eventId: 42,
+        discordUserId: 'discord-123',
+        joinedAt,
+        leftAt: null,
+        totalDurationSeconds: null,
+      };
+      mockDb.limit.mockResolvedValueOnce([row]);
+      // Codex r2: the leave re-reads the row FOR UPDATE.
+      mockDb.for.mockResolvedValueOnce([row]);
+      jest.setSystemTime(new Date(joinedAt.getTime() + 120_000));
+      await service.markLeave(42, 'discord-123');
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ totalDurationSeconds: 120 }),
+      );
+      jest.useRealTimers();
+    });
+
+    it('returns early when participant row not found', async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+      await service.markLeave(42, 'discord-unknown');
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('does not double-mark if participant already left', async () => {
+      const row = {
+        id: 'uuid-1',
+        eventId: 42,
+        discordUserId: 'discord-123',
+        joinedAt: new Date('2026-02-10T18:00:00Z'),
+        leftAt: new Date('2026-02-10T18:05:00Z'),
+        totalDurationSeconds: 300,
+      };
+      mockDb.limit.mockResolvedValueOnce([row]);
+      // Codex r2: the leave re-reads the row FOR UPDATE.
+      mockDb.for.mockResolvedValueOnce([row]);
+      await service.markLeave(42, 'discord-123');
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('markLeave — duration accumulation', () => {
+    it('accumulates total duration across sessions', async () => {
+      jest.useFakeTimers();
+      const joinedAt = new Date('2026-02-10T19:00:00Z');
+      const row = {
+        id: 'uuid-1',
+        eventId: 42,
+        discordUserId: 'discord-123',
+        joinedAt,
+        leftAt: null,
+        totalDurationSeconds: 300,
+      };
+      mockDb.limit.mockResolvedValueOnce([row]);
+      // Codex r2: the leave re-reads the row FOR UPDATE.
+      mockDb.for.mockResolvedValueOnce([row]);
+      jest.setSystemTime(new Date(joinedAt.getTime() + 60_000));
+      await service.markLeave(42, 'discord-123');
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ totalDurationSeconds: 360 }),
+      );
+      jest.useRealTimers();
+    });
+  });
+
+  describe('getRoster', () => {
+    function buildRosterRows() {
+      const joinedAt = new Date('2026-02-10T18:00:00Z');
+      const leftAt = new Date('2026-02-10T18:30:00Z');
+      return {
+        joinedAt,
+        leftAt,
+        rows: [
+          {
+            id: 'uuid-1',
+            eventId: 42,
+            userId: 1,
+            discordUserId: 'discord-123',
+            discordUsername: 'Player1',
+            discordAvatarHash: 'abc',
+            joinedAt,
+            leftAt,
+            totalDurationSeconds: 1800,
+            sessionCount: 1,
+          },
+          {
+            id: 'uuid-2',
+            eventId: 42,
+            userId: null,
+            discordUserId: 'discord-456',
+            discordUsername: 'AnonPlayer',
+            discordAvatarHash: null,
+            joinedAt,
+            leftAt: null,
+            totalDurationSeconds: null,
+            sessionCount: 2,
+          },
+        ],
+      };
+    }
+
+    it('returns roster with ISO string timestamps', async () => {
+      const { joinedAt, leftAt, rows } = buildRosterRows();
+      mockDb.where.mockResolvedValueOnce(rows);
+      const result = await service.getRoster(42);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        id: 'uuid-1',
+        eventId: 42,
+        userId: 1,
+        joinedAt: joinedAt.toISOString(),
+        leftAt: leftAt.toISOString(),
+        totalDurationSeconds: 1800,
+        sessionCount: 1,
+      });
+      expect(result[1]).toMatchObject({
+        userId: null,
+        leftAt: null,
+        totalDurationSeconds: null,
+        sessionCount: 2,
+      });
+    });
+
+    it('carries source, inVoice and onServer so the web can split voice from server rows (ROK-1821)', async () => {
+      const { rows } = buildRosterRows();
+      const [voiceRow, serverRow] = rows;
+      mockDb.where.mockResolvedValueOnce([
+        { ...voiceRow, source: 'discord', inVoice: true, onServer: false },
+        {
+          ...serverRow,
+          discordUserId: null,
+          steamId: '76561198000000001',
+          source: 'steam',
+          inVoice: false,
+          onServer: true,
+        },
+      ]);
+      const result = await service.getRoster(42);
+      expect(result[0]).toMatchObject({
+        source: 'discord',
+        inVoice: true,
+        onServer: false,
+      });
+      expect(result[1]).toMatchObject({
+        source: 'steam',
+        inVoice: false,
+        onServer: true,
+      });
+    });
+
+    it('returns empty array when no participants', async () => {
+      mockDb.where.mockResolvedValueOnce([]);
+      const result = await service.getRoster(42);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('finalizeAll', () => {
+    it('marks all active participants as left in a single query', async () => {
+      mockDb.returning.mockResolvedValueOnce([
+        { id: 'uuid-1' },
+        { id: 'uuid-2' },
+      ]);
+      await service.finalizeAll(42);
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ leftAt: expect.any(Date) }),
+      );
+    });
+
+    it('handles no active participants gracefully', async () => {
+      mockDb.returning.mockResolvedValueOnce([]);
+      await service.finalizeAll(42);
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getActiveCount', () => {
+    it('returns count of active (not-left) participants', async () => {
+      mockDb.where.mockResolvedValueOnce([{ count: 5 }]);
+      const count = await service.getActiveCount(42);
+      expect(count).toBe(5);
+    });
+
+    it('returns 0 when result is empty', async () => {
+      mockDb.where.mockResolvedValueOnce([]);
+      const count = await service.getActiveCount(42);
+      expect(count).toBe(0);
+    });
+  });
+});

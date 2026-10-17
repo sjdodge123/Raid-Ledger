@@ -1,0 +1,421 @@
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+} from '@nestjs/common';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  DiscordEmbedFactory,
+  type EmbedEventData,
+} from './discord-embed.factory';
+import { EMBED_STATES } from '../discord-bot.constants';
+import { ChannelBindingsService } from './channel-bindings.service';
+import { ChannelResolverService } from './channel-resolver.service';
+import { ChannelPresenceEmbedService } from './channel-presence-embed.service';
+import { SettingsService } from '../../settings/settings.service';
+import {
+  type AdHocNotificationDeps,
+  type AdHocParticipant,
+  buildContext,
+  buildEmbedEventData,
+  isGeneralLobbyBinding,
+  readParticipants,
+  resolveNotificationChannel,
+  toActiveParticipants,
+} from './ad-hoc-notification.helpers';
+import {
+  markTrackedCompleted,
+  rehydrateSpawnMessage,
+  resolveQuickPlayAnnounceChannel,
+  type TrackedMessage,
+} from './quick-play-announce.helpers';
+
+/**
+ * Batch flush interval for embed updates (ms).
+ *
+ * ROK-1446 D5: `ChannelPresenceEmbedService` drains its dirty set on the same
+ * cadence, so a room and the per-event cards it replaces never disagree about
+ * how stale "live" is allowed to be. Exported so the two constants can be
+ * pinned equal.
+ */
+export const BATCH_FLUSH_INTERVAL_MS = 5000;
+
+interface PendingUpdate {
+  eventId: number;
+  bindingId: string;
+}
+
+/**
+ * AdHocNotificationService — handles Discord embed notifications for ad-hoc events (ROK-293).
+ *
+ * Features:
+ * - Posts an embed when an ad-hoc event spawns
+ * - Batched edit-in-place updates as players join/leave (5s flush interval)
+ * - Posts a final summary embed when the event completes
+ *
+ * ROK-1447: Quick Play no longer borrows the scheduled-event layout. It builds
+ * through `DiscordEmbedFactory.buildQuickPlayEmbed` — a compact card (game-name
+ * title deep-linked to `/games/:id`, roster + `[Open event ↗]`, co-op and sale
+ * badges while LIVE) with NO button row in either state. This service owns the
+ * whole edit loop for those messages; `EmbedSyncProcessor` skips ad-hoc ids so
+ * it cannot rebuild them through the scheduled-event builder.
+ *
+ * ROK-1446 (D9): **this service posts nothing for `general-lobby` bindings.**
+ * A lobby voice channel gets ONE message owned by `ChannelPresenceEmbedService`
+ * that is edited in place as the room changes, so a per-event card would be a
+ * second announcement of the same session. `notifySpawn` therefore gates on
+ * `isGeneralLobbyBinding`, calls `markDirty(voiceChannelId)` and returns — no
+ * `sendEmbed`, no `discord_event_messages` row. Because nothing is tracked in
+ * `messageIds`, `queueUpdate` / `processUpdate` / `notifyCompleted` are already
+ * no-ops for those event ids; `notifyCompleted` additionally calls
+ * `onEventEnded(bindingId)` so the completion folds into the room's message.
+ * `game-voice-monitor` bindings (D1) are OUT of scope and keep every behaviour
+ * on this page unchanged.
+ *
+ * ROK-1766: a `quick-play-announcements` binding for the event's effective
+ * game adds ONE tracked per-event card in that text channel — for a lobby
+ * spawn alongside the (unchanged) room card, for a monitor spawn INSTEAD of
+ * `resolveNotificationChannel` (D2). A failed QP send falls back for monitors
+ * only (D7). Tracked messages rehydrate from `discord_event_messages` on a
+ * Map miss (D6), so a deploy mid-session does not freeze the card.
+ */
+@Injectable()
+export class AdHocNotificationService implements OnModuleDestroy {
+  private readonly logger = new Logger(AdHocNotificationService.name);
+  private messageIds = new Map<
+    number,
+    { channelId: string; messageId: string }
+  >();
+  private pendingUpdates = new Map<number, PendingUpdate>();
+  /** Events whose rehydration found no spawn card — not re-queried per flush. */
+  private untracked = new Set<number>();
+  private flushTimer: NodeJS.Timeout | null = null;
+  private flushing = false;
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly clientService: DiscordBotClientService,
+    private readonly embedFactory: DiscordEmbedFactory,
+    private readonly channelBindingsService: ChannelBindingsService,
+    private readonly channelResolver: ChannelResolverService,
+    private readonly channelPresence: ChannelPresenceEmbedService,
+    private readonly settingsService: SettingsService,
+  ) {
+    this.startFlushTimer();
+  }
+
+  /** Dependency bundle for extracted helper functions. */
+  private get deps(): AdHocNotificationDeps {
+    return {
+      db: this.db,
+      channelBindingsService: this.channelBindingsService,
+      channelResolver: this.channelResolver,
+      settingsService: this.settingsService,
+    };
+  }
+
+  onModuleDestroy(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+  }
+
+  /** Post the initial spawn notification embed. */
+  async notifySpawn(
+    eventId: number,
+    bindingId: string,
+    _event: { id: number; title: string; gameName?: string },
+    participants: Array<{
+      discordUserId: string | null;
+      discordUsername: string;
+    }>,
+    effectiveGameId?: number | null,
+  ): Promise<void> {
+    // ROK-1446 D9: a general-lobby room already carries this session inside its
+    // own live message — announcing it again would ship two cards for one
+    // spawn. Mark the room dirty and stop before anything is sent or tracked.
+    const lobby = await isGeneralLobbyBinding(this.deps, bindingId);
+    if (lobby) this.channelPresence.markDirty(lobby.channelId);
+    // ROK-1766 D2: a QP binding for the effective game wins outright.
+    const qpChannel = await resolveQuickPlayAnnounceChannel(
+      this.deps,
+      bindingId,
+      effectiveGameId,
+    );
+    const active = toActiveParticipants(participants);
+    if (qpChannel && (await this.postSpawn(eventId, qpChannel, active))) return;
+    // D7: a lobby never falls back — its room card already carries the session.
+    if (lobby) return;
+    // ROK-1390: pass the event's effective game so announce routing follows the
+    // runtime game fallback, not the binding's stored game.
+    const channelId = await resolveNotificationChannel(
+      this.deps,
+      bindingId,
+      effectiveGameId,
+    );
+    if (!channelId) return;
+    await this.postSpawn(eventId, channelId, active);
+  }
+
+  /** Build the LIVE card and post it; true once a message landed. */
+  private async postSpawn(
+    eventId: number,
+    channelId: string,
+    active: AdHocParticipant[],
+  ): Promise<boolean> {
+    const embedData = await buildEmbedEventData(this.deps, eventId, active);
+    if (!embedData) return false;
+    return this.sendSpawnEmbed(eventId, channelId, embedData);
+  }
+
+  /** Send the spawn embed and track the message; true once a message landed. */
+  private async sendSpawnEmbed(
+    eventId: number,
+    channelId: string,
+    embedData: EmbedEventData,
+  ): Promise<boolean> {
+    const { embed, row, content } = await this.buildEmbed(
+      embedData,
+      EMBED_STATES.LIVE,
+    );
+    try {
+      const message = await this.clientService.sendEmbed(
+        channelId,
+        embed,
+        row,
+        content,
+      );
+      if (!message) {
+        this.logger.warn(`No message returned for event ${eventId}`);
+        return false;
+      }
+      await this.trackSpawnMessage(eventId, channelId, message.id);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `Failed to send spawn notification for event ${eventId}: ${err}`,
+      );
+      return false;
+    }
+  }
+
+  /** Track the spawn message and persist to DB. */
+  private async trackSpawnMessage(
+    eventId: number,
+    channelId: string,
+    messageId: string,
+  ): Promise<void> {
+    this.messageIds.set(eventId, { channelId, messageId });
+    const guildId = this.clientService.getGuildId();
+    if (guildId) {
+      await this.db.insert(schema.discordEventMessages).values({
+        eventId,
+        guildId,
+        channelId,
+        messageId,
+        embedState: EMBED_STATES.LIVE,
+      });
+    }
+  }
+
+  /** Queue an update for batched flush (edit-in-place). */
+  queueUpdate(eventId: number, bindingId: string): void {
+    this.pendingUpdates.set(eventId, { eventId, bindingId });
+  }
+
+  /**
+   * Update the existing embed in-place to show the completed state (ROK-612).
+   * No second "completed" message is posted — the original embed is edited.
+   *
+   * ROK-1243: event / participants are kept on the signature for backwards
+   * compatibility with `ad-hoc-event.handlers.ts::notifyCompleted` but the
+   * implementation re-reads everything it needs from the DB.
+   *
+   * ROK-1446 D9: `bindingId` is used again — the presence service is told the
+   * event ended BEFORE the untracked early return, because a lobby event has
+   * no tracked message by design and its recap lives in the room's message.
+   */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  async notifyCompleted(
+    eventId: number,
+    bindingId: string,
+    _event: {
+      id: number;
+      title: string;
+      gameName?: string;
+      startTime: string;
+      endTime: string;
+    },
+    _participants: Array<{
+      discordUserId: string | null;
+      discordUsername: string;
+      totalDurationSeconds: number | null;
+    }>,
+  ): Promise<void> {
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+    await this.finalise(eventId, bindingId);
+  }
+
+  /**
+   * ROK-1766 M1: a cancelled ad-hoc session ends its card(s) the same way a
+   * completed one does — room fold, tracked card edited to `ended`, rows
+   * COMPLETED, in-memory state dropped. The scheduled CANCELLED builder skips
+   * ad-hoc events, so nothing else finalises them. Never throws: the caller
+   * still has to tear down the session's active state.
+   */
+  async notifyCancelled(eventId: number, bindingId: string): Promise<void> {
+    try {
+      await this.finalise(eventId, bindingId);
+    } catch (err) {
+      this.logger.error(
+        `Failed to finalise cancelled event ${eventId}: ${err}`,
+      );
+      this.cleanup(eventId);
+    }
+  }
+
+  private async finalise(eventId: number, bindingId: string): Promise<void> {
+    // ROK-1446 D9: fold the completion into the room's message. Must run before
+    // the `!tracked` early return — a suppressed lobby spawn never tracked one.
+    this.channelPresence.onEventEnded(bindingId);
+    // ROK-1243 review: close flusher race window — drop pendingUpdates BEFORE the
+    // DB read so a 5s-interval flushUpdates cycle that fires mid-await cannot
+    // land a LIVE-state editEmbed AFTER our COMPLETED edit.
+    this.pendingUpdates.delete(eventId);
+    // ROK-1766 m1: bypass the negative cache — one read per event end is cheap
+    // and a cached miss must not leave a real card LIVE.
+    const tracked = await this.trackedFor(eventId, bindingId, false);
+    if (!tracked) {
+      this.cleanup(eventId); // m2: drop the negative-cache entry too.
+      return;
+    }
+    // ROK-1243: re-read participants from DB so any join/leave that happened
+    // during the final 5s batch window (or was lost to a silent editEmbed
+    // failure) is reflected in the COMPLETED historical record.
+    const reconciled = await readParticipants(this.db, eventId, true);
+    const embedData = await buildEmbedEventData(this.deps, eventId, reconciled);
+    if (!embedData) {
+      this.cleanup(eventId);
+      return;
+    }
+    await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.COMPLETED);
+    await markTrackedCompleted(this.db, eventId);
+    this.cleanup(eventId);
+  }
+
+  /**
+   * ROK-1766 D6: the Map entry, or our own still-LIVE spawn row re-seeded into
+   * it. A definite miss is cached so the 5 s flush does not re-query every
+   * cycle; a thrown lookup is NOT (m1) — the next flush retries it.
+   */
+  private async trackedFor(
+    eventId: number,
+    bindingId: string,
+    useCache = true,
+  ): Promise<TrackedMessage | null> {
+    const hit = this.messageIds.get(eventId);
+    if (hit) return hit;
+    if (useCache && this.untracked.has(eventId)) return null;
+    try {
+      const row = await rehydrateSpawnMessage(this.deps, eventId, bindingId);
+      if (row) this.messageIds.set(eventId, row);
+      else this.untracked.add(eventId);
+      return row;
+    } catch (err) {
+      this.logger.warn(`Could not rehydrate event ${eventId}'s card: ${err}`);
+      return null;
+    }
+  }
+
+  /** Clean up tracked state for an event. */
+  private cleanup(eventId: number): void {
+    this.messageIds.delete(eventId);
+    this.pendingUpdates.delete(eventId);
+    this.untracked.delete(eventId);
+  }
+
+  /** Flush pending updates — edit-in-place the tracked messages. */
+  private async flushUpdates(): Promise<void> {
+    if (this.flushing || this.pendingUpdates.size === 0) return;
+    this.flushing = true;
+    try {
+      const updates = Array.from(this.pendingUpdates.values());
+      this.pendingUpdates.clear();
+      for (const update of updates) {
+        try {
+          await this.processUpdate(update);
+        } catch (err) {
+          this.logger.error(
+            `Failed to flush ad-hoc update for event ${update.eventId}: ${err}`,
+          );
+        }
+      }
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  private async processUpdate(update: PendingUpdate): Promise<void> {
+    const tracked = await this.trackedFor(update.eventId, update.bindingId);
+    if (!tracked) return;
+    const participants = await readParticipants(this.db, update.eventId);
+    const embedData = await buildEmbedEventData(
+      this.deps,
+      update.eventId,
+      participants,
+    );
+    if (!embedData) return;
+    await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.LIVE);
+  }
+
+  /**
+   * Build the Quick Play embed for a lifecycle state.
+   *
+   * ROK-1447: Quick Play has its own compact builder and no button row in
+   * either state — the title deep-links to the game and the description closes
+   * with `[Open event ↗]`, so a "View Event" button would be a third copy of
+   * the same link.
+   */
+  private async buildEmbed(embedData: EmbedEventData, state: string) {
+    const context = await buildContext(this.deps);
+    return this.embedFactory.buildQuickPlayEmbed(
+      embedData,
+      context,
+      state === EMBED_STATES.COMPLETED ? 'ended' : 'live',
+    );
+  }
+
+  /** Edit a tracked embed message with new data. */
+  private async editTrackedEmbed(
+    tracked: { channelId: string; messageId: string },
+    embedData: EmbedEventData,
+    state: string,
+  ): Promise<void> {
+    const { embed, row, content } = await this.buildEmbed(embedData, state);
+    try {
+      await this.clientService.editEmbed(
+        tracked.channelId,
+        tracked.messageId,
+        embed,
+        row,
+        content,
+      );
+    } catch (err) {
+      this.logger.error(`Failed to edit embed: ${err}`);
+    }
+  }
+
+  private startFlushTimer(): void {
+    this.flushTimer = setInterval(() => {
+      this.flushUpdates().catch((err) => {
+        this.logger.error(`Batch flush error: ${err}`);
+      });
+    }, BATCH_FLUSH_INTERVAL_MS);
+  }
+}

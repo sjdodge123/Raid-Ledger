@@ -1,0 +1,251 @@
+/**
+ * ROK-1471 D6 — the `+1 · I'm in` button on an LFG board post.
+ *
+ * ROK-1454 declared `LFG_BUTTON_IDS.JOIN` and deliberately left it unhandled;
+ * this listener is the socket it reserved. It copies `LfgWithdrawListener`'s
+ * gateway-binding pattern move for move, and inherits its two rules:
+ *
+ *  1. **Identity comes from the interaction, never from the custom id.** The
+ *     button carries only a game id, so a replayed or hand-crafted id raises
+ *     the CLICKER's hand or nobody's.
+ *  2. **No write path of its own.** Every press goes through
+ *     `LfgService.createIntent` — the same method `POST /lfg` and `/lfg game:`
+ *     call — so the advisory lock, the 1 -> 2 rule and expiry refresh stay
+ *     honest, a repeat press is idempotent rather than an error, and the public
+ *     post repaints through the existing `GROUP_CHANGED` consumer. This file
+ *     edits no Discord message.
+ *
+ * ROK-1455 walk feedback added a SECOND source: the invite DM's own Join
+ * button (`LFG_BUTTON_IDS.INVITE_JOIN`).
+ *
+ * **ROK-1614 — both sources now resolve the group's horizon at press time.**
+ * They used to differ: the board passed no urgency and defaulted to
+ * `WEEK_REQUEST` (ROK-1471), while the DM inherited the group's horizon. That
+ * split produced the reported failure — roknua raised a `now` hand, a second
+ * player pressed `+1 · I'm in` on the board card and got a WEEK hand, so the
+ * group sat at one now-hand, never reached `LFG_NOW_SPAWN_THRESHOLD`, and no
+ * session spawned. Two people present, both willing, nothing happened.
+ *
+ * The old board default had a real rationale and it is worth stating why it is
+ * gone rather than just deleting it: *"a press an hour later must not raise a
+ * now-hand on a group whose now-hands have all lapsed."* That hazard is REAL
+ * and is still covered — by the mechanism that replaced it, not by the default.
+ * `readGroupHorizon` reads LIVE intents at PRESS TIME, never the custom id and
+ * never the rendered card's state, so a group whose now-hands have all lapsed
+ * reports a `week` horizon and a late press still raises a week hand. Only the
+ * fresh case changes behaviour.
+ *
+ * So the two sources no longer differ at all, which is the point: one
+ * resolution, not two that drift.
+ */
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { MessageFlags } from 'discord.js';
+import type { ButtonInteraction } from 'discord.js';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import {
+  horizonJoinRequest,
+  readGroupHorizon,
+} from '../../lfg/lfg-group-horizon.helpers';
+import { LfgService, type CreateIntentResult } from '../../lfg/lfg.service';
+import { SettingsService } from '../../settings/settings.service';
+import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  buildLfgJoinConfirmation,
+  type LfgJoinConfirmation,
+} from './lfg-join-confirmation.helpers';
+import {
+  LFG_BLOCKED_REPLY,
+  LFG_UNLINKED_REPLY,
+} from '../commands/lfg.command.helpers';
+import { resolveLfgCaller } from '../commands/lfg.command';
+import { findLfmMessageByIds } from '../lfg-board/lfg-board.db-helpers';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+
+/** E11 — the refusal a stale client gets when the group has already ended. */
+export const LFG_JOIN_TERMINAL_REPLY =
+  "This group already got scheduled — there's nothing left to join.";
+
+/** Either a bare refusal string, or the full confirmation body. */
+type LfgJoinReply = string | LfgJoinConfirmation;
+
+/** Which button was pressed, and on which game. */
+export interface LfgJoinPress {
+  gameId: number;
+  /** `board` keeps the ROK-1471 week default; `dm` matches the group. */
+  source: 'board' | 'dm';
+}
+
+/** The game id trailing a `{prefix}:` custom id, or null. */
+function gameIdAfter(customId: string, prefix: string): number | null {
+  if (!customId.startsWith(`${prefix}:`)) return null;
+  const raw = customId.slice(prefix.length + 1);
+  if (!/^\d+$/.test(raw)) return null;
+  return Number(raw);
+}
+
+/**
+ * Parse a board `+1` button's custom id.
+ *
+ * @param customId - The interaction's custom id.
+ * @returns The game id, or null when this is not a board join button.
+ */
+export function parseJoinCustomId(customId: string): number | null {
+  return gameIdAfter(customId, LFG_BUTTON_IDS.JOIN);
+}
+
+/**
+ * Parse either join button's custom id.
+ *
+ * The two prefixes are disjoint by construction (`lfg:join` vs
+ * `lfg:invite-join`), so a board id can never be read as a DM id or the other
+ * way round — which is what keeps ROK-1471's behaviour provably unchanged.
+ *
+ * @param customId - The interaction's custom id.
+ * @returns What was pressed, or null when this is neither join button.
+ */
+export function parseJoinPress(customId: string): LfgJoinPress | null {
+  const board = parseJoinCustomId(customId);
+  if (board !== null) return { gameId: board, source: 'board' };
+  const dm = gameIdAfter(customId, LFG_BUTTON_IDS.INVITE_JOIN);
+  return dm === null ? null : { gameId: dm, source: 'dm' };
+}
+
+@Injectable()
+export class LfgJoinListener {
+  private readonly logger = new Logger(LfgJoinListener.name);
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'LFG join interactions',
+  );
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly clientService: DiscordBotClientService,
+    private readonly lfgService: LfgService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  onBotConnected(): void {
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
+      }),
+    ]);
+  }
+
+  /** Drop the handler so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.binding.detach();
+  }
+
+  /** True for the board's `+1` buttons AND the invite DM's Join button. */
+  matches(customId: string): boolean {
+    return parseJoinPress(customId) !== null;
+  }
+
+  /**
+   * Handle one `+1` press. Never throws back into the gateway.
+   *
+   * @param interaction - The button interaction discord.js dispatched.
+   */
+  async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
+    const press = parseJoinPress(interaction.customId);
+    if (press === null) return;
+    try {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await this.reply(interaction, await this.join(interaction, press));
+    } catch (error) {
+      this.logger.error(
+        `Failed to join the LFG group for game ${press.gameId}:`,
+        error,
+      );
+      await this.reply(interaction, 'Something went wrong. Please try again.');
+    }
+  }
+
+  /** The one write path, guarded exactly as the HTTP and slash surfaces are. */
+  private async join(
+    interaction: ButtonInteraction,
+    press: LfgJoinPress,
+  ): Promise<LfgJoinReply> {
+    const { gameId } = press;
+    const caller = await resolveLfgCaller(this.db, interaction.user.id);
+    if (!caller) return LFG_UNLINKED_REPLY; // E8
+    // E9: `NotDeactivatedGuard` guards the HTTP routes only, so a gateway click
+    // by a blocked account is refused here or not at all.
+    if (caller.deactivatedAt || caller.bannedAt) return LFG_BLOCKED_REPLY;
+    if (await this.isTerminalPost(interaction)) return LFG_JOIN_TERMINAL_REPLY;
+    // ROK-1614 — BOTH sources take the group's horizon; `press.source` no
+    // longer changes what is written. ROK-1616: a joiner inherits the HORIZON,
+    // not the expiry — on a `tonight` group `resolveIntentHorizon` recomputes
+    // 04:00 from this press, which needs the community zone. Reading it here
+    // (rather than copying the group's `expires_at`) is what stops a late
+    // joiner inheriting a clock that has already run out.
+    const [horizon, timezone] = await Promise.all([
+      readGroupHorizon(this.db, gameId),
+      this.settingsService.getDiscordBotTimezone(),
+    ]);
+    return this.confirmation(
+      await this.lfgService.createIntent(caller.id, gameId, {
+        ...horizonJoinRequest(horizon),
+        timezone,
+      }),
+    );
+  }
+
+  /**
+   * E11 — a press from a stale client on a post whose group already ended.
+   *
+   * An UNKNOWN message is deliberately not terminal: only rows the board wrote
+   * are tracked, so treating "no row" as closed would refuse a legitimate press
+   * on anything else that ever carries this button.
+   */
+  private async isTerminalPost(
+    interaction: ButtonInteraction,
+  ): Promise<boolean> {
+    const { guildId, channelId } = interaction;
+    if (!guildId || !channelId) return false;
+    const row = await findLfmMessageByIds(this.db, {
+      guildId,
+      channelId,
+      messageId: interaction.message.id,
+    });
+    return row !== null && row.state !== 'open';
+  }
+
+  /**
+   * `created === false` is the idempotent repeat, not a failure (E10) — the
+   * copy differs only in its lead-in, which is the point: one shape, both
+   * presses, both surfaces (walk feedback 1).
+   */
+  private async confirmation(
+    result: CreateIntentResult,
+  ): Promise<LfgJoinConfirmation> {
+    return buildLfgJoinConfirmation(
+      result,
+      await this.settingsService.getClientUrl(),
+    );
+  }
+
+  /** The ephemeral answer. Best-effort — a dead interaction is not an error. */
+  private async reply(
+    interaction: ButtonInteraction,
+    reply: LfgJoinReply,
+  ): Promise<void> {
+    const body = typeof reply === 'string' ? { content: reply } : reply;
+    await interaction.editReply(body).catch(() => {
+      this.logger.warn(`Could not deliver the LFG join reply: ${body.content}`);
+    });
+  }
+}

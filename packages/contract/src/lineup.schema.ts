@@ -1,0 +1,681 @@
+import { z } from 'zod';
+
+// Re-export match & scheduling schemas for backward compatibility (ROK-975)
+export * from './lineup-match.schema.js';
+
+// Re-export tiebreaker schemas (ROK-938)
+export * from './lineup-tiebreaker.schema.js';
+
+// Re-export invitee / visibility schemas (ROK-1065)
+export * from './lineup-invitees.schema.js';
+
+// Re-export public-share schemas (ROK-1067)
+export * from './lineup-public.schema.js';
+
+// Re-export submit schemas (ROK-1296, U4 SubmitBar)
+export * from './lineup-submit.schema.js';
+
+import { LineupVisibilitySchema, LineupInviteeResponseSchema } from './lineup-invitees.schema.js';
+import { ViewerSubmissionsSchema } from './lineup-submit.schema.js';
+
+// ============================================================
+// Community Lineup Schemas (ROK-933)
+// ============================================================
+
+/** Valid lineup statuses. Flow: building -> voting -> decided -> archived */
+export const LineupStatusSchema = z.enum([
+    'building',
+    'voting',
+    'decided',
+    'archived',
+]);
+
+export type LineupStatusDto = z.infer<typeof LineupStatusSchema>;
+
+// ============================================================
+// Request Schemas
+// ============================================================
+
+/** Create a new lineup (ROK-1063: title required, description optional markdown). */
+export const CreateLineupSchema = z
+    .object({
+        /** Operator-authored title (1-100 chars, ROK-1063). */
+        title: z.string().trim().min(1).max(100),
+        /** Optional operator-authored markdown description (<=500 chars, ROK-1063). */
+        description: z.string().max(500).nullable().optional(),
+        targetDate: z.string().datetime({ offset: true }).nullable().optional(),
+        /**
+         * Hours for the building phase. Sub-hour values are allowed (ROK-1302
+         * "Tonight" preset = 0.25h = 15 min); `.int()` was dropped and the
+         * floor lowered to 0.25h. Durations persist in the
+         * `phase_duration_override` jsonb and all deadline math is
+         * `hours * 3_600_000`, so fractional hours round-trip cleanly
+         * (0.25 → 900_000 ms).
+         */
+        buildingDurationHours: z.number().min(0.25).max(720).optional(),
+        /** Hours for the voting phase. Sub-hour allowed (ROK-1302); see buildingDurationHours. */
+        votingDurationHours: z.number().min(0.25).max(720).optional(),
+        /** Hours for the decided phase (1-720, default from admin settings). */
+        decidedDurationHours: z.number().int().min(1).max(720).optional(),
+        /** Match threshold percentage for grouping algorithm (0–100, default 35). */
+        matchThreshold: z.number().int().min(0).max(100).optional(),
+        /** Max votes each player can cast during voting (1–10, default 3). */
+        votesPerPlayer: z.number().int().min(1).max(10).optional(),
+        /** Default tiebreaker mode when voting deadline expires. Null = skip tiebreaker. */
+        defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable().optional(),
+        /**
+         * Optional per-lineup Discord channel override (ROK-1064).
+         * When set, every lineup lifecycle embed posts to this channel instead
+         * of the guild-bound default. Must be a Discord snowflake (17–20 digits).
+         */
+        channelOverrideId: z
+            .string()
+            .regex(/^\d{17,20}$/)
+            .nullable()
+            .optional(),
+        /** Lineup visibility (ROK-1065). Defaults to 'public'. */
+        visibility: LineupVisibilitySchema.default('public').optional(),
+        /**
+         * Initial invitees (required when visibility === 'private').
+         * Users pinned here — along with the creator and any admin/operator —
+         * are the only ones who may nominate or vote on the lineup.
+         */
+        inviteeUserIds: z.array(z.number().int().positive()).optional(),
+        /**
+         * Public-share toggle (ROK-1067). Default ON for public lineups so
+         * operators can copy a shareable link immediately. Forced to false
+         * when `visibility === 'private'` (the service ignores `true` here
+         * for private lineups; the refine below blocks the EXPLICIT
+         * private + true combo so the operator gets a 400).
+         */
+        publicShareEnabled: z.boolean().optional(),
+        /**
+         * Whether the lineup advances into a scheduling poll after Decided
+         * (ROK-1302). Default ON preserves existing behavior. When false, the
+         * lineup terminates at Decided: no match is promoted to 'scheduling',
+         * no scheduling poll/slots are created, and the decided-page
+         * "Pick a time" CTA is hidden.
+         */
+        includeSchedulingPhase: z.boolean().default(true).optional(),
+        /**
+         * ROK-1444: open voting early once nominations reach this percentage
+         * of the dynamic nomination cap (max(20, nominators * 5)). Omit or
+         * null to keep today's deadline-only behaviour.
+         *
+         * The global `LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS` floor still applies
+         * as an absolute minimum, so a low percentage cannot advance a lineup
+         * below that floor.
+         */
+        nominationTargetPct: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .nullable()
+            .optional(),
+    })
+    .refine(
+        (d) =>
+            d.visibility !== 'private' ||
+            (Array.isArray(d.inviteeUserIds) && d.inviteeUserIds.length > 0),
+        {
+            message: 'Private lineups require at least one invitee',
+            path: ['inviteeUserIds'],
+        },
+    )
+    .refine(
+        (d) => d.visibility !== 'private' || d.publicShareEnabled !== true,
+        {
+            message: 'Private lineups cannot have public share enabled',
+            path: ['publicShareEnabled'],
+        },
+    );
+
+export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
+
+/**
+ * Update a lineup's title and/or description (ROK-1063).
+ * Title, when provided, must be 1-100 chars (trimmed non-empty).
+ * Description may be null to clear.
+ */
+export const UpdateLineupMetadataSchema = z
+    .object({
+        title: z.string().trim().min(1).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+    })
+    .refine(
+        (data) => data.title !== undefined || data.description !== undefined,
+        { message: 'At least one of title or description must be provided' },
+    );
+
+export type UpdateLineupMetadataDto = z.infer<typeof UpdateLineupMetadataSchema>;
+
+/** Transition a lineup to a new status with optional context fields. */
+export const UpdateLineupStatusSchema = z.object({
+    status: LineupStatusSchema,
+    /** Set when transitioning building → voting. */
+    votingDeadline: z.string().datetime({ offset: true }).nullable().optional(),
+    /** Required when transitioning voting → decided. Must be a game in the lineup entries. */
+    decidedGameId: z.number().int().positive().nullable().optional(),
+});
+
+export type UpdateLineupStatusDto = z.infer<typeof UpdateLineupStatusSchema>;
+
+/** Abort a lineup with optional operator-authored reason (ROK-1062). */
+export const AbortLineupSchema = z.object({
+    reason: z.string().trim().max(500).nullable().optional(),
+});
+
+export type AbortLineupDto = z.infer<typeof AbortLineupSchema>;
+
+// ============================================================
+// Response Schemas
+// ============================================================
+
+/** Nominator / voter identity embedded in responses. */
+const LineupUserSchema = z.object({
+    id: z.number(),
+    displayName: z.string(),
+});
+
+/** A single game nomination within a lineup. */
+export const LineupEntryResponseSchema = z.object({
+    id: z.number(),
+    gameId: z.number(),
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    nominatedBy: LineupUserSchema,
+    note: z.string().nullable(),
+    carriedOver: z.boolean(),
+    voteCount: z.number(),
+    /**
+     * ROK-1474: how many voters made this game their top pick.
+     *
+     * **`null` while the ballot is open** — the operator ruled (2026-09-05)
+     * that stars are private until the outcome, and a live star count is a
+     * far stronger bandwagon signal than a live vote count because it is
+     * scarce and single-use. A number appears only once voting is closed.
+     * Clients MUST treat `null` as "not disclosed yet", never as zero.
+     */
+    starCount: z.number().nullable(),
+    createdAt: z.string(),
+    /** How many community members own this game (source=steam_library). */
+    ownerCount: z.number(),
+    /** Total registered community members. */
+    totalMembers: z.number(),
+    /** Members who do NOT own this game. */
+    nonOwnerCount: z.number(),
+    /** Members who have this game on their Steam wishlist. */
+    wishlistCount: z.number(),
+    /** Current best deal price from ITAD. */
+    itadCurrentPrice: z.number().nullable(),
+    /** Discount percentage (0-100). */
+    itadCurrentCut: z.number().nullable(),
+    /** Store name offering the current deal. */
+    itadCurrentShop: z.string().nullable(),
+    /** URL to the current deal. */
+    itadCurrentUrl: z.string().nullable(),
+    /** Min/max player count from IGDB (null if unknown). */
+    playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max` — the Co-Optimus-verified
+     * online co-op cap. Positive = a co-op claim the row may advertise;
+     * `0` = synced with no online co-op; `null` = never synced. Deliberately
+     * NOT blended with `playerCount` (an IGDB lobby size is not a co-op
+     * capability) — see `web/src/components/lineups/coop-fit.ts`.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
+    /**
+     * ROK-1314: historical lowest ITAD price. Without it a nomination card can
+     * never resolve `best-price`, so the same game would read "On Sale" here and
+     * "Best Price" on Common Ground — the drift ROK-1314 exists to remove.
+     */
+    itadLowestPrice: z.number().nullable().optional(),
+    /** ROK-1314: does the CURRENT viewer own this nominated game? */
+    currentUserOwns: z.boolean().optional(),
+    /** ROK-1314: has the CURRENT viewer wishlisted this nominated game? */
+    currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1375: the CURRENT viewer's lifetime Steam playtime for this game, in
+     * minutes, read from their synced library row (`game_interests` with
+     * `source='steam_library'`, `playtime_forever`). Pairs with
+     * `currentUserOwns` so the card can say "You own · 12h played".
+     *
+     * `null` when the viewer is signed in but does not own the game, or owns it
+     * with no synced playtime. OMITTED when there is no viewer. Additive — v1.
+     */
+    currentUserPlaytimeMinutes: z.number().int().nonnegative().nullable().optional(),
+    /**
+     * ROK-1314: the remaining co-op inputs and the shared card chrome, so a
+     * nomination card renders the same badges as Common Ground and `/games`.
+     * The card already warned "Fits N online / group is M" without showing the
+     * co-op badge that warning refers to.
+     */
+    cooptimusCouchMax: z.number().int().nullable().optional(),
+    cooptimusComboCoop: z.boolean().nullable().optional(),
+    earlyAccess: z.boolean().optional(),
+    genres: z.array(z.number()).optional(),
+    rating: z.number().nullable().optional(),
+    aggregatedRating: z.number().nullable().optional(),
+});
+
+export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;
+
+/** Full lineup detail including entries and vote tallies. */
+export const LineupDetailResponseSchema = z.object({
+    id: z.number(),
+    /** Operator-authored title shown in H1 / embeds (ROK-1063). */
+    title: z.string(),
+    /** Operator-authored markdown description (ROK-1063). */
+    description: z.string().nullable(),
+    status: LineupStatusSchema,
+    targetDate: z.string().nullable(),
+    decidedGameId: z.number().nullable(),
+    decidedGameName: z.string().nullable(),
+    linkedEventId: z.number().nullable(),
+    createdBy: LineupUserSchema,
+    votingDeadline: z.string().nullable(),
+    phaseDeadline: z.string().nullable(),
+    /**
+     * ROK-1253: When set, quorum has gone ready and the lineup will auto-advance
+     * at this wall-clock time unless quorum breaks first. ISO 8601 UTC.
+     */
+    pendingAdvanceAt: z.string().nullable(),
+    /**
+     * ROK-1253: Operator reverted the lineup at this timestamp; auto-advance
+     * is suppressed until the pause TTL elapses. ISO 8601 UTC. Operator-only
+     * visibility (clients render appropriate copy when set).
+     */
+    autoAdvancePausedAt: z.string().nullable(),
+    matchThreshold: z.number().nullable(),
+    /** Max votes each player can cast during voting (ROK-976). */
+    maxVotesPerPlayer: z.number(),
+    /** Default tiebreaker mode for deadline expiry (ROK-938). */
+    defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable(),
+    entries: z.array(LineupEntryResponseSchema),
+    totalVoters: z.number(),
+    totalMembers: z.number(),
+    /** Game IDs the current user has voted for (ROK-936). */
+    myVotes: z.array(z.number()),
+    /**
+     * ROK-1474: the viewer's OWN top pick, or null if they starred nothing.
+     *
+     * Viewer-scoped by design: this is the only star information an open
+     * ballot discloses. It is always a member of `myVotes` — starring writes
+     * `rank = 1` onto an approval row, inserting one if needed (D2).
+     */
+    myTopPickGameId: z.number().nullable(),
+    /**
+     * ROK-1474: why the decided game won, when a star broke an approval tie
+     * — e.g. `tied on votes 5-5, won on top picks 4-1`. Null for a clean
+     * win, for an operator's hand pick, and for any lineup still voting.
+     * DERIVED from the frozen vote rows on every read; never stored.
+     */
+    decisionReason: z.string().nullable(),
+    /** Count of members without a linked Steam account (ROK-993). */
+    unlinkedSteamCount: z.number(),
+    /** Members without a linked Steam account (ROK-993, operator-only). */
+    unlinkedSteamMembers: z.array(z.object({ id: z.number(), displayName: z.string() })),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    /** Active tiebreaker detail, null when no tiebreaker (ROK-938). */
+    tiebreaker: z.unknown().nullable().optional(),
+    /** Per-lineup Discord channel override ID (ROK-1064), null when unset. */
+    channelOverrideId: z.string().nullable(),
+    /**
+     * Pre-resolved Discord channel name for the detail header badge (ROK-1064).
+     * Null when no override set, or when override set but channel no longer
+     * visible to the bot.
+     */
+    channelOverrideName: z.string().nullable(),
+    /** Lineup visibility — 'public' or 'private' (ROK-1065). */
+    visibility: LineupVisibilitySchema,
+    /** Explicit invitees when visibility === 'private' (ROK-1065). */
+    invitees: z.array(LineupInviteeResponseSchema),
+    /**
+     * Invitees who still owe their full vote allotment during the voting phase
+     * (ROK-1258). Backs the "Still waiting on N voters" panel for private
+     * lineups. Always present — empty array for public lineups, non-voting
+     * states, or when nobody is outstanding.
+     */
+    stillWaitingOnVoters: z.array(LineupInviteeResponseSchema),
+    /** Public-share toggle (ROK-1067) — only applicable to public lineups. */
+    publicShareEnabled: z.boolean(),
+    /** URL-safe slug used for the public share link (ROK-1067). */
+    publicSlug: z.string(),
+    /**
+     * Whether this lineup advances into a scheduling poll after Decided
+     * (ROK-1302). When false, the decided page hides the per-match
+     * "Pick a time" CTA and no scheduling poll exists. Pre-ROK-1302 rows
+     * backfill to true (existing behavior).
+     */
+    includeSchedulingPhase: z.boolean(),
+    /**
+     * ROK-1444: early-advance target as a percentage of `nominationCap`.
+     * Null when the lineup uses deadline-only advancement.
+     */
+    nominationTargetPct: z.number().nullable(),
+    /**
+     * ROK-1444: the DENOMINATOR the target is measured against —
+     * `max(20, distinctNominators * 5)`. Published because it moves: a fifth
+     * nominator raises it 20 -> 25, which changes how many games the lineup
+     * needs. Clients render "<entries> / <nominationCap>" so the bar people
+     * are nominating toward is never implicit.
+     */
+    nominationCap: z.number().int().positive(),
+    /**
+     * ROK-1444: set when an operator reverted `voting -> building`. While
+     * non-null the count target is permanently disarmed and the lineup
+     * advances only by deadline or manual action. Never auto-cleared.
+     */
+    nominationTargetDisarmedAt: z.string().nullable(),
+    /**
+     * ROK-1444: whether the early-advance target is ARMED — i.e. the lineup has
+     * been observed below its target, which the rising-edge guard requires
+     * before it may fire. False for a carry-over-seeded lineup that started at
+     * or above its target: such a lineup will never advance early, so the UI
+     * must not promise "voting opens at N%".
+     */
+    nominationTargetArmed: z.boolean(),
+    /**
+     * Viewer's per-phase submission timestamps (ROK-1296, U4 SubmitBar).
+     * Both fields are ISO 8601 UTC strings or null. Populated for the
+     * authenticated caller from the `community_lineup_user_submissions` row
+     * scoped to (lineup, viewer). Always present in the response shape; an
+     * unauthenticated detail call (e.g. /public/...) yields both nulls.
+     */
+    viewerSubmissions: ViewerSubmissionsSchema,
+    /**
+     * Sv (ROK-1298) — total number of users *eligible* to vote on this
+     * lineup, used as the denominator for normalized vote bars. For private
+     * lineups this is creator + invitees count (deduped); for public
+     * lineups it is the membership count. Distinct from `totalVoters`
+     * (which only counts users who have cast >=1 vote) and `totalMembers`
+     * (which counts everyone regardless of lineup audience). Always
+     * `>= totalVoters`. Always `>= 1` (creator is always eligible).
+     */
+    votingEligibleCount: z.number().int().positive(),
+});
+
+export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
+
+/** Banner entry — lightweight game summary for the banner. */
+const LineupBannerEntrySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    ownerCount: z.number(),
+    voteCount: z.number(),
+});
+
+/** Lightweight banner data for the Games page hero. */
+export const LineupBannerResponseSchema = z.object({
+    id: z.number(),
+    /** Operator-authored title (ROK-1063). */
+    title: z.string(),
+    /** Operator-authored markdown description (ROK-1063). */
+    description: z.string().nullable(),
+    status: LineupStatusSchema,
+    targetDate: z.string().nullable(),
+    phaseDeadline: z.string().nullable(),
+    /** ROK-1253: When set, lineup will auto-advance at this wall-clock time. ISO 8601 UTC. */
+    pendingAdvanceAt: z.string().nullable(),
+    entryCount: z.number(),
+    totalVoters: z.number(),
+    totalMembers: z.number(),
+    /**
+     * ROK-1348: number of users eligible to vote on this lineup. Private =
+     * creator + invitees (deduped); public = totalMembers. Use this — not
+     * `totalMembers` — as the people-denominator so private lineups stop
+     * borrowing the whole community's count. Always `>= 1`.
+     */
+    votingEligibleCount: z.number().int().positive(),
+    decidedGameName: z.string().nullable(),
+    entries: z.array(LineupBannerEntrySchema),
+    /** Whether a tiebreaker is active on this lineup (ROK-938). */
+    tiebreakerActive: z.boolean().optional(),
+    /** Lineup visibility (ROK-1065). */
+    visibility: LineupVisibilitySchema,
+    /**
+     * ROK-1302: whether the lineup advances into a scheduling poll after
+     * Decided. Lets the game-detail decided banner drop "schedule a time"
+     * copy for terminal lineups. Optional + defaults true for back-compat.
+     */
+    includeSchedulingPhase: z.boolean().optional(),
+});
+
+export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;
+
+/** Lightweight lineup summary for lists. */
+export const LineupSummaryResponseSchema = z.object({
+    id: z.number(),
+    /** Operator-authored title (ROK-1063). */
+    title: z.string(),
+    status: LineupStatusSchema,
+    targetDate: z.string().nullable(),
+    entryCount: z.number(),
+    totalVoters: z.number(),
+    createdAt: z.string(),
+    /** Lineup visibility (ROK-1065). */
+    visibility: LineupVisibilitySchema,
+    /** Public-share toggle (ROK-1067). */
+    publicShareEnabled: z.boolean(),
+    /** URL-safe slug used for the public share link (ROK-1067). */
+    publicSlug: z.string(),
+});
+
+export type LineupSummaryResponseDto = z.infer<typeof LineupSummaryResponseSchema>;
+
+// ============================================================
+// Common Ground Schemas (ROK-934)
+// ============================================================
+
+/** Query params for the Common Ground endpoint. */
+export const CommonGroundQuerySchema = z.object({
+    /** Minimum library owners. 0 = show all games (including unowned). */
+    minOwners: z.coerce.number().int().min(0).max(15).default(2),
+    maxPlayers: z.coerce.number().int().positive().optional(),
+    /**
+     * ROK-1400: minimum online co-op group size the game must support.
+     * **Co-Optimus-verified only** — the server applies
+     * `cooptimus_online_max >= minOnlineCoop`, so:
+     *   - a positive `cooptimus_online_max` is the ONLY way to match
+     *   - `0` fails (synced: this game has no online co-op)
+     *   - `NULL` fails (never synced / unverified)
+     *
+     * IGDB `playerCount.max` is a LOBBY-SIZE estimate, not a co-op
+     * capability, and NEVER satisfies this filter — deliberate, after PvP
+     * titles passed a "4+ co-op" filter through an earlier fallback. See the
+     * comment in `api/src/lineups/common-ground-query.helpers.ts`. Note this
+     * diverges from `resolvePlayerCap` (ROK-1411), which does fall back
+     * because it answers a display question.
+     *
+     * Optional + additive — absent leaves the result set unchanged.
+     */
+    minOnlineCoop: z.coerce.number().int().min(1).optional(),
+    genre: z.string().optional(),
+    /** Case-insensitive game name search (ILIKE). */
+    search: z.string().max(100).optional(),
+    // ROK-1297 round 5k: bumped from 50/50 → 500/300 so the operator's
+    // "infinite scroll" expectation lands without hitting the bottom of
+    // the catalogue after ~50 tiles. True cursor-paginated infinite
+    // scroll is tracked separately; this is the immediate fix.
+    limit: z.coerce.number().int().min(1).max(500).default(300),
+    /**
+     * Explicit lineup to score against (ROK-1065).
+     * When omitted the server falls back to the newest public building lineup.
+     */
+    lineupId: z.coerce.number().int().positive().optional(),
+});
+
+export type CommonGroundQueryDto = z.infer<typeof CommonGroundQuerySchema>;
+
+/** Body for nominating a game into a lineup. */
+export const NominateGameSchema = z.object({
+    gameId: z.number().int().positive(),
+    note: z.string().max(200).optional(),
+});
+
+/** Body for casting / toggling a vote on a nominated game (ROK-936). */
+export const CastVoteSchema = z.object({
+    gameId: z.number().int().positive(),
+});
+
+export type CastVoteDto = z.infer<typeof CastVoteSchema>;
+
+export type NominateGameDto = z.infer<typeof NominateGameSchema>;
+
+/**
+ * Per-game score breakdown (ROK-950). `total` equals the top-level `score`
+ * field for back-compat; downstream consumers should prefer the breakdown
+ * when reasoning about individual factors.
+ */
+export const CommonGroundScoreBreakdownSchema = z.object({
+    baseScore: z.number(),
+    tasteScore: z.number(),
+    socialScore: z.number(),
+    intensityScore: z.number(),
+    total: z.number(),
+});
+
+export type CommonGroundScoreBreakdownDto = z.infer<
+    typeof CommonGroundScoreBreakdownSchema
+>;
+
+/**
+ * ROK-1297 (S1 Nominating composite) — themed-row classification for the
+ * multi-row Common Ground hero. The server tags each tile with the bucket
+ * that won its score breakdown so the client can lay out Owned / Taste /
+ * Trending rows deterministically.
+ */
+export const CommonGroundThemeSchema = z.enum([
+    'owned',
+    'taste',
+    'trending',
+    /**
+     * ROK-1538: games this lineup's exact COHORT (its roster —
+     * `{createdBy} ∪ invitees ∪ nominators ∪ voters`) has already resolved
+     * together in a PRIOR lineup. Sourced from
+     * `community_lineup_cohort_memory`, not from the score breakdown, so it
+     * is assigned explicitly rather than by `classifyTheme`. Renders as the
+     * FIRST themed row of the Common Ground hero.
+     */
+    'cohort',
+]);
+
+export type CommonGroundTheme = z.infer<typeof CommonGroundThemeSchema>;
+
+/** A single game in the Common Ground response. */
+export const CommonGroundGameSchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+    ownerCount: z.number(),
+    wishlistCount: z.number(),
+    nonOwnerPrice: z.number().nullable(),
+    itadCurrentCut: z.number().nullable(),
+    itadCurrentShop: z.string().nullable(),
+    itadCurrentUrl: z.string().nullable(),
+    /**
+     * ROK-1297 round-3 (2026-05-18): historical lowest price the game has
+     * been observed at via ITAD. Used by the Common Ground card to switch
+     * the sale badge to "Best Price" when current ≤ lowest. Optional for
+     * deployment-skew compatibility — legacy responses render the standard
+     * -X% badge.
+     */
+    itadLowestPrice: z.number().nullable().optional(),
+    earlyAccess: z.boolean(),
+    itadTags: z.array(z.string()),
+    playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max` — the Co-Optimus-verified
+     * online co-op cap. Positive = render the `👥 N co-op` pill; `0` (synced,
+     * no online co-op) and `null` (never synced) render NOTHING. Never falls
+     * back to IGDB `playerCount` — a lobby size is not a co-op capability.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
+    /** ROK-1401: RAW `games.cooptimus_couch_max` — `>= 2` means local co-op. */
+    cooptimusCouchMax: z.number().int().nullable().optional(),
+    /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
+    cooptimusComboCoop: z.boolean().nullable().optional(),
+    score: z.number(),
+    /** ROK-950: per-factor score breakdown (taste, social, intensity, base). */
+    scoreBreakdown: CommonGroundScoreBreakdownSchema.optional(),
+    /**
+     * ROK-1297 (S1) — themed-row bucket for the Nominating composite.
+     * Optional for backward compatibility: legacy clients render a single
+     * unthemed row when absent.
+     */
+    theme: CommonGroundThemeSchema.optional(),
+    /**
+     * ROK-1297 (S1) — short human-readable rationale ("12 of you own this",
+     * "Matches your sci-fi/co-op cluster"). Server fills; client never
+     * concocts its own. Capped at 80 chars.
+     */
+    whyReason: z.string().max(80).optional(),
+    /**
+     * ROK-1314: does the CURRENT viewer own this game? Resolved from the
+     * already-aggregated `ownerUserIds` in the Common Ground query — no extra
+     * round trip. Unauthenticated viewers always get `false`.
+     */
+    currentUserOwns: z.boolean().optional(),
+    /** ROK-1314: has the CURRENT viewer wishlisted this game? */
+    currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314 "unify up" (operator decision 2026-09-01): the same card chrome
+     * the `/games` surfaces render — genre pill, cover rating badge, and the
+     * rating/mode info bar. Common Ground never carried these, which is why the
+     * two surfaces still looked distinct after the badge row was unified.
+     *
+     * All four already exist on the `games` table; the Common Ground query
+     * simply never selected them. Optional (never `.default()`, which would
+     * make the inferred output type required and break existing DTO literals).
+     */
+    genres: z.array(z.number()).optional(),
+    rating: z.number().nullable().optional(),
+    aggregatedRating: z.number().nullable().optional(),
+    gameModes: z.array(z.number()).optional(),
+});
+
+export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;
+
+/** Full Common Ground response with metadata. */
+export const CommonGroundResponseSchema = z.object({
+    data: z.array(CommonGroundGameSchema),
+    meta: z.object({
+        total: z.number(),
+        appliedWeights: z.object({
+            ownerWeight: z.number(),
+            saleBonus: z.number(),
+            fullPricePenalty: z.number(),
+            /** ROK-950: cosine-similarity weight between game and voter taste vector. */
+            tasteWeight: z.number(),
+            /** ROK-950: weight applied when a co-play partner owns the game. */
+            socialWeight: z.number(),
+            /** ROK-950: weight applied when the game's intensity matches the voter's preferred intensity. */
+            intensityWeight: z.number(),
+        }),
+        activeLineupId: z.number(),
+        nominatedCount: z.number(),
+        maxNominations: z.number(),
+        /**
+         * Voting-eligibility size for the active lineup (ROK-1255).
+         * Private lineups: creator + invitees. Public lineups: union of
+         * nominators + voters + creator. Used by the panel's player-count
+         * filter to auto-set on first mount.
+         */
+        participantCount: z.number(),
+        /**
+         * ROK-1400: whether ANY game in the catalogue has been synced with
+         * Co-Optimus yet (`cooptimus_synced_at IS NOT NULL`). The co-op
+         * group-size filter is Co-Optimus-verified only, so before the first
+         * sync it could only ever return zero rows — the client keeps the
+         * whole control dormant until this flips true. Optional so existing
+         * fixtures and older clients stay valid; treat absent as `false`.
+         */
+        coopDataAvailable: z.boolean().optional(),
+    }),
+});
+
+export type CommonGroundResponseDto = z.infer<typeof CommonGroundResponseSchema>;

@@ -1,0 +1,71 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchApi } from '../lib/api-client';
+import { toast } from '../lib/toast';
+
+interface BrandingData {
+    communityName: string | null;
+    communityLogoUrl: string | null;
+    /** ROK-1778: optional contact email for the public /privacy page. */
+    privacyContactEmail?: string | null;
+}
+
+/** PATCH /admin/branding body — only the fields being changed. */
+export interface BrandingUpdate {
+    communityName?: string;
+    /** ROK-1778: '' clears it. */
+    privacyContactEmail?: string;
+}
+
+/**
+ * Fetch branding settings from the system branding endpoint (ROK-271, ROK-877).
+ * This is a public endpoint - no auth required.
+ */
+async function fetchBranding(): Promise<BrandingData> {
+    return fetchApi<BrandingData>('/system/branding');
+}
+
+/**
+ * Hook for managing community branding settings (ROK-271).
+ */
+function useBrandingMutations() {
+    const queryClient = useQueryClient();
+    const onBrandingSuccess = (data: BrandingData, msg: string) => {
+        queryClient.setQueryData(['system', 'branding'], data);
+        void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        toast.success(msg);
+    };
+
+    const updateBranding = useMutation({
+        mutationFn: (data: BrandingUpdate) =>
+            fetchApi<BrandingData>('/admin/branding', { method: 'PATCH', body: JSON.stringify(data) }),
+        onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Branding updated'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to update branding'),
+    });
+
+    const uploadLogo = useMutation({
+        mutationFn: (file: File) => {
+            const formData = new FormData();
+            formData.append('logo', file);
+            return fetchApi<BrandingData>('/admin/branding/logo', { method: 'POST', body: formData });
+        },
+        onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Logo uploaded'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to upload logo'),
+    });
+
+    const resetBranding = useMutation({
+        mutationFn: () => fetchApi<BrandingData>('/admin/branding/reset', { method: 'POST' }),
+        onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Branding reset to defaults'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to reset branding'),
+    });
+
+    return { updateBranding, uploadLogo, resetBranding };
+}
+
+export function useBranding() {
+    const brandingQuery = useQuery({
+        queryKey: ['system', 'branding'],
+        queryFn: fetchBranding,
+        staleTime: 60_000,
+    });
+    return { brandingQuery, ...useBrandingMutations() };
+}

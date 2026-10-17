@@ -1,0 +1,352 @@
+/**
+ * Demo-mode taste-profile signal generator (ROK-1083).
+ *
+ * Produces per-user weekly + daily game activity rollups and
+ * steam-library-flavoured game interests so the aggregator pipeline
+ * derives varied intensity tiers (Hardcore / Dedicated / Regular / Casual)
+ * and vector titles across the demo population. Without this step the
+ * demo users have zero playtime signal and everyone resolves to Casual.
+ */
+import type { Rng } from './demo-data-rng';
+import { defined } from '../common/defined.helpers';
+import { pickN, randInt, weightedPick } from './demo-data-rng';
+import { IGDB_GAME_WEIGHTS } from './demo-data-generator-templates';
+
+/** Taste-profile intensity tier label (matches contract `IntensityTier`). */
+export type TasteIntensityTier =
+  'Hardcore' | 'Dedicated' | 'Regular' | 'Casual';
+
+export interface TasteTierProfile {
+  /** Weekly hours range (inclusive) this tier plays across all games. */
+  weeklyHours: [number, number];
+  /** How many "favourite" games the user plays in a given week. */
+  gameCount: [number, number];
+  /** Unique-ownership multiplier used for playtime_forever (all-time minutes). */
+  lifetimeMultiplier: number;
+}
+
+/**
+ * Per-tier playtime shape. Tuned so the aggregator's intensity-rollup
+ * bucketing lands in the matching tier: Hardcore ≥ 85, Dedicated 60-84,
+ * Regular 35-59, Casual < 35 after the community-relative percentile rank.
+ */
+export const TASTE_TIER_PROFILES: Record<TasteIntensityTier, TasteTierProfile> =
+  {
+    Hardcore: {
+      weeklyHours: [28, 45],
+      gameCount: [3, 5],
+      lifetimeMultiplier: 80,
+    },
+    Dedicated: {
+      weeklyHours: [14, 26],
+      gameCount: [2, 4],
+      lifetimeMultiplier: 40,
+    },
+    Regular: {
+      weeklyHours: [6, 12],
+      gameCount: [2, 3],
+      lifetimeMultiplier: 15,
+    },
+    Casual: {
+      weeklyHours: [1, 4],
+      gameCount: [1, 2],
+      lifetimeMultiplier: 4,
+    },
+  };
+
+/** Weighted tier distribution — hits all four tiers on ~100 demo users. */
+const TIER_WEIGHTS: Array<{ tier: TasteIntensityTier; weight: number }> = [
+  { tier: 'Hardcore', weight: 3 },
+  { tier: 'Dedicated', weight: 6 },
+  { tier: 'Regular', weight: 7 },
+  { tier: 'Casual', weight: 4 },
+];
+
+export interface SignalProfileEntry {
+  username: string;
+  tier: TasteIntensityTier;
+  /** IGDB IDs the user actively plays this week. */
+  favouriteIgdbIds: number[];
+  /** Hours to spread across the favourite games this week. */
+  weeklyHours: number;
+}
+
+export interface GeneratedGameActivityRollup {
+  username: string;
+  igdbId: number;
+  period: 'day' | 'week';
+  periodStart: Date;
+  totalSeconds: number;
+}
+
+export interface GeneratedPlayhistoryInterest {
+  username: string;
+  igdbId: number;
+  source: 'steam_library';
+  playtimeForever: number;
+  playtime2weeks: number;
+}
+
+/** Pick a tier using the community-wide distribution. */
+function pickTier(rng: Rng): TasteIntensityTier {
+  const weights = TIER_WEIGHTS.map((t) => t.weight);
+  return weightedPick(rng, TIER_WEIGHTS, weights).tier;
+}
+
+/**
+ * Assemble a per-user signal profile: tier, chosen games, weekly hours.
+ * The choice of games uses the same weighted pool as other demo flows
+ * so popular MMOs get more volume and genre spread remains believable.
+ */
+export function generateSignalProfiles(
+  rng: Rng,
+  usernames: string[],
+): SignalProfileEntry[] {
+  const gameWeights = IGDB_GAME_WEIGHTS.map((g) => g.weight);
+  const gamePool = IGDB_GAME_WEIGHTS.map((g) => Number(g.igdbId));
+  return usernames.map((username) => {
+    const tier = pickTier(rng);
+    const profile = TASTE_TIER_PROFILES[tier];
+    const gameCount = randInt(rng, profile.gameCount[0], profile.gameCount[1]);
+    const weeklyHours = randInt(
+      rng,
+      profile.weeklyHours[0],
+      profile.weeklyHours[1],
+    );
+    const favouriteIgdbIds = pickWeightedUnique(
+      rng,
+      gamePool,
+      gameWeights,
+      gameCount,
+    );
+    return { username, tier, favouriteIgdbIds, weeklyHours };
+  });
+}
+
+/**
+ * Weighted sample without replacement — returns `count` unique IGDB IDs.
+ *
+ * ROK-1105: uses a Fenwick (binary-indexed) partial-sum tree so each draw
+ * is an O(log n) prefix-sum binary search plus an O(log n) weight removal,
+ * replacing the previous O(pool) rescan-and-splice per pick. One `rng()`
+ * call per pick, exactly like before. Exported for direct spec coverage.
+ */
+export function pickWeightedUnique(
+  rng: Rng,
+  pool: number[],
+  weights: number[],
+  count: number,
+): number[] {
+  const want = Math.min(count, pool.length);
+  const live = weights.slice(0, pool.length);
+  const tree = buildPrefixSumTree(live);
+  const taken = new Array<boolean>(pool.length).fill(false);
+  const picked: number[] = [];
+  while (picked.length < want) {
+    const total = prefixSumTotal(tree);
+    if (total <= 0) break;
+    const idx = findByPrefixSum(tree, rng() * total);
+    picked.push(defined(pool[idx], `weighted pool entry ${idx}`));
+    taken[idx] = true;
+    // Past the end of `live` the old `-undefined` delta was an empty loop.
+    const weight = live[idx];
+    if (weight !== undefined) addToPrefixSum(tree, idx, -weight);
+    live[idx] = 0;
+  }
+  // Only zero-weight entries remain (count >= positive pool): fill in pool
+  // order, matching the previous implementation's exhaustion behavior —
+  // including its one rng() draw per pick, so the shared seeded stream
+  // stays in sync for every generator downstream of this call.
+  for (const [i, value] of pool.entries()) {
+    if (picked.length >= want) break;
+    if (taken[i]) continue;
+    rng();
+    picked.push(value);
+  }
+  return picked;
+}
+
+/** Build a 1-indexed Fenwick tree of partial sums over `weights`. */
+function buildPrefixSumTree(weights: number[]): number[] {
+  const tree = new Array<number>(weights.length + 1).fill(0);
+  for (const [k, weight] of weights.entries()) {
+    const i = k + 1;
+    tree[i] = nodeAt(tree, i) + weight;
+    const parent = i + (i & -i);
+    if (parent < tree.length) {
+      tree[parent] = nodeAt(tree, parent) + nodeAt(tree, i);
+    }
+  }
+  return tree;
+}
+
+/** Fenwick node `i`; every caller has already bounded `0 < i < length`. */
+function nodeAt(tree: number[], i: number): number {
+  return defined(tree[i], `prefix-sum node ${i}`);
+}
+
+/** Add `delta` to the weight at 0-based index `idx`. */
+function addToPrefixSum(tree: number[], idx: number, delta: number): void {
+  for (let i = idx + 1; i < tree.length; i += i & -i) {
+    tree[i] = nodeAt(tree, i) + delta;
+  }
+}
+
+/** Sum of all weights currently in the tree. */
+function prefixSumTotal(tree: number[]): number {
+  let total = 0;
+  for (let i = tree.length - 1; i > 0; i -= i & -i) total += nodeAt(tree, i);
+  return total;
+}
+
+/**
+ * Prefix-sum binary search (Fenwick descent): returns the 0-based index of
+ * the first entry whose running cumulative weight strictly exceeds
+ * `target`. Requires `0 <= target < total`, which guarantees the hit has a
+ * positive weight — already-picked (zeroed) entries are never re-selected.
+ */
+function findByPrefixSum(tree: number[], target: number): number {
+  let pos = 0;
+  let remaining = target;
+  let step = 1;
+  while (step * 2 < tree.length) step *= 2;
+  for (; step > 0; step = Math.floor(step / 2)) {
+    const next = pos + step;
+    if (next >= tree.length) continue;
+    const weight = nodeAt(tree, next);
+    if (weight <= remaining) {
+      pos = next;
+      remaining -= weight;
+    }
+  }
+  return pos;
+}
+
+/** Monday-floor date for `game_activity_rollups.period_start` week rows. */
+export function currentWeekStart(now: Date): Date {
+  const d = new Date(now);
+  const day = d.getDay();
+  d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Daily floor (midnight local). */
+function floorDay(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+/**
+ * Produce the current-week rollup plus 28 prior days of daily rollups so
+ * the intensity rollup's `last4wHours` signal is non-zero. Total weekly
+ * hours are spread proportionally across the user's favourite games.
+ */
+export function generateGameActivityRollups(
+  profiles: SignalProfileEntry[],
+  now: Date,
+): GeneratedGameActivityRollup[] {
+  const rows: GeneratedGameActivityRollup[] = [];
+  const weekStart = currentWeekStart(now);
+  for (const p of profiles) {
+    if (p.favouriteIgdbIds.length === 0) continue;
+    const perGameSeconds = splitSecondsAcrossGames(
+      p.weeklyHours * 3600,
+      p.favouriteIgdbIds.length,
+    );
+    p.favouriteIgdbIds.forEach((igdbId, idx) => {
+      const weeklySeconds = defined(perGameSeconds[idx], `game ${idx} seconds`);
+      if (weeklySeconds <= 0) return;
+      rows.push({
+        username: p.username,
+        igdbId,
+        period: 'week',
+        periodStart: weekStart,
+        totalSeconds: weeklySeconds,
+      });
+      rows.push(
+        ...emitDailyRollups(p.username, igdbId, weeklySeconds, weekStart, now),
+      );
+    });
+  }
+  return rows;
+}
+
+/** Split `totalSeconds` across `count` games with a mild front-bias. */
+function splitSecondsAcrossGames(
+  totalSeconds: number,
+  count: number,
+): number[] {
+  if (count === 1) return [totalSeconds];
+  const weights = Array.from({ length: count }, (_, i) => count - i);
+  const weightTotal = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => Math.round((totalSeconds * w) / weightTotal));
+}
+
+/** Emit 4 prior weeks of daily-period rollups averaging the weekly total. */
+function emitDailyRollups(
+  username: string,
+  igdbId: number,
+  weeklySeconds: number,
+  weekStart: Date,
+  now: Date,
+): GeneratedGameActivityRollup[] {
+  const rows: GeneratedGameActivityRollup[] = [];
+  const dailySeconds = Math.max(0, Math.round(weeklySeconds / 7));
+  if (dailySeconds === 0) return rows;
+  for (let dayOffset = 1; dayOffset <= 28; dayOffset++) {
+    const day = new Date(weekStart);
+    day.setDate(day.getDate() - dayOffset);
+    if (day >= now) continue;
+    rows.push({
+      username,
+      igdbId,
+      period: 'day',
+      periodStart: floorDay(day),
+      totalSeconds: dailySeconds,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Enrich game interests with steam-library playtime fields so the
+ * aggregator's `steamOwnership` signal path produces non-zero axis values.
+ * Adds 1–3 extra "owned but barely played" games per user to make the
+ * profile feel more like a real library.
+ */
+export function generatePlayhistoryInterests(
+  rng: Rng,
+  profiles: SignalProfileEntry[],
+): GeneratedPlayhistoryInterest[] {
+  const rows: GeneratedPlayhistoryInterest[] = [];
+  const gamePool = IGDB_GAME_WEIGHTS.map((g) => Number(g.igdbId));
+  for (const p of profiles) {
+    const tierProfile = TASTE_TIER_PROFILES[p.tier];
+    const weeklyMinutes = p.weeklyHours * 60;
+    for (const igdbId of p.favouriteIgdbIds) {
+      rows.push({
+        username: p.username,
+        igdbId,
+        source: 'steam_library',
+        playtimeForever: Math.round(
+          weeklyMinutes * tierProfile.lifetimeMultiplier,
+        ),
+        playtime2weeks: weeklyMinutes * 2,
+      });
+    }
+    const owned = pickN(rng, gamePool, randInt(rng, 1, 3));
+    for (const igdbId of owned) {
+      if (p.favouriteIgdbIds.includes(igdbId)) continue;
+      rows.push({
+        username: p.username,
+        igdbId,
+        source: 'steam_library',
+        playtimeForever: randInt(rng, 30, 600),
+        playtime2weeks: 0,
+      });
+    }
+  }
+  return rows;
+}

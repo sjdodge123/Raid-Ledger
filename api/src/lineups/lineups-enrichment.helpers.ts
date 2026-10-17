@@ -1,0 +1,205 @@
+/**
+ * Enrichment helpers for lineup detail responses (ROK-935).
+ * Provides batch queries for ownership, wishlist, pricing, and member counts.
+ */
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** Pricing data for a single game. */
+export interface GamePricing {
+  itadCurrentPrice: number | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  /** ROK-1314: historical low, so the card can resolve `best-price`. */
+  itadLowestPrice: number | null;
+}
+
+/**
+ * Count how many users own each game (source=steam_library).
+ * Returns a Map of gameId to owner count.
+ *
+ * ROK-1348 (Codex P2): optional `userIds` restricts the count to a specific
+ * audience (private lineup = creator + invitees) so a private lineup's
+ * non-owner math never mixes community-wide owners with the private pool.
+ */
+export async function countOwnersPerGame(
+  db: Db,
+  gameIds: number[],
+  userIds?: number[],
+): Promise<Map<number, number>> {
+  if (gameIds.length === 0) return new Map();
+  if (userIds && userIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      gameId: schema.gameInterests.gameId,
+      count: sql<number>`count(*)::int`.as('count'),
+    })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        inArray(schema.gameInterests.gameId, gameIds),
+        eq(schema.gameInterests.source, 'steam_library'),
+        userIds ? inArray(schema.gameInterests.userId, userIds) : undefined,
+      ),
+    )
+    .groupBy(schema.gameInterests.gameId);
+
+  return new Map(rows.map((r) => [r.gameId, r.count]));
+}
+
+/**
+ * Count how many users have each game on their Steam wishlist.
+ * Returns a Map of gameId to wishlist count.
+ */
+export async function countWishlistPerGame(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, number>> {
+  if (gameIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      gameId: schema.gameInterests.gameId,
+      count: sql<number>`count(*)::int`.as('count'),
+    })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        inArray(schema.gameInterests.gameId, gameIds),
+        eq(schema.gameInterests.source, 'steam_wishlist'),
+      ),
+    )
+    .groupBy(schema.gameInterests.gameId);
+
+  return new Map(rows.map((r) => [r.gameId, r.count]));
+}
+
+/**
+ * Fetch ITAD pricing metadata for a batch of games.
+ * Returns a Map of gameId to pricing data.
+ */
+export async function fetchPricingMetadata(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, GamePricing>> {
+  if (gameIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      id: schema.games.id,
+      itadCurrentPrice: schema.games.itadCurrentPrice,
+      itadCurrentCut: schema.games.itadCurrentCut,
+      itadCurrentShop: schema.games.itadCurrentShop,
+      itadCurrentUrl: schema.games.itadCurrentUrl,
+      itadLowestPrice: schema.games.itadLowestPrice,
+    })
+    .from(schema.games)
+    .where(inArray(schema.games.id, gameIds));
+
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      {
+        itadCurrentPrice: r.itadCurrentPrice
+          ? Number(r.itadCurrentPrice)
+          : null,
+        itadCurrentCut: r.itadCurrentCut,
+        itadCurrentShop: r.itadCurrentShop,
+        itadCurrentUrl: r.itadCurrentUrl,
+        itadLowestPrice: r.itadLowestPrice ? Number(r.itadLowestPrice) : null,
+      },
+    ]),
+  );
+}
+
+/**
+ * Count total registered community members.
+ */
+export async function countTotalMembers(db: Db): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int`.as('count') })
+    .from(schema.users);
+
+  return row?.count ?? 0;
+}
+
+/** Member without a linked Steam account. */
+export interface UnlinkedSteamMember {
+  id: number;
+  displayName: string;
+}
+
+/**
+ * Audience scope for steam-link helpers (ROK-1252). Public lineups query
+ * community-wide; private lineups restrict to creator + invitees.
+ */
+export interface LineupAudience {
+  visibility: 'public' | 'private';
+  createdBy: number;
+  inviteeUserIds: number[];
+}
+
+/** Resolve the distinct id set for a private audience (creator ∪ invitees). */
+function audienceIds(audience: LineupAudience): number[] {
+  return Array.from(new Set([audience.createdBy, ...audience.inviteeUserIds]));
+}
+
+/**
+ * Count members without a linked Steam account, scoped to the lineup
+ * audience (ROK-993, ROK-1252).
+ */
+export async function countUnlinkedSteamMembers(
+  db: Db,
+  audience: LineupAudience,
+): Promise<number> {
+  if (audience.visibility === 'private') {
+    const ids = audienceIds(audience);
+    if (ids.length === 0) return 0;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int`.as('count') })
+      .from(schema.users)
+      .where(and(inArray(schema.users.id, ids), isNull(schema.users.steamId)));
+    return Number(row?.count ?? 0);
+  }
+
+  const rows = (await db.execute(sql`
+    SELECT count(*)::int AS count FROM users WHERE steam_id IS NULL
+  `)) as unknown as { count: number }[];
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * Find members without a linked Steam account, scoped to the lineup
+ * audience (ROK-993, ROK-1252).
+ */
+export async function findUnlinkedSteamMembers(
+  db: Db,
+  audience: LineupAudience,
+): Promise<UnlinkedSteamMember[]> {
+  if (audience.visibility === 'private') {
+    const ids = audienceIds(audience);
+    if (ids.length === 0) return [];
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        displayName:
+          sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
+            'display_name',
+          ),
+      })
+      .from(schema.users)
+      .where(and(inArray(schema.users.id, ids), isNull(schema.users.steamId)));
+    return rows.map((r) => ({ id: r.id, displayName: r.displayName }));
+  }
+
+  const rows = (await db.execute(sql`
+    SELECT id, COALESCE(display_name, username) AS display_name
+    FROM users WHERE steam_id IS NULL
+  `)) as unknown as { id: number; display_name: string }[];
+  return rows.map((r) => ({ id: r.id, displayName: r.display_name }));
+}

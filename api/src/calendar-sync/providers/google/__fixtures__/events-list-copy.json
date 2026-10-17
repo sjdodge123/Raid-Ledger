@@ -1,0 +1,22 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p33f9vfiq1nsuo0g\"",
+  "summary": "Raid Ledger",
+  "updated": "2026-10-11T12:00:00.000Z",
+  "timeZone": "UTC",
+  "accessRole": "owner",
+  "defaultReminders": [],
+  "items": [
+    {
+      "kind": "calendar#event",
+      "etag": "\"3381234567890000\"",
+      "id": "fixtureevt0001",
+      "status": "confirmed",
+      "summary": "Molten Core",
+      "transparency": "opaque",
+      "start": { "dateTime": "2026-10-20T19:00:00Z", "timeZone": "UTC" },
+      "end": { "dateTime": "2026-10-20T22:00:00Z", "timeZone": "UTC" },
+      "extendedProperties": { "private": { "rlCopyId": "rl:0123456789ab:42:7" } }
+    }
+  ]
+}

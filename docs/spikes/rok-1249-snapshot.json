@@ -1,0 +1,553 @@
+{
+  "capturedAt": "2026-05-09T18:06:17.432Z",
+  "reason": "socket hang up",
+  "context": {
+    "method": "POST",
+    "url": "/lineups/24/vote",
+    "elapsedMs": 2
+  },
+  "pid": 62150,
+  "postgresPool": {
+    "configuredMax": 10,
+    "probe": {
+      "count": "8"
+    }
+  },
+  "bullmqWorkers": [
+    {
+      "name": "SteamSyncProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "LineupPhaseProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "EnrichmentsProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "DepartureGraceProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "EventLifecycleProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "AdHocGracePeriodProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "EmbedSyncProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "IgdbSyncProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "ItadPriceSyncProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "GameTasteRecomputeProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "EventPlansProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "BenchPromotionProcessor",
+      "isRunning": null,
+      "isPaused": null
+    },
+    {
+      "name": "DiscordNotificationProcessor",
+      "isRunning": null,
+      "isPaused": null
+    }
+  ],
+  "activeHandles": {
+    "handles": [
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      },
+      {
+        "constructorName": "Server",
+        "summary": ""
+      },
+      {
+        "constructorName": "Socket",
+        "summary": ""
+      }
+    ],
+    "requests": []
+  },
+  "cronJobs": [
+    {
+      "name": "ActiveEventCacheService_refresh",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "NotificationService_cleanupExpiredNotifications",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "EventReminderService_handleReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "PostEventReminderService_handlePostEventReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "LiveNoShowService_checkNoShows",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "RecruitmentReminderService_checkAndSendReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "SchedulingThresholdService_checkThresholds",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "GameActivityService_sweepStaleSessions",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "GameActivityService_dailyRollup",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "VoiceAttendanceService_snapshotOnEventStart",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "VoiceAttendanceService_classifyCompletedEvents",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "EventAutoExtendService_checkExtensions",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "AdHocReaperService_reapOrphans",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "EmbedSchedulerService_handleScheduledEmbeds",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "ScheduledEventService_startScheduledEvents",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "ScheduledEventService_completeScheduledEvents",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "ScheduledEventReconciliation_reconcileMissing",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "SessionCleanupService_cleanupExpiredSessions",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "IntentTokenCleanupService_cleanupExpiredTokens",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "ItadPriceSyncService_syncPricing",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "GameTasteService_aggregateGameVectors",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "IgdbService_handleScheduledSync",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "LineupReminderService_checkVoteReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "LineupReminderService_checkSchedulingReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "LineupReminderService_checkNominationReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "LineupReminderService_checkTiebreakerReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "TasteProfileService_aggregateVectors",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "TasteProfileService_buildCoPlayGraph",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "TasteProfileService_weeklyIntensityRollup",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "StandalonePollReminderService_runReminders",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "CommunityInsightsService_refreshSnapshot",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "SlowQueriesCron_appendDigest",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "RelayService_handleHeartbeat",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "VersionCheckService_handleCron",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "BackupService_dailyBackup",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "SteamSyncProcessor_scheduledSync",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "DiscoveryCategoriesService_weeklyGenerate",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "blizzard:character-auto-sync",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    },
+    {
+      "name": "blizzard:boss-data-refresh",
+      "isActive": false,
+      "lastDate": null,
+      "nextDate": null
+    }
+  ],
+  "redisMockStore": {
+    "totalKeys": 4,
+    "prefixes": {
+      "lineup-steam-nudge": {
+        "count": 1,
+        "sample": [
+          "lineup-steam-nudge:24:52"
+        ]
+      },
+      "lineup-created": {
+        "count": 1,
+        "sample": [
+          "lineup-created:24"
+        ]
+      },
+      "lineup-voting": {
+        "count": 1,
+        "sample": [
+          "lineup-voting:24"
+        ]
+      },
+      "lineup-vote-dm": {
+        "count": 1,
+        "sample": [
+          "lineup-vote-dm:24:52:2026-05-11T18:06:17.266Z"
+        ]
+      }
+    }
+  }
+}

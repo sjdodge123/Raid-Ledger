@@ -1,0 +1,252 @@
+/**
+ * API Client barrel -- re-exports all domain API modules.
+ * Import from here for backward compatibility.
+ */
+
+// Core
+export { fetchApi } from './api/fetch-api';
+
+// Avatar
+export {
+    uploadAvatar,
+    deleteCustomAvatar,
+    adminRemoveAvatar,
+} from './api/avatar-api';
+
+// Events, Signups, Attendance, Roster
+export type { EventListParams, RosterAvailabilityParams } from './api/events-api';
+export {
+    getEvents,
+    getEvent,
+    getEventRoster,
+    getEventDetail,
+    getEventVariantContext,
+    createEvent,
+    updateEvent,
+    cancelEvent,
+    deleteEvent,
+    getMyDashboard,
+    signupForEvent,
+    cancelSignup,
+    confirmSignup,
+    updateSignupStatus,
+    redeemIntent,
+    recordAttendance,
+    getAttendanceSummary,
+    getRosterWithAssignments,
+    updateRoster,
+    selfUnassignFromRoster,
+    adminRemoveUserFromEvent,
+    getRosterAvailability,
+    getAggregateGameTime,
+    rescheduleEvent,
+} from './api/events-api';
+
+// Games
+export {
+    searchGames,
+    fetchGameRegistry,
+    getGameEventTypes,
+    getGameActivity,
+    getGameNowPlaying,
+    getGamePricing,
+    getGamePricingBatch,
+    getGameBySteamAppId,
+} from './api/games-api';
+
+// Characters
+export {
+    getMyCharacters,
+    createCharacter,
+    updateCharacter,
+    setMainCharacter,
+    deleteCharacter,
+    getUserCharacters,
+    getCharacterDetail,
+} from './api/characters-api';
+
+// Availability
+export type { AvailabilityQueryParams } from './api/availability-api';
+export {
+    getMyAvailability,
+    createAvailability,
+    updateAvailability,
+    deleteAvailability,
+} from './api/availability-api';
+
+// Users, Management, Discord link
+export {
+    getPlayers,
+    getRecentPlayers,
+    getUserProfile,
+    getUserHeartedGames,
+    getUserSteamLibrary,
+    getUserSteamWishlist,
+    getUserEventSignups,
+    getUserActivity,
+    getUsersForManagement,
+    updateUserRole,
+    deleteMyAccount,
+    adminRemoveUser,
+    adminReactivateUser,
+    adminKickUser,
+    adminUnkickUser,
+    adminBanUser,
+    adminUnbanUser,
+    adminGetUserActions,
+    unlinkDiscord,
+    getTasteProfile,
+} from './api/users-api';
+
+// Preferences
+export {
+    getMyPreferences,
+    updatePreference,
+} from './api/preferences-api';
+
+// Game Time
+export {
+    getMyGameTime,
+    saveMyGameTime,
+    saveMyGameTimeOverrides,
+    confirmMyGameTime,
+    createGameTimeAbsence,
+    deleteGameTimeAbsence,
+    ignoreAbsence,
+    getGameTimeAbsences,
+} from './api/game-time-api';
+
+// Event Templates
+export {
+    getEventTemplates,
+    createEventTemplate,
+    deleteEventTemplate,
+} from './api/templates-api';
+
+// Plugin Admin
+export {
+    getPlugins,
+    installPlugin,
+    uninstallPlugin,
+    activatePlugin,
+    deactivatePlugin,
+} from './api/plugins-api';
+
+// Discord / PUGs / Invite Codes
+export type { DiscordMemberSearchResult } from './api/discord-api';
+export {
+    getEventPugs,
+    createEventInviteLink,
+    createPugSlot,
+    updatePugSlot,
+    deletePugSlot,
+    inviteMember,
+    listDiscordMembers,
+    searchDiscordMembers,
+    resolveInviteCode,
+    claimInviteCode,
+    shareEventToDiscord,
+    regeneratePugInviteCode,
+} from './api/discord-api';
+
+// Event Plans
+export {
+    getTimeSuggestions,
+    createEventPlan,
+    getMyEventPlans,
+    getEventPlan,
+    cancelEventPlan,
+    getEventPlanPollResults,
+    restartEventPlan,
+    convertEventToPlan,
+} from './api/event-plans-api';
+
+// Event Series (ROK-429)
+export {
+    updateSeries,
+    deleteSeries,
+    cancelSeries,
+} from './api/event-series-api';
+
+// Analytics
+export {
+    getAttendanceTrends,
+    getUserReliability,
+    getGameAttendance,
+    getEventMetrics,
+} from './api/analytics-api';
+
+// Lineups (ROK-934, ROK-935)
+export type {
+    CommonGroundParams,
+    CreateLineupParams,
+    UpdateLineupMetadataParams,
+} from './api/lineups-api';
+export {
+    getActiveLineups,
+    getCommonGround,
+    nominateGame,
+    getLineupBanner,
+    getLineupById,
+    getLineupParticipants,
+    removeNomination,
+    createLineup,
+    transitionLineupStatus,
+    toggleVote,
+    setStar,
+    updateLineupMetadata,
+    addLineupInvitees,
+    removeLineupInvitee,
+    abortLineup,
+    togglePublicShare,
+    getPublicLineup,
+} from './api/lineups-api';
+
+// Activity Log (ROK-930)
+export {
+    getLineupActivity,
+    getEventActivity,
+} from './api/activity-log-api';
+
+// Lineup Matches (ROK-989)
+export {
+    getLineupMatches,
+    joinMatch,
+    advanceMatch,
+} from './api/lineups-matches-api';
+
+// Lineup Scheduling (ROK-965)
+export {
+    getSchedulePoll,
+    suggestSlot,
+    toggleScheduleVote,
+    createEventFromSlot,
+    retractAllVotes,
+    getMatchAvailability,
+    getSchedulingBanner,
+    getOtherPolls,
+    cancelSchedulePoll,
+    remindVoters,
+    rallyNonVoters,
+    addPollMembers,
+} from './api/scheduling-api';
+
+// Standalone Scheduling Polls (ROK-977)
+export {
+    createSchedulingPoll,
+    getActiveStandalonePolls,
+    completeStandalonePoll,
+    getPollSharePreview,
+    joinPollShare,
+    resetPollShareToken,
+} from './api/standalone-poll-api';
+
+// Tiebreaker (ROK-938)
+export {
+    getTiebreakerDetail,
+    startTiebreaker,
+    dismissTiebreaker,
+    castBracketVote,
+    castVeto,
+    forceResolveTiebreaker,
+} from './api/tiebreaker-api';

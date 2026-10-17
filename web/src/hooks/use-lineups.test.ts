@@ -1,0 +1,638 @@
+/**
+ * Tests for use-lineups hooks (ROK-934, ROK-1065).
+ * Validates useActiveLineups (array), useCommonGround, and useNominateGame.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { renderHook, waitFor, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createElement, type ReactNode } from 'react';
+
+// --- API client mocks ---
+const mockGetActiveLineups = vi.fn();
+const mockGetCommonGround = vi.fn();
+const mockNominateGame = vi.fn();
+const mockGetLineupBanner = vi.fn();
+const mockGetLineupById = vi.fn();
+const mockRemoveNomination = vi.fn();
+const mockToggleVote = vi.fn();
+const mockSetStar = vi.fn();
+const mockAddLineupInvitees = vi.fn();
+const mockRemoveLineupInvitee = vi.fn();
+const mockAbortLineup = vi.fn();
+const mockGetLineupParticipants = vi.fn();
+
+vi.mock('../lib/api-client', () => ({
+    getActiveLineups: (...args: unknown[]) => mockGetActiveLineups(...args),
+    getCommonGround: (...args: unknown[]) => mockGetCommonGround(...args),
+    nominateGame: (...args: unknown[]) => mockNominateGame(...args),
+    getLineupBanner: (...args: unknown[]) => mockGetLineupBanner(...args),
+    getLineupById: (...args: unknown[]) => mockGetLineupById(...args),
+    removeNomination: (...args: unknown[]) => mockRemoveNomination(...args),
+    toggleVote: (...args: unknown[]) => mockToggleVote(...args),
+    setStar: (...args: unknown[]) => mockSetStar(...args),
+    addLineupInvitees: (...args: unknown[]) => mockAddLineupInvitees(...args),
+    removeLineupInvitee: (...args: unknown[]) =>
+        mockRemoveLineupInvitee(...args),
+    abortLineup: (...args: unknown[]) => mockAbortLineup(...args),
+    getLineupParticipants: (...args: unknown[]) =>
+        mockGetLineupParticipants(...args),
+}));
+
+import {
+    useActiveLineups, useCommonGround, useNominateGame,
+    useLineupBanner, useLineupDetail, useRemoveNomination,
+    useToggleVote,
+    useSetStar,
+    useAddLineupInvitees, useRemoveLineupInvitee,
+    useAbortLineup,
+    useLineupParticipants,
+} from './use-lineups';
+
+// --- Helpers ---
+
+const ACTIVE_LINEUP_KEY = ['lineups', 'active'];
+const COMMON_GROUND_KEY = ['common-ground'];
+
+function createWrapper() {
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: { retry: false, gcTime: Infinity },
+            mutations: { retry: false },
+        },
+    });
+    function wrapper({ children }: { children: ReactNode }) {
+        return createElement(QueryClientProvider, { client: queryClient }, children);
+    }
+    return { queryClient, wrapper };
+}
+
+const mockLineupResponse = {
+    id: 1,
+    title: 'Test Lineup',
+    description: null,
+    status: 'building' as const,
+    targetDate: null,
+    decidedGameId: null,
+    decidedGameName: null,
+    linkedEventId: null,
+    createdBy: { id: 1, displayName: 'Admin' },
+    votingDeadline: null,
+    entries: [],
+    totalVoters: 0,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+    // ROK-1065
+    visibility: 'public' as const,
+    invitees: [],
+};
+
+const mockCommonGroundResponse = {
+    data: [
+        {
+            gameId: 42,
+            gameName: 'Valheim',
+            slug: 'valheim',
+            coverUrl: null,
+            ownerCount: 5,
+            wishlistCount: 2,
+            nonOwnerPrice: 19.99,
+            itadCurrentCut: 25,
+            itadCurrentShop: 'Steam',
+            itadCurrentUrl: null,
+            earlyAccess: false,
+            itadTags: [],
+            playerCount: null,
+            score: 80,
+        },
+    ],
+    meta: {
+        total: 1,
+        appliedWeights: { ownerWeight: 1, saleBonus: 0.5, fullPricePenalty: 0.2 },
+        activeLineupId: 1,
+        nominatedCount: 0,
+        maxNominations: 10,
+    },
+};
+
+// --- Tests ---
+
+describe('useActiveLineups (ROK-1065)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    const mockSummaryRow = {
+        id: 1,
+        title: 'Weekend Raid',
+        status: 'building' as const,
+        targetDate: null,
+        entryCount: 0,
+        totalVoters: 0,
+        createdAt: '2026-03-01T00:00:00Z',
+        visibility: 'public' as const,
+    };
+
+    it('returns lineup array on success', async () => {
+        const { wrapper } = createWrapper();
+        mockGetActiveLineups.mockResolvedValue([mockSummaryRow]);
+
+        const { result } = renderHook(() => useActiveLineups(), { wrapper });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual([mockSummaryRow]);
+        expect(mockGetActiveLineups).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns error state when API call fails', async () => {
+        const { wrapper } = createWrapper();
+        mockGetActiveLineups.mockRejectedValue(new Error('Boom'));
+
+        const { result } = renderHook(() => useActiveLineups(), { wrapper });
+
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toBeInstanceOf(Error);
+    });
+});
+
+describe('useAddLineupInvitees / useRemoveLineupInvitee (ROK-1065)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('add invitees calls API with lineupId + userIds', async () => {
+        mockAddLineupInvitees.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useAddLineupInvitees(), {
+            wrapper,
+        });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, userIds: [5, 7] });
+        });
+        expect(mockAddLineupInvitees).toHaveBeenCalledWith(1, [5, 7]);
+    });
+
+    it('remove invitee calls API with lineupId + userId', async () => {
+        mockRemoveLineupInvitee.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useRemoveLineupInvitee(), {
+            wrapper,
+        });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, userId: 5 });
+        });
+        expect(mockRemoveLineupInvitee).toHaveBeenCalledWith(1, 5);
+    });
+});
+
+describe('useCommonGround', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('returns common ground data on success', async () => {
+        const { wrapper } = createWrapper();
+        mockGetCommonGround.mockResolvedValue(mockCommonGroundResponse);
+
+        const params = { minOwners: 3 };
+        const { result } = renderHook(
+            () => useCommonGround(params),
+            { wrapper },
+        );
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual(mockCommonGroundResponse);
+        expect(mockGetCommonGround).toHaveBeenCalledWith(params);
+    });
+
+    it('includes params in the query key', async () => {
+        const { wrapper, queryClient } = createWrapper();
+        mockGetCommonGround.mockResolvedValue(mockCommonGroundResponse);
+
+        const params = { minOwners: 5, genre: 'RPG' };
+        const { result } = renderHook(
+            () => useCommonGround(params),
+            { wrapper },
+        );
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        // The cache entry should be keyed with the params
+        const cached = queryClient.getQueryData([...COMMON_GROUND_KEY, params]);
+        expect(cached).toEqual(mockCommonGroundResponse);
+    });
+
+    it('does not fetch when enabled is false', async () => {
+        const { wrapper } = createWrapper();
+
+        const { result } = renderHook(
+            () => useCommonGround({ minOwners: 2 }, false),
+            { wrapper },
+        );
+
+        // Wait a tick to ensure no async query fires
+        await new Promise((r) => setTimeout(r, 50));
+        expect(result.current.fetchStatus).toBe('idle');
+        expect(mockGetCommonGround).not.toHaveBeenCalled();
+    });
+
+    it('fetches with different params producing separate cache entries', async () => {
+        const { wrapper, queryClient } = createWrapper();
+        const response1 = { ...mockCommonGroundResponse, meta: { ...mockCommonGroundResponse.meta, total: 5 } };
+        const response2 = { ...mockCommonGroundResponse, meta: { ...mockCommonGroundResponse.meta, total: 3 } };
+
+        mockGetCommonGround.mockResolvedValueOnce(response1);
+        mockGetCommonGround.mockResolvedValueOnce(response2);
+
+        const params1 = { minOwners: 2 };
+        const params2 = { minOwners: 4 };
+
+        const { result: r1 } = renderHook(
+            () => useCommonGround(params1),
+            { wrapper },
+        );
+        await waitFor(() => expect(r1.current.isSuccess).toBe(true));
+
+        const { result: r2 } = renderHook(
+            () => useCommonGround(params2),
+            { wrapper },
+        );
+        await waitFor(() => expect(r2.current.isSuccess).toBe(true));
+
+        // Both cache entries should exist independently
+        expect(queryClient.getQueryData([...COMMON_GROUND_KEY, params1])).toEqual(response1);
+        expect(queryClient.getQueryData([...COMMON_GROUND_KEY, params2])).toEqual(response2);
+    });
+});
+
+describe('useNominateGame', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('calls nominateGame with lineupId and body', async () => {
+        const { wrapper } = createWrapper();
+        mockNominateGame.mockResolvedValue(mockLineupResponse);
+
+        const { result } = renderHook(() => useNominateGame(), { wrapper });
+
+        await act(async () => {
+            await result.current.mutateAsync({
+                lineupId: 1,
+                body: { gameId: 42 },
+            });
+        });
+
+        expect(mockNominateGame).toHaveBeenCalledWith(1, { gameId: 42 });
+    });
+
+    it('invalidates lineup and common-ground queries on success', async () => {
+        const { wrapper, queryClient } = createWrapper();
+        mockNominateGame.mockResolvedValue(mockLineupResponse);
+
+        // Seed query caches so invalidation can be observed
+        queryClient.setQueryData([...ACTIVE_LINEUP_KEY], mockLineupResponse);
+        queryClient.setQueryData([...COMMON_GROUND_KEY, { minOwners: 2 }], mockCommonGroundResponse);
+
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+        const { result } = renderHook(() => useNominateGame(), { wrapper });
+
+        await act(async () => {
+            await result.current.mutateAsync({
+                lineupId: 1,
+                body: { gameId: 42 },
+            });
+        });
+
+        // Should invalidate all lineup queries via prefix
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+
+        // Should invalidate the common-ground key prefix
+        const commonGroundCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(COMMON_GROUND_KEY),
+        );
+        expect(commonGroundCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not invalidate queries on mutation error', async () => {
+        const { wrapper, queryClient } = createWrapper();
+        mockNominateGame.mockRejectedValue(new Error('Conflict'));
+
+        queryClient.setQueryData([...ACTIVE_LINEUP_KEY], mockLineupResponse);
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+        const { result } = renderHook(() => useNominateGame(), { wrapper });
+
+        await act(async () => {
+            try {
+                await result.current.mutateAsync({
+                    lineupId: 1,
+                    body: { gameId: 99 },
+                });
+            } catch {
+                // Expected — mutation should fail
+            }
+        });
+
+        expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+});
+
+const mockBanner = {
+    id: 1,
+    status: 'building' as const,
+    targetDate: '2026-03-28',
+    entryCount: 5,
+    totalVoters: 3,
+    totalMembers: 10,
+    decidedGameName: null,
+    entries: [{ gameId: 42, gameName: 'Valheim', gameCoverUrl: null, ownerCount: 5, voteCount: 2 }],
+};
+
+describe('useLineupBanner', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('fetches banner data on mount', async () => {
+        mockGetLineupBanner.mockResolvedValue(mockBanner);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupBanner(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual(mockBanner);
+        expect(mockGetLineupBanner).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles null response', async () => {
+        mockGetLineupBanner.mockResolvedValue(null);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupBanner(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toBeNull();
+    });
+
+    describe('smoke banner scope', () => {
+        /** The key the hook reads; scripts/smoke/api-helpers.ts writes it. */
+        const SMOKE_KEY = 'rl:smoke-banner-lineup';
+        afterEach(() => { sessionStorage.clear(); });
+
+        it('reads the same key the smoke helpers write', () => {
+            // No import links the two sides, so a rename on either one would
+            // silently unscope every banner-backed smoke page.
+            const helpers = readFileSync(
+                resolve(__dirname, '../../../scripts/smoke/api-helpers.ts'),
+                'utf8',
+            );
+            const smokeKey = /const BANNER_SCOPE_KEY = '([^']+)'/.exec(helpers)?.[1];
+            expect(smokeKey).toBe(SMOKE_KEY);
+        });
+
+        it('scopes the fetch to the sessionStorage lineup id', async () => {
+            sessionStorage.setItem(SMOKE_KEY, '42');
+            mockGetLineupBanner.mockResolvedValue(mockBanner);
+            const { wrapper } = createWrapper();
+            const { result } = renderHook(() => useLineupBanner(), { wrapper });
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(mockGetLineupBanner).toHaveBeenCalledWith(42);
+        });
+
+        it('fetches unscoped when the key is absent', async () => {
+            mockGetLineupBanner.mockResolvedValue(mockBanner);
+            const { wrapper } = createWrapper();
+            const { result } = renderHook(() => useLineupBanner(), { wrapper });
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(mockGetLineupBanner).toHaveBeenCalledWith(undefined);
+        });
+
+        it('ignores a non-numeric sessionStorage value', async () => {
+            sessionStorage.setItem(SMOKE_KEY, 'abc');
+            mockGetLineupBanner.mockResolvedValue(mockBanner);
+            const { wrapper } = createWrapper();
+            const { result } = renderHook(() => useLineupBanner(), { wrapper });
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(mockGetLineupBanner).toHaveBeenCalledWith(undefined);
+        });
+    });
+});
+
+describe('useLineupDetail', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('fetches detail when id is provided', async () => {
+        mockGetLineupById.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupDetail(1), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual(mockLineupResponse);
+        expect(mockGetLineupById).toHaveBeenCalledWith(1);
+    });
+
+    it('does not fetch when id is undefined', () => {
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupDetail(undefined), { wrapper });
+        expect(result.current.isFetching).toBe(false);
+        expect(mockGetLineupById).not.toHaveBeenCalled();
+    });
+});
+
+describe('useRemoveNomination', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls removeNomination with lineupId and gameId', async () => {
+        mockRemoveNomination.mockResolvedValue(undefined);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useRemoveNomination(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(mockRemoveNomination).toHaveBeenCalledWith(1, 42);
+    });
+
+    it('invalidates lineup queries on success', async () => {
+        mockRemoveNomination.mockResolvedValue(undefined);
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useRemoveNomination(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(invalidateSpy).toHaveBeenCalled();
+    });
+});
+
+describe('useToggleVote', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls toggleVote with lineupId and gameId', async () => {
+        mockToggleVote.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(mockToggleVote).toHaveBeenCalledWith(1, 42);
+    });
+
+    it('invalidates lineup queries on success', async () => {
+        mockToggleVote.mockResolvedValue(mockLineupResponse);
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('rejects on failure', async () => {
+        mockToggleVote.mockRejectedValue(new Error('Vote limit'));
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await expect(
+            act(() => result.current.mutateAsync({ lineupId: 1, gameId: 99 })),
+        ).rejects.toThrow('Vote limit');
+    });
+});
+
+describe('useAbortLineup (ROK-1062)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls abortLineup with lineupId and body', async () => {
+        mockAbortLineup.mockResolvedValue({ ...mockLineupResponse, status: 'archived' });
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useAbortLineup(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({
+                lineupId: 1,
+                body: { reason: 'wrong scope' },
+            });
+        });
+        expect(mockAbortLineup).toHaveBeenCalledWith(1, { reason: 'wrong scope' });
+    });
+
+    it('invalidates lineup detail and lineups prefix on success', async () => {
+        mockAbortLineup.mockResolvedValue({ ...mockLineupResponse, status: 'archived' });
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useAbortLineup(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({
+                lineupId: 7,
+                body: { reason: null },
+            });
+        });
+        const detailCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) =>
+                JSON.stringify(opts?.queryKey) ===
+                JSON.stringify(['lineups', 'detail', 7]),
+        );
+        expect(detailCalls.length).toBeGreaterThanOrEqual(1);
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not invalidate queries on mutation error', async () => {
+        mockAbortLineup.mockRejectedValue(new Error('Conflict'));
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useAbortLineup(), { wrapper });
+        await act(async () => {
+            try {
+                await result.current.mutateAsync({
+                    lineupId: 1,
+                    body: { reason: null },
+                });
+            } catch {
+                // expected
+            }
+        });
+        expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+});
+
+// ROK-1474 — the starred ballot. `useSetStar` is a sibling of `useToggleVote`
+// (same LINEUPS_PREFIX invalidation); `gameId: null` clears the star, which is
+// a first-class value, not an omitted argument.
+describe('useSetStar (ROK-1474)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls setStar with lineupId and gameId', async () => {
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(mockSetStar).toHaveBeenCalledWith(1, 42);
+    });
+
+    it('passes an explicit null through to clear the star', async () => {
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: null });
+        });
+        expect(mockSetStar).toHaveBeenCalledWith(1, null);
+    });
+
+    it('invalidates lineup queries on success', async () => {
+        mockSetStar.mockResolvedValue(mockLineupResponse);
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useSetStar(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe('useLineupParticipants (ROK-1557)', () => {
+    beforeEach(() => {
+        mockGetLineupParticipants.mockReset();
+        mockGetLineupParticipants.mockResolvedValue({ participants: [] });
+    });
+
+    it('requests the nomination-phase roster when no matchId is given', async () => {
+        const { result } = renderHook(() => useLineupParticipants(5), {
+            wrapper: createWrapper().wrapper,
+        });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(mockGetLineupParticipants).toHaveBeenCalledWith(5, undefined);
+    });
+
+    it('passes matchId through so the roster answers the scheduling poll', async () => {
+        const { result } = renderHook(() => useLineupParticipants(5, 12), {
+            wrapper: createWrapper().wrapper,
+        });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(mockGetLineupParticipants).toHaveBeenCalledWith(5, 12);
+    });
+
+    it('caches the match roster under its own query key', async () => {
+        const { wrapper } = createWrapper();
+        const nomination = renderHook(() => useLineupParticipants(5), { wrapper });
+        await waitFor(() =>
+            expect(nomination.result.current.isSuccess).toBe(true),
+        );
+
+        const match = renderHook(() => useLineupParticipants(5, 12), { wrapper });
+        await waitFor(() => expect(match.result.current.isSuccess).toBe(true));
+
+        expect(mockGetLineupParticipants).toHaveBeenCalledTimes(2);
+    });
+});

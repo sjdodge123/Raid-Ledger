@@ -1,0 +1,703 @@
+#!/usr/bin/env bash
+# Periodic sweeper. Runs every $SWEEP_INTERVAL_SECONDS inside the rl-gc-sweeper
+# container. Mounts /state from the host so it reads the canonical claims +
+# env-registry files.
+#
+# Responsibilities:
+#   1. Release slots whose last_heartbeat is older than $CLAIM_HEARTBEAT_TIMEOUT_SECONDS.
+#   2. Destroy envs whose age exceeds their declared TTL.
+#   3. Destroy orphaned env containers (no matching claim).
+#   4. Prune dangling images/volumes scoped to rl.role=* labels, then run the
+#      ROK-1568 disk-pressure ladder when the host is above RL_DISK_PRUNE_PCT.
+#   5. Append summary to audit log.
+set -euo pipefail
+
+# ROK-1331 M1: accept RL_STATE_DIR as a fallback so callers using the
+# orchestrator's canonical var name (test_helpers.sh, mcp-env tools) work
+# without re-exporting under the legacy STATE_DIR name.
+STATE_DIR="${STATE_DIR:-${RL_STATE_DIR:-/state}}"
+CLAIMS="${STATE_DIR}/claims.json"
+ENVS="${STATE_DIR}/env-registry.json"
+QUEUE="${STATE_DIR}/queue.json"
+AUDIT="${STATE_DIR}/audit.log"
+# ROK-1331 M11 — sibling perf log. Per-cycle structured stats land here so
+# dashboards can show "GC sweep took 280ms last cycle, reaped K envs".
+PERF_LOG="${PERF_LOG:-${STATE_DIR}/perf.log}"
+LOCK_DIR="${STATE_DIR}/locks"
+QUEUE_TTL_SECONDS="${QUEUE_TTL_SECONDS:-1800}"   # 30 min — stale waiters
+MAX_CLAIM_AGE_SECONDS="${MAX_CLAIM_AGE_SECONDS:-28800}"   # 8 hr — slot hoarding
+# ROK-1331 M1: default so the task-retention block (added below) can be
+# exercised by tests that don't supply the Dockerfile-provided env vars.
+# Default 30min (matches docker-compose). MCP agents can't heartbeat a held
+# claim during local-work gaps between fleet tasks; a 5min grace reclaimed live
+# slots mid-build. Dead slots still bounded by MAX_CLAIM_AGE + /opt preemption.
+CLAIM_HEARTBEAT_TIMEOUT_SECONDS="${CLAIM_HEARTBEAT_TIMEOUT_SECONDS:-1800}"
+mkdir -p "$LOCK_DIR"
+NOW_EPOCH=$(date -u +%s)
+NOW_ISO=$(date -u +%FT%TZ)
+
+# ROK-1331 M11 — cycle-level counters. Bumped by the reap branches below
+# and consumed by the gc.sweep.cycle perf emit at the end. Wallclock
+# timing uses python3 (portable across macOS bash 3.2 + Linux bash 5).
+# Emitted via EXIT trap so a partial cycle (docker daemon down, jq error,
+# anything that trips set -e) still surfaces "we ran" with the work done
+# up to the failure point — operators see the cycle terminated rather
+# than the sweeper silently going dark.
+CYCLE_START_MS=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$((NOW_EPOCH * 1000))")
+CYCLE_CLAIMS_SWEPT=0
+CYCLE_ENVS_REAPED=0
+CYCLE_TESTCONTAINERS_REAPED=0
+
+_emit_cycle_perf() {
+    local end_ms dur ts
+    end_ms=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(( $(date -u +%s) * 1000 ))")
+    dur=$(( end_ms - CYCLE_START_MS ))
+    (( dur < 0 )) && dur=0
+    ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+        || date -u +%FT%TZ)
+    jq -nc \
+        --arg ts "$ts" \
+        --argjson dur "$dur" \
+        --argjson cs "$CYCLE_CLAIMS_SWEPT" \
+        --argjson er "$CYCLE_ENVS_REAPED" \
+        --argjson tr "$CYCLE_TESTCONTAINERS_REAPED" \
+        '{ts:$ts, event:"gc.sweep.cycle", source:"orchestrator", agent_id:"sweeper", branch:"unknown", duration_ms:$dur, claims_swept:$cs, envs_reaped:$er, testcontainers_reaped:$tr}' \
+        >> "$PERF_LOG" 2>/dev/null || true
+}
+trap _emit_cycle_perf EXIT
+
+log() { echo "[$(date -u +%FT%TZ)] sweep: $*"; }
+
+# ROK-1331 M5a — flock shim mirror (matches _state.sh). flock(1) lives in
+# util-linux on the VM, but macOS test runners don't ship it. Without this
+# shim, the mutate() function below silently no-ops on macOS because flock
+# fails before jq can write the tmpfile. The shim lets the local test
+# harness exercise the reaper without flock; the VM keeps its real serializer.
+if ! command -v flock >/dev/null 2>&1; then
+    flock() { return 0; }
+fi
+
+# ROK-1331 M5a — portable ISO 8601 → epoch parser. GNU `date -d` is Linux-only;
+# macOS test runners (and any non-coreutils environment) fall back to python.
+iso_to_epoch() {
+    local iso="$1"
+    [[ -z "$iso" ]] && { echo 0; return; }
+    date -u -d "$iso" +%s 2>/dev/null \
+        || python3 -W ignore -c "import datetime,sys; print(int(datetime.datetime.fromisoformat('$iso'.replace('Z','+00:00')).timestamp()))" 2>/dev/null \
+        || echo 0
+}
+
+# When the sweeper reaps an env (orphan, unhealthy, TTL, or dead-claim
+# cascade), it also sweeps the test guild's leaked ⏰ voice channels for that
+# env's slot (ROK-1515, see sweeper_discord_sweep below) and drops the env's
+# test plan file. Without this, a tester
+# returning to fleet.gamernight.net would see a plan tied to a slug
+# that no longer maps to a running env — confusing + the deep links
+# would 502. Mirrors the cleanup env-destroy does for explicit teardowns.
+TEST_PLANS_DIR="${TEST_PLANS_DIR:-/state/test-plans}"
+TEST_PLAN_ATTACHMENTS_DIR="${TEST_PLAN_ATTACHMENTS_DIR:-/state/test-plan-attachments}"
+# Test plan auto-cleanup is DISABLED on reaper paths too (operator pref
+# 2026-05-19). When an env is destroyed by the sweeper, its plan + any
+# screenshot attachments are preserved for review. Operators clear
+# explicitly via rl_test_plan_clear when ready. The clean_test_plan
+# function stays as a no-op so callers in this script don't need touching.
+clean_test_plan() {
+    local _slug="$1"
+    return 0
+}
+
+audit() {
+    local outcome="$1"
+    # Don't use ${2:-{}} — bash parses the first `}` as end of expansion,
+    # leaving the second as literal text. Default + assign in two steps.
+    local extra="${2-}"
+    [[ -z "$extra" ]] && extra='{}'
+    jq -nc --arg ts "$NOW_ISO" --arg cmd "gc-sweep" --arg outcome "$outcome" \
+        --argjson extra "$extra" \
+        '{ts:$ts, cmd:$cmd, outcome:$outcome, agent:"sweeper"} + $extra' >> "$AUDIT"
+}
+
+mutate() {
+    local file="$1"; shift
+    local tmp
+    # tmpfile in the SAME directory as the target so:
+    #   1. mv is a same-fs rename (atomic + preserves the dir's setgid bit
+    #      so the new file inherits the rl-fleet group)
+    #   2. we don't cross from /tmp (root-owned, mode 600) to /state
+    #      (which would copy+unlink and leave the target as root:root 0600,
+    #      blocking the dashboard reader). Same fix already in _state.sh.
+    tmp=$(mktemp "${file}.XXXXXX")
+    (
+        flock -x 200
+        jq "$@" "$file" > "$tmp"
+        mv "$tmp" "$file"
+        chmod 664 "$file" 2>/dev/null || true
+    ) 200>"$LOCK_DIR/$(basename "$file").lock"
+}
+
+# 0. ROK-1331 M1 — task retention. Drop task JSON + log pairs for completed
+# tasks older than TASK_RETENTION_SECONDS (default 86400 = 24h). Running tasks
+# are preserved unconditionally — the sweeper never kills tasks. Orphan
+# recovery: if a running task's pidfile is missing or its mtime heartbeat is
+# stale, flip to failed with cancel_reason "orphaned" so the next sweeper pass
+# ages it out normally.
+#
+# ROK-1336 #3 — orphan detection uses the per-task pidfile written by the
+# supervisor in task-start, NOT `kill -0 $PID`. The sweeper runs in its own
+# PID namespace so the host PID stamped in tasks/<id>.json is never visible
+# here; the previous kill -0 check returned false for EVERY running task and
+# false-orphaned them after one sweep tick. The pidfile + mtime contract is
+# namespace-agnostic: supervisor touches the file every
+# RL_PIDFILE_HEARTBEAT_SECONDS (default 30s), sweeper requires the mtime to
+# be within PIDFILE_STALE_SECONDS (default 60s, ~2× the heartbeat).
+#
+# Runs BEFORE the docker-dependent sections so it works even when the docker
+# socket is unreachable (e.g. local test runs on the operator's Mac).
+TASK_RETENTION_SECONDS="${TASK_RETENTION_SECONDS:-86400}"
+TASKS_DIR="${TASKS_DIR:-/state/tasks}"
+PIDFILE_STALE_SECONDS="${PIDFILE_STALE_SECONDS:-60}"
+if [[ -d "$TASKS_DIR" ]]; then
+    for tjson in "$TASKS_DIR"/*.json; do
+        [[ -f "$tjson" ]] || continue
+        STATUS=$(jq -r '.status // "unknown"' "$tjson" 2>/dev/null || echo "unknown")
+        if [[ "$STATUS" == "running" ]]; then
+            PID=$(jq -r '.pid // empty' "$tjson" 2>/dev/null)
+            # PID empty → task is still initialising (supervisor hasn't
+            # stamped CMD_PID yet) OR is a legacy fixture without pid set.
+            # Preserve unconditionally — sweeper never racing with task-start.
+            if [[ -z "$PID" ]]; then
+                continue
+            fi
+            TID_BASE=$(basename "$tjson" .json)
+            PIDFILE="$TASKS_DIR/${TID_BASE}.pid"
+            ORPHAN_REASON=""
+            if [[ ! -f "$PIDFILE" ]]; then
+                ORPHAN_REASON="pidfile_missing"
+            else
+                # GNU stat first, BSD/macOS fallback (test runners on Mac).
+                PIDFILE_MTIME=$(stat -c %Y "$PIDFILE" 2>/dev/null || stat -f %m "$PIDFILE" 2>/dev/null || echo 0)
+                if (( NOW_EPOCH - PIDFILE_MTIME > PIDFILE_STALE_SECONDS )); then
+                    ORPHAN_REASON="pidfile_stale"
+                fi
+            fi
+            if [[ -n "$ORPHAN_REASON" ]]; then
+                ORPHAN_FINISHED=$(date -u +%FT%TZ)
+                # Route through mutate() so chmod 664 fires — without it,
+                # the post-orphan JSON ends up root:root 0600 (mktemp's
+                # default) and the non-root dashboard can no longer read it.
+                mutate "$tjson" --arg f "$ORPHAN_FINISHED" \
+                    '.status = "failed" | .cancel_reason = "orphaned" | (if .finished_at == null then .finished_at = $f else . end)'
+                ORPHAN_TID=$(jq -r '.task_id // "unknown"' "$tjson" 2>/dev/null)
+                audit task_orphaned "$(jq -nc --arg t "$ORPHAN_TID" --arg r "$ORPHAN_REASON" '{task_id:$t, reason:$r}')"
+                # Remove the stale pidfile if present so subsequent sweeps
+                # don't re-flag the same task.
+                rm -f "$PIDFILE" 2>/dev/null || true
+            fi
+            continue
+        fi
+        FINISHED=$(jq -r '.finished_at // empty' "$tjson" 2>/dev/null)
+        [[ -z "$FINISHED" ]] && continue
+        FINISHED_EPOCH=$(date -u -d "$FINISHED" +%s 2>/dev/null || \
+            date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$FINISHED" +%s 2>/dev/null || echo 0)
+        AGE=$(( NOW_EPOCH - FINISHED_EPOCH ))
+        if (( AGE >= TASK_RETENTION_SECONDS )); then
+            TID=$(jq -r '.task_id' "$tjson" 2>/dev/null || echo "")
+            rm -f "$tjson" "$TASKS_DIR/${TID}.log"
+            audit task_pruned "$(jq -nc --arg tid "$TID" --argjson age "$AGE" '{task_id:$tid, age_s:$age}')"
+        fi
+    done
+fi
+
+# ROK-1515 — the reap paths below must also sweep the shared Discord test
+# guild's leaked ⏰ voice channels, exactly as env-destroy does (ROK-1508).
+# The helper lives in the orchestrator's bin dir, mounted read-only at
+# $DISCORD_SWEEP_LIB_DIR (/orchestrator-lib in docker-compose.yml). Only the
+# two function-only files are sourced — NEVER _state.sh, which re-sources
+# /srv/rl-infra/.env, probes the docker socket proxy and mkdir's under
+# /srv/rl-infra/state. Absent mount (fresh deploy, local tests) → silent no-op:
+# the `[[ -r ]]` guard below simply skips the source.
+# The default is the path compose actually mounts. It used to fall back to
+# /orchestrator/bin, which was never mounted in this container (TDB:1101).
+DISCORD_SWEEP_LIB_DIR="${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}"
+SWEEP_DISCORD_READY=0
+if [[ -r "${DISCORD_SWEEP_LIB_DIR}/_bot_identity.sh" && -r "${DISCORD_SWEEP_LIB_DIR}/_discord_sweep.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${DISCORD_SWEEP_LIB_DIR}/_bot_identity.sh"
+    # shellcheck disable=SC1091
+    source "${DISCORD_SWEEP_LIB_DIR}/_discord_sweep.sh"
+    # The helper logs its count via `audit::log <cmd> <outcome> <json>`, guarded
+    # by `declare -F`; this sweeper's audit() is `audit <outcome> <extra>`.
+    # Define the shim ONLY when the lib was sourced so that guard stays honest.
+    audit::log() { audit "$2" "${3-}"; }
+    SWEEP_DISCORD_READY=1
+fi
+
+# Best-effort ⏰ sweep for one reaped env. Never fails the reap: the helper
+# itself returns 0 on every path, and the `|| true` covers a sourcing surprise.
+sweeper_discord_sweep() {
+    local slot="$1" slug="${2:-}"
+    (( SWEEP_DISCORD_READY )) || return 0
+    [[ "$slot" =~ ^[0-9]+$ ]] || { log "  discord sweep skipped for ${slug:-?} (no slot recorded)"; return 0; }
+    log "  discord sweep for slot $slot${slug:+ ($slug)}"
+    discord_sweep_ephemeral_voice "$slot" "$slug" || true
+    return 0
+}
+
+# A3-B P1 — work-liveness guard for the dead-claim reaper below.
+#
+# `claims[].last_heartbeat` tracks the CLAIMING AGENT, never the RUNNING WORK.
+# Only three things write it: orchestrator/bin/{claim,lease-advance,heartbeat},
+# and `heartbeat` is driven by the `rl` CLI's laptop-side daemon
+# (cli/rl::start_heartbeat_daemon). MCP-driven agents have no such daemon, and
+# task-start does not touch the field at all — so a 14-minute validate-ci run
+# routinely outlives CLAIM_HEARTBEAT_TIMEOUT_SECONDS while still executing, and
+# §1 below releases the slot AND destroys its envs mid-gate. Observed
+# 2026-09-03: slot 1 swept after its 18:37 heartbeat with rl_validate_ci tasks
+# still running; the env survived only because the agent happened to re-claim
+# the same agent_id.
+#
+# The fix does NOT make task-start stamp last_heartbeat: that would put two
+# different facts in one field, fake agent liveness for the hoard/expiry reapers,
+# and poison fleet-health's stale_heartbeat_slots. Instead the sweeper reads the
+# work-liveness signal that already exists and that §0 above already trusts —
+# one fact, one writer:
+#     claims[].last_heartbeat  -> agent liveness (claim / lease-advance / heartbeat)
+#     tasks/<id>.pid  mtime    -> work  liveness (touched by the task supervisor)
+#
+# DEAD-AGENT CASE (explicit): the pidfile is touched by the task's own
+# supervisor loop in task-start, not by the agent, so this protects a slot only
+# while the WORK is alive. If the agent dies but its task keeps running, the
+# slot is held until that task finishes — correct, it is doing real work. If the
+# work or its supervisor dies, the pidfile stops being touched, goes stale within
+# PIDFILE_STALE_SECONDS, §0 flips the task to failed/orphaned, and this guard
+# stops matching on the SAME sweep pass — the slot is reaped normally. A dead
+# agent therefore cannot leak a slot permanently.
+#
+# Deliberately scoped to §1 only. The hoard reaper (§1b', MAX_CLAIM_AGE_SECONDS)
+# and the claim-expiry reaper (§1d, past expires_at with a queued waiter) stay
+# unguarded on purpose: they are the ceilings that bound a pathological
+# never-ending task, and removing them would trade this sweep bug for the
+# permanent leak. `force-release` remains the operator override.
+TASK_LIVENESS_TASKS_DIR="${TASKS_DIR:-/state/tasks}"
+slot_running_task_ids() {
+    local slot="$1"
+    local found="" tjson tstatus tslot tid pidfile pmtime
+    [[ -d "$TASK_LIVENESS_TASKS_DIR" ]] || { echo ""; return 0; }
+    for tjson in "$TASK_LIVENESS_TASKS_DIR"/*.json; do
+        [[ -f "$tjson" ]] || continue
+        tstatus=$(jq -r '.status // "unknown"' "$tjson" 2>/dev/null || echo unknown)
+        [[ "$tstatus" == "running" ]] || continue
+        tslot=$(jq -r '.slot // empty' "$tjson" 2>/dev/null || echo "")
+        [[ "$tslot" == "$slot" ]] || continue
+        # Status alone is NOT protection — a `running` JSON whose supervisor
+        # died would hold the lease forever. Require the namespace-agnostic
+        # pidfile heartbeat §0 uses, with the same staleness threshold.
+        tid=$(basename "$tjson" .json)
+        pidfile="$TASK_LIVENESS_TASKS_DIR/${tid}.pid"
+        [[ -f "$pidfile" ]] || continue
+        pmtime=$(stat -c %Y "$pidfile" 2>/dev/null || stat -f %m "$pidfile" 2>/dev/null || echo 0)
+        (( NOW_EPOCH - pmtime > PIDFILE_STALE_SECONDS )) && continue
+        found+="${found:+ }$tid"
+    done
+    echo "$found"
+}
+
+# 1. Dead claims (heartbeat older than timeout).
+# ROK-1331 M5a — fix pre-existing missing-close-paren in the M1 jq (the
+# `((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | ... | tostring)`
+# expression needs ONE more `)` before the `| .slot` outdent so the
+# `and (...)` wrapping closes properly. Without it jq emits a compile error
+# that the `2>/dev/null || true` guard silently swallows — the dead-claim
+# reaper has been a no-op since M1 landed.
+DEAD_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$CLAIM_HEARTBEAT_TIMEOUT_SECONDS" \
+    '.[] | select(.claimed == true and .last_heartbeat != null
+        and ((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
+    ) | .slot' "$CLAIMS" 2>/dev/null || true)
+
+for slot in $DEAD_SLOTS; do
+    # A3-B P1 — never reap a slot that still has live work on it.
+    RUNNING_TIDS=$(slot_running_task_ids "$slot")
+    if [[ -n "$RUNNING_TIDS" ]]; then
+        log "skipping dead slot $slot (heartbeat expired) — task(s) still running: $RUNNING_TIDS"
+        audit dead_claim_skipped_running_task \
+            "$(jq -nc --argjson slot "$slot" --arg tids "$RUNNING_TIDS" \
+                '{slot:$slot, running_task_ids:($tids | split(" ")), reason:"work_liveness"}')"
+        continue
+    fi
+    log "releasing dead slot $slot (heartbeat expired)"
+    # Inline release: destroy envs labeled with this slot, clear claim record.
+    # ROK-1515 F1 — capture the list first (instead of piping straight into
+    # `while`) so we can tell "released a slot that had envs" from "released a
+    # slot that never spun one". The ⏰ sweep below is GUILD-WIDE, so firing it
+    # on an env-less release (the common validate-ci case) would delete a live
+    # sibling env's channels.
+    SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
+    while read -r slug cid; do
+        [[ -z "$slug" ]] && continue
+        log "  destroying env $slug (orphaned by dead claim)"
+        docker rm -f "$cid" >/dev/null 2>&1 || true
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        clean_test_plan "$slug"
+    done <<<"$SLOT_ENVS"
+    mutate "$CLAIMS" --argjson s "$slot" \
+        '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
+    audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
+    # Only when an env was actually destroyed — see the SLOT_ENVS comment above.
+    # `if` rather than `[[ … ]] && …`: under `set -e` a false AND-list mid-body
+    # would abort the whole sweeper cycle.
+    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
+    # Queued waiters are not promoted here. claim-wait wakes only on a change
+    # to the lease-queue dir, and this reaper writes claims.json, not that dir,
+    # so a queued waiter picks up the slot this freed on its next queue wake
+    # or, failing that, when its wait times out (TDB:1101).
+done
+
+# 1b'. Hoarded-slot reaper. Claims older than MAX_CLAIM_AGE_SECONDS get
+# released regardless of heartbeat — stops a "stuck-alive" agent from
+# holding a slot indefinitely. Operator can opt out per-claim with the
+# `--keep-alive` flag (sets claims[].keep_alive=true).
+#
+# ROK-1331 M5a (STRICT, architect 2026-05-20) — the legacy reaper now ONLY
+# fires when `expires_at IS NULL`. New M5a claims always populate
+# expires_at; their lifecycle is driven by the claim-expiry reaper (1d
+# below). Legacy rows from before M5a (or rows manually wiped) keep the
+# 8h fallback. Without this gate, M5a claims older than 8h would be
+# reaped despite still being within their 24h lease.
+HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AGE_SECONDS" \
+    '.[] | select(.claimed == true and (.keep_alive // false) == false and .started_at != null
+        and (.expires_at == null)
+        and ((($cutoff - ($tol|tonumber)) | tostring) > (.started_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
+    ) | .slot' "$CLAIMS" 2>/dev/null || true)
+for slot in $HOARDED_SLOTS; do
+    log "releasing hoarded slot $slot (claim age > ${MAX_CLAIM_AGE_SECONDS}s, keep_alive=false, expires_at=null)"
+    # ROK-1515 F1 — same capture-then-gate shape as §1 above.
+    SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
+    while read -r slug cid; do
+        [[ -z "$slug" ]] && continue
+        docker rm -f "$cid" >/dev/null 2>&1 || true
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+        clean_test_plan "$slug"
+    done <<<"$SLOT_ENVS"
+    mutate "$CLAIMS" --argjson s "$slot" \
+        '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false | .expires_at=null | .extends_count=0)'
+    audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
+    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
+done
+
+# 1d. ROK-1331 M5a — Claim-expiry reaper. Claims past `expires_at` get
+# released ONLY when there's a queued waiter for the slot (operator
+# quote: "leave up until an agent is queued"). When the queue is empty
+# AND the claim is past expiry, leave the env up + slot "claimed but
+# idle" — the next claim/release path inherits or destroys the envs when
+# someone arrives.
+LEASE_QUEUE_DIR="${LEASE_QUEUE_DIR:-${STATE_DIR}/lease-queue}"
+EXPIRED_SLOTS=$(jq -r --argjson now "$NOW_EPOCH" \
+    '.[] | select(.claimed == true and .expires_at != null
+        and (($now | tostring) > (.expires_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
+    ) | .slot' "$CLAIMS" 2>/dev/null || true)
+for slot in $EXPIRED_SLOTS; do
+    QFILE="${LEASE_QUEUE_DIR}/${slot}.json"
+    QLEN=0
+    if [[ -f "$QFILE" ]]; then
+        QLEN=$(jq 'length' "$QFILE" 2>/dev/null || echo 0)
+    fi
+    if (( QLEN == 0 )); then
+        # No queued waiter — defer; operator quote "leave up until queued".
+        continue
+    fi
+    log "releasing expired slot $slot (past expires_at, queue depth=$QLEN)"
+    # Preserve envs so the queue head can inherit them on branch-match.
+    SLOT_BRANCH=$(jq -r --argjson s "$slot" '.[] | select(.slot == $s) | .branch // ""' "$CLAIMS" 2>/dev/null || echo "")
+    if [[ -n "$SLOT_BRANCH" ]]; then
+        mutate "$ENVS" --argjson s "$slot" --arg b "$SLOT_BRANCH" \
+            'map(if .slot == $s then .claimable_by_next = true | .created_for_branch = $b else . end)'
+    fi
+    mutate "$CLAIMS" --argjson s "$slot" \
+        '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
+    audit claim_expired_released "$(jq -nc --argjson slot "$slot" --argjson q "$QLEN" '{slot:$slot, queue_depth:$q}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
+done
+
+# 1e. ROK-1331 M5a — Stale lease-queue heads. Drop entries whose
+# last_heartbeat is older than LEASE_HEAD_TIMEOUT_SECONDS so dead waiters
+# don't block the queue front indefinitely.
+LEASE_HEAD_TIMEOUT_SECONDS="${LEASE_HEAD_TIMEOUT_SECONDS:-300}"
+if [[ -d "$LEASE_QUEUE_DIR" ]]; then
+    for qfile in "$LEASE_QUEUE_DIR"/*.json; do
+        [[ -f "$qfile" ]] || continue
+        STALE_AGENTS=$(jq -r --argjson now "$NOW_EPOCH" --argjson tol "$LEASE_HEAD_TIMEOUT_SECONDS" \
+            '.[] | select(.last_heartbeat != null
+                and ((($now - ($tol|tonumber)) | tostring) > (.last_heartbeat | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
+            ) | .agent_id' "$qfile" 2>/dev/null || true)
+        for sa in $STALE_AGENTS; do
+            [[ -z "$sa" ]] && continue
+            mutate "$qfile" --arg a "$sa" 'map(select(.agent_id != $a))'
+            audit lease_head_evicted "$(jq -nc --arg agent "$sa" --arg file "$qfile" '{agent:$agent, queue_file:$file, reason:"stale_heartbeat"}')"
+        done
+    done
+fi
+
+# 1c. Stale queue entries. Waiters older than QUEUE_TTL_SECONDS get dropped
+# so dead callers don't block the queue head.
+STALE_WAITERS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$QUEUE_TTL_SECONDS" \
+    '.[] | select(.queued_at != null
+        and ((($cutoff - ($tol|tonumber)) | tostring) > (.queued_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
+    ) | .agent_id' "$QUEUE" 2>/dev/null || true)
+for waiter in $STALE_WAITERS; do
+    log "dropping stale queue entry: $waiter"
+    mutate "$QUEUE" --arg a "$waiter" 'map(select(.agent_id != $a))'
+    audit queue_waiter_expired "$(jq -nc --arg agent "$waiter" '{agent:$agent}')"
+done
+
+# 1b. Orphan / unhealthy envs. Two failure modes the sweeper catches:
+#   (a) env-registry.json has a slug whose containers don't exist (env-destroy
+#       crashed mid-way, or container was killed externally).
+#   (b) Allinone container exists but Docker marks it 'unhealthy' (nginx
+#       crashed inside, app boot failed, etc.) for >5 minutes — auto-destroy
+#       so the dashboard doesn't show a dead URL as "live".
+ENVS_REGISTERED=$(jq -r '.[] | .slug' "$ENVS" 2>/dev/null || true)
+for slug in $ENVS_REGISTERED; do
+    [[ -z "$slug" ]] && continue
+    APP="rl-env-${slug}-allinone"
+    if ! docker inspect "$APP" >/dev/null 2>&1; then
+        log "destroying orphan env $slug (registry entry exists but $APP container is gone)"
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+        # ROK-1515: read the slot BEFORE mutate deletes the registry row —
+        # there is no container left to read the rl.slot label from.
+        ORPHAN_SLOT=$(jq -r --arg slug "$slug" '.[] | select(.slug == $slug) | .slot // empty' "$ENVS" 2>/dev/null || echo "")
+        mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
+        clean_test_plan "$slug"
+        audit orphan_env_pruned "$(jq -nc --arg slug "$slug" '{slug:$slug, reason:"container_missing"}')"
+        CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
+        sweeper_discord_sweep "$ORPHAN_SLOT" "$slug"
+        continue
+    fi
+    HEALTH=$(docker inspect "$APP" --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
+    if [[ "$HEALTH" == "unhealthy" ]]; then
+        # Grace from spin time before reaping for unhealth. Bumped from
+        # 5min → 15min (2026-05-19): allinones with cold DB + migrations
+        # + first-load workers legitimately take >5min to come fully
+        # healthy on the smaller VM. Anything longer than 15min is
+        # almost certainly an app-level crash worth tearing down so the
+        # operator notices.
+        STARTED=$(docker inspect "$APP" --format '{{.State.StartedAt}}' 2>/dev/null || echo "")
+        STARTED_EPOCH=$(iso_to_epoch "$STARTED")
+        [[ "$STARTED_EPOCH" == "0" ]] && STARTED_EPOCH="$NOW_EPOCH"
+        UPTIME=$(( NOW_EPOCH - STARTED_EPOCH ))
+        if (( UPTIME >= 900 )); then
+            # ROK-1331 M5a — pin / active-claim guards. Pinned envs are
+            # protected from the unhealthy reaper until the 24h-idle ceiling
+            # hits (operator can still unpin to force-reap sooner). Envs
+            # whose owning slot has a fresh heartbeat (<5min) are also
+            # skipped — the slot is in active use; an intermittent
+            # health-check blip shouldn't yank it.
+            ENV_PINNED=$(jq -r --arg slug "$slug" '.[] | select(.slug == $slug) | .pinned // false' "$ENVS" 2>/dev/null || echo "false")
+            ENV_SLOT=$(jq -r --arg slug "$slug" '.[] | select(.slug == $slug) | .slot // empty' "$ENVS" 2>/dev/null || echo "")
+            LAST_TOUCHED=$(jq -r --arg slug "$slug" '.[] | select(.slug == $slug) | .last_touched // ""' "$ENVS" 2>/dev/null || echo "")
+            IDLE_SECONDS=0
+            if [[ -n "$LAST_TOUCHED" ]]; then
+                LT_EPOCH=$(iso_to_epoch "$LAST_TOUCHED")
+                [[ "$LT_EPOCH" == "0" ]] && LT_EPOCH="$NOW_EPOCH"
+                IDLE_SECONDS=$(( NOW_EPOCH - LT_EPOCH ))
+            fi
+            if [[ "$ENV_PINNED" == "true" ]] && (( IDLE_SECONDS < 86400 )); then
+                audit pinned_env_skipped "$(jq -nc --arg slug "$slug" --argjson uptime "$UPTIME" --argjson idle "$IDLE_SECONDS" '{slug:$slug, uptime_s:$uptime, idle_s:$idle, reason:"pinned"}')"
+                continue
+            fi
+            # Active-claim heartbeat guard: skip when the slot's claim has a
+            # heartbeat within the last 5 minutes.
+            if [[ -n "$ENV_SLOT" ]]; then
+                CLAIM_HB=$(jq -r --argjson s "$ENV_SLOT" '.[] | select(.slot == $s and .claimed == true) | .last_heartbeat // ""' "$CLAIMS" 2>/dev/null || echo "")
+                if [[ -n "$CLAIM_HB" ]]; then
+                    HB_EPOCH=$(iso_to_epoch "$CLAIM_HB")
+                    HB_AGE=$(( NOW_EPOCH - HB_EPOCH ))
+                    if (( HB_AGE < 300 )); then
+                        audit unhealthy_env_skipped_active_claim "$(jq -nc --arg slug "$slug" --argjson slot "$ENV_SLOT" --argjson hb_age "$HB_AGE" '{slug:$slug, slot:$slot, hb_age_s:$hb_age}')"
+                        continue
+                    fi
+                fi
+            fi
+            log "destroying unhealthy env $slug (allinone has been unhealthy for ${UPTIME}s)"
+            docker rm -f "$APP" "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+            docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+            rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+            mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
+            clean_test_plan "$slug"
+            audit unhealthy_env_pruned "$(jq -nc --arg slug "$slug" --argjson uptime "$UPTIME" '{slug:$slug, uptime_s:$uptime, reason:"unhealthy"}')"
+            CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
+            sweeper_discord_sweep "$ENV_SLOT" "$slug"
+        fi
+    fi
+done
+
+# 2. TTL-expired envs.
+#
+# ROK-1600 — the decision itself lives in _env_ttl.sh so it can be unit tested
+# without docker. Two behaviours it adds over the old label-only arithmetic:
+#   - the age clock is max(container label, env-registry last_touched), so a
+#     redeploy actually extends the env. env-spin REUSES the PG container
+#     (ENV_SPIN_PG_REUSED) and labels are immutable on standalone containers,
+#     so the PG's stale label used to reap freshly-redeployed envs.
+#   - an env whose test plans still have steps without a verdict gets
+#     TEST_PLAN_GRACE_HOURS of extra life, capped absolutely at ttl + grace so
+#     a forgotten plan delays the reap instead of blocking it forever.
+# Same mount resolution as the ⏰ Discord sweep and the disk ladder. If the
+# mount is missing we keep reaping on the old label-only rule (a sweeper that
+# stops reaping fills the host) but say so loudly every cycle.
+#
+# The grace is sanitized ONCE, here at the config edge. A suffixed value
+# (`24h` — the style used three lines away in `rl.ttl=24h`) or any other
+# non-integer would blow up `$(( ttl + grace ))` inside the decision, and with
+# `set -euo pipefail` that arithmetic error kills the whole `docker ps | while`
+# pipeline BELOW: steps 3-5 (orphan prune, image/volume GC, disk-pressure
+# ladder, cycle summary) would never run, every cycle, while the `while true`
+# entrypoint kept the container looking alive. Degrade to 0 (= the guard off,
+# pre-ROK-1600 behaviour) and say so loudly rather than lose the cycle.
+TEST_PLAN_GRACE_HOURS="${TEST_PLAN_GRACE_HOURS:-24}"
+if ! [[ "$TEST_PLAN_GRACE_HOURS" =~ ^[0-9]+$ ]]; then
+    log "WARN: TEST_PLAN_GRACE_HOURS='${TEST_PLAN_GRACE_HOURS}' is not a whole number of hours — using 0 (pending-test-plan grace DISABLED this cycle)"
+    TEST_PLAN_GRACE_HOURS=0
+fi
+ENV_TTL_LIB="${ENV_TTL_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_env_ttl.sh}"
+if [[ -r "$ENV_TTL_LIB" ]]; then
+    # shellcheck disable=SC1090
+    source "$ENV_TTL_LIB"
+else
+    log "WARN: env-ttl library not found at $ENV_TTL_LIB — falling back to label-only TTL; the pending-test-plan guard is DISABLED this cycle"
+    # Echoes nothing + returns 1 when the timestamp is unreadable (including on
+    # a non-GNU `date`, which has no -d): the caller then KEEPS the env. The
+    # old `|| echo 0` made every env look 1970-old, so this stub on a BSD host
+    # would have reaped the entire fleet in one cycle.
+    env_ttl::reference_epoch() { date -u -d "${1-}" +%s 2>/dev/null || return 1; }
+    env_ttl::pending_plan_steps() { echo 0; }
+    env_ttl::decision() {
+        local age
+        [[ "${3-}" =~ ^[0-9]+$ ]] || { echo "keep 0 0"; return 0; }
+        age=$(( ($1 - $2) / 3600 ))
+        (( age < 0 )) && age=0
+        if (( age >= $3 )); then echo "reap $age $3"; else echo "keep $age $3"; fi
+    }
+fi
+
+docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid; do
+    [[ -z "$cid" ]] && continue
+    LABELS=$(docker inspect "$cid" --format '{{json .Config.Labels}}' 2>/dev/null || echo '{}')
+    SLUG=$(jq -r '."rl.env_slug" // empty' <<<"$LABELS")
+    TTL_RAW=$(jq -r '."rl.ttl" // empty' <<<"$LABELS")
+    LAST_TOUCHED=$(jq -r '."rl.last_touched" // empty' <<<"$LABELS")
+    SLOT=$(jq -r '."rl.slot" // empty' <<<"$LABELS")
+    [[ -z "$SLUG" || -z "$TTL_RAW" || -z "$LAST_TOUCHED" ]] && continue
+    # env-spin labels BOTH the allinone and the pg sidecar `rl.role=env`, so
+    # this loop sees each env TWICE. The DECISION must be computed for both
+    # (either container is enough to destroy the env), but the spare's log line
+    # and audit row are emitted only for the allinone — otherwise a single
+    # spared env wrote ~192 duplicate `env_ttl_extended_pending_plan` rows a day
+    # into the same audit log an operator greps for "where did my plan go?".
+    CNAME=$(docker inspect "$cid" --format '{{.Name}}' 2>/dev/null || echo "")
+    TTL_HOURS=$(sed 's/h$//' <<<"$TTL_RAW")
+    # FAIL SAFE: this branch deletes containers, volumes, the registry row and
+    # the env's test plans. Anything we cannot read confidently means KEEP.
+    if ! [[ "$TTL_HOURS" =~ ^[0-9]+$ ]]; then
+        log "WARN: env $SLUG has an unreadable rl.ttl label ('$TTL_RAW') — keeping it this cycle"
+        continue
+    fi
+    REF_EPOCH=$(env_ttl::reference_epoch "$LAST_TOUCHED" "$SLUG" "$ENVS") || REF_EPOCH=""
+    if ! [[ "$REF_EPOCH" =~ ^-?[0-9]+$ ]]; then
+        log "WARN: env $SLUG has no parseable age (rl.last_touched='$LAST_TOUCHED', registry row unreadable) — keeping it this cycle"
+        continue
+    fi
+    PENDING_STEPS=$(env_ttl::pending_plan_steps "$SLUG" "$TEST_PLANS_DIR")
+    DECISION_LINE=$(env_ttl::decision "$NOW_EPOCH" "$REF_EPOCH" "$TTL_HOURS" "$PENDING_STEPS" "$TEST_PLAN_GRACE_HOURS")
+    TTL_VERDICT="${DECISION_LINE%% *}"
+    AGE_HOURS=$(awk '{print $2}' <<<"$DECISION_LINE")
+    DEADLINE_HOURS=$(awk '{print $3}' <<<"$DECISION_LINE")
+    if [[ "$TTL_VERDICT" == "plan_grace" ]]; then
+        # Sidecar (`-pg`) iterations reach the same verdict and also skip the
+        # reap; they just stay quiet. Any container whose name we could not
+        # read still reports, so a spare is never silent.
+        if [[ -n "$CNAME" && "$CNAME" != *-allinone ]]; then
+            continue
+        fi
+        log "sparing expired env $SLUG (age ${AGE_HOURS}h, ttl ${TTL_HOURS}h) — ${PENDING_STEPS} test-plan step(s) still pending; hard deadline ${DEADLINE_HOURS}h"
+        audit env_ttl_extended_pending_plan "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" \
+            --argjson ttl "$TTL_HOURS" --argjson deadline "$DEADLINE_HOURS" --argjson pending "$PENDING_STEPS" \
+            '{slug:$slug, age_hours:$age, ttl_hours:$ttl, deadline_hours:$deadline, pending_steps:$pending}')"
+        continue
+    fi
+    if [[ "$TTL_VERDICT" == "reap" ]]; then
+        log "destroying expired env $SLUG (age ${AGE_HOURS}h >= deadline ${DEADLINE_HOURS}h, ttl ${TTL_HOURS}h, pending plan steps ${PENDING_STEPS})"
+        docker rm -f "rl-env-${SLUG}-allinone" "rl-env-${SLUG}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${SLUG}" >/dev/null 2>&1 || true
+        # TECH-DEBT 2026-06-06: this was the ONLY destroy path missing the
+        # Traefik route-file cleanup — a TTL-reaped env that owned the slot
+        # rule left slot-N.gamernight.net 502'd AND unclaimable ("another env
+        # owns the slot rule"), and since the registry entry is removed below,
+        # the orphan-sweep (keyed on registry) could never catch it later.
+        rm -f "/traefik-conf.d/env-${SLUG}.yml" 2>/dev/null || true
+        mutate "$ENVS" --arg slug "$SLUG" 'map(select(.slug != $slug))'
+        clean_test_plan "$SLUG"
+        # pending_steps is carried into the audit record on purpose: a reap
+        # that happened *despite* pending verdicts (the ttl+grace ceiling) is
+        # exactly the case an operator asking "where did my test plan go?"
+        # needs to be able to find.
+        audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" \
+            --argjson deadline "$DEADLINE_HOURS" --argjson pending "$PENDING_STEPS" \
+            '{slug:$slug, age_hours:$age, ttl_hours:$ttl, deadline_hours:$deadline, pending_steps:$pending}')"
+        CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
+        sweeper_discord_sweep "$SLOT" "$SLUG"
+    fi
+done
+
+# 3. Scoped prune.
+docker image prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
+docker volume prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
+docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
+
+# 3b. ROK-1568 — host disk pressure ladder.
+# The scoped prune above only touches `rl.role=env` objects, which is exactly
+# the disk the fleet does NOT leak. On 2026-09-14 the host hit 98% (240G/245G)
+# with 87 GB in the buildkit cache, untagged images and 285 anonymous volumes;
+# the scoped prune reclaimed nothing, two image builds died at `chmod -R` with
+# ENOSPC and an overlapping Playwright run went net::ERR_TIMED_OUT. The ladder
+# re-reads df after each rung and stops as soon as usage clears the target, so
+# a host that only needed its builder cache keeps its images and volumes.
+# Best-effort: the library fails open (and no-ops when df is unreadable), so a
+# sweeper cycle is never lost to it.
+# The lib lives with the other orchestrator helpers, which compose mounts
+# read-only at /orchestrator-lib (DISCORD_SWEEP_LIB_DIR). Same resolution the
+# ⏰ Discord sweep uses. Getting this wrong made the whole
+# ladder a silent no-op (review BLOCKER 1).
+DISK_PRESSURE_LIB="${DISK_PRESSURE_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_disk_pressure.sh}"
+if [[ -r "$DISK_PRESSURE_LIB" ]]; then
+    RL_DISK_STATE_FILE="${RL_DISK_STATE_FILE:-${STATE_DIR}/disk-pressure.json}"
+    # shellcheck disable=SC1090
+    source "$DISK_PRESSURE_LIB"
+    DISK_RESULT=$(disk_pressure::guard 2>/dev/null || echo '{}')
+    log "disk: $(jq -rc '"used=" + ((.after_pct // "?")|tostring) + "% free=" + ((.free_gb // "?")|tostring) + "G pruned=" + ((.pruned // false)|tostring)' <<<"$DISK_RESULT" 2>/dev/null || echo unknown)"
+else
+    log "disk: ladder library not found at $DISK_PRESSURE_LIB — skipping disk-pressure check"
+fi
+
+# 3c. ROK-1331 M1 — task retention block moved to a self-contained function
+# below + invoked at the top (before docker ops) so it runs even when docker
+# is unavailable (test runners on the operator's Mac). See `prune_old_tasks`
+# above the section-1 block.
+
+# 4. Summary.
+FREE=$(jq '[.[] | select(.claimed == false)] | length' "$CLAIMS")
+BUSY=$(jq '[.[] | select(.claimed == true)] | length' "$CLAIMS")
+ENV_COUNT=$(docker ps -aq --filter "label=rl.role=env" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+audit summary "$(jq -nc --argjson free "$FREE" --argjson busy "$BUSY" --argjson envs "$ENV_COUNT" '{slots_free:$free, slots_busy:$busy, envs:$envs}')"
+log "summary: $FREE free / $BUSY busy / $ENV_COUNT envs"
+
+# gc.sweep.cycle perf emit fires from the EXIT trap registered at the top
+# of the script — fires on success AND on partial-cycle failure paths.

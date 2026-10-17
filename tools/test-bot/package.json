@@ -1,0 +1,26 @@
+{
+  "name": "@raid-ledger/test-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Discord companion bot for E2E testing",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "demo": "tsx src/demo.ts",
+    "smoke": "tsx src/smoke/run.ts",
+    "test": "bash scripts/run-unit-specs.sh",
+    "lint": "eslint .",
+    "lint:no-sleep": "bash scripts/no-sleep-lint.sh",
+    "test:render-rules": "tsx src/smoke/render-rules.selftest.ts"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.27.0",
+    "dotenv": "^18.0.7",
+    "sodium-native": "^5.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

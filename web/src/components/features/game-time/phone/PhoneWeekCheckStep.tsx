@@ -1,0 +1,197 @@
+/**
+ * Step 1 of the phone game-time check IS the week editor (ROK-1569).
+ *
+ * Operator ruling 2026-09-15 ("i want this one built") picked the Option A comp
+ * — `dev/scheduling-wireframes/rok-1569-option-a-comp.html`, panel C of
+ * `/dev/wireframes/scheduling`. Below 768px the check no longer asks four
+ * questions and sends the viewer OUT to the profile editor: the week itself is
+ * on screen, one day at a time, with the answers wrapped around it —
+ * "Same as last week" (one tap, confirm-only), "I'm away" (a row that swaps the
+ * drawer to the away view) and a pinned footer carrying "Save my week" / "Skip".
+ *
+ * The DESKTOP modal keeps the four-answer body (`GameTimeCheckBody`); it has
+ * the room for the full grid on the profile page and is out of this story.
+ *
+ * ROK-1584 §3: the profile's day reaches all 24 hours through two quiet
+ * toggles — "Show earlier" above the day and "Show later" below it — so the
+ * default view stays the evening while no hour is unreachable.
+ *
+ * `variant="profile"` is the SAME editor on the phone profile page (AC4: one
+ * component, two mounts): no question, no "Same as last week", no Skip — the
+ * away row and the sticky Save stay, and the caller passes the profile's
+ * full hour range (`PROFILE_HOURS`) so no daytime hour is lost.
+ *
+ * ROK-1579: "Save my week" also reports the check answered through
+ * `useStepOneDone()`, which collapses the drawer it is mounted in (a no-op
+ * anywhere else).
+ *
+ * ROK-1585 drawer A: "I'm away ›" swaps the drawer to `PhoneAwayView` under a
+ * "‹ I'm away" header (`useSheetHeader`). The week stays MOUNTED under `hidden`
+ * while away, so the unsaved draft and the selected day survive the round trip;
+ * the strip marks the next seven days' away days.
+ *
+ * No new pattern: the editor is `PhoneWeekEditorCore`, the away view is the
+ * shared `AwayPanel`, and the buttons are the check's own recipes from
+ * `game-time-check-copy.ts`. Every colour is a token.
+ */
+import { useCallback, useMemo, useState, type JSX, type RefObject } from 'react';
+import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
+import type { GridDims } from '../game-time-grid.types';
+import { gameTimeCheckPrompt } from '../game-time-check-copy';
+import { useGameTime } from '../../../../hooks/use-game-time';
+import { useTimezoneStore } from '../../../../stores/timezone-store';
+import { getTimezoneOffsetMinutes } from '../../../../lib/timezone-utils';
+import { PhoneWeekEditorCore } from './PhoneWeekEditorCore';
+import { PROFILE_BLOCK_PRESETS, type BlockPreset, type BlockPresetControl } from '../block-presets';
+import { PhoneWindowToggle } from './PhoneWindowToggle';
+import { useProfileWindow } from './use-profile-window';
+import { CHECK_HOURS, toTemplateSlots, usePhoneWeekDraft } from './phone-week-check.helpers';
+import { SameAsLastWeek, StepFooter } from './phone-week-check-footer';
+import { AwayEntry, PhoneAwayView } from './PhoneAwayView';
+import { useAwaySummary, useAwayView } from './use-away-view';
+import { useReportSheetDirty } from '../sheet-dirty-context';
+
+/** Stable empty week — a new array each render would reset the draft. */
+const NO_SLOTS: GameTimeSlot[] = [];
+const NO_BUSY: GameTimeCalendarBusy[] = [];
+
+/**
+ * The profile's Evening / Whole day chips, and the window negotiation behind
+ * them: "Whole day" starts at 9 AM, which the fitted window does not show, so
+ * the chip asks for room, the window expands, and the preset is handed back to
+ * the editor to apply once that hour exists (ROK-1579 frame 3).
+ *
+ * @param isCheck The poll's check has no presets — its window IS the evening.
+ * @param expand Opens the full range so a preset's start hour can resolve.
+ */
+function useProfilePresets(isCheck: boolean, expand: () => void): BlockPresetControl | undefined {
+    const [pending, setPending] = useState<BlockPreset | null>(null);
+    const onNeedsRoom = useCallback((preset: BlockPreset) => { expand(); setPending(preset); }, [expand]);
+    const onApplied = useCallback(() => setPending(null), []);
+    // Stable identity: this object is an effect dependency downstream.
+    const control = useMemo<BlockPresetControl>(
+        () => ({ list: PROFILE_BLOCK_PRESETS, pending, onNeedsRoom, onApplied }),
+        [pending, onNeedsRoom, onApplied],
+    );
+    return isCheck ? undefined : control;
+}
+
+export interface PhoneWeekCheckStepProps {
+    /** Whole days since the last confirmation; `null` = never confirmed. */
+    ageDays?: number | null | undefined;
+    /** Whether the viewer has a saved week (drives the copy AND the one-tap answer). */
+    hasSlots?: boolean;
+    /** The caller's session-skip, rendered as "Skip" in the sticky footer (check only). */
+    onSkip?: () => void;
+    /** `check` = the poll sheet's step 1 (default); `profile` = editor + absences + Save. */
+    variant?: 'check' | 'profile';
+    /** Visible hours in the caller's order; defaults to the check's evening range. */
+    hours?: number[];
+    /**
+     * @internal Pre-measured dims for tests only (jsdom is zero-sized) — see
+     * `DayBlockEditor`. Not a layout knob.
+     */
+    dims?: GridDims;
+    /**
+     * @internal Pre-measured day-slot height for tests only (jsdom is
+     * zero-sized), so the fitted window is deterministic. Not a layout knob.
+     */
+    slotHeight?: number;
+}
+
+/**
+ * The phone week editor with the check's answers around it — see docstring.
+ * The caller (the sheet) MUST give it a bounded height: the editor rows stretch
+ * to fill it and nothing scrolls inside.
+ */
+export function PhoneWeekCheckStep(props: PhoneWeekCheckStepProps): JSX.Element {
+    const { away, openAway, entryRef } = useAwayView();
+    const variant = props.variant ?? 'check';
+    return (
+        <div data-testid="phone-week-check" data-variant={variant} className="flex h-full min-h-0 flex-col">
+            <WeekView {...props} hidden={away} onAway={openAway} entryRef={entryRef} />
+            {away && <PhoneAwayView />}
+        </div>
+    );
+}
+
+/** The saved week as a draft, the window the day slot can show, and its presets. */
+function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: number) {
+    // ROK-1595: the PROFILE timezone, as the desktop editor asks
+    // (`use-game-time-editor.ts`) — the browser's offset drew busy hours late.
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
+    const { data } = useGameTime({ tzOffset });
+    const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
+    const draft = usePhoneWeekDraft(templateSlots);
+    // ROK-1640: the drawer asks before a close throws this draft away.
+    useReportSheetDirty(draft.dirty);
+    // The window the day slot can actually show (ROK-1579 frame 3). A range
+    // that fits — the check's seven evening hours — comes back untouched.
+    const hourWindow = useProfileWindow(hours, draft.slots, slotHeight);
+    const presets = useProfilePresets(isCheck, hourWindow.expand);
+    const calendarBusy = data?.calendarBusy ?? NO_BUSY;
+    return { draft, hourWindow, presets, calendarBusy };
+}
+
+/** "Same as last week" needs a last week; every viewer gets the away row. */
+function WeekAnswers({ showSame, nextLabel, onAway, entryRef }: {
+    showSame: boolean; nextLabel: string | null; onAway: () => void; entryRef: RefObject<HTMLButtonElement | null>;
+}): JSX.Element {
+    return (
+        <div className="flex flex-col gap-2">
+            {showSame && <SameAsLastWeek />}
+            <AwayEntry nextLabel={nextLabel} onOpen={onAway} entryRef={entryRef} />
+        </div>
+    );
+}
+
+/** The check's one question line (the profile has none). */
+function WeekPrompt({ ageDays, hasSlots }: { ageDays?: number | null | undefined; hasSlots: boolean }): JSX.Element {
+    return (
+        <p data-testid="phone-week-prompt" className="text-sm text-foreground">
+            {gameTimeCheckPrompt(ageDays, hasSlots)}
+        </p>
+    );
+}
+
+type WeekViewProps = PhoneWeekCheckStepProps & {
+    hidden: boolean; onAway: () => void; entryRef: RefObject<HTMLButtonElement | null>;
+};
+
+/**
+ * The week: prompt, editor and answers in a scroll body, then the Save footer
+ * OUTSIDE it (ROK-1640) — a `shrink-0` flex footer is pinned to the drawer's
+ * bottom edge whatever the body holds; a `sticky` one inside a scrolling body
+ * only stuck within that body and fell below the fold. Kept mounted while away.
+ */
+function WeekView({
+    ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight, hidden, onAway, entryRef,
+}: WeekViewProps): JSX.Element {
+    const isCheck = variant === 'check';
+    const { draft, hourWindow, presets, calendarBusy } = useWeekEditorState(hours, isCheck, slotHeight);
+    const { awayDays, nextLabel } = useAwaySummary();
+    return (
+        <div data-testid="phone-week-view" hidden={hidden} className={hidden ? 'hidden' : 'flex h-full min-h-0 flex-col'}>
+            <div data-testid="phone-week-body" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
+                {isCheck && <WeekPrompt ageDays={ageDays} hasSlots={hasSlots} />}
+                {/* `min-h-0` keeps this slot's height DEFINITE inside the sheet's
+                    fixed box, so the day grid scrolls instead of growing the column
+                    (ROK-1579). The day's own floor lives on the day slot
+                    (`min-h-[132px]` in PhoneWeekEditorCore). */}
+                <div className="min-h-0 flex-1">
+                    <PhoneWeekEditorCore
+                        slots={draft.slots} onChange={draft.setDraft} hours={hourWindow.hours}
+                        initialDay={new Date().getDay()} dims={dims} awayDays={awayDays} calendarBusy={calendarBusy}
+                        inspectorPlacement="flow"
+                        daySlotRef={hourWindow.slotRef} presets={presets}
+                        gridHeader={<PhoneWindowToggle direction="earlier" band={hourWindow.earlier} />}
+                        gridFooter={<PhoneWindowToggle direction="later" band={hourWindow.later} />}
+                    />
+                </div>
+                <WeekAnswers showSame={isCheck && hasSlots} nextLabel={nextLabel} onAway={onAway} entryRef={entryRef} />
+            </div>
+            <StepFooter slots={draft.slots} dirty={draft.dirty} onSkip={isCheck ? onSkip : undefined} />
+        </div>
+    );
+}

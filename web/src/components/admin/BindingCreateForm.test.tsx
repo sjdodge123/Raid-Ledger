@@ -1,0 +1,177 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useState } from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QUICK_PLAY_ANNOUNCE_HELP } from "@raid-ledger/contract";
+import { BindingCreateForm, type BindingChannelOption } from "./BindingCreateForm";
+
+// GameSearchInput (shown for the default voice-monitor purpose) calls
+// useGameSearch; no MSW handler serves /games/search, so stub the hook.
+vi.mock("../../hooks/use-game-search", () => ({ useGameSearch: vi.fn() }));
+import { useGameSearch } from "../../hooks/use-game-search";
+
+const CHANNELS: BindingChannelOption[] = [
+  { id: "t-1", name: "announcements", channelType: "text" },
+  { id: "v-1", name: "Raid Voice", channelType: "voice" },
+];
+
+const onCreate = vi.fn();
+
+function renderOpen(props: { isCreating?: boolean; createError?: string | null } = {}) {
+  const view = render(
+    <BindingCreateForm channels={CHANNELS} onCreate={onCreate}
+      isCreating={props.isCreating ?? false}
+      {...(props.createError === undefined ? {} : { createError: props.createError })} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+  return view;
+}
+
+function channelSelect(): HTMLSelectElement {
+  return screen.getByRole("combobox", { name: "Channel" }) as HTMLSelectElement;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  onCreate.mockResolvedValue(undefined);
+  vi.mocked(useGameSearch).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+  } as unknown as ReturnType<typeof useGameSearch>);
+});
+
+describe("BindingCreateForm — fields", () => {
+  it("names both selects by their labels, keeps their ids and renders them as the shared Select", () => {
+    renderOpen();
+    expect(channelSelect()).toHaveAttribute("id", "new-binding-channel");
+    expect(screen.getByRole("combobox", { name: "Purpose" })).toHaveAttribute("id", "new-binding-purpose");
+    // The shared Select draws its own chevron; a raw <select> has none.
+    expect(screen.getAllByTestId("select-chevron")).toHaveLength(2);
+  });
+
+  it("keeps Create disabled until a channel is chosen, then submits the binding", async () => {
+    renderOpen();
+    const create = screen.getByRole("button", { name: "Create binding" });
+    expect(create).toBeDisabled();
+    fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+    expect(create).toBeEnabled();
+    fireEvent.click(create);
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(onCreate).toHaveBeenCalledWith({
+      channelId: "t-1", channelType: "text", bindingPurpose: "game-announcements", gameId: null,
+    });
+  });
+});
+
+/** [value, visible label] pairs of the Purpose select, in order. */
+function purposeOptions(): [string, string][] {
+  const select = screen.getByRole("combobox", { name: "Purpose" }) as HTMLSelectElement;
+  return Array.from(select.options).map((o) => [o.value, o.textContent ?? ""]);
+}
+
+describe("BindingCreateForm — purpose options per channel type (TDB:261 pin)", () => {
+  it("offers the contract-labelled purposes a voice or text channel may carry, voice default first", () => {
+    renderOpen();
+    fireEvent.change(channelSelect(), { target: { value: "v-1" } });
+    expect(purposeOptions()).toEqual([
+      ["game-voice-monitor", "Activity Monitor"],
+      ["general-lobby", "General Lobby"],
+    ]);
+    expect(screen.getByRole("combobox", { name: "Purpose" })).toHaveValue("game-voice-monitor");
+
+    fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+    expect(purposeOptions()).toEqual([
+      ["game-announcements", "Announcements"],
+      ["quick-play-announcements", "Quick Play Announcements"],
+    ]);
+    // Announcements stays the text-channel default.
+    expect(screen.getByRole("combobox", { name: "Purpose" })).toHaveValue("game-announcements");
+  });
+});
+
+const VALHEIM = { id: 42, igdbId: 42, name: "Valheim", slug: "valheim", coverUrl: null };
+
+function chooseQuickPlay() {
+  renderOpen();
+  fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Purpose" }), {
+    target: { value: "quick-play-announcements" },
+  });
+}
+
+describe("BindingCreateForm — Quick Play Announcements (ROK-1766)", () => {
+  it("shows the Quick Play help line only for the Quick Play purpose", () => {
+    renderOpen();
+    fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+    expect(screen.queryByText(QUICK_PLAY_ANNOUNCE_HELP)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Purpose" }), {
+      target: { value: "quick-play-announcements" },
+    });
+    expect(screen.getByText(QUICK_PLAY_ANNOUNCE_HELP)).toBeInTheDocument();
+  });
+
+  it("without a game keeps Create disabled and shows the game-field error", () => {
+    chooseQuickPlay();
+    expect(screen.getByRole("button", { name: "Create binding" })).toBeDisabled();
+    expect(screen.getByText("A Quick Play Announcements binding must have a game.")).toBeInTheDocument();
+  });
+
+  it("with a game posts a quick-play-announcements binding for that game", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(useGameSearch).mockReturnValue({
+      data: { data: [VALHEIM], meta: { total: 1, cached: false, source: "local" } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGameSearch>);
+    chooseQuickPlay();
+    await userEvent.type(screen.getByRole("combobox", { name: "Game" }), "Valh");
+    await userEvent.click(await screen.findByRole("option", { name: /Valheim/ }));
+    const create = screen.getByRole("button", { name: "Create binding" });
+    expect(create).toBeEnabled();
+    fireEvent.click(create);
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(onCreate).toHaveBeenCalledWith({
+      channelId: "t-1", channelType: "text", bindingPurpose: "quick-play-announcements", gameId: 42,
+    });
+  });
+});
+
+describe("BindingCreateForm — pending and error", () => {
+  // ROK-1652 ruling 7: a pending Create is Button `loading` — aria-disabled +
+  // aria-busy (focus stays) and the click is swallowed.
+  it("a pending Create is loading and swallows the click", () => {
+    const { rerender } = renderOpen();
+    fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+    rerender(<BindingCreateForm channels={CHANNELS} onCreate={onCreate} isCreating />);
+    const create = screen.getByRole("button", { name: "Creating..." });
+    expect(create).toHaveAttribute("aria-busy", "true");
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(create);
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("shows the create error as an alert in the danger token", () => {
+    renderOpen({ createError: "Channel already bound" });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Channel already bound");
+    expect(alert).toHaveClass("text-danger");
+  });
+});
+
+/** Models the page: the mutation's error lives above the form until reset. */
+function ErrorHarness() {
+  const [error, setError] = useState<string | null>("Channel already posts Quick Play");
+  return (
+    <BindingCreateForm channels={CHANNELS} onCreate={onCreate} isCreating={false}
+      createError={error} onResetError={() => setError(null)} />
+  );
+}
+
+describe("ROK-1766: a stale create error does not survive Cancel", () => {
+  it("Cancel then + Add binding reopens the form without the previous error", () => {
+    render(<ErrorHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

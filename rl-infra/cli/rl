@@ -1,0 +1,1430 @@
+#!/usr/bin/env bash
+# rl — local CLI dispatcher for the rl-infra remote test fleet.
+#
+# Resolves RL_TARGET (auto by default) and dispatches:
+#   - remote  → SSH to rl-infra VM, invoke /srv/rl-infra/orchestrator/bin/<cmd>
+#   - local   → fall back to existing local-mode scripts (deploy_dev.sh, MCP env lock, validate-ci.sh)
+#
+# Env vars (set in shell rc):
+#   RL_PROXMOX_HOST   default: rl-infra.lan
+#   RL_PROXMOX_USER   default: rl
+#   RL_TARGET         auto|remote|local  (default: auto)
+#   RL_AGENT_ID       auto-derived from $USER + worktree path if unset
+set -euo pipefail
+
+RL_PROXMOX_HOST="${RL_PROXMOX_HOST:-rl-infra.lan}"
+# User identity:
+#   - Default: rl-agent (no sudo, no docker group, Docker API filtered via
+#     socket-proxy, infra config files read-only). This is what agents use.
+#   - Operator override: export RL_OPERATOR=1 (becomes rl) for ops like
+#     `docker compose up -d`, daemon restarts, editing infra config.
+#   - Explicit override: export RL_PROXMOX_USER=<user> wins over either.
+if [[ -z "${RL_PROXMOX_USER:-}" ]]; then
+    if [[ "${RL_OPERATOR:-0}" == "1" ]]; then
+        RL_PROXMOX_USER=rl
+    else
+        RL_PROXMOX_USER=rl-agent
+    fi
+fi
+RL_TARGET="${RL_TARGET:-auto}"
+
+# Find the repo root from the OPERATOR's cwd (not from this script's location —
+# rl is typically symlinked into /opt/homebrew/bin or similar, so resolving
+# from the script path is wrong). Falls back to empty when not in a git repo.
+# Commands that need a repo root (claim, validate-ci) call require_repo_root.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then
+    # Stable per-worktree id: $USER + sha1 of worktree path (or cwd if no
+    # git repo, so the id is still stable per directory).
+    # $USER is unset in the fleet runner container (no login shell), and
+    # `set -u` turned that into a hard abort before any command ran. id -un
+    # always resolves.
+    RL_AGENT_ID="${USER:-$(id -un)}-$(printf '%s' "${REPO_ROOT:-$PWD}" | shasum -a 1 | cut -c1-8)"
+fi
+export RL_AGENT_ID
+
+require_repo_root() {
+    # Spec-only escape hatch: the runner's Mutagen-synced worktree has no
+    # .git, so this guard would fire first and mask whatever a spec is
+    # actually asserting. Never set outside tests.
+    if [[ "${RL_TEST_SKIP_REPO_GUARD:-0}" == "1" ]]; then
+        REPO_ROOT="${REPO_ROOT:-$PWD}"
+        return 0
+    fi
+    if [[ -z "$REPO_ROOT" ]]; then
+        echo "[rl] this command must be run from inside the project git repo" >&2
+        echo "      cd into ~/Documents/Projects/Raid-Ledger (or your worktree) and retry" >&2
+        exit 2
+    fi
+}
+
+# --- DNS-fallback for RL_PROXMOX_HOST (ROK-1331 M6b HIGH-3) --------------
+#
+# Agents in sandboxed Claude Code contexts can't always resolve `rl-infra.lan`
+# (the operator's Pi-hole provides it on the LAN; sandbox networking doesn't
+# forward that). When the candidate host fails to resolve, fall back to the
+# literal IP loaded from repo-root .env (`RL_INFRA_IP=192.168.0.132`).
+#
+# Algorithm:
+#   1. Operator explicit override (any non-default host) → echo as-is.
+#   2. Otherwise probe with getent (Linux) / dscacheutil (Darwin) / host (any).
+#      On probe success → echo $RL_PROXMOX_HOST verbatim.
+#   3. Probe fail → walk cwd up to find <repo-root>/.env, parse RL_INFRA_IP,
+#      echo that.
+#   4. Both fail → echo original $RL_PROXMOX_HOST as best-effort + warn to
+#      stderr so downstream SSH errors land in a context the operator can
+#      understand.
+
+is_default_host() {
+    local h="$1"
+    [[ "$h" == "rl-infra" || "$h" == "rl-infra.lan" ]]
+}
+
+probe_dns_for_host() {
+    local h="$1"
+    if command -v getent >/dev/null 2>&1; then
+        getent hosts "$h" >/dev/null 2>&1
+        return $?
+    fi
+    if command -v dscacheutil >/dev/null 2>&1; then
+        # dscacheutil exits 0 even on no-match, so parse stdout for any
+        # `ip_address:` line. Empty stdout → no answer.
+        local out
+        out=$(dscacheutil -q host -a name "$h" 2>/dev/null)
+        if [[ -n "$out" ]] && printf '%s' "$out" | grep -q '^ip_address:'; then
+            return 0
+        fi
+        return 1
+    fi
+    if command -v host >/dev/null 2>&1; then
+        host -W 2 "$h" >/dev/null 2>&1
+        return $?
+    fi
+    # No probe tool available — treat as success; the downstream ssh will
+    # surface the real failure if the host doesn't resolve.
+    return 0
+}
+
+walk_up_for_env_var() {
+    local var_name="$1"
+    local dir
+    dir="$(pwd)"
+    local depth=0
+    while [[ "$dir" != "/" && $depth -lt 64 ]]; do
+        # `.git` is a directory in the main repo and a FILE (gitlink) in a
+        # worktree — accept either to handle both layouts.
+        if [[ -e "$dir/.git" ]]; then
+            if [[ -f "$dir/.env" ]]; then
+                local line
+                line=$(grep -E "^${var_name}=" "$dir/.env" 2>/dev/null | grep -v '^#' | head -1)
+                if [[ -n "$line" ]]; then
+                    printf '%s' "${line#*=}"
+                fi
+            fi
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+        depth=$((depth + 1))
+    done
+}
+
+resolve_proxmox_host() {
+    local host="$RL_PROXMOX_HOST"
+    if ! is_default_host "$host"; then
+        # Explicit operator override — trust it.
+        printf '%s\n' "$host"
+        return 0
+    fi
+    if probe_dns_for_host "$host"; then
+        printf '%s\n' "$host"
+        return 0
+    fi
+    local fallback_ip
+    fallback_ip="$(walk_up_for_env_var RL_INFRA_IP)"
+    if [[ -n "$fallback_ip" ]]; then
+        printf '%s\n' "$fallback_ip"
+        return 0
+    fi
+    echo "[rl] WARNING: cannot resolve $host and no RL_INFRA_IP in .env — SSH will likely fail" >&2
+    printf '%s\n' "$host"
+    return 0
+}
+
+# Resolve once at module init so every downstream ssh inherits the value.
+# The `_resolve_host` subcommand at the dispatch tail prints this verbatim
+# for the bash test harness.
+RL_PROXMOX_HOST="$(resolve_proxmox_host)"
+export RL_PROXMOX_HOST
+
+# --- target resolution ----------------------------------------------------
+
+resolve_target() {
+    case "$RL_TARGET" in
+        remote|local) echo "$RL_TARGET"; return ;;
+        auto) ;;
+        *) echo "RL_TARGET must be auto|remote|local (got: $RL_TARGET)" >&2; exit 2 ;;
+    esac
+    # Use SSH for the probe (not nc) so SSH config aliases like
+    # "Host rl-infra" resolve correctly. nc only does direct DNS, but
+    # operators usually point RL_PROXMOX_HOST at an ssh-config Host name.
+    if ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new \
+           "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" 'true' >/dev/null 2>&1; then
+        echo "remote"
+    else
+        echo "local"
+    fi
+}
+
+TARGET="$(resolve_target)"
+
+# --- remote dispatch ------------------------------------------------------
+
+# Shell-escape each positional arg for safe interpolation into a string
+# that will be re-parsed by the remote login shell. `printf '%q'` emits a
+# form bash can re-parse exactly — so a slug, branch, or pass-through arg
+# containing `$(...)`, backticks, or quotes is treated as opaque literal
+# bytes (H-VM-1). Echoes the escaped, space-joined args.
+q_args() {
+    local out=""
+    local arg
+    for arg in "$@"; do
+        out+=" $(printf '%q' "$arg")"
+    done
+    # Strip the leading space so the caller can drop the result mid-string.
+    printf '%s' "${out# }"
+}
+
+ssh_run() {
+    # Pipes RL_AGENT_ID through; orchestrator scripts read it.
+    #
+    # Callers MUST pass each argv element as a separate positional —
+    # `ssh_run claim --branch "$branch"`, NOT a pre-joined string. The
+    # remote login shell re-parses whatever string we send, so we
+    # printf-%q each arg through q_args. Previously this used "$*" which
+    # let any caller arg containing $(...) / backticks / quotes execute
+    # arbitrary code as rl-agent on the VM (H-VM-1).
+    local remote_cmd
+    remote_cmd="RL_AGENT_ID=$(printf '%q' "$RL_AGENT_ID") /srv/rl-infra/orchestrator/bin/$(q_args "$@")"
+    ssh -o ConnectTimeout=5 -o BatchMode=yes \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "$remote_cmd"
+}
+
+ssh_run_interactive() {
+    ssh -t "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" "$@"
+}
+
+# --- subcommands ----------------------------------------------------------
+
+cmd_claim() {
+    require_repo_root
+    if [[ "$TARGET" == "local" ]]; then
+        echo "[rl] local mode — using MCP env lock instead of remote slot." >&2
+        echo "Run: ./scripts/env-lock.sh acquire --purpose '<task>'" >&2
+        exit 0
+    fi
+    # Wait/poll flags. Default: wait up to 10 min, poll every 10s.
+    # Pass --no-wait to get a single-shot {queued, position} response.
+    local wait=1 timeout=600 interval=10
+    local extra_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-wait) wait=0; shift ;;
+            --wait-timeout) timeout="$2"; shift 2 ;;
+            --poll-interval) interval="$2"; shift 2 ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
+
+    local started_at deadline now
+    started_at=$(date +%s)
+    deadline=$((started_at + timeout))
+
+    while true; do
+        # Pass each arg as a separate positional so ssh_run can printf-%q
+        # them — branch can in principle contain shell metachars (a typo
+        # could ship a worktree branch like `foo$(id)`), and any future
+        # extra_args from operator typing would too. H-VM-1.
+        # `${extra_args[@]:+${extra_args[@]}}` — defensive expansion. Under
+        # `set -u`, expanding an empty array via `"${extra_args[@]}"` errors
+        # on macOS bash 3.2 ("unbound variable"). The `:+` form expands to
+        # the array's elements when non-empty, and to nothing when empty —
+        # so the ssh_run call gets the right argv either way. Bug T 2026-05-19.
+        # Capture the exit code without letting `set -e` abort us: a non-zero
+        # exit from the orchestrator (invalid_slot exit 2, queue_corrupt /
+        # claims_corrupt exit 1) STILL carries a JSON error body on stdout. If
+        # we let `set -euo` kill the function on the failing command sub, RESULT
+        # is captured but never printed, so the MCP layer sees empty stdout and
+        # reports `failed_to_parse_response` instead of the real error code.
+        local claim_rc=0
+        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}") || claim_rc=$?
+        if (( claim_rc != 0 )); then
+            # Surface the JSON error body (pretty if it parses, raw otherwise)
+            # and propagate the real exit code rather than dying silently.
+            if [[ -n "$RESULT" ]]; then
+                echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
+            fi
+            return "$claim_rc"
+        fi
+        SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
+        # ROK-1331 M5a — orchestrator emits both legacy `queued:true` and the
+        # new `enqueued:true` during the transition window. Either signals a
+        # poll-and-retry response.
+        QUEUED=$(jq -r '(.queued // .enqueued // false)' <<<"$RESULT")
+        if [[ -n "$SLOT" ]]; then
+            echo "$RESULT" | jq .
+            # M5a hint surface: inherited envs from a branch-match handoff
+            # let the consumer skip its own env deploy. Print only when the
+            # field is non-empty so legacy callers don't see noise.
+            INH_COUNT=$(jq -r '(.inherited_envs // []) | length' <<<"$RESULT")
+            if [[ "$INH_COUNT" != "0" && -n "$INH_COUNT" ]]; then
+                echo "[rl] inherited $INH_COUNT env(s) from prior holder (branch match)" >&2
+            fi
+            ensure_mutagen_sync "$SLOT"
+            # ROK-1338 PR-1 fold-in (2026-05-21): block until Mutagen's initial
+            # sync round actually completes — `mutagen sync create` (called
+            # inside ensure_mutagen_sync) registers the session but returns
+            # before files have transferred. Without this flush, downstream
+            # commands like `rl_env_build_image_from_runner` start a
+            # `docker build /workspace` BEFORE the runner's /workspace has
+            # the current files — manifested as a silent 6+ minute hang
+            # during ROK-1338 dogfood Phase A. flush_mutagen blocks until
+            # the session reports in-sync; if mutagen isn't installed or
+            # the session is missing, it no-ops via `|| true` inside.
+            #
+            # A3-B P2: flush_mutagen now also repairs exec bits and can return
+            # 97. Non-fatal HERE on purpose — under `set -e` a bare call would
+            # abort the claim after the slot is already held on the VM, leaking
+            # it until the gc-sweeper reaps it. The slot is genuinely claimed
+            # and still usable for non-script work; the warning is loud, and the
+            # next `rl validate-ci` hard-aborts on the same condition.
+            flush_mutagen "$SLOT" || \
+                echo "[rl] WARNING: slot $SLOT claimed but its /workspace scripts are NOT executable (see above) — run 'rl resync' before any gate" >&2
+            # ROK-1331 M4 AC11: heartbeat must start BEFORE scaffold so a slow
+            # remote git fetch doesn't let the claim expire mid-scaffold.
+            start_heartbeat_daemon "$SLOT"
+            scaffold_runner_git "$SLOT" "$branch"
+            # ROK-1326 fix-11: preempt the npm-ci cost on the FIRST
+            # validate-ci/test run. Mutagen excludes node_modules so a
+            # freshly-claimed slot has none of the workspace's deps
+            # available; without this, the first `tsc`/`nest`/`jest`
+            # invocation dies with "command not found". Running here at
+            # claim time (in the background, doesn't block claim return)
+            # moves the cost out of the first agent action and into
+            # idle setup time. Skips silently if a prior session left a
+            # populated node_modules.
+            install_runner_deps "$SLOT" &
+            echo
+            echo "claimed slot $SLOT"
+            echo "  worktree synced to: $(jq -r '.worktree' <<<"$RESULT")"
+            echo "  shell:       rl shell"
+            echo "  web url:     http://$(jq -r '.hostnames.web' <<<"$RESULT")"
+            echo "  debug url:   http://$(jq -r '.hostnames.debug' <<<"$RESULT")"
+            return 0
+        fi
+        if [[ "$QUEUED" != "true" || "$wait" == "0" ]]; then
+            echo "$RESULT" | jq .
+            return 0
+        fi
+        now=$(date +%s)
+        if (( now >= deadline )); then
+            echo "$RESULT" | jq --argjson waited "$((now - started_at))" '. + {wait_timed_out: true, waited_seconds: $waited}'
+            return 0
+        fi
+        local pos len
+        # M5a — prefer the new queue_position field, fall back to the legacy
+        # `position` for transition-window compat.
+        pos=$(jq -r '(.queue_position // .position // "?")' <<<"$RESULT")
+        len=$(jq -r '(.queue_length // "?")' <<<"$RESULT")
+        echo "[rl] queued at position $pos of $len — polling again in ${interval}s (timeout in $((deadline - now))s)" >&2
+        sleep "$interval"
+    done
+}
+
+cmd_release() {
+    if [[ "$TARGET" == "local" ]]; then
+        echo "[rl] local mode — releasing MCP env lock." >&2
+        ./scripts/env-lock.sh release || true
+        exit 0
+    fi
+    # ROK-1331 M5a — by default an agent release PRESERVES envs (the next
+    # claim on the same branch inherits them). Operator path keeps the legacy
+    # destroy-everything behavior. Explicit flag overrides win.
+    local extra_args=()
+    local preserve_flag=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --preserve-envs) preserve_flag="--preserve-envs"; shift ;;
+            --destroy-envs)  preserve_flag="--destroy-envs"; shift ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    if [[ -z "$preserve_flag" ]]; then
+        if [[ "${RL_OPERATOR:-0}" == "1" || "$RL_PROXMOX_USER" == "rl" ]]; then
+            preserve_flag="--destroy-envs"
+        else
+            preserve_flag="--preserve-envs"
+        fi
+    fi
+    # Look up the slot BEFORE the SSH release call drops the claim record,
+    # so we know which Mutagen session to terminate. RL_AGENT_ID is
+    # printf-%q'd through into the remote jq invocation — defense in
+    # depth (today USER + sha1 is always alnum, but the same shape as
+    # H-VM-1 — never interpolate user-derived strings into a remote
+    # shell context without escaping).
+    local slot_for_mutagen
+    slot_for_mutagen=$(ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "jq -r --arg a $(printf '%q' "$RL_AGENT_ID") '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true)
+    stop_heartbeat_daemon
+    local result
+    result=$(ssh_run release "$preserve_flag" "${extra_args[@]:+${extra_args[@]}}")
+    # Compact JSON for parseability by the MCP layer (no trailing pretty-print
+    # multi-line output; the result block is already single-line JSON from the
+    # orchestrator). Print as-is, no jq reformatting.
+    echo "$result"
+    # Terminate the Mutagen sync session so the NEXT claim from a possibly
+    # different worktree starts with a fresh endpoint. Without this, the
+    # session keeps its original source path and ensure_mutagen_sync sees the
+    # existing session + no-ops, leaving the runner syncing from the wrong
+    # tree. See feedback_rl_fleet_worktree_path.md.
+    stop_mutagen_sync "$slot_for_mutagen"
+}
+
+# rl resync — force-recreate the Mutagen sync session for the agent's slot.
+#
+# Recovers a WEDGED sync without a full release/reclaim dance. After a rapid
+# sequence of history-rewriting rebases in the synced worktree (or a
+# concurrent job churning the same tree), Mutagen's one-way-replica session
+# can stall in a halted/errored state. The hazard: `flush_mutagen` swallows
+# the error (`mutagen sync flush ... 2>/dev/null || true`), so a subsequent
+# `build-image-on-runner` reads STALE /workspace files yet reports success —
+# the env then serves pre-change code while build_image looks green
+# (TECH-DEBT 2026-06-02). This command tears the session down and recreates
+# it from scratch, blocks until the first sync round drains (flush), and
+# re-scaffolds the runner-side .git so worktree_head tracks the branch again.
+#
+# Idempotent + safe to call mid-claim — it never drops the slot claim.
+# Used by the rl_force_resync MCP tool and auto-invoked by rl_env_deploy's
+# pre-build sync guard when it detects /workspace is stale.
+cmd_resync() {
+    if [[ "$TARGET" == "local" ]]; then
+        echo '{"ok":false,"error":"resync_remote_only","message":"rl resync only applies to the remote fleet (Mutagen one-way-replica). No-op in local mode."}'
+        exit 0
+    fi
+    require_repo_root
+    # Mutagen is the whole point of a resync — if it's absent, say so and FAIL
+    # rather than emitting resynced:true (Codex review 2026-06-02, med). The
+    # best-effort helpers (stop/ensure/flush_mutagen) all `|| true` or no-op
+    # without mutagen, which would otherwise produce a misleading success.
+    if ! command -v mutagen >/dev/null 2>&1; then
+        jq -nc '{ok:false, error:"mutagen_not_installed", resynced:false, message:"mutagen CLI not found on this host — cannot resync. Install from https://mutagen.io/"}'
+        exit 1
+    fi
+    # Resync requires an ALREADY-held slot. Do NOT use ensure_claim/current_slot
+    # here — they run `claim` and would ACQUIRE a slot as a side effect (Codex
+    # review 2026-06-02, P2): a standalone recovery call must never mutate lease
+    # state (it could branch-mismatch-destroy a preserved env or leak a queue
+    # entry). Look the slot up read-only and fail loud if none is held.
+    SLOT=$(lookup_held_slot)
+    if [[ -z "$SLOT" ]]; then
+        jq -nc '{ok:false, error:"no_active_claim", resynced:false, message:"rl resync needs a slot you already hold — none found for this agent. Run `rl claim` first (it grants a slot or enqueues you; poll rl_claim_wait to block until granted). resync recovers a wedged sync without dropping the claim; it must never acquire one."}'
+        exit 1
+    fi
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo main)"
+    echo "[rl] force-resyncing Mutagen session for slot $SLOT (branch $branch)" >&2
+    # Redirect each helper's stdout to stderr: `mutagen sync create` prints
+    # the new session id to stdout, which would otherwise pollute the single
+    # JSON line this command emits. (parseJsonFromStdout would still recover
+    # it, but a clean single-line stdout is friendlier to operators piping
+    # through jq.)
+    stop_mutagen_sync "$SLOT" >&2 || true
+    # Recreate the session — CHECKED. ensure_mutagen_sync's last command is
+    # `mutagen sync create`; a non-zero exit here means the session could not
+    # be re-established, so we must not claim success.
+    if ! ensure_mutagen_sync "$SLOT" >&2; then
+        jq -nc --argjson slot "$SLOT" \
+            '{ok:false, error:"resync_create_failed", slot:$slot, resynced:false, message:"failed to (re)create the Mutagen sync session — check `mutagen sync list` / daemon, then retry or release + re-claim the slot."}'
+        exit 1
+    fi
+    # Flush — CHECKED, NOT the error-swallowing flush_mutagen helper. A resync
+    # that can't reach in-sync is exactly the wedged state we're recovering
+    # from; reporting it as success would re-introduce the original bug.
+    if ! mutagen sync flush "rl-slot-$SLOT" >&2; then
+        jq -nc --argjson slot "$SLOT" \
+            '{ok:false, error:"resync_flush_failed", slot:$slot, resynced:false, message:"recreated the session but `mutagen sync flush` did not reach in-sync — it may still be wedged. Retry, or release + re-claim the slot."}'
+        exit 1
+    fi
+    # .git scaffold is best-effort (a slot without .git is still buildable —
+    # the build reads /workspace file contents, not the scaffold).
+    scaffold_runner_git "$SLOT" "$branch" >&2 || true
+    jq -nc --argjson slot "$SLOT" --arg branch "$branch" \
+        '{ok:true, slot:$slot, branch:$branch, resynced:true, message:"Mutagen session terminated + recreated, flushed to in-sync, and runner .git re-scaffolded."}'
+}
+
+# force-release — operator-only: clear a stuck slot regardless of holder.
+# Requires RL_OPERATOR=1 in the caller's shell (so the rl CLI SSHes as the
+# privileged `rl` user; the orchestrator script also re-checks the gate).
+cmd_force_release() {
+    [[ "$TARGET" == "local" ]] && { echo "force-release is remote-only" >&2; exit 1; }
+    if [[ "${RL_OPERATOR:-0}" != "1" ]]; then
+        echo "[rl] force-release requires RL_OPERATOR=1 (export it, then retry)" >&2
+        exit 1
+    fi
+    local slot="" reason="" no_destroy=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --slot) slot="$2"; shift 2 ;;
+            --reason) reason="$2"; shift 2 ;;
+            --no-destroy) no_destroy="--no-destroy"; shift ;;
+            *) echo "unknown arg: $1" >&2; exit 2 ;;
+        esac
+    done
+    [[ -z "$slot" ]] && { echo "usage: rl force-release --slot N [--reason '...'] [--no-destroy]" >&2; exit 2; }
+    [[ -z "$reason" ]] && { echo "--reason '<why>' is required (recorded in audit log)" >&2; exit 2; }
+    # printf-%q every interpolated value: reason is operator free-form,
+    # RL_AGENT_ID derives from $USER, slot/no_destroy are local flags
+    # but defense-in-depth (H-VM-1).
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "RL_OPERATOR=1 RL_FORCE_REASON=$(printf '%q' "$reason") RL_AGENT_ID=$(printf '%q' "$RL_AGENT_ID") \
+         /srv/rl-infra/orchestrator/bin/force-release --slot $(printf '%q' "$slot") ${no_destroy}" | jq .
+}
+
+cmd_status() {
+    if [[ "$TARGET" == "local" ]]; then
+        echo "[rl] local mode — running deploy_dev.sh --status"
+        "$REPO_ROOT/scripts/deploy_dev.sh" --status
+        exit 0
+    fi
+    # Pass through args so the MCP server (which doesn't pass --pretty) gets
+    # parseable JSON, while operator typing `rl status --pretty` gets the
+    # human table. Previously hardcoded --pretty here, which broke the MCP
+    # rl_status wrapper that expected JSON. Each arg goes through ssh_run's
+    # printf-%q for H-VM-1.
+    ssh_run status "$@"
+}
+
+cmd_shell() {
+    [[ "$TARGET" == "local" ]] && { echo "no remote shell in local mode" >&2; exit 1; }
+    SLOT=$(ssh_run claim --branch unknown | jq -r '.slot')
+    [[ -z "$SLOT" || "$SLOT" == "null" ]] && { echo "no slot claimed — rl claim first (or rl_claim_wait if enqueued)" >&2; exit 1; }
+    # SLOT came from jq output of a server-controlled state file; numeric
+    # by contract. Still defense-in-depth: validate before interpolating.
+    [[ "$SLOT" =~ ^[0-9]+$ ]] || { echo "[rl] unexpected slot value: $SLOT" >&2; exit 1; }
+    ssh_run_interactive "docker exec -it rl-runner-$SLOT tmux attach -t main"
+}
+
+cmd_env() {
+    [[ "$TARGET" == "local" ]] && { echo "env subcommands are remote-only (use deploy_dev.sh locally)" >&2; exit 1; }
+    local sub="${1:-}"; shift || true
+    case "$sub" in
+        # ssh_run takes each arg as a separate positional and printf-%q's
+        # them — pass "$@" not "$*" so a slug like `foo$(id)` reaches the
+        # remote orchestrator as the literal string. H-VM-1.
+        spin)     ssh_run env-spin "$@" | jq . ;;
+        destroy)  ssh_run env-destroy "$@" | jq . ;;
+        list)     ssh_run status | jq '.envs' ;;
+        # ROK-1331 M5a — pin/unpin: defeat (or release) the gc-sweeper's
+        # unhealthy-env reaper for a given slug. CLI accepts a positional
+        # slug for ergonomics: `rl env pin my-env` rather than --slug=my-env.
+        pin|unpin)
+            local slug="${1:-}"
+            shift || true
+            [[ -z "$slug" ]] && { echo "rl env $sub <slug>" >&2; exit 2; }
+            [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must match [a-z0-9-]+" >&2; exit 2; }
+            ssh_run "env-${sub}" --slug "$slug" | jq .
+            ;;
+        *) echo "rl env {spin|destroy|list|pin|unpin} [args]" >&2; exit 2 ;;
+    esac
+}
+
+# ROK-1331 M5a — extend the current claim's expires_at. Holder path doesn't
+# need --slot; operator path (RL_OPERATOR=1) MUST pass --slot N.
+cmd_extend() {
+    [[ "$TARGET" == "local" ]] && { echo "extend is remote-only" >&2; exit 1; }
+    local hours=1
+    local extra=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --hours) hours="$2"; shift 2 ;;
+            --slot)  extra+=(--slot "$2"); shift 2 ;;
+            *)
+                # First bare arg is treated as hours for ergonomics:
+                # `rl extend 4` == `rl extend --hours 4`.
+                if [[ "$1" =~ ^[0-9]+$ ]]; then
+                    hours="$1"; shift
+                else
+                    extra+=("$1"); shift
+                fi
+                ;;
+        esac
+    done
+    ssh_run extend --hours "$hours" "${extra[@]:+${extra[@]}}" | jq .
+}
+
+# ROK-1331 M5a — wrappers for the remaining new orchestrator binaries.
+cmd_lease_status() {
+    [[ "$TARGET" == "local" ]] && { echo "lease-status is remote-only" >&2; exit 1; }
+    local extra=()
+    [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]] && { extra+=(--slot "$1"); shift; }
+    ssh_run lease-status "${extra[@]:+${extra[@]}}" | jq .
+}
+
+cmd_claim_wait() {
+    [[ "$TARGET" == "local" ]] && { echo "claim-wait is remote-only" >&2; exit 1; }
+    require_repo_root
+    local timeout=600
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
+    local extra=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timeout) timeout="$2"; shift 2 ;;
+            # Forward --slot so a slot-pinned wait stays pinned through every
+            # re-claim the orchestrator performs (Codex P1, 2026-06-02).
+            --slot) extra+=(--slot "$2"); shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    ssh_run claim-wait --timeout "$timeout" --branch "$branch" "${extra[@]:+${extra[@]}}" | jq .
+}
+
+cmd_db() {
+    [[ "$TARGET" == "local" ]] && { echo "db is remote-only" >&2; exit 1; }
+    local slug="${1:-}"; shift || true
+    [[ -z "$slug" ]] && { echo "usage: rl db <slug> [--web]" >&2; exit 2; }
+    # CLI-side slug re-validation (H-VM-1). The orchestrator scripts
+    # validate `^[a-z0-9-]+$` server-side, but cmd_db here runs
+    # `docker exec` DIRECTLY via SSH — no orchestrator binary is invoked
+    # in this path, so the orchestrator's regex never gets to see this
+    # slug. Without this check a hostile/typo slug like `"; touch /tmp/x; #`
+    # reaches the rl-agent shell before any orchestrator validation.
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || {
+        echo "[rl] slug must match [a-z0-9-]+ (got: $(printf '%q' "$slug"))" >&2; exit 2
+    }
+    if [[ "${1:-}" == "--web" ]]; then
+        # Resolve the slot this agent currently holds so the pgweb container
+        # carries `rl.role=env` + `rl.slot=N` labels — the same shape the
+        # gc-sweeper uses to reap a slot's children on release. Without these,
+        # `docker run --rm -d ...` leaves an orphan container that outlives
+        # both env-destroy AND slot release (M-VM-6 2026-05-19).
+        #
+        # NB: env-destroy itself does NOT remove pgweb today — flagged for
+        # the orchestrator agent. The sweeper-on-release path closes the gap
+        # in the meantime.
+        local pgweb_slot
+        pgweb_slot=$(current_slot)
+        [[ -z "$pgweb_slot" ]] && {
+            echo "[rl] no slot claimed — run 'rl claim' (and rl_claim_wait if enqueued) before 'rl db --web'" >&2; exit 1
+        }
+        [[ "$pgweb_slot" =~ ^[0-9]+$ ]] || {
+            echo "[rl] unexpected slot value: $pgweb_slot" >&2; exit 1
+        }
+        ssh_run_interactive "docker exec -it rl-env-${slug}-pg true && \
+            docker run --rm -d --name pgweb-${slug} --network rl-net \
+              --label rl.role=env \
+              --label rl.slot=${pgweb_slot} \
+              --label rl.env_slug=${slug} \
+              --label 'traefik.enable=true' \
+              --label 'traefik.http.routers.pgweb-${slug}.rule=Host(\`db-${slug}.rl.lan\`)' \
+              --label 'traefik.http.services.pgweb-${slug}.loadbalancer.server.port=8081' \
+              sosedoff/pgweb --bind=0.0.0.0 --listen=8081 \
+              --url postgres://user:password@rl-env-${slug}-pg:5432/raid_ledger?sslmode=disable"
+        echo "pgweb up at http://db-${slug}.rl.lan"
+    else
+        ssh_run_interactive "docker exec -it rl-env-${slug}-pg psql -U user -d raid_ledger"
+    fi
+}
+
+cmd_logs() {
+    [[ "$TARGET" == "local" ]] && { tail -f "$REPO_ROOT"/*.log 2>/dev/null || echo "no local logs"; exit 0; }
+    local query="${*:-{rl_role=\"runner\"}}"
+    # Open Grafana with the query pre-filled.
+    local url="http://grafana.rl.lan/explore?left=$(printf '%s' "[\"now-1h\",\"now\",\"Loki\",{\"expr\":\"$query\"}]" | jq -sRr @uri)"
+    case "$(uname -s)" in
+        Darwin) open "$url" ;;
+        Linux)  xdg-open "$url" ;;
+        *) echo "$url" ;;
+    esac
+}
+
+cmd_validate_ci() {
+    require_repo_root
+    if [[ "$TARGET" == "local" ]]; then
+        exec "$REPO_ROOT/scripts/validate-ci.sh" "$@"
+    fi
+    # ROK-1336 — opt-in EXIT-trap release. By default the slot persists across
+    # `rl validate-ci` exit codes so the agent can ssh in to debug or chain
+    # follow-up `rl run-on-runner` calls. Pass --release-on-exit at the front
+    # of the arg list for one-shot ergonomics (release fires regardless of
+    # success/failure, just like a trap on EXIT).
+    local release_on_exit=false
+    local forwarded_args=()
+    for arg in "$@"; do
+        if [[ "$arg" == "--release-on-exit" ]]; then
+            release_on_exit=true
+        else
+            forwarded_args+=("$arg")
+        fi
+    done
+    if [[ "$release_on_exit" == "true" ]]; then
+        trap '
+            rc=$?
+            if [[ -n "${RL_AGENT_ID:-}" ]]; then
+                echo "[rl] --release-on-exit: cmd_validate_ci exited rc=$rc, releasing slot" >&2
+                cmd_release >/dev/null 2>&1 || true
+            fi
+        ' EXIT
+    fi
+    ensure_claim
+    # Mutagen pre-flight: make sure the worktree is current before running.
+    SLOT=$(current_slot)
+    # A3-B P2: flush_mutagen also repairs exec bits and returns 97 if the tree
+    # cannot be made executable. FATAL here — dispatching a 15-minute gate onto
+    # a runner whose scripts exit 126 produces a red run with no assertion
+    # output, which is precisely the wasted round-trip this fix removes. Abort
+    # before spending the compute, with the reason named.
+    flush_mutagen "$SLOT" || {
+        echo "[rl] aborting validate-ci on slot $SLOT — refusing to spend a gate on a tree whose scripts are not executable" >&2
+        return 97
+    }
+    # Bug R (ROK-1326) defensive re-scaffold: slots claimed BEFORE the
+    # cmd_claim scaffold change landed will have a stale or empty .git
+    # (mutagen ignore-list now excludes .git entirely). If /workspace/.git/objects
+    # is missing, re-scaffold before running validate-ci. Harmless if .git
+    # is already healthy — the check exits 0 and no work is done.
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo main)"
+    ensure_runner_git "$SLOT" "$branch"
+    # ssh_run printf-%q's each positional. Pass "$@" so a validate-ci flag
+    # like --against-env-slug=$(id) reaches the runner as a literal
+    # string rather than executing on the VM (H-VM-1).
+    ssh_run run-on-runner -- bash /workspace/scripts/validate-ci.sh "${forwarded_args[@]:+${forwarded_args[@]}}"
+}
+
+# ROK-1326 fix-7: push-notify pattern. Agents that post a test plan need
+# to know when a tester submits without the operator nudging them. The
+# Claude Code harness auto-backgrounds Bash invocations and fires a
+# task-completion notification when they finish, but MCP tools block the
+# agent's main thread for the full call duration (per ROK-1331). Solution:
+# expose `rl test-plan wait` as a CLI subcommand so the agent spawns it
+# via Bash and gets a harness wake on tester submit.
+cmd_test_plan() {
+    local sub="${1:-}"
+    [[ -z "$sub" ]] && { echo "rl test-plan {wait|status} <slug> [--timeout N]" >&2; exit 2; }
+    shift
+    case "$sub" in
+        wait)   cmd_test_plan_wait "$@" ;;
+        status) cmd_test_plan_status "$@" ;;
+        *) echo "rl test-plan {wait|status} <slug> [--timeout N]" >&2; exit 2 ;;
+    esac
+}
+
+cmd_test_plan_wait() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && { echo "rl test-plan wait <slug> [--timeout N]" >&2; exit 2; }
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+    shift
+    local timeout=600
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timeout) timeout="$2"; shift 2 ;;
+            *) echo "unknown arg: $1" >&2; exit 2 ;;
+        esac
+    done
+    # ROK-1326 fix-10 (Codex P1): validate --timeout as a bounded
+    # positive integer BEFORE interpolating into the remote shell.
+    # Without this, `--timeout '60; rm -rf /'` becomes a command
+    # injection on the VM as rl-agent.
+    [[ "$timeout" =~ ^[0-9]+$ ]] && (( timeout >= 1 && timeout <= 3600 )) \
+        || { echo "invalid --timeout: must be 1..3600 seconds, got: $timeout" >&2; exit 2; }
+    if [[ "$TARGET" == "local" ]]; then
+        echo "test-plan wait is fleet-only (RL_TARGET=remote)" >&2
+        exit 1
+    fi
+    # Pre-flight: inotifywait MUST be installed on the VM. Without it the
+    # ssh below silently exits 127, set +e catches it, the code treats the
+    # non-zero rc as "no event = timeout" and emits a fake timed_out JSON.
+    # Result: agents think push-notify is working when it's not.
+    # Surfaced during ROK-1326 retest 2026-05-19 — same gap affects MCP
+    # rl_test_plan_wait and is folded into ROK-1331 follow-ups.
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "command -v inotifywait >/dev/null 2>&1"; then
+        cat <<EOF
+{"ok":false,"error":"inotifywait_not_installed","slug":"${slug}","hint":"inotify-tools is required for push-notify. Install on the VM: sudo apt-get install -y inotify-tools"}
+EOF
+        exit 2
+    fi
+    # close_write covers tester submit (POST /submit → writePlanAtomic
+    # writes a `.<slug>.<ts>.tmp` file then renames it to `<slug>.json`);
+    # moved_to covers the rename() landing on the parent dir; delete
+    # covers env-destroy reaping the plan. Same event set as the MCP
+    # rl_test_plan_wait (ROK-1326 D4).
+    #
+    # -m (monitor mode) is REQUIRED here. Without it, inotifywait exits
+    # after the FIRST event. The dashboard's writePlanAtomic always
+    # fires TWO events per submit: close_write on the .tmp file (filename
+    # like `.rok-1326-validate.1779226429054.tmp` — doesn't match the
+    # slug regex) then moved_to on the final filename (matches). Without
+    # -m, inotifywait grabs the .tmp event, dies, the grep -m 1 reads
+    # EOF without a match, exits 1, and the CLI mis-reports a timeout
+    # that was actually a successful submit. Surfaced during ROK-1326
+    # retest 2026-05-19 — operator wait fired in ~2 min instead of 30.
+    #
+    # With -m: inotifywait keeps streaming events; grep -m 1 reads until
+    # the slug-matching filename appears; on match, grep exits 0,
+    # SIGPIPE kills inotifywait, ssh exits 0.
+    #
+    # The remote timeout is enforced via a parent-shell timeout (the
+    # `timeout` coreutil) rather than inotifywait's -t flag, because
+    # -t and -m are not compatible (-m loops forever; -t is one-shot).
+    local plan_re
+    plan_re="^${slug}\\.json$"
+    # `set -e` at top of file would kill us on the expected non-zero exit
+    # from ssh/grep when the timeout fires (no match within window).
+    # Disable for the wait + restore immediately.
+    local rc=0
+    set +e
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "timeout ${timeout} inotifywait -m -q -e close_write,moved_to,delete --format '%f' /srv/rl-infra/state/test-plans/ 2>/dev/null | grep -m 1 -E '${plan_re}' >/dev/null"
+    rc=$?
+    set -e
+    if (( rc != 0 )); then
+        # inotifywait exits 2 on timeout, 1 on other errors. grep -m 1 exits
+        # 0 only on a match. So rc != 0 ⇒ no match within timeout.
+        echo '{"ok":true,"timed_out":true,"slug":"'"$slug"'","waited_seconds":'"$timeout"'}'
+        exit 0
+    fi
+    # Match landed — emit the current plan JSON so the agent can read
+    # verdicts on its next turn (Bash captures stdout into the harness
+    # notification).
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "cat /srv/rl-infra/state/test-plans/${slug}.json"
+}
+
+cmd_test_plan_status() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && { echo "rl test-plan status <slug>" >&2; exit 2; }
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+    if [[ "$TARGET" == "local" ]]; then
+        echo "test-plan status is fleet-only (RL_TARGET=remote)" >&2
+        exit 1
+    fi
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "cat /srv/rl-infra/state/test-plans/${slug}.json"
+}
+
+cmd_top() {
+    [[ "$TARGET" == "local" ]] && { command -v ctop >/dev/null && exec ctop; echo "install ctop"; exit 1; }
+    ssh_run_interactive "ctop"
+}
+
+cmd_gc() {
+    [[ "$TARGET" == "local" ]] && { echo "no remote sweeper in local mode" >&2; exit 0; }
+    ssh_run_interactive "docker exec rl-gc-sweeper sweep"
+}
+
+cmd_snapshot() {
+    [[ "$TARGET" == "local" ]] && { echo "snapshot is remote-only (ZFS-backed)" >&2; exit 1; }
+    local sub="${1:-}"; local name="${2:-}"
+    case "$sub" in
+        create)   ssh_run_interactive "sudo zfs snapshot rpool/rl-infra@$name" ;;
+        rollback) ssh_run_interactive "sudo zfs rollback rpool/rl-infra@$name" ;;
+        list)     ssh_run_interactive "zfs list -t snapshot rpool/rl-infra" ;;
+        *) echo "rl snapshot {create|rollback|list} <name>" >&2; exit 2 ;;
+    esac
+}
+
+cmd_doctor() {
+    echo "=== rl doctor ==="
+    echo "RL_TARGET (resolved): $TARGET"
+    echo "RL_AGENT_ID:          $RL_AGENT_ID"
+    echo "RL_PROXMOX_HOST:      $RL_PROXMOX_HOST"
+    if [[ "$TARGET" == "remote" ]]; then
+        echo -n "SSH connect:          "; ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" 'echo ok' 2>&1 || echo "FAILED"
+        echo -n "Orchestrator:         "; ssh_run status >/dev/null 2>&1 && echo "ok" || echo "FAILED"
+        echo -n "Mutagen daemon:       "; pgrep -f "mutagen daemon run" >/dev/null && echo "running" || echo "not running (start with: mutagen daemon start)"
+        echo -n "Active sync sessions: "; mutagen sync list 2>/dev/null | grep -c '^Name:' || true
+    else
+        echo "(local mode — remote checks skipped)"
+        echo -n "Docker:               "; docker info >/dev/null 2>&1 && echo "ok" || echo "FAILED"
+        echo -n "Env lock:             "; "$REPO_ROOT/scripts/env-lock.sh" status 2>/dev/null | head -1 || echo "unknown"
+    fi
+}
+
+# --- helpers --------------------------------------------------------------
+
+# Read-only lookup of the slot this agent currently holds, straight from
+# claims.json — NO side effects. Unlike current_slot()/ensure_claim (which run
+# `claim` and would ACQUIRE a slot as a side effect), this never mutates lease
+# state, so a caller that must not claim (e.g. the standalone `rl resync`
+# recovery tool) can ask "do I already hold a slot?" without risking a
+# branch-mismatch env destroy or a stray queue entry (Codex review 2026-06-02, P2).
+lookup_held_slot() {
+    ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "jq -r --arg a $(printf '%q' "$RL_AGENT_ID") '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true
+}
+
+current_slot() {
+    ssh_run claim --branch unknown | jq -r '.slot // empty'
+}
+
+ensure_claim() {
+    SLOT=$(current_slot)
+    # Use if/fi rather than `[[ -z "$SLOT" ]] && { ... }`. With set -e in
+    # effect, the && form makes the function's last command exit with the
+    # condition's exit code — which is 1 (false) when SLOT IS set, the
+    # successful path. That non-zero return then trips set -e in any
+    # caller (e.g. cmd_validate_ci), aborting the script silently before
+    # any work is done. Pre-existing on origin/main from PR #827 —
+    # surfaced during ROK-1326 fleet validation when `rl validate-ci`
+    # exited 1 with no output despite a healthy claim.
+    if [[ -z "$SLOT" ]]; then
+        echo "no slot — run 'rl claim' first (rl_claim_wait if enqueued)" >&2
+        exit 1
+    fi
+}
+
+ensure_mutagen_sync() {
+    local slot="$1"
+    local session="rl-slot-$slot"
+    if ! command -v mutagen >/dev/null; then
+        echo "[rl] mutagen not installed — install from https://mutagen.io/" >&2
+        return
+    fi
+    # CRITICAL: Mutagen lets multiple sessions share the same NAME — only
+    # the identifier is unique. If past claim/release cycles leaked orphans
+    # (e.g. user-prefix change rl@ → rl-agent@, or stop_mutagen_sync didn't
+    # fire), multiple sessions named "rl-slot-N" can race the same source/
+    # dest pair and never converge. Count first; if >1 OR if the single
+    # one's alpha doesn't match REPO_ROOT, terminate ALL (mutagen sync
+    # terminate <name> handles duplicates in one shot) and recreate.
+    local count
+    # `grep -c` exits 1 when zero matches — which with set -e would abort
+    # this function silently right where we MOST want to fall through to
+    # the create branch. `|| true` keeps the pipeline's exit at 0; grep -c
+    # already prints `0` on no-match so we don't need `echo 0` (which would
+    # double the stdout and break `(( count == 1 ))` arithmetic). ROK-1331
+    # M4 LOW #6.
+    count=$(mutagen sync list 2>/dev/null | grep -c "^Name: $session$" || true)
+    if (( count == 1 )); then
+        local current_alpha
+        current_alpha=$(mutagen sync list "$session" 2>/dev/null \
+            | awk '/^Alpha:/{flag=1;next} flag && /URL:/{print $2; exit}')
+        if [[ -n "$current_alpha" && "$current_alpha" == "$REPO_ROOT" ]]; then
+            # Single session, correct source — reuse.
+            return
+        fi
+        echo "[rl] mutagen session $session points at '$current_alpha', re-creating for '$REPO_ROOT'" >&2
+    elif (( count > 1 )); then
+        echo "[rl] WARNING: $count duplicate Mutagen sessions named $session — terminating all and recreating" >&2
+    fi
+    if (( count > 0 )); then
+        # `mutagen sync terminate <name>` terminates ALL sessions matching the
+        # name in one shot — verified during the bug-fix that motivated this.
+        mutagen sync terminate "$session" 2>/dev/null || true
+    fi
+    # --permissions-mode=manual: Bug S Layer 1 (ROK-1326). Was --permissions-mode=portable
+    # which still propagated some macOS xattr-driven perms to the runner as 0600 / 0700
+    # and broke Docker COPY in the allinone build. `manual` ignores source perms entirely
+    # and forces the explicit defaults below on every beta-side file.
+    # --default-{file,directory}-mode-beta force the runner-side perms.
+    # --mode=one-way-replica: laptop (alpha) is the SOLE source of truth.
+    # Runner (beta) gets aligned to alpha — files that exist only on the
+    # runner get DELETED on next sync. Without this (was: default
+    # two-way-resolved), any stale files left on a slot's /workspace by
+    # a previous session — e.g. operator's main-repo WIP — would
+    # propagate UP into the next agent's worktree on their first sync.
+    # Reported by the rok-1325 agent 2026-05-19.
+    #
+    # --ignore: keep this list in sync with rl-infra/mutagen/sync-template.yml.
+    # Bug R (ROK-1326): exclude the entire .git tree because cmd_claim
+    # scaffolds a fresh shallow .git on the runner side via `git init` +
+    # `git fetch origin`. Bug W (ROK-1326): exclude *.tsbuildinfo so tsc
+    # incremental caches don't clobber the runner's own build state.
+    mutagen sync create \
+        --name "$session" \
+        --mode=one-way-replica \
+        --permissions-mode=manual \
+        --default-file-mode-beta=0644 \
+        --default-directory-mode-beta=0755 \
+        --ignore-vcs=false \
+        --ignore=node_modules \
+        --ignore='**/node_modules' \
+        --ignore=dist \
+        --ignore='**/dist' \
+        --ignore=coverage \
+        --ignore='**/coverage' \
+        --ignore='**/coverage/**' \
+        --ignore=.git \
+        --ignore='.git/**' \
+        --ignore=.git/objects \
+        --ignore=.git/lfs \
+        --ignore='*.tsbuildinfo' \
+        --ignore='**/*.tsbuildinfo' \
+        --ignore=playwright-report \
+        --ignore='**/playwright-report' \
+        --ignore=test-results \
+        --ignore='**/test-results' \
+        --ignore=scripts/.auth \
+        --ignore='scripts/.auth/**' \
+        --ignore=.rl-perf.log \
+        --ignore=.rl-perf.log.errors \
+        "$REPO_ROOT" \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}:/srv/rl-infra/runners/slot-${slot}/worktree"
+}
+
+flush_mutagen() {
+    local slot="$1"
+    command -v mutagen >/dev/null || return 0
+    mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+    # A3-B P2: the sync just (re)wrote files at 0644 — repair exec bits before
+    # anything tries to run them. This is the ONE place; both consumers
+    # (cmd_claim, cmd_validate_ci) already flush here, so no caller needs the
+    # old `chmod -R a+x` incantation. Returns 97 on an unrepairable tree.
+    restore_runner_exec_bits "$slot"
+}
+
+# A3-B P2 — post-sync exec-bit restoration. See the long WHY in
+# rl-infra/runner/restore-exec-bits.sh: the Mutagen session is deliberately
+# created --permissions-mode=manual --default-file-mode-beta=0644 (Bug S Layer 1,
+# ROK-1326), so it propagates NO source permission — executability included —
+# and every synced script lands on the runner at 0644. `./scripts/foo.sh` then
+# exits 126, which a calling suite reports as a test failure with no assertion
+# output. Two fleet runs were lost to that on 2026-09-03.
+#
+# Routed through run-on-runner, not `ssh ... docker exec`: rl-agent is
+# deliberately NOT in the docker group, so a raw docker exec fails with
+# "permission denied while trying to connect to the docker API".
+#
+# Invoked with an EXPLICIT `bash`: the restore script is synced through the same
+# permission-stripping path as everything it repairs, so it cannot rely on its
+# own exec bit to run.
+restore_runner_exec_bits() {
+    local slot="$1"
+    [[ -z "$slot" ]] && return 0
+    local out rc=0
+    out=$(ssh_run run-on-runner -- \
+        bash /workspace/rl-infra/runner/restore-exec-bits.sh /workspace 2>&1) || rc=$?
+    if (( rc != 0 )); then
+        [[ -n "$out" ]] && echo "$out" >&2
+        echo "[rl] FATAL exec-bit restore failed on slot $slot (rc=$rc)." >&2
+        echo "[rl] Scripts under /workspace are not executable, so anything that shells" >&2
+        echo "[rl] out to one would die with a bare 126 that reads like a test failure." >&2
+        echo "[rl] This is an ENVIRONMENT problem. Try: rl resync (or release + re-claim)." >&2
+        return 97
+    fi
+    return 0
+}
+
+# Bug R (ROK-1326): rebuild .git inside the runner container from scratch
+# after every claim. The Mutagen sync now ignores .git entirely (so the
+# runner never inherits the laptop's local-branch index / packed-refs /
+# possibly-corrupt objects directory), and we replace it here with a
+# fresh shallow remote-tracking clone. Tools that expect `git` state inside
+# /workspace (validate-ci, scripts that detect changed files via `git diff`,
+# the install/build steps that read package.json from the staged tree) then
+# see a clean repository pinned to the same branch the agent is working on.
+#
+# Steps run inside the runner container via docker exec, NOT on the VM host:
+#   1. rm -rf .git  (handle both file + dir case — was a regular dir before)
+#   2. git init -q  (re-create)
+#   3. git remote add origin <url>
+#   4. git fetch origin main --depth=500 -q
+#   5. git reset --mixed FETCH_HEAD  (don't blow away mutagen-synced files)
+#   6. git checkout -q -B <branch>   (best-effort; falls back if branch
+#                                     doesn't exist remotely — local-only
+#                                     branches are legal mid-development)
+# ROK-1326 fix-11: preempt `npm ci` so the first validate-ci/test run on
+# a freshly-claimed slot doesn't pay the 1-2min dep-install cost on top
+# of its own work. Mutagen excludes node_modules (large + OS-specific
+# binaries), so /workspace/node_modules is never synced from the laptop: it
+# persists on the runner between claims and may be missing (a new runner)
+# or stale (installed for another branch's package-lock.json).
+# Runs in the background from cmd_claim — claim returns to the user
+# immediately and deps populate while they read the claim output.
+# The root install goes through scripts/ci/ensure-runner-deps.sh, the
+# same helper validate-ci.sh calls. It holds the shared install lock
+# (container /tmp) and the lockfile-sha256 marker in node_modules, so a
+# validate-ci run that starts before this background install finishes
+# waits for it and then skips, instead of running a second `npm ci` in
+# the same tree.
+install_runner_deps() {
+    local slot="$1"
+    [[ -z "$slot" ]] && return 0
+    # `npm ci` is a clean-slate install — faster + more reproducible than
+    # `npm install` from a populated state. ensure-runner-deps.sh skips it
+    # when node_modules is current for this package-lock.json (prior
+    # session, or another concurrent claim finished the install) and
+    # re-installs when the lockfile changed since the last install. A
+    # branch that predates the helper falls back to the old tsc-present
+    # check. `2>&1 >/dev/null` keeps the background logging quiet so it
+    # doesn't tangle with the claim output the user is reading.
+    #
+    # ROK-1359: tools/test-bot is a STANDALONE package (not an npm
+    # workspace), so the root `npm ci` above doesn't cover it. Pre-install
+    # its deps too so the `--full` Discord smoke step doesn't die at import
+    # (ERR_MODULE_NOT_FOUND: @discordjs/voice) on a fresh runner. When the
+    # checkout's helper carries the RL_DEPS_SUBROOT_V1 capability token it
+    # takes tools/test-bot as a SUBDIR: same lock, its own lockfile-sha256
+    # marker, so a test-bot lockfile change re-installs on a warm runner
+    # too. A branch that predates the token keeps the old
+    # skip-when-populated guard. validate-ci.sh calls the same helper and
+    # owns the npm install fallback on lockfile drift.
+    ssh_run run-on-runner -- bash -c \
+        'if [ -f /workspace/scripts/ci/ensure-runner-deps.sh ]; then \
+           bash /workspace/scripts/ci/ensure-runner-deps.sh /workspace; \
+         else \
+           [ -x /workspace/node_modules/.bin/tsc ] || \
+             (cd /workspace && npm ci --silent --no-audit --no-fund); \
+         fi; \
+         if grep -q RL_DEPS_SUBROOT_V1 /workspace/scripts/ci/ensure-runner-deps.sh 2>/dev/null; then \
+           bash /workspace/scripts/ci/ensure-runner-deps.sh /workspace tools/test-bot; \
+         else \
+           [ -d /workspace/tools/test-bot/node_modules ] || \
+             (cd /workspace/tools/test-bot && npm ci --silent --no-audit --no-fund); \
+         fi' \
+        >/dev/null 2>&1 || true
+}
+
+scaffold_runner_git() {
+    local slot="$1" branch="$2"
+    [[ -z "$slot" ]] && return 0
+    local origin_url
+    origin_url=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)
+    if [[ -z "$origin_url" ]]; then
+        echo "[rl] no 'origin' remote configured locally — skipping runner .git scaffold" >&2
+        return 0
+    fi
+    [[ -z "$branch" || "$branch" == "unknown" ]] && branch="main"
+    # printf-%q every interpolated value: origin_url is a config file value
+    # (less risky) but branch can in principle carry shell metachars. Defense
+    # in depth (H-VM-1 pattern).
+    local quoted_url quoted_branch
+    quoted_url=$(printf '%q' "$origin_url")
+    quoted_branch=$(printf '%q' "$branch")
+
+    # ROK-1331 M4 AC6 — idempotency probe. If /workspace/.git is already on
+    # the target branch AND has objects/pack populated, skip the destructive
+    # rebuild (saves 2-5s of remote git work per re-claim of the same slot
+    # for the same branch). Detached HEAD or branch mismatch falls through
+    # to the rebuild.
+    local probe_script
+    probe_script=$(cat <<EOF
+set -e
+cd /workspace 2>/dev/null || exit 1
+test -d .git/objects/pack || exit 2
+current=\$(git -c safe.directory=/workspace rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [[ "\$current" != ${quoted_branch} ]]; then exit 3; fi
+ls .git/objects/pack/*.pack >/dev/null 2>&1 || exit 4
+exit 0
+EOF
+)
+    if ssh_run run-on-runner -- bash -s <<<"$probe_script" >/dev/null 2>&1; then
+        echo "[rl] scaffold-idempotent: slot ${slot} already on ${branch} with packed objects — skipping rebuild" >&2
+        return 0
+    fi
+
+    local script
+    # safe.directory: scaffold runs as root (via run-on-runner) but
+    # /workspace is owned by uid 1001 (rl-fleet). Git's dubious-ownership
+    # check fires on every operation when uid mismatches the dir owner.
+    # The git -c flag scopes the override to this invocation only —
+    # cleaner than touching the container's global gitconfig.
+    #
+    # ROK-1331 M4 AC7 — try fetching the agent's branch first; fall back to
+    # main if origin doesn't have it yet (fresh local-only branch). The
+    # `|| { warn; return 0; }` outer catch handles "neither branch nor main
+    # reachable" without aborting the claim.
+    script=$(cat <<EOF
+set -e
+cd /workspace
+rm -rf .git
+git -c safe.directory=/workspace init -q
+git -c safe.directory=/workspace remote add origin ${quoted_url}
+git -c safe.directory=/workspace fetch origin ${quoted_branch} --depth=500 -q 2>/dev/null \\
+    || git -c safe.directory=/workspace fetch origin main --depth=500 -q
+git -c safe.directory=/workspace reset --mixed FETCH_HEAD
+git -c safe.directory=/workspace checkout -q -B ${quoted_branch} 2>/dev/null || true
+EOF
+)
+    # Route through orchestrator's run-on-runner endpoint — rl-agent (the
+    # default user) is intentionally NOT in the docker group, so raw
+    # `ssh ... docker exec` fails with "permission denied while trying to
+    # connect to the docker API". run-on-runner runs as root inside the
+    # orchestrator binary, derives the slot from RL_AGENT_ID via _state.sh,
+    # and pipes stdin through to `docker exec -i`. Failures here should
+    # not be fatal — a slot without .git is still usable for non-git
+    # operations.
+    ssh_run run-on-runner -- bash -s <<<"$script" >/dev/null 2>&1 || {
+        echo "[rl] WARNING: failed to scaffold .git on slot ${slot} — validate-ci will retry" >&2
+        return 0
+    }
+}
+
+# Bug R defensive re-scaffold: only rebuild .git if /workspace/.git/objects
+# is missing on the runner. Cheap no-op when .git is healthy. Used by
+# cmd_validate_ci so slots claimed before Bug R landed self-heal.
+ensure_runner_git() {
+    local slot="$1" branch="$2"
+    [[ -z "$slot" ]] && return 0
+    # Route through run-on-runner same as scaffold_runner_git — direct
+    # `docker exec` fails under rl-agent (no docker group membership).
+    if ssh_run run-on-runner -- test -d /workspace/.git/objects >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "[rl] runner slot ${slot} missing .git/objects — re-scaffolding" >&2
+    scaffold_runner_git "$slot" "$branch"
+}
+
+# Terminate the Mutagen sync session for a slot. Called from cmd_release so
+# the next claim from a (possibly different) worktree creates a fresh session
+# pointing at the new source. Without this, the existing-session-noop in
+# ensure_mutagen_sync keeps the OLD source path indefinitely.
+#
+# Two-tier guard:
+#   1. If slot is known (the typical path), terminate by name directly.
+#   2. If slot is empty (lookup raced with the release that just cleared the
+#      claim — see cmd_release), scan local sessions for any rl-slot-*
+#      whose alpha URL matches REPO_ROOT and terminate those. Belt-and-
+#      suspenders so an orphan session doesn't outlive the release.
+stop_mutagen_sync() {
+    local slot="$1"
+    command -v mutagen >/dev/null || return 0
+
+    if [[ -n "$slot" ]]; then
+        mutagen sync terminate "rl-slot-$slot" 2>/dev/null || true
+        return 0
+    fi
+
+    [[ -z "$REPO_ROOT" ]] && return 0
+    # Scan: find rl-slot-N sessions whose Alpha URL points at our REPO_ROOT.
+    # `mutagen sync list` output has alpha/beta blocks per session — match
+    # the alpha URL to our local path. Awk groups by Name then captures
+    # the alpha URL when present.
+    local orphans
+    orphans=$(mutagen sync list 2>/dev/null \
+        | awk -v root="$REPO_ROOT" '
+            /^Name: rl-slot-/ { name = $2; alpha = ""; next }
+            /^Alpha:/         { reading_alpha = 1; next }
+            /^Beta:/          { reading_alpha = 0; next }
+            reading_alpha && /URL:/ && $2 == root { print name }
+        ')
+    local s
+    for s in $orphans; do
+        mutagen sync terminate "$s" 2>/dev/null || true
+    done
+}
+
+start_heartbeat_daemon() {
+    local slot="$1"
+    local pidfile="$HOME/.rl-heartbeat-${slot}.pid"
+    [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null && return
+    (
+        # CRITICAL: detach all inherited FDs BEFORE the long-running loop
+        # starts. Without this, the backgrounded subshell keeps the parent
+        # script's stdin/stdout/stderr open — which is fine when invoked
+        # interactively, but catastrophic when invoked from the MCP server.
+        # The MCP server's execFile/spawn reads from rl claim's stdout pipe (or rl_claim_wait when enqueued)
+        # and waits for EOF; the heartbeat subshell inherits that pipe and
+        # never closes it, so the MCP call hangs for the full 5-min default
+        # timeout. Closing the FDs here lets cmd_claim return cleanly to
+        # the MCP caller within milliseconds. Verified 2026-05-18 — every
+        # "hung claim" incident tonight traced back to this missing detach.
+        exec 0</dev/null 1>/dev/null 2>/dev/null
+        # Snapshot RL_AGENT_ID into the subshell with printf-%q so any
+        # weird chars (defensive — see deriveAgentId validation in MCP
+        # exec.ts) can't break out of the remote shell quoting.
+        local quoted_id
+        quoted_id=$(printf '%q' "$RL_AGENT_ID")
+        while true; do
+            ssh -o ConnectTimeout=5 -o BatchMode=yes \
+                "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+                "RL_AGENT_ID=$quoted_id /srv/rl-infra/orchestrator/bin/heartbeat" >/dev/null 2>&1 || true
+            sleep 60
+        done
+    ) &
+    disown   # remove from job table so bash doesn't track it through exit
+    echo $! > "$pidfile"
+}
+
+stop_heartbeat_daemon() {
+    for pidfile in "$HOME"/.rl-heartbeat-*.pid; do
+        [[ -f "$pidfile" ]] || continue
+        kill "$(cat "$pidfile")" 2>/dev/null || true
+        rm -f "$pidfile"
+    done
+}
+
+# --- dispatch -------------------------------------------------------------
+
+usage() {
+    cat <<EOF
+rl — remote runner CLI (target: $TARGET)
+
+  rl claim [--no-wait] [--wait-timeout N] [--poll-interval N]   # enqueues with queue_position=N when contended
+                             acquire a slot (waits + polls if all busy; enqueues with queue_position=N when contended)
+  rl release                 release slot + clean up
+  rl resync                  force-recreate a WEDGED Mutagen sync for your
+                             slot (terminate + recreate + flush + re-scaffold
+                             .git) without releasing. Use when a redeploy
+                             serves stale code / worktree is behind the laptop.
+  rl force-release --slot N --reason '...' [--no-destroy]
+                             operator-only: clear stuck slot (requires RL_OPERATOR=1)
+  rl status [--pretty]       global view (JSON by default; --pretty for human table)
+  rl shell                   tmux attach into your slot
+  rl logs [filter]           open Loki/Grafana with filter
+  rl env spin <slug>         spin per-env stack (allinone + sibling PG)
+  rl env destroy <slug>      tear down env
+  rl env list                list active envs
+  rl env pin <slug>          pin an env so the sweeper skips it (24h ceiling still applies)
+  rl env unpin <slug>        clear the pinned flag
+  rl extend [N]              push current claim's expires_at to NOW + N hours (1..24, default 1)
+  rl lease-status [N]        snapshot of lease queues + claims + pinned/claimable envs
+  rl claim-wait [--timeout N]  long-poll the lease queue: queues until granted (push-notify shape; mirrors rl_claim_wait MCP tool)
+  rl db <slug> [--web]       psql or pgweb against env's Postgres
+  rl validate-ci [args] [--release-on-exit]
+                             run validate-ci.sh inside your runner. The slot
+                             persists across exit codes (heartbeat daemon
+                             outlives the script) so you can ssh in to debug.
+                             Pass --release-on-exit for one-shot ergonomics:
+                             the CLI traps EXIT and calls cmd_release on any
+                             exit code. Held-but-failed slots are also
+                             surfaced via /api/fleet-health
+                             (held_slots_with_failed_validate_ci field).
+  rl test-plan wait <slug>   long-poll for first tester submit (spawn in background; harness notifies on submit)
+  rl test-plan status <slug> cheap one-shot read of the plan JSON
+  rl top                     ctop live resource view
+  rl gc                      force a sweeper run
+  rl snapshot {create|rollback|list} <name>
+  rl settings push           encrypt shared API keys to the VM bundle (operator)
+  rl doctor                  end-to-end health check
+EOF
+}
+
+# --- settings bundle (ROK-1469 D6) ----------------------------------------
+#
+# `rl_env_deploy` used to require the operator's laptop DB: sync_settings
+# pg_dumps app_settings out of raid-ledger-db, so with Docker Desktop off
+# every deployed env came up with NO API keys. `rl settings push` encrypts the
+# SHARED keys (allowlisted in scripts/rl-settings-bundle.mjs — never the
+# per-slot Discord identity) into /srv/rl-infra/settings/bundle.enc, which
+# env-settings-overlay seeds into each env at spin time.
+#
+# Operator-only: writing under /srv/rl-infra needs the `rl` account, so run it
+# with RL_OPERATOR=1. Agents cannot (and must not) push credentials.
+
+# Resolve the operator's local JWT_SECRET — app_settings rows are encrypted
+# with it. $LOCAL_JWT_SECRET wins; otherwise the main repo's api/.env.
+_settings_local_jwt() {
+    if [[ -n "${LOCAL_JWT_SECRET:-}" ]]; then printf '%s' "$LOCAL_JWT_SECRET"; return 0; fi
+    local common_dir main_repo f secret
+    common_dir=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || echo "")
+    if [[ "$common_dir" == /* ]]; then main_repo=$(cd "$common_dir/.." && pwd)
+    else main_repo="$REPO_ROOT"; fi
+    for f in "$main_repo/api/.env" "$REPO_ROOT/api/.env"; do
+        [[ -f "$f" ]] || continue
+        secret=$(grep -E '^JWT_SECRET=' "$f" | head -1 | cut -d= -f2-)
+        secret="${secret%\"}"; secret="${secret#\"}"
+        secret="${secret%\'}"; secret="${secret#\'}"
+        [[ -n "$secret" ]] && { printf '%s' "$secret"; return 0; }
+    done
+    return 1
+}
+
+# Read RL_SETTINGS_BUNDLE_KEY from the environment or the repo-root .env
+# (where the other RL_INFRA_* credentials already live).
+_settings_bundle_key() {
+    if [[ -n "${RL_SETTINGS_BUNDLE_KEY:-}" ]]; then printf '%s' "$RL_SETTINGS_BUNDLE_KEY"; return 0; fi
+    local v
+    v=$(grep -E '^RL_SETTINGS_BUNDLE_KEY=' "$REPO_ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2-)
+    v="${v%\"}"; v="${v#\"}"
+    [[ -n "$v" ]] && { printf '%s' "$v"; return 0; }
+    return 1
+}
+
+# The bundle is written by the OPERATOR (rl) but read by the ORCHESTRATOR
+# (rl-agent, group rl-fleet). Without the chgrp it lands rl:rl 640, rl-agent
+# cannot open it, and env-settings-overlay used to treat that exactly like an
+# absent bundle — envs came up with their identity keys and none of the 12
+# shared ones (live finding 2026-09-02). 2750 on the dir keeps `other` out
+# entirely; 640 on the file keeps every community API key off o+r.
+cmd_settings_push() {
+    require_repo_root
+    local key jwt tsv plaintext container="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
+    if ! key=$(_settings_bundle_key); then
+        echo "[rl] RL_SETTINGS_BUNDLE_KEY is not set (shell env or repo-root .env)." >&2
+        echo "      It must match RL_SETTINGS_BUNDLE_KEY in /srv/rl-infra/.env, or the VM cannot decrypt the bundle." >&2
+        exit 2
+    fi
+    if ! jwt=$(_settings_local_jwt); then
+        echo "[rl] cannot resolve the local JWT_SECRET (set LOCAL_JWT_SECRET or ensure api/.env exists)." >&2
+        exit 2
+    fi
+    if ! docker inspect "$container" --format '{{.State.Running}}' 2>/dev/null | grep -q true; then
+        echo "[rl] local DB container '$container' is not running — start it, then re-push." >&2
+        exit 3
+    fi
+    tsv=$(docker exec "$container" psql -U user -d raid_ledger -tA -F$'\t' -c \
+        "SELECT key, encrypted_value FROM app_settings ORDER BY key;") || exit 3
+    plaintext=$(RL_BUNDLE_SRC_SECRET="$jwt" node "$REPO_ROOT/scripts/rl-settings-bundle.mjs" <<<"$tsv") || exit 3
+    # Encrypt locally, then stream to the VM. The plaintext never touches disk.
+    if ! printf '%s' "$plaintext" \
+        | RL_SETTINGS_BUNDLE_KEY="$key" openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -pass env:RL_SETTINGS_BUNDLE_KEY \
+        | ssh "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+            'set -e
+             mkdir -p /srv/rl-infra/settings
+             cat > /srv/rl-infra/settings/bundle.enc
+             chgrp rl-fleet /srv/rl-infra/settings /srv/rl-infra/settings/bundle.enc 2>/dev/null || true
+             chmod 2750 /srv/rl-infra/settings
+             chmod 640 /srv/rl-infra/settings/bundle.enc'; then
+        echo "[rl] failed to write the bundle to the VM (need RL_OPERATOR=1 for write access under /srv/rl-infra)." >&2
+        exit 3
+    fi
+    echo "[rl] pushed $(jq -r 'keys | length' <<<"$plaintext") shared setting(s) to /srv/rl-infra/settings/bundle.enc"
+    echo "     New envs seed from it automatically; refresh a live env with rl_env_deploy or env-settings-overlay --slug <slug>."
+}
+
+cmd_settings() {
+    case "${1:-}" in
+        push) shift; cmd_settings_push "$@" ;;
+        *)
+            echo "usage: rl settings push        encrypt the shared API keys to the VM bundle" >&2
+            echo "       (operator-only; run with RL_OPERATOR=1)" >&2
+            exit 2
+            ;;
+    esac
+}
+
+case "${1:-}" in
+    claim)        shift; cmd_claim "$@" ;;
+    claim-wait)   shift; cmd_claim_wait "$@" ;;
+    release)      shift; cmd_release "$@" ;;
+    resync)       shift; cmd_resync "$@" ;;
+    force-release) shift; cmd_force_release "$@" ;;
+    extend)       shift; cmd_extend "$@" ;;
+    lease-status) shift; cmd_lease_status "$@" ;;
+    status)       shift; cmd_status "$@" ;;
+    shell)        shift; cmd_shell "$@" ;;
+    env)          shift; cmd_env "$@" ;;
+    db)           shift; cmd_db "$@" ;;
+    logs)         shift; cmd_logs "$@" ;;
+    validate-ci)  shift; cmd_validate_ci "$@" ;;
+    test-plan)    shift; cmd_test_plan "$@" ;;
+    top)          shift; cmd_top "$@" ;;
+    gc)           shift; cmd_gc "$@" ;;
+    snapshot)     shift; cmd_snapshot "$@" ;;
+    settings)     shift; cmd_settings "$@" ;;
+    doctor)       shift; cmd_doctor "$@" ;;
+    _resolve_host) printf '%s\n' "$RL_PROXMOX_HOST" ;;
+    -h|--help|"") usage ;;
+    *) echo "unknown subcommand: $1" >&2; usage >&2; exit 2 ;;
+esac

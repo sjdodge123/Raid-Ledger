@@ -1,0 +1,943 @@
+/**
+ * Community Lineup Matches Integration Tests (ROK-937)
+ *
+ * Verifies the decided-view match endpoints against a real PostgreSQL
+ * database: tiered match grouping, bandwagon join, operator advance,
+ * and auto-carryover on lineup creation.
+ *
+ * Endpoints under test:
+ *   GET  /lineups/:id/matches
+ *   POST /lineups/:id/matches/:matchId/join
+ *   POST /lineups/:id/matches/:matchId/advance
+ *   POST /lineups (auto-carryover on creation)
+ */
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import {
+  truncateAllTables,
+  loginAsAdmin,
+} from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
+import { buildMatchesForLineup } from './lineups-matching.helpers';
+import { eq, sql } from 'drizzle-orm';
+import { at, nonEmpty } from '../common/testing/narrow';
+
+// ── Shared state ──────────────────────────────────────────────
+let testApp: TestApp;
+let adminToken: string;
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+});
+
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+});
+
+// ── Helpers ───────────────────────────────────────────────────
+
+async function loginAsOperator(): Promise<string> {
+  const bcrypt = await import('bcrypt');
+  const hash = await bcrypt.hash('OperatorPass1!', 4);
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:operator@test.local',
+        username: 'operator',
+        role: 'operator',
+      })
+      .returning(),
+    'user',
+  );
+  await testApp.db.insert(schema.localCredentials).values({
+    email: 'operator@test.local',
+    passwordHash: hash,
+    userId: user.id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email: 'operator@test.local', password: 'OperatorPass1!' });
+  return res.body.access_token as string;
+}
+
+async function loginAsMember(
+  tag = 'member',
+): Promise<{ token: string; userId: number }> {
+  const bcrypt = await import('bcrypt');
+  const hash = await bcrypt.hash('MemberPass1!', 4);
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
+  await testApp.db.insert(schema.localCredentials).values({
+    email: `${tag}@test.local`,
+    passwordHash: hash,
+    userId: user.id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email: `${tag}@test.local`, password: 'MemberPass1!' });
+  return { token: res.body.access_token as string, userId: user.id };
+}
+
+async function createGame(name: string, slug: string) {
+  const [game] = nonEmpty(
+    await testApp.db.insert(schema.games).values({ name, slug }).returning(),
+    'game',
+  );
+  return game;
+}
+
+/** Create lineup, add entries, cast votes, and advance to decided. */
+async function buildDecidedLineup(opts: {
+  token: string;
+  games: { id: number }[];
+  voters: { userId: number; gameIds: number[] }[];
+  matchThreshold?: number;
+}): Promise<number> {
+  // Create lineup
+  const createRes = await testApp.request
+    .post('/lineups')
+    .set('Authorization', `Bearer ${opts.token}`)
+    .send({ title: 'Matches Test', matchThreshold: opts.matchThreshold ?? 35 });
+  const lineupId = createRes.body.id as number;
+
+  // Add entries for each game
+  for (const game of opts.games) {
+    await testApp.db.insert(schema.communityLineupEntries).values({
+      lineupId,
+      gameId: game.id,
+      nominatedBy: testApp.seed.adminUser.id,
+    });
+  }
+
+  // Advance to voting
+  await testApp.request
+    .patch(`/lineups/${lineupId}/status`)
+    .set('Authorization', `Bearer ${opts.token}`)
+    .send({ status: 'voting' });
+
+  // Cast votes
+  for (const voter of opts.voters) {
+    for (const gameId of voter.gameIds) {
+      await testApp.db.insert(schema.communityLineupVotes).values({
+        lineupId,
+        userId: voter.userId,
+        gameId,
+      });
+    }
+  }
+
+  // Advance directly to decided (voting → decided)
+  await testApp.request
+    .patch(`/lineups/${lineupId}/status`)
+    .set('Authorization', `Bearer ${opts.token}`)
+    .send({ status: 'decided' });
+
+  return lineupId;
+}
+
+// ── GET /lineups/:id/matches ──────────────────────────────────
+
+function describeGETMatches() {
+  it('returns grouped response with all four tier arrays', async () => {
+    const game1 = await createGame('Game High', 'game-high');
+    const game2 = await createGame('Game Mid', 'game-mid');
+    const game3 = await createGame('Game Low', 'game-low');
+
+    // Create 10 voters; every voter must cast at least one vote so
+    // countDistinctVoters = 10 (the denominator for votePercentage).
+    const game4 = await createGame('Filler Game', 'filler-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const m = await loginAsMember(`voter-${i}`);
+      voters.push({ userId: m.userId, gameIds: [] });
+    }
+
+    // threshold = 35%
+    // game1: 5/10 = 50% -> scheduling (thresholdMet=true)
+    // game2: 3/10 = 30% -> almostThere (>= 35*0.7 = 24.5%)
+    // game3: 1/10 = 10% -> rallyYourCrew (< 24.5%)
+    for (const voter of voters.slice(0, 5)) voter.gameIds.push(game1.id);
+    for (const voter of voters.slice(0, 3)) voter.gameIds.push(game2.id);
+    at(voters, 0).gameIds.push(game3.id);
+    // Voters 5-9 need at least one vote; give them game4
+    for (const voter of voters.slice(5, 10)) voter.gameIds.push(game4.id);
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1, game2, game3, game4],
+      voters,
+      matchThreshold: 35,
+    });
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}/matches`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('scheduling');
+    expect(res.body).toHaveProperty('almostThere');
+    expect(res.body).toHaveProperty('rallyYourCrew');
+    expect(res.body).toHaveProperty('carriedForward');
+    expect(res.body).toHaveProperty('matchThreshold');
+    expect(res.body).toHaveProperty('totalVoters');
+  });
+
+  it('places thresholdMet=true matches in scheduling tier', async () => {
+    const game1 = await createGame('Popular Game', 'popular-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    for (let i = 0; i < 5; i++) {
+      const m = await loginAsMember(`pop-voter-${i}`);
+      // All 5 vote for game1 -> 100% >= 35% -> scheduling
+      voters.push({ userId: m.userId, gameIds: [game1.id] });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1],
+      voters,
+      matchThreshold: 35,
+    });
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}/matches`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.scheduling).toHaveLength(1);
+    expect(res.body.scheduling[0].gameId).toBe(game1.id);
+  });
+
+  it('places almostThere matches (>= threshold*0.7)', async () => {
+    const gameAlmost = await createGame('Almost Game', 'almost-game');
+    const gameAbove = await createGame('Above Game', 'above-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+
+    // 10 voters, threshold=50 — all must vote so countDistinctVoters = 10
+    // gameAlmost: 4/10 = 40% — almostThere (>= 50*0.7=35%)
+    // gameAbove: 10/10 = 100% — scheduling (>= 50%)
+    for (let i = 0; i < 10; i++) {
+      const m = await loginAsMember(`almost-voter-${i}`);
+      const gameIds: number[] = [gameAbove.id];
+      if (i < 4) gameIds.push(gameAlmost.id);
+      voters.push({ userId: m.userId, gameIds });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [gameAlmost, gameAbove],
+      voters,
+      matchThreshold: 50,
+    });
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}/matches`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.almostThere).toHaveLength(1);
+    expect(res.body.almostThere[0].gameId).toBe(gameAlmost.id);
+  });
+
+  it('places rallyYourCrew matches (< threshold*0.7)', async () => {
+    const gameRally = await createGame('Rally Game', 'rally-game');
+    const gameAbove = await createGame('Above2 Game', 'above2-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+
+    // 10 voters, threshold=50 — all must vote so countDistinctVoters = 10
+    // gameRally: 2/10 = 20% — rallyYourCrew (< 50*0.7=35%)
+    // gameAbove: 10/10 = 100% — scheduling (>= 50%)
+    for (let i = 0; i < 10; i++) {
+      const m = await loginAsMember(`rally-voter-${i}`);
+      const gameIds: number[] = [gameAbove.id];
+      if (i < 2) gameIds.push(gameRally.id);
+      voters.push({ userId: m.userId, gameIds });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [gameRally, gameAbove],
+      voters,
+      matchThreshold: 50,
+    });
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}/matches`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.rallyYourCrew).toHaveLength(1);
+    expect(res.body.rallyYourCrew[0].gameId).toBe(gameRally.id);
+  });
+
+  it('returns 404 when lineup not found', async () => {
+    const res = await testApp.request
+      .get('/lineups/99999/matches')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(404);
+    // Must be a domain-level 404, not a route-not-found 404
+    expect(res.body.message).toMatch(/lineup|not found/i);
+    expect(res.body.message).not.toMatch(/Cannot GET/i);
+  });
+
+  it('requires authentication', async () => {
+    const res = await testApp.request.get('/lineups/1/matches');
+    expect(res.status).toBe(401);
+  });
+}
+describe('GET /lineups/:id/matches', describeGETMatches);
+
+// ── POST /lineups/:id/matches/:matchId/join ──────────────────
+
+function describeJoin() {
+  it('creates match_member with source=bandwagon', async () => {
+    const game1 = await createGame('Join Game', 'join-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    for (let i = 0; i < 5; i++) {
+      const m = await loginAsMember(`join-voter-${i}`);
+      voters.push({ userId: m.userId, gameIds: [game1.id] });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1],
+      voters,
+      matchThreshold: 35,
+    });
+
+    // Get the match ID
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    const matchId = at(matches, 0).id;
+
+    // New member joins via bandwagon
+    const newMember = await loginAsMember('bandwagon-joiner');
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/${matchId}/join`)
+      .set('Authorization', `Bearer ${newMember.token}`);
+
+    expect(res.status).toBe(200);
+
+    // Verify the member row was created with source=bandwagon
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers);
+    const bandwagonMember = members.find((m) => m.userId === newMember.userId);
+    expect(bandwagonMember).toBeDefined();
+    expect(bandwagonMember!.source).toBe('bandwagon');
+  });
+
+  it('auto-promotes match when bandwagon reaches threshold', async () => {
+    const game1 = await createGame('Promote Game', 'promote-game');
+    const game2 = await createGame('Filler Game', 'filler-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+
+    // 10 voters, threshold=50
+    // game1: 4/10 = 40% -> suggested (below 50%)
+    // game2: 10/10 = 100% -> scheduling (above 50%)
+    // All voters must vote for at least one game so countDistinctVoters = 10
+    for (let i = 0; i < 10; i++) {
+      const m = await loginAsMember(`promote-voter-${i}`);
+      const gameIds: number[] = [game2.id];
+      if (i < 4) gameIds.push(game1.id);
+      voters.push({ userId: m.userId, gameIds });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1, game2],
+      voters,
+      matchThreshold: 50,
+    });
+
+    // Find the suggested match for game1
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    const suggestedMatch = matches.find(
+      (m) => m.gameId === game1.id && m.status === 'suggested',
+    );
+
+    // Guard: ensure the matching algorithm created the suggested match.
+    // If this fails, the matching algorithm needs fixing before this test
+    // can exercise the bandwagon promotion path.
+    if (!suggestedMatch) {
+      // Force a failing assertion against the join endpoint
+      const newMember = await loginAsMember('promote-joiner');
+      const fallbackRes = await testApp.request
+        .post(`/lineups/${lineupId}/matches/1/join`)
+        .set('Authorization', `Bearer ${newMember.token}`);
+      // This will fail with 404 since the endpoint doesn't exist
+      expect(fallbackRes.status).toBe(200);
+      return;
+    }
+
+    // Bandwagon join — need 1 more to reach 5/10 = 50%
+    const newMember = await loginAsMember('promote-joiner');
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/${suggestedMatch.id}/join`)
+      .set('Authorization', `Bearer ${newMember.token}`);
+
+    expect(res.status).toBe(200);
+
+    // Verify the match was promoted to scheduling
+    const promotedMatch = (
+      await testApp.db.select().from(schema.communityLineupMatches)
+    ).find((m) => m.id === suggestedMatch.id);
+    expect(promotedMatch!.status).toBe('scheduling');
+    expect(promotedMatch!.thresholdMet).toBe(true);
+  });
+
+  it('returns 409 when user is already a member', async () => {
+    const game1 = await createGame('Dup Game', 'dup-game');
+    const member = await loginAsMember('dup-member');
+    const voters = [{ userId: member.userId, gameIds: [game1.id] }];
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1],
+      voters,
+      matchThreshold: 35,
+    });
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    const matchId = at(matches, 0).id;
+
+    // member already voted, so they're already a member
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/${matchId}/join`)
+      .set('Authorization', `Bearer ${member.token}`);
+
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 400 if lineup not in decided status', async () => {
+    // Create a lineup in building status
+    const createRes = await testApp.request
+      .post('/lineups')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: 'Matches Test' });
+    const lineupId = createRes.body.id as number;
+
+    const member = await loginAsMember('early-joiner');
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/1/join`)
+      .set('Authorization', `Bearer ${member.token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when match not found', async () => {
+    const game1 = await createGame('404 Game', '404-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const m = await loginAsMember(`404-voter-${i}`);
+      voters.push({ userId: m.userId, gameIds: [game1.id] });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1],
+      voters,
+    });
+
+    const member = await loginAsMember('lost-joiner');
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/99999/join`)
+      .set('Authorization', `Bearer ${member.token}`);
+
+    expect(res.status).toBe(404);
+    // Must be a domain-level 404, not a route-not-found 404
+    expect(res.body.message).toMatch(/match|not found/i);
+    expect(res.body.message).not.toMatch(/Cannot POST/i);
+  });
+}
+describe('POST /lineups/:id/matches/:matchId/join', describeJoin);
+
+// ── POST /lineups/:id/matches/:matchId/advance ───────────────
+
+function describeAdvance() {
+  it('changes suggested match to scheduling (operator)', async () => {
+    const opToken = await loginAsOperator();
+    const game1 = await createGame('Advance Game', 'advance-game');
+    const game2 = await createGame('Filler2 Game', 'filler2-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+
+    // 10 voters, threshold=80 — all must vote so countDistinctVoters = 10
+    // game1: 5/10 = 50% -> suggested (below 80%)
+    // game2: 10/10 = 100% -> scheduling (above 80%)
+    for (let i = 0; i < 10; i++) {
+      const m = await loginAsMember(`adv-voter-${i}`);
+      const gameIds: number[] = [game2.id];
+      if (i < 5) gameIds.push(game1.id);
+      voters.push({ userId: m.userId, gameIds });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: opToken,
+      games: [game1, game2],
+      voters,
+      matchThreshold: 80,
+    });
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    const suggestedMatch = matches.find(
+      (m) => m.gameId === game1.id && m.status === 'suggested',
+    );
+    expect(suggestedMatch).toBeDefined();
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/${suggestedMatch!.id}/advance`)
+      .set('Authorization', `Bearer ${opToken}`);
+
+    expect(res.status).toBe(200);
+
+    // Verify match was updated
+    const advancedMatch = (
+      await testApp.db.select().from(schema.communityLineupMatches)
+    ).find((m) => m.id === suggestedMatch!.id);
+    expect(advancedMatch!.status).toBe('scheduling');
+    expect(advancedMatch!.thresholdMet).toBe(true);
+  });
+
+  it('returns 403 for non-operator', async () => {
+    const game1 = await createGame('Forbid Game', 'forbid-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const m = await loginAsMember(`forbid-voter-${i}`);
+      voters.push({ userId: m.userId, gameIds: [game1.id] });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1],
+      voters,
+    });
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    const matchId = at(matches, 0).id;
+
+    const member = await loginAsMember('non-op');
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/${matchId}/advance`)
+      .set('Authorization', `Bearer ${member.token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 if match not in suggested status', async () => {
+    const opToken = await loginAsOperator();
+    const game1 = await createGame('Already Game', 'already-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    // All voters vote for game1 -> scheduling (above threshold)
+    for (let i = 0; i < 5; i++) {
+      const m = await loginAsMember(`already-voter-${i}`);
+      voters.push({ userId: m.userId, gameIds: [game1.id] });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: opToken,
+      games: [game1],
+      voters,
+      matchThreshold: 35,
+    });
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    // game1 should already be 'scheduling'
+    const schedulingMatch = matches.find(
+      (m) => m.gameId === game1.id && m.status === 'scheduling',
+    );
+    expect(schedulingMatch).toBeDefined();
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/${schedulingMatch!.id}/advance`)
+      .set('Authorization', `Bearer ${opToken}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 if match not found', async () => {
+    const opToken = await loginAsOperator();
+    const game1 = await createGame('Missing Game', 'missing-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const m = await loginAsMember(`miss-voter-${i}`);
+      voters.push({ userId: m.userId, gameIds: [game1.id] });
+    }
+
+    const lineupId = await buildDecidedLineup({
+      token: opToken,
+      games: [game1],
+      voters,
+    });
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/matches/99999/advance`)
+      .set('Authorization', `Bearer ${opToken}`);
+
+    expect(res.status).toBe(404);
+    // Must be a domain-level 404, not a route-not-found 404
+    expect(res.body.message).toMatch(/match|not found/i);
+    expect(res.body.message).not.toMatch(/Cannot POST/i);
+  });
+}
+describe('POST /lineups/:id/matches/:matchId/advance', describeAdvance);
+
+// ── Auto-Carryover on Lineup Creation ────────────────────────
+
+function describeCarryover() {
+  it('copies entries from previous decided lineup suggested matches', async () => {
+    const game1 = await createGame('Carry Game', 'carry-game');
+    const game2 = await createGame('Strong Game', 'strong-game');
+    const voters: { userId: number; gameIds: number[] }[] = [];
+
+    // 10 voters, threshold=50 — all must vote so countDistinctVoters = 10
+    // game1: 3/10 = 30% -> suggested (below 50%)
+    // game2: 10/10 = 100% -> scheduling (above 50%)
+    for (let i = 0; i < 10; i++) {
+      const m = await loginAsMember(`carry-voter-${i}`);
+      const gameIds: number[] = [game2.id];
+      if (i < 3) gameIds.push(game1.id);
+      voters.push({ userId: m.userId, gameIds });
+    }
+
+    const oldLineupId = await buildDecidedLineup({
+      token: adminToken,
+      games: [game1, game2],
+      voters,
+      matchThreshold: 50,
+    });
+
+    // Archive the old lineup so a new one can be created
+    await testApp.request
+      .patch(`/lineups/${oldLineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'archived' });
+
+    // Create a new lineup — should auto-carry entries from suggested matches
+    const newRes = await testApp.request
+      .post('/lineups')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: 'Matches Test' });
+
+    expect(newRes.status).toBe(201);
+    const newLineupId = newRes.body.id as number;
+
+    // Check that the new lineup has a carried-over entry for game1
+    const entries = await testApp.db
+      .select()
+      .from(schema.communityLineupEntries);
+    const carriedEntries = entries.filter(
+      (e) => e.lineupId === newLineupId && e.carriedOverFrom !== null,
+    );
+
+    expect(carriedEntries).toHaveLength(1);
+    expect(carriedEntries[0]?.gameId).toBe(game1.id);
+    expect(carriedEntries[0]?.carriedOverFrom).toBe(oldLineupId);
+  });
+}
+describe('Auto-Carryover on Lineup Creation', describeCarryover);
+
+// ── ROK-1225: buildMatchesForLineup race + idempotency regressions ──
+
+/**
+ * Set up a lineup in 'voting' status with entries and votes ready for the
+ * matching algorithm — but do NOT call `buildMatchesForLineup` yet. Returns
+ * the lineup id and the voter user ids so callers can assert downstream.
+ */
+async function seedLineupReadyForMatching(opts: {
+  voterCount: number;
+  threshold: number;
+  tag: string;
+}): Promise<{ lineupId: number; voterIds: number[]; gameId: number }> {
+  const game = await createGame(`${opts.tag} Game`, `${opts.tag}-game`);
+
+  // Create the lineup through the API so public_slug + defaults are populated
+  // (the POST endpoint runs insertWithSlugRetry internally).
+  const createRes = await testApp.request
+    .post('/lineups')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ title: `${opts.tag} Lineup`, matchThreshold: opts.threshold });
+  const lineupId = createRes.body.id as number;
+
+  await testApp.db.insert(schema.communityLineupEntries).values({
+    lineupId,
+    gameId: game.id,
+    nominatedBy: testApp.seed.adminUser.id,
+  });
+
+  // Advance to voting through the API so any phase-deadline side effects fire.
+  await testApp.request
+    .patch(`/lineups/${lineupId}/status`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ status: 'voting' });
+
+  const voterIds: number[] = [];
+  for (let i = 0; i < opts.voterCount; i++) {
+    const m = await loginAsMember(`${opts.tag}-voter-${i}`);
+    voterIds.push(m.userId);
+    await testApp.db.insert(schema.communityLineupVotes).values({
+      lineupId,
+      userId: m.userId,
+      gameId: game.id,
+    });
+  }
+
+  return { lineupId, voterIds, gameId: game.id };
+}
+
+function describeMatchingRaceAndIdempotency() {
+  it('single buildMatchesForLineup invocation creates match + voted members', async () => {
+    const { lineupId, voterIds } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'single',
+    });
+
+    // ROK-1473: the pass now RETURNS the ids it moved into `scheduling` so
+    // the caller can announce them post-commit (the Discord poll card).
+    const { schedulingMatchIds: schedulingIds } = await buildMatchesForLineup(
+      testApp.db,
+      lineupId,
+    );
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches).toHaveLength(1);
+    const [match] = nonEmpty(matches, 'match');
+    expect(schedulingIds).toEqual([match.id]);
+    expect(match.status).toBe('scheduling');
+
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.matchId, match.id));
+    expect(members).toHaveLength(voterIds.length);
+    for (const member of members) {
+      expect(member.source).toBe('voted');
+      expect(voterIds).toContain(member.userId);
+    }
+  });
+
+  it('re-decide returns the poll card of the scheduling match it wiped (TDB:571)', async () => {
+    const { lineupId } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'orphan-card',
+    });
+    const first = await buildMatchesForLineup(testApp.db, lineupId);
+    expect(first.orphanedCards).toEqual([]);
+    const [wipedId] = nonEmpty(first.schedulingMatchIds, 'scheduling match id');
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ embedChannelId: 'chan-571', embedMessageId: 'msg-571' })
+      .where(eq(schema.communityLineupMatches.id, wipedId));
+
+    const second = await buildMatchesForLineup(testApp.db, lineupId);
+
+    expect(second.orphanedCards).toEqual([
+      { channelId: 'chan-571', messageId: 'msg-571' },
+    ]);
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches.map((m) => m.id)).toEqual(second.schedulingMatchIds);
+    const [match] = nonEmpty(matches, 'match');
+    expect(match.id).not.toBe(wipedId);
+    expect(match.embedMessageId).toBeNull();
+  });
+
+  it('5x parallel buildMatchesForLineup does not throw uq_match_member_user', async () => {
+    const { lineupId, voterIds } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'race',
+    });
+
+    const results = await Promise.allSettled([
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+    ]);
+
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    if (rejected.length > 0) {
+      const reasons = rejected
+        .map((r) => r.reason)
+        .map((e) => (e instanceof Error ? e.message : String(e)));
+      throw new Error(
+        `Expected all 5 calls to settle as fulfilled but ${rejected.length} rejected:\n${reasons.join('\n')}`,
+      );
+    }
+    expect(rejected).toHaveLength(0);
+
+    // Exactly one parent match per (lineup, game) regardless of race count;
+    // member rows must equal voter count (no duplicates beyond uq_match_member_user).
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches).toHaveLength(1);
+
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.matchId, at(matches, 0).id));
+    expect(members).toHaveLength(voterIds.length);
+    const memberUserIds = members.map((m) => m.userId).sort();
+    expect(memberUserIds).toEqual([...voterIds].sort());
+  });
+
+  it('orphan member row at the next match auto-id does not collide on uq_match_member_user', async () => {
+    // Reproduces the production failure mode (ROK-1225). In dev/prod the FK on
+    // community_lineup_match_members.match_id is missing, allowing orphan rows
+    // from prior runs whose match_id collides with the next auto-assigned
+    // match id. We simulate that state in the test DB by:
+    //   1. Dropping the FK at runtime (mimics the broken dev state).
+    //   2. Pre-inserting an orphan (next-match-id, voter-user-id) row.
+    //   3. Calling buildMatchesForLineup, which today raises 23505 on
+    //      uq_match_member_user. Once Commit 3 lands (.onConflictDoNothing()),
+    //      the insert becomes idempotent and this test passes.
+    //   4. Asserting the new match exists AND no orphan rows remain — the
+    //      cleanup migration (Commit 2) must scrub them at setup time.
+    const orphanVoter = await loginAsMember('orphan-victim');
+
+    // Drop ALL FK constraints on match_id so we can plant an orphan row.
+    // 0104 created the FK inline (auto-named *_fkey) and 0113 also declares
+    // the long-named one — the test DB may carry one or both depending on
+    // migration order. Cleanup migration must restore at least one.
+    await testApp.db.execute(sql`
+      DO $$
+      DECLARE
+        c text;
+      BEGIN
+        FOR c IN
+          SELECT conname FROM pg_constraint
+          WHERE conrelid = 'community_lineup_match_members'::regclass
+            AND contype = 'f'
+            AND pg_get_constraintdef(oid) LIKE '%community_lineup_matches%'
+        LOOP
+          EXECUTE format(
+            'ALTER TABLE community_lineup_match_members DROP CONSTRAINT %I',
+            c
+          );
+        END LOOP;
+      END $$
+    `);
+
+    // Predict the next match auto-id by reading the sequence — orphan must
+    // collide with the row buildMatchesForLineup will attempt to insert.
+    const nextIdRows = await testApp.db.execute<{ next_id: number }>(sql`
+      SELECT (last_value + CASE WHEN is_called THEN 1 ELSE 0 END)::int AS next_id
+      FROM community_lineup_matches_id_seq
+    `);
+    const nextMatchId = at(nextIdRows, 0).next_id;
+
+    await testApp.db.insert(schema.communityLineupMatchMembers).values({
+      matchId: nextMatchId,
+      userId: orphanVoter.userId,
+      source: 'voted',
+    });
+
+    // Build a lineup whose first voter is the orphan victim — that vote will
+    // produce an INSERT at (nextMatchId, orphanVoter.userId) and collide on
+    // uq_match_member_user without .onConflictDoNothing().
+    const game = await createGame('Orphan Game', 'orphan-game');
+    const createRes = await testApp.request
+      .post('/lineups')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: 'Orphan Lineup', matchThreshold: 35 });
+    const lineupId = createRes.body.id as number;
+    await testApp.db.insert(schema.communityLineupEntries).values({
+      lineupId,
+      gameId: game.id,
+      nominatedBy: testApp.seed.adminUser.id,
+    });
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'voting' });
+
+    // Orphan voter is the first ballot so they end up in the new match.
+    await testApp.db.insert(schema.communityLineupVotes).values({
+      lineupId,
+      userId: orphanVoter.userId,
+      gameId: game.id,
+    });
+    for (let i = 0; i < 4; i++) {
+      const m = await loginAsMember(`orphan-co-voter-${i}`);
+      await testApp.db.insert(schema.communityLineupVotes).values({
+        lineupId,
+        userId: m.userId,
+        gameId: game.id,
+      });
+    }
+
+    // Today this rejects with PostgresError 23505 on uq_match_member_user.
+    // After Commit 3 (.onConflictDoNothing()) it resolves cleanly — and since
+    // ROK-1473 it resolves with the ids that entered `scheduling`.
+    const { schedulingMatchIds: schedulingIds } = await buildMatchesForLineup(
+      testApp.db,
+      lineupId,
+    );
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches).toHaveLength(1);
+    const [match] = nonEmpty(matches, 'match');
+    expect(schedulingIds).toEqual([match.id]);
+
+    // The new match must contain the orphan voter's user_id — that is the
+    // "silent data loss" path the brief warns about.
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.matchId, match.id));
+    expect(members.map((m) => m.userId)).toContain(orphanVoter.userId);
+
+    // The cleanup migration (Commit 2) must have scrubbed all orphan rows
+    // when the test DB was migrated. Today no such migration exists, so
+    // the orphan we planted above persists and this assertion fails.
+    const orphans = await testApp.db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count
+      FROM community_lineup_match_members m
+      WHERE NOT EXISTS (
+        SELECT 1 FROM community_lineup_matches WHERE id = m.match_id
+      )
+    `);
+    expect(orphans[0]?.count).toBe(0);
+  });
+}
+describe(
+  'ROK-1225: buildMatchesForLineup race + idempotency',
+  describeMatchingRaceAndIdempotency,
+);

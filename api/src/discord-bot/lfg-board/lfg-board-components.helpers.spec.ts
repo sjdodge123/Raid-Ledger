@@ -1,0 +1,229 @@
+/**
+ * ROK-1471 D7 / AC5(iii)(iv) — the `+1` + `I'm out` (ROK-1660) + `Open group`
+ * row on a board post.
+ *
+ * The high-risk assertions here, and why each exists:
+ *
+ *  - **the custom id round-trips through the LISTENER'S parser.** Asserting the
+ *    string shape here and hoping `parseJoinCustomId` agrees is exactly how the
+ *    button ends up inert in production: nothing would fail. So the spec
+ *    imports the real parser and asserts it recovers the game id.
+ *  - **every non-open state returns an EMPTY row list.** A live `+1` on a
+ *    converted group is a trap (E11), and Discord happily renders it.
+ *  - **no second builder.** D7 says one embed builder with one option; a
+ *    `buildLfgForumEmbed` is a spec violation, so the source is scanned for one.
+ */
+import { readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { ButtonStyle, ComponentType } from 'discord.js';
+import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import { parseJoinCustomId } from '../listeners/lfg-join.listener';
+import { parseLeaveCustomId } from '../listeners/lfg-leave.helpers';
+import { parseWithdrawCustomId } from '../commands/lfg.command.helpers';
+import type { LfmRenderState } from '../lfm/lfm-embed.helpers';
+import {
+  LFG_JOIN_BUTTON_LABEL,
+  LFG_LEAVE_BUTTON_LABEL,
+  LFG_OPEN_GROUP_LABEL,
+} from './lfg-board.constants';
+import { buildLfgPostComponents } from './lfg-board-components.helpers';
+import {
+  LFG_NOW_INDICATOR_UNICODE,
+  LFG_NOW_SPAWN_BUTTON_LABEL,
+} from '../lfg-now/lfg-now-indicator.helpers';
+import { at } from '../../common/testing/narrow';
+
+const CLIENT_URL = 'https://raid.example';
+const GAME_ID = 12;
+const GAME_SLUG = 'deep-rock-galactic';
+
+/** The rendered row list as Discord's API sees it. */
+function render(overrides: Record<string, unknown> = {}) {
+  return buildLfgPostComponents({
+    gameId: GAME_ID,
+    gameSlug: GAME_SLUG,
+    clientUrl: CLIENT_URL,
+    state: 'open',
+    ...overrides,
+  }).map((row) => row.toJSON());
+}
+
+/** The buttons on the single row an open-state post renders. */
+function buttons(overrides: Record<string, unknown> = {}) {
+  return at(render(overrides), 0).components;
+}
+
+describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
+  it("is exactly one row of exactly three buttons: +1, I'm out, Open group", () => {
+    const rows = render();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.type).toBe(ComponentType.ActionRow);
+    expect(rows[0]?.components).toHaveLength(3);
+  });
+
+  it('carries a join id the REAL listener parser recovers the game id from', () => {
+    const [join] = buttons();
+    expect(join).toMatchObject({
+      type: ComponentType.Button,
+      style: ButtonStyle.Primary,
+      label: LFG_JOIN_BUTTON_LABEL,
+    });
+    const customId = (join as { custom_id: string }).custom_id;
+    expect(customId).toBe(`${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}`);
+    expect(parseJoinCustomId(customId)).toBe(GAME_ID);
+  });
+
+  it('links the third button at the web group page', () => {
+    const [, , link] = buttons();
+    expect(link).toMatchObject({
+      type: ComponentType.Button,
+      style: ButtonStyle.Link,
+      label: LFG_OPEN_GROUP_LABEL,
+      url: `${CLIENT_URL}/lfg/${GAME_SLUG}`,
+    });
+  });
+
+  it("drops the link button — but keeps +1 and I'm out — with no client URL", () => {
+    const rows = render({ clientUrl: '' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.components).toHaveLength(2);
+    expect(rows[0]?.components[0]).toMatchObject({
+      style: ButtonStyle.Primary,
+      custom_id: `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}`,
+    });
+    expect(rows[0]?.components[1]).toMatchObject({
+      style: ButtonStyle.Secondary,
+      custom_id: `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}`,
+    });
+  });
+});
+
+describe("buildLfgPostComponents — ROK-1660, the I'm out button", () => {
+  it("puts a Secondary I'm out beside +1, carrying lfg:leave:<gameId> (ROK-1660)", () => {
+    const [, leave] = buttons();
+    expect(leave).toMatchObject({
+      type: ComponentType.Button,
+      style: ButtonStyle.Secondary,
+      label: LFG_LEAVE_BUTTON_LABEL,
+    });
+    expect(LFG_LEAVE_BUTTON_LABEL).toBe("I'm out");
+    const customId = (leave as { custom_id: string }).custom_id;
+    expect(customId).toBe(`${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}`);
+    expect(customId).toBe(`lfg:leave:${String(GAME_ID)}`);
+    expect(customId.length).toBeLessThanOrEqual(100);
+    expect(parseLeaveCustomId(customId)).toBe(GAME_ID);
+  });
+
+  it('keeps the three button ids disjoint — no press is claimed twice', () => {
+    const row = buttons() as Array<{ custom_id: string }>;
+    const joinId = at(row, 0).custom_id;
+    const leaveId = at(row, 1).custom_id;
+    expect(parseJoinCustomId(leaveId)).toBeNull();
+    expect(parseWithdrawCustomId(leaveId)).toBeNull();
+    expect(parseLeaveCustomId(joinId)).toBeNull();
+    expect(parseLeaveCustomId(`${LFG_BUTTON_IDS.WITHDRAW}:42`)).toBeNull();
+    expect(parseLeaveCustomId('lfg:leave:abc')).toBeNull();
+    expect(parseLeaveCustomId('lfg:leave')).toBeNull();
+  });
+});
+
+describe('buildLfgPostComponents — ROK-1619, the threshold-crossing mark', () => {
+  const EMOJI = { name: LFG_NOW_INDICATOR_UNICODE };
+
+  it('leaves the ROK-1471 button untouched when the press does not spawn', () => {
+    const [join] = buttons();
+    expect(join).toMatchObject({ label: LFG_JOIN_BUTTON_LABEL });
+    expect((join as { emoji?: unknown }).emoji).toBeUndefined();
+  });
+
+  it('swaps the label and carries the emoji when the press forms the group', () => {
+    const [join] = buttons({ spawnsNow: true, spawnEmoji: EMOJI });
+    expect(join).toMatchObject({
+      label: LFG_NOW_SPAWN_BUTTON_LABEL,
+      emoji: { name: LFG_NOW_INDICATOR_UNICODE },
+    });
+  });
+
+  it('keeps the custom id identical — the mark changes how it READS, not what it writes', () => {
+    const plain = at(buttons(), 0) as { custom_id: string };
+    const marked = at(buttons({ spawnsNow: true, spawnEmoji: EMOJI }), 0) as {
+      custom_id: string;
+    };
+    expect(marked.custom_id).toBe(plain.custom_id);
+    expect(parseJoinCustomId(marked.custom_id)).toBe(GAME_ID);
+  });
+
+  it('carries a custom emoji as { id, name }, never as a raw <:name:id> label (AC5)', () => {
+    const [join] = buttons({
+      spawnsNow: true,
+      spawnEmoji: { id: '987', name: 'praise_sun' },
+    });
+    expect(join).toMatchObject({ emoji: { id: '987', name: 'praise_sun' } });
+    expect((join as { label: string }).label).not.toContain('<:');
+  });
+
+  it("leaves I'm out unchanged on the now-spawn variant", () => {
+    const [, leave] = buttons({ spawnsNow: true, spawnEmoji: EMOJI });
+    expect(leave).toMatchObject({
+      label: LFG_LEAVE_BUTTON_LABEL,
+      custom_id: `${LFG_BUTTON_IDS.LEAVE}:${String(GAME_ID)}`,
+    });
+    expect((leave as { emoji?: unknown }).emoji).toBeUndefined();
+  });
+
+  it('still renders a usable button if the emoji could not be resolved at all', () => {
+    const [join] = buttons({ spawnsNow: true });
+    expect(join).toMatchObject({ label: LFG_NOW_SPAWN_BUTTON_LABEL });
+    expect((join as { emoji?: unknown }).emoji).toBeUndefined();
+  });
+
+  it('never marks a terminal state — there is no row to mark', () => {
+    expect(
+      render({ state: 'scheduled', spawnsNow: true, spawnEmoji: EMOJI }),
+    ).toEqual([]);
+  });
+});
+
+describe('buildLfgPostComponents — terminal states have no row (AC5 iv)', () => {
+  it.each<LfmRenderState>(['scheduled', 'expired', 'closed'])(
+    'renders no components at %s — a live +1 on a dead group is a trap',
+    (state) => {
+      expect(render({ state })).toEqual([]);
+      // Not even an empty row: Discord renders an empty action row as a gap.
+      expect(render({ state })).toHaveLength(0);
+    },
+  );
+});
+
+describe('D7 — one embed builder, never a second (AC5)', () => {
+  /**
+   * Matched on the DECLARATION, not the bare identifier: the spec and the
+   * design note both name `buildLfgForumEmbed` in prose to forbid it, and a
+   * guard that trips on the sentence forbidding the thing is the ROK-1314
+   * defect. Only an actual export can match these.
+   */
+  const DECLARATIONS = [
+    /export\s+(?:async\s+)?function\s+buildLfgForumEmbed\b/,
+    /export\s+(?:const|let|var)\s+buildLfgForumEmbed\b/,
+  ];
+
+  const dirs = [__dirname, join(__dirname, '..', 'lfm')];
+  const files = dirs.flatMap((dir) =>
+    readdirSync(dir)
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => join(dir, f)),
+  );
+
+  it('finds the files it is supposed to be guarding', () => {
+    // Without this the guard passes vacuously if a directory is renamed.
+    expect(files.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('declares no buildLfgForumEmbed anywhere in the LFG/LFM families', () => {
+    const hits = files.filter((file) => {
+      const source = readFileSync(file, 'utf-8');
+      return DECLARATIONS.some((re) => re.test(source));
+    });
+    expect(hits).toEqual([]);
+  });
+});

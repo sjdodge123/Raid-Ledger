@@ -1,0 +1,302 @@
+import { z } from 'zod';
+import { AiSuggestionSchema } from '@raid-ledger/contract';
+import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
+
+export const LinkDiscordSchema = z.object({
+  userId: z.number().int().positive(),
+  discordId: z.string().regex(/^\d{17,20}$/, 'Invalid Discord ID format'),
+  username: z.string().min(1).max(100),
+});
+
+export const EnableNotificationsSchema = z.object({
+  userId: z.number().int().positive(),
+});
+
+const VALID_ROLES = [
+  'tank',
+  'healer',
+  'dps',
+  'flex',
+  'player',
+  'bench',
+] as const;
+
+export const AddGameInterestSchema = z.object({
+  userId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+  /**
+   * ROK-1314: which interest source to seed. Optional and defaulting to
+   * `manual` so every existing smoke caller is unaffected. The badge
+   * personalization smoke test needs `steam_library` / `steam_wishlist`,
+   * because `manual` is deliberately NOT ownership. Values mirror the
+   * `game_interests.source` DB CHECK constraint.
+   */
+  source: z
+    .enum(['manual', 'discord', 'steam_library', 'steam_wishlist', 'poll'])
+    .optional()
+    .default('manual'),
+});
+
+export const TriggerDepartureSchema = z.object({
+  eventId: z.number().int().positive(),
+  signupId: z.number().int().positive(),
+  discordUserId: z.string().min(1),
+});
+
+export const CancelSignupSchema = z.object({
+  eventId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+export const TriggerClassifySchema = z.object({
+  eventId: z.number().int().positive(),
+});
+
+export const InjectVoiceSessionSchema = z.object({
+  eventId: z.number().int().positive(),
+  discordUserId: z.string().min(1),
+  userId: z.number().int().positive(),
+  durationSec: z.number().int().nonnegative(),
+  firstJoinAt: z.string().datetime().optional(),
+  lastLeaveAt: z.string().datetime().optional(),
+});
+
+export const AwaitProcessingSchema = z.object({
+  timeoutMs: z.number().int().positive().max(60_000).optional(),
+});
+
+export const SetSteamAppIdSchema = z.object({
+  gameId: z.number().int().positive(),
+  steamAppId: z.number().int().positive(),
+});
+
+export const GetGameSchema = z.object({
+  id: z.number().int().positive(),
+});
+
+export const ClearGameInterestSchema = z.object({
+  userId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+});
+
+export const SetAutoHeartPrefSchema = z.object({
+  userId: z.number().int().positive(),
+  enabled: z.boolean(),
+});
+
+export const CreateBuildingLineupSchema = z.object({
+  createdByUserId: z.number().int().positive(),
+});
+
+export const NominateGameTestSchema = z.object({
+  lineupId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+export const ArchiveLineupSchema = z.object({
+  lineupId: z.number().int().positive(),
+});
+
+/**
+ * Phases archived by `/admin/test/reset-lineups` (ROK-1070).
+ *
+ * Mirrors `community_lineups.status` enum (`api/src/drizzle/schema/
+ * community-lineups.ts`): `building`, `voting`, `decided`, `archived`.
+ *
+ * Default behaviour (no phases supplied) preserves the original ROK-1147
+ * contract — only `building` and `voting` rows are archived. Pass a broader
+ * array (e.g. `['building', 'voting', 'decided']`) when the caller's
+ * fixtures depend on archiving lineups already past `voting` — for example
+ * scheduling-poll fixtures attach to `decided` lineups.
+ */
+const VALID_LINEUP_PHASES = [
+  'building',
+  'voting',
+  'decided',
+  'archived',
+] as const;
+
+export const ResetLineupsSchema = z.object({
+  titlePrefix: z.string().min(1).max(64),
+  phases: z.array(z.enum(VALID_LINEUP_PHASES)).min(1).optional(),
+});
+
+/**
+ * Body for `/admin/test/seed-slow-queries-log` (ROK-1070).
+ *
+ * Empty object is the only valid shape today. Reserved for a future
+ * `entryCount` knob if smoke tests ever need to control how many
+ * digest blocks are pre-seeded.
+ */
+export const SeedSlowQueriesLogSchema = z.object({}).strict();
+
+/**
+ * Body for `/admin/test/reset-events` (ROK-1070).
+ *
+ * Mirrors the lineup reset contract — caller passes a per-worker
+ * `titlePrefix` so sibling workers' events are untouched.
+ */
+export const ResetEventsSchema = z.object({
+  titlePrefix: z.string().min(1).max(64),
+});
+
+export const SetAutoNominatePrefSchema = z.object({
+  userId: z.number().int().positive(),
+  enabled: z.boolean(),
+});
+
+const VALID_STATUSES = [
+  'signed_up',
+  'tentative',
+  'declined',
+  'roached_out',
+  'departed',
+] as const;
+
+export const CreateTestSignupSchema = z.object({
+  eventId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  preferredRoles: z.array(z.enum(VALID_ROLES)).optional(),
+  characterId: z.string().uuid().optional(),
+  status: z.enum(VALID_STATUSES).optional(),
+});
+
+export const SetEventTimesSchema = z.object({
+  eventId: z.number().int().positive(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+});
+
+/** Body for `/admin/test/record-followup-sentinel` (ROK-1371 smoke). */
+export const RecordFollowupSentinelSchema = z.object({
+  eventId: z.number().int().positive(),
+});
+
+export const CancelLineupPhaseJobsSchema = z.object({
+  lineupId: z.number().int().positive(),
+});
+
+export const AiChatSimulateSchema = z.object({
+  discordUserId: z.string().min(1),
+  text: z.string().optional(),
+  buttonId: z.string().optional(),
+});
+
+export const ExpireAiChatSessionSchema = z.object({
+  discordUserId: z.string().min(1),
+});
+
+export const SetAiChatEnabledSchema = z.object({
+  enabled: z.boolean(),
+});
+
+export const AdvanceStandalonePollDeadlineSchema = z.object({
+  lineupId: z.number().int().positive(),
+  hoursUntilDeadline: z.number().min(-720).max(720),
+});
+
+/** Body for `/admin/test/lineup/advance-with-zero-noms` (ROK-1069). */
+export const AdvanceLineupZeroNomsSchema = z.object({
+  lineupId: z.number().int().positive(),
+});
+
+/**
+ * Body for `/admin/test/lineup/fire-deadline-transition` (ROK-1363) — drives
+ * the deadline-driven phase-transition job (`executeTransition`) directly so
+ * smoke fixtures can exercise the deadline path, not just the quorum/grace path.
+ */
+export const FireLineupDeadlineSchema = z.object({
+  lineupId: z.number().int().positive(),
+  targetStatus: z.enum(['voting', 'decided', 'archived']),
+});
+
+/** Body for `/admin/test/lineup/seed-single-voter` (ROK-1069). */
+export const SeedSingleVoterSchema = z.object({
+  lineupId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+/**
+ * Body for `/admin/test/lineup/carryover-from`: re-carry `lineupId` from an
+ * explicit source lineup instead of the newest one on the instance.
+ */
+export const RecarryLineupFromSchema = z.object({
+  lineupId: z.number().int().positive(),
+  previousLineupId: z.number().int().positive(),
+});
+
+/** Body for `/admin/test/lineup/set-private` (ROK-1069). */
+export const SetLineupPrivateSchema = z.object({
+  lineupId: z.number().int().positive(),
+  visibility: z.enum(['public', 'private']).optional(),
+});
+
+/** Body for `/admin/test/lineup/revoke-channel-perms` (ROK-1069). */
+export const RevokeChannelPermsSchema = z.object({
+  lineupId: z.number().int().positive(),
+  /** Snowflake to set as override; pass an invalid id to simulate perm loss. */
+  channelOverrideId: z
+    .string()
+    .regex(/^\d{17,20}$/, 'Invalid Discord ID format')
+    .nullable(),
+});
+
+/** Body for `/admin/test/backup/simulate-corruption` (ROK-1160 D9). */
+export const SimulateBackupCorruptionSchema = z.object({
+  mode: z.enum(['truncate', 'garbage']),
+});
+
+/**
+ * Body for `/admin/test/ai-suggestions/seed` (ROK-1110).
+ *
+ * Reuses the contract's `AiSuggestionSchema` verbatim so a fixture can
+ * never drift from the DTO the real LLM pipeline enriches and stores —
+ * a seeded payload is byte-identical in shape to a generated one.
+ */
+export const SeedAiSuggestionsSchema = z.object({
+  lineupId: z.number().int().positive(),
+  suggestions: z.array(AiSuggestionSchema).min(1).max(10),
+});
+
+/** Body for `/admin/test/ai-suggestions/clear` (ROK-1110). */
+export const ClearAiSuggestionsSchema = z.object({
+  lineupId: z.number().int().positive(),
+});
+
+/**
+ * Body for `/admin/test/render-dm-embed`: the fields the DM processor hands
+ * `DiscordNotificationEmbedService.buildNotificationEmbed` (the notification
+ * id is fixed by the seam). Bounds match what the builder accepts, so bad
+ * input is a 400 here rather than a builder throw (500): the description is
+ * 1..4096 chars, and the title is 256 minus room for the `<emoji> ` prefix
+ * the builder adds (at most 3 UTF-16 units today, so 250 leaves headroom).
+ */
+export const RenderDmEmbedSchema = z.object({
+  type: z.enum(NOTIFICATION_TYPES),
+  title: z.string().min(1).max(250),
+  message: z.string().min(1).max(4096),
+  payload: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Body for `/admin/test/render-pug-invite-embed`: the event the PUG invite DM
+ * is rendered for, the slot role shown in its footer, and the invitee whose
+ * library drives the personalized fields (absent = no reader-specific half).
+ * A role carrying `<t:` markup is a 400 here rather than a chrome throw (500):
+ * Discord does not render timestamps in a footer.
+ */
+export const RenderPugInviteEmbedSchema = z.object({
+  eventId: z.number().int().positive(),
+  role: z
+    .string()
+    .min(1)
+    .max(32)
+    .refine((r) => !r.includes('<t:'), 'Timestamp markup is not allowed')
+    .optional(),
+  discordUserId: z
+    .string()
+    .regex(/^\d{17,20}$/, 'Invalid Discord ID format')
+    .optional(),
+});

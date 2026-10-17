@@ -1,0 +1,582 @@
+/**
+ * Shared API helpers for Playwright smoke tests.
+ *
+ * Centralises getAdminToken (with retry + module-level caching),
+ * apiGet, apiPost, apiPatch, apiPut, and apiDelete so that individual
+ * smoke spec files don't duplicate this boilerplate.
+ *
+ * Every network call here goes through `fetchWithRetry`, which retries ONLY
+ * thrown transport errors (a dropped connect through the Cloudflare edge in
+ * front of the fleet's slot-N envs) and never an HTTP response of any status.
+ * See ./fetch-retry.ts for why that distinction is the whole design.
+ */
+
+import { readFile } from 'node:fs/promises';
+import type { BrowserContext, Page } from '@playwright/test';
+import { TOKEN_FILE_PATH } from '../auth-paths';
+import { resolveApiUrl } from './target';
+import { MAX_LOGIN_ATTEMPTS, MAX_TOTAL_WAIT_MS, nextDelayMs } from './login-retry';
+import { readTokenFromStorageState } from './storage-state';
+import { fetchWithRetry } from './fetch-retry';
+
+export const API_BASE = resolveApiUrl();
+
+// ---------------------------------------------------------------------------
+// Admin token — cached at module level, with 429 back-off retry
+// ---------------------------------------------------------------------------
+
+// ROK-1085: globalSetup writes the JWT to scripts/.auth/admin-token.json so
+// each Playwright worker can read the cached token instead of hammering
+// /auth/local in parallel (the rate limiter rejected the fan-out and caused
+// flaky smoke runs). Falls back to the live login if the file is absent.
+//
+// ROK-1149: tokens older than ~50 min are treated as missing (JWT default
+// expiry is 1h). In practice this is inert — CI uses a fresh `.auth/` per
+// run and a single Playwright invocation rarely exceeds 12 min — but it
+// guards re-runs that reuse a stale on-disk token in long local sessions.
+const TOKEN_MAX_AGE_MS = 50 * 60 * 1000;
+
+let _cachedToken: string | null = null;
+let _tokenPromise: Promise<string> | null = null;
+
+async function readTokenFromDisk(): Promise<string | null> {
+    try {
+        const raw = await readFile(TOKEN_FILE_PATH, 'utf8');
+        const parsed = JSON.parse(raw) as {
+            access_token?: unknown;
+            issued_at?: unknown;
+        };
+        if (typeof parsed.access_token !== 'string' || !parsed.access_token) {
+            return null;
+        }
+        if (typeof parsed.issued_at === 'string') {
+            const issuedMs = Date.parse(parsed.issued_at);
+            if (
+                !Number.isNaN(issuedMs) &&
+                Date.now() - issuedMs > TOKEN_MAX_AGE_MS
+            ) {
+                return null;
+            }
+        }
+        return parsed.access_token;
+    } catch {
+        return null;
+    }
+}
+
+// ROK-1466: on the fleet the suite talks to the env over its internal hostname
+// with no Cloudflare hop, so every worker's login hits the API's own rate
+// limiter at once. The old policy (3 attempts, flat 5s/15s, `Retry-After`
+// ignored) gave up inside the limiter's window — `Auth failed after 3 attempts
+// (rate limited)` on every co-op spec. Wait as long as the server asks
+// instead; relaxing the limiter is not an option, it is a production control
+// that DEMO_MODE does not disable.
+async function loginViaApi(): Promise<string> {
+    let lastStatus = 0;
+    let elapsed = 0;
+    let lastRetryAfter: string | null = null;
+    for (let attempt = 0; attempt < MAX_LOGIN_ATTEMPTS; attempt++) {
+        const res = await fetchWithRetry(`${API_BASE}/auth/local`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: 'admin@local',
+                password: process.env.ADMIN_PASSWORD || 'password',
+            }),
+        });
+        if (res.ok) {
+            const { access_token } = (await res.json()) as {
+                access_token: string;
+            };
+            return access_token;
+        }
+        lastStatus = res.status;
+        if (res.status !== 429) {
+            throw new Error(`Auth failed: ${res.status} (${API_BASE}/auth/local)`);
+        }
+        lastRetryAfter = res.headers.get('retry-after');
+        const wait = nextDelayMs(attempt, lastRetryAfter, elapsed);
+        // null = the wait does not fit the remaining budget. Sleeping a stub of
+        // it would retry before the window reopens (another 429) AND hammer the
+        // limiter early, so stop and report what the server actually asked for.
+        if (wait === null) break;
+        console.warn(
+            `[api-helpers] /auth/local 429 (attempt ${attempt + 1}/${MAX_LOGIN_ATTEMPTS}) — waiting ${wait}ms`,
+        );
+        elapsed += wait;
+        await new Promise((r) => setTimeout(r, wait));
+    }
+    const asked = lastRetryAfter
+        ? ` The server asked us to wait ${lastRetryAfter}s, which does not fit that budget.`
+        : '';
+    throw new Error(
+        `Auth failed after up to ${MAX_LOGIN_ATTEMPTS} attempts / ${MAX_TOTAL_WAIT_MS}ms ` +
+            `(last status ${lastStatus}) against ${API_BASE}.${asked} ` +
+            'Global setup should have written scripts/.auth/admin-token.json so no worker needs to log in — ' +
+            'check the [global-setup] lines at the top of the run.',
+    );
+}
+
+export async function getAdminToken(): Promise<string> {
+    if (_cachedToken) return _cachedToken;
+    if (_tokenPromise) return _tokenPromise;
+    _tokenPromise = (async () => {
+        const fromDisk = await readTokenFromDisk();
+        if (fromDisk) return fromDisk;
+        // ROK-1466: global setup writes BOTH admin-token.json and the browser
+        // storageState from the same login. If the token file is missing or
+        // aged out, the storageState copy is still the SAME run's token — read
+        // it before minting a new one, so a run costs exactly one /auth/local
+        // call no matter how many workers ask.
+        // W3: the same 50-min TTL readTokenFromDisk enforces — a stale
+        // storageState would hand every worker an expired JWT and 401 the file.
+        const fromStorageState = readTokenFromStorageState(undefined, {
+            maxAgeMs: TOKEN_MAX_AGE_MS,
+        });
+        if (fromStorageState) return fromStorageState;
+        return loginViaApi();
+    })();
+    _cachedToken = await _tokenPromise;
+    _tokenPromise = null;
+    return _cachedToken;
+}
+
+// ---------------------------------------------------------------------------
+// Invitee token — non-admin smoke fixture user (ROK-1276)
+// ---------------------------------------------------------------------------
+
+// The lineup-confirmation-pills smoke tests need a non-admin persona to
+// exercise the invitee branches of `getLineupPersona`. The admin user always
+// resolves to `organizer` when they're the creator. We mint a stable
+// `role: 'member'` fixture user via `/admin/test/seed-fixture-user` and
+// cache its JWT for the lifetime of the worker process — same shape as
+// `getAdminToken` above so call-sites are interchangeable.
+
+interface InviteeFixture {
+    userId: number;
+    discordId: string;
+    jwt: string;
+}
+
+let _cachedInvitee: InviteeFixture | null = null;
+let _inviteePromise: Promise<InviteeFixture> | null = null;
+
+async function fetchInviteeFixture(
+    adminToken: string,
+): Promise<InviteeFixture> {
+    const res = await fetchWithRetry(`${API_BASE}/admin/test/seed-fixture-user`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+        },
+    });
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(
+            `seed-fixture-user failed: ${res.status} ${body.slice(0, 200)}`,
+        );
+    }
+    return (await res.json()) as InviteeFixture;
+}
+
+/**
+ * Resolve the smoke-invitee fixture user and return its JWT. The fixture is
+ * idempotent server-side (stable `discord_id`) so re-entry returns the same
+ * `userId`. Cached at module level — first caller pays the API round-trip,
+ * the rest get the cached token. Mirrors `getAdminToken` semantics.
+ */
+export async function getInviteeToken(): Promise<string> {
+    const fixture = await getInviteeFixture();
+    return fixture.jwt;
+}
+
+/** Like `getInviteeToken` but exposes `userId` for tests that need it. */
+export async function getInviteeFixture(): Promise<InviteeFixture> {
+    if (_cachedInvitee) return _cachedInvitee;
+    if (_inviteePromise) return _inviteePromise;
+    _inviteePromise = (async () => {
+        const adminToken = await getAdminToken();
+        return fetchInviteeFixture(adminToken);
+    })();
+    _cachedInvitee = await _inviteePromise;
+    _inviteePromise = null;
+    return _cachedInvitee;
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers
+// ---------------------------------------------------------------------------
+
+/** GET — returns parsed JSON or null on non-OK responses. */
+export async function apiGet(token: string, path: string) {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+}
+
+/** POST — body is optional, returns parsed JSON. */
+export async function apiPost(
+    token: string,
+    path: string,
+    body?: Record<string, unknown>,
+) {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    return res.json();
+}
+
+/** PATCH — returns parsed JSON. */
+export async function apiPatch(
+    token: string,
+    path: string,
+    body: Record<string, unknown>,
+) {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+    return res.json();
+}
+
+/** PUT — returns parsed JSON. */
+export async function apiPut(
+    token: string,
+    path: string,
+    body: Record<string, unknown>,
+) {
+    const res = await fetchWithRetry(`${API_BASE}${path}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+    return res.json();
+}
+
+/** DELETE — fire-and-forget (no return value). */
+export async function apiDelete(token: string, path: string) {
+    await fetchWithRetry(`${API_BASE}${path}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Lineup creation with bounded retry on 409 (ROK-1167)
+// ---------------------------------------------------------------------------
+
+interface CreateLineupOpts {
+    /** Max attempts including the first POST. Default 5. */
+    attempts?: number;
+    /** Pacing between attempts in ms. Default 1000. */
+    delayMs?: number;
+}
+
+async function postLineup(token: string, body: Record<string, unknown>) {
+    return fetchWithRetry(`${API_BASE}/lineups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+}
+
+async function resetLineupsByPrefix(token: string, workerPrefix: string) {
+    await fetchWithRetry(`${API_BASE}/admin/test/reset-lineups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ titlePrefix: workerPrefix }),
+    });
+}
+
+/**
+ * POST /lineups with bounded retry on 409 collisions.
+ *
+ * When a sibling worker has just created a lineup, our POST returns 409.
+ * We then call /admin/test/reset-lineups (prefix-scoped) to archive the
+ * sibling's row, wait for the transaction to settle, and retry. Throws a
+ * descriptive error after exhausting attempts.
+ *
+ * ROK-1167: replaces the ad-hoc 409 fallback in lineup-tiebreaker /
+ * lineup-votes-per-player / paste-nominate fixtures.
+ */
+export async function createLineupOrRetry(
+    token: string,
+    body: Record<string, unknown>,
+    workerPrefix: string,
+    opts: CreateLineupOpts = {},
+): Promise<{ id: number }> {
+    const attempts = opts.attempts ?? 5;
+    const delayMs = opts.delayMs ?? 1000;
+    let lastStatus = 0;
+    let lastText = '';
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        const res = await postLineup(token, body);
+        if (res.status === 201) {
+            const json = (await res.json()) as { id: number };
+            return { id: json.id };
+        }
+        lastStatus = res.status;
+        lastText = await res.text().catch(() => '');
+        if (res.status !== 409) {
+            throw new Error(
+                `createLineupOrRetry failed for prefix=${workerPrefix}; status=${lastStatus} body=${lastText}`,
+            );
+        }
+        await resetLineupsByPrefix(token, workerPrefix);
+        // Retry pacing for 409 collision recovery between server-side reset
+        // and re-POST — not a UI assertion delay (test infra only).
+        await new Promise((r) => setTimeout(r, delayMs));
+    }
+    throw new Error(
+        `createLineupOrRetry exhausted ${attempts} attempts for prefix=${workerPrefix}; last status=${lastStatus} body=${lastText}`,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Async-write coordination helpers (ROK-1070)
+// ---------------------------------------------------------------------------
+
+/**
+ * Drain all BullMQ queues and any buffered async writes so subsequent
+ * assertions see the final post-write state. Thin wrapper around the
+ * existing test-only endpoint `/admin/test/await-processing`.
+ *
+ * Use this after a write whose downstream side-effects (event listeners,
+ * BullMQ jobs, embed-sync, notifications) must complete before the next
+ * read. See `feedback_smoke_polling_for_async_writes.md`.
+ */
+export async function awaitProcessing(token: string): Promise<void> {
+    await apiPost(token, '/admin/test/await-processing');
+}
+
+/**
+ * Cancel all queued BullMQ phase-advance jobs for `lineupId`. Thin wrapper
+ * around the existing test-only endpoint
+ * `/admin/test/cancel-lineup-phase-jobs`. Used by smoke fixtures that need
+ * to keep a lineup in a fixed phase regardless of the auto-advance schedule.
+ */
+export async function cancelLineupPhaseJobs(
+    token: string,
+    lineupId: number,
+): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', {
+        lineupId,
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Direct API polling for staleTime/useQuery races (ROK-1247)
+// ---------------------------------------------------------------------------
+
+interface PollForConditionOpts {
+    /** Total deadline before throwing. Default 15_000 ms. */
+    timeoutMs?: number;
+    /** Polling interval. Default 250 ms. */
+    intervalMs?: number;
+    /** Included in the timeout error to identify the failing wait. */
+    description?: string;
+}
+
+/**
+ * Poll an async `check` function until it returns a truthy value or the
+ * timeout elapses. Returns the truthy value on success; throws a descriptive
+ * error on timeout, including the last observed value when available.
+ *
+ * Use this AFTER an API write and BEFORE a UI assertion that depends on
+ * `useQuery`-backed data: React Query's 15s staleTime can serve a cached
+ * empty fetch for the lifetime of the test, so polling the source endpoint
+ * is the only reliable barrier. See `feedback_smoke_polling_for_async_writes.md`
+ * (ROK-1156) and the canonical reference impl in
+ * `admin-slow-queries-log.smoke.spec.ts`.
+ *
+ * CONTRACT: readiness is truthiness (`if (last)`), so a check that resolves
+ * to a falsy-but-valid value (`0`, `''`, `false`) is treated as "not yet
+ * ready" and will poll until timeout. Return a non-null object on ready and
+ * `null` otherwise — never a bare count or boolean.
+ *
+ * @example
+ * const data = await pollForCondition(async () => {
+ *     const res = await apiGet(token, '/users/management?page=1&limit=20');
+ *     return res?.users?.length ? res : null; // not `res?.users?.length`
+ * }, { description: '/users/management' });
+ */
+export async function pollForCondition<T>(
+    check: () => Promise<T | null | undefined>,
+    opts: PollForConditionOpts = {},
+): Promise<T> {
+    const timeoutMs = opts.timeoutMs ?? 15_000;
+    const intervalMs = opts.intervalMs ?? 250;
+    const description = opts.description ?? 'pollForCondition';
+    const start = Date.now();
+    let last: T | null | undefined;
+    while (Date.now() - start < timeoutMs) {
+        last = await check();
+        if (last) return last;
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    const lastDesc =
+        last === undefined || last === null
+            ? '(none)'
+            : (() => {
+                  try {
+                      return JSON.stringify(last).slice(0, 200);
+                  } catch {
+                      return String(last);
+                  }
+              })();
+    throw new Error(
+        `[${description}] timed out after ${timeoutMs}ms; last value=${lastDesc}`,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Lineup phase-transition barrier (ROK-1286)
+// ---------------------------------------------------------------------------
+
+/** Lineup detail shape — only the fields the smoke fixtures read. */
+type LineupDetail = { status?: unknown } & Record<string, unknown>;
+
+/**
+ * Poll `GET /lineups/:id` until its `status` equals `target`, returning the
+ * lineup detail. Throws a descriptive error — including the lineup id, the
+ * target, and the LAST observed status — on timeout.
+ *
+ * Use this INSIDE a fixture helper immediately after driving a lineup through
+ * a phase transition (`PATCH /lineups/:id/status`, abort, or archive). A
+ * status PATCH and its async side-effects settle out of band; under the full
+ * desktop+mobile suite the parallel workers add 1–3s of latency so fixture
+ * setup races feature code (ROK-1286). Gating on the server-observed status
+ * here makes the fixture fail fast with a clear message instead of letting a
+ * downstream `expect(...).toBe(...)` fail with no context, and guarantees the
+ * page navigation that follows lands on the intended phase surface.
+ */
+export async function waitForLineupStatus(
+    token: string,
+    lineupId: number,
+    target: string,
+    opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<LineupDetail> {
+    const timeoutMs = opts.timeoutMs ?? 10_000;
+    const intervalMs = opts.intervalMs ?? 250;
+    const start = Date.now();
+    let last: LineupDetail | null = null;
+    while (Date.now() - start < timeoutMs) {
+        last = (await apiGet(token, `/lineups/${lineupId}`)) as LineupDetail | null;
+        if (last && last.status === target) return last;
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error(
+        `waitForLineupStatus: lineup ${lineupId} did not reach status='${target}' ` +
+            `within ${timeoutMs}ms; last observed status=${String(last?.status ?? '(none)')}`,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Banner scoping — pin the global lineup banner to one lineup (DEMO_MODE)
+// ---------------------------------------------------------------------------
+
+/**
+ * sessionStorage key the web reads to scope `GET /lineups/banner` (DEMO_MODE
+ * only). Must equal `SMOKE_BANNER_SCOPE_KEY` in web/src/hooks/use-lineups.ts —
+ * no import links the two; use-lineups.test.ts pins that they match.
+ */
+const BANNER_SCOPE_KEY = 'rl:smoke-banner-lineup';
+
+/** The lineup each page/context was scoped to — a target is scoped once. */
+const scopedTargets = new WeakMap<Page | BrowserContext, number>();
+
+/** The banner fields a smoke spec reads back from `GET /lineups/banner`. */
+export interface ScopedBanner {
+    id?: number;
+    status?: string;
+    title?: string;
+}
+
+/**
+ * Scope every banner-backed surface the page renders to `lineupId`.
+ *
+ * `GET /lineups/banner` is a GLOBAL singleton — the single most recently
+ * created eligible lineup for the whole instance. It feeds `LineupBanner` on
+ * the Games page (which renders `TiebreakerBadge`) and `LineupVoteBanner` on
+ * game detail. On a shared fleet env (desktop + mobile projects plus every
+ * other lane on ONE deployment) a sibling spec's newer lineup owns it, so an
+ * unscoped page says nothing about the lineup under test.
+ *
+ * Under DEMO_MODE the web reads this session key and passes `?lineupId=` on
+ * its banner request, so the page renders OUR lineup no matter what siblings
+ * create. Outside DEMO_MODE the API ignores the param.
+ *
+ * Call it BEFORE `page.goto`: it registers an init script that runs ahead of
+ * the app on every navigation. Scope each page or context ONCE: Playwright
+ * does not define the order multiple init scripts run in, so a second script
+ * with a different id could lose to the first. A repeat call with the same id
+ * is a no-op; a different id throws (use a fresh page instead).
+ *
+ * @param target - The page (or whole context) to scope.
+ * @param lineupId - The lineup the banner should resolve to.
+ */
+export async function scopeBannerTo(
+    target: Page | BrowserContext,
+    lineupId: number,
+): Promise<void> {
+    const existing = scopedTargets.get(target);
+    if (existing === lineupId) return;
+    if (existing !== undefined) {
+        throw new Error(
+            `scopeBannerTo: target is already scoped to lineup ${existing}; ` +
+                `re-scoping it to ${lineupId} is unsafe (Playwright does not order ` +
+                `init scripts) — scope a fresh page instead`,
+        );
+    }
+    scopedTargets.set(target, lineupId);
+    const script = ({ key, id }: { key: string; id: number }): void => {
+        try {
+            sessionStorage.setItem(key, String(id));
+        } catch {
+            /* about:blank frames throw */
+        }
+    };
+    const arg = { key: BANNER_SCOPE_KEY, id: lineupId };
+    await target.addInitScript(script, arg);
+}
+
+/**
+ * Read `GET /lineups/banner` scoped to `lineupId` — what a page scoped with
+ * `scopeBannerTo` will render.
+ *
+ * The banner is a global singleton; the API honours `?lineupId=` only under
+ * DEMO_MODE, which smoke always runs with. Returns `null` when the lineup is
+ * not banner-eligible (wrong phase, archived), so `?.id === lineupId` is the
+ * precondition a banner assertion needs.
+ *
+ * @param token - Admin token.
+ * @param lineupId - The lineup to scope the read to.
+ */
+export async function getScopedBanner(
+    token: string,
+    lineupId: number,
+): Promise<ScopedBanner | null> {
+    return (await apiGet(token, `/lineups/banner?lineupId=${lineupId}`)) as ScopedBanner | null;
+}

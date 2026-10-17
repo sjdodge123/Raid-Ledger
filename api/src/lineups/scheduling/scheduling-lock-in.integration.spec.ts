@@ -1,0 +1,496 @@
+/**
+ * ROK-1610 + ROK-1606 — finishing an EXPIRED poll, end to end.
+ *
+ * The operator's Valheim poll: 5 of 12 voted, the deadline passed, and the
+ * leading time (Sat Oct 10, 9 PM) was still in the future. The page offered
+ * "start a new poll" and nothing else. An organiser can now lock that time
+ * in without re-polling — and, per ROK-1606, the voters who get signed up
+ * actually land on the roster instead of the unassigned pool.
+ *
+ * Covered here, through the real controller and a real DB:
+ *   (a) organiser locks in after expiry → event at that slot's time, exactly
+ *       that slot's voters signed up AND rostered, poll terminal (ROK-1606
+ *       AC1/AC2, ROK-1610 AC1)
+ *   (b) a poll whose every slot has passed is refused (ROK-1610 AC2)
+ *   (c) a non-organiser member is refused (ROK-1610 AC3)
+ *   (d) voting stays closed after expiry (AC3, second half)
+ */
+import { eq, sql } from 'drizzle-orm';
+import * as bcrypt from 'bcrypt';
+import { getTestApp, type TestApp } from '../../common/testing/test-app';
+import {
+  truncateAllTables,
+  loginAsAdmin,
+} from '../../common/testing/integration-helpers';
+import * as schema from '../../drizzle/schema';
+import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { findSlotInMatch } from './scheduling-rally.helpers';
+import { at, nonEmpty } from '../../common/testing/narrow';
+
+/** Far enough out that the slot is always "future" (ROK-1610's gate). */
+const FUTURE_SLOT = new Date('2099-10-10T21:00:00.000Z');
+const OTHER_FUTURE_SLOT = new Date('2099-10-11T21:00:00.000Z');
+const PAST_SLOT = new Date('2020-10-10T21:00:00.000Z');
+
+describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
+  let testApp: TestApp;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  // ── helpers ────────────────────────────────────────────────────────
+
+  /** Create a plain member (+ local creds) and return their id and token. */
+  async function createMember(
+    suffix: string,
+  ): Promise<{ id: number; token: string }> {
+    const email = `lockin-${suffix}@test.local`;
+    const hash = await bcrypt.hash('LockInPass1!', 4);
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: `lockin-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
+    await testApp.db
+      .insert(schema.localCredentials)
+      .values({ email, passwordHash: hash, userId: user.id });
+    const res = await testApp.request
+      .post('/auth/local')
+      .send({ email, password: 'LockInPass1!' });
+    return { id: user.id, token: res.body.access_token as string };
+  }
+
+  interface SeededPoll {
+    lineupId: number;
+    matchId: number;
+    slotIds: readonly [number, ...number[]];
+  }
+
+  /**
+   * Seed an EXPIRED poll: the lineup-phase job archived the LINEUP and left
+   * the match on `scheduling` with no linked event (the prod expiry shape
+   * pinned by ROK-1545). The admin is the lineup creator, i.e. the organiser.
+   */
+  async function seedExpiredPoll(
+    slotTimes: Date[],
+    memberIds: number[] = [],
+    /**
+     * Review fix: `decided` (a LIVE lineup, no deadline set) seeds the OTHER
+     * expiry shape — the deadline is still ahead but every proposed time has
+     * passed, which `pollStatusFromMatch` also calls `closed`.
+     */
+    lineupStatus: 'archived' | 'decided' = 'archived',
+  ): Promise<SeededPoll> {
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Valheim',
+          createdBy: testApp.seed.adminUser.id,
+          status: lineupStatus,
+          visibility: 'public',
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
+    await testApp.db.insert(schema.communityLineupMatchMembers).values(
+      [testApp.seed.adminUser.id, ...memberIds].map((userId) => ({
+        matchId: match.id,
+        userId,
+        source: 'voted' as const,
+      })),
+    );
+    const slots = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values(
+        slotTimes.map((proposedTime) => ({
+          matchId: match.id,
+          proposedTime,
+          suggestedBy: 'system' as const,
+        })),
+      )
+      .returning();
+    return {
+      lineupId: lineup.id,
+      matchId: match.id,
+      slotIds: nonEmpty(
+        slots.map((s) => s.id),
+        'slot ids',
+      ),
+    };
+  }
+
+  /** Record a vote directly (the endpoint refuses one after expiry). */
+  async function seedVote(slotId: number, userId: number): Promise<void> {
+    await testApp.db
+      .insert(schema.communityLineupScheduleVotes)
+      .values({ slotId, userId });
+  }
+
+  function lockIn(poll: SeededPoll, slotId: number, token: string) {
+    return testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/create-event`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ slotId });
+  }
+
+  /** Every signup on the event, with the roster row it was placed into. */
+  async function rosterFor(eventId: number) {
+    return testApp.db
+      .select({
+        userId: schema.eventSignups.userId,
+        assignmentId: schema.rosterAssignments.id,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(
+        schema.rosterAssignments,
+        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+      )
+      .where(eq(schema.eventSignups.eventId, eventId));
+  }
+
+  // ── (a) the happy path ─────────────────────────────────────────────
+
+  it("lets the organiser schedule the leading future time, signing up and ROSTERING exactly that slot's voters", async () => {
+    const voter = await createMember('voter');
+    const bystander = await createMember('bystander');
+    const poll = await seedExpiredPoll(
+      [FUTURE_SLOT, OTHER_FUTURE_SLOT],
+      [voter.id, bystander.id],
+    );
+    const winningSlot = at(poll.slotIds, 0);
+    const otherSlot = at(poll.slotIds, 1);
+    await seedVote(winningSlot, testApp.seed.adminUser.id);
+    await seedVote(winningSlot, voter.id);
+    // The bystander voted for a DIFFERENT time — they must not be signed up.
+    await seedVote(otherSlot, bystander.id);
+
+    const res = await lockIn(poll, winningSlot, adminToken);
+
+    expect(res.status).toBe(201);
+    const eventId = res.body.eventId as number;
+    const roster = await rosterFor(eventId);
+    expect(roster.map((r) => r.userId).sort()).toEqual(
+      [testApp.seed.adminUser.id, voter.id].sort(),
+    );
+    // ROK-1606: a signup with no roster assignment is the bug this pins.
+    for (const row of roster) {
+      expect(row.assignmentId).not.toBeNull();
+    }
+  });
+
+  it('moves the poll to its locked-in terminal state', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT]);
+    await seedVote(poll.slotIds[0], testApp.seed.adminUser.id);
+
+    const created = await lockIn(poll, poll.slotIds[0], adminToken);
+    expect(created.status).toBe(201);
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.status).toBe(200);
+    expect(page.body.pollStatus).toBe('locked_in');
+    expect(page.body.canLockIn).toBe(false);
+    // TDB:1489 — the slot, the event the lock-in created and `lockedInTime`
+    // name the SAME absolute instant. `lockedInTime` used to parse the
+    // zone-less `tsrange` bound as LOCAL time, so under a non-UTC `TZ` it
+    // disagreed with its own event by the host's offset.
+    const iso = FUTURE_SLOT.toISOString();
+    expect(page.body.lockedInTime).toBe(iso);
+    const slots = page.body.slots as Array<{
+      id: number;
+      proposedTime: string;
+    }>;
+    expect(slots.find((s) => s.id === poll.slotIds[0])?.proposedTime).toBe(iso);
+    const [event] = nonEmpty(
+      await testApp.db
+        .select({ duration: schema.events.duration })
+        .from(schema.events)
+        .where(eq(schema.events.id, created.body.eventId as number)),
+      'event',
+    );
+    expect(event.duration[0].toISOString()).toBe(iso);
+
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
+    expect(match.status).toBe('scheduled');
+    expect(match.linkedEventId).toBe(created.body.eventId);
+  });
+
+  it('holds each slot as an absolute instant, whatever the DB session zone (TDB:1489)', async () => {
+    // `proposed_time` was a zone-less `timestamp`: every SQL `NOW()`
+    // comparison and raw read then shifted by the session TimeZone's offset.
+    // One transaction pins a non-UTC session, so this fails on ANY host if the
+    // column reverts to `timestamp` OR a raw reader drops `AT TIME ZONE 'UTC'`.
+    const recentPast = new Date(Date.now() - 60 * 60 * 1000);
+    const poll = await seedExpiredPoll([FUTURE_SLOT, recentPast]);
+    const futureId = at(poll.slotIds, 0);
+    const pastId = at(poll.slotIds, 1);
+
+    const seen = await testApp.db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL TIME ZONE 'America/New_York'`);
+      const rows = (await tx.execute(sql`
+        SELECT s.id AS "slotId",
+               s.proposed_time = ${FUTURE_SLOT.toISOString()}::timestamptz
+                 AS "sameInstant",
+               s.proposed_time > NOW() AS "isFuture"
+        FROM community_lineup_schedule_slots s
+        WHERE s.match_id = ${poll.matchId}`)) as unknown as Array<{
+        slotId: number;
+        sameInstant: boolean;
+        isFuture: boolean;
+      }>;
+      const db = tx as unknown as typeof testApp.db;
+      return { rows, found: await findSlotInMatch(db, poll.matchId, futureId) };
+    });
+
+    const byId = new Map(seen.rows.map((r) => [Number(r.slotId), r]));
+    expect(byId.get(futureId)).toMatchObject({
+      sameInstant: true,
+      isFuture: true,
+    });
+    // A time that passed an hour ago read as ~3h AHEAD in New York before.
+    expect(byId.get(pastId)?.isFuture).toBe(false);
+    expect(seen.found?.proposedTime).toBe(FUTURE_SLOT.toISOString());
+  });
+
+  it('advertises the future leading slot to the organiser before they act', async () => {
+    const poll = await seedExpiredPoll([PAST_SLOT, FUTURE_SLOT]);
+    const futureSlot = at(poll.slotIds, 1);
+    await seedVote(poll.slotIds[0], testApp.seed.adminUser.id);
+    await seedVote(futureSlot, testApp.seed.adminUser.id);
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(page.body.pollStatus).toBe('closed');
+    expect(page.body.canLockIn).toBe(true);
+    expect(page.body.lockInSlotId).toBe(futureSlot);
+  });
+
+  // ── (b) every slot has passed ──────────────────────────────────────
+
+  it('refuses a slot whose time has passed, and offers no action (AC2)', async () => {
+    const poll = await seedExpiredPoll([PAST_SLOT]);
+    await seedVote(poll.slotIds[0], testApp.seed.adminUser.id);
+
+    const res = await lockIn(poll, poll.slotIds[0], adminToken);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('already passed');
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.canLockIn).toBe(false);
+    expect(page.body.lockInSlotId).toBeNull();
+  });
+
+  // ── (b2) a future slot NOBODY voted for (review P2) ────────────────
+
+  it('refuses a future slot with zero votes, so no empty-roster event is announced', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT, OTHER_FUTURE_SLOT]);
+    const votedSlot = at(poll.slotIds, 0);
+    const emptySlot = at(poll.slotIds, 1);
+    await seedVote(votedSlot, testApp.seed.adminUser.id);
+
+    const res = await lockIn(poll, emptySlot, adminToken);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Nobody voted for that time');
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
+    expect(match.linkedEventId).toBeNull();
+    // The READ path never offered it either — the two paths agree.
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.lockInSlotId).toBe(votedSlot);
+  });
+
+  // ── (e) all times passed, deadline still ahead (review P2 #2) ──────
+
+  it('keeps SUGGESTING open when every time has passed but the deadline has not', async () => {
+    const poll = await seedExpiredPoll([PAST_SLOT], [], 'decided');
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.pollStatus).toBe('closed');
+    expect(page.body.canVote).toBe(false);
+    expect(page.body.canSuggest).toBe(true);
+
+    // ...and the server accepts the suggestion the Discord card invites.
+    const suggested = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ proposedTime: FUTURE_SLOT.toISOString() });
+    expect(suggested.status).toBe(201);
+  });
+
+  it('refuses suggesting once the DEADLINE itself has passed', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT]);
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(page.body.canSuggest).toBe(false);
+
+    const suggested = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ proposedTime: OTHER_FUTURE_SLOT.toISOString() });
+    expect(suggested.status).toBe(400);
+  });
+
+  // ── (f) withdrawing a vote from a time that has passed ─────────────
+
+  it('lets a member WITHDRAW a vote from a time that has since passed', async () => {
+    const member = await createMember('withdrawer');
+    const poll = await seedExpiredPoll([PAST_SLOT], [member.id], 'decided');
+    await seedVote(poll.slotIds[0], member.id);
+
+    const withdraw = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/vote`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ slotId: poll.slotIds[0] });
+
+    // The vote route is @HttpCode(OK).
+    expect(withdraw.status).toBe(200);
+    expect(withdraw.body.voted).toBe(false);
+
+    // ...but re-ADDING a vote to that dead time is still refused.
+    const readd = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/vote`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ slotId: poll.slotIds[0] });
+    expect(readd.status).toBe(400);
+    expect(readd.body.message).toContain('already passed');
+    const votes = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleVotes)
+      .where(eq(schema.communityLineupScheduleVotes.slotId, poll.slotIds[0]));
+    expect(votes).toHaveLength(0);
+  });
+
+  // ── (c) permission ─────────────────────────────────────────────────
+
+  it('refuses a non-organiser member, even one who voted for the slot (AC3)', async () => {
+    const member = await createMember('member');
+    const poll = await seedExpiredPoll([FUTURE_SLOT], [member.id]);
+    await seedVote(poll.slotIds[0], member.id);
+
+    const res = await lockIn(poll, poll.slotIds[0], member.token);
+
+    expect(res.status).toBe(403);
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
+    expect(match.linkedEventId).toBeNull();
+  });
+
+  it('refuses a voted non-organiser on an OPEN poll, where the page offers no lock (batch 2026-09-22)', async () => {
+    const member = await createMember('open-member');
+    const poll = await seedExpiredPoll([FUTURE_SLOT], [member.id], 'decided');
+    // A live lineup with a future deadline and a future slot: the poll is OPEN.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ phaseDeadline: new Date('2099-01-01T00:00:00.000Z') })
+      .where(eq(schema.communityLineups.id, poll.lineupId));
+    await seedVote(poll.slotIds[0], member.id);
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${member.token}`);
+    expect(page.body.pollStatus).toBe('open');
+    // The caller is a member, not the organiser the page would offer the lock.
+    expect(page.body.match.lineupCreatedById).toEqual(expect.any(Number));
+    expect(page.body.match.lineupCreatedById).not.toBe(member.id);
+
+    const res = await lockIn(poll, poll.slotIds[0], member.token);
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('Only the poll creator or an operator');
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
+    expect(match.linkedEventId).toBeNull();
+  });
+
+  it('shows a member the expired state with no lock-in action (AC3)', async () => {
+    const member = await createMember('viewer');
+    const poll = await seedExpiredPoll([FUTURE_SLOT], [member.id]);
+    await seedVote(poll.slotIds[0], member.id);
+
+    const page = await testApp.request
+      .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
+      .set('Authorization', `Bearer ${member.token}`);
+
+    expect(page.body.pollStatus).toBe('closed');
+    expect(page.body.canVote).toBe(false);
+    expect(page.body.canLockIn).toBe(false);
+    // The time is still named, so the banner can say what was leading.
+    expect(page.body.lockInSlotId).toBe(poll.slotIds[0]);
+  });
+
+  // ── (d) voting stays closed ────────────────────────────────────────
+
+  it('keeps voting closed after expiry — lock-in is not a re-open', async () => {
+    const member = await createMember('latevoter');
+    const poll = await seedExpiredPoll([FUTURE_SLOT], [member.id]);
+
+    const res = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/vote`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ slotId: poll.slotIds[0] });
+
+    expect(res.status).toBe(400);
+  });
+});

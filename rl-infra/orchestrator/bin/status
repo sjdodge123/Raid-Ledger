@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# Global status: slots, envs, resource summary.
+# Emits JSON by default; pass --pretty for human format.
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+# ROK-1470 — admission counters for the dynamic-memory model.
+source "$(dirname "$0")/_admission.sh"
+# ROK-1469 D2 — per-slot Discord identity on each env row.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_bot_identity.sh"
+# TDB:1904 — settings-bundle freshness (age, key count, decrypts) without SSH.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_settings_bundle.sh"
+
+PRETTY=0
+[[ "${1:-}" == "--pretty" ]] && PRETTY=1
+
+CLAIMS=$(cat "$RL_CLAIMS_FILE")
+QUEUE=$(cat "$RL_QUEUE_FILE" 2>/dev/null || echo "[]")
+ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq -s '
+    map({
+        container: .Names,
+        slug: (.Labels | capture("rl\\.env_slug=(?<v>[^,]+)").v // null),
+        slot: (.Labels | capture("rl\\.slot=(?<v>[^,]+)").v // null),
+        ttl: (.Labels | capture("rl\\.ttl=(?<v>[^,]+)").v // null),
+        last_touched: (.Labels | capture("rl\\.last_touched=(?<v>[^,]+)").v // null),
+        status: .Status,
+        created: .CreatedAt
+    })
+')
+# ROK-1469 D2: stamp each env with its slot's PUBLIC bot identity so an agent
+# can tell at a glance WHICH Discord app an env is posting as.
+ENVS_JSON=$(bot_identity::augment_envs "$ENVS_JSON")
+
+# ROK-1568 — machine-readable disk fields beside the human `disk` string.
+# `disk` is a display string ("92G/245G (39%)"); agents deciding whether to
+# start an image build need numbers, and disk_pressure echoes the gc-sweeper
+# ladder's last run (null until the sweeper has completed a cycle).
+# Both the human string and the numbers below read the SAME filesystem —
+# `disk` used to report /srv while disk_free_gb reported / (review MINOR 10).
+DISK_FS="${RL_DISK_ROOT:-/}"
+DISK_FREE_GB=$(df -BG --output=avail "$DISK_FS" 2>/dev/null | tail -1 | tr -dc '0-9') || true
+[[ -z "$DISK_FREE_GB" ]] && { DISK_FREE_GB=$(df -Pk "$DISK_FS" 2>/dev/null | tail -1 | awk '{printf "%d", $4 / 1048576}') || true; }
+[[ -z "$DISK_FREE_GB" ]] && DISK_FREE_GB=0
+DISK_PRESSURE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-/state}/disk-pressure.json}"
+# `|| echo null`, NOT a bare `jq`: this script runs under `set -euo pipefail`,
+# so on every deploy before the sweeper's first cycle (file absent) — or if the
+# file is ever truncated mid-write — a non-zero jq would abort the assignment
+# and take the WHOLE of `rl status` down fleet-wide (Codex P1).
+DISK_PRESSURE=$(jq -c . "$DISK_PRESSURE_FILE" 2>/dev/null || echo null)
+[[ -z "$DISK_PRESSURE" ]] && DISK_PRESSURE=null
+jq -e . >/dev/null 2>&1 <<<"$DISK_PRESSURE" || DISK_PRESSURE=null
+
+# TDB:1904 — bundle.enc freshness. Same `|| echo null` + `jq -e` guard as
+# DISK_PRESSURE above: this must never abort `rl status`. The payload never
+# leaves freshness_json; only counts and the warning text come back.
+SETTINGS_BUNDLE=$(settings_bundle::freshness_json 2>/dev/null || echo null)
+[[ -z "$SETTINGS_BUNDLE" ]] && SETTINGS_BUNDLE=null
+jq -e . >/dev/null 2>&1 <<<"$SETTINGS_BUNDLE" || SETTINGS_BUNDLE=null
+
+# Host resources.
+HOST=$(jq -nc \
+    --arg mem "$(free -h | awk '/^Mem:/ {print $3"/"$2}')" \
+    --arg disk "$(df -h "$DISK_FS" | awk 'NR==2 {print $3"/"$2" ("$5")"}')" \
+    --arg load "$(awk '{print $1, $2, $3}' /proc/loadavg)" \
+    --argjson disk_free_gb "$DISK_FREE_GB" \
+    --argjson disk_pressure "$DISK_PRESSURE" \
+    '{memory: $mem, disk: $disk, loadavg: $load, disk_free_gb: $disk_free_gb, disk_pressure: $disk_pressure}')
+
+# Per-runner stats from docker stats (no-stream).
+RUNNER_STATS=$(docker stats --no-stream --format '{{json .}}' $(docker ps --filter "label=rl.role=runner" --format '{{.Names}}') 2>/dev/null | jq -s '
+    map({container: .Name, cpu: .CPUPerc, mem: .MemUsage, net: .NetIO, block: .BlockIO})
+' || echo '[]')
+
+# ROK-1338 PR-1 — per-runner sync state. For each runner in $RUNNER_STATS,
+# derive (a) `last_sync_at` from `stat -c %y` on /srv/rl-infra/runners/slot-N/worktree
+# (mtime of the worktree dir reflects Mutagen sync recency) and (b)
+# `worktree_head` from `git rev-parse --short HEAD` inside the runner. Both
+# default to null when missing (no claim active, or runner not running) so
+# the orchestrator never errors out the whole status read.
+augment_runner_sync() {
+    local runner_json="$1"
+    local container slot worktree_dir last_sync worktree_head
+    container=$(jq -r '.container' <<<"$runner_json")
+    # Extract slot number from container name (e.g. rl-runner-2 → 2).
+    slot=$(echo "$container" | sed -n 's/^rl-runner-\([0-9]\+\)$/\1/p')
+    if [[ -z "$slot" ]]; then
+        # Not a numbered slot runner — nothing to derive.
+        jq -c '. + {last_sync_at: null, worktree_head: null}' <<<"$runner_json"
+        return
+    fi
+    worktree_dir="/srv/rl-infra/runners/slot-${slot}/worktree"
+    # last_sync_at: ISO-8601 of the NEWEST FILE's mtime under the worktree.
+    # ROK-1338 PR-1 codex P2 (2026-05-21): stat on the dir itself only
+    # updates when files are added/removed at the top level — Mutagen's
+    # common edit-in-place writes don't bump dir mtime, leaving
+    # last_sync_at stale even though sync is healthy. find -printf '%T@'
+    # scans actual file mtimes under the tree. Exclude node_modules / .git
+    # / dist / build / .next to keep the scan cheap (under 1s on typical
+    # worktrees).
+    last_sync="null"
+    if [[ -d "$worktree_dir" ]]; then
+        local newest_epoch
+        newest_epoch=$(find "$worktree_dir" \
+            -type d \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .next \) -prune \
+            -o -type f -printf '%T@\n' 2>/dev/null \
+            | sort -rn | head -1)
+        if [[ -n "$newest_epoch" ]]; then
+            local iso
+            iso=$(date -u -d "@${newest_epoch%.*}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
+            if [[ -n "$iso" ]]; then
+                last_sync="\"$iso\""
+            fi
+        fi
+    fi
+    # worktree_head: short SHA from inside the runner container. The runner
+    # has the synced worktree at /workspace. Suppress git's "dubious-ownership"
+    # warning via -c safe.directory=*.
+    worktree_head="null"
+    local sha
+    sha=$(docker exec "rl-runner-${slot}" git -c safe.directory='*' -C /workspace rev-parse --short HEAD 2>/dev/null || echo "")
+    if [[ -n "$sha" ]]; then
+        worktree_head="\"$sha\""
+    fi
+    jq -c ". + {last_sync_at: ${last_sync}, worktree_head: ${worktree_head}}" <<<"$runner_json"
+}
+
+# Walk RUNNER_STATS and augment each entry. jq emits one runner per line, we
+# augment, then re-array.
+RUNNER_STATS_AUGMENTED=$(jq -c '.[]' <<<"$RUNNER_STATS" | while IFS= read -r runner; do
+    augment_runner_sync "$runner"
+done | jq -s '.')
+RUNNER_STATS="$RUNNER_STATS_AUGMENTED"
+
+# ROK-1338 PR-1 — deployed_sha. Operator's deploy script writes this on every
+# rsync. Absent file → null. Trim trailing whitespace defensively.
+DEPLOYED_SHA="null"
+if [[ -f /srv/rl-infra/.deployed_sha ]]; then
+    sha_content=$(tr -d '[:space:]' < /srv/rl-infra/.deployed_sha 2>/dev/null || echo "")
+    if [[ -n "$sha_content" ]]; then
+        DEPLOYED_SHA="\"$sha_content\""
+    fi
+fi
+
+# ROK-1470 — heavy-task admission snapshot (counts + host MemAvailable). The
+# runners are over-subscribed on purpose (4 x 6g caps on a 15 GiB host), so
+# "who is holding a heavy slot right now" is first-class status.
+ADMISSION_JSON=$(admission::snapshot 2>/dev/null || echo '{}')
+
+OUT=$(jq -nc \
+    --argjson adm "$ADMISSION_JSON" \
+    --argjson claims "$CLAIMS" \
+    --argjson envs "$ENVS_JSON" \
+    --argjson host "$HOST" \
+    --argjson runners "$RUNNER_STATS" \
+    --argjson queue "$QUEUE" \
+    --argjson deployed_sha "$DEPLOYED_SHA" \
+    --argjson settings_bundle "$SETTINGS_BUNDLE" \
+    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), deployed_sha: $deployed_sha, settings_bundle: $settings_bundle, slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)} + $adm')
+
+if [[ $PRETTY -eq 1 ]]; then
+    echo "=== rl-infra status ==="
+    echo "Host:    $(jq -r '.host.memory' <<<"$OUT") RAM  |  $(jq -r '.host.disk' <<<"$OUT")  |  load $(jq -r '.host.loadavg' <<<"$OUT")"
+    echo
+    echo "Slots:"
+    jq -r '.slots[] | "  slot-\(.slot): \(if .claimed then "BUSY  agent=\(.agent_id)  branch=\(.branch // "?")  heartbeat=\(.last_heartbeat // "?")" else "FREE" end)"' <<<"$OUT"
+    echo
+    echo "Envs:"
+    jq -r '.envs[] | "  \(.slug // .container): slot=\(.slot // "?")  ttl=\(.ttl // "?")  status=\(.status)"' <<<"$OUT"
+    echo
+    QDEPTH=$(jq -r '.queue_depth' <<<"$OUT")
+    if [[ "$QDEPTH" != "0" ]]; then
+        echo "Queue (depth=$QDEPTH):"
+        jq -r '.queue | to_entries[] | "  [\(.key)] agent=\(.value.agent_id)  branch=\(.value.branch // "?")  queued_at=\(.value.queued_at)"' <<<"$OUT"
+    else
+        echo "Queue: empty"
+    fi
+    echo
+    echo "Admission (ROK-1470): heavy_running=$(jq -r '.heavy_running // 0' <<<"$OUT")  heavy_waiting=$(jq -r '.heavy_waiting // 0' <<<"$OUT")  mem_available=$(jq -r '.mem_available_mb // "?"' <<<"$OUT")MB  floor=$(jq -r '.heavy_task_min_free_mb // "?"' <<<"$OUT")MB"
+    echo
+    echo "Settings bundle: $(jq -r 'if .settings_bundle == null then "unknown" elif .settings_bundle.present then "age=\(.settings_bundle.age_hours // "?")h  keys=\(.settings_bundle.key_count // "?")  decrypts=\(.settings_bundle.decrypts)\(if .settings_bundle.warning then "  WARNING: \(.settings_bundle.warning)" else "" end)" else "absent" end' <<<"$OUT")"
+    echo
+    echo "Runners (live):"
+    jq -r '.runners[] | "  \(.container): cpu=\(.cpu)  mem=\(.mem)"' <<<"$OUT"
+else
+    echo "$OUT"
+fi

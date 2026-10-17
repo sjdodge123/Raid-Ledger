@@ -1,0 +1,136 @@
+/**
+ * Accent hues, dark shade vs light shade (ROK-1539).
+ *
+ * This is the rendered home of what used to be a table in
+ * docs/design-system.md §2.2 — the doc links here rather than carrying it, so
+ * the mapping is read where it can actually be *seen* in both families (turn on
+ * "Side by side" and every swatch below renders twice).
+ *
+ * You write ONE class; `index.css:702-721` rewrites it for the six light
+ * schemes, to a shade that clears 4.5:1 on the surface, the panel and the hue's
+ * own -500/10 tint (`styles/raw-hue-light.guard.test.ts` enforces it). The literal hexes below are documented values, the sanctioned
+ * exception to "never hardcode a colour" — every swatch itself paints via the
+ * Tailwind class named in its own row, so a wrong claim shows up visually.
+ */
+import type { JSX } from 'react';
+import { Section } from './design-system-bits';
+
+interface AccentRow {
+    cls: string;
+    dark: string;
+    light: string;
+    note: string;
+}
+
+/**
+ * Text accents. `light` is what `index.css` repaints them as under every light scheme; ratios are
+ * the shared light block's surface / panel / own -500/10 tint, then the worst across all six light
+ * schemes (celestial's #e4ddd0 panel binds every hue).
+ */
+const TEXT_ACCENTS: AccentRow[] = [
+    { cls: 'text-emerald-400', dark: '#34d399', light: '#065f46', note: 'emerald-800 · 7.7 / 7.0 / 6.4 · worst 5.3 · :710' },
+    { cls: 'text-emerald-300', dark: '#6ee7b7', light: '#065f46', note: 'emerald-800 · :711' },
+    { cls: 'text-emerald-500', dark: '#10b981', light: '#065f46', note: 'emerald-800 · worst 5.3 · :712' },
+    { cls: 'text-red-400', dark: '#f87171', light: '#991b1b', note: 'red-800 · 8.3 / 7.6 / 6.7 · worst 5.5 · :703' },
+    { cls: 'text-red-300', dark: '#fca5a5', light: '#991b1b', note: 'red-800 · :702' },
+    { cls: 'text-amber-400', dark: '#fbbf24', light: '#92400e', note: 'amber-800 = warning · 7.1 / 6.5 / 6.0 · worst 5.0 · :705' },
+    { cls: 'text-amber-300', dark: '#fcd34d', light: '#92400e', note: 'amber-800 = warning · :704' },
+    { cls: 'text-yellow-400', dark: '#facc15', light: '#854d0e', note: 'yellow-800 · 6.9 / 6.3 / 5.9 · worst 4.9 · :706' },
+    { cls: 'text-green-400', dark: '#4ade80', light: '#166534', note: 'green-800 · 7.1 / 6.5 / 6.0 · worst 5.0 · :708' },
+    { cls: 'text-purple-400', dark: '#c084fc', light: '#6d28d9', note: 'violet-700 · 7.1 / 6.5 / 5.8 · worst 4.7 · :713' },
+    { cls: 'text-indigo-400', dark: '#818cf8', light: '#4338ca', note: 'indigo-700 · 7.9 / 7.2 / 6.4 · worst 5.3 · :715' },
+    { cls: 'text-indigo-300', dark: '#a5b4fc', light: '#4338ca', note: 'indigo-700 · :714' },
+    { cls: 'text-cyan-400', dark: '#22d3ee', light: '#155e75', note: 'cyan-800 · 7.3 / 6.6 / 6.1 · worst 5.0 · :717' },
+    { cls: 'text-teal-400', dark: '#2dd4bf', light: '#115e59', note: 'teal-800 · worst 5.0 · :718' },
+    { cls: 'text-gray-400', dark: '#9ca3af', light: '#374151', note: 'gray-700 · worst 6.2 · kept gray-400 inside bg-gray-900 (:836) · :719' },
+    { cls: 'text-blue-400', dark: '#60a5fa', light: '#1d4ed8', note: 'blue-700 · 6.7 / 6.1 / 5.5 · worst 4.5 · :721' },
+];
+
+function AccentTextRow({ row }: { row: AccentRow }): JSX.Element {
+    return (
+        <tr className="border-t border-edge-subtle" data-testid={`ds-accent-${row.cls}`}>
+            <td className="py-1.5 pr-3"><code className={`text-xs ${row.cls}`}>{row.cls}</code></td>
+            <td className="py-1.5 pr-3 font-mono text-[11px] text-muted">{row.dark}</td>
+            <td className="py-1.5 pr-3 font-mono text-[11px] text-muted">{row.light}</td>
+            <td className="py-1.5 text-[11px] text-dim">{row.note}</td>
+        </tr>
+    );
+}
+
+function AccentTextTable(): JSX.Element {
+    return (
+        <table className="w-full text-sm">
+            <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-muted text-left">
+                    <th className="py-1 pr-3 font-medium">Class (painted live)</th>
+                    <th className="py-1 pr-3 font-medium">Dark</th>
+                    <th className="py-1 pr-3 font-medium">Light</th>
+                    <th className="py-1 font-medium">index.css</th>
+                </tr>
+            </thead>
+            <tbody>
+                {TEXT_ACCENTS.map((row) => <AccentTextRow key={row.cls} row={row} />)}
+            </tbody>
+        </table>
+    );
+}
+
+/** Tinted surfaces: `-500/10` fill + `-500/30` border, remapped at `:742-770` / `:786-801`. */
+function TintedSurfaces(): JSX.Element {
+    const hues = ['emerald', 'amber', 'red', 'indigo'];
+    return (
+        <div className="flex flex-wrap gap-2">
+            {hues.map((hue) => (
+                <span
+                    key={hue}
+                    data-testid={`ds-accent-tint-${hue}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs bg-${hue}-500/10 border border-${hue}-500/30 text-${hue}-400`}
+                >
+                    {hue}-500/10
+                </span>
+            ))}
+        </div>
+    );
+}
+
+/** Solid fills keep their hue in both families with a forced-white label on light — except the primary bg-emerald-600, which steps to #047857 (hover #065f46) on light. */
+function SolidFills(): JSX.Element {
+    return (
+        <div className="flex flex-wrap gap-2">
+            <button type="button" className="min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-foreground">
+                bg-emerald-600 + text-foreground
+            </button>
+            <button type="button" className="min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-foreground">
+                bg-indigo-600
+            </button>
+            <button type="button" className="min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium bg-red-600 text-foreground">
+                bg-red-600
+            </button>
+        </div>
+    );
+}
+
+/** Accent-hue reference: every shade in its dark and light rendering. */
+export function AccentsSection(): JSX.Element {
+    return (
+        <Section
+            id="accents"
+            title="Accent hues"
+            blurb="One class, two paintings. Semantic accents are raw Tailwind hues; the light family repaints them in index.css. Every repaint clears WCAG AA on the light surface, the panel and its own tinted chip; new code should still prefer text-success / text-warning / text-danger."
+        >
+            <div className="bg-panel/50 border border-edge rounded-lg p-3 mb-4 overflow-x-auto">
+                <AccentTextTable />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="bg-panel/50 border border-edge rounded-lg p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted mb-2">Tinted surface — remapped on light</div>
+                    <TintedSurfaces />
+                </div>
+                <div className="bg-panel/50 border border-edge rounded-lg p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted mb-2">Solid fill — label forced white on light; primary steps to #047857</div>
+                    <SolidFills />
+                </div>
+            </div>
+        </Section>
+    );
+}

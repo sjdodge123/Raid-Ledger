@@ -1,0 +1,370 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { isPerfEnabled, perfLog } from '../common/perf-logger';
+import {
+  type Client,
+  type Guild,
+  type EmbedBuilder,
+  type ActionRowBuilder,
+  type ButtonBuilder,
+  type TextChannel,
+  type Message,
+} from 'discord.js';
+import {
+  DISCORD_BOT_EVENTS,
+  friendlyDiscordErrorMessage,
+} from './discord-bot.constants';
+import { emitIsolated } from './discord-bot-event-dispatch.helpers';
+import {
+  createDiscordClient,
+  checkBotPermissions,
+  type GuildInfo,
+  type PermissionCheckResult,
+} from './discord-bot-client.helpers';
+import {
+  searchGuildMembers as searchGuildMembersHelper,
+  listGuildMembers as listGuildMembersHelper,
+  isGuildMember as isGuildMemberHelper,
+  listAllGuildMemberAvatars as listAllGuildMemberAvatarsHelper,
+  type GuildMemberAvatars,
+  kickGuildMember as kickGuildMemberHelper,
+  listGuildTextChannels as listGuildTextChannelsHelper,
+  listGuildVoiceChannels as listGuildVoiceChannelsHelper,
+} from './discord-bot-client.guild.helpers';
+
+export type {
+  GuildInfo,
+  PermissionCheckResult,
+} from './discord-bot-client.helpers';
+
+@Injectable()
+export class DiscordBotClientService {
+  private readonly logger = new Logger(DiscordBotClientService.name);
+  private client: Client | null = null;
+  private connecting = false;
+  private connectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly eventEmitter: EventEmitter2) {}
+
+  async connect(token: string): Promise<void> {
+    if (this.client) await this.disconnect();
+
+    const client = createDiscordClient();
+    this.client = client;
+    this.connecting = true;
+
+    return new Promise<void>((resolve, reject) => {
+      this.connectTimeout = setTimeout(() => {
+        this.connectTimeout = null;
+        this.connecting = false;
+        reject(new Error('Discord bot connection timed out after 15s'));
+      }, 15_000);
+
+      this.setupReadyHandler(client, resolve);
+      this.setupErrorHandler(client, reject);
+      this.doLogin(client, token, reject);
+    });
+  }
+
+  async disconnect(): Promise<void> {
+    this.connecting = false;
+    if (this.connectTimeout) {
+      clearTimeout(this.connectTimeout);
+      this.connectTimeout = null;
+    }
+    if (!this.client) return;
+
+    try {
+      await this.client.destroy();
+      this.logger.log('Discord bot disconnected');
+      this.eventEmitter.emit(DISCORD_BOT_EVENTS.DISCONNECTED);
+    } catch (error) {
+      this.logger.error('Error disconnecting Discord bot:', error);
+    } finally {
+      this.client = null;
+    }
+  }
+
+  isConnected(): boolean {
+    return this.client?.isReady() ?? false;
+  }
+
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  isConnecting(): boolean {
+    return this.connecting;
+  }
+
+  getGuild(): Guild | null {
+    if (!this.client?.isReady()) return null;
+    return this.client.guilds.cache.first() ?? null;
+  }
+
+  getGuildInfo(): GuildInfo | null {
+    try {
+      const guild = this.getGuild();
+      if (!guild) return null;
+      return { name: guild.name, memberCount: guild.memberCount };
+    } catch (error) {
+      this.logger.error('Failed to get guild info:', error);
+      return null;
+    }
+  }
+
+  async sendDirectMessage(discordId: string, content: string): Promise<void> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+    const start = isPerfEnabled() ? performance.now() : 0;
+    const user = await this.client.users.fetch(discordId);
+    await user.send(content);
+    if (start) {
+      perfLog('DISCORD', 'sendDirectMessage', performance.now() - start, {
+        discordId,
+      });
+    }
+  }
+
+  /** Send a rich embed DM to a user. */
+  async sendEmbedDM(
+    discordId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+    extraRows?: ActionRowBuilder<ButtonBuilder>[],
+    content?: string,
+  ): Promise<void> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+    const start = isPerfEnabled() ? performance.now() : 0;
+    const user = await this.client.users.fetch(discordId);
+
+    const components: ActionRowBuilder<ButtonBuilder>[] = [];
+    if (extraRows) components.push(...extraRows);
+    if (row) components.push(row);
+
+    await user.send({
+      ...(content ? { content } : {}),
+      embeds: [embed],
+      ...(components.length > 0 ? { components } : {}),
+    });
+    if (start) {
+      perfLog('DISCORD', 'sendEmbedDM', performance.now() - start, {
+        discordId,
+      });
+    }
+  }
+
+  getGuildId(): string | null {
+    return this.getGuild()?.id ?? null;
+  }
+
+  /**
+   * ROK-1469: the Discord user this process is logged in as ({id, username}),
+   * or null when the client isn't ready. Fleet envs run per-slot Discord apps,
+   * so callers (the bot status endpoint → smoke author filter) need to know
+   * WHICH bot is posting, not just that one is.
+   */
+  getBotUser(): { id: string; username: string } | null {
+    if (!this.client?.isReady()) return null;
+    const user = this.client.user;
+    if (!user) return null;
+    return { id: user.id, username: user.username };
+  }
+
+  getClientId(): string | null {
+    if (!this.client?.isReady()) return null;
+    return this.client.user?.id ?? null;
+  }
+
+  /** Send an embed message to a channel. */
+  async sendEmbed(
+    channelId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+    content?: string,
+  ): Promise<Message> {
+    const channel = await this.fetchTextChannel(channelId);
+    const start = isPerfEnabled() ? performance.now() : 0;
+    const result = await channel.send({
+      ...(content ? { content } : {}),
+      embeds: [embed],
+      ...(row ? { components: [row] } : {}),
+    });
+    if (start) {
+      perfLog('DISCORD', 'sendEmbed', performance.now() - start, {
+        channelId,
+      });
+    }
+    return result;
+  }
+
+  /** Edit an existing embed message in a channel. */
+  async editEmbed(
+    channelId: string,
+    messageId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+    content?: string,
+  ): Promise<Message> {
+    const channel = await this.fetchTextChannel(channelId);
+    const start = isPerfEnabled() ? performance.now() : 0;
+
+    const message = await channel.messages.fetch(messageId);
+    const result = await message.edit({
+      ...(content ? { content } : {}),
+      embeds: [embed],
+      components: row ? [row] : [],
+    });
+
+    if (start) {
+      perfLog('DISCORD', 'editEmbed', performance.now() - start, {
+        channelId,
+        messageId,
+      });
+    }
+    return result;
+  }
+
+  /** Delete a message from a channel. */
+  async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    const channel = await this.fetchTextChannel(channelId);
+    const start = isPerfEnabled() ? performance.now() : 0;
+    const message = await channel.messages.fetch(messageId);
+    await message.delete();
+    if (start) {
+      perfLog('DISCORD', 'deleteMessage', performance.now() - start, {
+        channelId,
+        messageId,
+      });
+    }
+  }
+
+  /** List text channels from the guild. */
+  getTextChannels(): { id: string; name: string }[] {
+    return listGuildTextChannelsHelper(this.getGuild());
+  }
+
+  /** List voice channels from the guild. */
+  getVoiceChannels(): { id: string; name: string }[] {
+    return listGuildVoiceChannelsHelper(this.getGuild());
+  }
+
+  /** Search guild members by username query. */
+  async searchGuildMembers(
+    query: string,
+  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
+    return searchGuildMembersHelper(this.getGuild(), query);
+  }
+
+  /** List guild members (no query required). */
+  async listGuildMembers(
+    limit = 25,
+  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
+    return listGuildMembersHelper(this.getGuild(), limit);
+  }
+
+  /** Check if a Discord user is in the guild (ROK-403). */
+  async isGuildMember(discordUserId: string): Promise<boolean> {
+    return isGuildMemberHelper(this.getGuild(), discordUserId);
+  }
+
+  /** Kick a member from the guild (ROK-313). False when disconnected/no guild. */
+  async kickMember(discordId: string, reason?: string): Promise<boolean> {
+    return kickGuildMemberHelper(this.getGuild(), discordId, reason);
+  }
+
+  /**
+   * Fetch every guild member as Discord ID → global avatar hash (ROK-1282,
+   * ROK-1714). Returns null when the bot is disconnected — caller
+   * (`GuildReconciliationService`) treats null as a no-op.
+   */
+  async listAllGuildMemberAvatars(): Promise<GuildMemberAvatars | null> {
+    return listAllGuildMemberAvatarsHelper(this.getGuild());
+  }
+
+  /** Check bot permissions in the guild. */
+  checkPermissions(): PermissionCheckResult[] {
+    return checkBotPermissions(this.getGuild());
+  }
+
+  // ─── Private helpers ──────────────────────────────────────
+
+  private setupReadyHandler(client: Client, resolve: () => void): void {
+    client.once('clientReady', () => {
+      clearTimeout(this.connectTimeout!);
+      this.connectTimeout = null;
+      this.connecting = false;
+      this.logger.log(`Discord bot connected as ${client.user?.tag}`);
+
+      const guildCount = client.guilds.cache.size;
+      if (guildCount > 1) {
+        this.logger.warn(
+          `Bot is in ${guildCount} guilds but only the first one is used.`,
+        );
+      }
+
+      this.emitConnected().then(resolve, resolve);
+    });
+  }
+
+  private setupErrorHandler(
+    client: Client,
+    reject: (err: Error) => void,
+  ): void {
+    client.once('error', (error: Error) => {
+      clearTimeout(this.connectTimeout!);
+      this.connectTimeout = null;
+      this.connecting = false;
+      const message = friendlyDiscordErrorMessage(error);
+      this.logger.error('Discord bot connection error:', message);
+      this.eventEmitter.emit(DISCORD_BOT_EVENTS.ERROR, error);
+      reject(new Error(message));
+    });
+  }
+
+  private doLogin(
+    client: Client,
+    token: string,
+    reject: (err: Error) => void,
+  ): void {
+    client.login(token).catch((err: unknown) => {
+      clearTimeout(this.connectTimeout!);
+      this.connectTimeout = null;
+      this.connecting = false;
+      const message = friendlyDiscordErrorMessage(err);
+      this.logger.error('Discord bot login failed:', message);
+      this.client = null;
+      reject(new Error(message));
+    });
+  }
+
+  /**
+   * Fan out CONNECTED with per-subscriber fault isolation (ROK-1425 follow-up).
+   *
+   * Previously this awaited a single `emitAsync` inside one try/catch. That
+   * caught a throwing subscriber but could not resume the chain — every
+   * listener after the thrower silently never attached its gateway handlers.
+   * See discord-bot-event-dispatch.helpers.ts.
+   */
+  private async emitConnected(): Promise<void> {
+    await emitIsolated(
+      this.eventEmitter,
+      DISCORD_BOT_EVENTS.CONNECTED,
+      this.logger,
+    );
+  }
+
+  private async fetchTextChannel(channelId: string): Promise<TextChannel> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel || !('send' in channel)) {
+      throw new Error(`Channel ${channelId} not found or not a text channel`);
+    }
+    return channel as TextChannel;
+  }
+}

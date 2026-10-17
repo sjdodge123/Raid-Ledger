@@ -1,0 +1,1 @@
+ALTER TABLE "game_interests" ADD CONSTRAINT "chk_game_interests_source" CHECK ("source" IN ('manual', 'discord', 'steam'));

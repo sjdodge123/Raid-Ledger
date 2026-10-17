@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "clientRef": "101",
+      "name": "Dota 2",
+      "igdbId": 2963,
+      "steamAppId": 570,
+      "provenance": { "igdbId": "igdb", "steamAppId": "steam" }
+    },
+    {
+      "clientRef": "102",
+      "name": "Deep Rock Galactic",
+      "itadUuid": "018f4a2c-7b3e-7c91-9d2a-5e6f7a8b9c0d",
+      "provenance": { "itadUuid": "itad" }
+    }
+  ]
+}

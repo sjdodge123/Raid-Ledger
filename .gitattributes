@@ -1,0 +1,3 @@
+# TECH-DEBT-BACKLOG.md is append-only: concurrent PRs each add a dated section at the end, and every
+# squash merge otherwise conflicts with every other open PR. The union driver keeps both sides.
+TECH-DEBT-BACKLOG.md merge=union

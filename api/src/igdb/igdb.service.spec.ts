@@ -1,0 +1,711 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
+import { IgdbService } from './igdb.service';
+import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { SettingsService } from '../settings/settings.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
+import { ItadService } from '../itad/itad.service';
+import { GameTasteService } from '../game-taste/game-taste.service';
+import { withMockTransaction } from '../common/testing/drizzle-mock';
+
+// Mock fetch globally
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
+/**
+ * Creates a thenable mock that also exposes query-builder methods (.limit(), .orderBy(), .groupBy()).
+ * This mirrors Drizzle's pattern where the query builder is itself a PromiseLike.
+ */
+interface ThenableQuery {
+  then: (
+    resolve: (v: unknown[]) => void,
+    reject?: (e: unknown) => void,
+  ) => Promise<void>;
+  limit: jest.Mock;
+  orderBy: jest.Mock;
+  groupBy: jest.Mock;
+}
+
+function thenableResult(data: unknown[]): ThenableQuery {
+  const obj: ThenableQuery = {
+    then: (resolve, reject?) => Promise.resolve(data).then(resolve, reject),
+    limit: jest.fn().mockImplementation(() => thenableResult(data)),
+    orderBy: jest.fn().mockImplementation(() => thenableResult(data)),
+    groupBy: jest.fn().mockImplementation(() => thenableResult(data)),
+  };
+  return obj;
+}
+
+describe('IgdbService', () => {
+  let service: IgdbService;
+  let mockDb: Record<string, jest.Mock>;
+  let mockRedis: Record<'del' | 'get' | 'keys' | 'setex', jest.Mock>;
+  let mockConfigService: Partial<ConfigService>;
+  let selectResults: unknown[];
+
+  const mockGames = [
+    {
+      id: 1,
+      igdbId: 1234,
+      name: 'Valheim',
+      slug: 'valheim',
+      coverUrl: 'https://example.com/cover.jpg',
+    },
+  ];
+
+  /**
+   * A full page (SEARCH_LIMIT = 20) of mock games for testing the database-layer
+   * cache hit path. The DB layer only returns source='database' when it finds a
+   * full page of results (>= SEARCH_LIMIT), to avoid suppressing IGDB lookups for
+   * partial result sets.
+   */
+  const mockFullPageGames = Array.from({ length: 20 }, (_, i) => ({
+    id: i + 1,
+    igdbId: 1234 + i,
+    name: `Valheim ${i + 1}`,
+    slug: `valheim-${i + 1}`,
+    coverUrl: 'https://example.com/cover.jpg',
+  }));
+
+  /** Expected output after mapDbRowToDetail() transforms a mockGames row */
+  const mockGameDetails = [
+    {
+      id: 1,
+      igdbId: 1234,
+      name: 'Valheim',
+      slug: 'valheim',
+      coverUrl: 'https://example.com/cover.jpg',
+      genres: [],
+      summary: undefined,
+      rating: undefined,
+      aggregatedRating: undefined,
+      popularity: undefined,
+      gameModes: [],
+      themes: [],
+      platforms: [],
+      screenshots: [],
+      videos: [],
+      firstReleaseDate: null,
+      playerCount: undefined,
+      twitchGameId: undefined,
+      crossplay: null,
+      itadGameId: null,
+      itadBoxartUrl: null,
+      itadTags: [],
+      itadCurrentPrice: null,
+      itadCurrentCut: null,
+      itadCurrentShop: null,
+      itadCurrentUrl: null,
+      itadLowestPrice: null,
+      itadLowestCut: null,
+      itadPriceUpdatedAt: null,
+      earlyAccess: false,
+      steamAppId: null,
+      cooptimusOnlineMax: null,
+      cooptimusCouchMax: null,
+      cooptimusLanMax: null,
+      cooptimusSplitscreen: null,
+      cooptimusDropIn: null,
+      cooptimusCampaignCoop: null,
+      cooptimusComboCoop: null,
+      cooptimusUrl: null,
+      cooptimusSyncedAt: null,
+      // ROK-1314: mapDbRowToDetail seeds only the two personalization
+      // BOOLEANS. The aggregate counts are written exclusively by
+      // personalizeGames, so a bare mapper result must not carry them
+      // (review F1 — a seeded 0 renders a false "0 own" badge).
+      currentUserOwns: false,
+      currentUserWishlisted: false,
+    },
+  ];
+
+  function createMockDb() {
+    // ROK-1438: find-then-insert paths run inside withGameNameLock, which
+    // opens a transaction and issues the advisory-lock SELECT.
+    return withMockTransaction({
+      select: jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest
+            .fn()
+            .mockImplementation(() => thenableResult(selectResults)),
+        })),
+      })),
+      insert: jest.fn().mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+          onConflictDoUpdate: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue(mockGames),
+          }),
+        }),
+      }),
+    });
+  }
+
+  beforeEach(async () => {
+    selectResults = mockGames;
+    mockDb = createMockDb();
+    mockRedis = {
+      get: jest.fn().mockResolvedValue(null),
+      setex: jest.fn().mockResolvedValue('OK'),
+      keys: jest.fn().mockResolvedValue([]),
+      del: jest.fn().mockResolvedValue(0),
+    };
+    mockConfigService = {
+      get: jest.fn((key: string) => {
+        const config: Record<string, string> = {
+          IGDB_CLIENT_ID: 'test-client-id',
+          IGDB_CLIENT_SECRET: 'test-client-secret',
+        };
+        return config[key];
+      }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        IgdbService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: REDIS_CLIENT, useValue: mockRedis },
+        { provide: ConfigService, useValue: mockConfigService },
+        {
+          provide: SettingsService,
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            getIgdbConfig: jest.fn().mockResolvedValue(null),
+            isIgdbConfigured: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: getQueueToken(IGDB_SYNC_QUEUE),
+          useValue: {
+            add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
+            name: 'igdb-sync',
+          },
+        },
+        {
+          provide: CronJobService,
+          useValue: {
+            executeWithTracking: jest.fn(
+              (_name: string, fn: () => Promise<void>) => fn(),
+            ),
+          },
+        },
+        {
+          provide: ItadService,
+          useValue: {
+            searchGames: jest.fn().mockResolvedValue([]),
+            lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
+            getGameInfo: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: GameTasteService,
+          useValue: {
+            enqueueRecompute: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<IgdbService>(IgdbService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('searchGames', () => {
+    it('should return Redis-cached games when available', async () => {
+      // ROK-660: Redis now stores full GameDetailDto objects and returns them
+      // directly without a DB re-query. Key-aware mock (ROK-1381): the ITAD
+      // cache layer consults its own key first — return the payload only for
+      // the SWR key so this test still covers the SWR hit path.
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'igdb:search:valheim'
+            ? JSON.stringify(mockGameDetails)
+            : null,
+        ),
+      );
+
+      const result = await service.searchGames('valheim');
+
+      expect(result.cached).toBe(true);
+      expect(result.source).toBe('redis');
+      expect(result.games).toEqual(mockGameDetails);
+      expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:valheim');
+    });
+
+    it('should return database-cached games when Redis misses', async () => {
+      // Redis miss, DB full-page hit — DB layer returns 'database' only when a full
+      // page (>= SEARCH_LIMIT) is available, to avoid suppressing IGDB lookups for
+      // partial result sets.
+      mockRedis.get.mockResolvedValueOnce(null);
+      selectResults = mockFullPageGames;
+
+      const result = await service.searchGames('valheim');
+
+      expect(result.cached).toBe(true);
+      expect(result.source).toBe('database');
+      expect(result.games.length).toBe(20);
+      // Should cache to Redis after DB hit
+      expect(mockRedis.setex).toHaveBeenCalled();
+    });
+
+    it('should fetch from IGDB when both caches miss', async () => {
+      // Both caches miss, then return games after upsert
+      mockRedis.get.mockResolvedValueOnce(null);
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            // First select: search cache miss, subsequent selects: return games
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      // Mock IGDB API responses
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'test-token', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1234,
+                name: 'Valheim',
+                slug: 'valheim',
+                cover: { image_id: 'abc123' },
+              },
+            ]),
+        });
+
+      const result = await service.searchGames('valheim');
+
+      expect(result.cached).toBe(false);
+      expect(result.source).toBe('igdb');
+      expect(mockFetch).toHaveBeenCalledTimes(2); // Token + search
+    });
+
+    it('should retry on 429 with exponential backoff', async () => {
+      jest.useFakeTimers();
+
+      // Both caches miss
+      mockRedis.get.mockResolvedValueOnce(null);
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      // First call: get token
+      // Second call: 429 (rate limited)
+      // Third call: success
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'test-token', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          text: () => Promise.resolve('Rate limit exceeded'),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1234,
+                name: 'Valheim',
+                slug: 'valheim',
+                cover: { image_id: 'abc123' },
+              },
+            ]),
+        });
+
+      const searchPromise = service.searchGames('valheim');
+
+      // Fast-forward through the retry delay
+      await jest.advanceTimersByTimeAsync(1000);
+
+      const result = await searchPromise;
+
+      expect(result.source).toBe('igdb');
+      expect(mockFetch).toHaveBeenCalledTimes(3); // Token + 429 + success
+
+      jest.useRealTimers();
+    });
+
+    it('should fall back to local search when IGDB fails after retries', async () => {
+      jest.useFakeTimers();
+
+      // Redis miss
+      mockRedis.get.mockResolvedValueOnce(null);
+      // First DB check: miss, local fallback: has games
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      // All IGDB calls fail with 429
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'test-token', expires_in: 3600 }),
+        })
+        .mockResolvedValue({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          text: () => Promise.resolve('Rate limit exceeded'),
+        });
+
+      const searchPromise = service.searchGames('valheim');
+
+      // Fast-forward through all retry delays (1s + 2s + 4s)
+      await jest.advanceTimersByTimeAsync(8000);
+
+      const result = await searchPromise;
+
+      expect(result.source).toBe('local');
+      expect(result.games).toEqual(mockGameDetails);
+
+      jest.useRealTimers();
+    });
+
+    it('should escape LIKE special characters in query', async () => {
+      // SWR-key-only Redis hit to avoid going through the whole chain
+      // (the ITAD cache layer probes its own key first — ROK-1381)
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'igdb:search:valheimtest' ? JSON.stringify(mockGames) : null,
+        ),
+      );
+
+      await service.searchGames('val%heim_test');
+
+      // Verify the cache key is normalized
+      expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:valheimtest');
+    });
+
+    it('should normalize query for cache keys (lowercase, trim)', async () => {
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'igdb:search:valheim' ? JSON.stringify(mockGames) : null,
+        ),
+      );
+
+      await service.searchGames('  VALHEIM  ');
+
+      expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:valheim');
+    });
+
+    it('should handle Redis failures gracefully', async () => {
+      // Redis throws error — fall back to database layer.
+      // Use a full page of results so the DB layer returns 'database' source
+      // (DB cache hit requires >= SEARCH_LIMIT results to avoid hiding IGDB lookups).
+      mockRedis.get.mockRejectedValueOnce(new Error('Redis connection failed'));
+      selectResults = mockFullPageGames;
+
+      const result = await service.searchGames('valheim');
+
+      // Should fall back to database
+      expect(result.source).toBe('database');
+    });
+
+    it('should upsert games from IGDB with full data', async () => {
+      mockRedis.get.mockResolvedValueOnce(null);
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            // call 1: search cache miss, call 2: banned-games check (none banned),
+            // call 3: ROK-1113 normalized-name dedup batch lookup (no matches)
+            const data = callCount <= 3 ? [] : mockGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'test-token', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1234,
+                name: 'Valheim',
+                slug: 'valheim',
+                cover: { image_id: 'abc123' },
+              },
+              { id: 5678, name: 'Valheim 2', slug: 'valheim-2' },
+            ]),
+        });
+
+      await service.searchGames('valheim');
+
+      // ROK-1024: upsertGamesFromApi batches all non-conflicting games into
+      // a single INSERT (was previously one INSERT per row).
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getGameById', () => {
+    it('should return game when found', async () => {
+      const result = await service.getGameById(1);
+
+      expect(result).toEqual(mockGames[0]);
+    });
+
+    it('should return null when game not found', async () => {
+      selectResults = [];
+
+      const result = await service.getGameById(999);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('searchLocalGames', () => {
+    it('should search local database only', async () => {
+      const result = await service.searchLocalGames('valheim');
+
+      expect(result.source).toBe('local');
+      expect(result.cached).toBe(true);
+      expect(result.games).toEqual(mockGameDetails);
+    });
+  });
+
+  describe('syncAllGames — cover art backfill (Phase 3)', () => {
+    /**
+     * Helper to wire up the mock DB and fetch so that syncAllGames' Phase 1
+     * (refresh existing) and Phase 2 (discover popular) complete quickly,
+     * letting us focus on Phase 3 (backfill missing covers).
+     *
+     * @param missingCoverGames  Rows returned for the Phase-3 "coverUrl IS NULL" query
+     * @param igdbCoverResponse  IGDB API response for the cover-backfill query
+     */
+    function setupSyncMocks(
+      missingCoverGames: { igdbId: number }[],
+      igdbCoverResponse: { id: number; cover?: { image_id: string } }[],
+    ) {
+      let selectCallIndex = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            selectCallIndex++;
+            // Call 1: Phase 1 — existing games (return empty to skip refresh)
+            // Call 2: Phase 3 — games with missing covers
+            // Call 3+: ITAD enrichment + re-enrichment (return empty)
+            const data = selectCallIndex === 2 ? missingCoverGames : [];
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      mockDb.update = jest.fn().mockReturnValue({
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue(undefined),
+        }),
+      });
+
+      // Phase 2 (discover popular) + optional Phase 3 (cover backfill) IGDB calls
+      mockFetch
+        // Token
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'test-token', expires_in: 3600 }),
+        })
+        // Phase 2: popular games (empty to skip)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([]),
+        });
+
+      // Only add Phase 3 mock if there are games to backfill (avoids
+      // unconsumed mockResolvedValueOnce bleeding into later tests)
+      if (missingCoverGames.length > 0) {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(igdbCoverResponse),
+        });
+      }
+    }
+
+    it('should backfill covers for games where IGDB now has art', async () => {
+      const missingCoverGames = [{ igdbId: 111 }, { igdbId: 222 }];
+      const igdbCoverResponse = [
+        { id: 111, cover: { image_id: 'co_abc' } },
+        { id: 222, cover: { image_id: 'co_def' } },
+      ];
+
+      setupSyncMocks(missingCoverGames, igdbCoverResponse);
+
+      const result = await service.syncAllGames();
+
+      expect(result.backfilled).toBe(2);
+      expect(mockDb.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('should skip games where IGDB still has no cover', async () => {
+      const missingCoverGames = [{ igdbId: 333 }];
+      // IGDB returns the game but with no cover field
+      const igdbCoverResponse = [{ id: 333 }];
+
+      setupSyncMocks(missingCoverGames, igdbCoverResponse);
+
+      const result = await service.syncAllGames();
+
+      expect(result.backfilled).toBe(0);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should not query IGDB when no games are missing covers', async () => {
+      // No games with missing covers
+      setupSyncMocks([], []);
+
+      const result = await service.syncAllGames();
+
+      expect(result.backfilled).toBe(0);
+      // Only token + Phase 2 (discover) — no Phase 3 IGDB call
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw when IGDB credentials not configured', async () => {
+      mockConfigService.get = jest.fn().mockReturnValue(undefined);
+      mockRedis.get.mockResolvedValueOnce(null);
+      selectResults = [];
+
+      // Should fall back to local, not throw (since we have local fallback now)
+      const result = await service.searchGames('valheim');
+      expect(result.source).toBe('local');
+    });
+
+    it('should retry with fresh token on 401 and succeed', async () => {
+      mockRedis.get.mockResolvedValueOnce(null);
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      mockFetch
+        // First token fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'stale-token', expires_in: 3600 }),
+        })
+        // IGDB search returns 401 (stale token)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('Invalid token'),
+        })
+        // Fresh token fetch after invalidation
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'fresh-token', expires_in: 3600 }),
+        })
+        // Retry IGDB search succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1234,
+                name: 'Valheim',
+                slug: 'valheim',
+                cover: { image_id: 'abc123' },
+              },
+            ]),
+        });
+
+      const result = await service.searchGames('valheim');
+
+      expect(result.source).toBe('igdb');
+      // Token + 401 + fresh token + successful search = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('should fall back to local when 401 retry also fails', async () => {
+      mockRedis.get.mockResolvedValueOnce(null);
+      selectResults = [];
+
+      mockFetch
+        // First token fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'stale-token', expires_in: 3600 }),
+        })
+        // IGDB search returns 401
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('Invalid token'),
+        })
+        // Fresh token fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'also-bad', expires_in: 3600 }),
+        })
+        // Retry also returns 401
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('Invalid client'),
+        });
+
+      const result = await service.searchGames('valheim');
+      // Falls back to local after retry exhausted
+      expect(result.source).toBe('local');
+      expect(result.games).toEqual([]);
+      // Token + 401 + fresh token + 401 = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+  });
+});

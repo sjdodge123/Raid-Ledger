@@ -1,0 +1,304 @@
+#!/usr/bin/env ts-node
+/**
+ * Re-encrypt Settings Script (ROK-1035)
+ *
+ * Decrypts all app_settings.encryptedValue rows with the old key and
+ * re-encrypts them with a new key. Used during JWT_SECRET migration
+ * from the hardcoded default to an auto-generated secret.
+ *
+ * Usage (standalone):
+ *   node dist/scripts/reencrypt-settings.js --old-secret <old> --new-secret <new>
+ *
+ * The exported `reencryptAllSettings` function is also used by integration tests.
+ *
+ * ROK-1592: also rotates `calendar_connections.credentials_encrypted`
+ * (`reencryptCalendarCredentials`) — without it a JWT_SECRET rotation bricks
+ * every calendar connection. Boot-time script: fatal errors go to Sentry.
+ *
+ * ROK-1599: also rotates `calendar_feeds.token_encrypted`
+ * (`reencryptCalendarFeedTokens`) so subscribe links survive a rotation.
+ */
+
+import '../src/sentry/instrument'; // MUST be first — installs Sentry handlers
+import * as Sentry from '@sentry/nestjs';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { eq } from 'drizzle-orm';
+import postgres from 'postgres';
+import {
+  appSettings,
+  calendarConnections,
+  calendarFeeds,
+} from '../src/drizzle/schema';
+import {
+  deriveKey,
+  encryptWithKey,
+  decryptWithKey,
+} from '../src/settings/encryption.util';
+
+/** Minimal DB interface for re-encryption (accepts any Drizzle schema). */
+type DrizzleDb = PostgresJsDatabase<Record<string, unknown>>;
+
+/** Row shape returned by select from appSettings. */
+interface SettingsRow {
+  id: number;
+  key: string;
+  encryptedValue: string;
+}
+
+/**
+ * Re-encrypts all app_settings rows from oldKey to newKey.
+ * Returns the number of successfully re-encrypted rows.
+ * Rows that can't be decrypted with oldKey are skipped (logged).
+ */
+export async function reencryptAllSettings(
+  db: DrizzleDb,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<number> {
+  const rows: SettingsRow[] = await db.select().from(appSettings);
+
+  if (rows.length === 0) {
+    console.log('[reencrypt] No app_settings rows found. Nothing to do.');
+    return 0;
+  }
+
+  console.log(`[reencrypt] Found ${rows.length} app_settings row(s).`);
+
+  let successCount = 0;
+  let skipCount = 0;
+
+  for (const row of rows) {
+    const result = await reencryptRow(db, row, oldKey, newKey);
+    if (result) {
+      successCount++;
+    } else {
+      skipCount++;
+    }
+  }
+
+  logSummary(successCount, skipCount);
+  return successCount;
+}
+
+/** Re-encrypt a single row. Returns true on success, false on skip. */
+async function reencryptRow(
+  db: DrizzleDb,
+  row: SettingsRow,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<boolean> {
+  try {
+    const plaintext = decryptWithKey(row.encryptedValue, oldKey);
+    const newCiphertext = encryptWithKey(plaintext, newKey);
+    await db
+      .update(appSettings)
+      .set({ encryptedValue: newCiphertext })
+      .where(eq(appSettings.id, row.id));
+    console.log(`[reencrypt]   ✅ ${row.key} — re-encrypted`);
+    return true;
+  } catch {
+    console.log(
+      `[reencrypt]   ⏭️  ${row.key} — skipped (could not decrypt with old key)`,
+    );
+    return false;
+  }
+}
+
+/** Row shape returned by select from calendarConnections (ROK-1592). */
+interface CalendarCredentialRow {
+  id: number;
+  credentialsEncrypted: string;
+}
+
+/**
+ * ROK-1592: re-encrypt every calendar_connections credential blob from oldKey
+ * to newKey. Same skip rule as settings; logs the row id only, never content.
+ */
+export async function reencryptCalendarCredentials(
+  db: DrizzleDb,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<number> {
+  const rows: CalendarCredentialRow[] = await db
+    .select({
+      id: calendarConnections.id,
+      credentialsEncrypted: calendarConnections.credentialsEncrypted,
+    })
+    .from(calendarConnections);
+  let successCount = 0;
+  for (const row of rows) {
+    if (await reencryptCalendarRow(db, row, oldKey, newKey)) successCount++;
+  }
+  console.log(
+    `[reencrypt] calendar_connections: ${successCount}/${rows.length} re-encrypted`,
+  );
+  return successCount;
+}
+
+/** Re-encrypt one connection's credentials. Returns true on success. */
+async function reencryptCalendarRow(
+  db: DrizzleDb,
+  row: CalendarCredentialRow,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<boolean> {
+  try {
+    const plaintext = decryptWithKey(row.credentialsEncrypted, oldKey);
+    await db
+      .update(calendarConnections)
+      .set({
+        credentialsEncrypted: encryptWithKey(plaintext, newKey),
+        updatedAt: new Date(),
+      })
+      .where(eq(calendarConnections.id, row.id));
+    return true;
+  } catch {
+    console.log(
+      `[reencrypt]   ⏭️  calendar_connections#${row.id} — skipped (could not decrypt with old key)`,
+    );
+    return false;
+  }
+}
+
+/**
+ * ROK-1599: re-encrypt every calendar_feeds token copy from oldKey to newKey.
+ * `token_hash` is unaffected (sha256 of the plaintext). Logs the user id only,
+ * never the token. Returns the number re-encrypted.
+ */
+export async function reencryptCalendarFeedTokens(
+  db: DrizzleDb,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<number> {
+  const rows = await db
+    .select({
+      userId: calendarFeeds.userId,
+      tokenEncrypted: calendarFeeds.tokenEncrypted,
+    })
+    .from(calendarFeeds);
+  let successCount = 0;
+  for (const row of rows) {
+    if (await reencryptFeedRow(db, row, oldKey, newKey)) successCount++;
+  }
+  console.log(
+    `[reencrypt] calendar_feeds: ${successCount}/${rows.length} re-encrypted`,
+  );
+  return successCount;
+}
+
+/** Re-encrypt one feed's token copy. Returns true on success. */
+async function reencryptFeedRow(
+  db: DrizzleDb,
+  row: { userId: number; tokenEncrypted: string },
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<boolean> {
+  try {
+    const token = decryptWithKey(row.tokenEncrypted, oldKey);
+    await db
+      .update(calendarFeeds)
+      .set({ tokenEncrypted: encryptWithKey(token, newKey) })
+      .where(eq(calendarFeeds.userId, row.userId));
+    return true;
+  } catch {
+    console.log(
+      `[reencrypt]   ⏭️  calendar_feeds#${row.userId} — skipped (could not decrypt with old key)`,
+    );
+    return false;
+  }
+}
+
+function logSummary(success: number, skipped: number): void {
+  console.log('🔐 JWT_SECRET MIGRATION COMPLETE');
+  console.log(`   Succeeded: ${success}/${success + skipped}`);
+  console.log(`   Skipped: ${skipped}`);
+  if (skipped > 0) {
+    console.log(
+      '   ⚠️  Skipped rows were already encrypted with a different key',
+    );
+  }
+  console.log('');
+  console.log(
+    '   ⚠️  RECOVERY NOTE: If you restore a database backup from before',
+  );
+  console.log('   this migration, you must either:');
+  console.log(
+    '     1. Delete /data/.jwt_secret_migrated to re-run on next startup',
+  );
+  console.log(
+    '     2. Set JWT_SECRET to the old default to decrypt old backups:',
+  );
+  console.log(
+    '        -e JWT_SECRET=raid-ledger-default-secret-change-in-production',
+  );
+}
+
+/** Parse --old-secret and --new-secret from CLI args. */
+function parseCliArgs(): { oldSecret: string; newSecret: string } {
+  const args = process.argv.slice(2);
+  const oldIdx = args.indexOf('--old-secret');
+  const newIdx = args.indexOf('--new-secret');
+
+  if (oldIdx === -1 || newIdx === -1) {
+    console.error(
+      'Usage: node reencrypt-settings.js --old-secret <old> --new-secret <new>',
+    );
+    process.exit(1);
+  }
+
+  const oldSecret = args[oldIdx + 1];
+  const newSecret = args[newIdx + 1];
+
+  if (!oldSecret || oldSecret.startsWith('--')) {
+    console.error('Error: --old-secret requires a value');
+    process.exit(1);
+  }
+  if (!newSecret || newSecret.startsWith('--')) {
+    console.error('Error: --new-secret requires a value');
+    process.exit(1);
+  }
+
+  return { oldSecret, newSecret };
+}
+
+/** Standalone entry point — only runs when executed directly. */
+async function main(): Promise<void> {
+  const { oldSecret, newSecret } = parseCliArgs();
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    console.error('DATABASE_URL environment variable is required');
+    process.exit(1);
+  }
+
+  console.log('🔐 JWT_SECRET MIGRATION STARTED');
+  console.log(`   Timestamp: ${new Date().toISOString()}`);
+  console.log(`   Old secret: <hardcoded default>`);
+  console.log(`   New secret: <${newSecret.length}-char generated value>`);
+  console.log(`   New secret file: /data/.jwt_secret`);
+
+  const oldKey = deriveKey(oldSecret);
+  const newKey = deriveKey(newSecret);
+
+  const sql = postgres(databaseUrl);
+  const db = drizzle(sql);
+
+  try {
+    await reencryptAllSettings(db, oldKey, newKey);
+    await reencryptCalendarCredentials(db, oldKey, newKey);
+    await reencryptCalendarFeedTokens(db, oldKey, newKey);
+  } finally {
+    await sql.end();
+  }
+}
+
+// Run main() only when executed directly (not when imported by tests)
+if (require.main === module) {
+  main().catch(async (err: unknown) => {
+    console.error('[reencrypt] Fatal error:', err);
+    Sentry.captureException(err, { tags: { context: 'boot.reencrypt' } });
+    await Sentry.flush(2000);
+    process.exit(1);
+  });
+}

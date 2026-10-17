@@ -1,0 +1,36 @@
+{
+    "name": "raid-ledger",
+    "version": "1.1.0",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "private": true,
+    "workspaces": [
+        "api",
+        "web",
+        "packages/*",
+        "tools/mcp-discord",
+        "tools/mcp-env",
+        "tools/mcp-rl-fleet"
+    ],
+    "scripts": {
+        "dev": "docker-compose up",
+        "build": "npm run build --workspaces",
+        "lint": "npm run lint --workspaces",
+        "test": "npm run test --workspaces",
+        "db:migrate": "npm run migrate -w api",
+        "seed": "npm run seed -w api"
+    },
+    "overrides": {
+        "@nestjs/common": "^11.0.1",
+        "@nestjs/core": "^11.0.1"
+    },
+    "devDependencies": {
+        "@axe-core/playwright": "~4.13.0",
+        "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
+        "@playwright/test": "^1.64.0"
+    },
+    "dependencies": {
+        "chrono-node": "^2.10.2"
+    }
+}

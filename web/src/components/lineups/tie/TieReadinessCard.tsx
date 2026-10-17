@@ -1,0 +1,116 @@
+/**
+ * The tie readiness card (ROK-1374).
+ *
+ * A completed vote with no decidable winner used to be a dead end. The card
+ * takes the slot the grace banner vacated and turns the tie into a comparison
+ * the group can act on: who owns what, how big it is, how long it takes to
+ * download — and one human clicking a game. It never selects a winner itself.
+ */
+import { useState, type JSX } from 'react';
+import type { TieReadinessGameDto } from '@raid-ledger/contract';
+import { useTieReadiness } from '../../../hooks/use-tie-readiness';
+import { useConnectionSpeed } from '../../../hooks/use-connection-speed';
+import { TieReadinessRow } from './TieReadinessRow';
+import { TiePickControls } from './TiePickControls';
+import { InstallSizeEntryModal } from './InstallSizeEntryModal';
+import { ConnectionSpeedConsentModal } from './ConnectionSpeedConsentModal';
+import { formatExpiry, formatStarTieLine } from './tie-format.helpers';
+
+interface Props {
+    lineupId: number;
+}
+
+/**
+ * Vote count + deadline — the "why am I looking at this" line.
+ *
+ * ROK-1474: when the ballot ALSO tied on stars, say so. Leaving it out let
+ * the card imply no one had a top pick, which is the trust failure the star
+ * tiebreak exists to prevent. A legacy no-star ballot (`starTied` false)
+ * renders exactly the copy it did before.
+ */
+function CardHeader({
+    voteCount,
+    expiresAt,
+    starTieLine,
+}: {
+    voteCount: number;
+    expiresAt: string | null;
+    starTieLine: string | null;
+}): JSX.Element {
+    const expiry = formatExpiry(expiresAt);
+    return (
+        <div className="mb-3">
+            <h3 className="text-base font-semibold text-foreground">
+                Tied — {voteCount} votes each
+            </h3>
+            {starTieLine && (
+                <p data-testid="tie-star-tied" className="text-sm text-warning">
+                    {starTieLine}
+                </p>
+            )}
+            <p className="text-sm text-muted">
+                Compare them below, then someone picks
+                {expiry ? ` · expires ${expiry}` : ''}
+            </p>
+        </div>
+    );
+}
+
+/** The comparison card, or nothing at all when no tie hold exists (AC7). */
+export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
+    const { data } = useTieReadiness(lineupId);
+    const { data: speed } = useConnectionSpeed();
+    const [sizeGame, setSizeGame] = useState<TieReadinessGameDto | null>(null);
+    const [speedModalOpen, setSpeedModalOpen] = useState(false);
+
+    if (!data || data.status === 'none') return null;
+    return (
+        <section
+            aria-label="Tie readiness"
+            className="mb-4 rounded-lg border border-warning/40 bg-surface p-4"
+        >
+            <CardHeader
+                voteCount={data.voteCount}
+                expiresAt={data.expiresAt}
+                starTieLine={
+                    data.starTied
+                        ? formatStarTieLine(data.games.map((g) => g.starCount))
+                        : null
+                }
+            />
+            <ul className="mb-3 space-y-2">
+                {data.games.map((game) => (
+                    <TieReadinessRow
+                        key={game.gameId}
+                        game={game}
+                        rosterSize={data.rosterSize}
+                        viewerSpeedMbps={data.viewerSpeedMbps}
+                        onAddSize={setSizeGame}
+                        onAddSpeed={() => setSpeedModalOpen(true)}
+                    />
+                ))}
+            </ul>
+            <TiePickControls
+                lineupId={lineupId}
+                games={data.games}
+                canPick={data.canPick && data.status !== 'expired'}
+                pick={data.pick}
+                pickerName={data.pickerName}
+                expiresAt={data.expiresAt}
+            />
+            {sizeGame && (
+                <InstallSizeEntryModal
+                    lineupId={lineupId}
+                    game={sizeGame}
+                    isOpen
+                    onClose={() => setSizeGame(null)}
+                />
+            )}
+            <ConnectionSpeedConsentModal
+                isOpen={speedModalOpen}
+                onClose={() => setSpeedModalOpen(false)}
+                speed={speed}
+            />
+        </section>
+    );
+}

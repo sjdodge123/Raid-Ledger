@@ -1,0 +1,275 @@
+/**
+ * Private-lineup DM builders for lifecycle notifications (ROK-1115).
+ *
+ * These mirror the channel embeds suppressed for `visibility='private'`
+ * lineups so invitees + creator still get the same lifecycle context via DM.
+ * Kept in a sibling file to keep `lineup-notification-dm.helpers.ts` under
+ * the 300-line ESLint ceiling.
+ */
+import type { NotificationService } from '../notifications/notification.service';
+import type { NotificationDedupService } from '../notifications/notification-dedup.service';
+import type {
+  DiscordMember,
+  LineupDmInfo,
+  MatchDmInfo,
+} from './lineup-notification-dm.helpers';
+import { DEDUP_TTL } from './lineup-notification.constants';
+import { votingOpensClause } from './lineup-notification-embed-copy.helpers';
+
+/** Tiebreaker shape needed by the open-notification DM (ROK-1117). */
+export interface TiebreakerNotificationInfo {
+  id: number;
+  mode: 'bracket' | 'veto';
+  roundDeadline?: Date | null;
+  /** ROK-1461: round number for the `⚔️ TIEBREAKER · round N` author line. */
+  round?: number;
+  /** Tied games surfaced as deep-linked markdown in the DM body (ROK-1117). */
+  tiedGames?: ReadonlyArray<{ id: number; name: string }>;
+}
+
+/**
+ * Render up to 15 tied games as a bulleted list of deep links, mirroring
+ * the voting-open ballot pattern. Falls back to plain bold names when no
+ * `clientUrl` is configured.
+ */
+export function buildTiedGamesList(
+  games: ReadonlyArray<{ id: number; name: string }>,
+  clientUrl?: string,
+): string {
+  if (games.length === 0) return '';
+  const lines = games.slice(0, 15).map((g) => {
+    const label = clientUrl
+      ? `[**${g.name}**](${clientUrl}/games/${g.id})`
+      : `**${g.name}**`;
+    return `\u{1F3AE} ${label}`;
+  });
+  const overflow =
+    games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
+  return `\n\n**Tied Games**\n${lines.join('\n')}${overflow}`;
+}
+
+/**
+ * Title + body of the milestone DM (ROK-1442): the cap is a hard ceiling, not
+ * a voting trigger — at 100% no more games can be added, so the copy must
+ * not ask for more. ROK-1513: the closing sentence is the channel embed's own
+ * `votingOpensClause`, so the DM names the same deadline the card does.
+ */
+function milestoneDmCopy(
+  lineup: LineupDmInfo,
+  threshold: number,
+  entryCount: number,
+): { title: string; message: string } {
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  if (threshold >= 100) {
+    return {
+      title: `Nominations are full${titleSuffix}`,
+      message:
+        `Your private lineup has **${entryCount}** games nominated — the ` +
+        'cap is reached and no more games can be added. ' +
+        votingOpensClause(lineup.phaseDeadline, lineup.nominationTargetPct),
+    };
+  }
+  return {
+    title: `${threshold}% of nominations filled${titleSuffix}`,
+    message:
+      `Your private lineup now has **${entryCount}** games nominated. ` +
+      'Keep adding games while there is room!',
+  };
+}
+
+/** Send the per-invitee nomination-milestone DM (ROK-1115). */
+export async function sendMilestoneDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupDmInfo,
+  threshold: number,
+  entryCount: number,
+  member: DiscordMember,
+): Promise<void> {
+  const key = `lineup-milestone-dm:${lineup.id}:${threshold}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const { title, message } = milestoneDmCopy(lineup, threshold, entryCount);
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title,
+    message,
+    payload: {
+      subtype: 'lineup_nomination_milestone',
+      lineupId: lineup.id,
+      threshold,
+    },
+  });
+}
+
+/** ROK-1474: the reasoning line, in the shape the decided embed renders it. */
+function reasonLine(decisionReason: string | null): string {
+  return decisionReason ? `\n\n\u2B50 _${decisionReason}_` : '';
+}
+
+/**
+ * Send the per-invitee matches-found (decided phase) DM (ROK-1115).
+ *
+ * ROK-1474: `decisionReason` is the same string the public decided embed
+ * renders. A private lineup suppresses that embed, so without this the
+ * invitees of a star-decided ballot would be the only people never told WHY
+ * their lineup picked what it picked.
+ */
+export async function sendMatchesFoundDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupDmInfo,
+  matchCount: number,
+  member: DiscordMember,
+  decisionReason: string | null = null,
+): Promise<void> {
+  const key = `lineup-decided-dm:${lineup.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
+  const plural = matchCount === 1 ? '' : 'es';
+  const message =
+    lineup.includeSchedulingPhase === false
+      ? `Voting is closed on your private lineup. **${matchCount}** match` +
+        `${plural} decided — this lineup just picks the game, so there is ` +
+        'no scheduling poll.'
+      : `Voting is closed on your private lineup. **${matchCount}** match` +
+        `${plural} ready to schedule. Top picks will move into scheduling next.`;
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `Results are in${titleSuffix}`,
+    message: `${message}${reasonLine(decisionReason)}`,
+    payload: {
+      subtype: 'lineup_matches_found',
+      lineupId: lineup.id,
+    },
+  });
+}
+
+/** Send the per-invitee scheduling-open DM for a private lineup (ROK-1115). */
+export async function sendPrivateSchedulingDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  match: MatchDmInfo,
+  member: DiscordMember,
+): Promise<void> {
+  const key = `lineup-sched-invitee-dm:${match.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `Vote on a time for ${match.gameName}`,
+    message:
+      `Your private lineup match for **${match.gameName}** is scheduling — ` +
+      'vote on a time slot.',
+    payload: {
+      subtype: 'lineup_scheduling_open',
+      matchId: match.id,
+      lineupId: match.lineupId,
+    },
+  });
+}
+
+/**
+ * Format an event start date for a private-lineup DM in the recipient's
+ * timezone (ROK-1112). `timeZone` is an IANA string (recipient pref → guild
+ * default → 'UTC'); omitting it renders in the server TZ — tests only.
+ */
+function formatEventWhen(eventDate: Date, timeZone?: string): string {
+  return eventDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
+/** Compose the tiebreaker-open DM body with tied-game links + CTA (ROK-1117). */
+function composeTiebreakerOpenMessage(
+  lineup: LineupDmInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  clientUrl?: string,
+): string {
+  const cta =
+    tiebreaker.mode === 'veto' ? 'Cast your veto now' : 'Vote in the bracket';
+  const deadlineLine = tiebreaker.roundDeadline
+    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:f>.`
+    : '';
+  const ballot = buildTiedGamesList(tiebreaker.tiedGames ?? [], clientUrl);
+  const ctaLink = clientUrl
+    ? `\n\n[${cta}](${clientUrl}/community-lineup/${lineup.id})`
+    : '';
+  return (
+    `It's a tie! A ${tiebreaker.mode} tiebreaker is now running. ` +
+    `${cta}.${deadlineLine}${ballot}${ctaLink}`
+  );
+}
+
+/**
+ * Send the per-user tiebreaker-open DM (ROK-1117).
+ *
+ * Used for both public (every expected voter) and private (creator +
+ * invitees) lineups since the body is the same. Dedup key includes the
+ * tiebreaker id so a future re-open fires its own DM.
+ */
+export async function sendTiebreakerOpenDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupDmInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  member: DiscordMember,
+  clientUrl?: string,
+): Promise<void> {
+  const key = `lineup-tiebreaker-open-dm:${tiebreaker.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `Tiebreaker open${titleSuffix}`,
+    message: composeTiebreakerOpenMessage(lineup, tiebreaker, clientUrl),
+    payload: {
+      subtype: 'lineup_tiebreaker_open',
+      lineupId: lineup.id,
+      tiebreakerId: tiebreaker.id,
+      mode: tiebreaker.mode,
+    },
+  });
+}
+
+/** Send the per-invitee event-created DM for a private lineup (ROK-1115). */
+export async function sendPrivateEventCreatedDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  match: MatchDmInfo,
+  member: DiscordMember,
+  eventDate: Date,
+  eventId: number | undefined,
+  timeZone?: string,
+): Promise<void> {
+  const key = `lineup-event-invitee-dm:${match.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const when = formatEventWhen(eventDate, timeZone);
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `${match.gameName} is happening!`,
+    message:
+      `**${match.gameName}** is locked in for ${when}. ` +
+      'Sign up on the event page!',
+    payload: {
+      subtype: 'lineup_event_created',
+      matchId: match.id,
+      lineupId: match.lineupId,
+      eventId,
+    },
+  });
+}

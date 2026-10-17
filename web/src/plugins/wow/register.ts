@@ -1,0 +1,55 @@
+import { registerPlugin } from '../plugin-registry';
+import { CharacterDetailSections } from './slots/character-detail-sections';
+import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
+import { CharacterCreateImportForm } from './slots/character-create-import-form';
+import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
+import { EventCreateContentBrowser } from './slots/event-create-content-browser';
+import { EventCreateGuildField } from './slots/event-create-guild-field';
+import { EventDetailContentSections } from './slots/event-detail-content-sections';
+import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
+import { BlizzardIntegrationSlot } from './slots/admin-settings-integration-cards';
+import { ProfileCharacterActions } from './slots/profile-character-actions';
+import { QuestPrepPanel } from './slots/quest-prep-panel';
+import { BossLootPanel } from './slots/boss-loot-panel';
+import { CharacterVariantBadge } from './slots/character-variant-badge';
+import { CharacterDetailOwnerActions } from './slots/character-detail-owner-actions';
+import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
+import { CharacterCreateHeaderActions } from './slots/character-create-header-actions';
+import { NavGuildLink } from './slots/nav-guild-link';
+import { DrawerYourGuild } from './slots/drawer-your-guild';
+import { UserMenuGuild } from './slots/user-menu-guild';
+import { PlayersGuildCard } from './slots/players-guild-card';
+import { GameDetailGuilds } from './slots/game-detail-guilds';
+import { foreverIdentityProvider } from './forever-identity-provider';
+import { wowHubModule } from './hub/register-hub';
+
+const blizzard = registerPlugin('blizzard', {
+    icon: '/plugins/blizzard/badge.jpg',
+    iconSmall: '/plugins/blizzard/badge-32.jpg',
+    color: 'blue',
+    label: 'World of Warcraft Plugin',
+});
+
+blizzard.registerSlot('character-detail:sections', CharacterDetailSections);
+blizzard.registerSlot('character-detail:header-badges', CharacterDetailHeaderBadges);
+blizzard.registerSlot('character-detail:owner-actions', CharacterDetailOwnerActions);
+blizzard.registerSlot('character-detail:admin-actions', CharacterDetailAdminActions);
+blizzard.registerSlot('character-create:header-actions', CharacterCreateHeaderActions);
+blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
+blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
+blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);
+blizzard.registerSlot('event-create:guild-field', EventCreateGuildField);
+blizzard.registerSlot('event-detail:content-sections', EventDetailContentSections);
+blizzard.registerSlot('event-detail:content-sections', BossLootPanel, 5);
+blizzard.registerSlot('event-detail:content-sections', QuestPrepPanel, 10);
+blizzard.registerSlot('event-detail:signup-warnings', EventDetailSignupWarnings);
+blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
+blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
+blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
+blizzard.registerSlot('nav:primary-links', NavGuildLink);
+blizzard.registerSlot('nav:drawer-top', DrawerYourGuild);
+blizzard.registerSlot('user-menu:items', UserMenuGuild);
+blizzard.registerSlot('players:header-cards', PlayersGuildCard);
+blizzard.registerSlot('game-detail:sections', GameDetailGuilds);
+blizzard.registerCharacterIdentity(foreverIdentityProvider);
+blizzard.registerHubModule(wowHubModule);

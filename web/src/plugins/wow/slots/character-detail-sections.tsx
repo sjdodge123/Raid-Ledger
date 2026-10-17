@@ -1,0 +1,194 @@
+/**
+ * Character detail sections: equipment grid and talents display.
+ * Props passed via PluginSlot context from character-detail-page.
+ *
+ * ROK-1726: the effective WoW variant is resolved ONCE here (D6) and passed
+ * to the grid, the item modal, talents and the empty states. Manual WoW:
+ * Forever characters carry `gameVariant: null` + a `ruleset`; the ruleset is
+ * read from the page's own character query (same cache key, no extra
+ * request), so core's slot context needs no WoW field. ROK-1751: the game
+ * slug (from the cached game registry) resolves LedgerLink Forever characters
+ * whose ruleset is null; while the registry is still loading, neutral
+ * panels render instead of variant-specific copy. ROK-1743: Forever saved
+ * instances (`character.lockouts`, addon snapshot) render after Quests.
+ */
+import { lazy, Suspense, useState } from 'react';
+import { useCharacterDetail } from '../../../hooks/use-character-detail';
+import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations } from '../lib/wow-variant-config';
+import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
+import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
+import { ItemDetailModal } from '../components/item-detail-modal';
+import { TalentDisplay } from '../components/talent-display';
+import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
+import { CharacterQuestsSection } from '../components/character-quests-section';
+import { CharacterLockoutsSection } from '../components/character-lockouts-section';
+import { formatAddonSourceLine } from '../lib/addon-source-line';
+import { EquipmentGrid } from './equipment-grid';
+import { buildOrderedItems } from './equipment-constants';
+import { selectForeverPortrait, type ForeverPortrait } from '../lib/forever-portrait';
+import type { WowVariant } from '../lib/wow-era';
+import type {
+    CharacterEquipmentDto,
+    CharacterProfessionsDto,
+    EquipmentItemDto,
+} from '@raid-ledger/contract';
+
+/** ROK-1786: lazy so the guild addons card stays out of the entry chunk. */
+const CharacterAddonsCard = lazy(() => import('./character-addons-card').then((m) => ({ default: m.CharacterAddonsCard })));
+
+/** Props passed via PluginSlot context from character-detail-page */
+interface CharacterDetailSectionsProps {
+    equipment: CharacterEquipmentDto | null;
+    talents: unknown;
+    professions: CharacterProfessionsDto | null;
+    gameVariant: string | null;
+    renderUrl: string | null;
+    isArmoryImported: boolean;
+    characterClass: string | null;
+    isOwner: boolean;
+    characterId: string;
+    gameId: number;
+}
+
+/** Equipment panel with items and item detail modal */
+function EquipmentWithItems({ equipment, gameVariant, renderUrl, portrait, isArmoryImported }: {
+    equipment: CharacterEquipmentDto; gameVariant: string | null; renderUrl: string | null;
+    portrait: ForeverPortrait; isArmoryImported: boolean;
+}) {
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+    const orderedItems = buildOrderedItems(equipment);
+
+    function handleItemClick(item: EquipmentItemDto) {
+        const idx = orderedItems.findIndex((i) => i.slot === item.slot);
+        if (idx >= 0) setSelectedItemIndex(idx);
+    }
+
+    return (
+        <>
+            <div className="bg-panel border border-edge rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
+                <EquipmentSourceLine equipment={equipment} />
+                {equipment.items.length > 0 ? (
+                    <EquipmentGrid equipment={equipment} gameVariant={gameVariant}
+                        renderUrl={renderUrl} portrait={portrait} onItemClick={handleItemClick} />
+                ) : (
+                    <EquipmentEmptyMessage isArmoryImported={isArmoryImported} gameVariant={gameVariant} />
+                )}
+            </div>
+            <ItemDetailModal isOpen={selectedItemIndex !== null} onClose={() => setSelectedItemIndex(null)}
+                items={orderedItems} currentIndex={selectedItemIndex ?? 0}
+                onNavigate={setSelectedItemIndex} gameVariant={gameVariant} />
+        </>
+    );
+}
+
+/** Source line under the Equipment heading; Armory equipment (or absent source) shows nothing new. */
+function EquipmentSourceLine({ equipment }: { equipment: CharacterEquipmentDto }) {
+    if (equipment.source !== 'addon') return null;
+    return <p className="-mt-3 mb-4 text-xs text-muted">{formatAddonSourceLine(equipment.syncedAt)}</p>;
+}
+
+/** Main character detail sections component */
+export function CharacterDetailSections({
+    equipment, talents, professions, gameVariant,
+    renderUrl, isArmoryImported, characterClass,
+    isOwner, characterId, gameId,
+}: CharacterDetailSectionsProps) {
+    useWowheadTooltips(equipment ? [equipment] : []);
+    const { data: character } = useCharacterDetail(characterId);
+    const { variant, isResolving } = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
+    const portrait = renderSlotPortrait(character, variant, renderUrl);
+
+    return (
+        <>
+            {isResolving ? (
+                <VariantPendingSections />
+            ) : equipment ? (
+                <EquipmentWithItems equipment={equipment} gameVariant={variant}
+                    renderUrl={renderUrl} portrait={portrait} isArmoryImported={isArmoryImported} />
+            ) : (
+                <EquipmentEmptyState isArmoryImported={isArmoryImported} gameVariant={variant} />
+            )}
+            {!isResolving && <TalentSection talents={talents} isArmoryImported={isArmoryImported}
+                characterClass={characterClass} gameVariant={variant} />}
+            <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>
+            <CharacterQuestsSection characterId={characterId} variant={variant} />
+            <CharacterLockoutsSection lockouts={character?.lockouts} />
+            <CharacterProfessionsPanel professions={professions}
+                isOwner={isOwner} characterId={characterId} gameId={gameId} />
+        </>
+    );
+}
+
+type PortraitCharacter = { race: string | null; gender?: string | null | undefined; class: string | null; name: string };
+
+/**
+ * ROK-1747: the Forever fallback portrait for the equipment render slot.
+ * `renderUrl` stands in for the avatar so a Blizzard render always wins here.
+ */
+function renderSlotPortrait(character: PortraitCharacter | undefined, variant: WowVariant | null, renderUrl: string | null): ForeverPortrait {
+    if (!character) return { kind: 'none' };
+    return selectForeverPortrait({
+        variant, avatarUrl: renderUrl, race: character.race, gender: character.gender,
+        characterClass: character.class, name: character.name,
+    });
+}
+
+/**
+ * Neutral Equipment + Talents panels while the game registry resolves the
+ * variant (ROK-1751): no Armory copy and no addon hint, so the page does not
+ * flip from one to the other once the registry answers.
+ */
+function VariantPendingSections() {
+    return (
+        <>
+            {['Equipment', 'Talents'].map((title) => (
+                <div key={title} className="bg-panel border border-edge rounded-lg p-6" aria-busy="true">
+                    <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
+                    <div className="h-16 rounded-md bg-overlay animate-pulse" />
+                </div>
+            ))}
+        </>
+    );
+}
+
+/** Empty state when no equipment data is available */
+function EquipmentEmptyState({ isArmoryImported, gameVariant }: { isArmoryImported: boolean; gameVariant: string | null }) {
+    return (
+        <div className="bg-panel border border-edge rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
+            <EquipmentEmptyMessage isArmoryImported={isArmoryImported} gameVariant={gameVariant} />
+        </div>
+    );
+}
+
+function equipmentEmptyHint(isArmoryImported: boolean, gameVariant: string | null): string {
+    if (isArmoryImported) return 'Equipment data may not be available for this character. Try refreshing.';
+    // A variant the Armory cannot import (WoW: Forever) gets the addon hint, not the Armory copy (AC5).
+    if (getWowVariantIntegrations(gameVariant)?.armoryImport === false) return FOREVER_ADDON_HINT_EQUIPMENT;
+    return 'Equipment data is only available for characters imported from the Blizzard Armory.';
+}
+
+/** Empty message content for equipment section */
+function EquipmentEmptyMessage({ isArmoryImported, gameVariant }: { isArmoryImported: boolean; gameVariant: string | null }) {
+    return (
+        <div className="text-center py-8 text-muted">
+            <p className="text-lg">No equipment data</p>
+            <p className="text-sm mt-1">{equipmentEmptyHint(isArmoryImported, gameVariant)}</p>
+        </div>
+    );
+}
+
+/** Talents section wrapper */
+function TalentSection({ talents, isArmoryImported, characterClass, gameVariant }: {
+    talents: unknown; isArmoryImported: boolean;
+    characterClass: string | null; gameVariant: string | null;
+}) {
+    return (
+        <div className="bg-panel border border-edge rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Talents</h2>
+            <TalentDisplay talents={talents} isArmoryImported={isArmoryImported}
+                characterClass={characterClass} gameVariant={gameVariant} />
+        </div>
+    );
+}

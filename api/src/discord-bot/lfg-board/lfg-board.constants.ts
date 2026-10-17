@@ -1,0 +1,204 @@
+/**
+ * ROK-1471 — LFG forum-board constants. One edit changes every surface.
+ */
+import {
+  LFG_EXPIRY_DAYS,
+  LFG_POST_MAX_AGE_DAYS,
+} from '../../lfg/lfg.constants';
+
+/**
+ * Forum tag names. These are the ROK-1454 D7 author-line states, verbatim, so
+ * the forum's tag filter and the embed's author line say the same words (AC6).
+ *
+ * ROK-1494 D3 appends a SIXTH, `PLAYING NOW`, deliberately overriding ROK-1479
+ * A11 ("no sixth tag") — a spawned now-group is a live session, not a
+ * scheduled group, and reusing `SCHEDULED` would close the row and freeze its
+ * head-count forever. Appended rather than inserted because
+ * `lfm-embed.helpers.ts` destructures this array BY POSITION, so the five
+ * ROK-1454 author lines are undisturbed. `ensureTags`
+ * (`lfg-board-channel.service.ts:105`) tops it up on existing forums, and
+ * `DISCORD_FORUM_TAG_CAP` is 20, so there is headroom.
+ *
+ * ROK-1505 D7 appends a SEVENTH, `LOOKING` — the web chip's own word for a
+ * one-hand group. The board now posts at the first hand (parity with the
+ * chips), and that post is LFG, not LFM: it neither "needs players" (there
+ * is no group yet) nor is "ready to schedule". Appended for the same
+ * by-position reason.
+ */
+export const LFG_BOARD_TAGS = [
+  'NEEDS PLAYERS',
+  'READY TO SCHEDULE',
+  'SCHEDULED',
+  'EXPIRED',
+  'CLOSED',
+  'PLAYING NOW',
+  'LOOKING',
+] as const;
+export type LfgBoardTag = (typeof LFG_BOARD_TAGS)[number];
+
+/**
+ * Default name of the bot-created forum channel.
+ *
+ * `lfg`, NOT the `looking-for-group` this story's spec first wrote down: the
+ * operator chose the short name on ROK-1471 (Linear issue ROK-1471, D3/AC2 —
+ * the spec at `planning-artifacts/specs/ROK-1471.md` has been reconciled to
+ * match). Do not "fix" it back; a smoke or AC that looks for
+ * `looking-for-group` is reading the pre-reconciliation spec.
+ */
+export const LFG_BOARD_CHANNEL_NAME = 'lfg';
+
+/** D10: thread renames + tag edits coalesce on a trailing timer; content edits never wait. */
+export const LFG_BOARD_EDIT_DEBOUNCE_MS = 5000;
+
+/** D2: the surface a `lfg_group_messages` row lives on — pinned at post time. */
+export const LFG_POST_KINDS = ['forum', 'text'] as const;
+export type LfgPostKind = (typeof LFG_POST_KINDS)[number];
+
+/** Discord caps a forum at 20 available tags (E16). Never one tag per game. */
+export const DISCORD_FORUM_TAG_CAP = 20;
+
+/** Binding purpose for the manual forum override (D3a / D4). */
+export const LFG_BOARD_BINDING_PURPOSE = 'lfg-board';
+
+/**
+ * D1: the master toggle broadcast. The wave-2 posting lane subscribes to
+ * ensure the forum channel + intro post on enable, and to archive live posts
+ * on disable — the toggle endpoint itself never touches Discord.
+ */
+export const LFG_BOARD_EVENTS = {
+  /**
+   * ROK-1658 — `LfgComposerPinService` also subscribes, and acts ONLY on the
+   * disable branch (it takes the composer buttons down). Its enable branch
+   * stays on {@link LFG_BOARD_EVENTS.ENABLED} so it never races provisioning.
+   */
+  TOGGLED: 'lfg-board.toggled',
+  /**
+   * ROK-1523 — the board is on AND provisioned. `LfmEmbedService` subscribes
+   * and re-posts a fresh card for every group that is still live, which is
+   * what makes a disable/enable round trip restore the board.
+   *
+   * A separate event rather than a second `TOGGLED` subscriber on purpose:
+   * `emitAsync` runs listeners CONCURRENTLY, so a reconcile racing
+   * {@link LfgBoardToggleListener.provision} would resolve the forum while the
+   * toggle listener is still creating it — two boards, both marked. This is
+   * emitted by that listener only once provisioning has finished.
+   * `LfgComposerPinService` subscribes for the same reason (ROK-1658): the
+   * composer buttons ride the intro post, which exists only after provision.
+   *
+   * The direction also matters: `LfmEmbedModule` imports `LfgBoardModule`, so
+   * the board calling `LfmEmbedService` directly would be a module cycle. The
+   * event is the seam that keeps the dependency one-way.
+   */
+  ENABLED: 'lfg-board.enabled',
+  /**
+   * D10: drain the rename/tag debounce NOW. Emitted by the DEMO_MODE-only
+   * flush endpoint so a smoke test can assert a thread's name and tags without
+   * sleeping out the trailing window.
+   */
+  FLUSH: 'lfg-board.flush',
+} as const;
+
+/** Payload of {@link LFG_BOARD_EVENTS.TOGGLED}. */
+export interface LfgBoardToggledPayload {
+  enabled: boolean;
+}
+
+/** D7: the join button's label. The `+1` vocabulary the spec uses throughout. */
+export const LFG_JOIN_BUTTON_LABEL = "+1 · I'm in";
+
+/**
+ * ROK-1660: the board post's leave button, beside {@link LFG_JOIN_BUTTON_LABEL}.
+ * A plain ASCII apostrophe, as the join label spells it.
+ */
+export const LFG_LEAVE_BUTTON_LABEL = "I'm out";
+
+/** D7: the Link button that replaces the description's masked group link. */
+export const LFG_OPEN_GROUP_LABEL = 'Open group ↗';
+
+/** Discord's hard cap on a thread name. Truncation target for `threadNameFor`. */
+export const DISCORD_THREAD_NAME_MAX = 100;
+
+/**
+ * Title of the pinned thread that explains the board (posted once on enable).
+ *
+ * ROK-1658 (operator 2026-09-23): the title leads with the composer, so a
+ * member scanning the forum knows the `Post an LFG` button lives inside this
+ * post. U+2795 HEAVY PLUS SIGN, U+00B7 MIDDLE DOT. Well under Discord's
+ * 100-char thread-name cap ({@link DISCORD_THREAD_NAME_MAX}).
+ *
+ * The title is also half of the intro's IDENTITY (`isOwnIntro`), so changing
+ * it again means moving the old value into {@link LFG_BOARD_INTRO_LEGACY_TITLES}.
+ */
+export const LFG_BOARD_INTRO_TITLE =
+  '➕ Post an LFG here · How this board works';
+
+/**
+ * Titles the intro thread carried before {@link LFG_BOARD_INTRO_TITLE}.
+ *
+ * Renamed by ROK-1658. Live boards (prod included) still carry the old title,
+ * so the intro rediscovery keeps recognising it (bot-owned only) — otherwise a
+ * board whose stored id was lost would seed a SECOND intro next to its own.
+ * `LfgComposerPinService` renames a legacy-titled intro to the current title
+ * once, in place, keeping its thread id.
+ */
+export const LFG_BOARD_INTRO_LEGACY_TITLES: readonly string[] = [
+  'How this board works',
+];
+
+/**
+ * Body of the intro thread. Plain text — no embed, so it renders in search.
+ * Kept short on purpose (operator ask 2026-09-23, ROK-1658: "reduce the amount
+ * of reading"): one line each for what a post is, how to start one (the
+ * composer's `Post an LFG` button pinned on this post, `/lfg`, or the site),
+ * how `+1` works (interest, not a commitment), the three horizons and how long
+ * each lasts, how to leave (ROK-1660: `I'm out`, `My LFGs` or `/lfg-leave`),
+ * and how posts end. The day counts are read
+ * from `lfg.constants.ts` (ROK-1691), so the copy cannot drift from the clock.
+ * The old "you cannot post here yourself" line is gone — the composer now lets
+ * a member start one.
+ *
+ * `LfgComposerPinService` rewrites an older intro to this text when it sets
+ * the composer buttons, so boards seeded before this copy pick it up.
+ * Well inside Discord's 2000-char cap.
+ */
+export const LFG_BOARD_INTRO_BODY = [
+  '**Each post is a group looking for players for one game.**',
+  '',
+  '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
+  "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
+  `**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next ${LFG_EXPIRY_DAYS} days).`,
+  "**Leave one**: press **I'm out** on the post, **My LFGs** below, or `/lfg-leave`.",
+  '',
+  "Posts close when the group becomes an event, when everyone's hand expires, " +
+    `or ${LFG_POST_MAX_AGE_DAYS} days after they open. Still looking? Post again.`,
+].join('\n');
+
+/**
+ * ROK-1523 — the line a post carries when the operator turns the board OFF.
+ *
+ * The board's other terminal renders mean the GROUP ended (scheduled, expired,
+ * dropped below the floor). This one does not: the group is untouched and
+ * still live on the site, only its Discord surface is being retired. The copy
+ * therefore says what happened to the BOARD and where the group went, and
+ * never uses the vocabulary of cancellation.
+ */
+export const LFG_BOARD_RETIRED_NOTE =
+  'The LFG board was switched off — this group is still live on the site.';
+
+/**
+ * ROK-1523 — the author line a RETIRED card leads with, and the phrase after it.
+ *
+ * Every other terminal author line states what happened to the GROUP
+ * (`CLOSED · 3 still looking`, `EXPIRED · 5 were looking`). On this card the
+ * group is untouched, so a head-count in the terminal vocabulary reads as a
+ * cancellation of something that did not end. Operator ruling (lead default,
+ * 2026-09-12): name the BOARD and say where the group went.
+ *
+ * Deliberately NOT a member of `LFG_BOARD_TAGS`: the forum TAG stays `CLOSED`,
+ * which is the most neutral terminal tag the board creates (the alternatives
+ * are `EXPIRED` and `SCHEDULED`, both of which assert something false). Tags
+ * are forum-configured and shared across every post; the author line is
+ * per-render, which is the right place for a one-off state.
+ */
+export const LFG_BOARD_RETIRED_AUTHOR = 'BOARD OFF';
+export const LFG_BOARD_RETIRED_AUTHOR_SUFFIX = 'still live on the site';

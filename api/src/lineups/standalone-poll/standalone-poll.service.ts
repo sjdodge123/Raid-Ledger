@@ -1,0 +1,378 @@
+/**
+ * Service for standalone scheduling polls (ROK-977).
+ * Creates a minimal lineup (decided) + match (scheduling) behind the scenes,
+ * exposing a simplified API that skips the full lineup flow.
+ */
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  forwardRef,
+} from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  SchedulingPollResponseDto,
+  StandalonePollVisibility,
+} from '@raid-ledger/contract';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
+import { scheduleTransitionBestEffort } from '../queue/lineup-phase-schedule.helpers';
+import { StandalonePollNotificationService } from './standalone-poll-notification.service';
+import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
+import {
+  findGameById,
+  filterValidUserIds,
+  insertDecidedLineup,
+  insertSchedulingMatch,
+  insertMatchMembers,
+  countMatchMembers,
+  countActiveEventSignups,
+  findActiveStandalonePolls,
+  completeStandalonePoll,
+  stampReschedulingPollId,
+} from './standalone-poll-query.helpers';
+import {
+  assertCanRescheduleEvent,
+  assertCanCompletePoll,
+} from './standalone-poll-auth.helpers';
+import {
+  findScheduleSlots,
+  findScheduleVotes,
+} from '../scheduling/scheduling-query.helpers';
+import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
+import { SignupsService } from '../../events/signups.service';
+import { EventsService } from '../../events/events.service';
+import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
+import {
+  splitYesVotersBySlot,
+  notifyPollVoters,
+  heartPollGameForVoters,
+} from './standalone-poll-voter.helpers';
+import { SettingsService } from '../../settings/settings.service';
+import {
+  assertVisibilityAllowed,
+  buildShareSettings,
+} from './standalone-poll-share.helpers';
+import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
+import { insertInvitees } from './standalone-poll-share-query.helpers';
+import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
+
+/** No-op rejection swallower for fire-and-forget DMs. */
+const noop = (): void => {};
+
+/** Input DTO after Zod validation. */
+export interface CreatePollInput {
+  gameId: number;
+  linkedEventId?: number;
+  durationHours?: number;
+  memberUserIds?: number[];
+  /** Minimum unique voters before organizer is notified (ROK-1015). */
+  minVoteThreshold?: number;
+  /**
+   * ROK-1371: user IDs to EXCLUDE from the game-interest broadcast because they
+   * are already receiving the targeted post-event follow-up DM. Internal-only
+   * (not on the public Zod schema) so regular polls never set it → no-op.
+   */
+  broadcastExcludeUserIds?: number[];
+  /** ROK-1750: `private` = picked members + link holders only. */
+  visibility?: StandalonePollVisibility;
+}
+
+type ShareSettings = ReturnType<typeof buildShareSettings>;
+export type PollGame = {
+  id: number;
+  name: string;
+  coverUrl: string | null;
+};
+
+/**
+ * Fallback poll length when the caller omits `durationHours` (2 weeks).
+ *
+ * A null `phase_deadline` opted the poll out of BOTH the deadline reminder
+ * service and the auto-archive job, so deadline-less polls stayed open
+ * forever with no way to close but a manual lock-in. Every poll now gets a
+ * deadline; two weeks is long enough not to guillotine a slow-moving group.
+ * Stays within the contract's 1-720h bound.
+ */
+const DEFAULT_POLL_DURATION_HOURS = 14 * 24;
+
+@Injectable()
+export class StandalonePollService {
+  private readonly logger = new Logger(StandalonePollService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly phaseQueue: LineupPhaseQueueService,
+    private readonly notifications: StandalonePollNotificationService,
+    private readonly schedulingPollEmbed: SchedulingPollEmbedService,
+    private readonly signupsService: SignupsService,
+    private readonly settingsService: SettingsService,
+    private readonly eventsService: EventsService,
+    @Inject(forwardRef(() => EmbedSyncQueueService))
+    private readonly embedSyncQueue: EmbedSyncQueueService,
+  ) {}
+
+  /** List the active standalone polls the caller may see (ROK-1750). */
+  async listActive(caller: { id: number; isAdmin: boolean }) {
+    return findActiveStandalonePolls(this.db, caller);
+  }
+
+  /** Mark a standalone poll as completed (match -> scheduled, lineup -> archived).
+   *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
+  async complete(
+    matchId: number,
+    eventId?: number,
+    startTime?: string,
+    creatorId?: number,
+    isAdmin = false,
+  ): Promise<boolean> {
+    // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
+    // SE recreated) — restrict it to the poll/event owner or an admin.
+    await assertCanCompletePoll(this.db, matchId, creatorId ?? -1, isAdmin);
+    const result = await completeStandalonePoll(this.db, matchId);
+    // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
+    // embed so its author line and colour follow.
+    if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
+    if (result.ok && eventId) {
+      this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
+        },
+      );
+    }
+    // ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
+    // embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
+    // at the (already-moved) winning time. Skip for an event cancelled
+    // mid-poll: the re-emit would recreate a Discord SE for a dead event.
+    if (result.ok && result.linkedEventId && !result.linkedEventCancelled) {
+      this.eventsService
+        .emitLifecycleEvent(result.linkedEventId, APP_EVENT_EVENTS.UPDATED)
+        .catch(noop);
+      // ROK-1392: the UPDATED re-emit recreates the Scheduled Event, but its
+      // embed re-render is fire-and-forget — on a quiet server nothing else
+      // enqueues an embed sync, so the card can stay stuck on RESCHEDULING
+      // until unrelated traffic heals it. completeStandalonePoll has already
+      // cleared reschedulingPollId, so enqueue an explicit level-triggered
+      // sync now: the processor reads the (cleared) flag and restores the live
+      // embed deterministically. Symmetric to the poll-start RESCHEDULING
+      // teardown's updateEmbedState.
+      await this.embedSyncQueue.enqueue(
+        result.linkedEventId,
+        'reschedule-poll-lockin',
+      );
+    }
+    return result.ok;
+  }
+
+  /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
+  private async fireAutoSignup(
+    matchId: number,
+    eventId: number,
+    startTime?: string,
+    creatorId?: number,
+  ): Promise<void> {
+    const slots = await findScheduleSlots(this.db, matchId);
+    const allVoters = await findScheduleVotes(
+      this.db,
+      slots.map((s) => s.id),
+    );
+    // ROK-1617: yes-votes only on both sides of the split — see
+    // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
+    const { selectedVoters, otherVoters } = splitYesVotersBySlot(
+      slots,
+      allVoters,
+      startTime,
+    );
+    await autoSignupSlotVoters({
+      eventId,
+      creatorId: creatorId ?? -1,
+      voters: selectedVoters,
+      signupsService: this.signupsService,
+    });
+    // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
+    // name the DMs below announce.
+    const gameName = await heartPollGameForVoters(this.db, matchId, allVoters);
+    if (startTime) {
+      await notifyPollVoters(
+        {
+          db: this.db,
+          settingsService: this.settingsService,
+          notifications: this.notifications,
+        },
+        selectedVoters,
+        otherVoters,
+        startTime,
+        eventId,
+        gameName ?? 'Game Night',
+      );
+    }
+  }
+
+  /**
+   * Create a standalone scheduling poll.
+   * Inserts a decided lineup + scheduling match, adds members,
+   * optionally schedules auto-archive, and notifies interested users.
+   */
+  async create(
+    input: CreatePollInput,
+    userId: number,
+    isAdmin = false,
+  ): Promise<SchedulingPollResponseDto> {
+    assertVisibilityAllowed(input.visibility, input.linkedEventId);
+    const share = buildShareSettings(input.visibility);
+    const game = await this.validateGame(input.gameId);
+    if (input.linkedEventId) {
+      // ROK-1370 (P1): opening a poll linked to an event is destructive — only
+      // the event owner or an admin may do it (404 preserved when missing).
+      await assertCanRescheduleEvent(
+        this.db,
+        input.linkedEventId,
+        userId,
+        isAdmin,
+      );
+    }
+    const phaseDeadline = this.computeDeadline(input.durationHours);
+    const lineup = await insertDecidedLineup(
+      this.db,
+      userId,
+      input.linkedEventId,
+      phaseDeadline,
+      share,
+    );
+    const match = await insertSchedulingMatch(
+      this.db,
+      lineup.id,
+      input.gameId,
+      input.linkedEventId,
+      await this.resolveMinVoteThreshold(input),
+    );
+    if (input.linkedEventId) {
+      await this.linkEventToPoll(input.linkedEventId, match.id);
+    }
+    const pickedIds = await this.addMembers(
+      match.id,
+      userId,
+      input.memberUserIds,
+    );
+    if (share.visibility === 'private') {
+      // ROK-1750 (D4): picked members are invitees too, so the private
+      // lineup's view / vote guards admit them.
+      const invitees = pickedIds.filter((id) => id !== userId);
+      await insertInvitees(this.db, lineup.id, invitees, userId);
+    }
+    // Always set: computeDeadline falls back to DEFAULT_POLL_DURATION_HOURS.
+    // ROK-1512: best-effort — the poll row committed; `reconcileArchiveJobs`
+    // heals a missing archive job at boot and Sentry has the failure.
+    await scheduleTransitionBestEffort(
+      this.phaseQueue,
+      lineup.id,
+      'archived',
+      phaseDeadline.getTime() - Date.now(),
+      'StandalonePollService.create',
+    );
+    fireCreateFanout(
+      {
+        notifications: this.notifications,
+        pollEmbed: this.schedulingPollEmbed,
+      },
+      game,
+      { lineupId: lineup.id, matchId: match.id, creatorId: userId },
+      input,
+      pickedIds,
+      share.visibility,
+    );
+    const memberCount = await countMatchMembers(this.db, match.id);
+    return this.buildResponse(match.id, lineup.id, game, memberCount, share);
+  }
+
+  /**
+   * Resolve the vote threshold for a new poll. Linked (reschedule) polls
+   * default to the linked event's active roster size — the ROK-1015
+   * ready-for-review cron only considers polls with a non-null threshold, so
+   * a NULL default meant the creator was never notified. Explicit input
+   * always wins; an empty roster keeps null (nothing meaningful to wait for).
+   */
+  private async resolveMinVoteThreshold(
+    input: CreatePollInput,
+  ): Promise<number | undefined> {
+    if (input.minVoteThreshold !== undefined || !input.linkedEventId) {
+      return input.minVoteThreshold;
+    }
+    const count = await countActiveEventSignups(this.db, input.linkedEventId);
+    return count > 0 ? count : undefined;
+  }
+
+  /** Validate game exists, throw 404 if not. */
+  private async validateGame(
+    gameId: number,
+  ): Promise<{ id: number; name: string; coverUrl: string | null }> {
+    const game = await findGameById(this.db, gameId);
+    if (!game) throw new NotFoundException('Game not found');
+    return game;
+  }
+
+  /** Compute phase deadline from durationHours, defaulting to 2 weeks. */
+  private computeDeadline(durationHours?: number): Date {
+    const hours = durationHours || DEFAULT_POLL_DURATION_HOURS;
+    return new Date(Date.now() + hours * 60 * 60 * 1000);
+  }
+
+  /** Add creator + provided members to the match; returns the valid picks. */
+  private async addMembers(
+    matchId: number,
+    creatorId: number,
+    memberUserIds?: number[],
+  ): Promise<number[]> {
+    const validIds = memberUserIds?.length
+      ? await filterValidUserIds(this.db, memberUserIds)
+      : [];
+    const allIds = [creatorId, ...validIds];
+    await insertMatchMembers(this.db, matchId, allIds);
+    return validIds;
+  }
+
+  /** Atomically set reschedulingPollId on the linked event. */
+  private async linkEventToPoll(
+    eventId: number,
+    matchId: number,
+  ): Promise<void> {
+    const stamped = await stampReschedulingPollId(this.db, eventId, matchId);
+    if (!stamped) {
+      throw new ConflictException(
+        'Event is already being rescheduled or has been cancelled.',
+      );
+    }
+    // ROK-1370 (Option A): flip the Discord embed to RESCHEDULING and tear down
+    // the Scheduled Event now — lock-in recreates it at the winning time.
+    this.eventsService
+      .emitLifecycleEvent(eventId, APP_EVENT_EVENTS.RESCHEDULING)
+      .catch(noop);
+  }
+
+  /** Build the API response DTO. */
+  private buildResponse(
+    matchId: number,
+    lineupId: number,
+    game: PollGame,
+    memberCount: number,
+    share: ShareSettings,
+  ): SchedulingPollResponseDto {
+    return {
+      id: matchId,
+      lineupId,
+      gameId: game.id,
+      gameName: game.name,
+      gameCoverUrl: game.coverUrl,
+      memberCount,
+      status: 'scheduling',
+      createdAt: new Date().toISOString(),
+      visibility: share.visibility,
+      shareToken: share.shareToken,
+    };
+  }
+}

@@ -1,0 +1,564 @@
+import type { LfgGroupSummaryDto, LfgMemberDto } from '@raid-ledger/contract';
+import { LfgCommand } from './lfg.command';
+import {
+  LFG_BLOCKED_REPLY,
+  LFG_LIST_SENTINEL,
+  LFG_UNLINKED_REPLY,
+} from './lfg.command.helpers';
+import { readOpenGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
+import { listGroupMembers } from '../../lfg/lfg-query.helpers';
+import { at } from '../../common/testing/narrow';
+
+// ROK-1656 — the open-group read is a real query the fake DB cannot answer;
+// it is pinned against Postgres in `lfg-now-spawn.integration.spec.ts`. Here
+// it defaults to "no open group" and individual cases override it.
+jest.mock('../../lfg/lfg-group-horizon.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-group-horizon.helpers'),
+  readOpenGroupHorizon: jest.fn().mockResolvedValue(null),
+}));
+// ROK-1656 — likewise the playing-now read: default "no session".
+jest.mock('../../lfg/lfg-playing.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-playing.helpers'),
+  findOpenLfgNowEventId: jest.fn().mockResolvedValue(null),
+}));
+// The join reply's roster line reads the roster alone — no group detail.
+jest.mock('../../lfg/lfg-query.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-query.helpers'),
+  listGroupMembers: jest.fn(),
+}));
+const readOpen = readOpenGroupHorizon as jest.MockedFunction<
+  typeof readOpenGroupHorizon
+>;
+const listMembers = listGroupMembers as jest.MockedFunction<
+  typeof listGroupMembers
+>;
+
+function member(userId: number, username: string, displayName: string | null) {
+  return {
+    userId,
+    username,
+    displayName,
+    avatarUrl: null,
+    urgency: 'week',
+    expiresAt: '2026-01-02T00:00:00.000Z',
+    joinedAt: '2026-01-01T00:00:00.000Z',
+  } satisfies LfgMemberDto;
+}
+
+beforeEach(() => {
+  listMembers
+    .mockReset()
+    .mockResolvedValue([member(7, 'ana', 'Ana'), member(8, 'bo', null)]);
+});
+
+type Row = Record<string, unknown>;
+
+/**
+ * A drizzle stand-in that hands back queued result sets in call order.
+ * Each `select()` consumes exactly one queued batch, which is what lets a test
+ * distinguish "the user lookup ran" from "the game lookup ran".
+ */
+/** Every `where(...)` predicate the fake saw, in call order. */
+let wheres: unknown[] = [];
+
+function fakeDb(batches: Row[][]): {
+  db: never;
+  selects: () => number;
+} {
+  let calls = 0;
+  wheres = [];
+  const db = {
+    select: () => {
+      const rows = batches[calls++] ?? [];
+      const terminal = {
+        limit: () => Promise.resolve(rows),
+        // ROK-1531 — game autocomplete now ranks before it caps.
+        orderBy: () => terminal,
+        then: (fn: (r: Row[]) => unknown) => Promise.resolve(rows).then(fn),
+      };
+      return {
+        from: () => ({
+          where: (predicate: unknown) => {
+            wheres.push(predicate);
+            return terminal;
+          },
+        }),
+      };
+    },
+  };
+  return { db: db as never, selects: () => calls };
+}
+
+/**
+ * The operators and bound values of a drizzle predicate, flattened — enough to
+ * tell `name ilike $1` from `id = $1`, and to see the bound pattern itself.
+ */
+function sqlText(predicate: unknown): string {
+  const chunks = (
+    predicate as { queryChunks: Array<string | { value?: unknown }> }
+  ).queryChunks;
+  return chunks
+    .map((chunk) => {
+      // `ilike` binds a raw string chunk; `eq` binds a Param with `.value`;
+      // operators are StringChunks whose `.value` is a string array.
+      if (typeof chunk === 'string') return `<${chunk}>`;
+      const value = chunk.value;
+      if (Array.isArray(value)) return value.join('');
+      if (typeof value === 'string' || typeof value === 'number') {
+        return `<${String(value)}>`;
+      }
+      return '';
+    })
+    .join('');
+}
+
+function summary(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
+  return {
+    gameId: 42,
+    gameName: 'Deep Rock Galactic',
+    gameSlug: 'deep-rock-galactic',
+    gameCoverUrl: null,
+    activeCount: 2,
+    nowCount: 0,
+    soonestNowExpiresAt: null,
+    playingNow: null,
+    state: 'lfm',
+    viabilityThreshold: null,
+    isViable: false,
+    hasOwnIntent: true,
+    soonestExpiresAt: null,
+    ...over,
+  };
+}
+
+function makeInteraction(game: string | null): {
+  interaction: never;
+  editReply: jest.Mock;
+  deferReply: jest.Mock;
+} {
+  const editReply = jest.fn().mockResolvedValue(undefined);
+  const deferReply = jest.fn().mockResolvedValue(undefined);
+  const interaction = {
+    user: { id: 'discord-1' },
+    options: { getString: () => game },
+    deferReply,
+    editReply,
+  };
+  return { interaction: interaction as never, editReply, deferReply };
+}
+
+function makeLfgService(
+  over: Partial<Record<string, jest.Mock>> = {},
+): Record<string, jest.Mock> {
+  return {
+    createIntent: jest.fn().mockResolvedValue({
+      created: true,
+      body: { group: summary() },
+    }),
+    listOwnGroups: jest.fn().mockResolvedValue([]),
+    ...over,
+  };
+}
+
+const settings = {
+  getDiscordBotCommunityName: jest.fn().mockResolvedValue('Gamer Night'),
+  getDiscordBotTimezone: jest.fn().mockResolvedValue('UTC'),
+  getClientUrl: jest.fn().mockResolvedValue('https://raid.example'),
+};
+
+const LINKED = [{ id: 7, deactivatedAt: null, bannedAt: null }];
+
+function build(
+  batches: Row[][],
+  lfgService: Record<string, jest.Mock>,
+): LfgCommand {
+  const { db } = fakeDb(batches);
+  return new LfgCommand(db, lfgService as never, settings as never);
+}
+
+describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
+  it('registers as /lfg with an optional autocompleted game option', () => {
+    const definition = build([], makeLfgService()).getDefinition();
+    expect(definition.name).toBe('lfg');
+    expect(definition.options?.[0]).toMatchObject({
+      name: 'game',
+      required: false,
+      autocomplete: true,
+    });
+  });
+
+  // ROK-1479: the second option. Still no subcommands — the count is pinned so
+  // a third option is a decision someone has to make deliberately.
+  it('registers the optional urgency option with exactly three choices', () => {
+    const definition = build([], makeLfgService()).getDefinition();
+    expect(definition.options).toHaveLength(2);
+    expect(definition.options?.[1]).toMatchObject({
+      name: 'urgency',
+      required: false,
+    });
+    const choices = (
+      definition.options?.[1] as { choices?: Array<{ value: string }> }
+    ).choices;
+    // ROK-1616 — three horizons. `now:30` keeps its value (label-only rename);
+    // the retired `now:60` slot is now `tonight`.
+    expect(choices?.map((c) => c.value)).toEqual(['week', 'now:30', 'tonight']);
+  });
+
+  it('offers My groups as the FIRST autocomplete choice, always', async () => {
+    const command = build(
+      [[{ id: 42, name: 'Deep Rock Galactic' }]],
+      makeLfgService(),
+    );
+    const respond = jest.fn().mockResolvedValue(undefined);
+    await command.handleAutocomplete({
+      options: { getFocused: () => ({ name: 'game', value: 'de' }) },
+      respond,
+    } as never);
+    const choices = respond.mock.calls[0][0] as Array<{ value: string }>;
+    expect(choices[0]?.value).toBe(LFG_LIST_SENTINEL);
+    expect(choices[1]).toEqual({ name: 'Deep Rock Galactic', value: '42' });
+  });
+
+  describe('an unlinked Discord account', () => {
+    it('gets the shared link-your-account reply and creates NO intent', async () => {
+      const lfgService = makeLfgService();
+      const command = build([[]], lfgService);
+      const { interaction, editReply } = makeInteraction('42');
+
+      await command.handleInteraction(interaction);
+
+      expect(editReply).toHaveBeenCalledWith(LFG_UNLINKED_REPLY);
+      expect(lfgService.createIntent).not.toHaveBeenCalled();
+      expect(lfgService.listOwnGroups).not.toHaveBeenCalled();
+    });
+  });
+
+  it('refuses a deactivated account itself — NotDeactivatedGuard does not cover this path', async () => {
+    const lfgService = makeLfgService();
+    const command = build(
+      [[{ id: 7, deactivatedAt: new Date(), bannedAt: null }]],
+      lfgService,
+    );
+    const { interaction, editReply } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(editReply).toHaveBeenCalledWith(LFG_BLOCKED_REPLY);
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+  });
+
+  it('refuses a banned account', async () => {
+    const lfgService = makeLfgService();
+    const command = build(
+      [[{ id: 7, deactivatedAt: null, bannedAt: new Date() }]],
+      lfgService,
+    );
+    const { interaction, editReply } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(editReply).toHaveBeenCalledWith(LFG_BLOCKED_REPLY);
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+  });
+
+  it('raises a hand through the SAME service method POST /lfg uses', async () => {
+    const lfgService = makeLfgService();
+    const command = build(
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
+    const { interaction, editReply, deferReply } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(deferReply).toHaveBeenCalledWith({ flags: 64 });
+    expect(lfgService.createIntent).toHaveBeenCalledTimes(1);
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+      urgency: 'week',
+      // ROK-1616 — the community zone rides with EVERY write, not only the
+      // tonight one: it is read once for the reply context anyway, and a
+      // conditional would be one more place for the zone to go missing.
+      timezone: 'UTC',
+    });
+    // Title first (escaped ilike), then — and only then — the id pick.
+    expect(sqlText(wheres[1])).toContain(' ilike ');
+    expect(sqlText(wheres[1])).toContain('<42>');
+    expect(sqlText(wheres[2])).toContain(' = ');
+    expect(sqlText(wheres[2])).toContain('<42>');
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    expect(payload.embeds[0]?.toJSON().description).toContain("That's 2 now");
+  });
+
+  it('is IDEMPOTENT: a repeat /lfg makes exactly one write call and says already in', async () => {
+    const lfgService = makeLfgService({
+      createIntent: jest.fn().mockResolvedValue({
+        created: false,
+        body: { group: summary({ activeCount: 2 }) },
+      }),
+    });
+    const command = build(
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
+    const { interaction, editReply } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).toHaveBeenCalledTimes(1);
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    expect(payload.embeds[0]?.toJSON().description).toContain(
+      "You're already in — 2 looking",
+    );
+  });
+
+  it('resolves a free-typed exact game NAME to its id before writing', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, [{ id: 99, name: 'Valheim' }]], lfgService);
+    const { interaction } = makeInteraction('Valheim');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 99, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+    // The fake returns its batch whatever the predicate — so pin the predicate.
+    expect(sqlText(wheres[1])).toContain(' ilike ');
+    expect(sqlText(wheres[1])).toContain('<Valheim>');
+    // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
+    // the predicate count is 3. The assertion's point is unchanged: no
+    // `games.id` fallback ran. That fallback would render as ` = <Valheim>`; the
+    // board read is the only conjunction in this flow, so it renders as `()`.
+    expect(wheres).toHaveLength(3);
+    expect(sqlText(wheres[2])).toBe('()');
+  });
+
+  it('escapes LIKE metacharacters — `/lfg game:%` cannot select an arbitrary game', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, []], lfgService);
+    const { interaction, editReply } = makeInteraction('%');
+
+    await command.handleInteraction(interaction);
+
+    expect(sqlText(wheres[1])).toContain('<\\%>');
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    expect(payload.embeds[0]?.toJSON().description).toContain("I don't know");
+  });
+
+  it('an all-digit TITLE wins over the game whose id happens to match', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, [{ id: 7, name: '1942' }]], lfgService);
+    const { interaction } = makeInteraction('1942');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).toHaveBeenCalledWith(7, 7, {
+      urgency: 'week',
+      timezone: 'UTC',
+    });
+    // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
+    // the predicate count is 3. The assertion's point is unchanged: no
+    // `games.id` fallback ran. That fallback would render as ` = <1942>`; the
+    // board read is the only conjunction in this flow, so it renders as `()`.
+    expect(wheres).toHaveLength(3);
+    expect(sqlText(wheres[2])).toBe('()');
+  });
+
+  it('refuses an id that cannot be an int4 without a second lookup', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, []], lfgService);
+    const { interaction } = makeInteraction('99999999999');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    expect(wheres).toHaveLength(2);
+  });
+
+  it('tells the user when nothing matched, and writes nothing', async () => {
+    const lfgService = makeLfgService();
+    const command = build([LINKED, []], lfgService);
+    const { interaction, editReply } = makeInteraction('drg 2');
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    expect(payload.embeds[0]?.toJSON().description).toContain("I don't know");
+  });
+
+  it.each([
+    ['bare /lfg', null],
+    ['/lfg list', LFG_LIST_SENTINEL],
+  ])('%s lists the caller groups instead of writing', async (_label, game) => {
+    const lfgService = makeLfgService({
+      listOwnGroups: jest
+        .fn()
+        .mockResolvedValue([summary({ hasOwnIntent: true, gameName: 'Mine' })]),
+    });
+    const command = build([LINKED], lfgService);
+    const { interaction, editReply } = makeInteraction(game);
+
+    await command.handleInteraction(interaction);
+
+    expect(lfgService.createIntent).not.toHaveBeenCalled();
+    expect(lfgService.listOwnGroups).toHaveBeenCalledWith(7);
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { author?: { name: string } } }>;
+      components: unknown[];
+    };
+    expect(payload.embeds[0]?.toJSON().author?.name).toBe('📋 YOUR GROUPS · 1');
+    expect(payload.components).toHaveLength(1);
+  });
+
+  it('skips the roster read entirely while the caller is the only one looking', async () => {
+    const lfgService = makeLfgService({
+      createIntent: jest.fn().mockResolvedValue({
+        created: true,
+        body: { group: summary({ activeCount: 1, state: 'lfg' }) },
+      }),
+    });
+    const command = build(
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
+    const { interaction } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(listMembers).not.toHaveBeenCalled();
+  });
+
+  it('names the roster from the roster read alone, never the whole group detail', async () => {
+    // Present only so the assertion below can say it went unused; its roster
+    // differs from the roster read's, so the reply shows which one rendered.
+    const getGroupDetail = jest.fn().mockResolvedValue({
+      ...summary(),
+      members: [member(9, 'detail-only', null)],
+      ownIntent: null,
+    });
+    const lfgService = makeLfgService({ getGroupDetail });
+    const command = build(
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
+    const { interaction, editReply } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(getGroupDetail).not.toHaveBeenCalled();
+    expect(listMembers).toHaveBeenCalledWith(expect.anything(), 42);
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    const description = at(payload.embeds, 0).toJSON().description ?? '';
+    expect(description).toContain("That's 2 now");
+    expect(description).toContain('Ana');
+    expect(description).toContain('bo');
+    expect(description).not.toContain('detail-only');
+  });
+
+  /**
+   * ROK-1479 — the urgency option reaches the write path.
+   *
+   * `makeInteraction` returns the same string for every option name, so these
+   * cases build their own interaction with a per-NAME `getString`: otherwise a
+   * test asserting `now:30` would also be asking for a game called `now:30`.
+   */
+  describe('ROK-1479 — the urgency choice threads into createIntent', () => {
+    function urgentInteraction(game: string, urgency: string | null) {
+      const editReply = jest.fn().mockResolvedValue(undefined);
+      const interaction = {
+        user: { id: 'discord-1' },
+        options: {
+          getString: (name: string) => (name === 'urgency' ? urgency : game),
+        },
+        deferReply: jest.fn().mockResolvedValue(undefined),
+        editReply,
+      };
+      return { interaction: interaction as never, editReply };
+    }
+
+    it.each([
+      ['now:30', { urgency: 'now', ttlMinutes: 30 }],
+      // ROK-1616 — retired from the picker, still SIXTY minutes here.
+      ['now:60', { urgency: 'now', ttlMinutes: 60 }],
+      ['tonight', { urgency: 'tonight' }],
+      ['week', { urgency: 'week' }],
+      // ROK-1656 — no urgency and no open group: tonight, not this week.
+      [null, { urgency: 'tonight' }],
+      // A stale registered command sending a value this build never offered
+      // must keep working — a 400 would throw away a player's hand.
+      ['nonsense', { urgency: 'week' }],
+    ])('%s becomes %o (+ the community zone)', async (choice, expected) => {
+      const lfgService = makeLfgService();
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        lfgService,
+      );
+      const { interaction } = urgentInteraction('42', choice);
+
+      await command.handleInteraction(interaction);
+
+      // ROK-1616 — `tonight` expires at 04:00 on the COMMUNITY's wall clock,
+      // so the zone from the reply context has to reach the write.
+      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+        ...expected,
+        timezone: 'UTC',
+      });
+    });
+
+    // ROK-1656 AC2 — the bare command reads the group the way the board `+1`
+    // does, so a now group's joiner lands on `now` with the group's bucket.
+    it('no urgency on a game with an open now group inherits now + its TTL', async () => {
+      readOpen.mockResolvedValueOnce({
+        urgency: 'now',
+        nowExpiresAt: new Date(),
+        ttlMinutes: 60,
+      });
+      const lfgService = makeLfgService();
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        lfgService,
+      );
+      const { interaction } = urgentInteraction('42', null);
+
+      await command.handleInteraction(interaction);
+
+      expect(readOpen).toHaveBeenLastCalledWith(expect.anything(), 42);
+      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+        urgency: 'now',
+        ttlMinutes: 60,
+        timezone: 'UTC',
+      });
+    });
+
+    // ROK-1656 — the player never picked the horizon, so the reply names it.
+    it.each([
+      [null, '**When:** Tonight'],
+      ['tonight', null],
+    ])('urgency %s -> reply horizon line %s', async (choice, line) => {
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        makeLfgService(),
+      );
+      const { interaction, editReply } = urgentInteraction('42', choice);
+      await command.handleInteraction(interaction);
+      const payload = editReply.mock.calls[0][0] as {
+        embeds: Array<{ toJSON: () => { description?: string } }>;
+      };
+      const description = at(payload.embeds, 0).toJSON().description ?? '';
+      if (line) expect(description).toContain(line);
+      else expect(description).not.toContain('**When:**');
+    });
+  });
+});

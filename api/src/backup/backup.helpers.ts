@@ -1,0 +1,289 @@
+/**
+ * Helper functions for backup service (pg_dump/pg_restore execution).
+ */
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { InternalServerErrorException } from '@nestjs/common';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
+import { defined } from '../common/defined.helpers';
+
+const execFileAsync = promisify(execFile);
+
+/** Build `--exclude-table-data=<t>` flags for each sanitized table. */
+function excludeTableDataFlags(tables?: readonly string[]): string[] {
+  if (!tables || tables.length === 0) return [];
+  return tables.map((t) => `--exclude-table-data=${t}`);
+}
+
+/**
+ * Build pg_dump args for custom format.
+ *
+ * ROK-1413: `--exclude-schema=drizzle` keeps migration metadata
+ * (`drizzle.__drizzle_migrations`) out of DEV dumps. On a dev box that schema is
+ * branch state, not data — restoring another branch's applied-hash rows causes
+ * cross-branch drift + silently-skipped migrations.
+ *
+ * ROK-1160 D4 (operator ruling 2026-09-22, option b): PROD dumps KEEP the
+ * journal (`keepJournal: true`, passed by `runPgDumpDirect` — the production
+ * path, since `BackupService` only leaves `dbContainer` empty in production).
+ * A prod restore must carry the journal that matches its `public` schema;
+ * without it `reconcile-migrations.mjs` replays from `0000` and dies on
+ * `0003` (`42804`). Dev safety does not depend on this flag: every restore
+ * path (`pgRestoreArgs`, `deploy_dev.sh`) still excludes `drizzle` on the way
+ * back in. Exported so the arg list is unit-assertable without spawning pg_dump.
+ */
+export function pgDumpArgs(
+  outputPath: string,
+  dbUrl: string,
+  excludeTableData?: readonly string[],
+  opts: { keepJournal?: boolean } = {},
+): string[] {
+  return [
+    '--format=custom',
+    '--no-owner',
+    '--no-privileges',
+    ...(opts.keepJournal ? [] : ['--exclude-schema=drizzle']),
+    `--file=${outputPath}`,
+    ...excludeTableDataFlags(excludeTableData),
+    dbUrl,
+  ];
+}
+
+/**
+ * Build pg_restore args.
+ *
+ * ROK-1413: `--exclude-schema=drizzle` is applied on restore too — prod dumps
+ * carry the drizzle schema (ROK-1160 D4, see `pgDumpArgs`) and older local
+ * dumps may too, so the exclusion must hold independent of the dump-side flag. The
+ * live DB's `drizzle.__drizzle_migrations` hashes are preserved across the
+ * restore instead of being replaced by the backup's (the foreign-hash-import
+ * incident class this fix closes). CAVEAT — cross-version restores: restoring
+ * a backup OLDER than the deployed schema recreates public tables in the older
+ * shape while the newer hashes survive, and the post-restore `runMigrations`
+ * trusts those hashes (re-applies nothing). That case needs a manual
+ * `node scripts/reconcile-migrations.mjs` run afterward (its per-statement
+ * trust-probe demotes partially-present migrations to a real apply);
+ * `deploy_dev.sh` already does this after its restores. Exported so the arg
+ * list is unit-assertable without spawning pg_restore. `pg_restore` supports
+ * `--exclude-schema` from PG10+.
+ */
+export function pgRestoreArgs(dbUrl: string, inputPath: string): string[] {
+  return [
+    '--clean',
+    '--if-exists',
+    '--no-owner',
+    '--no-privileges',
+    '--exclude-schema=drizzle',
+    `--dbname=${dbUrl}`,
+    inputPath,
+  ];
+}
+
+/** Run pg_dump directly (production) — keeps the migration journal (D4). */
+export async function runPgDumpDirect(
+  outputPath: string,
+  dbUrl: string,
+  excludeTableData?: readonly string[],
+): Promise<void> {
+  await execFileAsync(
+    'pg_dump',
+    pgDumpArgs(outputPath, dbUrl, excludeTableData, { keepJournal: true }),
+  );
+}
+
+/** Run pg_dump via Docker container (dev). */
+export async function runPgDumpDocker(
+  outputPath: string,
+  dbUrl: string,
+  container: string,
+  excludeTableData?: readonly string[],
+): Promise<void> {
+  const containerTmp = '/tmp/backup.dump';
+  // Reuse pgDumpArgs so the docker path can never drift from the direct path
+  // (the inlined arg list is exactly how the drizzle-schema exclusion was
+  // originally missed on one path — ROK-1413).
+  await execFileAsync('docker', [
+    'exec',
+    container,
+    'pg_dump',
+    ...pgDumpArgs(containerTmp, dbUrl, excludeTableData),
+  ]);
+  await execFileAsync('docker', [
+    'cp',
+    `${container}:${containerTmp}`,
+    outputPath,
+  ]);
+  await execFileAsync('docker', ['exec', container, 'rm', '-f', containerTmp]);
+}
+
+/** Run pg_restore directly (production). */
+export async function runPgRestoreDirect(
+  filepath: string,
+  dbUrl: string,
+): Promise<void> {
+  await execFileAsync('pg_restore', pgRestoreArgs(dbUrl, filepath));
+}
+
+/** Run pg_restore via Docker container (dev). */
+export async function runPgRestoreDocker(
+  filepath: string,
+  dbUrl: string,
+  container: string,
+): Promise<void> {
+  const containerTmp = '/tmp/restore.dump';
+  await execFileAsync('docker', [
+    'cp',
+    filepath,
+    `${container}:${containerTmp}`,
+  ]);
+  // Reuse pgRestoreArgs so the docker restore path can never drift from the
+  // direct path — the same duplication that let the drizzle-schema exclusion
+  // go missing on the dump side (ROK-1413).
+  await execFileAsync('docker', [
+    'exec',
+    container,
+    'pg_restore',
+    ...pgRestoreArgs(dbUrl, containerTmp),
+  ]);
+  await execFileAsync('docker', ['exec', container, 'rm', '-f', containerTmp]);
+}
+
+/** Check if pg_restore error is fatal (vs. harmless warnings). */
+export function isRestoreFatal(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('pg_restore: error:') &&
+    !message.includes('errors ignored on restore')
+  );
+}
+
+/**
+ * Resolve the drizzle migrations folder for the restore path.
+ *
+ * Precedence:
+ *   1. `MIGRATIONS_FOLDER` env var if set (operator override / boot script).
+ *   2. `${apiRoot}/src/drizzle/migrations` (source tree — dev, tests, runner).
+ *   3. `${apiRoot}/drizzle/migrations` (allinone production image — see
+ *      Dockerfile.allinone line 165 which copies migrations to /app/drizzle).
+ */
+function resolveMigrationsFolder(apiRoot: string): string {
+  const candidates = [
+    process.env.MIGRATIONS_FOLDER,
+    path.resolve(apiRoot, 'src/drizzle/migrations'),
+    path.resolve(apiRoot, 'drizzle/migrations'),
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0);
+  const migrationsFolder = candidates.find((p) =>
+    fs.existsSync(path.join(p, 'meta', '_journal.json')),
+  );
+  if (!migrationsFolder) {
+    throw new Error(
+      `Could not locate drizzle migrations folder (searched: ${candidates.join(', ')})`,
+    );
+  }
+  return migrationsFolder;
+}
+
+/**
+ * Run post-restore / factory-reset database migrations.
+ *
+ * ROK-1322: routes through the SAME instrumented runner as the deploy-time
+ * boot path — `runBootMigrations` — so restore gets the identical invariant:
+ *   1. Refresh `games_dedup_audit` BEFORE migrate (the real 2026-05-14
+ *      incident-prevention: a data migration consuming a stale audit blows up).
+ *   2. Run the programmatic `migrate()` (the drizzle-kit CLI silently swallows
+ *      SQL errors — upstream drizzle-team/drizzle-orm#5601 — see ROK-1343).
+ *   3. `validateMigrationState` (journal-vs-applied + critical-table probe;
+ *      diagnostic-only, never throws) for the same phantom-migration visibility.
+ * Failures are captured to Sentry tagged `restore-migration` and flushed BEFORE
+ * re-throwing — instrumented inside `runBootMigrations`, so this call site adds
+ * no wrapper (avoids double-capture). The error still re-throws so callers keep
+ * their existing propagation semantics.
+ *
+ * `databaseUrl` is threaded from the caller (`backup.service` has it as
+ * `DATABASE_URL` from config); falls back to `process.env.DATABASE_URL`.
+ */
+export async function runMigrations(
+  apiRoot: string,
+  databaseUrl?: string,
+): Promise<void> {
+  const migrationsFolder = resolveMigrationsFolder(apiRoot);
+  const url = databaseUrl ?? process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('DATABASE_URL is required for restore-time migrations');
+  }
+  await runBootMigrations(url, {
+    migrationsFolder,
+    context: 'restore-migration',
+  });
+}
+
+/** Run bootstrap-admin script and extract password. */
+export async function bootstrapAdmin(apiRoot: string): Promise<string> {
+  const isDocker = process.env.NODE_ENV === 'production';
+  const runner = isDocker ? 'node' : 'npx';
+  const args = isDocker
+    ? [path.resolve('dist/scripts/bootstrap-admin.js'), '--reset']
+    : [
+        'ts-node',
+        path.resolve(apiRoot, 'scripts/bootstrap-admin.ts'),
+        '--reset',
+      ];
+  const { stdout } = await execFileAsync(runner, args, {
+    cwd: apiRoot,
+    env: { ...process.env, RESET_PASSWORD: 'true' },
+  });
+  const match = stdout.match(/Password:\s+(.+)/);
+  if (!match) {
+    throw new InternalServerErrorException(
+      'Reset completed but failed to extract new admin credentials',
+    );
+  }
+  return defined(match[1], 'reset admin password capture group').trim();
+}
+
+/** Run seed scripts for game data. */
+export async function seedGameData(apiRoot: string): Promise<void> {
+  const isDocker = process.env.NODE_ENV === 'production';
+  const runner = isDocker ? 'node' : 'npx';
+  const gamesArgs = isDocker
+    ? [path.resolve('dist/scripts/seed-games.js')]
+    : ['ts-node', path.resolve(apiRoot, 'scripts/seed-games.ts')];
+  const igdbArgs = isDocker
+    ? [path.resolve('dist/scripts/seed-igdb-games.js')]
+    : ['ts-node', path.resolve(apiRoot, 'scripts/seed-igdb-games.ts')];
+  await execFileAsync(runner, gamesArgs, { cwd: apiRoot });
+  await execFileAsync(runner, igdbArgs, { cwd: apiRoot });
+}
+
+/** Drop and recreate database schemas. */
+export async function dropSchemas(
+  dbUrl: string,
+  container: string,
+): Promise<void> {
+  const dropSql =
+    'DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;';
+  if (!container) {
+    await execFileAsync('psql', [dbUrl, '-c', dropSql]);
+  } else {
+    await execFileAsync('docker', [
+      'exec',
+      container,
+      'psql',
+      dbUrl,
+      '-c',
+      dropSql,
+    ]);
+  }
+}
+
+/** Clean up partial file on error, ignoring cleanup failures. */
+export function cleanupPartialFile(filepath: string): void {
+  try {
+    fs.unlinkSync(filepath);
+  } catch {
+    // ignore cleanup errors
+  }
+}
