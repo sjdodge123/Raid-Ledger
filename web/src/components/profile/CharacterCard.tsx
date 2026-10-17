@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { useDeleteCharacter } from '../../hooks/use-character-mutations';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 interface CharacterCardProps {

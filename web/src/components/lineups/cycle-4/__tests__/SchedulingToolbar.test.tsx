@@ -18,7 +18,7 @@ import type { JourneyHeroProps } from '../../../shared/journey-hero/types';
 import { SchedulingToolbar } from '../SchedulingToolbar';
 import { buildPoll } from './scheduling-poll-fixtures';
 
-vi.mock('../../../shared/journey-hero/index', () => ({
+vi.mock('../../../shared/journey-hero', () => ({
     // ROK-1582: the mock now renders the hero's action slots so the phone
     // layout of the creator/operator action row can be asserted here.
     // ROK-1584: `manage` (the phone "Manage poll ⋯" slot) renders too.

@@ -15,7 +15,7 @@
 import type { JSX, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { LfgConvertedEventDto, LfgGroupDetailDto } from '@raid-ledger/contract';
-import { JourneyHero } from '../../components/shared/journey-hero/index';
+import { JourneyHero } from '../../components/shared/journey-hero';
 import { LFG_COPY, eventSetHeadline, heroHeadline, heroSub } from './lfg-copy';
 import { LFG_HERO_PRIMARY_BTN, LFG_HERO_SECONDARY_BTN } from './lfg-action-buttons';
 

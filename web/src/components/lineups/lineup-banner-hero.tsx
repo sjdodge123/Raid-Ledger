@@ -3,7 +3,7 @@
  * which sat on the 300-line cap once ROK-1374's tie states joined it).
  */
 import type { JSX } from 'react';
-import { JourneyHero } from '../shared/journey-hero/index';
+import { JourneyHero } from '../shared/journey-hero';
 
 /**
  * Hero-styled banner with primary + secondary action buttons.

@@ -7,8 +7,8 @@
  * (`action` = success, `waiting` = neutral edge, `set` = warning).
  */
 import type { JSX } from 'react';
-import { JourneyHero } from '../../components/shared/journey-hero/index';
-import type { HeroTone, JourneyPhase } from '../../components/shared/journey-hero/index';
+import { JourneyHero } from '../../components/shared/journey-hero';
+import type { HeroTone, JourneyPhase } from '../../components/shared/journey-hero';
 import { Section } from './design-system-bits';
 
 interface HeroExample {

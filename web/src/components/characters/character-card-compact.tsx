@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import type { CharacterDto, CharacterProfessionsDto } from '@raid-ledger/contract';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 const FACTION_STYLES: Record<string, string> = {

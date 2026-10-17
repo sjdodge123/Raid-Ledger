@@ -20,7 +20,7 @@
 import type { JSX } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
-import { GameTimePanel } from '../../components/features/game-time/index';
+import { GameTimePanel } from '../../components/features/game-time';
 import { AwayPanel } from '../../components/features/game-time/away/AwayPanel';
 import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../../components/features/game-time/phone/phone-week-check.helpers';

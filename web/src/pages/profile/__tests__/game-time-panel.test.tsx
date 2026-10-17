@@ -45,7 +45,7 @@ vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
     return { ...actual, useNavigate: () => navigate };
 });
-vi.mock('../../../components/features/game-time/index', () => ({
+vi.mock('../../../components/features/game-time', () => ({
     GameTimePanel: (): JSX.Element => <div data-testid="desktop-game-time-panel" />,
 }));
 vi.mock('../../../hooks/use-game-time', () => ({

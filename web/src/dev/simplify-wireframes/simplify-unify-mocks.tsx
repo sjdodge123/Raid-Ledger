@@ -3,7 +3,7 @@
  * DEV-ONLY. Static mocks; no behavior wired up.
  */
 import type { JSX, ReactNode } from 'react';
-import { JourneyHero } from '../../components/shared/journey-hero/index';
+import { JourneyHero } from '../../components/shared/journey-hero';
 
 function Btn({ children, variant = 'ghost' }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost' }): JSX.Element {
   const cls = {

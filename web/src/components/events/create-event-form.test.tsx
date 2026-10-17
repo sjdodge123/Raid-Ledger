@@ -75,7 +75,7 @@ vi.mock('../../hooks/use-want-to-play', () => ({
 }));
 
 // ─── Plugin/WoW mocks ─────────────────────────────────────────────────────────
-vi.mock('../../plugins/index', () => ({
+vi.mock('../../plugins', () => ({
     PluginSlot: vi.fn(() => null),
 }));
 

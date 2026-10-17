@@ -3,7 +3,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { CharacterRole, GameRegistryDto, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 import { CharacterCardCompact } from '../characters/character-card-compact';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';

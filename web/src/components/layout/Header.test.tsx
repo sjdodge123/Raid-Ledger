@@ -20,7 +20,7 @@ vi.mock('../../lib/config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-vi.mock('../notifications/index', () => ({
+vi.mock('../notifications', () => ({
     NotificationBell: () => null,
 }));
 

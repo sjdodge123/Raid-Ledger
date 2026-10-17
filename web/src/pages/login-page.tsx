@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
-import { consumeAuthRedirect } from '../components/auth/index';
+import { consumeAuthRedirect } from '../components/auth';
 import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
 import { DEACTIVATED_MESSAGE } from '../lib/api/deactivated-session';
 import { DiscordIcon } from '../components/icons/DiscordIcon';

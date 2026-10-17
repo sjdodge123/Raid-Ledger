@@ -12,7 +12,7 @@ import { RoleBadge } from '../ui/role-badge';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { SearchInput } from '../ui/search-input';
 import { nativeFetch } from '../../lib/api/native-fetch';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 
 interface ImpersonateUser {
     id: number;

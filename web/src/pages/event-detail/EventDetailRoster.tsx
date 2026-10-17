@@ -6,7 +6,7 @@ import { toAvatarUser } from '../../lib/avatar';
 import { guestProfileLink } from '../../lib/guest-profile-link';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
 import { RoleIcon } from '../../components/shared/RoleIcon';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 import { copyWithToast } from '../../lib/clipboard';
 import type { EventResponseDto, SignupCharacterDto } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';

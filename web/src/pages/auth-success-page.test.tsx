@@ -21,7 +21,7 @@ import { setAccessToken, getAccessToken } from '../lib/api/access-token-store';
 
 vi.mock('../hooks/use-auth', () => ({ useAuth: () => ({ login: vi.fn() }) }));
 vi.mock('../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
-vi.mock('../components/auth/index', () => ({ consumeAuthRedirect: () => null }));
+vi.mock('../components/auth', () => ({ consumeAuthRedirect: () => null }));
 
 describe('AuthSuccessPage — ROK-1367 silent-guard cooldown', () => {
     beforeEach(() => {

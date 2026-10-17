@@ -27,7 +27,7 @@ import type {
     LineupDetailResponseDto,
     TieReadinessResponseDto,
 } from '@raid-ledger/contract';
-import { JourneyHero } from '../../shared/journey-hero/index';
+import { JourneyHero } from '../../shared/journey-hero';
 import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import {
     deriveSubmitKind,

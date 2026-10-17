@@ -8,7 +8,7 @@ import { at } from '../../test/defined';
 
 // Mock the plugins module so PluginSlot renders nothing visible; the badge
 // slot exposes the gameId it received (ROK-1751) as a data attribute.
-vi.mock('../../plugins/index', () => ({
+vi.mock('../../plugins', () => ({
     PluginSlot: ({ name, context }: { name: string; context?: { gameId?: number | null } }) =>
         name === 'character-card:badges' ? <span data-testid="badge-slot" data-game-id={String(context?.gameId)} /> : null,
 }));

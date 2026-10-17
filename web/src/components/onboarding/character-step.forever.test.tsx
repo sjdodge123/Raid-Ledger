@@ -14,7 +14,7 @@ vi.mock('../../hooks/use-character-mutations', () => ({
     useCreateCharacter: vi.fn(), useDeleteCharacter: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 vi.mock('../../hooks/use-characters', () => ({ useMyCharacters: vi.fn(() => ({ data: { data: [] } })) }));
-vi.mock('../../plugins/index', () => ({ PluginSlot: () => null }));
+vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
 
 const mutate = vi.fn();
 beforeEach(() => {

@@ -5,9 +5,9 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { useAuth } from '../hooks/use-auth';
 import { useMyCharacters } from '../hooks/use-characters';
 import { useGameRegistry } from '../hooks/use-game-registry';
-import { CharacterList, AddCharacterModal, NotificationPreferencesSection } from '../components/profile/index';
+import { CharacterList, AddCharacterModal, NotificationPreferencesSection } from '../components/profile';
 import { TimezoneSection } from '../components/profile/TimezoneSection';
-import { GameTimePanel } from '../components/features/game-time/index';
+import { GameTimePanel } from '../components/features/game-time';
 import { AppearanceSection } from './profile/appearance-components';
 
 /** Scrolls to the element matching location.hash on mount */

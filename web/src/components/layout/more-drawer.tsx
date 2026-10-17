@@ -15,7 +15,7 @@ import { GameTimeCheckSheet } from '../../pages/scheduling/GameTimeCheckSheet';
 import { PhoneWeekCheckStep } from '../features/game-time/phone/PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../features/game-time/phone/phone-week-check.helpers';
 import { nativeFetch } from '../../lib/api/native-fetch';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 
 interface MoreDrawerProps {
     isOpen: boolean;

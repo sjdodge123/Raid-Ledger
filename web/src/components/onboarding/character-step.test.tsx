@@ -22,7 +22,7 @@ vi.mock('../../hooks/use-characters', () => ({
     })),
 }));
 
-vi.mock('../../plugins/index', () => ({
+vi.mock('../../plugins', () => ({
     PluginSlot: () => null,
 }));
 

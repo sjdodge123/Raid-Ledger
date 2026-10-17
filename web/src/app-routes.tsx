@@ -3,7 +3,7 @@
  * All lazy-loaded components are imported from lazy-routes.ts.
  */
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthGuard } from './components/auth/index';
+import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
 import { RedirectKeepingLocation } from './components/routing/redirect-keeping-location';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';

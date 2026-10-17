@@ -5,7 +5,7 @@ import { AddCharacterModal } from './AddCharacterModal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
-import { PluginSlot } from '../../plugins/index';
+import { PluginSlot } from '../../plugins';
 
 // Mock hooks used by AddCharacterModal
 vi.mock('../../hooks/use-character-mutations', () => ({
@@ -56,7 +56,7 @@ vi.mock('../events/game-search-input', () => ({
 }));
 
 // Mock PluginSlot to render nothing (no plugins active in tests)
-vi.mock('../../plugins/index', () => ({
+vi.mock('../../plugins', () => ({
     PluginSlot: vi.fn(({ context }: { context?: { onTabChange?: (tab: 'import') => void } }) => (context?.onTabChange
         ? <button type="button" data-testid="to-import" onClick={() => context.onTabChange?.('import')}>Import tab</button>
         : null)),

@@ -64,7 +64,7 @@ vi.mock('../components/common/ActivityTimeline', () => ({
     ActivityTimeline: () => <div data-testid="activity-timeline" />,
 }));
 
-vi.mock('../plugins/index', () => ({
+vi.mock('../plugins', () => ({
     PluginSlot: () => null,
 }));
 

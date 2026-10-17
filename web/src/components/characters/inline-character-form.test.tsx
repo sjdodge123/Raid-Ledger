@@ -13,7 +13,7 @@ vi.mock('../../hooks/use-character-mutations', () => ({
 }));
 
 // No plugins active: the WoW import slot renders nothing.
-vi.mock('../../plugins/index', () => ({ PluginSlot: () => null }));
+vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
 
 type MutateOpts = { onSuccess?: (d: unknown) => void; onError?: (e: Error) => void };
 const mutate = vi.fn();
