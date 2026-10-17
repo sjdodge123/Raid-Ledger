@@ -309,7 +309,12 @@ describe('Presence session — a cold replay enrol persists the character owner 
       arrival(STEAM_C, 'bob', 'zdo-owner-c', 5),
     );
 
-    expect(second.session.players().map((p) => [p.steamId, p.name])).toEqual([
+    // Rehydrate reads open rows without an ORDER BY, so compare by SteamID.
+    const roster = second.session
+      .players()
+      .map((p) => [p.steamId, p.name])
+      .sort(([a], [b]) => String(a).localeCompare(String(b)));
+    expect(roster).toEqual([
       [STEAM_A, 'rok'],
       [STEAM_B, 'bob'],
       [STEAM_C, 'bob'],
