@@ -101,7 +101,7 @@ export class GuildsController {
   }
 
   @Get(':id/editors')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   listEditors(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -110,7 +110,7 @@ export class GuildsController {
   }
 
   @Post(':id/editors')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   createEditor(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -120,7 +120,7 @@ export class GuildsController {
   }
 
   @Delete(':id/editors/:editorId')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   @HttpCode(204)
   async deleteEditor(
     @Request() req: AuthenticatedRequest,

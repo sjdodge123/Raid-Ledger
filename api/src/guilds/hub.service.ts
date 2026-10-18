@@ -9,7 +9,6 @@ import {
   HubHideSchema,
   type GuildPage,
   type GuildRaidsDto,
-  type GuildSummary,
   type MyGuild,
   type MyGuilds,
 } from '@raid-ledger/contract';
@@ -19,17 +18,13 @@ import type {
   HubKindAdapter,
   HubMineRank,
 } from '../plugins/plugin-host/extension-points';
-import {
-  GuildAccessService,
-  isStaff,
-  type GuildActor,
-} from './guild-access.service';
+import { GuildAccessService, type GuildActor } from './guild-access.service';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
 import { hubGameIcons } from './hub-game-icons.queries';
 import {
   HUB_NOT_FOUND,
-  findHiddenAt,
+  dropHiddenFor,
   setHubHidden,
 } from './hub-hidden.helpers';
 import { HubKindRegistry } from './hub-kind.registry';
@@ -61,7 +56,7 @@ export class HubService {
   /** Every hub the viewer belongs to, across live kinds; hidden ones only for staff. */
   async mine(actor: GuildActor): Promise<MyGuilds> {
     const all = await this.access.myGuilds(actor.id);
-    const visible = isStaff(actor) ? all : await this.dropHidden(all);
+    const visible = await dropHiddenFor(this.db, actor, all);
     const ids = visible.map((g) => g.id);
     const [ranks, headlines, icons] = await Promise.all([
       this.ranksFor(actor.id, ids),
@@ -106,16 +101,6 @@ export class HubService {
     return this.hubKinds.require(kind);
   }
 
-  private async dropHidden(guilds: GuildSummary[]): Promise<GuildSummary[]> {
-    const hidden = await Promise.all(
-      guilds.map((g) => findHiddenAt(this.db, g.id)),
-    );
-    return guilds.filter((_, i) => {
-      const at = hidden[i];
-      return at === null || at === undefined;
-    });
-  }
-
   /** Merge every live kind's rank answer (kinds without ranks contribute none). */
   private async ranksFor(
     userId: number,
@@ -126,6 +111,11 @@ export class HubService {
     for (const hub of this.hubKinds.active()) {
       if (hub.mineRanks === undefined) continue;
       for (const [id, rank] of await hub.mineRanks(userId, ids)) {
+        // Never let a later kind's empty answer clobber a real rank.
+        const prev = out.get(id);
+        if (prev && (prev.rankIndex !== null || prev.rankName !== null)) {
+          continue;
+        }
         out.set(id, rank);
       }
     }

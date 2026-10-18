@@ -24,7 +24,7 @@ import {
   findLinkedMemberRows,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
-import { findGuild, toGuildSummary } from '../../../guilds/guild-core.queries';
+import { findGuild, hubSummaryFor } from '../../../guilds/guild-core.queries';
 import {
   findCharacterGuild,
   findImportedBy,
@@ -32,6 +32,10 @@ import {
   rankNamesByMemberId,
 } from './guild-queries.helpers';
 import { gmPostHeadlines } from '../../../guilds/guild-profile.queries';
+import {
+  dropHiddenFor,
+  isHiddenFrom,
+} from '../../../guilds/hub-hidden.helpers';
 import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
 
@@ -49,7 +53,11 @@ export class GuildPageService {
 
   /** The viewer's guilds with their best rank and edit right. */
   async mine(actor: GuildActor): Promise<MyGuilds> {
-    const summaries = await this.access.myGuilds(actor.id);
+    const summaries = await dropHiddenFor(
+      this.db,
+      actor,
+      await this.access.myGuilds(actor.id),
+    );
     const ids = summaries.map((g) => g.id);
     const [ranks, headlines] = await Promise.all([
       this.mineRanks(actor.id, ids),
@@ -105,7 +113,7 @@ export class GuildPageService {
       this.access.resolveLadder(actor, guildId),
     ]);
     return {
-      guild: toGuildSummary(guild),
+      guild: hubSummaryFor(guild, isStaff(actor)),
       importedBy,
       viewer: viewerAccess(role),
       ranks: groupRoster(rows),
@@ -119,7 +127,9 @@ export class GuildPageService {
     characterId: string,
   ): Promise<CharacterGuild> {
     const found = await findCharacterGuild(this.db, characterId);
-    if (!found) return { data: null };
+    if (!found || (await isHiddenFrom(this.db, actor, found.guild.id))) {
+      return { data: null };
+    }
     const viewerCanOpen = await this.access.canView(actor, found.guild.id);
     return { data: { ...found, viewerCanOpen } };
   }
@@ -131,7 +141,7 @@ export class GuildPageService {
       return { guilds: mine.guilds.filter((g) => g.gameId === gameId) };
     }
     const own = new Map(mine.guilds.map((g) => [g.id, g]));
-    const all = await listGuildsOfGame(this.db, gameId);
+    const all = await listGuildsOfGame(this.db, gameId); // staff: hidden included
     const headlines = await gmPostHeadlines(
       this.db,
       all.map((g) => g.id),

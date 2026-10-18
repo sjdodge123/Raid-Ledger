@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, inArray, isNotNull, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { isStaff, type GuildActor } from './guild-access.service';
@@ -31,11 +31,44 @@ export async function assertNotHidden(
   actor: GuildActor,
   guildId: number,
 ): Promise<void> {
-  if (isStaff(actor)) return;
-  const hiddenAt = await findHiddenAt(db, guildId);
-  if (hiddenAt !== null && hiddenAt !== undefined) {
+  if (await isHiddenFrom(db, actor, guildId)) {
     throw new NotFoundException(HUB_NOT_FOUND);
   }
+}
+
+/** True when the hub is hidden and the actor is not staff (L-5). */
+export async function isHiddenFrom(
+  db: Db,
+  actor: GuildActor,
+  guildId: number,
+): Promise<boolean> {
+  if (isStaff(actor)) return false;
+  const hiddenAt = await findHiddenAt(db, guildId);
+  return hiddenAt !== null && hiddenAt !== undefined;
+}
+
+/** L-5 list filter: staff see every hub, everyone else loses the hidden ones. */
+export async function dropHiddenFor<T extends { id: number }>(
+  db: Db,
+  actor: GuildActor,
+  hubs: T[],
+): Promise<T[]> {
+  if (isStaff(actor) || hubs.length === 0) return hubs;
+  const g = schema.guilds;
+  const rows = await db
+    .select({ id: g.id })
+    .from(g)
+    .where(
+      and(
+        inArray(
+          g.id,
+          hubs.map((h) => h.id),
+        ),
+        isNotNull(g.hiddenAt),
+      ),
+    );
+  const hidden = new Set(rows.map((r) => r.id));
+  return hubs.filter((h) => !hidden.has(h.id));
 }
 
 /** Set (`hidden: true`) or clear `guilds.hidden_at`; false when no such guild. */

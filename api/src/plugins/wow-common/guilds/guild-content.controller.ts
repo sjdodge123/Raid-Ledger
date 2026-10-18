@@ -57,7 +57,7 @@ export class GuildContentController {
   }
 
   @Patch('profile')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
   updateProfile(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -67,7 +67,7 @@ export class GuildContentController {
   }
 
   @Get('addons')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   listAddons(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -76,7 +76,7 @@ export class GuildContentController {
   }
 
   @Post('addons')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
   createAddon(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -86,7 +86,7 @@ export class GuildContentController {
   }
 
   @Put('addons/order')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
   reorderAddons(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,
@@ -95,7 +95,7 @@ export class GuildContentController {
   }
 
   @Patch('addons/:addonId')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
   updateAddon(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -106,7 +106,7 @@ export class GuildContentController {
   }
 
   @Delete('addons/:addonId')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
   @HttpCode(204)
   async deleteAddon(
     @Param('id', ParseIntPipe) id: number,
