@@ -9,6 +9,7 @@ vi.mock('./fetch-api', () => ({ fetchApi: vi.fn() }));
 import { fetchApi } from './fetch-api';
 import { resolveInviteCode, claimInviteCode } from './discord-api';
 import { getCharacterDetail } from './characters-api';
+import { getPollSharePreview, joinPollShare } from './standalone-poll-api';
 
 const mockFetchApi = vi.mocked(fetchApi);
 const HOSTILE = '..?claim=1#x';
@@ -55,6 +56,21 @@ describe('route-param path encoding (ROK-1845)', () => {
         await expect(claimInviteCode(value)).rejects.toThrow(/path segment/i);
         await expect(getCharacterDetail(value)).rejects.toThrow(/path segment/i);
         expect(mockFetchApi).not.toHaveBeenCalled();
+    });
+
+    it.each(['../../lineups/5/matches/7', '..\\..\\lineups\\5\\matches\\7'])(
+        'a poll share token holding a path separator sends no request (%j)',
+        async (token) => {
+            await expect(joinPollShare(token)).rejects.toThrow(/path segment/i);
+            await expect(getPollSharePreview(token)).rejects.toThrow(/path segment/i);
+            expect(mockFetchApi).not.toHaveBeenCalled();
+        },
+    );
+
+    it('a valid poll share token still hits the plain join route', async () => {
+        await joinPollShare('tok_AbC123-xyz');
+        expect(resolvedPath()).toBe('/scheduling-polls/share/tok_AbC123-xyz/join');
+        expect(mockFetchApi).toHaveBeenCalledWith('/scheduling-polls/share/tok_AbC123-xyz/join', { method: 'POST' });
     });
 
     it('a valid code still hits the plain route', async () => {
