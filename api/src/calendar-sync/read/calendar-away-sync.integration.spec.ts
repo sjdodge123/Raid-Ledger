@@ -622,6 +622,8 @@ describe('review fixes', () => {
       startDate: TOMORROW(),
       endDate: '9999-12-31',
     });
+    // The direct insert skips the POST hook that queues the derive.
+    await enqueueCalendarDerive(readQueue, m.userId);
     expect(await processDerive(m.userId)).toBe('derived');
     fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, [allDay(TOMORROW(), DAY_AFTER())]);
 
