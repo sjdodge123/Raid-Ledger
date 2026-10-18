@@ -138,9 +138,9 @@ export class ServerHubMembershipService {
 
   /**
    * Records who arrived since the last roster. Hydration is explicit (Codex
-   * r2 P2): a `rehydrated` boot roster is a touch that never clears a Leave;
-   * any other event — including the first after an EMPTY boot, which emits
-   * nothing — is a genuine transition, so a join clears `left_at`.
+   * r2/r3 P2): a `rehydrated` event (the boot roster, or a join rebuilt from
+   * replayed console history) is a touch that never clears a Leave; only a
+   * live transition after catch-up is an arrival that clears `left_at`.
    */
   private async recordArrivals(
     serverId: number,

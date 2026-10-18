@@ -513,3 +513,36 @@ describe('character owner persistence (ROK-1822 r4)', () => {
     expect(h.sink.playerLeft).not.toHaveBeenCalled();
   });
 });
+
+describe('ROK-1831 Codex r3: replayed history is marked rehydrated', () => {
+  const MARKED = { ...SRC, rehydrated: true };
+
+  it('a cold-start replayed join is marked; a live join after catch-up is not', async () => {
+    const h = harness();
+    await h.connect(arrive('A', 'Alice', T(1)));
+    expect(h.sink.playerJoined).toHaveBeenCalledTimes(1);
+    expect(h.onChanged.mock.calls).toEqual([[MARKED]]);
+    await h.live(arrive('B', 'Bob', T(2)));
+    expect(h.onChanged.mock.calls).toEqual([[MARKED], [SRC]]);
+  });
+
+  it('a replay re-admitted after a timeout-driven empty is marked', async () => {
+    let up = true;
+    const flaky: ConsoleCredentialsSource = (id) =>
+      up ? okCredentials(id) : Promise.reject(new Error('down'));
+    const h = harness([], flaky);
+    await h.connect();
+    await h.live(arrive('A', 'Alice', T(1)));
+    up = false;
+    h.wings.sockets[0]?.handlers.onClose();
+    await jest.advanceTimersByTimeAsync(PRESENCE_UNREACHABLE_EMPTY_MS + 60_000);
+    await h.session.idle();
+    h.onChanged.mockClear();
+    up = true;
+    await jest.advanceTimersByTimeAsync(5 * 60_000);
+    h.wings.authenticate();
+    h.wings.lines(arrive('A', 'Alice', T(1)));
+    await h.settle();
+    expect(h.onChanged.mock.calls).toEqual([[MARKED]]);
+  });
+});

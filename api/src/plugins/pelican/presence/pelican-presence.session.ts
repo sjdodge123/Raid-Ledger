@@ -80,6 +80,12 @@ export class PelicanPresenceSession {
   private emptiedOnce = false;
   /** True until the first replay after `start()` has been flushed. */
   private cold = true;
+  /**
+   * ROK-1831 Codex r3: the next replay reconstructs history (the first after
+   * `start()`, or one re-admitted after a watermark reset), so its changes are
+   * marked `rehydrated` — a listener must not read them as live arrivals.
+   */
+  private history = true;
   private queue: Promise<void> = Promise.resolve();
   /** Set by `stop()`; a `start()` still rehydrating then never opens a socket. */
   private stopped = false;
@@ -267,11 +273,13 @@ export class PelicanPresenceSession {
     for (const { event, at } of buffered) this.tracker.apply(event, at);
     if (this.cold) this.tracker.restore(before);
     this.cold = false;
+    const rehydrated = this.history;
+    this.history = false;
     const changes = netPresenceChanges(before, this.tracker.snapshot());
     this.opts.logger.log(
       `Presence replay for server ${this.serverId}: ${buffered.length} events, ${changes.length} changes`,
     );
-    this.forward(changes);
+    this.forward(changes, rehydrated);
     this.forwardOwners(before, changes);
   }
 
@@ -292,6 +300,7 @@ export class PelicanPresenceSession {
     // The tracker no longer holds anyone the watermark saw: let the next
     // replay re-admit those lines so players still on the server re-enrol.
     this.watermark.reset();
+    this.history = true;
   }
 
   /** Everyone leaves at once — one `serverEmptied` (see the guard below). */
@@ -313,7 +322,8 @@ export class PelicanPresenceSession {
     if (hadPlayers) this.notify();
   }
 
-  private forward(changes: PresenceChange[]): void {
+  /** `rehydrated`: the changes came from replayed history (Codex r3). */
+  private forward(changes: PresenceChange[], rehydrated = false): void {
     for (const change of changes) {
       const owner = this.tracker.ownerOf(change.steamId);
       const player = toSinkPlayer(change, owner);
@@ -328,7 +338,7 @@ export class PelicanPresenceSession {
         );
       }
     }
-    if (changes.length > 0) this.notify();
+    if (changes.length > 0) this.notify(rehydrated);
   }
 
   /**
@@ -349,7 +359,8 @@ export class PelicanPresenceSession {
 
   /**
    * Queued behind the sink calls, so a listener sees their outcome.
-   * `rehydrated` marks the boot roster (ROK-1831 Codex r2).
+   * `rehydrated` marks the boot roster (ROK-1831 Codex r2) and changes
+   * reconstructed from replayed history (Codex r3).
    */
   private notify(rehydrated = false): void {
     const cb = this.opts.onChanged;
