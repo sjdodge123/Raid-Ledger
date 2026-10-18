@@ -48,7 +48,7 @@ const ROUTES = [
   R('POST', `/images/(${IMG})/(push|tag)`, { query: 'image-write' }),
   R('POST', '/(images|build)/prune', ALLOW),
   R('POST', '/auth', ALLOW),
-  R('POST', '/build', { query: 'build' }),
+  R('POST', '/build', { query: 'build', context: true }),
   R('GET', `/networks(/${ID})?`, ALLOW),
   R('POST', '/networks/create', { body: 'network-create' }),
   R('POST', `/networks/(${ID})/(connect|disconnect)`, { owned: { kind: 'network', group: 1 }, body: 'network-connect' }),
@@ -90,7 +90,7 @@ function checkBuildQuery(query) {
   for (const mode of query.getAll('networkmode')) {
     if (!BUILD_NETWORKS.has(mode)) return `build networkmode=${mode} is not allowed`;
   }
-  if (query.getAll('remote').some((v) => v !== '')) return 'build remote= is not allowed';
+  if (query.has('remote')) return 'build remote= is not allowed (no daemon-side fetch)';
   if (query.getAll('cgroupparent').some((v) => v !== '')) return 'build cgroupparent= is not allowed';
   return buildTagReason(query);
 }
@@ -135,6 +135,7 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
     const out = { ok: true };
     if (plan.body) out.body = plan.body;
     if (plan.hijack) out.hijack = true;
+    if (plan.context) out.context = true;
     if (plan.owned) out.owned = { kind: plan.owned.kind, id: m[plan.owned.group] ?? '' };
     return out;
   }

@@ -11,6 +11,7 @@ import http from 'node:http';
 import { OWNER_LABEL } from './body-policy.mjs';
 import { forward, wantsUpgrade } from './forward.mjs';
 import { spliceHijack } from './hijack.mjs';
+import { contentTypeReason } from './request-policy.mjs';
 import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
 import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
@@ -85,6 +86,8 @@ async function onRequest(req, res) {
   const plan = classify(req.method ?? '', req.url ?? '/', { allowBuildkit: ALLOW_BUILDKIT });
   if (wantsUpgrade(req.headers)) return refuse(res, `${req.method} ${req.url} may not upgrade the connection`, 400);
   if (!plan.ok) return refuse(res, plan.reason);
+  const media = contentTypeReason(plan, req.headers['content-type']);
+  if (media) return refuse(res, media.reason, media.status);
   const auth = await authorize(req, plan);
   if (auth.reason) return refuse(res, auth.reason);
   forward(SOCKET, req, res, auth.body ? { buf: auth.body } : undefined, (r) => refuse(res, r, 502));
