@@ -36,7 +36,8 @@ test('the tar scanner honours PAX path and GNU long names, and refuses a symlink
   const gnu = tarOf([{ name: '././@LongLink', type: 'L', data: 'Dockerfile\0' }, { name: 'innocent', data: LEAK }]);
   assert.equal(scan(gnu).files[0]?.data.toString(), LEAK);
   assert.notEqual(scan(tarOf([{ name: 'Dockerfile', type: '2' }])).error, null);
-  assert.equal(scan(tarOf([{ name: './Dockerfile', data: PLAIN }])).files.length, 1);
+  // c2: a `./` variant is never guessed at — build_context_ambiguous.
+  assert.match(scan(tarOf([{ name: './Dockerfile', data: PLAIN }])).error ?? '', /^build_context_ambiguous/);
 });
 
 let daemon;
@@ -73,6 +74,14 @@ test('a context whose Dockerfile ADDs a URL is 403 build_dockerfile_policy and n
     assert.match(r.text, /build_dockerfile_policy/);
   }
   assert.equal((await build('', Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 1, 2]))).status, 415);
+  assert.equal(daemon.builds.length, 0);
+});
+
+test('the Codex c2 sequence (dockerfile, empty PAX path, Dockerfile) is 403 build_context_ambiguous at the guard', async () => {
+  const tar = tarOf([{ name: 'dockerfile', data: PLAIN }, { name: 'PaxHeader', type: 'x', data: paxRecord('path', '') }, { name: 'Dockerfile', data: LEAK }]);
+  const r = await build('', tar);
+  assert.equal(r.status, 403);
+  assert.match(r.text, /build_context_ambiguous/);
   assert.equal(daemon.builds.length, 0);
 });
 

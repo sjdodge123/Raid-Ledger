@@ -71,6 +71,7 @@ export async function spoolBuildContext(req, dockerfileParam, tmpDir = os.tmpdir
   if (kind === 'aborted') return { cleanup, error: { status: 400, reason: 'build context upload aborted' } };
   if (kind !== 'tar' && kind !== 'gzip') return { cleanup, error: { status: 415, reason: `${kind} build contexts cannot be inspected; send a plain or gzip tar` } };
   const scan = scanner.end();
+  if (scan.error?.startsWith('build_context_ambiguous')) return { cleanup, error: { status: 403, reason: scan.error } };
   if (scan.error) return policy(scan.error);
   if (scan.files.length === 0) return policy(`${candidates[0]} is not in the build context`);
   for (const f of scan.files) {

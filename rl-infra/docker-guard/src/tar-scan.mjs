@@ -9,7 +9,11 @@ const REGULAR = new Set(['0', '\0', '7']);
 const META = new Set(['x', 'g', 'L', 'K']);
 const OTHER = new Set(['1', '2', '3', '4', '5', '6']);
 
-const cstr = (b, from, to) => { const s = b.subarray(from, to); const z = s.indexOf(0); return (z < 0 ? s : s.subarray(0, z)).toString('utf8'); };
+// Names are compared as raw bytes (latin1 strings), as Go's tar.Header.Name is.
+const cstr = (b, from, to) => { const s = b.subarray(from, to); const z = s.indexOf(0); return (z < 0 ? s : s.subarray(0, z)).toString('latin1'); };
+const bin = (s) => Buffer.from(s, 'utf8').toString('latin1');
+/** Printable form of a byte-string name for refusal messages. */
+const show = (n) => JSON.stringify(Buffer.from(n, 'latin1').toString('utf8'));
 /** Context-relative name: `./Dockerfile`, `/Dockerfile` and `Dockerfile` are one file. */
 export const normName = (n) => path.posix.normalize(`/${n}`).slice(1).replace(/\/+$/, '');
 
@@ -26,7 +30,7 @@ function parsePax(data) {
     const sp = data.indexOf(0x20, pos);
     const len = sp < 0 ? NaN : Number(data.toString('latin1', pos, sp));
     if (!Number.isSafeInteger(len) || len <= 0 || pos + len > data.length) return null;
-    const kv = data.toString('utf8', sp + 1, pos + len - 1);
+    const kv = data.toString('latin1', sp + 1, pos + len - 1);
     const eq = kv.indexOf('=');
     if (eq > 0) out[kv.slice(0, eq)] = kv.slice(eq + 1);
     pos += len;
@@ -36,20 +40,33 @@ function parsePax(data) {
 
 function onMeta(st, e) {
   const data = Buffer.concat(e.chunks);
-  if (e.type === 'L') return void (st.next.path = cstr(data, 0, data.length));
+  // Go: an empty GNU long name or PAX value keeps the ustar field (mergePAX `v == ""` → continue).
+  if (e.type === 'L') return void ((st.next.gnu = cstr(data, 0, data.length) || undefined));
   if (e.type === 'K') return undefined;
   const rec = parsePax(data);
   if (!rec) return void (st.error = 'tar PAX header is malformed');
   if (Object.keys(rec).some((k) => k.startsWith('GNU.sparse'))) return void (st.error = 'sparse tar entries are not inspected');
-  if (e.type === 'g') return void ('path' in rec || 'size' in rec ? (st.error = 'global PAX path/size headers are not inspected') : null);
-  if ('path' in rec) st.next.path = rec.path;
-  if ('size' in rec) st.next.size = /^[0-9]+$/.test(rec.size) ? Number(rec.size) : NaN;
+  if (e.type === 'g') return void (rec.path || rec.size ? (st.error = 'global PAX path/size headers are not inspected') : null);
+  if (rec.path) st.next.pax = rec.path;
+  if (rec.size) st.next.size = /^[0-9]+$/.test(rec.size) ? Number(rec.size) : NaN;
 }
 
 function endEntry(st, e) {
   if (META.has(e.type)) onMeta(st, e);
   else if (e.keep) st.files.push({ name: e.name, data: Buffer.concat(e.chunks) });
   st.entry = null;
+}
+
+/**
+ * Any entry that folds (case, `./`, `/`, trailing slash) onto a wanted name is a
+ * hit; a second hit, or a hit whose raw name is not byte-equal to a wanted name,
+ * is build_context_ambiguous — the guard never guesses which one the daemon uses.
+ */
+function noteHit(st, wanted, rawName, name) {
+  if (!st.fold.has(name.toLowerCase())) return;
+  st.hits.push(rawName);
+  if (st.hits.length > 1) st.error = `build_context_ambiguous: ${st.hits.map(show).join(' and ')} both resolve to the Dockerfile`;
+  else if (!wanted.has(rawName)) st.error = `build_context_ambiguous: ${show(rawName)} only resembles the Dockerfile name`;
 }
 
 function onHeader(st, wanted, h) {
@@ -63,8 +80,14 @@ function onHeader(st, wanted, h) {
   if (!Number.isSafeInteger(size) || size < 0) return void (st.error = 'tar size field is not inspectable');
   const prefix = ustar ? cstr(h, 345, 500) : '';
   const raw = prefix ? `${prefix}/${cstr(h, 0, 100)}` : cstr(h, 0, 100);
-  const name = normName(meta ? raw : st.next.path ?? raw);
-  if (!meta) st.next = {};
+  // Go order: mergePAX sets Name, then a non-empty GNU long name overrides it.
+  const rawName = meta ? raw : st.next.gnu ?? st.next.pax ?? raw;
+  const name = normName(rawName);
+  if (!meta) {
+    st.next = {};
+    noteHit(st, wanted, rawName, name);
+    if (st.error) return;
+  }
   if (OTHER.has(type) && type !== '5') st.links.push(name);
   const keep = meta || (REGULAR.has(type) && wanted.has(name));
   if (keep && size > MAX_KEEP) return void (st.error = `${name} is over 1 MiB`);
@@ -85,8 +108,10 @@ function consume(st) {
 }
 
 /** Scanner for the context-relative names in `wanted`. push(chunk) … end() → { files, error }. */
-export function createTarScanner(wanted) {
-  const st = { buf: Buffer.alloc(0), entry: null, next: {}, files: [], links: [], error: null, done: false };
+export function createTarScanner(wantedNames) {
+  const wanted = new Set([...wantedNames].map(bin));
+  const fold = new Set([...wanted].map((w) => w.toLowerCase()));
+  const st = { buf: Buffer.alloc(0), entry: null, next: {}, files: [], links: [], hits: [], fold, error: null, done: false };
   const push = (chunk) => {
     if (st.done || st.error) return;
     st.buf = st.buf.length ? Buffer.concat([st.buf, chunk]) : chunk;
@@ -105,7 +130,7 @@ export function createTarScanner(wanted) {
     if (!st.error && (st.entry || (!st.done && st.buf.length))) st.error = 'build context tar is truncated';
     const linked = [...wanted].find((w) => st.links.some((l) => w === l || w.startsWith(`${l}/`)));
     if (!st.error && linked) st.error = `${linked} is (inside) a link entry`;
-    return { files: st.files, error: st.error };
+    return { files: st.files.map((f) => ({ ...f, name: Buffer.from(f.name, 'latin1').toString('utf8') })), error: st.error };
   };
   return { push, end, fail: (reason) => { st.error ??= reason; } };
 }
