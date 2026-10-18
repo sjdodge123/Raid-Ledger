@@ -22,7 +22,10 @@ export class ValheimLinkBlobsRepository {
       .select()
       .from(blobs)
       .where(
-        and(eq(blobs.pelicanServerId, pelicanServerId), eq(blobs.sha256, sha256)),
+        and(
+          eq(blobs.pelicanServerId, pelicanServerId),
+          eq(blobs.sha256, sha256),
+        ),
       )
       .limit(1);
     return row ?? null;
@@ -65,7 +68,10 @@ export class ValheimLinkBlobsRepository {
       .update(blobs)
       .set({ lastReferencedAt: sql`now()` })
       .where(
-        and(eq(blobs.pelicanServerId, pelicanServerId), eq(blobs.sha256, sha256)),
+        and(
+          eq(blobs.pelicanServerId, pelicanServerId),
+          eq(blobs.sha256, sha256),
+        ),
       );
   }
 }

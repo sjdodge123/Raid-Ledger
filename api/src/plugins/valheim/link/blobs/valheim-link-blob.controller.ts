@@ -43,7 +43,9 @@ export class ValheimLinkBlobController {
   ): Promise<ValheimLinkBlobResult> {
     try {
       const result = await this.blobs.upload(req, sha256);
-      res.status(result.status === 'stored' ? HttpStatus.CREATED : HttpStatus.OK);
+      res.status(
+        result.status === 'stored' ? HttpStatus.CREATED : HttpStatus.OK,
+      );
       return result;
     } catch (err: unknown) {
       if (err instanceof HttpException) {

@@ -17,7 +17,10 @@ import {
   type ValheimLinkAuth,
   type ValheimLinkRequest,
 } from '../valheim-link-request';
-import { readBlobToFile, type BlobReadResult } from './valheim-link-blob.reader';
+import {
+  readBlobToFile,
+  type BlobReadResult,
+} from './valheim-link-blob.reader';
 import {
   blobRelativePath,
   blobTempPath,

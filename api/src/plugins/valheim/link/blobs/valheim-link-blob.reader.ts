@@ -88,10 +88,37 @@ class BlobSink {
     return this.out.write(head);
   }
 
-  /** At EOF: a body shorter than the header still gets its 400. */
-  finish(): PngDimensions {
-    return this.dims ?? parsePngHeader(Buffer.concat(this.head), this.opts.maxEdge);
+  /** At EOF: the read result (a body shorter than the header gets its 400). */
+  finish(): BlobReadResult {
+    const dims =
+      this.dims ?? parsePngHeader(Buffer.concat(this.head), this.opts.maxEdge);
+    return { ...dims, sha256: this.hash.digest('hex'), byteLength: this.size };
   }
+}
+
+/** Hand one chunk to the sink, pausing `src` on write backpressure. */
+function feed(
+  src: BoundedBodySource,
+  out: WriteStream,
+  sink: BlobSink,
+  chunk: Buffer,
+): void {
+  if (!sink.push(chunk)) {
+    src.pause();
+    out.once('drain', () => src.resume());
+  }
+}
+
+/** Stop reading `src` (the rest is never buffered) and reject. */
+function stopper(
+  src: BoundedBodySource,
+  reject: (err: Error) => void,
+): (err: unknown) => void {
+  return (err: unknown): void => {
+    src.removeAllListeners('data');
+    src.pause();
+    reject(err instanceof Error ? err : new Error(String(err)));
+  };
 }
 
 function pump(
@@ -101,17 +128,10 @@ function pump(
 ): Promise<BlobReadResult> {
   return new Promise<BlobReadResult>((resolve, reject) => {
     const sink = new BlobSink(out, opts);
-    const fail = (err: unknown): void => {
-      src.removeAllListeners('data');
-      src.pause();
-      reject(err instanceof Error ? err : new Error(String(err)));
-    };
+    const fail = stopper(src, reject);
     src.on('data', (chunk: Buffer) => {
       try {
-        if (!sink.push(chunk)) {
-          src.pause();
-          out.once('drain', () => src.resume());
-        }
+        feed(src, out, sink, chunk);
       } catch (err: unknown) {
         fail(err);
       }
@@ -120,9 +140,8 @@ function pump(
     out.once('error', fail);
     src.once('end', () => {
       try {
-        const dims = sink.finish();
-        const sha256 = sink.hash.digest('hex');
-        out.end(() => resolve({ ...dims, sha256, byteLength: sink.size }));
+        const result = sink.finish();
+        out.end(() => resolve(result));
       } catch (err: unknown) {
         fail(err);
       }

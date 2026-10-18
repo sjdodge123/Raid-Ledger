@@ -59,9 +59,9 @@ describe('parsePngHeader (ROK-1833 CONTRACT §1)', () => {
     expect(codeOf(() => parsePngHeader(pngHeader(0, 1), 16_384))).toBe(
       'png_too_large',
     );
-    expect(codeOf(() => parsePngHeader(pngHeader(20_000, 20_000), 16_384))).toBe(
-      'png_too_large',
-    );
+    expect(
+      codeOf(() => parsePngHeader(pngHeader(20_000, 20_000), 16_384)),
+    ).toBe('png_too_large');
     expect(codeOf(() => parsePngHeader(pngHeader(4097, 64), 4096))).toBe(
       'png_too_large',
     );
