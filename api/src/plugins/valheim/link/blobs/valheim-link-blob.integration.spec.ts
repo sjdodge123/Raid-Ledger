@@ -102,11 +102,15 @@ function postMap(token: string, serverId: number, png: Buffer, ago: number) {
       height: EDGE,
     },
   };
-  return testApp.request
-    .post('/plugins/valheim/link/messages/map')
-    .set('Authorization', `Bearer ${token}`)
-    .set('Content-Type', 'application/json')
-    .send(Buffer.from(JSON.stringify(msg)));
+  return (
+    testApp.request
+      .post('/plugins/valheim/link/messages/map')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      // superagent would JSON-serialise the Buffer itself; send the bytes as-is.
+      .serialize((bytes) => bytes)
+      .send(Buffer.from(JSON.stringify(msg)))
+  );
 }
 
 async function blobRow(serverId: number, sha: string) {

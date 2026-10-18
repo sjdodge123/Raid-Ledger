@@ -90,11 +90,17 @@ function message(
   };
 }
 
+/**
+ * superagent JSON-serialises any non-string body sent as `application/json` —
+ * a Buffer would arrive as `{"type":"Buffer","data":[…]}`. The identity
+ * serializer puts the bytes on the wire as-is (gzip bodies included).
+ */
 function post(kind: string, token: string, body: Buffer, gzip = false) {
   const r = testApp.request
     .post(`${ROUTE}/${kind}`)
     .set('Authorization', `Bearer ${token}`)
-    .set('Content-Type', 'application/json');
+    .set('Content-Type', 'application/json')
+    .serialize((bytes) => bytes);
   return (gzip ? r.set('Content-Encoding', 'gzip') : r).send(body);
 }
 
@@ -188,7 +194,11 @@ describe('Valheim Link message ingest (ROK-1833)', () => {
       const expected = loadValheimFixture('EXPECTED', INVALID)[name];
       const id = await valheimServer(1);
       const token = await issueToken(id);
-      const msg = message(name, id, recent(2), INVALID);
+      // Keep the fixture's own capturedAt — it IS the defect in one fixture.
+      const msg: Record<string, unknown> = {
+        ...loadValheimFixture(name, INVALID),
+        serverId: String(id),
+      };
       const kind = KINDS.includes(String(msg['kind']))
         ? String(msg['kind'])
         : 'character';
