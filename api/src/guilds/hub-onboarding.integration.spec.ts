@@ -293,7 +293,9 @@ describe('GET /guilds/onboarding (HTTP)', () => {
     const res = await testApp.request
       .post('/auth/local')
       .send({ email, password: PASSWORD });
-    expect(res.status).toBe(201);
+    // `/auth/local` answers 200, not Nest's POST-default 201 — same as
+    // `auth.integration.spec.ts` and `loginAsAdmin` in integration-helpers.
+    expect(res.status).toBe(200);
     const token = (res.body as { access_token?: string }).access_token;
     if (typeof token !== 'string') {
       throw new Error(`no access_token in login response for ${username}`);

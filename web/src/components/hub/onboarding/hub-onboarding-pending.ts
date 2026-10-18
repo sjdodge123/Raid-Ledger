@@ -61,15 +61,22 @@ export function settlePending(
     const confirmed = cur.confirmed || outcome === 'success';
     const rollback = outcome === 'error' && inFlight === 0 && !confirmed && !cur.preExisting;
     const rest = Object.fromEntries(Object.entries(map).filter(([k]) => k !== id));
+    // A CONFIRMED pair outlives its own write. Another prompt's response can
+    // already have been in flight when this one committed, so its body
+    // predates the commit and omits this row; the entry is the only thing
+    // that tells `mergePending` to keep it. `prunePending` drops it once the
+    // server's own state reports the dismissal.
+    const keep = inFlight > 0 || confirmed;
     return {
-        map: inFlight === 0 ? rest : { ...rest, [id]: { ...cur, inFlight, confirmed } },
+        map: keep ? { ...rest, [id]: { ...cur, inFlight, confirmed } } : rest,
         rollback,
     };
 }
 
 /**
  * The server's state, plus any optimistic row for a DIFFERENT pair that is
- * still in flight — a sibling's dismissal must survive this response.
+ * still in flight OR already confirmed — a sibling's dismissal must survive
+ * this response even when the response's body predates its commit.
  */
 export function mergePending(
     fresh: HubOnboardingStateDto,
@@ -78,10 +85,28 @@ export function mergePending(
 ): HubOnboardingStateDto {
     const known = new Set(fresh.dismissed.map((d) => pairId(d.key, d.guildId)));
     const kept = (current?.dismissed ?? []).filter((d) => {
-        const id = pairId(d.key, d.guildId);
-        return !known.has(id) && (map[id]?.inFlight ?? 0) > 0;
+        const pending = map[pairId(d.key, d.guildId)];
+        if (pending === undefined || known.has(pairId(d.key, d.guildId))) return false;
+        return pending.inFlight > 0 || pending.confirmed;
     });
     return kept.length === 0 ? fresh : { dismissed: [...fresh.dismissed, ...kept] };
+}
+
+/**
+ * Forget settled pairs that a LATER response already accounts for — the
+ * server state wins last. `self` (the pair whose own response this is) is
+ * never pruned here: its body was read before its own commit landed in any
+ * sibling's in-flight request, so only somebody else's response proves the
+ * row is durable.
+ */
+export function prunePending(
+    map: PendingDismissals, fresh: HubOnboardingStateDto, self: string,
+): PendingDismissals {
+    const known = new Set(fresh.dismissed.map((d) => pairId(d.key, d.guildId)));
+    const entries = Object.entries(map).filter(
+        ([id, pair]) => pair.inFlight > 0 || id === self || !known.has(id),
+    );
+    return entries.length === Object.keys(map).length ? map : Object.fromEntries(entries);
 }
 
 /** The three cache reads/writes the hook needs, bound to one pair. */
@@ -90,6 +115,8 @@ export interface PendingLedger {
     /** Settle one write; `true` = this caller must roll the entry back. */
     settle: (outcome: 'success' | 'error') => boolean;
     read: () => PendingDismissals;
+    /** Drop confirmed pairs this server response already accounts for. */
+    prune: (fresh: HubOnboardingStateDto) => void;
 }
 
 export function pendingLedger(
@@ -105,5 +132,6 @@ export function pendingLedger(
             return rollback;
         },
         read,
+        prune: (fresh) => { write(prunePending(read(), fresh, id)); },
     };
 }

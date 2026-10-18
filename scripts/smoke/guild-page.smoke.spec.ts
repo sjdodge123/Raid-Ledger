@@ -242,7 +242,9 @@ test('editor: the Overview setup checklist scores the seeded hub and stays dismi
         await expect(list, 'the seeded hub still has steps outstanding (ROK-1830 S5b, D11-B)').toBeVisible({ timeout: 15_000 });
         // An Officer has no channel picker, so the Discord row is blocked and
         // drops out of the count: six countable steps, not seven.
-        await expect(page.getByTestId('setup-checklist-progress')).toHaveText(/^\d+ of 6 done$/);
+        // roster + next-raid + mods are seeded; leader-post, rules and links
+        // are profile copy the seed leaves empty — an exact 3, not a wildcard.
+        await expect(page.getByTestId('setup-checklist-progress')).toHaveText('3 of 6 done');
         // The seed already satisfies three of them; the profile ones it does not.
         await expect(list.getByTestId('setup-step-roster'), 'the Officer is a seeded member').toHaveAttribute('data-done', 'true');
         await expect(list.getByTestId('setup-step-next-raid'), 'the seed tags raid nights').toHaveAttribute('data-done', 'true');

@@ -111,6 +111,9 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
             queryClient.setQueryData<HubOnboardingStateDto>(
                 queryKey, (cur) => mergePending(fresh, cur, map),
             );
+            // Only now: a confirmed pair stays in the ledger until a response
+            // carries it, so a body that predates its commit cannot drop it.
+            ledger.prune(fresh);
         },
     });
     // Not memoized: `mutation` is a fresh object every render, so a
