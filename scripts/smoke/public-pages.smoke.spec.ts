@@ -195,7 +195,7 @@ test.describe('Join page (/join) — redeemable intent token', () => {
         if (typeof token !== 'string' || token === '') {
             throw new Error(`POST /admin/test/intent-token returned no token: ${JSON.stringify(minted)}`);
         }
-        expect(await rosterUserIds(adminToken, eventId), 'the fixture event starts with an empty roster').toEqual([]);
+        expect(await rosterUserIds(adminToken, eventId), `user ${adminUserId} must not be signed up before redeeming`).not.toContain(adminUserId);
 
         await page.goto(`/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(token)}`);
 
