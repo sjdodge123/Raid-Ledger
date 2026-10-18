@@ -8,7 +8,7 @@
  * back for everyone. External transports (ITAD, IGDB) are spied at the
  * service boundary; Postgres and the merge/upsert code below them are real.
  */
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
@@ -21,7 +21,11 @@ import {
   type DiscoveryDeps,
   type DiscoveryResult,
 } from './steam-itad-discovery.helpers';
-import { findModeratedMatch } from '../igdb/games-moderation-match.helpers';
+import {
+  findModeratedMatch,
+  lockModerationKeys,
+} from '../igdb/games-moderation-match.helpers';
+import type { IgdbApiGame } from '../igdb/igdb.constants';
 import { upsertItadGame } from '../igdb/igdb-itad-upsert.helpers';
 import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 
@@ -435,6 +439,98 @@ describe('ROK-1843 Codex r1: one moderation lookup on every path', () => {
     const after = await reload(row.id);
     expect(after.banned).toBe(true);
     expect(after.steamAppId).toBeNull();
+  });
+});
+
+async function rowsWhere(where: SQL): Promise<GameRow[]> {
+  return testApp.db.select().from(schema.games).where(where);
+}
+
+describe('ROK-1843 Codex r2: igdbId key and cross-name serialisation', () => {
+  it('a row hidden by igdbId is not recreated as a visible twin', async () => {
+    await insertGame({
+      slug: 'rok1843-igdb-hidden',
+      name: 'Rok1843 Igdb Hidden Original',
+      igdbId: 184381,
+      hidden: true,
+    });
+    const igdbHit: IgdbApiGame = {
+      id: 184381,
+      name: 'Rok1843 Igdb Other',
+      slug: 'rok1843-igdb-other',
+    };
+    const deps: DiscoveryDeps = {
+      ...syncDeps(itadGame('rok1843-igdb-itad', 'Rok1843 Igdb Other')),
+      queryIgdb: jest.fn().mockResolvedValue([igdbHit]),
+    };
+
+    const result = await discoverGameViaItad(184382, deps, 'steam');
+
+    expect(result?.hidden).toBe(true);
+    const twins = await rowsWhere(eq(schema.games.steamAppId, 184382));
+    expect(twins.every((r) => r.hidden)).toBe(true);
+  });
+
+  it('two discoveries with different names and one itadGameId leave no visible twin', async () => {
+    let discovery: Promise<DiscoveryResult | null> | undefined;
+    // An in-flight discovery for "Alpha": it holds the alternate-key lock and
+    // has inserted its (adult-filtered, hidden) row but not yet committed.
+    await testApp.db.transaction(async (tx) => {
+      await lockModerationKeys(tx, { itadGameId: 'itad-rok1843-lock' });
+      await tx.insert(schema.games).values({
+        slug: 'rok1843-lock-alpha',
+        name: 'Rok1843 Lock Alpha',
+        itadGameId: 'itad-rok1843-lock',
+        steamAppId: 184371,
+        hidden: true,
+      });
+      discovery = discoverGameViaItad(
+        184372,
+        syncDeps(
+          itadGame(
+            'rok1843-lock-beta',
+            'Rok1843 Lock Beta',
+            'itad-rok1843-lock',
+          ),
+        ),
+        'steam',
+      );
+      await waitForBlockedBackend(tx);
+    });
+
+    if (!discovery) throw new Error('discovery never started');
+    expect((await discovery)?.hidden).toBe(true);
+    const all = await rowsWhere(sql`${schema.games.name} LIKE 'Rok1843 Lock%'`);
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.every((r) => r.hidden)).toBe(true);
+  });
+});
+
+describe('ROK-1843 Codex r2: distinct editions', () => {
+  it('a banned edition does not suppress a remake with a different igdbId', async () => {
+    const banned = await insertGame({
+      slug: 'rok1843-edition',
+      name: 'Rok1843 Edition',
+      igdbId: 184391,
+      banned: true,
+    });
+
+    const remake = await findModeratedMatch(testApp.db, {
+      slug: 'rok1843-edition-remake',
+      name: 'Rok1843 Edition',
+      igdbId: 184392,
+    });
+    const unknownEdition = await findModeratedMatch(testApp.db, {
+      slug: 'rok1843-edition-unknown',
+      name: 'Rok1843 Edition',
+    });
+
+    expect(remake).toBeNull();
+    expect(unknownEdition).toEqual({
+      id: banned.id,
+      hidden: false,
+      banned: true,
+    });
   });
 });
 

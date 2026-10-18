@@ -15,7 +15,12 @@ import {
 import { checkAdultContent } from './steam-content-filter.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
-import { findModeratedMatch } from '../igdb/games-moderation-match.helpers';
+import {
+  findModeratedMatch,
+  lockModerationKeys,
+  type ModeratedMatch,
+  type ModerationKeys,
+} from '../igdb/games-moderation-match.helpers';
 import { defined } from '../common/defined.helpers';
 import { steamAppIdWrite } from './steam-itad-discovery-merge.helpers';
 
@@ -125,8 +130,10 @@ async function upsertGame(
 }
 
 /**
- * Find-then-insert body. MUST run inside the name lock. ROK-1843: moderation
- * is read first, on every key, under the lock (`findModeratedMatch`) — any
+ * Find-then-insert body. MUST run inside the name lock. ROK-1843: the
+ * alternate-key locks are taken first (`lockModerationKeys`, serialising
+ * discoveries that share a key under different names), then moderation is
+ * read on every key, igdbId included (`findModeratedMatch`) — any
  * banned match means nothing is written and nothing returned; any hidden
  * match means a newly inserted row or slug twin is born hidden.
  */
@@ -134,12 +141,7 @@ async function upsertGameLocked(
   db: PostgresJsDatabase<typeof schema>,
   candidate: GameInsertRow,
 ): Promise<StoredGame | null> {
-  const moderated = await findModeratedMatch(db, {
-    slug: candidate.slug,
-    itadGameId: candidate.itadGameId,
-    steamAppId: candidate.steamAppId,
-    name: candidate.name,
-  });
+  const moderated = await lockAndFindModerated(db, candidate);
   if (moderated?.banned === true) return null;
   const row = moderated?.hidden ? { ...candidate, hidden: true } : candidate;
   const bySlug = await db.query.games.findFirst({
@@ -168,6 +170,25 @@ async function upsertGameLocked(
   if (byNormalized) return mergeIntoExisting(db, byNormalized, row);
 
   return insertNewGame(db, row);
+}
+
+/**
+ * Lock the candidate's alternate keys, then read moderation on every key
+ * (igdbId included) — the Codex r2 order: lock before probe (ROK-1843).
+ */
+async function lockAndFindModerated(
+  db: PostgresJsDatabase<typeof schema>,
+  candidate: GameInsertRow,
+): Promise<ModeratedMatch | null> {
+  const keys: ModerationKeys = {
+    slug: candidate.slug,
+    itadGameId: candidate.itadGameId,
+    steamAppId: candidate.steamAppId,
+    igdbId: candidate.igdbId,
+    name: candidate.name,
+  };
+  await lockModerationKeys(db, keys);
+  return findModeratedMatch(db, keys);
 }
 
 /**

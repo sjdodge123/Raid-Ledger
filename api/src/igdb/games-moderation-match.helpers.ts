@@ -8,7 +8,7 @@
  * upsert that rewrote a hidden alternate-key match, a failed upsert that
  * surfaced the raw candidate. Centralising the lookup closes them together.
  */
-import { eq, or, type SQL } from 'drizzle-orm';
+import { eq, or, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
@@ -74,6 +74,58 @@ async function keyConditions(tx: Db, keys: ModerationKeys): Promise<SQL[]> {
   const byName = keys.name
     ? await findGameByNormalizedName(tx, keys.name)
     : null;
-  if (byName) conditions.push(eq(g.id, byName.id));
+  if (byName && !isDistinctEdition(keys.igdbId, byName.igdbId)) {
+    conditions.push(eq(g.id, byName.id));
+  }
   return conditions;
+}
+
+/**
+ * Codex r2 P2 (ROK-1843): a name match whose non-null igdbId differs from the
+ * candidate's is a different edition (a remake, a sequel sharing a title), not
+ * the same game. The dedup guards (`findByNormalizedName`, ROK-1113) already
+ * keep such rows separate, so moderating one edition must not suppress the
+ * other. Rows matched on a real key (slug, itadGameId, steamAppId, igdbId)
+ * still count.
+ */
+function isDistinctEdition(
+  candidate: number | null | undefined,
+  matched: number | null | undefined,
+): boolean {
+  return candidate != null && matched != null && candidate !== matched;
+}
+
+/**
+ * Advisory-lock class for the alternate-key moderation locks — disjoint from
+ * `GAMES_NAME_LOCK_CLASS` so a hash collision with a name key can't deadlock.
+ */
+export const GAMES_MODERATION_KEY_LOCK_CLASS = 1843;
+
+/**
+ * Codex r2 P2 (ROK-1843): take a transaction-scoped advisory lock per
+ * alternate key present (itadGameId, steamAppId, igdbId), ALWAYS in that
+ * fixed order so two transactions never acquire them crosswise (no deadlock).
+ *
+ * The name lock only serialises discoveries for the SAME normalized name. Two
+ * discoveries under different names that share an alternate key could both
+ * probe `findModeratedMatch` before either commits, and the loser of the
+ * unique-key collision would then insert a visible suffixed twin of a hidden
+ * row. Call this inside the name-lock transaction BEFORE the probe: the second
+ * discovery waits here until the first commits, then its probe sees the row.
+ */
+export async function lockModerationKeys(
+  tx: Db,
+  keys: ModerationKeys,
+): Promise<void> {
+  const lockKeys: string[] = [];
+  if (keys.itadGameId) lockKeys.push(`game-mod:itad:${keys.itadGameId}`);
+  if (keys.steamAppId != null) {
+    lockKeys.push(`game-mod:steam:${keys.steamAppId}`);
+  }
+  if (keys.igdbId != null) lockKeys.push(`game-mod:igdb:${keys.igdbId}`);
+  for (const key of lockKeys) {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${GAMES_MODERATION_KEY_LOCK_CLASS}::int4, hashtext(${key}))`,
+    );
+  }
 }
