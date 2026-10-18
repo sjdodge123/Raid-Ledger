@@ -10,6 +10,8 @@
 // containers are out of reach for exec / archive / kill / rm.
 // Anything not listed is refused — the allowlist is the boundary.
 
+import { buildTagReason, pullReason, pushReason, tagReason } from './image-refs.mjs';
+
 const ID = '[A-Za-z0-9_.-]+';
 const IMG = '[A-Za-z0-9_.@:/-]+';
 const R = (method, pattern, plan) => ({ method, re: new RegExp(`^${pattern}$`), plan });
@@ -38,7 +40,7 @@ const ROUTES = [
   R('GET', `/images/(${IMG})/(json|history)`, ALLOW),
   R('GET', `/distribution/(${IMG})/json`, ALLOW),
   R('POST', '/images/create', { query: 'image-create' }),
-  R('POST', `/images/(${IMG})/(push|tag)`, ALLOW),
+  R('POST', `/images/(${IMG})/(push|tag)`, { query: 'image-write' }),
   R('POST', '/(images|build)/prune', ALLOW),
   R('POST', '/auth', ALLOW),
   R('POST', '/build', { query: 'build' }),
@@ -75,20 +77,29 @@ export function parseUrl(rawUrl) {
 // `remote` / `fromSrc` make the DAEMON fetch a URL from the VM host network —
 // 127.0.0.1:2375 (rl-docker-proxy) included, whose container-inspect JSON a
 // build error would echo back. Runners only build/pull from local contexts.
+const BUILD_NETWORKS = new Set(['', 'default', 'bridge', 'none']);
+
 function checkBuildQuery(query) {
+  // A named network (rl-docker-guard, rl-net) would put classic-builder RUN
+  // containers next to the guard or the env containers.
   for (const mode of query.getAll('networkmode')) {
-    if (mode === 'host' || mode.startsWith('container:')) return `build networkmode=${mode} is not allowed`;
+    if (!BUILD_NETWORKS.has(mode)) return `build networkmode=${mode} is not allowed`;
   }
   if (query.getAll('remote').some((v) => v !== '')) return 'build remote= is not allowed';
   if (query.getAll('cgroupparent').some((v) => v !== '')) return 'build cgroupparent= is not allowed';
-  return null;
+  return buildTagReason(query);
 }
 
 function checkImageCreateQuery(query) {
-  return query.has('fromSrc') ? 'images/create fromSrc= is not allowed' : null;
+  return query.has('fromSrc') ? 'images/create fromSrc= is not allowed' : pullReason(query);
 }
 
-const QUERY_CHECKS = { build: checkBuildQuery, 'image-create': checkImageCreateQuery };
+// Tag / push target must be a runner-writable name (image-refs.mjs).
+function checkImageWriteQuery(query, m) {
+  return m[2] === 'push' ? pushReason(m[1] ?? '', query) : tagReason(query);
+}
+
+const QUERY_CHECKS = { build: checkBuildQuery, 'image-create': checkImageCreateQuery, 'image-write': checkImageWriteQuery };
 
 export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
   let parsed;
@@ -104,7 +115,7 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
     if (!m) continue;
     const plan = route.plan;
     const queryCheck = plan.query ? QUERY_CHECKS[plan.query] : undefined;
-    const reason = queryCheck ? queryCheck(parsed.query) : null;
+    const reason = queryCheck ? queryCheck(parsed.query, m) : null;
     if (reason) return { ok: false, reason };
     const out = { ok: true };
     if (plan.body) out.body = plan.body;
