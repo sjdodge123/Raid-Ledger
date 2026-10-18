@@ -23,12 +23,17 @@ The lane marks those steps `OPERATOR` (not run). The Lead batches them into one 
 
 As soon as the branch's env is up (`rl_env_deploy` / `rl_env_spin`) and BEFORE the PR is opened — the plan link and the lane's verdict table go in the PR body and in `CURRENT-STATE.md`'s checklist. The dashboard is `https://fleet.gamernight.net`, built into every slot.
 
+**Two links (ROK-1847).** `rl_test_plan_create` returns:
+
+- `plan_url` — token-less, read-only on the public host. **This is "the plan link"** for the PR body, Linear and `CURRENT-STATE.md`.
+- `tester_url` (public) / `tester_url_lan` — carry the plan's tester token as `k`. On `fleet.gamernight.net` the dashboard refuses Submit, verdicts, comments, screenshot uploads and reset requests without it (401). Give it **only** to the person testing — in practice the operator's OPERATOR-step ask — and **never** put it in a PR, Linear, `CURRENT-STATE.md`, a commit or a lane report: anyone holding it can write verdicts. It is returned once and no later read recovers it; keep it for the run, and re-create the plan if it is lost. The LAN dashboard (`http://fleet.rl.lan`) needs no token.
+
 ## How
 
 `rl_test_plan_create({ slug, story_id, goal, steps })` — one plan per story. Each step is ≤ 1 sentence with:
 
 - `expected` — what the tester (agent or operator) should see, concrete enough to be a PASS/FAIL assertion ("the Filters FAB opens a BottomSheet listing 3 genres", not "looks good").
-- `test_url` — a deep link into the env pointing at a **seeded object**, not a list page. A URL embedded in the description does not render as the step link.
+- `test_url` — a deep link into the env pointing at a **seeded object**, not a list page, on the env's slot URL (`https://slot-N.gamernight.net/...`). The dashboard rejects the whole plan with 400 for any other host, the legacy `<slug>test.<domain>` form included. A URL embedded in the description does not render as the step link.
 - `reset_hint` — on every step that mutates state; it renders the ↻ button and doubles as the agent instruction.
 - Say in the description **which seeded user** the step runs as, and which viewport(s) it is about. Write design-judgement asks as their own steps so the lane can mark just those `OPERATOR`.
 
@@ -54,7 +59,7 @@ Seed AFTER the fleet gate: gates reset the env DB, so seeding first leaves the t
 
 ## Operator steps
 
-Only `OPERATOR`-marked steps reach the operator, batched into one ask with the plan link. A step needing their own account starts with "sign in, tell the Lead *I'm in*"; then the Lead (or a Sonnet lane) runs the seed's second block against their account row. Until ROK-1537 lands (`RL_OPERATOR_DISCORD_ID` in `/srv/rl-infra/.env`), promote them to admin after `rl_env_deploy`:
+Only `OPERATOR`-marked steps reach the operator, batched into one ask with the plan's `tester_url` (the token-bearing link — the token-less `plan_url` 401s their Submit on the public host). A step needing their own account starts with "sign in, tell the Lead *I'm in*"; then the Lead (or a Sonnet lane) runs the seed's second block against their account row. Until ROK-1537 lands (`RL_OPERATOR_DISCORD_ID` in `/srv/rl-infra/.env`), promote them to admin after `rl_env_deploy`:
 
 ```sql
 UPDATE users SET role='admin' WHERE discord_id='258431047815921665'
