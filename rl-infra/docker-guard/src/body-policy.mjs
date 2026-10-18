@@ -111,6 +111,19 @@ function withOwner(labels, owner) {
   return { ...base, [OWNER_LABEL]: owner.owner, 'rl.slot': owner.slot };
 }
 
+/**
+ * Docker copies the IMAGE's Config.Labels onto the container for every key the
+ * create body leaves out, so `LABEL rl.role=env rl.env_slug=<victim>` in a
+ * runner-built image would reach release / the sweeper's reapers unchecked.
+ * Name both reserved keys in the body so the image's values never apply:
+ * a non-reserved role the caller chose (checkLabels ran) stays, else runner-child.
+ */
+function withReservedOverrides(labels) {
+  const base = isObj(labels) ? labels : {};
+  const role = typeof base['rl.role'] === 'string' && base['rl.role'] !== '' ? base['rl.role'] : 'runner-child';
+  return { ...base, 'rl.role': role, 'rl.env_slug': '' };
+}
+
 /** POST /containers/create */
 export function checkContainerCreate(body, { allow, owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
@@ -122,7 +135,7 @@ export function checkContainerCreate(body, { allow, owner }) {
     ?? checkPrivileges(hc) ?? checkNamespaces(hc) ?? checkBinds(hc.Binds, allow)
     ?? checkMounts(hc.Mounts, allow) ?? checkLabels(body.Labels);
   if (reason) return deny(reason);
-  return { ok: true, body: { ...body, Labels: withOwner(body.Labels, owner) } };
+  return { ok: true, body: { ...body, Labels: withOwner(withReservedOverrides(body.Labels), owner) } };
 }
 
 /** POST /containers/{id}/exec */
