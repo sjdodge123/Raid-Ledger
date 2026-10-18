@@ -5,7 +5,6 @@ import {
   Get,
   HttpCode,
   Param,
-  ParseIntPipe,
   Post,
   Put,
   Req,
@@ -14,7 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import {
   ValheimAssignOwnerBodySchema,
-  type ValheimClaimEvent,
+  type ValheimCharacterSummary,
   type ValheimClaimEventListResponse,
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../../../../auth/admin.guard';
@@ -25,41 +24,50 @@ import {
   RequirePlugin,
 } from '../../../plugin-host/plugin-active.guard';
 import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
+import { ValheimArmoryReadService } from '../read/valheim-armory-read.service';
+import { armoryIdPipe } from '../valheim-armory-id.pipe';
 import { ValheimArmoryClaimsService } from './valheim-armory-claims.service';
 
 /**
  * ROK-1835 L3 claim + owner endpoints. Members: any signed-in user (the JWT
- * strategy already refuses deactivated accounts). Responses carry user ids
- * only — a SteamID64 never leaves the server here. No owner release in v1.
+ * strategy already refuses deactivated accounts). Claim and owner changes
+ * answer 200 with the updated member summary (spec route table — V6 re-renders
+ * the card without a refetch); a SteamID64 never leaves the server here. The
+ * claim route rides the global default throttle tier. No owner release in v1.
  */
 @Controller()
 @UseGuards(AuthGuard('jwt'), PluginActiveGuard)
 @RequirePlugin(VALHEIM_PLUGIN_ID)
 export class ValheimArmoryClaimsController {
-  constructor(private readonly claims: ValheimArmoryClaimsService) {}
+  constructor(
+    private readonly claims: ValheimArmoryClaimsService,
+    private readonly reads: ValheimArmoryReadService,
+  ) {}
 
-  /** POST — claim an unclaimed character; 409 `already_claimed`. */
+  /** POST — claim an unclaimed character; 200 + summary, 409 `already_claimed`. */
   @Post('plugins/valheim/armory/characters/:id/claim')
-  @HttpCode(201)
-  claim(
-    @Param('id', ParseIntPipe) id: number,
+  @HttpCode(200)
+  async claim(
+    @Param('id', armoryIdPipe) id: number,
     @Req() req: AuthenticatedExpressRequest,
-  ): Promise<ValheimClaimEvent> {
-    return this.claims.claim(id, req.user.id);
+  ): Promise<ValheimCharacterSummary> {
+    await this.claims.claim(id, req.user.id);
+    return this.reads.summary(id);
   }
 
-  /** PUT — admin assign (`userId`) or unassign (`null`). */
+  /** PUT — admin assign (`userId`) or unassign (`null`); 200 + summary. */
   @Put('admin/plugins/valheim/armory/characters/:id/owner')
   @UseGuards(AdminGuard)
   @RateLimit('admin')
-  assign(
-    @Param('id', ParseIntPipe) id: number,
+  async assign(
+    @Param('id', armoryIdPipe) id: number,
     @Body() body: unknown,
     @Req() req: AuthenticatedExpressRequest,
-  ): Promise<ValheimClaimEvent> {
+  ): Promise<ValheimCharacterSummary> {
     const parsed = ValheimAssignOwnerBodySchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Invalid body');
-    return this.claims.assign(id, req.user.id, parsed.data.userId);
+    await this.claims.assign(id, req.user.id, parsed.data.userId);
+    return this.reads.summary(id);
   }
 
   /** GET — the character's claim audit trail, newest first. */
@@ -67,7 +75,7 @@ export class ValheimArmoryClaimsController {
   @UseGuards(AdminGuard)
   @RateLimit('admin')
   async claimEvents(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', armoryIdPipe) id: number,
   ): Promise<ValheimClaimEventListResponse> {
     return { data: await this.claims.events(id) };
   }

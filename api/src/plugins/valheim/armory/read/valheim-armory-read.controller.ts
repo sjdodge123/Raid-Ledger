@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Param,
-  ParseIntPipe,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,14 +18,15 @@ import {
   RequirePlugin,
 } from '../../../plugin-host/plugin-active.guard';
 import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
+import { armoryIdPipe } from '../valheim-armory-id.pipe';
 import { parseArmoryListQuery } from './valheim-armory-read.query';
 import {
   ValheimArmoryReadService,
   type ValheimAdminCharacterListResponse,
 } from './valheim-armory-read.service';
 
-/** Positive-int path param (400 otherwise). */
-const idPipe = new ParseIntPipe();
+/** Positive int4 path param (400 otherwise). */
+const idPipe = armoryIdPipe;
 
 /**
  * ROK-1835 L4 armory reads. Members: any signed-in user (signed-out → 401;

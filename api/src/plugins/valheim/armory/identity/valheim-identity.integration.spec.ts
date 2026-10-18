@@ -1,14 +1,15 @@
 /**
  * ROK-1835 L3 — Steam identity + claims against a real database: import-time
  * auto-attach (active verified users only), attach on a later Steam link,
- * auto-only detach on unlink, member claim 201/409, admin assign/unassign and
- * the audit trail.
+ * auto-only detach on unlink, member claim 200 (summary)/409, admin
+ * assign/unassign and the audit trail, claim release on user hard-delete,
+ * plugin-inactive 403 and bad path ids 400.
  */
 import { eq } from 'drizzle-orm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  ValheimCharacterSummarySchema,
   ValheimClaimEventListResponseSchema,
-  ValheimClaimEventSchema,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import {
@@ -18,6 +19,7 @@ import {
 import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { SettingsService } from '../../../../settings/settings.service';
+import { deleteUserTransaction } from '../../../../users/users-delete.helpers';
 import {
   STEAM_ACCOUNT_LINKED,
   STEAM_ACCOUNT_UNLINKED,
@@ -227,18 +229,22 @@ describe('Valheim armory Steam auto-match (ROK-1835 L3)', () => {
 });
 
 describe('Valheim armory claims (ROK-1835 L3)', () => {
-  it('a member claims an unclaimed character (201 + audit); a second claim is 409', async () => {
+  it('a member claims an unclaimed character (200 + summary + audit); a second claim is 409', async () => {
     const id = await importCharacter(await makeServer(1));
     const alice = await memberToken(testApp, 'alice');
     const bob = await memberToken(testApp, 'bob');
     const res = await testApp.request.post(claimUrl(id)).set(auth(alice));
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const aliceId = await userIdOf('alice');
-    expect(ValheimClaimEventSchema.parse(res.body)).toMatchObject({
-      action: 'claim',
-      toUserId: aliceId,
-      actorUserId: aliceId,
-    });
+    const summary = ValheimCharacterSummarySchema.parse(res.body);
+    expect(summary).toMatchObject({ id, claimedBy: { id: aliceId } });
+    expect(await audit(id)).toEqual([
+      expect.objectContaining({
+        action: 'claim',
+        toUserId: aliceId,
+        actorUserId: aliceId,
+      }),
+    ]);
     expect(res.text).not.toContain(STEAM);
     expect(
       (await testApp.request.post(claimUrl(id)).set(auth(bob))).status,
@@ -263,7 +269,7 @@ describe('Valheim armory claims (ROK-1835 L3)', () => {
           .then((r) => r.status),
       ),
     );
-    expect(codes.sort()).toEqual([201, 409]);
+    expect(codes.sort()).toEqual([200, 409]);
   });
 
   it('404 for a missing character; 401 signed out', async () => {
@@ -294,10 +300,9 @@ describe('Valheim armory claims (ROK-1835 L3)', () => {
       .set(auth(admin))
       .send({ userId: target });
     expect(put.status).toBe(200);
-    expect(ValheimClaimEventSchema.parse(put.body)).toMatchObject({
-      action: 'admin_assign',
-      fromUserId: aliceId,
-      toUserId: target,
+    expect(ValheimCharacterSummarySchema.parse(put.body)).toMatchObject({
+      id,
+      claimedBy: { id: target },
     });
     expect(await profile(id)).toEqual({
       claimedBy: target,
@@ -307,23 +312,32 @@ describe('Valheim armory claims (ROK-1835 L3)', () => {
       .put(ownerUrl(id))
       .set(auth(admin))
       .send({ userId: null });
-    expect(ValheimClaimEventSchema.parse(un.body)).toMatchObject({
-      action: 'admin_unassign',
-      fromUserId: target,
-      toUserId: null,
-    });
+    expect(un.status).toBe(200);
+    expect(ValheimCharacterSummarySchema.parse(un.body).claimedBy).toBeNull();
     expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
     const list = await testApp.request
       .get(`/admin/plugins/valheim/armory/characters/${id}/claim-events`)
       .set(auth(admin));
-    const actions = ValheimClaimEventListResponseSchema.parse(
-      list.body,
-    ).data.map((e) => e.action);
-    expect([...actions].sort()).toEqual([
+    const events = ValheimClaimEventListResponseSchema.parse(list.body).data;
+    expect(events.map((e) => e.action).sort()).toEqual([
       'admin_assign',
       'admin_unassign',
       'claim',
     ]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'admin_assign',
+          fromUserId: aliceId,
+          toUserId: target,
+        }),
+        expect.objectContaining({
+          action: 'admin_unassign',
+          fromUserId: target,
+          toUserId: null,
+        }),
+      ]),
+    );
   });
 
   it('admin assign to a deactivated user is 400; a bad body is 400', async () => {
@@ -346,5 +360,87 @@ describe('Valheim armory claims (ROK-1835 L3)', () => {
           .send({ owner: 1 })
       ).status,
     ).toBe(400);
+  });
+});
+
+describe('Valheim armory claims vs user hard-delete (ROK-1835 B1)', () => {
+  it('deleting a claimant (auto + manual) unclaims both profiles and audits auto_detach', async () => {
+    const manual = await importCharacter(await makeServer(1));
+    const alice = await memberToken(testApp, 'alice');
+    await testApp.request.post(claimUrl(manual)).set(auth(alice));
+    const aliceId = await userIdOf('alice');
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: STEAM })
+      .where(eq(schema.users.id, aliceId));
+    const auto = await importCharacter(await makeServer(2));
+    expect((await profile(auto)).claimSource).toBe('auto');
+    await deleteUserTransaction(testApp.db, aliceId, testApp.seed.adminUser.id);
+    const gone = await testApp.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, aliceId));
+    expect(gone).toHaveLength(0);
+    for (const id of [manual, auto]) {
+      const [p] = nonEmpty(
+        await testApp.db.select().from(P).where(eq(P.id, id)),
+        'profile after delete',
+      );
+      expect(p).toMatchObject({
+        claimedBy: null,
+        claimSource: null,
+        claimedAt: null,
+      });
+      const detach = (await audit(id)).filter((e) => e.action === 'auto_detach');
+      expect(detach).toEqual([
+        expect.objectContaining({ actorUserId: null, toUserId: null }),
+      ]);
+    }
+  });
+});
+
+describe('Valheim armory route guards (ROK-1835 T17, ids)', () => {
+  it('every armory route answers 403 while the Valheim plugin is inactive', async () => {
+    const id = await importCharacter(await makeServer(1));
+    const member = await memberToken(testApp, 'alice');
+    const admin = await loginAsAdmin(testApp.request, testApp.seed);
+    await registry().deactivate(VALHEIM_PLUGIN_ID);
+    const base = '/plugins/valheim/armory/characters';
+    const adminBase = '/admin/plugins/valheim/armory/characters';
+    const calls = [
+      testApp.request.get(base).set(auth(member)),
+      testApp.request.get(`${base}/${id}`).set(auth(member)),
+      testApp.request.get(`${base}/${id}/maps/1`).set(auth(member)),
+      testApp.request.post(claimUrl(id)).set(auth(member)),
+      testApp.request.get(adminBase).set(auth(admin)),
+      testApp.request
+        .put(ownerUrl(id))
+        .set(auth(admin))
+        .send({ userId: null }),
+      testApp.request.get(`${adminBase}/${id}/claim-events`).set(auth(admin)),
+    ];
+    const codes = (await Promise.all(calls)).map((r) => r.status);
+    expect(codes).toEqual([403, 403, 403, 403, 403, 403, 403]);
+    expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
+  });
+
+  it('path ids <= 0 or above int4 are 400, not 404/500', async () => {
+    const member = await memberToken(testApp, 'alice');
+    const admin = await loginAsAdmin(testApp.request, testApp.seed);
+    for (const bad of ['0', '-1', '99999999999', '1.5']) {
+      const codes = await Promise.all([
+        testApp.request
+          .get(`/plugins/valheim/armory/characters/${bad}`)
+          .set(auth(member)),
+        testApp.request
+          .get(`/plugins/valheim/armory/characters/1/maps/${bad}`)
+          .set(auth(member)),
+        testApp.request.post(claimUrl(Number(bad))).set(auth(member)),
+        testApp.request
+          .get(`/admin/plugins/valheim/armory/characters/${bad}/claim-events`)
+          .set(auth(admin)),
+      ]);
+      expect(codes.map((r) => r.status)).toEqual([400, 400, 400, 400]);
+    }
   });
 });

@@ -6,6 +6,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   ValheimCharacterDetail,
   ValheimCharacterListResponse,
+  ValheimCharacterSummary,
   ValheimMapMeta,
 } from '@raid-ledger/contract';
 import {
@@ -39,6 +40,13 @@ export class ValheimArmoryReadService {
   ): Promise<ValheimAdminCharacterListResponse> {
     const rows = await this.repo.listProfiles(q);
     return { data: rows.map(toAdminSummary) };
+  }
+
+  /** One character's member summary (claim/owner responses); 404 when unknown. */
+  async summary(id: number): Promise<ValheimCharacterSummary> {
+    const row = await this.repo.findProfile(id);
+    if (!row) throw new NotFoundException('Character not found');
+    return toSummary(row);
   }
 
   /** Character sheet + map refs; 404 when unknown. */
