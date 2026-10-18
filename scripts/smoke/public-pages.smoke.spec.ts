@@ -14,6 +14,11 @@ import { test, expect } from './base';
 import { apiDelete, apiGet, apiPost, getAdminToken, getInviteeFixture } from './api-helpers';
 import { signInContextWithJwt } from './browser-session';
 
+// Codex r1 P2 / ROK-1841: one case below navigates with a live sign-in token in the URL.
+// Playwright only allows a trace override at file level (not inside a describe), so the
+// whole file runs without traces; every other case here is a public-page check.
+test.use({ trace: 'off' });
+
 /**
  * `GET /events` answers a paginated `{ data, meta }` envelope, not a bare
  * array — r1 read it as an array, so `seededEventId()` always returned null
@@ -177,12 +182,11 @@ async function rosterUserIds(token: string, eventId: number): Promise<number[]> 
  * "not signed up before, signed up after" is a real precondition.
  *
  * Codex r1 P2: the join URL carries a live sign-in token. Traces are off for
- * this block, and the page comes from a context the spec builds itself, so its
- * `goto` skips the `base.ts` retry wrapper that logs the raw URL.
+ * this file (top-level `test.use`), the page comes from a context the spec builds
+ * itself so its `goto` skips the `base.ts` retry wrapper that logs the raw URL, and
+ * a navigation failure is rethrown without the URL (Codex r2 P2).
  */
 test.describe('Join page (/join) — redeemable intent token', () => {
-    test.use({ trace: 'off' });
-
     let adminToken = '';
     const eventIds: number[] = [];
 
@@ -220,9 +224,14 @@ test.describe('Join page (/join) — redeemable intent token', () => {
         try {
             await signInContextWithJwt(context, invitee.jwt);
             const page = await context.newPage();
-            await page.goto(`/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(token)}`, {
-                waitUntil: 'domcontentloaded',
-            });
+            try {
+                await page.goto(`/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(token)}`, {
+                    waitUntil: 'domcontentloaded',
+                });
+            } catch {
+                // Playwright's navigation errors quote the destination URL; never let the token into CI output.
+                throw new Error('navigation to the join link failed (URL withheld: it carries the intent token)');
+            }
 
             // The landing hands off to the event page…
             // Poll the PATHNAME so a failure message can never print the token-bearing query.
