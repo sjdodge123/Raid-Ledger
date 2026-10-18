@@ -7,10 +7,17 @@
  *  - Invalid/missing tokens show a graceful error state
  *  - Community branding (header link) is visible
  *  - Unauthenticated visitors can reach the pages
+ *  - A REDEEMABLE intent token (ROK-1841 fixture) actually signs the viewer
+ *    up, and the landing leaves no `token=` behind (ROK-1839)
  */
 import { test, expect } from './base';
-import { apiGet, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPost, getAdminToken, getInviteeFixture } from './api-helpers';
+import { signInContextWithJwt } from './browser-session';
 
+// Codex r1 P2 / ROK-1841: one case below navigates with a live sign-in token in the URL.
+// Playwright only allows a trace override at file level (not inside a describe), so the
+// whole file runs without traces; every other case here is a public-page check.
+test.use({ trace: 'off' });
 
 /**
  * `GET /events` answers a paginated `{ data, meta }` envelope, not a bare
@@ -135,6 +142,118 @@ test.describe('Join page (/join)', () => {
         await expect(page.getByText('This join link is invalid or has expired.')).toBeVisible();
 
         await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Join page — /join with a REDEEMABLE intent token (ROK-1841)
+// ---------------------------------------------------------------------------
+
+/** Read `key` off an API body, failing loudly when it is not a number. */
+function mustNumber(body: unknown, key: string, label: string): number {
+    const value: unknown = typeof body === 'object' && body !== null ? Reflect.get(body, key) : undefined;
+    if (typeof value !== 'number') throw new Error(`${label}: no numeric \`${key}\` in ${JSON.stringify(body)}`);
+    return value;
+}
+
+/** The minted token. Its value is never echoed into an error message. */
+function mustToken(body: unknown): string {
+    const value: unknown = typeof body === 'object' && body !== null ? Reflect.get(body, 'token') : undefined;
+    if (typeof value !== 'string' || value === '') throw new Error('POST /admin/test/intent-token returned no token');
+    return value;
+}
+
+/** User ids currently on the event's roster — a pure read for `expect.poll`. */
+async function rosterUserIds(token: string, eventId: number): Promise<number[]> {
+    const detail: unknown = await apiGet(token, `/events/${eventId}/detail`);
+    const roster: unknown = typeof detail === 'object' && detail !== null ? Reflect.get(detail, 'roster') : undefined;
+    const signups: unknown = typeof roster === 'object' && roster !== null ? Reflect.get(roster, 'signups') : undefined;
+    if (!Array.isArray(signups)) return [];
+    return signups.flatMap((s: unknown) => {
+        const user: unknown = typeof s === 'object' && s !== null ? Reflect.get(s, 'user') : undefined;
+        const id: unknown = typeof user === 'object' && user !== null ? Reflect.get(user, 'id') : undefined;
+        return typeof id === 'number' ? [id] : [];
+    });
+}
+
+/**
+ * The admin CREATES the event (a creator is on its roster at once), and the
+ * token is minted for — and redeemed by — the smoke invitee fixture user, so
+ * "not signed up before, signed up after" is a real precondition.
+ *
+ * Codex r1 P2: the join URL carries a live sign-in token. Traces are off for
+ * this file (top-level `test.use`), the page comes from a context the spec builds
+ * itself so its `goto` skips the `base.ts` retry wrapper that logs the raw URL, and
+ * a navigation failure is rethrown without the URL (Codex r2 P2).
+ */
+test.describe('Join page (/join) — redeemable intent token', () => {
+    let adminToken = '';
+    const eventIds: number[] = [];
+
+    test.beforeAll(async () => {
+        adminToken = await getAdminToken();
+    });
+
+    test.afterAll(async () => {
+        for (const id of eventIds.splice(0)) await apiDelete(adminToken, `/events/${id}`).catch(() => undefined);
+    });
+
+    /** A fresh event only its creator (the admin) is on, claimed for cleanup first. */
+    async function freshEvent(project: string): Promise<number> {
+        const start = new Date(Date.now() + 30 * 86_400_000);
+        const body: unknown = await apiPost(adminToken, '/events', {
+            title: `smoke-rok-1841-join-${project}-${Date.now()}`,
+            startTime: start.toISOString(),
+            endTime: new Date(start.getTime() + 2 * 3_600_000).toISOString(),
+            maxAttendees: 10,
+        });
+        const id = mustNumber(body, 'id', 'POST /events');
+        eventIds.push(id);
+        return id;
+    }
+
+    test('redeems the token, signs the viewer up, and leaves no token in the URL', async ({ browser }, testInfo) => {
+        const invitee = await getInviteeFixture();
+        const eventId = await freshEvent(testInfo.project.name);
+        const token = mustToken(
+            await apiPost(adminToken, '/admin/test/intent-token', { eventId, intent: 'signup', userId: invitee.userId }),
+        );
+        expect(await rosterUserIds(adminToken, eventId), `user ${invitee.userId} must not be signed up before redeeming`).not.toContain(invitee.userId);
+
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+        try {
+            await signInContextWithJwt(context, invitee.jwt);
+            const page = await context.newPage();
+            try {
+                await page.goto(`/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(token)}`, {
+                    waitUntil: 'domcontentloaded',
+                });
+            } catch {
+                // Playwright's navigation errors quote the destination URL; never let the token into CI output.
+                throw new Error('navigation to the join link failed (URL withheld: it carries the intent token)');
+            }
+
+            // The landing hands off to the event page…
+            // Poll the PATHNAME so a failure message can never print the token-bearing query.
+            await expect
+                .poll(() => new URL(page.url()).pathname, { message: 'the join landing must reach the event page', timeout: 20_000 })
+                .toBe(`/events/${eventId}`);
+            // …and ROK-1839: nothing carries the token forward into the URL.
+            const landed = page.url();
+            expect(landed.includes('token='), 'the join token must not survive into the landing URL').toBe(false);
+            expect(landed.includes(token.slice(0, 24)), 'nor any fragment of it').toBe(false);
+            await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+        } finally {
+            await context.close();
+        }
+
+        // The sign-in half of the flow actually happened, not just the redirect.
+        await expect
+            .poll(() => rosterUserIds(adminToken, eventId), {
+                message: `redeeming the intent token must sign user ${invitee.userId} up to event ${eventId}`,
+                timeout: 15_000,
+            })
+            .toContain(invitee.userId);
     });
 });
 
