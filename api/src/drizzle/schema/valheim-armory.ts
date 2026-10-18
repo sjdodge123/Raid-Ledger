@@ -11,7 +11,9 @@ import {
   index,
   unique,
   check,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type {
   ValheimCharacterMessage,
@@ -28,11 +30,18 @@ const serverFk = () =>
   integer('pelican_server_id')
     .notNull()
     .references(() => pelicanServers.id, { onDelete: 'cascade' });
-const snapshotFk = () =>
-  bigint('source_snapshot_id', { mode: 'number' }).references(
-    () => valheimLinkSnapshots.id,
-    { onDelete: 'set null' },
-  );
+const snapshotCol = () => bigint('source_snapshot_id', { mode: 'number' });
+/**
+ * Explicitly named: drizzle's default `<table>_source_snapshot_id_
+ * valheim_link_snapshots_id_fk` exceeds Postgres' 63-char identifier limit
+ * (constraint-name-length.spec.ts, ROK-1387).
+ */
+const snapshotFk = (table: string, col: AnyPgColumn) =>
+  foreignKey({
+    columns: [col],
+    foreignColumns: [valheimLinkSnapshots.id],
+    name: `${table}_source_snapshot_fk`,
+  }).onDelete('set null');
 const userFk = (name: string) =>
   integer(name).references(() => users.id, { onDelete: 'set null' });
 
@@ -76,7 +85,7 @@ export const valheimProfiles = pgTable(
     trophies: jsonb('trophies').$type<string[]>().notNull(),
     knownItems: jsonb('known_items').$type<string[]>().notNull(),
     knownRecipes: jsonb('known_recipes').$type<string[]>().notNull(),
-    sourceSnapshotId: snapshotFk(),
+    sourceSnapshotId: snapshotCol(),
   },
   (t) => [
     // Leading pelican_server_id also backs the server FK.
@@ -89,6 +98,7 @@ export const valheimProfiles = pgTable(
     // Attach-on-Steam-link lookup (A2).
     index('valheim_profiles_steam_id_idx').on(t.steamId),
     index('valheim_profiles_source_snapshot_idx').on(t.sourceSnapshotId),
+    snapshotFk('valheim_profiles', t.sourceSnapshotId),
     check(
       'valheim_profiles_claim_source_chk',
       sql`${t.claimSource} IN ('auto','manual','admin')`,
@@ -132,7 +142,7 @@ export const valheimMaps = pgTable(
     gameVersion: text('game_version').notNull(),
     capturedAt: tsz('captured_at').notNull(),
     importedAt: importedAt(),
-    sourceSnapshotId: snapshotFk(),
+    sourceSnapshotId: snapshotCol(),
   },
   (t) => [
     unique('valheim_maps_identity_uq').on(
@@ -143,6 +153,7 @@ export const valheimMaps = pgTable(
     ),
     index('valheim_maps_profile_idx').on(t.profileId),
     index('valheim_maps_source_snapshot_idx').on(t.sourceSnapshotId),
+    snapshotFk('valheim_maps', t.sourceSnapshotId),
   ],
 );
 
@@ -177,7 +188,7 @@ export const valheimItemCatalogs = pgTable(
       .notNull(),
     capturedAt: tsz('captured_at').notNull(),
     importedAt: importedAt(),
-    sourceSnapshotId: snapshotFk(),
+    sourceSnapshotId: snapshotCol(),
   },
   (t) => [
     unique('valheim_item_catalogs_version_uq').on(
@@ -185,6 +196,7 @@ export const valheimItemCatalogs = pgTable(
       t.gameVersion,
     ),
     index('valheim_item_catalogs_source_snapshot_idx').on(t.sourceSnapshotId),
+    snapshotFk('valheim_item_catalogs', t.sourceSnapshotId),
   ],
 );
 
