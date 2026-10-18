@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as bcrypt from 'bcrypt';
-import { and, count, eq, gte } from 'drizzle-orm';
+import { and, count, eq, gte, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import {
@@ -264,6 +264,52 @@ describe('ROK-1794 — removals over a rolling window (review r1)', () => {
       expect.objectContaining({ removed: 4 }),
       expect.objectContaining({ removed: 4 }),
     ]);
+  });
+});
+
+/** The roster minus `strip` real others, plus `fakes` invented GUIDs. */
+function padded(fakes: number, strip: number, step: number): string {
+  const others = roster().filter((m) => m.guid !== FIXTURE_GUID);
+  const dropped = new Set(others.slice(0, strip).map((m) => m.guid));
+  const fake = Array.from({ length: fakes }, (_, i) =>
+    buildMember(0xfa000000 + i),
+  );
+  const kept = roster().filter((m) => !dropped.has(m.guid));
+  const payload = buildGuildPayload([...kept, ...fake]);
+  payload.data.snapshotAt += step * 60;
+  return buildImportString(payload);
+}
+
+describe('ROK-1794 — padding the roster (review r2)', () => {
+  it(`${AC(4)}: adding over a quarter of the roster at once is held`, async () => {
+    const { token, id } = await seedRealGuild();
+    const res = await apply(token, id, padded(11, 0, 1));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('INVALID_PAYLOAD');
+    expect(await liveCount()).toBe(40);
+  });
+
+  it(`${AC(4)}: members added inside the window don't grow the removal baseline`, async () => {
+    const { token, id } = await seedRealGuild();
+    expect((await apply(token, id, padded(10, 0, 1))).status).toBe(200);
+    expect(await liveCount()).toBe(50);
+    // 11 real members of the 40 the guild had at the window's start: held,
+    // though 11 is under a quarter of the padded 50.
+    const res = await apply(token, id, padded(10, 11, 2));
+    expect(res.status).toBe(422);
+    expect(await liveCount()).toBe(50);
+  });
+
+  it(`${AC(4)}: removals older than the window stop counting`, async () => {
+    const { token, id } = await seedRealGuild();
+    expect((await apply(token, id, sliced(4, 1))).status).toBe(200);
+    expect((await apply(token, id, sliced(8, 2))).status).toBe(200);
+    await testApp.db
+      .update(schema.activityLog)
+      .set({ createdAt: sql`now() - interval '25 hours'` })
+      .where(eq(schema.activityLog.action, 'guild_roster_replaced'));
+    expect((await apply(token, id, sliced(12, 3))).status).toBe(200);
+    expect(await liveCount()).toBe(28);
   });
 });
 

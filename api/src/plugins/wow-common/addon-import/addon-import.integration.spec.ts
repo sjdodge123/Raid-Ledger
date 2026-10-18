@@ -501,6 +501,10 @@ describe('addon import — guild', () => {
       status: 'applied',
       summary: { members: 600, pages: 3 },
     });
+    // A live member adding 1,400 GUIDs to a 600-member roster is held for
+    // staff (ROK-1794 review r2), so the 2,000-member paging check runs on a
+    // fresh guild.
+    await testApp.db.delete(schema.guilds);
     const eight = await post(token, id, fixture('guild-8-pages-2000-members'));
     expect(eight.status).toBe(200);
     expect(eight.body.summary).toMatchObject({ members: 2000, pages: 8 });
