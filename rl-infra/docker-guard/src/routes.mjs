@@ -30,7 +30,7 @@ const ROUTES = [
   R('GET', `/containers/(${ID})/(archive|export)`, ownedContainer),
   R('HEAD', `/containers/(${ID})/archive`, ownedContainer),
   R('PUT', `/containers/(${ID})/archive`, ownedContainer),
-  R('POST', '/containers/create', { body: 'container-create' }),
+  R('POST', '/containers/create', { body: 'container-create', query: 'container-create' }),
   R('POST', `/containers/(${ID})/(start|stop|restart|kill|wait|attach|resize|pause|unpause)`, ownedContainer),
   R('POST', `/containers/(${ID})/exec`, { ...ownedContainer, body: 'exec-create' }),
   R('DELETE', `/containers/(${ID})`, ownedContainer),
@@ -99,7 +99,17 @@ function checkImageWriteQuery(query, m) {
   return m[2] === 'push' ? pushReason(m[1] ?? '', query) : tagReason(query);
 }
 
-const QUERY_CHECKS = { build: checkBuildQuery, 'image-create': checkImageCreateQuery, 'image-write': checkImageWriteQuery };
+// rl-runner-N is the guard's caller identity (docker-client.mjs); rl-env-<slug>-*
+// is what release / the reapers act on; the rest are compose infra names. A
+// runner squatting any of them would impersonate or DoS it.
+const RESERVED_NAME = /^\/?rl-(runner-|env-|docker-|gc-sweeper$|traefik$|registry$|loki$|promtail$|grafana$|dashboard$|orchestrator)/;
+
+function checkContainerCreateQuery(query) {
+  const bad = query.getAll('name').find((n) => RESERVED_NAME.test(n));
+  return bad === undefined ? null : `container name ${bad} is reserved for infra / runners / envs`;
+}
+
+const QUERY_CHECKS = { 'container-create': checkContainerCreateQuery, build: checkBuildQuery, 'image-create': checkImageCreateQuery, 'image-write': checkImageWriteQuery };
 
 export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
   let parsed;

@@ -13,6 +13,7 @@ import path from 'node:path';
 import { foldEach, foldReason } from './key-fold.mjs';
 
 export const OWNER_LABEL = 'rl.guard.owner';
+const COMPOSE_PREFIX = 'com.docker.compose.';
 const RESERVED_ROLE_VALUES = new Set(['env', 'infra', 'runner']);
 const NS_FIELDS = ['PidMode', 'IpcMode', 'UTSMode', 'UsernsMode', 'CgroupnsMode', 'Cgroup'];
 // Links: on the default bridge a legacy link copies the target's Env (bot
@@ -102,6 +103,9 @@ function checkLabels(labels) {
   if (!isObj(labels)) return 'Labels is not an object';
   if (RESERVED_ROLE_VALUES.has(labels['rl.role'])) return `label rl.role=${labels['rl.role']} is reserved for the orchestrator`;
   if ('rl.env_slug' in labels) return 'label rl.env_slug is reserved for the orchestrator';
+  // Compose's labels are how the guard recognises a runner (docker-client.mjs).
+  const composeKey = Object.keys(labels).find((k) => k.startsWith(COMPOSE_PREFIX));
+  if (composeKey) return `label ${composeKey} is reserved for docker compose`;
   return null;
 }
 
@@ -117,11 +121,14 @@ function withOwner(labels, owner) {
  * runner-built image would reach release / the sweeper's reapers unchecked.
  * Name both reserved keys in the body so the image's values never apply:
  * a non-reserved role the caller chose (checkLabels ran) stays, else runner-child.
+ * rl.slot needs no override: withOwner always writes the caller's.
  */
 function withReservedOverrides(labels) {
   const base = isObj(labels) ? labels : {};
   const role = typeof base['rl.role'] === 'string' && base['rl.role'] !== '' ? base['rl.role'] : 'runner-child';
-  return { ...base, 'rl.role': role, 'rl.env_slug': '' };
+  // Blank compose's identity labels too, so an image built FROM a compose image
+  // never yields a container compose (or the guard) mistakes for its own.
+  return { ...base, 'rl.role': role, 'rl.env_slug': '', [`${COMPOSE_PREFIX}project`]: '', [`${COMPOSE_PREFIX}service`]: '' };
 }
 
 /** POST /containers/create */

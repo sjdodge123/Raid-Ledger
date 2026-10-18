@@ -59,21 +59,39 @@ export async function ensureOwnedVolume(socketPath, name, owner, ownerLabel) {
 }
 
 /**
- * Which runner slot is calling? Match the peer IP against the rl.role=runner
+ * The slot a compose-created runner container serves, or null. Labels alone
+ * can be inherited from an image (a classic-builder RUN container of
+ * `FROM rl-infra/runner` + `LABEL rl.slot=2`), so the slot comes from the
+ * compose service name AND the compose container_name `rl-runner-N`, which the
+ * guard never lets a runner claim (routes.mjs) and whose compose labels it
+ * never lets a runner set or inherit (body-policy.mjs). rl.slot must agree.
+ */
+export function composeRunnerSlot(c) {
+  const labels = c?.Labels ?? {};
+  const svc = /^runner-([0-9]+)$/.exec(String(labels['com.docker.compose.service'] ?? ''));
+  const slot = svc?.[1];
+  if (!slot || !labels['com.docker.compose.project']) return null;
+  if (!Array.isArray(c?.Names) || !c.Names.includes(`/rl-runner-${slot}`)) return null;
+  if (labels['rl.slot'] !== undefined && labels['rl.slot'] !== slot) return null;
+  return slot;
+}
+
+/**
+ * Which runner slot is calling? Match the peer IP against the compose runner
  * containers' network addresses. Null when the caller is not a runner — the
  * guard then refuses every mutating call (fail closed).
  */
 export async function runnerForAddress(socketPath, address) {
   const ip = String(address ?? '').replace(/^::ffff:/, '');
   if (!ip) return null;
-  const filters = encodeURIComponent(JSON.stringify({ label: ['rl.role=runner'] }));
+  const filters = encodeURIComponent(JSON.stringify({ label: ['com.docker.compose.service'] }));
   const { status, json } = await dockerJson(socketPath, 'GET', `/containers/json?filters=${filters}`);
   if (status !== 200 || !Array.isArray(json)) return null;
   for (const c of json) {
     const nets = c?.NetworkSettings?.Networks ?? {};
     const hit = Object.values(nets).some((n) => n && n.IPAddress === ip);
-    const slot = c?.Labels?.['rl.slot'];
-    if (hit && typeof slot === 'string' && /^[0-9]+$/.test(slot)) return { owner: `slot-${slot}`, slot };
+    const slot = hit ? composeRunnerSlot(c) : null;
+    if (slot) return { owner: `slot-${slot}`, slot };
   }
   return null;
 }
