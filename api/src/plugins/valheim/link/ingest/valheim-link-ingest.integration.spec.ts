@@ -23,9 +23,12 @@ import { PluginRegistryService } from '../../../plugin-host/plugin-registry.serv
 import { PELICAN_PLUGIN_ID } from '../../../pelican/pelican.constants';
 import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
+import { hashValheimLinkToken } from '../valheim-link-token.helpers';
+import { ValheimLinkIngestService } from './valheim-link-ingest.service';
 import {
   VALHEIM_LINK_FIXTURES,
   loadValheimFixture,
+  rejection,
   valheimFixtureNames,
 } from './valheim-link-ingest.testing';
 
@@ -251,4 +254,50 @@ describe('Valheim Link message ingest (ROK-1833)', () => {
       .where(and(eq(schema.valheimLinkSnapshots.pelicanServerId, id)));
     expect(rows).toHaveLength(0);
   });
+});
+
+describe('Valheim Link ingest — token revalidated at commit (ROK-1833)', () => {
+  /** The auth record the guard would have attached for `token`. */
+  async function authFor(serverId: number, token: string) {
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ id: schema.valheimLinkTokens.id })
+        .from(schema.valheimLinkTokens)
+        .where(eq(schema.valheimLinkTokens.pelicanServerId, serverId)),
+      'token row',
+    );
+    return {
+      tokenId: row.id,
+      tokenHash: hashValheimLinkToken(token),
+      pelicanServerId: serverId,
+      serverId: String(serverId),
+    };
+  }
+
+  it.each([
+    ['revoked', { revokedAt: new Date() }],
+    ['rotated', { tokenHash: 'f'.repeat(64) }],
+  ])(
+    'a token %s after auth is 401 invalid_token and writes nothing',
+    async (_l, change) => {
+      const id = await valheimServer(1);
+      const token = await issueToken(id);
+      const valheimLink = await authFor(id, token);
+      await testApp.db
+        .update(schema.valheimLinkTokens)
+        .set(change)
+        .where(eq(schema.valheimLinkTokens.id, valheimLink.tokenId));
+      const body = json(message('character-vanilla', id, recent(5)));
+      const r = await rejection(
+        testApp.app
+          .get(ValheimLinkIngestService)
+          .ingest({ headers: {}, valheimLink }, 'character', body),
+      );
+      expect(r).toEqual({
+        status: 401,
+        body: expect.objectContaining({ code: 'invalid_token' }),
+      });
+      expect(await snapshots(id)).toHaveLength(0);
+    },
+  );
 });

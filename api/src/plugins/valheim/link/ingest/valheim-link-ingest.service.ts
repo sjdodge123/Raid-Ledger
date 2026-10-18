@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type {
   ValheimLinkIngestResult,
   ValheimLinkMessageKind,
@@ -50,8 +55,13 @@ export class ValheimLinkIngestService {
     const row = valheimSnapshotRow(auth.pelicanServerId, msg);
     const refs = row.blobRefs ?? [];
     const missingBlobs = await this.checkBlobs(auth.pelicanServerId, refs);
-    const written = await this.repo.upsertLatest(row);
-    const status = written ? 'accepted' : 'stale';
+    const written = await this.repo.upsertLatest(row, auth);
+    if (written === 'revoked') {
+      throw new UnauthorizedException(
+        ingestError('invalid_token', 'Invalid token'),
+      );
+    }
+    const status = written === 'written' ? 'accepted' : 'stale';
     this.logger.log(
       `valheim-link ingest kind=${kind} server=${auth.pelicanServerId} bytes=${body.length} result=${status}`,
     );

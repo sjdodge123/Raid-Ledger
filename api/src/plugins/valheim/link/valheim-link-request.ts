@@ -4,6 +4,8 @@ import type { ValheimLinkIngestErrorCode } from '@raid-ledger/contract';
 /** What `ValheimLinkBearerGuard` attaches to an authenticated ingest request. */
 export interface ValheimLinkAuth {
   tokenId: number;
+  /** sha256 of the bearer that authenticated — revalidated at commit. */
+  tokenHash: string;
   pelicanServerId: number;
   /** Wire `serverId` = `String(pelican_servers.id)`. */
   serverId: string;
@@ -12,6 +14,8 @@ export interface ValheimLinkAuth {
 /** An ingest request after the bearer guard ran. */
 export interface ValheimLinkRequest {
   headers: Record<string, string | string[] | undefined>;
+  /** Client IP (Express `req.ip`) — the pre-auth limiter key. */
+  ip?: string | undefined;
   valheimLink?: ValheimLinkAuth;
 }
 

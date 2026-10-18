@@ -7,14 +7,20 @@ import type { ValheimLinkSnapshotsRepository } from './valheim-link-snapshots.re
 const NOW = new Date('2026-10-17T20:20:00Z');
 const req: ValheimLinkRequest = {
   headers: {},
-  valheimLink: { tokenId: 1, pelicanServerId: 7, serverId: 'srv_fixture_01' },
+  valheimLink: {
+    tokenId: 1,
+    tokenHash: 'h',
+    pelicanServerId: 7,
+    serverId: 'srv_fixture_01',
+  },
 };
 const code = (c: string) => expect.objectContaining({ code: c });
 const buf = (o: unknown): Buffer => Buffer.from(JSON.stringify(o));
 
-function setup(written = true) {
+function setup(written: boolean | 'revoked' = true) {
+  const result = written === true ? 'written' : written || 'stale';
   const repo = {
-    upsertLatest: jest.fn().mockResolvedValue(written),
+    upsertLatest: jest.fn().mockResolvedValue(result),
     findBlobs: jest.fn().mockResolvedValue([]),
   };
   const service = new ValheimLinkIngestService(
@@ -128,5 +134,20 @@ describe('ValheimLinkIngestService (ROK-1833)', () => {
     ]);
     const r = await rejection(service.ingest(req, 'items', buf(msg), NOW));
     expect(r).toEqual({ status: 400, body: code('blob_ref_mismatch') });
+  });
+});
+
+describe('ValheimLinkIngestService — commit revalidation (ROK-1833)', () => {
+  it('401 invalid_token when the token was rotated/revoked after the guard', async () => {
+    const { repo, service } = setup('revoked');
+    const msg = loadValheimFixture('character-vanilla');
+    const r = await rejection(service.ingest(req, 'character', buf(msg), NOW));
+    expect(r).toEqual({ status: 401, body: code('invalid_token') });
+    expect(repo.upsertLatest).toHaveBeenCalledWith(expect.anything(), {
+      tokenId: 1,
+      tokenHash: 'h',
+      pelicanServerId: 7,
+      serverId: 'srv_fixture_01',
+    });
   });
 });
