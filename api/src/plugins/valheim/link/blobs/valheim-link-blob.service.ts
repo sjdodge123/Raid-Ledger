@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   VALHEIM_LINK_BINARY_MAX_BYTES,
@@ -27,6 +28,7 @@ import {
   commitBlob,
   discardBlob,
 } from './valheim-link-blob.store';
+import { assertUnderQuota, declaredLength } from './valheim-link-blob.quota';
 import { ValheimLinkBlobsRepository } from './valheim-link-blobs.repository';
 import { VALHEIM_BLOB_EDGE_MAX } from './valheim-link-png.helpers';
 
@@ -74,6 +76,10 @@ export class ValheimLinkBlobService {
   ): Promise<ValheimLinkBlobResult> {
     const sha256 = shaOf(rawSha);
     const auth = authOf(req);
+    assertUnderQuota(
+      await this.repo.usage(auth.pelicanServerId),
+      declaredLength(req.headers),
+    );
     const refs = await this.repo.findRefs(auth.pelicanServerId, sha256);
     const tmpPath = await blobTempPath(auth.pelicanServerId);
     const got = await readBlobToFile(req, {
@@ -83,7 +89,7 @@ export class ValheimLinkBlobService {
     });
     try {
       verify(sha256, refs, got);
-      const status = await this.store(auth.pelicanServerId, got, tmpPath);
+      const status = await this.store(auth, got, tmpPath);
       if (refs.length > 0) await this.repo.touch(auth.pelicanServerId, sha256);
       this.logger.log(
         `valheim-link blob server=${auth.pelicanServerId} status=${status} refs=${refs.length}`,
@@ -94,25 +100,34 @@ export class ValheimLinkBlobService {
     }
   }
 
-  /** Rename into place + insert the row; `exists` when already stored. */
+  /** Insert the row + rename into place; `exists` when already stored. */
   private async store(
-    pelicanServerId: number,
+    auth: ValheimLinkAuth,
     got: BlobReadResult,
     tmpPath: string,
   ): Promise<ValheimLinkBlobResult['status']> {
+    const { pelicanServerId } = auth;
     if (await this.repo.find(pelicanServerId, got.sha256)) return 'exists';
     const storagePath = blobRelativePath(pelicanServerId, got.sha256);
-    await commitBlob(tmpPath, storagePath);
-    const inserted = await this.repo.insert({
-      pelicanServerId,
-      sha256: got.sha256,
-      byteLength: got.byteLength,
-      contentType: 'image/png',
-      width: got.width,
-      height: got.height,
-      storagePath,
-    });
-    return inserted ? 'stored' : 'exists';
+    const result = await this.repo.insertIfTokenActive(
+      {
+        pelicanServerId,
+        sha256: got.sha256,
+        byteLength: got.byteLength,
+        contentType: 'image/png',
+        width: got.width,
+        height: got.height,
+        storagePath,
+      },
+      auth,
+      () => commitBlob(tmpPath, storagePath),
+    );
+    if (result === 'revoked') {
+      throw new UnauthorizedException(
+        ingestError('invalid_token', 'Invalid token'),
+      );
+    }
+    return result;
   }
 }
 

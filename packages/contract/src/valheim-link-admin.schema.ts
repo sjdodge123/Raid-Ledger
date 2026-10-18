@@ -108,6 +108,7 @@ export const ValheimLinkIngestErrorCodeSchema = z.enum([
   "payload_too_large",
   "unsupported_media",
   "rate_limited",
+  "quota_exceeded",
 ]);
 export type ValheimLinkIngestErrorCode = z.infer<
   typeof ValheimLinkIngestErrorCodeSchema

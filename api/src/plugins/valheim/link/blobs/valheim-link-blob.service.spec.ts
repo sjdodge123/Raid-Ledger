@@ -8,11 +8,14 @@ import { ValheimLinkBlobService } from './valheim-link-blob.service';
 import { blobSource, fakePng, sha256Of } from './valheim-link-blob.testing';
 import type { ValheimLinkBlobsRepository } from './valheim-link-blobs.repository';
 
-const AUTH = { tokenId: 1, pelicanServerId: 7, serverId: '7' };
+const AUTH = { tokenId: 1, tokenHash: 'h', pelicanServerId: 7, serverId: '7' };
 const code = (c: string) => expect.objectContaining({ code: c });
 let dir: string;
 let repo: jest.Mocked<
-  Pick<ValheimLinkBlobsRepository, 'find' | 'insert' | 'findRefs' | 'touch'>
+  Pick<
+    ValheimLinkBlobsRepository,
+    'find' | 'insertIfTokenActive' | 'findRefs' | 'touch' | 'usage'
+  >
 >;
 let service: ValheimLinkBlobService;
 
@@ -38,7 +41,14 @@ beforeEach(async () => {
   process.env.VALHEIM_LINK_BLOB_DIR = dir;
   repo = {
     find: jest.fn().mockResolvedValue(null),
-    insert: jest.fn().mockResolvedValue(true),
+    insertIfTokenActive: jest.fn<
+      ReturnType<ValheimLinkBlobsRepository['insertIfTokenActive']>,
+      Parameters<ValheimLinkBlobsRepository['insertIfTokenActive']>
+    >(async (_row, _t, place) => {
+      await place();
+      return 'stored';
+    }),
+    usage: jest.fn().mockResolvedValue({ bytes: 0, count: 0 }),
     findRefs: jest.fn().mockResolvedValue([]),
     touch: jest.fn().mockResolvedValue(undefined),
   };
@@ -58,7 +68,7 @@ describe('ValheimLinkBlobService (ROK-1833)', () => {
     expect(await upload(png, sha)).toEqual({ status: 'stored', sha256: sha });
     expect(readFileSync(join(dir, '7', `${sha}.png`)).equals(png)).toBe(true);
     expect(files()).toEqual([`${sha}.png`]);
-    expect(repo.insert).toHaveBeenCalledWith(
+    expect(repo.insertIfTokenActive).toHaveBeenCalledWith(
       expect.objectContaining({
         pelicanServerId: 7,
         sha256: sha,
@@ -67,6 +77,8 @@ describe('ValheimLinkBlobService (ROK-1833)', () => {
         height: 4,
         storagePath: `7/${sha}.png`,
       }),
+      { tokenId: 1, tokenHash: 'h' },
+      expect.any(Function),
     );
     expect(repo.touch).not.toHaveBeenCalled();
   });
@@ -76,7 +88,7 @@ describe('ValheimLinkBlobService (ROK-1833)', () => {
     const r = await rejection(upload(png, 'f'.repeat(64)));
     expect(r).toEqual({ status: 400, body: code('hash_mismatch') });
     expect(files()).toEqual([]);
-    expect(repo.insert).not.toHaveBeenCalled();
+    expect(repo.insertIfTokenActive).not.toHaveBeenCalled();
   });
 
   it('a non-hex path is 400 before any read', async () => {
@@ -100,7 +112,7 @@ describe('ValheimLinkBlobService (ROK-1833)', () => {
       lastReferencedAt: null,
     });
     expect(await upload(png, sha)).toEqual({ status: 'exists', sha256: sha });
-    expect(repo.insert).not.toHaveBeenCalled();
+    expect(repo.insertIfTokenActive).not.toHaveBeenCalled();
     expect(files()).toEqual([]);
   });
 
@@ -125,5 +137,47 @@ describe('ValheimLinkBlobService (ROK-1833)', () => {
     const r = await rejection(upload(png, sha256Of(png)));
     expect(r).toEqual({ status: 400, body: code('png_too_large') });
     expect(existsSync(join(dir, '7', `${sha256Of(png)}.png`))).toBe(false);
+  });
+});
+
+describe('ValheimLinkBlobService — quota + token revalidation (ROK-1833)', () => {
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_MAX_BLOBS_PER_SERVER;
+    delete process.env.VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER;
+  });
+
+  it('413 quota_exceeded at the blob count cap, before any read or write', async () => {
+    process.env.VALHEIM_LINK_MAX_BLOBS_PER_SERVER = '3';
+    repo.usage.mockResolvedValueOnce({ bytes: 10, count: 3 });
+    const png = fakePng(4, 4);
+    const r = await rejection(upload(png, sha256Of(png)));
+    expect(r).toEqual({ status: 413, body: code('quota_exceeded') });
+    expect(repo.findRefs).not.toHaveBeenCalled();
+    expect(repo.insertIfTokenActive).not.toHaveBeenCalled();
+    expect(repo.usage).toHaveBeenCalledWith(7);
+  });
+
+  it('413 quota_exceeded when stored bytes + Content-Length pass the byte cap', async () => {
+    process.env.VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER = '100';
+    repo.usage.mockResolvedValueOnce({ bytes: 90, count: 1 });
+    const png = fakePng(4, 4);
+    const src = blobSource({ 'content-length': String(png.length) }, AUTH);
+    src.end(png);
+    const r = await rejection(service.upload(src, sha256Of(png)));
+    expect(r).toEqual({ status: 413, body: code('quota_exceeded') });
+  });
+
+  it('under the default caps the upload is stored', async () => {
+    repo.usage.mockResolvedValueOnce({ bytes: 1024 ** 3, count: 1999 });
+    const png = fakePng(4, 4);
+    expect((await upload(png, sha256Of(png))).status).toBe('stored');
+  });
+
+  it('401 invalid_token when the token died before commit; no file kept', async () => {
+    repo.insertIfTokenActive.mockResolvedValueOnce('revoked');
+    const png = fakePng(4, 4);
+    const r = await rejection(upload(png, sha256Of(png)));
+    expect(r).toEqual({ status: 401, body: code('invalid_token') });
+    expect(files()).toEqual([]);
   });
 });

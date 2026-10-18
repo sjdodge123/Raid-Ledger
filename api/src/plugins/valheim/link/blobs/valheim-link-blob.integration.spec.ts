@@ -232,3 +232,24 @@ describe('Valheim Link blob upload (ROK-1833)', () => {
     expect(res.body).toMatchObject({ code: 'server_not_valheim' });
   });
 });
+
+describe('Valheim Link blob quota (ROK-1833)', () => {
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_MAX_BLOBS_PER_SERVER;
+  });
+
+  it('413 quota_exceeded past the per-server blob count; other servers unaffected', async () => {
+    process.env.VALHEIM_LINK_MAX_BLOBS_PER_SERVER = '1';
+    const a = await valheimServer(1);
+    const b = await valheimServer(2);
+    const [tokenA, tokenB] = [await issueToken(a), await issueToken(b)];
+    const first = fakePng(4, 4);
+    const second = fakePng(8, 8);
+    expect((await put(tokenA, sha256Of(first), first)).status).toBe(201);
+    const over = await put(tokenA, sha256Of(second), second);
+    expect(over.status).toBe(413);
+    expect(over.body).toMatchObject({ code: 'quota_exceeded' });
+    expect(await blobRow(a, sha256Of(second))).toBeUndefined();
+    expect((await put(tokenB, sha256Of(second), second)).status).toBe(201);
+  });
+});
