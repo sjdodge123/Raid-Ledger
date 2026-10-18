@@ -10,13 +10,7 @@ import type { PelicanServerRowDto } from '@raid-ledger/contract';
 import { Switch } from '../../../components/ui/switch';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import type { ServerUpdateHandler } from './pelican-server-row';
-
-export const HUB_NO_GAME_HINT = 'Map a game first';
-
-/** On = the server has a hub that is not hidden. */
-export function hubOn(row: PelicanServerRowDto): boolean {
-    return row.communityHub != null && !row.communityHub.hidden;
-}
+import { HUB_NO_GAME_HINT, hubOn } from './pelican-server-hub.helpers';
 
 function HubHint({ row, id }: { row: PelicanServerRowDto; id: string }): JSX.Element | null {
     const hub = row.communityHub ?? null;
