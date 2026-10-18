@@ -140,6 +140,36 @@ export class ValheimLinkTokensRepository {
       });
   }
 
+  /**
+   * Non-rotate issue in ONE statement: insert, or revive a revoked row; a
+   * live row is left alone (`ON CONFLICT … DO UPDATE … WHERE revoked_at IS
+   * NOT NULL`). False when a token is already active (concurrent Generate).
+   */
+  async issueIfNoneActive(
+    id: number,
+    tokenHash: string,
+    tokenHint: string,
+    createdBy: number | null,
+  ): Promise<boolean> {
+    const rows = await this.db
+      .insert(tokens)
+      .values({ pelicanServerId: id, tokenHash, tokenHint, createdBy })
+      .onConflictDoUpdate({
+        target: tokens.pelicanServerId,
+        set: {
+          tokenHash,
+          tokenHint,
+          createdBy,
+          rotatedAt: sql`now()`,
+          revokedAt: null,
+          lastUsedAt: null,
+        },
+        setWhere: sql`${tokens.revokedAt} IS NOT NULL`,
+      })
+      .returning({ id: tokens.id });
+    return rows.length > 0;
+  }
+
   /** Revoke the server's live token. True when one was live. */
   async revoke(id: number): Promise<boolean> {
     const rows = await this.db

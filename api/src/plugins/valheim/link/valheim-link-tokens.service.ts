@@ -16,10 +16,7 @@ import {
   hashValheimLinkToken,
   tokenHintOf,
 } from './valheim-link-token.helpers';
-import {
-  tokenStateOf,
-  toTokenStatusDto,
-} from './valheim-link-token-status.helpers';
+import { toTokenStatusDto } from './valheim-link-token-status.helpers';
 import { ValheimLinkTokensRepository } from './valheim-link-tokens.repository';
 
 /**
@@ -43,7 +40,8 @@ export class ValheimLinkTokensService {
   }
 
   /**
-   * Issue a token. 409 when one is live and `rotate` is false; with
+   * Issue a token. 409 when one is live and `rotate` is false — decided by
+   * the write itself, so two concurrent Generates cannot both succeed; with
    * `rotate` the old hash is overwritten in the same statement.
    */
   async issue(
@@ -52,17 +50,17 @@ export class ValheimLinkTokensService {
     rotate: boolean,
   ): Promise<ValheimLinkTokenIssued> {
     await this.requireValheimServer(id);
-    const current = await this.repo.getStatus(id);
-    if (!rotate && tokenStateOf(current) === 'active') {
-      throw new ConflictException('A token is already active; rotate it');
-    }
     const token = generateValheimLinkToken();
-    await this.repo.upsertToken(
+    const args = [
       id,
       hashValheimLinkToken(token),
       tokenHintOf(token),
       userId,
-    );
+    ] as const;
+    if (rotate) await this.repo.upsertToken(...args);
+    else if (!(await this.repo.issueIfNoneActive(...args))) {
+      throw new ConflictException('A token is already active; rotate it');
+    }
     const status = toTokenStatusDto(await this.repo.getStatus(id));
     return ValheimLinkTokenIssuedSchema.parse({
       token,

@@ -27,18 +27,28 @@ function build(
     row: { pelicanServerId: 7, ...NONE },
     hash: null as string | null,
   };
+  const write = (hash: string, hint: string): void => {
+    state.hash = hash;
+    state.row = {
+      ...state.row,
+      tokenHint: hint,
+      createdAt: new Date(),
+      revokedAt: null,
+    };
+  };
   const repo = {
     findServer: jest.fn(() => Promise.resolve(server)),
     getStatus: jest.fn(() => Promise.resolve({ ...state.row })),
     upsertToken: jest.fn((_id: number, hash: string, hint: string) => {
-      state.hash = hash;
-      state.row = {
-        ...state.row,
-        tokenHint: hint,
-        createdAt: new Date(),
-        revokedAt: null,
-      };
+      write(hash, hint);
       return Promise.resolve();
+    }),
+    issueIfNoneActive: jest.fn((_id: number, hash: string, hint: string) => {
+      if (state.row.tokenHint !== null && !state.row.revokedAt) {
+        return Promise.resolve(false);
+      }
+      write(hash, hint);
+      return Promise.resolve(true);
     }),
     revoke: jest.fn(() => {
       if (state.row.tokenHint === null || state.row.revokedAt) {
@@ -71,6 +81,15 @@ describe('ValheimLinkTokensService (ROK-1833)', () => {
     await expect(service.issue(7, 1, false)).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  it('409 when the atomic write loses a concurrent Generate (no pre-read decides)', async () => {
+    const { service, repo } = build();
+    repo.issueIfNoneActive.mockResolvedValueOnce(false);
+    await expect(service.issue(7, 1, false)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(repo.upsertToken).not.toHaveBeenCalled();
   });
 
   it('rotate replaces the hash — the old token no longer matches', async () => {
