@@ -11,6 +11,7 @@
 // Anything not listed is refused — the allowlist is the boundary.
 
 import { buildTagReason, pullReason, pushReason, tagReason } from './image-refs.mjs';
+import { dockerfileParamReason, parseQuery, QueryError } from './query-parse.mjs';
 
 const ID = '[A-Za-z0-9_.-]+';
 const IMG = '[A-Za-z0-9_.@:/-]+';
@@ -71,12 +72,15 @@ const BUILDKIT = [R('POST', '/session', ALLOW), R('POST', '/grpc', ALLOW)];
  * classifies must be byte-for-byte what Docker routes.
  */
 export function parseUrl(rawUrl) {
-  const rawPath = String(rawUrl).split('?')[0] ?? '';
+  const raw = String(rawUrl);
+  const q = raw.indexOf('?');
+  const rawPath = q < 0 ? raw : raw.slice(0, q);
   if (!rawPath.startsWith('/') || /%|\/\/|\\/.test(rawPath)) throw new Error('non-canonical path');
-  const u = new URL(rawUrl, 'http://guard.invalid');
+  const u = new URL(rawPath, 'http://guard.invalid');
   if (u.pathname !== rawPath) throw new Error('non-canonical path');
   const path = u.pathname.replace(/^\/v[0-9.]+(?=\/)/, '');
-  return { path, query: u.searchParams };
+  // c5: the query is parsed as Go parses it (query-parse.mjs), never by WHATWG.
+  return { path, query: parseQuery(q < 0 ? '' : raw.slice(q + 1)) };
 }
 
 // `remote` / `fromSrc` make the DAEMON fetch a URL from the VM host network —
@@ -116,13 +120,28 @@ function checkContainerCreateQuery(query) {
 
 const QUERY_CHECKS = { 'container-create': checkContainerCreateQuery, build: checkBuildQuery, 'image-create': checkImageCreateQuery, 'image-write': checkImageWriteQuery };
 
+// Docker's httputils.BoolValue: anything but "", 0, no, false, none is true.
+const truthy = (v) => v !== null && !['', '0', 'no', 'false', 'none'].includes(v.trim().toLowerCase());
+
+/** What /build's context inspection needs from the (already policy-checked) query. */
+function buildFacts(query) {
+  return { context: true, dockerfile: query.get('dockerfile') ?? '', pull: truthy(query.get('pull')) };
+}
+
+/**
+ * Classify a request. A refusal carries `status` 400 when the request-target
+ * itself is ambiguous (bad_request_target), else the server answers 403.
+ */
 export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
   let parsed;
   try {
     parsed = parseUrl(rawUrl);
-  } catch {
+  } catch (e) {
+    if (e instanceof QueryError) return { ok: false, status: 400, reason: `bad_request_target: ${e.message}` };
     return { ok: false, reason: 'unparseable URL' };
   }
+  const dfBad = dockerfileParamReason(parsed.query.get('dockerfile'));
+  if (dfBad) return { ok: false, status: 400, reason: `bad_request_target: ${dfBad}` };
   const table = allowBuildkit ? [...ROUTES, ...BUILDKIT] : ROUTES;
   for (const route of table) {
     if (route.method !== method) continue;
@@ -135,7 +154,7 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
     const out = { ok: true };
     if (plan.body) out.body = plan.body;
     if (plan.hijack) out.hijack = true;
-    if (plan.context) out.context = true;
+    if (plan.context) Object.assign(out, buildFacts(parsed.query));
     if (plan.owned) out.owned = { kind: plan.owned.kind, id: m[plan.owned.group] ?? '' };
     return out;
   }

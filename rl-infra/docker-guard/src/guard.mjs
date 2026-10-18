@@ -88,19 +88,19 @@ async function authorize(req, plan) {
 async function onRequest(req, res) {
   const plan = classify(req.method ?? '', req.url ?? '/', { allowBuildkit: ALLOW_BUILDKIT });
   if (wantsUpgrade(req.headers)) return refuse(res, `${req.method} ${req.url} may not upgrade the connection`, 400);
-  if (!plan.ok) return refuse(res, plan.reason);
+  if (!plan.ok) return refuse(res, plan.reason, plan.status ?? 403);
   const media = contentTypeReason(plan, req.headers['content-type']);
   if (media) return refuse(res, media.reason, media.status);
   const auth = await authorize(req, plan);
   if (auth.reason) return refuse(res, auth.reason);
-  if (plan.context) return forwardBuild(req, res);
+  if (plan.context) return forwardBuild(req, res, plan);
   forward(SOCKET, req, res, auth.body ? { buf: auth.body } : undefined, (r) => refuse(res, r, 502));
 }
 
 /** /build: spool + inspect the context, then stream the spooled copy upstream. */
-async function forwardBuild(req, res) {
-  const param = new URL(req.url ?? '/', 'http://guard.invalid').searchParams.get('dockerfile');
-  const ctx = await spoolBuildContext(req, param ?? '', TMPDIR);
+async function forwardBuild(req, res, plan) {
+  // c5: the dockerfile= value classify() decoded (Go's table) — never re-parsed.
+  const ctx = await spoolBuildContext(req, plan.dockerfile ?? '', TMPDIR, { pull: plan.pull === true });
   if (ctx.error) {
     ctx.cleanup();
     return refuse(res, ctx.error.reason, ctx.error.status);
@@ -120,7 +120,7 @@ function refuseSocket(socket, status, reason) {
  */
 async function onUpgrade(req, socket, head) {
   const plan = classify(req.method ?? '', req.url ?? '/', { allowBuildkit: ALLOW_BUILDKIT });
-  if (!plan.ok) return refuseSocket(socket, 403, plan.reason);
+  if (!plan.ok) return refuseSocket(socket, plan.status ?? 403, plan.reason);
   if (!plan.hijack) return refuseSocket(socket, 400, `${req.method} ${req.url} may not upgrade the connection`);
   const auth = await authorize(req, plan);
   if (auth.reason) return refuseSocket(socket, 403, auth.reason);
