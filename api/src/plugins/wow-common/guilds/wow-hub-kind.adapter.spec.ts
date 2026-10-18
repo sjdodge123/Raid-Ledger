@@ -1,8 +1,8 @@
 /**
  * ROK-1830 S2b — the WoW hub kind's own rules, moved verbatim out of
  * `guilds/guild-access.service.spec.ts` when membership / rank / delegation
- * left core. The membership query (`findLinkedMemberRows`) and the delegation
- * lookup both end at `.where()`; the SQL semantics of soft removal and
+ * left core. The membership query (`findLinkedMemberRows`) ends at
+ * `.where()`, the member-grant lookup at `.limit()`; the SQL semantics of soft removal and
  * deactivation are proven in `guilds/guild-access.integration.spec.ts`.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -17,12 +17,14 @@ import {
   WowHubKindAdapter,
 } from './wow-hub-kind.adapter';
 import type { LinkedMemberRow } from './guild-membership.helpers';
+import { RANK_GRANTS_CONFER_EDIT } from './guild-delegation.helpers';
 
 const GUILD = 7;
 const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({
   guildId: GUILD,
   memberId: id,
   rankIndex,
+  characterId: `char-${id}`,
 });
 const actor = (role: GuildActor['role']): GuildActor => ({ id: 42, role });
 
@@ -35,9 +37,10 @@ beforeEach(() => {
   adapter = new WowHubKindAdapter(asDb as PostgresJsDatabase<typeof schema>);
 });
 
-/** Queue the membership rows, then the delegation grants (if queried). */
+/** Queue the membership rows, then the member-grant lookup (if queried). */
 function queue(rows: LinkedMemberRow[], grants: { id: number }[] = []) {
-  db.where.mockResolvedValueOnce(rows).mockResolvedValueOnce(grants);
+  db.where.mockResolvedValueOnce(rows);
+  db.limit.mockResolvedValueOnce(grants);
 }
 
 describe('WowHubKindAdapter identity', () => {
@@ -56,9 +59,11 @@ describe('WowHubKindAdapter.resolveLadder', () => {
     },
   );
 
-  it('an explicit grant (rank or member) makes an officer', async () => {
+  it('a confirmed member grant makes an officer; rank grants are not queried', async () => {
     queue([member(2, 1)], [{ id: 9 }]);
     expect(await adapter.resolveLadder(actor('member'), GUILD)).toBe('officer');
+    // ROK-1794: with RANK_GRANTS_CONFER_EDIT off only the member lookup runs.
+    expect(db.limit).toHaveBeenCalledTimes(1);
   });
 
   it('a delegated member row is an officer (grant keyed by member id)', async () => {
@@ -104,5 +109,9 @@ describe('WowHubKindAdapter membership', () => {
 describe('GM_RANK_IMPLIES_EDIT', () => {
   it('is off until character ownership is verified', () => {
     expect(GM_RANK_IMPLIES_EDIT).toBe(false);
+  });
+
+  it('rank-kind grants confer nothing until ownership is verified (ROK-1794)', () => {
+    expect(RANK_GRANTS_CONFER_EDIT).toBe(false);
   });
 });

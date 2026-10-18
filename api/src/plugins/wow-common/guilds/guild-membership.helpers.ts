@@ -25,6 +25,8 @@ export interface LinkedMemberRow {
   guildId: number;
   memberId: number;
   rankIndex: number | null;
+  /** The user's character that links to the row (ROK-1794 delegation). */
+  characterId: string;
 }
 
 /** SQL predicate: the member row is in its guild's latest snapshot. */
@@ -72,6 +74,7 @@ export async function findLinkedMemberRows(
       guildId: guildMembers.guildId,
       memberId: guildMembers.id,
       rankIndex: guildMembers.rankIndex,
+      characterId: characters.id,
     })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
