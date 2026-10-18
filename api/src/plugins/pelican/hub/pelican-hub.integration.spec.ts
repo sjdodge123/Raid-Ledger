@@ -305,3 +305,66 @@ describe('server hub membership (ROK-1831 L-2)', () => {
     });
   });
 });
+
+describe('ROK-1831 fix r1 — visitor privacy + server sync', () => {
+  it('a visitor gets the server block, Join state and member count, but no member rows or arrivals', async () => {
+    const { guildId } = await enabledHub();
+    const joiner = await member('fixr1-joiner');
+    await testApp.request
+      .post(`/plugins/pelican/hubs/${guildId}/join`)
+      .set(auth(joiner.token))
+      .expect(201);
+    const visitor = await member('fixr1-visitor');
+    const res = await testApp.request
+      .get(`/guilds/${guildId}`)
+      .set(auth(visitor.token))
+      .expect(200);
+    expect(res.body.guild.memberCount).toBe(1);
+    expect(res.body.ranks[0].members).toEqual([]);
+    expect(res.body.server.viewerJoined).toBe(false);
+    expect(res.body.server.recentArrivals).toBeUndefined();
+    const own = await testApp.request
+      .get(`/guilds/${guildId}`)
+      .set(auth(joiner.token))
+      .expect(200);
+    expect(own.body.ranks[0].members).toHaveLength(1);
+  });
+
+  it('PATCH copies the server name and a game change onto the hub', async () => {
+    const { serverId } = await enabledHub();
+    await testApp.db
+      .update(schema.pelicanServers)
+      .set({ name: 'Renamed Vale' })
+      .where(eq(schema.pelicanServers.id, serverId));
+    const [other] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Fix R1 Game', slug: 'fix-r1-game' })
+        .returning({ id: schema.games.id }),
+      'game',
+    );
+    await testApp.request
+      .patch(`/admin/plugins/pelican/servers/${serverId}`)
+      .set(auth(adminToken))
+      .send({ gameId: other.id })
+      .expect(200);
+    const hub = await hubOf(serverId);
+    expect(hub).toMatchObject({
+      name: 'Renamed Vale',
+      nameKey: 'renamed vale',
+      gameId: other.id,
+    });
+  });
+
+  it('clearing the game mapping hides the hub; re-enabling needs a game', async () => {
+    const { serverId } = await enabledHub();
+    const res = await testApp.request
+      .patch(`/admin/plugins/pelican/servers/${serverId}`)
+      .set(auth(adminToken))
+      .send({ gameId: null })
+      .expect(200);
+    expect(res.body.communityHub).toMatchObject({ hidden: true });
+    expect((await hubOf(serverId)).hiddenAt).not.toBeNull();
+    expect((await toggle(serverId, true)).status).toBe(400);
+  });
+});

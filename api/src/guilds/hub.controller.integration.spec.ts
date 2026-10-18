@@ -190,3 +190,53 @@ describe('literal routes stay ahead of :id', () => {
     expect((await get(`${CORE}/onboarding`, 'member')).status).toBe(200);
   });
 });
+
+describe('ROK-1831 fix r1 — staff hidden flag + WoW alias hidden checks', () => {
+  const ids = (body: { guilds: { id: number }[] }) =>
+    body.guilds.map((g) => g.id);
+
+  it('admin reads guild.hidden true after hide and false after unhide', async () => {
+    await hide(true, 'admin');
+    const hidden = await get(`${CORE}/${guildId}`, 'admin');
+    expect(hidden.body.guild.hidden).toBe(true);
+    await hide(false, 'admin');
+    const shown = await get(`${CORE}/${guildId}`, 'admin');
+    expect(shown.body.guild.hidden).toBe(false);
+  });
+
+  it('a hidden WoW hub 404s on every alias :id route for a member', async () => {
+    await hide(true, 'admin');
+    for (const sub of ['/editors', '/addons']) {
+      expect((await get(`${WOW}/${guildId}${sub}`, 'member')).status).toBe(404);
+    }
+    const patch = await testApp.request
+      .patch(`${WOW}/${guildId}/profile`)
+      .set('Authorization', `Bearer ${token('member')}`)
+      .send({});
+    expect(patch.status).toBe(404);
+    const add = await testApp.request
+      .post(`${WOW}/${guildId}/editors`)
+      .set('Authorization', `Bearer ${token('member')}`)
+      .send({});
+    expect(add.status).toBe(404);
+  });
+
+  it('a hidden WoW hub leaves the alias mine / directory / by-character for a member, not for admin', async () => {
+    await hide(true, 'admin');
+    const dir = `${WOW}?gameId=${testApp.seed.game.id}`;
+    expect(ids((await get(`${WOW}/mine`, 'member')).body)).not.toContain(
+      guildId,
+    );
+    expect(ids((await get(dir, 'member')).body)).not.toContain(guildId);
+    expect(ids((await get(dir, 'admin')).body)).toContain(guildId);
+    const [char] = nonEmpty(
+      await testApp.db.select().from(schema.characters),
+      'character',
+    );
+    const byChar = await get(`${WOW}/by-character/${char.id}`, 'member');
+    expect(byChar.body).toEqual({ data: null });
+    await hide(false, 'admin');
+    const back = await get(`${WOW}/by-character/${char.id}`, 'member');
+    expect(back.body.data.guild.id).toBe(guildId);
+  });
+});
