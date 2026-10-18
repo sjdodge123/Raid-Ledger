@@ -24,7 +24,7 @@ beforeEach(() => {
 
 describe('pelican-server:row-extras', () => {
     it('renders the Valheim control in the table row', async () => {
-        renderWithProviders(<table><tbody><PelicanServerRow row={row} suggestions={[]} onUpdate={vi.fn()} /></tbody></table>);
+        renderWithProviders(<table><tbody><PelicanServerRow row={row} showExtras suggestions={[]} onUpdate={vi.fn()} /></tbody></table>);
         expect(await screen.findByTestId('valheim-link-token-7')).toBeInTheDocument();
     });
 

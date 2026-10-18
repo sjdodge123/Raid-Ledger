@@ -7,9 +7,13 @@ import type { IgdbGameDto, PelicanServerRowDto } from '@raid-ledger/contract';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
+import { usePluginStore } from '../../../stores/plugin-store';
+import { getSlotRegistrations } from '../../plugin-registry';
 import { PelicanServerCard, PelicanServerRow, type ServerUpdateHandler } from './pelican-server-row';
 
-const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Detect Quick Play', 'Last synced', 'Mod link'] as const;
+const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Detect Quick Play', 'Last synced'] as const;
+/** Only shown while an active plugin fills `pelican-server:row-extras` (ROK-1833). */
+const EXTRAS_HEADER = 'Mod link';
 
 interface TableProps {
     rows: PelicanServerRowDto[];
@@ -24,9 +28,16 @@ function useGameSuggestions(): IgdbGameDto[] {
     } satisfies IgdbGameDto)), [games]);
 }
 
+/** `true` while an active plugin fills the row-extras slot — else the column is dropped. */
+function useRowExtrasFilled(): boolean {
+    const activeSlugs = usePluginStore((s) => s.activeSlugs);
+    return getSlotRegistrations('pelican-server:row-extras').some((r) => activeSlugs.has(r.pluginSlug));
+}
+
 export function PelicanServersTable({ rows, onUpdate }: TableProps) {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const suggestions = useGameSuggestions();
+    const showExtras = useRowExtrasFilled();
     const shared = { suggestions, onUpdate };
     if (!isDesktop) {
         return (
@@ -40,13 +51,13 @@ export function PelicanServersTable({ rows, onUpdate }: TableProps) {
             <table className="w-full text-sm">
                 <thead className="border-b border-edge bg-surface/50">
                     <tr>
-                        {HEADERS.map((h) => (
+                        {(showExtras ? [...HEADERS, EXTRAS_HEADER] : HEADERS).map((h) => (
                             <th key={h} scope="col" className="px-2 py-2 text-left align-bottom text-xs font-medium text-muted">{h}</th>
                         ))}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-edge">
-                    {rows.map((row) => <PelicanServerRow key={row.id} row={row} {...shared} />)}
+                    {rows.map((row) => <PelicanServerRow key={row.id} row={row} showExtras={showExtras} {...shared} />)}
                 </tbody>
             </table>
         </div>

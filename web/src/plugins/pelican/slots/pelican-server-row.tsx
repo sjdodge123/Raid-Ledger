@@ -143,9 +143,10 @@ function RowExtras({ row, inline = false }: { row: PelicanServerRowDto; inline?:
 /**
  * Desktop: one `<tr>` in the §4.21-idiom table. Sized to fit the admin content
  * box without inner scroll: the game picker holds 10rem, every other column
- * shrinks to its longest word. No timezone column (ROK-1795).
+ * shrinks to its longest word. No timezone column (ROK-1795). The plugin
+ * "Mod link" cell renders only with `showExtras` (the table's slot check).
  */
-export function PelicanServerRow(p: ServerRowProps) {
+export function PelicanServerRow(p: ServerRowProps & { showExtras?: boolean }) {
     return (
         <tr data-testid={`pelican-server-row-${p.row.id}`} className="align-top">
             <td className="px-2 py-3"><ServerName row={p.row} /></td>
@@ -154,7 +155,7 @@ export function PelicanServerRow(p: ServerRowProps) {
             <td className="px-2 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
             <td className="px-2 py-3"><QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><LastSynced at={p.row.lastSyncedAt} /></td>
-            <td className="px-2 py-3"><RowExtras row={p.row} inline /></td>
+            {p.showExtras && <td className="px-2 py-3"><RowExtras row={p.row} inline /></td>}
         </tr>
     );
 }
