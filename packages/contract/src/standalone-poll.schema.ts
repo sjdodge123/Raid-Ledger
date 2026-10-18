@@ -39,6 +39,19 @@ export const CreateSchedulingPollSchema = z.object({
 export type CreateSchedulingPollDto = z.infer<typeof CreateSchedulingPollSchema>;
 
 /**
+ * ROK-1844: request body for `POST /scheduling-polls/:matchId/complete`.
+ * Strict — an unknown key is a 400. `eventId` is the event the poll's
+ * yes-voters are auto-signed up to (the linked event, or one created from the
+ * poll); `startTime` is the winning slot's instant.
+ */
+export const CompleteSchedulingPollSchema = z.object({
+    eventId: z.number().int().positive().optional(),
+    startTime: z.string().datetime({ offset: true }).optional(),
+}).strict();
+
+export type CompleteSchedulingPollDto = z.infer<typeof CompleteSchedulingPollSchema>;
+
+/**
  * Response from creating a standalone scheduling poll.
  * Returns the match and lineup identifiers needed to navigate
  * to the scheduling poll page.

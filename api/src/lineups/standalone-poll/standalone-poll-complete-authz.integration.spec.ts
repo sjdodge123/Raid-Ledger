@@ -315,7 +315,10 @@ function describeAc3() {
     expect(await matchStatus(matchId)).toBe('scheduling');
   });
 }
-describe('ROK-1844 AC3 — eventId must be ours and from this match', describeAc3);
+describe(
+  'ROK-1844 AC3 — eventId must be ours and from this match',
+  describeAc3,
+);
 
 function describeAc4() {
   it('409s a repeat complete and fires no second round of signups', async () => {
