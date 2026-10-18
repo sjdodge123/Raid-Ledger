@@ -137,9 +137,8 @@ export class StandalonePollService {
     await assertCanCompletePoll(
       this.db,
       matchId,
-      creatorId ?? -1,
-      isAdmin,
-      eventId,
+      { id: creatorId ?? -1, isAdmin },
+      { eventId, startTime },
     );
     const result = await completeStandalonePoll(this.db, matchId);
     if (result.conflict) {
@@ -148,7 +147,9 @@ export class StandalonePollService {
     // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
     // embed so its author line and colour follow.
     if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
-    if (result.ok && eventId) {
+    // The contract requires `startTime` with `eventId`; only that slot's
+    // yes-voters are signed up (ROK-1844), never every yes-voter.
+    if (result.ok && eventId && startTime) {
       this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
         (err) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -187,7 +188,7 @@ export class StandalonePollService {
   private async fireAutoSignup(
     matchId: number,
     eventId: number,
-    startTime?: string,
+    startTime: string,
     creatorId?: number,
   ): Promise<void> {
     const slots = await findScheduleSlots(this.db, matchId);
@@ -211,20 +212,18 @@ export class StandalonePollService {
     // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
     // name the DMs below announce.
     const gameName = await heartPollGameForVoters(this.db, matchId, allVoters);
-    if (startTime) {
-      await notifyPollVoters(
-        {
-          db: this.db,
-          settingsService: this.settingsService,
-          notifications: this.notifications,
-        },
-        selectedVoters,
-        otherVoters,
-        startTime,
-        eventId,
-        gameName ?? 'Game Night',
-      );
-    }
+    await notifyPollVoters(
+      {
+        db: this.db,
+        settingsService: this.settingsService,
+        notifications: this.notifications,
+      },
+      selectedVoters,
+      otherVoters,
+      startTime,
+      eventId,
+      gameName ?? 'Game Night',
+    );
   }
 
   /**

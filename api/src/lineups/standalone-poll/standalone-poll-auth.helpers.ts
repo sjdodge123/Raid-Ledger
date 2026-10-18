@@ -14,7 +14,11 @@
  * event, hearts the game and DMs them. Every completion is now owner/staff
  * only, and the `eventId` must be the caller's and come from this poll.
  */
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -55,12 +59,11 @@ export async function assertCanRescheduleEvent(
 
 /** What the completion guard needs to know about a standalone poll. */
 interface PollContext {
+  matchId: number;
   lineupId: number;
   pollCreatorId: number;
   visibility: 'public' | 'private';
   linkedEventId: number | null;
-  gameId: number;
-  openedAt: Date;
 }
 
 /** Fetch a standalone match's ownership/linkage context, or null. */
@@ -70,12 +73,11 @@ async function fetchPollContext(
 ): Promise<PollContext | null> {
   const [ctx] = await db
     .select({
+      matchId: schema.communityLineupMatches.id,
       lineupId: schema.communityLineups.id,
       pollCreatorId: schema.communityLineups.createdBy,
       visibility: schema.communityLineups.visibility,
       linkedEventId: schema.communityLineupMatches.linkedEventId,
-      gameId: schema.communityLineupMatches.gameId,
-      openedAt: schema.communityLineupMatches.createdAt,
     })
     .from(schema.communityLineupMatches)
     .innerJoin(
@@ -93,7 +95,7 @@ async function fetchPollContext(
 }
 
 /** The caller of a completion: their id and whether they are staff. */
-interface Caller {
+export interface Caller {
   id: number;
   isAdmin: boolean;
 }
@@ -127,8 +129,9 @@ async function assertMayCompletePoll(
 /**
  * AC3 — the event the yes-voters are signed up to must be the caller's (or
  * staff's) and must come from this poll: its linked event, or — for an
- * unlinked poll — an event for the poll's game created after the poll opened
- * (the create-event form's lock-in path). 404 when the event is gone.
+ * unlinked poll — the event created FROM this poll (`created_from_poll_id`,
+ * stamped at creation by the create-event form's `schedulingMatchId`). Same
+ * game / later creation date is not provenance. 404 when the event is gone.
  */
 async function assertMayUseEvent(
   db: Db,
@@ -139,8 +142,7 @@ async function assertMayUseEvent(
   const [event] = await db
     .select({
       creatorId: schema.events.creatorId,
-      gameId: schema.events.gameId,
-      createdAt: schema.events.createdAt,
+      createdFromPollId: schema.events.createdFromPollId,
     })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
@@ -153,29 +155,53 @@ async function assertMayUseEvent(
   }
   if (eventId === ctx.linkedEventId) return;
   const fromThisPoll =
-    ctx.linkedEventId === null &&
-    event.gameId === ctx.gameId &&
-    event.createdAt >= ctx.openedAt;
+    ctx.linkedEventId === null && event.createdFromPollId === ctx.matchId;
   if (!fromThisPoll) {
     throw new ForbiddenException('That event was not created from this poll');
   }
 }
 
+/** ROK-1844 — `startTime` must be one of the poll's proposed slots (400). */
+async function assertIsPollSlot(
+  db: Db,
+  matchId: number,
+  startTime: string,
+): Promise<void> {
+  const at = new Date(startTime).getTime();
+  const slots = await db
+    .select({ proposedTime: schema.communityLineupScheduleSlots.proposedTime })
+    .from(schema.communityLineupScheduleSlots)
+    .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+  if (!slots.some((s) => s.proposedTime.getTime() === at)) {
+    throw new BadRequestException("startTime is not one of this poll's slots");
+  }
+}
+
+/** What a completion signs voters up to: the event and the winning slot. */
+export interface CompletionTarget {
+  eventId?: number | undefined;
+  startTime?: string | undefined;
+}
+
 /**
- * P2 / ROK-1844 — authorize completing (locking in) a standalone poll, and the
- * `eventId` its yes-voters will be signed up to. An unknown match is a no-op
- * so the caller's usual 404 still applies.
+ * P2 / ROK-1844 — authorize completing (locking in) a standalone poll, the
+ * `eventId` its yes-voters will be signed up to and the slot (`startTime`)
+ * that picks them. An unknown match is a no-op so the caller's usual 404
+ * still applies.
  */
 export async function assertCanCompletePoll(
   db: Db,
   matchId: number,
-  userId: number,
-  isAdmin: boolean,
-  eventId?: number,
+  caller: Caller,
+  target: CompletionTarget = {},
 ): Promise<void> {
   const ctx = await fetchPollContext(db, matchId);
   if (!ctx) return;
-  const caller = { id: userId, isAdmin };
   await assertMayCompletePoll(db, ctx, caller);
-  if (eventId !== undefined) await assertMayUseEvent(db, ctx, eventId, caller);
+  if (target.eventId !== undefined) {
+    await assertMayUseEvent(db, ctx, target.eventId, caller);
+  }
+  if (target.startTime !== undefined) {
+    await assertIsPollSlot(db, matchId, target.startTime);
+  }
 }

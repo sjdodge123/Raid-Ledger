@@ -11,9 +11,12 @@
  *   AC1  only the poll creator, the linked-event creator or staff may complete
  *        (403; 404 for a private poll the caller cannot view)
  *   AC2  the body is a strict schema — malformed input is a 400
- *   AC3  a supplied `eventId` must be the caller's (or staff's) and belong to /
- *        be created from this match
+ *   AC3  a supplied `eventId` must be the caller's (or staff's) and be the
+ *        linked event or one created FROM this match (`created_from_poll_id`)
+ *        — same game + a later creation date is not provenance
  *   AC4  completion is a compare-and-set — a repeat call is a 409
+ *   AC5  `startTime` is required with `eventId`, must be one of the poll's
+ *        slots, and only that slot's yes-voters are signed up
  *
  * Every refusal also proves the side effects never ran: the poll stays open and
  * the yes-voter holds no signup. The auto-signup chain is fire-and-forget, so
@@ -103,9 +106,12 @@ async function openPoll(
   return res.body.id as number;
 }
 
-/** Add one slot a day out and a yes-vote on it; returns the slot time. */
-async function addYesVote(matchId: number, voterId: number): Promise<Date> {
-  const proposedTime = new Date(Date.now() + DAY_MS);
+/** Add one slot (default a day out) and a yes-vote on it; returns its time. */
+async function addYesVote(
+  matchId: number,
+  voterId: number,
+  proposedTime: Date = new Date(Date.now() + DAY_MS),
+): Promise<Date> {
   const [slot] = nonEmpty(
     await testApp.db
       .insert(schema.communityLineupScheduleSlots)
@@ -119,11 +125,12 @@ async function addYesVote(matchId: number, voterId: number): Promise<Date> {
   return proposedTime;
 }
 
-/** Insert an event for the seeded game owned by `creatorId`. */
+/** Insert an event for the seeded game owned by `creatorId`, optionally
+ *  stamped as created from poll `fromPollId`. */
 async function createEvent(
   creatorId: number,
   start: Date,
-  createdAt?: Date,
+  fromPollId: number | null = null,
 ): Promise<number> {
   const [event] = nonEmpty(
     await testApp.db
@@ -134,7 +141,7 @@ async function createEvent(
         duration: [start, new Date(start.getTime() + TWO_HOURS_MS)],
         maxAttendees: 10,
         creatorId,
-        ...(createdAt ? { createdAt } : {}),
+        createdFromPollId: fromPollId,
       })
       .returning(),
     'event',
@@ -192,7 +199,7 @@ async function seedOwnPoll(tag: string) {
   const voterId = await createVoter(`${tag}-voter`);
   const matchId = await openPoll(creator.token);
   const slotTime = await addYesVote(matchId, voterId);
-  const eventId = await createEvent(creator.userId, slotTime);
+  const eventId = await createEvent(creator.userId, slotTime, matchId);
   return { creator, voterId, matchId, slotTime, eventId };
 }
 
@@ -262,6 +269,7 @@ function describeAc2() {
     ['a fractional eventId', { eventId: 1.5 }],
     ['a non-ISO startTime', { eventId: 1, startTime: 'next tuesday' }],
     ['an unknown key', { eventId: 1, voters: [1, 2, 3] }],
+    ['an eventId without a startTime', { eventId: 1 }],
   ];
   it.each(malformed)('400s %s and leaves the poll open', async (_, body) => {
     const { creator, matchId } = await seedOwnPoll('ac2');
@@ -289,27 +297,42 @@ function describeAc3() {
     await expectUntouched(matchId, foreignEvent, voterId);
   });
 
-  it('403s the creator passing their own event that predates the poll', async () => {
-    const { creator, voterId, matchId, slotTime } = await seedOwnPoll('ac3old');
-    const oldEvent = await createEvent(
-      creator.userId,
-      slotTime,
-      new Date(Date.now() - 7 * DAY_MS),
-    );
+  it('403s their own same-game, same-slot event created after the poll but not from it', async () => {
+    const { creator, voterId, matchId, slotTime } =
+      await seedOwnPoll('ac3foreign');
+    const unrelated = await createEvent(creator.userId, slotTime);
 
     const res = await complete(creator.token, matchId, {
-      eventId: oldEvent,
+      eventId: unrelated,
       startTime: slotTime.toISOString(),
     });
 
     expect(res.status).toBe(403);
-    await expectUntouched(matchId, oldEvent, voterId);
+    await expectUntouched(matchId, unrelated, voterId);
+  });
+
+  it('403s their own event created from a DIFFERENT poll', async () => {
+    const { creator, voterId, matchId, slotTime } =
+      await seedOwnPoll('ac3other');
+    const otherPoll = await openPoll(creator.token);
+    const otherEvent = await createEvent(creator.userId, slotTime, otherPoll);
+
+    const res = await complete(creator.token, matchId, {
+      eventId: otherEvent,
+      startTime: slotTime.toISOString(),
+    });
+
+    expect(res.status).toBe(403);
+    await expectUntouched(matchId, otherEvent, voterId);
   });
 
   it('404s an eventId that does not exist and leaves the poll open', async () => {
-    const { creator, matchId } = await seedOwnPoll('ac3gone');
+    const { creator, matchId, slotTime } = await seedOwnPoll('ac3gone');
 
-    const res = await complete(creator.token, matchId, { eventId: 999_999 });
+    const res = await complete(creator.token, matchId, {
+      eventId: 999_999,
+      startTime: slotTime.toISOString(),
+    });
 
     expect(res.status).toBe(404);
     expect(await matchStatus(matchId)).toBe('scheduling');
@@ -341,3 +364,65 @@ function describeAc4() {
   });
 }
 describe('ROK-1844 AC4 — completion is one-shot', describeAc4);
+
+function describeAc5() {
+  it('400s a startTime that is not one of the poll slots and leaves the poll open', async () => {
+    const { creator, voterId, matchId, slotTime, eventId } =
+      await seedOwnPoll('ac5bad');
+    const offSlot = new Date(slotTime.getTime() + TWO_HOURS_MS);
+
+    const res = await complete(creator.token, matchId, {
+      eventId,
+      startTime: offSlot.toISOString(),
+    });
+
+    expect(res.status).toBe(400);
+    await expectUntouched(matchId, eventId, voterId);
+  });
+
+  it('signs up only the yes-voters of the chosen slot B, never slot A', async () => {
+    const {
+      creator,
+      voterId: slotAVoter,
+      matchId,
+      slotTime,
+    } = await seedOwnPoll('ac5slot');
+    const slotBVoter = await createVoter('ac5slot-voter-b');
+    const slotB = await addYesVote(
+      matchId,
+      slotBVoter,
+      new Date(slotTime.getTime() + DAY_MS),
+    );
+    const eventId = await createEvent(creator.userId, slotB, matchId);
+
+    const res = await complete(creator.token, matchId, {
+      eventId,
+      startTime: slotB.toISOString(),
+    });
+
+    expect(res.status).toBe(200);
+    // The game heart is written AFTER the signups and covers every yes-voter,
+    // so once slot A's voter is hearted the signup pass has finished.
+    await waitFor(async () => {
+      expect(await pollHeartCount(slotAVoter)).toBe(1);
+    });
+    expect(await signupCount(eventId, slotBVoter)).toBe(1);
+    expect(await signupCount(eventId, slotAVoter)).toBe(0);
+  });
+}
+describe('ROK-1844 AC5 — startTime picks one of the poll slots', describeAc5);
+
+/** Poll-sourced hearts `userId` holds for the seeded game. */
+async function pollHeartCount(userId: number): Promise<number> {
+  const rows = await testApp.db
+    .select({ id: schema.gameInterests.id })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, testApp.seed.game.id),
+        eq(schema.gameInterests.userId, userId),
+        eq(schema.gameInterests.source, 'poll'),
+      ),
+    );
+  return rows.length;
+}
