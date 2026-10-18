@@ -22,11 +22,18 @@ function fakeDb(): { db: PostgresJsDatabase<typeof schema>; seen: Captured[] } {
       return Promise.resolve();
     },
   };
-  const db = { insert: () => chain } as unknown as PostgresJsDatabase<typeof schema>;
+  const db = { insert: () => chain } as unknown as PostgresJsDatabase<
+    typeof schema
+  >;
   return { db, seen };
 }
 
-const S = { guildId: 9, userId: 11, characterName: 'Bjorn', at: new Date('2026-10-18T12:00:00Z') };
+const S = {
+  guildId: 9,
+  userId: 11,
+  characterName: 'Bjorn',
+  at: new Date('2026-10-18T12:00:00Z'),
+};
 
 describe('upsertSighting', () => {
   it('touch: updates last_seen_at, never sets left_at, skips a Left row', async () => {

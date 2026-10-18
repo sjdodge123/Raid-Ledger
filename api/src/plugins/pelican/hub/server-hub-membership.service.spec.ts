@@ -22,7 +22,9 @@ function player(steamId: string, name: string): ServerRosterPlayer {
 }
 
 /** A service over a fake roster; the db is only handed through to the mocked queries. */
-function make(roster: { current: ServerRosterPlayer[] }): ServerHubMembershipService {
+function make(roster: {
+  current: ServerRosterPlayer[];
+}): ServerHubMembershipService {
   const presence = {
     playersOnGames: () => roster.current,
   } as unknown as PelicanPresenceSupervisor;
@@ -44,7 +46,9 @@ beforeEach(() => {
 
 describe('touchOnline (L-3 still-online touch)', () => {
   it('writes every linked online player with rejoin=false', async () => {
-    const svc = make({ current: [player('11', 'Bjorn'), player('12', 'Astrid')] });
+    const svc = make({
+      current: [player('11', 'Bjorn'), player('12', 'Astrid')],
+    });
     expect(await svc.touchOnline(AT)).toBe(2);
     expect(q.upsertSighting).toHaveBeenCalledTimes(2);
     for (const call of q.upsertSighting.mock.calls) expect(call[2]).toBe(false);
