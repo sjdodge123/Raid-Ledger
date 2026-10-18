@@ -294,10 +294,13 @@ it('ROK-1801: signals nothing for a reconnect replay that changes nothing', asyn
 it('ROK-1801: signals after a rehydrate that restored players, and after an empty', async () => {
   const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
   await h.connect();
-  expect(h.onChanged.mock.calls).toEqual([[SRC]]);
+  // ROK-1831 Codex r2: the boot roster is marked, so a listener can tell it
+  // from an arrival.
+  const BOOT = { ...SRC, rehydrated: true };
+  expect(h.onChanged.mock.calls).toEqual([[BOOT]]);
   h.wings.frame('status', 'offline');
   await h.session.idle();
-  expect(h.onChanged.mock.calls).toEqual([[SRC], [SRC]]);
+  expect(h.onChanged.mock.calls).toEqual([[BOOT], [SRC]]);
   expect(h.session.players()).toEqual([]);
 });
 

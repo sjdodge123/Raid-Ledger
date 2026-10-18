@@ -70,7 +70,11 @@ export class ServerHubMembershipService {
   @OnEvent(SERVER_PRESENCE_EVENTS.CHANGED)
   async onPresenceChanged(src: ServerPresenceChangedPayload): Promise<void> {
     try {
-      await this.recordArrivals(src.pelicanServerId, new Date());
+      await this.recordArrivals(
+        src.pelicanServerId,
+        new Date(),
+        src.rehydrated === true,
+      );
     } catch (err) {
       this.logger.error(
         `hub presence write failed: ${err instanceof Error ? err.message : 'unknown'}`,
@@ -132,15 +136,23 @@ export class ServerHubMembershipService {
     return { joined: false };
   }
 
-  private async recordArrivals(serverId: number, at: Date): Promise<void> {
+  /**
+   * Records who arrived since the last roster. Hydration is explicit (Codex
+   * r2 P2): a `rehydrated` boot roster is a touch that never clears a Leave;
+   * any other event — including the first after an EMPTY boot, which emits
+   * nothing — is a genuine transition, so a join clears `left_at`.
+   */
+  private async recordArrivals(
+    serverId: number,
+    at: Date,
+    rehydrated: boolean,
+  ): Promise<void> {
     const players = this.players().filter(
       (p) => p.pelicanServerId === serverId,
     );
     const prev = this.rosters.get(serverId);
     this.rosters.set(serverId, new Set(players.map((p) => p.steamId)));
-    // No baseline (first CHANGED since boot): everyone online is rehydrated,
-    // not arriving — a touch that never clears a Leave (Codex r1 / review m1).
-    const rejoin = prev !== undefined;
+    const rejoin = !rehydrated;
     const arrived = players.filter((p) => !prev?.has(p.steamId));
     if (arrived.length === 0) return;
     const users = await usersBySteamId(

@@ -60,23 +60,51 @@ describe('touchOnline (L-3 still-online touch)', () => {
   });
 });
 
-describe('arrivals after boot', () => {
-  it('the first roster (no baseline) is a touch; a later join clears left_at', async () => {
+const BOOT = { pelicanServerId: SERVER, rehydrated: true } as never;
+const LIVE = { pelicanServerId: SERVER } as never;
+
+describe('arrivals after boot (Codex r2 P2: hydration is explicit)', () => {
+  it('a non-empty boot roster is a touch; the next join clears left_at', async () => {
     const roster = { current: [player('11', 'Bjorn')] };
     const svc = make(roster);
-    await svc.onPresenceChanged({ pelicanServerId: SERVER } as never);
+    await svc.onPresenceChanged(BOOT);
     expect(q.upsertSighting).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.objectContaining({ userId: 11 }),
       false,
     );
     roster.current = [player('11', 'Bjorn'), player('12', 'Astrid')];
-    await svc.onPresenceChanged({ pelicanServerId: SERVER } as never);
+    await svc.onPresenceChanged(LIVE);
     expect(q.upsertSighting).toHaveBeenCalledTimes(2);
     expect(q.upsertSighting).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.objectContaining({ userId: 12 }),
       true,
+    );
+  });
+
+  it('an empty boot roster (no hydration event): the first join clears left_at', async () => {
+    const roster = { current: [player('12', 'Astrid')] };
+    const svc = make(roster);
+    await svc.onPresenceChanged(LIVE);
+    expect(q.upsertSighting).toHaveBeenCalledTimes(1);
+    expect(q.upsertSighting).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userId: 12 }),
+      true,
+    );
+  });
+
+  it('a re-hydration (reactivation) never un-Leaves someone already known', async () => {
+    const roster = { current: [player('11', 'Bjorn')] };
+    const svc = make(roster);
+    await svc.onPresenceChanged(LIVE);
+    roster.current = [player('11', 'Bjorn'), player('13', 'Sigrid')];
+    await svc.onPresenceChanged(BOOT);
+    expect(q.upsertSighting).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userId: 13 }),
+      false,
     );
   });
 });

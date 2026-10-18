@@ -18,7 +18,11 @@ import {
 } from './pelican-presence.helpers';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
 import type { GamePresenceEvent } from './presence-events';
-import { rosterOf, type ServerRosterPlayer } from './server-presence.reader';
+import {
+  rosterOf,
+  type ServerPresenceChangedPayload,
+  type ServerRosterPlayer,
+} from './server-presence.reader';
 import type {
   ServerPresenceSink,
   ServerPresenceSource,
@@ -48,7 +52,7 @@ export interface PresenceSessionOptions {
   socketFactory?: WingsSocketFactory;
   now?: () => number;
   /** Roster changed; called once the queued sink calls settled (ROK-1801). */
-  onChanged?: (source: ServerPresenceSource) => void;
+  onChanged?: (source: ServerPresenceChangedPayload) => void;
 }
 
 interface Buffered {
@@ -148,7 +152,7 @@ export class PelicanPresenceSession {
       this.tracker.hydrate(toPresentPlayers(open));
       const ids = (ps: { steamId: string }[]) => ps.map((p) => p.steamId);
       this.held.reset(ids(held), ids(open));
-      if (open.length > 0) this.notify();
+      if (open.length > 0) this.notify(true);
     } catch (err) {
       this.opts.logger.error(
         `Presence rehydrate failed for server ${this.serverId}: ${errName(err)}`,
@@ -343,11 +347,17 @@ export class PelicanPresenceSession {
     }
   }
 
-  /** Queued behind the sink calls, so a listener sees their outcome. */
-  private notify(): void {
+  /**
+   * Queued behind the sink calls, so a listener sees their outcome.
+   * `rehydrated` marks the boot roster (ROK-1831 Codex r2).
+   */
+  private notify(rehydrated = false): void {
     const cb = this.opts.onChanged;
+    const mark = rehydrated ? { rehydrated: true as const } : {};
     if (cb)
-      this.enqueue('onChanged', (_s, src) => Promise.resolve(cb({ ...src })));
+      this.enqueue('onChanged', (_s, src) =>
+        Promise.resolve(cb({ ...src, ...mark })),
+      );
   }
 
   /** Serialised, per-call isolated: one failing sink call never stops the next. */
