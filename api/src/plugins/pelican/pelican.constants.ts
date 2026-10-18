@@ -37,3 +37,9 @@ export const PELICAN_TZ_TOLERANCE_MS = 60_000;
  */
 export const PELICAN_PRESENCE_CONFIG_CHANGED =
   'pelican.presence-config-changed';
+/**
+ * Emitted (awaited, `emitAsync`) after an admin PATCH that sets a server's
+ * game (ROK-1833). Game plugins react — Valheim revokes its ingest token when
+ * the row leaves Valheim. Payload: `{ serverId }`. Pelican stays game-agnostic.
+ */
+export const PELICAN_SERVER_GAME_CHANGED = 'pelican.server-game-changed';

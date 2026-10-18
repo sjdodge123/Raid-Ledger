@@ -776,6 +776,42 @@
                           "file": {
                             "type": "string",
                             "pattern": "^[A-Za-z0-9_.-]{1,100}\\.png$"
+                          },
+                          "blob": {
+                            "type": "object",
+                            "properties": {
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$"
+                              },
+                              "byteLength": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 16777216
+                              },
+                              "contentType": {
+                                "type": "string",
+                                "const": "image/png"
+                              },
+                              "width": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 16384
+                              },
+                              "height": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 16384
+                              }
+                            },
+                            "required": [
+                              "sha256",
+                              "byteLength",
+                              "contentType",
+                              "width",
+                              "height"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
