@@ -76,6 +76,26 @@ test_guard_is_isolated() {
     assert_eq "$(grep -c "rl-docker-guard" "$RL_INFRA/orchestrator/bin/env-spin" | tr -d ' ')" "0" "env-spin never joins env containers to the guard network"
 }
 
+# B1 (review r1): runners build with the classic builder (DOCKER_BUILDKIT=0, the
+# guard refuses BuildKit's /session + /grpc), and build-image-on-runner runs
+# `docker build -f Dockerfile.allinone` inside a runner. The classic builder
+# cannot parse BuildKit-only syntax, so the Dockerfile must carry none. Comment
+# lines are stripped first so the Dockerfile's own explanation never trips it.
+# Revert-proof: the pre-fix Dockerfile has six COPY <<'EOF' heredocs.
+test_allinone_builds_under_classic_builder() {
+    local dockerfile="$RL_INFRA/../Dockerfile.allinone" env code src missing=0
+    env=$(block "x-runner-docker-env")
+    assert_eq "$(has "$env" 'DOCKER_BUILDKIT: "0"')" "yes" "runners build with the classic builder"
+    code=$(grep -v '^[[:space:]]*#' "$dockerfile")
+    assert_eq "$(grep -cE "<<-?[\"']?[A-Za-z_]" <<<"$code" | tr -d ' ')" "0" "Dockerfile.allinone has no heredoc"
+    assert_eq "$(grep -ciE '^[[:space:]]*#[[:space:]]*syntax=' "$dockerfile" | tr -d ' ')" "0" "no BuildKit syntax directive"
+    assert_eq "$(grep -cE -- '--(mount|chmod|link|parents|exclude|checksum)([= ]|$)' <<<"$code" | tr -d ' ')" "0" "no BuildKit-only RUN/COPY flags"
+    for src in $(awk '$1 == "COPY" && $2 ~ /^docker\/allinone\// { print $2 }' <<<"$code"); do
+        [[ -f "$RL_INFRA/../$src" ]] || { echo "  missing build-context file: $src"; missing=$((missing + 1)); }
+    done
+    assert_eq "$missing" "0" "every COPY docker/allinone/* source exists"
+}
+
 test_rendered_config_when_docker_available() {
     if ! docker compose version >/dev/null 2>&1; then
         echo "  (skip: docker compose not installed — awk cases above still ran)"
@@ -92,6 +112,7 @@ run_test "proxy-is-off-rl-net" test_proxy_is_off_rl_net
 run_test "no-runner-mounts-docker-sock" test_no_runner_mounts_docker_sock
 run_test "runners-route-through-guard" test_runners_route_through_guard
 run_test "guard-is-isolated" test_guard_is_isolated
+run_test "allinone-builds-under-classic-builder" test_allinone_builds_under_classic_builder
 run_test "rendered-config-when-docker-available" test_rendered_config_when_docker_available
 
 print_test_summary
