@@ -9,11 +9,8 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { isStaff, type GuildActor } from '../../../guilds/guild-access.service';
-import { findGuild, toGuildSummary } from '../../../guilds/guild-core.queries';
-import type {
-  HubKindAdapter,
-  HubMineRank,
-} from '../../plugin-host/extension-points';
+import { findGuild, hubSummaryFor } from '../../../guilds/guild-core.queries';
+import type { HubKindAdapter } from '../../plugin-host/extension-points';
 import { PELICAN_PLUGIN_ID } from '../pelican.constants';
 import {
   isServerHubMemberRow,
@@ -82,7 +79,7 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
       loadServerBlock(this.db, guild.pelicanServerId, now),
     ]);
     return buildServerHubPage({
-      guild: toGuildSummary(guild),
+      guild: hubSummaryFor(guild, isStaff(actor)),
       role,
       viewerId: actor.id,
       members,
@@ -98,13 +95,6 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
     return EMPTY_SERVER_HUB_RAIDS;
   }
 
-  /** Server hubs have no ranks: both fields null for every hub asked about. */
-  mineRanks(
-    _userId: number,
-    guildIds: number[],
-  ): Promise<Map<number, HubMineRank>> {
-    return Promise.resolve(
-      new Map(guildIds.map((id) => [id, { rankIndex: null, rankName: null }])),
-    );
-  }
+  // No `mineRanks`: server hubs have no ranks, and answering null for every
+  // id would clobber another kind's real rank in `guilds/mine` (Codex r1).
 }
