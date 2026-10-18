@@ -104,7 +104,9 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
    `proxmox-vm:/srv/rl-infra/runners/slot-N/worktree`. Excludes `node_modules`,
    `dist`, `coverage`, and the entire `.git` tree (the runner-side `.git` is
    scaffolded separately via `git init` + `git fetch origin`), plus
-   `*.tsbuildinfo` and Playwright output dirs.
+   `*.tsbuildinfo` and Playwright output dirs — and every `.env` / `.env.*`
+   file except the tracked `*.example` templates (ROK-1849: they hold real
+   secrets and the runner side lands everything at 0644).
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
@@ -1105,6 +1107,18 @@ Terminate + recreate — `rl release` then `rl claim`, or `rl resync` /
 Relevant for the ROK-1466 `scripts/.auth` ignore: a slot claimed before that
 change still reaps the runner-written auth dir (the `PLAYWRIGHT_AUTH_DIR`
 relocation covers that case independently).
+
+Since ROK-1849 `ensure_mutagen_sync` stamps the session with an
+`rl-sync-config=N` label and recreates any live session that lacks the current
+one, so a flag change no longer waits for a manual release: **bump `N` in
+`ensure_mutagen_sync` whenever you change the create flags**. Mutagen never
+deletes an ignored path on the beta, so `flush_mutagen` also runs
+`rl-infra/runner/purge-synced-secrets.sh` inside the runner to remove `.env`
+copies a pre-fix session left in `/workspace` (operator, VM-wide:
+`for d in /srv/rl-infra/runners/slot-*/worktree; do sudo bash <repo>/rl-infra/runner/purge-synced-secrets.sh "$d"; done`).
+Consequence: a runner has no `tools/test-bot/.env`, so a fleet Discord smoke
+tier SKIPs (FAILs under `--ci`) unless `TEST_BOT_TOKEN` + `TEST_GUILD_ID` are
+exported — GitHub CI runs Discord smoke from its own secrets.
 
 ### Stale-build sync guard + force-resync (TECH-DEBT 2026-06-02)
 
