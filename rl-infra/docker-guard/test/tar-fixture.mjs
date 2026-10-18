@@ -27,12 +27,16 @@ export function paxRecord(key, value) {
   return `${len}${body}`;
 }
 
-/** entries: [{ name, data = '', type = '0' }] → a tar Buffer with the end marker. */
+/**
+ * entries: [{ name, data = '', type = '0', size }] → a tar Buffer with the end
+ * marker. `size` (default data length) is the DECLARED header size; the body
+ * written is always `data`, so a body-less type can declare a size it lacks.
+ */
 export function tarOf(entries) {
   const parts = [];
-  for (const { name, data = '', type = '0' } of entries) {
+  for (const { name, data = '', type = '0', size } of entries) {
     const d = Buffer.from(data);
-    parts.push(header(name, d.length, type), d, pad(d.length));
+    parts.push(header(name, size ?? d.length, type), d, pad(d.length));
   }
   parts.push(Buffer.alloc(1024));
   return Buffer.concat(parts);

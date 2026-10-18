@@ -98,8 +98,12 @@ function onHeader(st, wanted, h) {
   if (OTHER.has(type) && type !== '5') st.links.push(name);
   const keep = meta || (REGULAR.has(type) && wanted.has(name));
   if (keep && size > MAX_KEEP) return void (st.error = `${name} is over 1 MiB`);
-  const total = size + ((512 - (size % 512)) % 512);
-  st.entry = { type, name, keep, chunks: [], data: size, total, left: total };
+  // c4: Go's archive/tar (handleRegularFile → isHeaderOnlyType) gives links,
+  // devices, dirs and fifos NO body whatever the size field says; only regular
+  // and meta entries have `size` bytes. Unmodelled types were refused above.
+  const body = OTHER.has(type) ? 0 : size;
+  const total = body + ((512 - (body % 512)) % 512);
+  st.entry = { type, name, keep, chunks: [], data: body, total, left: total };
   if (st.entry.left === 0) endEntry(st, st.entry);
 }
 
