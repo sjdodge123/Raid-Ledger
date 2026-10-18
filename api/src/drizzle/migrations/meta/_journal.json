@@ -1576,6 +1576,13 @@
       "when": 1792276426271,
       "tag": "0225_odd_smiling_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1792347258530,
+      "tag": "0226_tearful_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

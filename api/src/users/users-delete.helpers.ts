@@ -222,6 +222,9 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // are SET NULL audit columns; the guild's content outlives its editor.
   schema.guildProfiles,
   schema.guildRecommendedAddons,
+  // ROK-1833: `created_by` is SET NULL; a server's link token outlives the
+  // admin who issued it (the mod keeps posting).
+  schema.valheimLinkTokens,
 ];
 
 /**

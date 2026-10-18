@@ -103,3 +103,7 @@ Full list: `api/src/admin/demo-test-*.controller.ts` (start with `demo-test-core
 ## Test categories
 
 Map to files in `tools/test-bot/src/smoke/tests/*.test.ts` — see file names for current coverage areas. Directory layout, CDP-gated tests, and test anatomy: `TESTING.md` → "Discord Smoke Tests (Companion Bot)".
+
+## ROK-1833 — Valheim Link ingest (not Discord, noted here for testers)
+
+The mod posts to `POST /api/plugins/valheim/link/messages/:kind` and `PUT /api/plugins/valheim/link/blobs/:sha256` with a `rlvl_…` bearer (DEMO_MODE seed: `/admin/test/valheim/…`). Per-server caps: `VALHEIM_LINK_RATE_MESSAGES_PER_MIN` (60), `VALHEIM_LINK_RATE_BLOBS_PER_MIN` (20), `VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER` (2 GiB) and `VALHEIM_LINK_MAX_BLOBS_PER_SERVER` (2000, 413 `quota_exceeded`); per IP, `VALHEIM_LINK_RATE_AUTH_PER_MIN` (30 failed token attempts, 429 `rate_limited`). **Known gap:** prod nginx (`nginx/monolith.conf.template`, `nginx/default.conf`) still caps request bodies at 10 MiB, so a blob over 10 MiB gets nginx's HTML 413 before the API sees it, until the separate infra PR raises it for `/api/plugins/valheim/link/`.
