@@ -1,6 +1,6 @@
 /**
  * ROK-1835 trust boundary R5: `users.steam_id` is written ONLY by
- * `UsersService.linkSteam` / `unlinkSteam` (driven by the Steam OpenID link
+ * `UsersService.linkSteam` / `unlinkSteam` (via `users-steam-link.helpers.ts`, driven by the Steam OpenID link
  * flow in `steam-auth.controller.ts`). The Valheim armory auto-matches a
  * mod-asserted SteamID64 against that column, so any other writer would let
  * an unverified SteamID become an identity link. Seeds and test helpers are
@@ -10,7 +10,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const SRC = path.resolve(__dirname, '..');
-const ALLOWED = new Set(['users/users.service.ts']);
+const ALLOWED = new Set([
+  'users/users.service.ts',
+  'users/users-steam-link.helpers.ts',
+]);
 const ALLOWED_PATH =
   /(^|\/)(testing|seeds?|test)\/|\.spec\.ts$|\.testing\.ts$|seed/;
 
@@ -49,7 +52,7 @@ describe('users.steam_id writers (ROK-1835 R5)', () => {
     );
 
   it('detects the legitimate writer (scanner is not vacuous)', () => {
-    expect(writers).toContain('users/users.service.ts');
+    expect(writers).toContain('users/users-steam-link.helpers.ts');
   });
 
   it('has no writer outside the Steam link path, seeds and tests', () => {

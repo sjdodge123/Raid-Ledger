@@ -20,6 +20,8 @@ import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { SettingsService } from '../../../../settings/settings.service';
 import { deleteUserTransaction } from '../../../../users/users-delete.helpers';
+import { UsersService } from '../../../../users/users.service';
+import { announceSteamLinkChange } from '../../../../steam/steam-link-events.helpers';
 import {
   STEAM_ACCOUNT_LINKED,
   STEAM_ACCOUNT_UNLINKED,
@@ -496,5 +498,61 @@ describe('Valheim armory attach vs unlink race (ROK-1835 Codex r1)', () => {
     });
     expect(await pending).toBe(204);
     expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
+  });
+});
+
+describe('Valheim armory Steam relink / unlink announcements (ROK-1835 Codex r1)', () => {
+  const STEAM_B = '76561198000000002';
+
+  it('relinking A to B detaches A auto claims and attaches B unclaimed ones', async () => {
+    const userId = await makeUser('viking', { steamId: STEAM });
+    const a = await importCharacter(await makeServer(1));
+    const b = await importCharacter(await makeServer(2));
+    await testApp.db
+      .update(P)
+      .set({ steamId: STEAM_B, claimedBy: null, claimSource: null })
+      .where(eq(P.id, b));
+    const users = testApp.app.get(UsersService);
+    const previous = await users.linkSteam(userId, STEAM_B);
+    expect(previous).toBe(STEAM);
+    await announceSteamLinkChange(
+      testApp.app.get(EventEmitter2),
+      userId,
+      previous,
+      STEAM_B,
+    );
+    expect(await profile(a)).toEqual({ claimedBy: null, claimSource: null });
+    expect(await profile(b)).toEqual({
+      claimedBy: userId,
+      claimSource: 'auto',
+    });
+  });
+
+  it('DELETE /auth/steam/link clears the link and detaches; with no link it emits nothing', async () => {
+    const token = await memberToken(testApp, 'unlinker');
+    const userId = await userIdOf('unlinker');
+    const spy = jest.spyOn(testApp.app.get(EventEmitter2), 'emitAsync');
+    try {
+      const del = () =>
+        testApp.request.delete('/auth/steam/link').set(auth(token));
+      expect((await del()).status).toBe(204);
+      expect(spy).not.toHaveBeenCalledWith(
+        STEAM_ACCOUNT_UNLINKED,
+        expect.anything(),
+      );
+      await testApp.db
+        .update(schema.users)
+        .set({ steamId: STEAM })
+        .where(eq(schema.users.id, userId));
+      const id = await importCharacter(await makeServer(1));
+      expect((await del()).status).toBe(204);
+      expect(spy).toHaveBeenCalledWith(STEAM_ACCOUNT_UNLINKED, {
+        userId,
+        steamId64: STEAM,
+      });
+      expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -38,10 +38,7 @@ import {
 } from './steam-http.util';
 import { assertFreshSteamAssertion } from './steam-openid-guard.helpers';
 import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
-import {
-  STEAM_ACCOUNT_LINKED,
-  STEAM_ACCOUNT_UNLINKED,
-} from './steam.constants';
+import { announceSteamLinkChange } from './steam-link-events.helpers';
 import {
   signSteamLinkState,
   verifySteamLinkState,
@@ -238,13 +235,10 @@ export class SteamAuthController {
     const userId = stateData.userId as number;
     const steamId = await verifySteamOpenId(query);
     if (!steamId) throw new Error('Steam verification failed');
-    await this.usersService.linkSteam(userId, steamId);
+    const previous = await this.usersService.linkSteam(userId, steamId);
     this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
-    // ROK-1835: users.steam_id is now a verified link (listeners swallow).
-    await this.events.emitAsync(STEAM_ACCOUNT_LINKED, {
-      userId,
-      steamId64: steamId,
-    });
+    // ROK-1835: detach the replaced SteamID, then attach the verified one.
+    await announceSteamLinkChange(this.events, userId, previous, steamId);
     return { userId, steamId };
   }
 
@@ -349,14 +343,9 @@ export class SteamAuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
   async unlinkSteam(@Req() req: AuthenticatedExpressRequest) {
-    const before = await this.usersService.findById(req.user.id);
-    await this.usersService.unlinkSteam(req.user.id);
+    // ROK-1835: the SteamID is read and cleared in one statement.
+    const previous = await this.usersService.unlinkSteam(req.user.id);
     this.logger.log(`Steam account unlinked for user ${req.user.id}`);
-    // ROK-1835: tell listeners which verified SteamID went away.
-    if (before?.steamId)
-      await this.events.emitAsync(STEAM_ACCOUNT_UNLINKED, {
-        userId: req.user.id,
-        steamId64: before.steamId,
-      });
+    await announceSteamLinkChange(this.events, req.user.id, previous, null);
   }
 }
