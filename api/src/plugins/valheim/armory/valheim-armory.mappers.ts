@@ -39,8 +39,7 @@ export interface ArmorySnapshot {
 
 /** Re-validation result; `detail` carries issue paths/codes only. */
 export type ArmoryValidation =
-  | { ok: true; message: ValheimLinkMessage }
-  | { ok: false; detail: string };
+  { ok: true; message: ValheimLinkMessage } | { ok: false; detail: string };
 
 /** `invalid:<path>:<code>;…` — never the payload text (pins are free text). */
 function issueDetail(error: z.ZodError): string {
@@ -73,8 +72,10 @@ export function validateSnapshotPayload(
   const parsed = ValheimLinkMessageSchema.safeParse(snap.payload);
   if (!parsed.success) return { ok: false, detail: issueDetail(parsed.error) };
   const msg = parsed.data;
-  if (msg.kind !== snap.kind) return { ok: false, detail: 'invalid:kind_mismatch' };
-  if (!keyMatches(snap, msg)) return { ok: false, detail: 'invalid:key_mismatch' };
+  if (msg.kind !== snap.kind)
+    return { ok: false, detail: 'invalid:kind_mismatch' };
+  if (!keyMatches(snap, msg))
+    return { ok: false, detail: 'invalid:key_mismatch' };
   return { ok: true, message: msg };
 }
 
@@ -87,6 +88,20 @@ export function capKnownList(list: string[]): {
   return { list: list.slice(0, ARMORY_KNOWN_LIST_MAX), truncated: true };
 }
 
+/** Both known lists capped; `truncated` names the ones that were cut. */
+function capKnownLists(msg: ValheimCharacterMessage): {
+  items: string[];
+  recipes: string[];
+  truncated: string[];
+} {
+  const items = capKnownList(msg.knownItems);
+  const recipes = capKnownList(msg.knownRecipes);
+  const truncated: string[] = [];
+  if (items.truncated) truncated.push('knownItems');
+  if (recipes.truncated) truncated.push('knownRecipes');
+  return { items: items.list, recipes: recipes.list, truncated };
+}
+
 /**
  * `valheim_profiles` values for a character message. Claim columns are
  * deliberately absent — identity is L3's (`onProfileUpserted`), never the
@@ -96,12 +111,7 @@ export function toProfileValues(
   snap: ArmorySnapshot,
   msg: ValheimCharacterMessage,
 ): { values: NewValheimProfile; truncated: string[] } {
-  const items = capKnownList(msg.knownItems);
-  const recipes = capKnownList(msg.knownRecipes);
-  const truncated = [
-    ...(items.truncated ? ['knownItems'] : []),
-    ...(recipes.truncated ? ['knownRecipes'] : []),
-  ];
+  const { items, recipes, truncated } = capKnownLists(msg);
   const c = msg.character;
   const values: NewValheimProfile = {
     pelicanServerId: snap.pelicanServerId,
@@ -117,8 +127,8 @@ export function toProfileValues(
     inventory: msg.inventory,
     skills: msg.skills,
     trophies: msg.trophies,
-    knownItems: items.list,
-    knownRecipes: recipes.list,
+    knownItems: items,
+    knownRecipes: recipes,
     sourceSnapshotId: snap.id,
   };
   return { values, truncated };

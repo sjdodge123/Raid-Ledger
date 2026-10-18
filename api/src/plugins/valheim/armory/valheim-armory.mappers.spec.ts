@@ -37,12 +37,6 @@ function snapshotOf(name: string, id = 11): ArmorySnapshot {
   };
 }
 
-function valid(snap: ArmorySnapshot) {
-  const res = validateSnapshotPayload(snap);
-  if (!res.ok) throw new Error(`expected valid: ${res.detail}`);
-  return res.message;
-}
-
 describe('validateSnapshotPayload', () => {
   it.each([
     'character-vanilla',
@@ -57,7 +51,8 @@ describe('validateSnapshotPayload', () => {
 
   it('fails with issue paths and codes, never payload text', () => {
     const snap = snapshotOf('character-vanilla');
-    snap.payload = { ...snap.payload, character: { name: 'SecretName' } };
+    const payload = loadValheimFixture('character-vanilla');
+    snap.payload = { ...payload, character: { name: 'SecretName' } };
     const res = validateSnapshotPayload(snap);
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -116,8 +111,9 @@ describe('toProfileValues', () => {
   it('truncates an over-long known list and names it', () => {
     const snap = snapshotOf('character-vanilla');
     const msg = ValheimCharacterMessageSchema.parse(snap.payload);
-    const long = Array.from({ length: ARMORY_KNOWN_LIST_MAX + 5 }, (_, i) =>
-      `Item${i}`,
+    const long = Array.from(
+      { length: ARMORY_KNOWN_LIST_MAX + 5 },
+      (_, i) => `Item${i}`,
     );
     const { values, truncated } = toProfileValues(snap, {
       ...msg,

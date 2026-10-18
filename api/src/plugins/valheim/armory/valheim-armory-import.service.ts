@@ -72,8 +72,15 @@ export class ValheimArmoryImportService {
       return await this.repo.db.transaction((tx) => this.importIn(tx, c));
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : 'unknown';
-      this.logger.error(`valheim-armory import failed snapshot=${c.id} (${name})`);
-      const marked = await this.repo.markStatus(this.repo.db, c, 'failed', `internal:${name}`);
+      this.logger.error(
+        `valheim-armory import failed snapshot=${c.id} (${name})`,
+      );
+      const marked = await this.repo.markStatus(
+        this.repo.db,
+        c,
+        'failed',
+        `internal:${name}`,
+      );
       return marked ? 'failed' : 'busy';
     }
   }
@@ -88,7 +95,12 @@ export class ValheimArmoryImportService {
     const applied: Applied = checked.ok
       ? await this.apply(tx, snap, checked.message)
       : { status: 'failed', detail: checked.detail };
-    const marked = await this.repo.markStatus(tx, c, applied.status, applied.detail);
+    const marked = await this.repo.markStatus(
+      tx,
+      c,
+      applied.status,
+      applied.detail,
+    );
     return marked ? applied.status : 'busy';
   }
 

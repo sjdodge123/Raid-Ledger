@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -45,8 +46,7 @@ const importable = or(
   and(eq(snapshots.status, 'waiting_blob'), blobArrived),
 );
 /** Latest wins; equal `captured_at` rewrites identical data (idempotent). */
-const notOlder = (col: typeof profiles.capturedAt) =>
-  sql`${col} <= excluded.captured_at`;
+const notOlder = (col: AnyPgColumn) => sql`${col} <= excluded.captured_at`;
 /** `{ key: excluded."<column>" }` for an ON CONFLICT DO UPDATE set. */
 const fromExcluded = (cols: Record<string, { name: string }>) =>
   Object.fromEntries(
@@ -88,7 +88,12 @@ export class ValheimArmoryRepository {
         payload: snapshots.payload,
       })
       .from(snapshots)
-      .where(and(sameVersion(c), inArray(snapshots.status, ['pending', 'waiting_blob'])))
+      .where(
+        and(
+          sameVersion(c),
+          inArray(snapshots.status, ['pending', 'waiting_blob']),
+        ),
+      )
       .for('update', { skipLocked: true });
     return row ?? null;
   }
@@ -165,12 +170,20 @@ export class ValheimArmoryRepository {
   }
 
   /** Upsert on `valheim_maps_identity_uq`; false when the stored map is newer. */
-  async upsertMap(tx: ValheimLinkTx, values: schema.NewValheimMap): Promise<boolean> {
+  async upsertMap(
+    tx: ValheimLinkTx,
+    values: schema.NewValheimMap,
+  ): Promise<boolean> {
     const done = await tx
       .insert(maps)
       .values(values)
       .onConflictDoUpdate({
-        target: [maps.pelicanServerId, maps.steamId, maps.playerId, maps.worldUid],
+        target: [
+          maps.pelicanServerId,
+          maps.steamId,
+          maps.playerId,
+          maps.worldUid,
+        ],
         set: {
           ...fromExcluded(MAP_COLUMNS),
           profileId: sql`COALESCE(excluded.profile_id, ${maps.profileId})`,
@@ -200,7 +213,11 @@ export class ValheimArmoryRepository {
   }
 
   /** Whether this server has uploaded the PNG with this sha256 (R6 scope). */
-  async blobExists(tx: ValheimLinkTx, server: number, sha256: string): Promise<boolean> {
+  async blobExists(
+    tx: ValheimLinkTx,
+    server: number,
+    sha256: string,
+  ): Promise<boolean> {
     const [row] = await tx
       .select({ sha: blobs.sha256 })
       .from(blobs)

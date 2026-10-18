@@ -14,7 +14,10 @@ import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
  * failed statement inside it (postgres.js poisons the transaction).
  */
 export interface ValheimProfileUpsertedHook {
-  onProfileUpserted(tx: ValheimLinkTx, profile: ValheimProfileRow): Promise<void>;
+  onProfileUpserted(
+    tx: ValheimLinkTx,
+    profile: ValheimProfileRow,
+  ): Promise<void>;
 }
 
 /** Nest injection token for {@link ValheimProfileUpsertedHook}. */

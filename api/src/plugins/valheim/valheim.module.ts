@@ -16,9 +16,17 @@ import { ValheimLinkTokensAdminController } from './link/valheim-link-tokens-adm
 import { ValheimLinkTokensRepository } from './link/valheim-link-tokens.repository';
 import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
 import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module';
+import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
+import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
+import { ValheimArmoryRepository } from './armory/valheim-armory.repository';
+import {
+  NOOP_PROFILE_UPSERTED_HOOK,
+  VALHEIM_PROFILE_UPSERTED_HOOK,
+} from './armory/valheim-armory-profile.hook';
 
 /**
- * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833).
+ * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
+ * the armory importer (ROK-1835).
  * Registers its manifest — no
  * `ensureInstalled`, so an uninstall survives a restart (as Pelican).
  */
@@ -43,6 +51,14 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
     ValheimLinkIngestService,
     ValheimLinkBlobsRepository,
     ValheimLinkBlobService,
+    // ROK-1835 armory importer (30 s drain). L3 swaps the hook provider.
+    ValheimArmoryRepository,
+    ValheimArmoryImportService,
+    ValheimArmoryImportCron,
+    {
+      provide: VALHEIM_PROFILE_UPSERTED_HOOK,
+      useValue: NOOP_PROFILE_UPSERTED_HOOK,
+    },
   ],
 })
 export class ValheimModule implements OnModuleInit {
