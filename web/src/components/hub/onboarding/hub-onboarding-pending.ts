@@ -15,8 +15,12 @@
  *
  *     merge(server, ledger) = server ∪ confirmed ∪ in-flight − restoring
  *
- * Confirmed entries therefore live as long as the QueryClient. That is
- * bounded and tiny — at most (prompt keys) × (guilds the viewer can see).
+ * Confirmed entries live with the query's cache entry (TanStack's default
+ * gcTime, 5 minutes after the last observer unmounts), so navigating between
+ * guilds does not accumulate them; while held they are tiny — at most
+ * (prompt keys) × (guilds the viewer can see). Known, accepted: a restore made
+ * on ANOTHER device since the last GET is not reflected until this entry is
+ * garbage-collected — this is a per-session UI flag, not shared state.
  */
 import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contract';
 import type { HubOnboardingScope } from './hub-onboarding-api';
