@@ -1,57 +1,74 @@
 /**
- * ROK-1830 PR-3 r2 — who owns an optimistic dismissal while it is in flight.
+ * ROK-1830 PR-3 r4 — one rule decides whether an optimistic dismissal lives.
  *
- * Two prompts share ONE cache entry, and the same prompt can be dismissed
- * twice before either write answers, so neither "restore the snapshot" nor
- * "install the server's state" is safe on its own:
+ * Two prompts share ONE cache entry and their writes answer out of order, so
+ * a response body is never proof that a row is absent: it only knows the rows
+ * the server held when it was READ. Earlier rounds expired a confirmed entry
+ * as soon as some later body carried it — and a third, slower response could
+ * still arrive with a body older than that one, un-dismissing the pair
+ * (Codex P2 r4: A confirms, B's body carries A and drops its entry, C's
+ * delayed `[C]` then wins).
  *
- * - an older FAILED write must not remove a `(key, guildId)` a newer write
- *   already confirmed (Codex P2), and
- * - a success must not replace the whole entry, which would wipe a sibling
- *   pair's still-pending optimistic row (PR-3 review MINOR).
+ * So the ledger stops guessing. A dismissal this session has CONFIRMED is
+ * removed only by an explicitly confirmed restore (`DELETE … success`), never
+ * by a GET or POST body:
  *
- * So each pair carries a tiny ledger: how many writes are in flight, whether
- * any of them has been confirmed, and whether the pair was already dismissed
- * before the first one started. A rollback happens only for the LAST failing
- * write of a pair that nothing confirmed and that we ourselves added.
+ *     merge(server, ledger) = server ∪ confirmed ∪ in-flight − restoring
+ *
+ * Confirmed entries therefore live as long as the QueryClient. That is
+ * bounded and tiny — at most (prompt keys) × (guilds the viewer can see).
  */
 import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contract';
 import type { HubOnboardingScope } from './hub-onboarding-api';
 
 export interface PendingPair {
-    /** Writes for this pair that have not settled yet. */
+    /** Dismiss writes for this pair that have not settled yet. */
     inFlight: number;
     /** One of them came back with the server's state. */
     confirmed: boolean;
     /** The pair was dismissed before the first of those writes — nothing to undo. */
     preExisting: boolean;
+    /** Restore (`DELETE`) writes in flight; the row hides while any is. */
+    restoring: number;
 }
 
 /** Keyed by pair, not by viewer: the map lives in that viewer's query cache. */
 export type PendingDismissals = Readonly<Record<string, PendingPair>>;
 
+const EMPTY: PendingPair = { inFlight: 0, confirmed: false, preExisting: false, restoring: 0 };
+
 export function pairId(key: HubOnboardingKey, guildId: HubOnboardingScope): string {
     return `${key}:${guildId ?? 'global'}`;
 }
 
-/** Register one more in-flight write for `id`. */
+/** Store `pair`, or forget the id entirely once it says nothing. */
+function put(map: PendingDismissals, id: string, pair: PendingPair): PendingDismissals {
+    if (pair.inFlight === 0 && pair.restoring === 0 && !pair.confirmed) {
+        return Object.fromEntries(Object.entries(map).filter(([k]) => k !== id));
+    }
+    return { ...map, [id]: pair };
+}
+
+/** Register one more in-flight dismiss for `id`. */
 export function beginPending(
     map: PendingDismissals, id: string, preExisting: boolean,
 ): PendingDismissals {
     const cur = map[id];
-    const next: PendingPair = cur === undefined
-        ? { inFlight: 1, confirmed: false, preExisting }
-        : { ...cur, inFlight: cur.inFlight + 1 };
-    return { ...map, [id]: next };
+    return put(map, id, cur === undefined
+        ? { ...EMPTY, inFlight: 1, preExisting }
+        : { ...cur, inFlight: cur.inFlight + 1 });
 }
 
 export interface SettleResult {
     map: PendingDismissals;
-    /** The caller must remove this pair from the cache. */
+    /** The caller must put the cache row back the way it was. */
     rollback: boolean;
 }
 
-/** Settle one write; the map drops the pair once nothing is in flight. */
+/**
+ * Settle one dismiss write. A confirmed pair stays in the map for good — only
+ * `settleRestore('success')` clears it.
+ */
 export function settlePending(
     map: PendingDismissals, id: string, outcome: 'success' | 'error',
 ): SettleResult {
@@ -59,64 +76,72 @@ export function settlePending(
     if (cur === undefined) return { map, rollback: false };
     const inFlight = Math.max(0, cur.inFlight - 1);
     const confirmed = cur.confirmed || outcome === 'success';
+    // Only the LAST failing write of a pair nothing confirmed, and only when
+    // we were the ones who added the row, may take it off the screen again.
     const rollback = outcome === 'error' && inFlight === 0 && !confirmed && !cur.preExisting;
-    const rest = Object.fromEntries(Object.entries(map).filter(([k]) => k !== id));
-    // A CONFIRMED pair outlives its own write. Another prompt's response can
-    // already have been in flight when this one committed, so its body
-    // predates the commit and omits this row; the entry is the only thing
-    // that tells `mergePending` to keep it. `prunePending` drops it once the
-    // server's own state reports the dismissal.
-    const keep = inFlight > 0 || confirmed;
-    return {
-        map: keep ? { ...rest, [id]: { ...cur, inFlight, confirmed } } : rest,
-        rollback,
-    };
+    return { map: put(map, id, { ...cur, inFlight, confirmed }), rollback };
+}
+
+/** Register one more in-flight restore; the row disappears optimistically. */
+export function beginRestore(map: PendingDismissals, id: string): PendingDismissals {
+    const cur = map[id] ?? EMPTY;
+    return put(map, id, { ...cur, restoring: cur.restoring + 1 });
 }
 
 /**
- * The server's state, plus any optimistic row for a DIFFERENT pair that is
- * still in flight OR already confirmed — a sibling's dismissal must survive
- * this response even when the response's body predates its commit.
+ * Settle one restore. Success is the ONLY thing that clears a confirmed
+ * dismissal; a failure rolls the row back onto the screen and leaves the
+ * confirmation standing.
+ */
+export function settleRestore(
+    map: PendingDismissals, id: string, outcome: 'success' | 'error',
+): SettleResult {
+    const cur = map[id];
+    if (cur === undefined) return { map, rollback: false };
+    const restoring = Math.max(0, cur.restoring - 1);
+    const cleared = outcome === 'success';
+    const next: PendingPair = {
+        ...cur,
+        restoring,
+        confirmed: cleared ? false : cur.confirmed,
+        preExisting: cleared ? false : cur.preExisting,
+    };
+    return { map: put(map, id, next), rollback: outcome === 'error' && restoring === 0 };
+}
+
+/**
+ * The server's state, plus every optimistic row this session still owns — one
+ * that is in flight or already confirmed — minus any pair whose restore is in
+ * flight. A sibling's dismissal survives a response whose body predates its
+ * commit, because nothing but a confirmed restore retires it.
  */
 export function mergePending(
     fresh: HubOnboardingStateDto,
     current: HubOnboardingStateDto | undefined,
     map: PendingDismissals,
 ): HubOnboardingStateDto {
-    const known = new Set(fresh.dismissed.map((d) => pairId(d.key, d.guildId)));
+    const restoring = (id: string): boolean => (map[id]?.restoring ?? 0) > 0;
+    const server = fresh.dismissed.filter((d) => !restoring(pairId(d.key, d.guildId)));
+    const known = new Set(server.map((d) => pairId(d.key, d.guildId)));
     const kept = (current?.dismissed ?? []).filter((d) => {
-        const pending = map[pairId(d.key, d.guildId)];
-        if (pending === undefined || known.has(pairId(d.key, d.guildId))) return false;
+        const id = pairId(d.key, d.guildId);
+        const pending = map[id];
+        if (pending === undefined || known.has(id) || pending.restoring > 0) return false;
         return pending.inFlight > 0 || pending.confirmed;
     });
-    return kept.length === 0 ? fresh : { dismissed: [...fresh.dismissed, ...kept] };
+    if (kept.length === 0 && server.length === fresh.dismissed.length) return fresh;
+    return { dismissed: [...server, ...kept] };
 }
 
-/**
- * Forget settled pairs that a LATER response already accounts for — the
- * server state wins last. `self` (the pair whose own response this is) is
- * never pruned here: its body was read before its own commit landed in any
- * sibling's in-flight request, so only somebody else's response proves the
- * row is durable.
- */
-export function prunePending(
-    map: PendingDismissals, fresh: HubOnboardingStateDto, self: string,
-): PendingDismissals {
-    const known = new Set(fresh.dismissed.map((d) => pairId(d.key, d.guildId)));
-    const entries = Object.entries(map).filter(
-        ([id, pair]) => pair.inFlight > 0 || id === self || !known.has(id),
-    );
-    return entries.length === Object.keys(map).length ? map : Object.fromEntries(entries);
-}
-
-/** The three cache reads/writes the hook needs, bound to one pair. */
+/** The cache reads/writes the hook needs, bound to one pair. */
 export interface PendingLedger {
     begin: (preExisting: boolean) => void;
-    /** Settle one write; `true` = this caller must roll the entry back. */
+    /** Settle one dismiss; `true` = this caller must roll the entry back. */
     settle: (outcome: 'success' | 'error') => boolean;
+    beginRestore: () => void;
+    /** Settle one restore; `true` = this caller must put the row back. */
+    settleRestore: (outcome: 'success' | 'error') => boolean;
     read: () => PendingDismissals;
-    /** Drop confirmed pairs this server response already accounts for. */
-    prune: (fresh: HubOnboardingStateDto) => void;
 }
 
 export function pendingLedger(
@@ -124,14 +149,19 @@ export function pendingLedger(
     write: (map: PendingDismissals) => void,
     id: string,
 ): PendingLedger {
+    const settleWith = (
+        settle: (map: PendingDismissals, id: string, outcome: 'success' | 'error') => SettleResult,
+        outcome: 'success' | 'error',
+    ): boolean => {
+        const result = settle(read(), id, outcome);
+        write(result.map);
+        return result.rollback;
+    };
     return {
         begin: (preExisting) => { write(beginPending(read(), id, preExisting)); },
-        settle: (outcome) => {
-            const { map, rollback } = settlePending(read(), id, outcome);
-            write(map);
-            return rollback;
-        },
+        settle: (outcome) => settleWith(settlePending, outcome),
+        beginRestore: () => { write(beginRestore(read(), id)); },
+        settleRestore: (outcome) => settleWith(settleRestore, outcome),
         read,
-        prune: (fresh) => { write(prunePending(read(), fresh, id)); },
     };
 }
