@@ -330,6 +330,21 @@ describe('ROK-1831 fix r1 — visitor privacy + server sync', () => {
     expect(own.body.ranks[0].members).toHaveLength(1);
   });
 
+  it('a presence-only member sees viewerJoined true; after Leave false until the next arrival', async () => {
+    const { serverId, guildId } = await enabledHub();
+    const u = await member('fix-presence', '76561190000000011');
+    await membership().recordPresence(serverId, u.id, 'Bjorn', new Date());
+    const page = () =>
+      testApp.request.get(`/guilds/${guildId}`).set(auth(u.token));
+    expect((await page().expect(200)).body.server.viewerJoined).toBe(true);
+    await testApp.request
+      .delete(`/plugins/pelican/hubs/${guildId}/join`)
+      .set(auth(u.token))
+      .expect(200);
+    const after = await page().expect(200);
+    expect(after.body.server.viewerJoined).toBe(false);
+  });
+
   it('PATCH copies the server name and a game change onto the hub', async () => {
     const { serverId } = await enabledHub();
     await testApp.db

@@ -114,8 +114,9 @@ function serverBlock(
   rows: readonly GuildMemberRow[],
   visitor: boolean,
 ): GuildPageServer {
-  const me = input.members.find((r) => r.userId === input.viewerId);
-  const joined = me !== undefined && me.joinedAt !== null && me.leftAt === null;
+  // `members` is already the L-2 current set (manual not left OR seen inside
+  // the window and after any Leave), so presence-only members count as joined.
+  const joined = input.members.some((r) => r.userId === input.viewerId);
   const onlineCount = rows.filter((r) => r.server?.onlineNow === true).length;
   return withViewer(
     server,

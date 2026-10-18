@@ -146,6 +146,23 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
     expect(page.server?.recentArrivals).toHaveLength(1);
   });
 
+  it('a presence-only member (never pressed Join) is viewerJoined', () => {
+    const page = buildServerHubPage({
+      guild,
+      role: 'member',
+      viewerId: 4,
+      members: [rec({ userId: 4, lastSeenAt: new Date(), joinedAt: null })],
+      onlineSteamIds: new Set(),
+      server: {
+        pelicanServerId: 5,
+        gameSlug: 'valheim',
+        gameIconUrl: null,
+        state: 'running',
+      },
+    });
+    expect(page.server?.viewerJoined).toBe(true);
+  });
+
   it('a visitor sees the member count but no rows and no arrivals (members-first)', () => {
     const page = buildServerHubPage({
       guild,
