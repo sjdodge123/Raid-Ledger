@@ -12,7 +12,8 @@ import net from 'node:net';
 import { OWNER_LABEL, parseBindAllow } from './body-policy.mjs';
 import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
-import { resourceLabels, runnerForAddress } from './docker-client.mjs';
+import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
+import { namedVolumeRefs } from './volume-refs.mjs';
 
 const SOCKET = process.env.GUARD_DOCKER_SOCKET || '/var/run/docker.sock';
 const PORT = Number(process.env.GUARD_PORT || 2375);
@@ -34,11 +35,14 @@ function readBody(req) {
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) req.destroy();
-      else chunks.push(c);
+      if (size > MAX_BODY) {
+        resolve(null);
+        req.destroy();
+      } else chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', () => resolve(null));
+    req.on('close', () => resolve(null));
   });
 }
 
@@ -57,6 +61,7 @@ async function authorize(req, plan) {
   }
   if (!plan.body) return {};
   const raw = await readBody(req);
+  if (raw === null) return { reason: 'request body unreadable or over 1 MiB' };
   let parsed;
   try {
     parsed = raw && raw.length ? JSON.parse(raw.toString('utf8')) : {};
@@ -67,6 +72,11 @@ async function authorize(req, plan) {
   if (!verdict.ok) return { reason: verdict.reason };
   const target = bodyOwnedContainer(plan.body, parsed);
   if (target !== null && !(await owns('container', target, owner))) return { reason: `container ${target} is not owned by ${owner.owner}` };
+  if (plan.body === 'container-create') {
+    for (const name of namedVolumeRefs(verdict.body)) {
+      if (!(await ensureOwnedVolume(SOCKET, name, owner, OWNER_LABEL))) return { reason: `volume ${name} is not owned by ${owner.owner}` };
+    }
+  }
   return { body: Buffer.from(JSON.stringify(verdict.body)) };
 }
 

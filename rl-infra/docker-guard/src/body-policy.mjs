@@ -10,11 +10,17 @@
 // container could use to step outside its namespaces is refused here.
 
 import path from 'node:path';
+import { foldEach, foldReason } from './key-fold.mjs';
 
 export const OWNER_LABEL = 'rl.guard.owner';
 const RESERVED_ROLE_VALUES = new Set(['env', 'infra', 'runner']);
-const NS_FIELDS = ['PidMode', 'IpcMode', 'UTSMode', 'UsernsMode', 'CgroupnsMode'];
-const NONEMPTY_DENY = ['CapAdd', 'Devices', 'DeviceRequests', 'DeviceCgroupRules', 'VolumesFrom'];
+const NS_FIELDS = ['PidMode', 'IpcMode', 'UTSMode', 'UsernsMode', 'CgroupnsMode', 'Cgroup'];
+// Links: on the default bridge a legacy link copies the target's Env (bot
+// tokens, passwords) into the new container.
+const NONEMPTY_DENY = ['CapAdd', 'Devices', 'DeviceRequests', 'DeviceCgroupRules', 'VolumesFrom', 'Links'];
+const HC_FIELDS = ['Privileged', 'SecurityOpt', 'MaskedPaths', 'ReadonlyPaths', 'Runtime', 'CgroupParent', 'NetworkMode',
+  'Binds', 'Mounts', 'VolumeDriver', ...NS_FIELDS, ...NONEMPTY_DENY];
+const MOUNT_FIELDS = ['Type', 'Source', 'VolumeOptions', 'BindOptions'];
 const SECURITY_OPT_DENY = /unconfined|label[:=]disable|systempaths/i;
 
 const deny = (reason) => ({ ok: false, reason });
@@ -87,6 +93,7 @@ function checkPrivileges(hc) {
   if (hc.MaskedPaths !== undefined || hc.ReadonlyPaths !== undefined) return 'MaskedPaths/ReadonlyPaths overrides are not allowed';
   if (typeof hc.Runtime === 'string' && hc.Runtime !== '' && hc.Runtime !== 'runc') return `Runtime=${hc.Runtime} is not allowed`;
   if (typeof hc.CgroupParent === 'string' && hc.CgroupParent !== '') return 'CgroupParent is not allowed';
+  if (typeof hc.VolumeDriver === 'string' && hc.VolumeDriver !== '' && hc.VolumeDriver !== 'local') return `VolumeDriver=${hc.VolumeDriver} is not allowed`;
   return null;
 }
 
@@ -108,7 +115,11 @@ function withOwner(labels, owner) {
 export function checkContainerCreate(body, { allow, owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
   const hc = isObj(body.HostConfig) ? body.HostConfig : {};
-  const reason = checkPrivileges(hc) ?? checkNamespaces(hc) ?? checkBinds(hc.Binds, allow)
+  const mounts = Array.isArray(hc.Mounts) ? hc.Mounts : [];
+  const reason = foldReason(body, ['HostConfig', 'Labels'], 'body') ?? foldReason(hc, HC_FIELDS, 'HostConfig')
+    ?? foldEach(mounts, MOUNT_FIELDS, 'Mounts[]')
+    ?? foldEach(mounts.map((m) => (isObj(m) ? m.VolumeOptions : null)), ['DriverConfig'], 'VolumeOptions')
+    ?? checkPrivileges(hc) ?? checkNamespaces(hc) ?? checkBinds(hc.Binds, allow)
     ?? checkMounts(hc.Mounts, allow) ?? checkLabels(body.Labels);
   if (reason) return deny(reason);
   return { ok: true, body: { ...body, Labels: withOwner(body.Labels, owner) } };
@@ -117,6 +128,8 @@ export function checkContainerCreate(body, { allow, owner }) {
 /** POST /containers/{id}/exec */
 export function checkExecCreate(body) {
   if (!isObj(body)) return deny('body is not a JSON object');
+  const fold = foldReason(body, ['Privileged'], 'exec');
+  if (fold) return deny(fold);
   if (body.Privileged === true) return deny('privileged exec is not allowed');
   return { ok: true, body };
 }
@@ -124,6 +137,8 @@ export function checkExecCreate(body) {
 /** POST /volumes/create */
 export function checkVolumeCreate(body, { owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
+  const fold = foldReason(body, ['Driver', 'DriverOpts', 'Labels', 'Name'], 'volume');
+  if (fold) return deny(fold);
   if (typeof body.Driver === 'string' && body.Driver !== '' && body.Driver !== 'local') return deny(`volume driver ${body.Driver} is not allowed`);
   if (nonEmpty(body.DriverOpts)) return deny('volume DriverOpts are not allowed (a local bind in disguise)');
   const reason = checkLabels(body.Labels);
@@ -134,6 +149,8 @@ export function checkVolumeCreate(body, { owner }) {
 /** POST /networks/create */
 export function checkNetworkCreate(body, { owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
+  const fold = foldReason(body, ['Driver', 'Options', 'ConfigFrom', 'ConfigOnly', 'Ingress', 'Labels'], 'network');
+  if (fold) return deny(fold);
   if (typeof body.Driver === 'string' && body.Driver !== '' && body.Driver !== 'bridge') return deny(`network driver ${body.Driver} is not allowed`);
   if (nonEmpty(body.Options) || nonEmpty(body.ConfigFrom) || body.ConfigOnly === true || body.Ingress === true) {
     return deny('network Options/ConfigFrom/ConfigOnly/Ingress are not allowed');

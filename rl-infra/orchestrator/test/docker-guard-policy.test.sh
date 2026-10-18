@@ -90,6 +90,36 @@ test_other_escape_routes_refused() {
     expect_allow POST "/v1.45/build?t=rl:ci-test" '{}' "plain legacy build"
 }
 
+test_json_case_fold_bypass_refused() {
+    # Go's encoding/json matches fields case-insensitively (and folds U+017F to
+    # 's'), so Docker honours these spellings even though the guard reads
+    # HostConfig.Privileged / HostConfig.Binds.
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"privileged":true}}' "lower-case privileged"
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"Privileged":false,"PRIVILEGED":true}}' "case-variant duplicate Privileged"
+    expect_deny POST "$CREATE" '{"Image":"alpine","hostconfig":{"Binds":["/:/host"]}}' "lower-case hostconfig"
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"Bind\u017f":["/:/host"]}}' "long-s Binds"
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"Mounts":[{"type":"bind","Source":"/","Target":"/h"}]}}' "lower-case Mounts[].type"
+    expect_deny POST "/v1.45/containers/x/exec" '{"Cmd":["sh"],"privileged":true}' "lower-case exec privileged"
+}
+
+test_links_cgroup_volumedriver_refused() {
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"Links":["rl-gc-sweeper:s"]}}' "legacy link (copies the target Env)"
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"Cgroup":"container:rl-traefik"}}' "joining an infra cgroup"
+    expect_deny POST "$CREATE" '{"Image":"alpine","HostConfig":{"VolumeDriver":"evil"}}' "plugin VolumeDriver"
+}
+
+test_daemon_fetch_and_path_tricks_refused() {
+    # The daemon would fetch these from the VM host network (127.0.0.1:2375).
+    expect_deny POST "/v1.45/build?remote=http://127.0.0.1:2375/containers/rl-env-x/json" '{}' "build remote= SSRF"
+    expect_deny POST "/v1.45/build?networkmode=default&networkmode=host" '{}' "second networkmode=host"
+    expect_deny POST "/v1.45/build?cgroupparent=/" '{}' "build cgroupparent"
+    expect_deny POST "/v1.45/images/create?fromSrc=http://127.0.0.1:2375/info" '{}' "image import fromSrc SSRF"
+    expect_allow POST "/v1.45/images/create?fromImage=redis&tag=7-alpine" '{}' "plain image pull"
+    expect_deny POST "/v1.45/containers/x/json/../../create" '{"HostConfig":{"Privileged":true}}' "dot-dot path"
+    expect_deny POST "/v1.45/containers%2Fcreate" '{}' "percent-escaped path"
+    expect_deny GET "//containers/json" '{}' "double-slash path"
+}
+
 run_test "privileged-create-refused" test_privileged_create_refused
 run_test "host-root-bind-refused" test_host_root_bind_refused
 run_test "capadd-and-devices-refused" test_capadd_and_devices_refused
@@ -97,5 +127,8 @@ run_test "host-namespaces-refused" test_host_namespaces_refused
 run_test "reserved-labels-refused" test_reserved_labels_refused
 run_test "testcontainers-shaped-create-allowed" test_testcontainers_shaped_create_allowed
 run_test "other-escape-routes-refused" test_other_escape_routes_refused
+run_test "json-case-fold-bypass-refused" test_json_case_fold_bypass_refused
+run_test "links-cgroup-volumedriver-refused" test_links_cgroup_volumedriver_refused
+run_test "daemon-fetch-and-path-tricks-refused" test_daemon_fetch_and_path_tricks_refused
 
 print_test_summary

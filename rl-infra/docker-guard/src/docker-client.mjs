@@ -1,9 +1,11 @@
 // ROK-1846 — minimal Docker Engine client over the unix socket (lookups only).
 import http from 'node:http';
 
-export function dockerJson(socketPath, method, path) {
+export function dockerJson(socketPath, method, path, body) {
   return new Promise((resolve) => {
-    const req = http.request({ socketPath, method, path, headers: { Host: 'docker' } }, (res) => {
+    const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
+    const headers = payload ? { Host: 'docker', 'Content-Type': 'application/json', 'Content-Length': String(payload.length) } : { Host: 'docker' };
+    const req = http.request({ socketPath, method, path, headers }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
@@ -17,7 +19,7 @@ export function dockerJson(socketPath, method, path) {
       });
     });
     req.on('error', () => resolve({ status: 0, json: null }));
-    req.end();
+    req.end(payload ?? undefined);
   });
 }
 
@@ -36,6 +38,24 @@ export async function resourceLabels(socketPath, kind, id) {
   if (status !== 200) return null;
   const labels = pick(json);
   return labels && typeof labels === 'object' ? labels : {};
+}
+
+/**
+ * True when the named volume belongs to `owner`. An absent volume is created
+ * here first, stamped with the owner labels (Docker would otherwise auto-create
+ * it unlabelled on container create). An existing volume someone else owns —
+ * or nobody owns — is refused by the caller.
+ */
+export async function ensureOwnedVolume(socketPath, name, owner, ownerLabel) {
+  let labels = await resourceLabels(socketPath, 'volume', name);
+  if (labels === null) {
+    const created = await dockerJson(socketPath, 'POST', '/volumes/create', {
+      Name: name, Labels: { [ownerLabel]: owner.owner, 'rl.slot': owner.slot },
+    });
+    if (created.status !== 201 && created.status !== 200) return false;
+    labels = await resourceLabels(socketPath, 'volume', name);
+  }
+  return labels !== null && labels[ownerLabel] === owner.owner;
 }
 
 /**

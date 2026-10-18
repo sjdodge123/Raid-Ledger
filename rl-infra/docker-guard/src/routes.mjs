@@ -37,7 +37,7 @@ const ROUTES = [
   R('GET', '/images/json', ALLOW),
   R('GET', `/images/(${IMG})/(json|history)`, ALLOW),
   R('GET', `/distribution/(${IMG})/json`, ALLOW),
-  R('POST', '/images/create', ALLOW),
+  R('POST', '/images/create', { query: 'image-create' }),
   R('POST', `/images/(${IMG})/(push|tag)`, ALLOW),
   R('POST', '/(images|build)/prune', ALLOW),
   R('POST', '/auth', ALLOW),
@@ -57,18 +57,38 @@ const ROUTES = [
 // an operator-accepted risk (README "Docker API boundary").
 const BUILDKIT = [R('POST', '/session', ALLOW), R('POST', '/grpc', ALLOW)];
 
-/** Split `/v1.45/containers/x/json?all=1` into { path: '/containers/x/json', query }. */
+/**
+ * Split `/v1.45/containers/x/json?all=1` into { path: '/containers/x/json', query }.
+ * The guard forwards the RAW url, so a path the URL parser would rewrite
+ * (`..`, `//`, percent-escapes, backslashes) is refused: what the guard
+ * classifies must be byte-for-byte what Docker routes.
+ */
 export function parseUrl(rawUrl) {
+  const rawPath = String(rawUrl).split('?')[0] ?? '';
+  if (!rawPath.startsWith('/') || /%|\/\/|\\/.test(rawPath)) throw new Error('non-canonical path');
   const u = new URL(rawUrl, 'http://guard.invalid');
+  if (u.pathname !== rawPath) throw new Error('non-canonical path');
   const path = u.pathname.replace(/^\/v[0-9.]+(?=\/)/, '');
   return { path, query: u.searchParams };
 }
 
+// `remote` / `fromSrc` make the DAEMON fetch a URL from the VM host network —
+// 127.0.0.1:2375 (rl-docker-proxy) included, whose container-inspect JSON a
+// build error would echo back. Runners only build/pull from local contexts.
 function checkBuildQuery(query) {
-  const mode = query.get('networkmode') ?? '';
-  if (mode === 'host' || mode.startsWith('container:')) return `build networkmode=${mode} is not allowed`;
+  for (const mode of query.getAll('networkmode')) {
+    if (mode === 'host' || mode.startsWith('container:')) return `build networkmode=${mode} is not allowed`;
+  }
+  if (query.getAll('remote').some((v) => v !== '')) return 'build remote= is not allowed';
+  if (query.getAll('cgroupparent').some((v) => v !== '')) return 'build cgroupparent= is not allowed';
   return null;
 }
+
+function checkImageCreateQuery(query) {
+  return query.has('fromSrc') ? 'images/create fromSrc= is not allowed' : null;
+}
+
+const QUERY_CHECKS = { build: checkBuildQuery, 'image-create': checkImageCreateQuery };
 
 export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
   let parsed;
@@ -83,10 +103,9 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
     const m = route.re.exec(parsed.path);
     if (!m) continue;
     const plan = route.plan;
-    if (plan.query === 'build') {
-      const reason = checkBuildQuery(parsed.query);
-      if (reason) return { ok: false, reason };
-    }
+    const queryCheck = plan.query ? QUERY_CHECKS[plan.query] : undefined;
+    const reason = queryCheck ? queryCheck(parsed.query) : null;
+    if (reason) return { ok: false, reason };
     const out = { ok: true };
     if (plan.body) out.body = plan.body;
     if (plan.owned) out.owned = { kind: plan.owned.kind, id: m[plan.owned.group] ?? '' };
