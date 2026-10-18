@@ -131,8 +131,39 @@ function readingReason(lines) {
   return null;
 }
 
-/** Null when the Dockerfile is acceptable under every reading, else the refusal reason. */
-export function dockerfileReason(text) {
+// c4: BuildKit trims Go unicode.IsSpace (U+0085, U+00A0, …) that no JS reading
+// models, so the whole class is closed up front: valid UTF-8, one optional BOM at
+// byte 0, then only printable ASCII plus \t \n \r. The readings stay as
+// defence-in-depth behind this gate.
+const NOT_ASCII = /[^\t\n\r\x20-\x7e]/;
+
+/** The Dockerfile as text (BOM at byte 0 stripped) or null when its bytes are not valid UTF-8. */
+function decode(input) {
+  if (!Buffer.isBuffer(input)) return String(input).replace(/^\uFEFF/, '');
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(input);
+  } catch {
+    return null;
+  }
+}
+
+/** `non_ascii: …` when the Dockerfile holds anything but printable ASCII, \t, \n, \r. */
+function asciiReason(text) {
+  if (text === null) return 'non_ascii: the Dockerfile is not valid UTF-8';
+  const m = NOT_ASCII.exec(text);
+  if (!m) return null;
+  const cp = (m[0].codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0');
+  return `non_ascii: U+${cp} at offset ${m.index}; Dockerfiles in a build context must be ASCII`;
+}
+
+/**
+ * Null when the Dockerfile (Buffer or string) is acceptable under every
+ * reading, else the refusal reason. Non-ASCII content is refused first.
+ */
+export function dockerfileReason(input) {
+  const text = decode(input);
+  const bad = asciiReason(text);
+  if (bad || text === null) return bad;
   for (const lines of readings(text)) {
     const r = readingReason(lines);
     if (r) return r;

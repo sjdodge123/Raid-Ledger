@@ -1,4 +1,4 @@
-# ROK-1846 — rl-docker-guard. node's own http + net; one pinned runtime
+# ROK-1846 -- rl-docker-guard. node's own http + net; one pinned runtime
 # dependency (dockerfile-ast, MIT, c3) installed from the committed lockfile.
 FROM node:22-alpine
 WORKDIR /guard

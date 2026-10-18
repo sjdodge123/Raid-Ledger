@@ -75,7 +75,7 @@ export async function spoolBuildContext(req, dockerfileParam, tmpDir = os.tmpdir
   if (scan.error) return policy(scan.error);
   if (scan.files.length === 0) return policy(`${candidates[0]} is not in the build context`);
   for (const f of scan.files) {
-    const reason = dockerfileReason(f.data.toString('utf8'));
+    const reason = dockerfileReason(f.data);
     if (reason) return policy(`${f.name}: ${reason}`);
   }
   return { cleanup, file, size };
