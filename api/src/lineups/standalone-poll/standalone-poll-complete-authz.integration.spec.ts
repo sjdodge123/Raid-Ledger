@@ -426,3 +426,125 @@ async function pollHeartCount(userId: number): Promise<number> {
     );
   return rows.length;
 }
+
+function describeAc5EventStart() {
+  it("400s a valid slot that is not the event's own start — slot A voters never land in slot B's event", async () => {
+    const { creator, voterId, matchId, slotTime, eventId } =
+      await seedOwnPoll('ac5start');
+    const slotBVoter = await createVoter('ac5start-voter-b');
+    const slotB = await addYesVote(
+      matchId,
+      slotBVoter,
+      new Date(slotTime.getTime() + DAY_MS),
+    );
+
+    // The event starts at slot A; completing with slot B must be refused.
+    const res = await complete(creator.token, matchId, {
+      eventId,
+      startTime: slotB.toISOString(),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/event's start/);
+    await expectUntouched(matchId, eventId, voterId);
+    expect(await signupCount(eventId, slotBVoter)).toBe(0);
+  });
+}
+describe(
+  "ROK-1844 AC5 — startTime must be the event's start",
+  describeAc5EventStart,
+);
+
+/** POST /events as `token` for a poll slot, tagged `schedulingMatchId`. */
+function createEventFromPoll(
+  token: string,
+  start: Date,
+  extra: Record<string, unknown>,
+) {
+  return testApp.request
+    .post('/events')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      title: 'From Poll',
+      startTime: start.toISOString(),
+      endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
+      gameId: testApp.seed.game.id,
+      ...extra,
+    });
+}
+
+/** Events stamped as created from `matchId`. */
+async function eventsFromPoll(matchId: number): Promise<number> {
+  const rows = await testApp.db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .where(eq(schema.events.createdFromPollId, matchId));
+  return rows.length;
+}
+
+function describeAc6() {
+  it('stamps created_from_poll_id for the poll owner creating a same-game event', async () => {
+    const { creator, matchId, slotTime } = await seedOwnPoll('ac6ok');
+
+    const res = await createEventFromPoll(creator.token, slotTime, {
+      schedulingMatchId: matchId,
+    });
+
+    expect(res.status).toBe(201);
+    expect(await eventsFromPoll(matchId)).toBe(2);
+  });
+
+  it("400s an event whose game is not the poll's game", async () => {
+    const { creator, matchId, slotTime } = await seedOwnPoll('ac6game');
+    const [other] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Other Game', slug: 'other-game' })
+        .returning(),
+      'other game',
+    );
+
+    const res = await createEventFromPoll(creator.token, slotTime, {
+      gameId: other.id,
+      schedulingMatchId: matchId,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/game must match/);
+    expect(await eventsFromPoll(matchId)).toBe(1);
+  });
+
+  it("400s a member tagging their event with someone else's poll", async () => {
+    const { matchId, slotTime } = await seedOwnPoll('ac6foreign');
+    const stranger = await loginAsMember('ac6foreign-stranger');
+
+    const res = await createEventFromPoll(stranger.token, slotTime, {
+      schedulingMatchId: matchId,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/your own poll/);
+    expect(await eventsFromPoll(matchId)).toBe(1);
+  });
+
+  it('400s a poll that is no longer open, and an unknown poll id', async () => {
+    const { creator, matchId, slotTime } = await seedOwnPoll('ac6closed');
+    expect((await complete(creator.token, matchId, {})).status).toBe(200);
+
+    const closed = await createEventFromPoll(creator.token, slotTime, {
+      schedulingMatchId: matchId,
+    });
+    const unknown = await createEventFromPoll(creator.token, slotTime, {
+      schedulingMatchId: 999_999,
+    });
+
+    expect(closed.status).toBe(400);
+    expect(closed.body.message).toMatch(/no longer open/);
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.message).toMatch(/not found/);
+  });
+}
+describe(
+  'ROK-1844 AC6 — schedulingMatchId on event create is validated',
+  describeAc6,
+);

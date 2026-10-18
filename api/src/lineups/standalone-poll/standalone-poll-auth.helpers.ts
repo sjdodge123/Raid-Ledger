@@ -138,11 +138,12 @@ async function assertMayUseEvent(
   ctx: PollContext,
   eventId: number,
   caller: Caller,
-): Promise<void> {
+): Promise<Date> {
   const [event] = await db
     .select({
       creatorId: schema.events.creatorId,
       createdFromPollId: schema.events.createdFromPollId,
+      duration: schema.events.duration,
     })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
@@ -153,11 +154,22 @@ async function assertMayUseEvent(
       'You can only sign voters up to your own event',
     );
   }
-  if (eventId === ctx.linkedEventId) return;
   const fromThisPoll =
-    ctx.linkedEventId === null && event.createdFromPollId === ctx.matchId;
+    eventId === ctx.linkedEventId ||
+    (ctx.linkedEventId === null && event.createdFromPollId === ctx.matchId);
   if (!fromThisPoll) {
     throw new ForbiddenException('That event was not created from this poll');
+  }
+  return event.duration[0];
+}
+
+/**
+ * ROK-1844 — the winning slot must be the event's own start, so slot A's
+ * yes-voters are never signed into an event at slot B (400).
+ */
+function assertSlotIsEventStart(eventStart: Date, startTime: string): void {
+  if (eventStart.getTime() !== new Date(startTime).getTime()) {
+    throw new BadRequestException("startTime must equal the event's start");
   }
 }
 
@@ -198,10 +210,12 @@ export async function assertCanCompletePoll(
   const ctx = await fetchPollContext(db, matchId);
   if (!ctx) return;
   await assertMayCompletePoll(db, ctx, caller);
-  if (target.eventId !== undefined) {
-    await assertMayUseEvent(db, ctx, target.eventId, caller);
-  }
+  const eventStart =
+    target.eventId === undefined
+      ? null
+      : await assertMayUseEvent(db, ctx, target.eventId, caller);
   if (target.startTime !== undefined) {
     await assertIsPollSlot(db, matchId, target.startTime);
+    if (eventStart) assertSlotIsEventStart(eventStart, target.startTime);
   }
 }
