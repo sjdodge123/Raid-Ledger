@@ -2,6 +2,9 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { VALHEIM_MANIFEST } from './valheim.manifest';
 import { ValheimAdapterRegistration } from './valheim-adapters';
+import { ValheimLinkBlobController } from './link/blobs/valheim-link-blob.controller';
+import { ValheimLinkBlobService } from './link/blobs/valheim-link-blob.service';
+import { ValheimLinkBlobsRepository } from './link/blobs/valheim-link-blobs.repository';
 import { ValheimLinkIngestController } from './link/ingest/valheim-link-ingest.controller';
 import { ValheimLinkIngestService } from './link/ingest/valheim-link-ingest.service';
 import { ValheimLinkSnapshotsRepository } from './link/ingest/valheim-link-snapshots.repository';
@@ -19,7 +22,11 @@ import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
  * `ensureInstalled`, so an uninstall survives a restart (as Pelican).
  */
 @Module({
-  controllers: [ValheimLinkTokensAdminController, ValheimLinkIngestController],
+  controllers: [
+    ValheimLinkTokensAdminController,
+    ValheimLinkIngestController,
+    ValheimLinkBlobController,
+  ],
   providers: [
     ValheimAdapterRegistration,
     // ROK-1833 Valheim Link: token lifecycle + ingest guards (L3 uses them).
@@ -31,6 +38,8 @@ import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
     ValheimLinkRateLimitGuard,
     ValheimLinkSnapshotsRepository,
     ValheimLinkIngestService,
+    ValheimLinkBlobsRepository,
+    ValheimLinkBlobService,
   ],
 })
 export class ValheimModule implements OnModuleInit {
