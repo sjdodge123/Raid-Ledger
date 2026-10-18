@@ -22,6 +22,24 @@ test.describe('Join page (/join)', () => {
         await expect(page.getByRole('button', { name: 'Go to Calendar' })).toBeVisible();
     });
 
+    /**
+     * ROK-1839: the intent token is captured and `history.replaceState`d out of
+     * the address bar before Sentry initialises, so a Session Replay's rrweb
+     * Meta (type 4) href — built from `window.location.href` inside the SDK,
+     * where no `beforeAddRecordingEvent` hook reaches — can never carry it.
+     * A token with no `eventId` is an invalid link, so the page settles here
+     * instead of navigating on to Discord or the event.
+     */
+    test('strips ?token= from the address bar on load (ROK-1839)', async ({ page }) => {
+        await page.goto('/join?intent=signup&token=rok1839-smoke-not-a-real-token');
+        await expect(page.getByRole('heading', { name: 'Invalid Link' })).toBeVisible({ timeout: 10_000 });
+
+        const landed = new URL(page.url());
+        expect(landed.search, 'the sign-in token must be gone from the address bar').not.toContain('token=');
+        expect(landed.href, 'no part of the URL may carry the token value').not.toContain('rok1839-smoke');
+        expect(landed.searchParams.get('intent'), 'every other query param survives the strip').toBe('signup');
+    });
+
     test('does not trigger the error boundary', async ({ page }) => {
         await page.goto('/join');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
