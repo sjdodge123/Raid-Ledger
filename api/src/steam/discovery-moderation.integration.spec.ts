@@ -8,7 +8,7 @@
  * back for everyone. External transports (ITAD, IGDB) are spied at the
  * service boundary; Postgres and the merge/upsert code below them are real.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
@@ -19,7 +19,11 @@ import type { ItadGame } from '../itad/itad.constants';
 import {
   discoverGameViaItad,
   type DiscoveryDeps,
+  type DiscoveryResult,
 } from './steam-itad-discovery.helpers';
+import { findModeratedMatch } from '../igdb/games-moderation-match.helpers';
+import { upsertItadGame } from '../igdb/igdb-itad-upsert.helpers';
+import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 
 type GameRow = typeof schema.games.$inferSelect;
 
@@ -325,11 +329,130 @@ describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () =>
       expect(searchSpy).toHaveBeenCalled();
       const ids = (res.body.data as { id: number }[]).map((g) => g.id);
       expect(ids).not.toContain(moderated.id);
-      if (label === 'banned') {
-        expect(await reload(moderated.id)).toEqual(moderated);
-      } else {
-        expect((await reload(moderated.id)).hidden).toBe(true);
-      }
+      // Hidden rows are read-only to discovery too (Codex r1 P2).
+      expect(await reload(moderated.id)).toEqual(moderated);
     },
   );
 });
+
+describe('ROK-1843 Codex r1: one moderation lookup on every path', () => {
+  it('a banned itadGameId is not recreated as a visible slug twin', async () => {
+    await insertGame({
+      slug: 'rok1843-twin',
+      name: 'Rok1843 Twin',
+      steamAppId: 184341,
+    });
+    const banned = await insertGame({
+      slug: 'rok1843-twin-banned',
+      name: 'Rok1843 Twin Banned Original',
+      itadGameId: 'itad-rok1843-twin',
+      banned: true,
+    });
+
+    const result = await discoverGameViaItad(
+      184342,
+      syncDeps(itadGame('rok1843-twin', 'Rok1843 Twin', 'itad-rok1843-twin')),
+      'steam',
+    );
+
+    expect(result).toBeNull();
+    const twins = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.steamAppId, 184342));
+    expect(twins).toEqual([]);
+    expect(await reload(banned.id)).toEqual(banned);
+  });
+
+  it.each([
+    ['itadGameId', { itadGameId: 'itad-rok1843-alt' }],
+    ['steamAppId', { steamAppId: 184343 }],
+    ['normalized name', { name: 'Rok1843 Alt Key II' }],
+  ])(
+    'the failed-upsert fallback lookup flags a banned row matched by %s',
+    async (_label, key) => {
+      const banned = await insertGame({
+        slug: 'rok1843-alt-banned',
+        name: 'Rok1843 Alt Banned',
+        banned: true,
+        ...key,
+      });
+
+      const match = await findModeratedMatch(testApp.db, {
+        slug: 'rok1843-alt-incoming',
+        itadGameId: 'itad-rok1843-alt',
+        steamAppId: 184343,
+        name: 'Rok1843 Alt Key 2',
+      });
+
+      expect(match).toEqual({ id: banned.id, hidden: false, banned: true });
+    },
+  );
+
+  it('a hidden alternate-key match is not rewritten by an anonymous search upsert', async () => {
+    const hidden = await insertGame({
+      slug: 'rok1843-alt-hidden',
+      name: 'Rok1843 Alt Hidden',
+      hidden: true,
+    });
+    // Matched by normalized name (the alt key the old update path used); the
+    // search brings a new slug, a new itadGameId and fresh metadata.
+    const incoming = {
+      ...mapDbRowToDetail(hidden),
+      slug: 'rok1843-alt-hidden-itad',
+      itadGameId: 'itad-rok1843-alt-hidden-new',
+      summary: 'rewritten by an anonymous search',
+    };
+
+    const returned = await upsertItadGame(testApp.db, incoming);
+
+    expect(returned.id).toBe(hidden.id);
+    expect(await reload(hidden.id)).toEqual(hidden);
+  });
+
+  it('a ban committed while discovery waits on the row is honoured', async () => {
+    const row = await insertGame({
+      slug: 'rok1843-race',
+      name: 'Rok1843 Race',
+    });
+    let discovery: Promise<DiscoveryResult | null> | undefined;
+
+    await testApp.db.transaction(async (tx) => {
+      await tx
+        .update(schema.games)
+        .set({ banned: true })
+        .where(eq(schema.games.id, row.id));
+      discovery = discoverGameViaItad(
+        184351,
+        syncDeps(itadGame('rok1843-race', 'Rok1843 Race')),
+        'steam',
+      );
+      await waitForBlockedBackend(tx);
+    });
+
+    if (!discovery) throw new Error('discovery never started');
+    expect(await discovery).toBeNull();
+    const after = await reload(row.id);
+    expect(after.banned).toBe(true);
+    expect(after.steamAppId).toBeNull();
+  });
+});
+
+/**
+ * Resolve once another backend is waiting on a row lock — i.e. discovery has
+ * reached the locked row and is blocked behind the uncommitted ban.
+ */
+async function waitForBlockedBackend(
+  tx: Parameters<Parameters<TestApp['db']['transaction']>[0]>[0],
+): Promise<void> {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const rows = await tx.execute<{ waiting: number }>(
+      sql`SELECT count(*)::int AS waiting FROM pg_stat_activity
+          WHERE datname = current_database() AND pid <> pg_backend_pid()
+            AND wait_event_type = 'Lock'`,
+    );
+    if ((rows[0]?.waiting ?? 0) > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('discovery never blocked on the banned row');
+}

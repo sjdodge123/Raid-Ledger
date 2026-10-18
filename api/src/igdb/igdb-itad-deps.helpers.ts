@@ -19,10 +19,7 @@ import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
 } from './igdb-itad-enrich.helpers';
-import {
-  itadModerationKeys,
-  upsertItadGame,
-} from './igdb-itad-upsert.helpers';
+import { itadModerationKeys, upsertItadGame } from './igdb-itad-upsert.helpers';
 import { findModeratedMatch } from './games-moderation-match.helpers';
 
 const logger = new Logger('ItadSearchDeps');

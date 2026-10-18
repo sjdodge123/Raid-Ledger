@@ -243,6 +243,42 @@ describe('executeItadSearch', () => {
     expect(onGameUpserted).toHaveBeenCalledWith(1);
   });
 
+  it.each([
+    ['matches a moderated row', jest.fn().mockResolvedValue(true)],
+    ['cannot be checked', jest.fn().mockRejectedValue(new Error('db down'))],
+  ])(
+    'drops a failed-upsert candidate that %s (ROK-1843)',
+    async (_label, hasModeratedMatch) => {
+      const deps = makeMockDeps({
+        searchItad: jest.fn().mockResolvedValue([GAME_A, GAME_B]),
+        upsertGame: jest
+          .fn()
+          .mockImplementation((g: { slug: string }) =>
+            g.slug === 'game-b'
+              ? Promise.reject(new Error('unique violation'))
+              : Promise.resolve({ ...g, id: 1 }),
+          ),
+        hasModeratedMatch,
+      });
+
+      const result = await executeItadSearch(deps, 'game');
+
+      expect(hasModeratedMatch).toHaveBeenCalledTimes(1);
+      expect(result.games.map((g) => g.slug)).toEqual(['game-a']);
+    },
+  );
+
+  it('keeps a failed-upsert candidate in-memory when nothing moderated matches it', async () => {
+    const deps = makeMockDeps({
+      searchItad: jest.fn().mockResolvedValue([GAME_A]),
+      upsertGame: jest.fn().mockRejectedValue(new Error('transient')),
+    });
+
+    const result = await executeItadSearch(deps, 'game');
+
+    expect(result.games.map((g) => g.slug)).toEqual(['game-a']);
+  });
+
   it('includes all games when adult filter is off', async () => {
     const deps = makeMockDeps({
       searchItad: jest.fn().mockResolvedValue([GAME_A, MATURE_GAME]),

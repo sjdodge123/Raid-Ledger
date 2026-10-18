@@ -3,7 +3,7 @@
  * When a Steam game isn't in the DB, looks it up via ITAD and creates a game row.
  */
 import { Logger } from '@nestjs/common';
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadGame } from '../itad/itad.constants';
@@ -17,6 +17,7 @@ import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 import { findModeratedMatch } from '../igdb/games-moderation-match.helpers';
 import { defined } from '../common/defined.helpers';
+import { steamAppIdWrite } from './steam-itad-discovery-merge.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
@@ -263,34 +264,6 @@ async function mergeIntoExisting(
   return {
     id: existing.id,
     hidden: existing.hidden === true || row.hidden === true,
-  };
-}
-
-/** The steamAppId columns of a merge's SET: a value, or an SQL expression. */
-interface SteamAppIdWrite {
-  steamAppId: GameInsertRow['steamAppId'] | SQL;
-  steamAppIdSource: GameInsertRow['steamAppIdSource'] | SQL;
-}
-
-/**
- * The steamAppId columns a merge writes. ROK-1843: a hidden row keeps its
- * non-null steamAppId (and its source) — it is the anchor by-steam-id checks
- * before rediscovering, so moving it would let the old id miss and rediscover.
- */
-function steamAppIdWrite(
-  existing: MatchedGame,
-  row: GameInsertRow,
-): SteamAppIdWrite {
-  if (existing.hidden !== true) {
-    return {
-      steamAppId: row.steamAppId,
-      steamAppIdSource: row.steamAppIdSource,
-    };
-  }
-  const g = schema.games;
-  return {
-    steamAppId: sql`COALESCE(${g.steamAppId}, ${row.steamAppId ?? null})`,
-    steamAppIdSource: sql`CASE WHEN ${g.steamAppId} IS NULL THEN ${row.steamAppIdSource ?? null} ELSE ${g.steamAppIdSource} END`,
   };
 }
 
