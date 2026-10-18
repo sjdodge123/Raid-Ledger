@@ -26,6 +26,8 @@ let lastSpawnArgs: { file: string; args: string[] } | null = null;
 let lastSpawnStdin: string | null = null;
 // ROK-1847 — overridable execFile stdout (executeCreate pre-reads /api/state).
 let cannedExecStdout = '{}\nRL_STATUS:200';
+// ROK-1847 — overridable spawn stdout (the sensitive-header POST/DELETE path).
+let cannedSpawnStdout = '{}\nRL_STATUS:200';
 
 vi.mock('node:child_process', async () => {
   return {
@@ -61,7 +63,7 @@ vi.mock('node:child_process', async () => {
       // Fire success on the next tick: emit the same canned stdout the
       // execFile mock returns so the curlOnVM consumer parses RL_STATUS.
       setImmediate(() => {
-        child.stdout.emit('data', Buffer.from('{}\nRL_STATUS:200'));
+        child.stdout.emit('data', Buffer.from(cannedSpawnStdout));
         child.emit('close', 0);
       });
       return child;
@@ -74,6 +76,7 @@ beforeEach(() => {
   lastSpawnArgs = null;
   lastSpawnStdin = null;
   cannedExecStdout = '{}\nRL_STATUS:200';
+  cannedSpawnStdout = '{}\nRL_STATUS:200';
 });
 
 afterEach(() => {
@@ -222,6 +225,26 @@ describe('ROK-1847 — plan create and clear send X-Agent-Token', () => {
       expect(remote).toContain('-X DELETE');
       expect(remote).toContain('X-Agent-Token: $RL_AGENT_TOKEN_VALUE');
       expect(lastSpawnStdin).toBe('create-clear-token-1847\n');
+    });
+  });
+
+  it('executeCreate returns the token-bearing tester links once and a token-less plan_url', async () => {
+    const { executeCreate } = await import('../test-plan.js');
+    cannedExecStdout = '{"envs":[{"slug":"aaa"}]}\nRL_STATUS:200';
+    cannedSpawnStdout = '{"ok":true,"tester_token":"tok-1847"}\nRL_STATUS:201';
+    await withToken(async () => {
+      const r = await executeCreate({
+        slug: 'aaa', goal: 'check the create links', story_id: 'ROK-1847',
+        steps: [{ description: 'one' }],
+      });
+      expect(r.ok).toBe(true);
+      expect(r).not.toHaveProperty('tester_token');
+      expect(r).not.toHaveProperty('env_url');
+      expect(r).toMatchObject({
+        tester_url: expect.stringMatching(/^https:\/\/fleet\.[^/]+\/\?slug=aaa&plan=[\w-]+&k=tok-1847$/),
+        tester_url_lan: expect.stringMatching(/^http:\/\/fleet\.rl\.lan\/\?slug=aaa&plan=[\w-]+&k=tok-1847$/),
+        plan_url: expect.stringMatching(/^https:\/\/fleet\.[^/]+\/\?slug=aaa&plan=[\w-]+$/),
+      });
     });
   });
 });

@@ -269,7 +269,7 @@ const curlOnVM = async (
 // ----- rl_test_plan_create -----
 export const CREATE_TOOL = 'rl_test_plan_create';
 export const CREATE_DESC =
-  "Post a test checklist tied to a fleet env slug. Steps render on the fleet.gamernight.net dashboard with pass/fail/skip buttons (and optional ↗ deep link + ↻ reset button per step) for the operator + external testers to tap. Ordering is enforced sequentially. REQUIRED fields (ROK-1337): `goal` (3-7 words, summarises what the tester should accomplish — e.g. 'Validate Discord OAuth flow') and `story_id` (must match /^ROK-\\d+$/ — the dashboard renders this as a Linear deep-link chip). Returns `{ok, plan_id}` where plan_id has the shape `YYYY-MM-DD-HHmm-XXXX`; pass that plan_id to rl_test_plan_status / rl_test_plan_clear to scope to ONE plan. Each slug can host MANY concurrent plans — every create call mints a new plan_id, no clobber. WRITE SMALL, ACTIONABLE STEPS the user can perform in seconds — bad: 'Verify the lineups page works'. Good: 'Open /lineups → Common Ground tab, expect ≥3 themed rows'. AVOID pasting URL-encoded blobs (redirect_uri=https%3A%2F%2F...) into description or expected — they're unreadable on mobile and blow out card height. Describe what the tester should see in plain English ('Location header points at slot URL, not localhost') and put the deep link in `test_url` for the ↗ button. Keep description ≤ 1 sentence and expected ≤ 1 sentence. Each step SHOULD include a `test_url` deep-linking to the right view (construct from the env_url returned by rl_env_deploy) and SHOULD include a `reset_hint` if the step mutates state that may need clearing for a re-test (e.g. 'Refresh seed data via /admin/seed-lineups'). When tester taps ↻ reset, agent gets a pending_resets signal via rl_test_plan_status / rl_test_plan_wait — execute the documented reset (the hint tells YOU what to do too), then post a verdict to clear the reset state. Auto-cleared on rl_env_destroy.";
+  "Post a test checklist tied to a fleet env slug. Steps render on the fleet.gamernight.net dashboard with pass/fail/skip buttons (and optional ↗ deep link + ↻ reset button per step) for the operator + external testers to tap. Ordering is enforced sequentially. REQUIRED fields (ROK-1337): `goal` (3-7 words, summarises what the tester should accomplish — e.g. 'Validate Discord OAuth flow') and `story_id` (must match /^ROK-\\d+$/ — the dashboard renders this as a Linear deep-link chip). Returns `{ok, plan_id, plan_url, tester_url, tester_url_lan}` where plan_id has the shape `YYYY-MM-DD-HHmm-XXXX`. LINKS (ROK-1847): the dashboard refuses tester writes (Submit, verdict, comment, screenshot upload, reset) on the public host without the plan's tester token. `tester_url` (public) and `tester_url_lan` carry that token as `k` and are returned ONLY by this call — no later read recovers them, so keep them for the run; losing them means re-creating the plan. Hand `tester_url` ONLY to the person testing (the operator's OPERATOR-step ask). NEVER put `tester_url`/`tester_url_lan` in a PR body, Linear, CURRENT-STATE.md, a commit or a report: anyone holding it can write verdicts. Use the token-less `plan_url` there (read-only on the public host). Pass plan_id pass that plan_id to rl_test_plan_status / rl_test_plan_clear to scope to ONE plan. Each slug can host MANY concurrent plans — every create call mints a new plan_id, no clobber. WRITE SMALL, ACTIONABLE STEPS the user can perform in seconds — bad: 'Verify the lineups page works'. Good: 'Open /lineups → Common Ground tab, expect ≥3 themed rows'. AVOID pasting URL-encoded blobs (redirect_uri=https%3A%2F%2F...) into description or expected — they're unreadable on mobile and blow out card height. Describe what the tester should see in plain English ('Location header points at slot URL, not localhost') and put the deep link in `test_url` for the ↗ button. Keep description ≤ 1 sentence and expected ≤ 1 sentence. Each step SHOULD include a `test_url` deep-linking to the right view, built on the slot URL — the `url` field of the terminal rl_env_spin / rl_env_deploy task (`https://slot-N.gamernight.net/...`); the dashboard rejects the whole plan with 400 for any other host, including the legacy `<slug>test.<domain>` form and SHOULD include a `reset_hint` if the step mutates state that may need clearing for a re-test (e.g. 'Refresh seed data via /admin/seed-lineups'). When tester taps ↻ reset, agent gets a pending_resets signal via rl_test_plan_status / rl_test_plan_wait — execute the documented reset (the hint tells YOU what to do too), then post a verdict to clear the reset state. Auto-cleared on rl_env_destroy.";
 
 export interface CreatePlanStep {
   description: string;
@@ -278,9 +278,9 @@ export interface CreatePlanStep {
   /**
    * Deep link to the test scenario. The dashboard renders this as a "↗"
    * link next to the step so the tester can jump straight to the right
-   * place (e.g. https://<slug>test.gamernight.net/lineups#common-ground).
-   * MUST start with http:// or https://. Construct using the env_url
-   * returned by rl_env_deploy.
+   * place (e.g. https://slot-1.gamernight.net/lineups#common-ground).
+   * ROK-1847: MUST be https://slot-N.<RL_PUBLIC_DOMAIN> or http(s)://*.rl.lan
+   * — the dashboard 400s any other host. Use the env's slot `url`.
    */
   test_url?: string;
   /**
@@ -387,7 +387,7 @@ export async function executeCreate(p: CreatePlanParams) {
         plan_id: planId,
         ...rest,
         dashboard_url: `https://fleet.${publicDomain}`,
-        env_url: `https://${p.slug}test.${publicDomain}`,
+        plan_url: `https://fleet.${publicDomain}/?slug=${encodeURIComponent(p.slug)}&plan=${planId}`,
         ...testerUrls(p.slug, planId, publicDomain, testerToken),
       };
     }
