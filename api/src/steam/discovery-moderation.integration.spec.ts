@@ -285,16 +285,17 @@ describe('ROK-1843 a merge never moves a hidden row off its Steam app id', () =>
 });
 
 describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () => {
-  function stubSearch(game: ItadGame, steamAppId: number): void {
+  function stubSearch(game: ItadGame, steamAppId: number): jest.SpyInstance {
     const itad = testApp.app.get(ItadService);
     const igdb = testApp.app.get(IgdbService);
-    jest.spyOn(itad, 'searchGames').mockResolvedValue([game]);
+    const searchSpy = jest.spyOn(itad, 'searchGames').mockResolvedValue([game]);
     jest.spyOn(itad, 'getGameInfo').mockResolvedValue(null);
     jest
       .spyOn(itad, 'lookupSteamAppIds')
       .mockResolvedValue(new Map([[game.id, steamAppId]]));
     jest.spyOn(igdb, 'queryIgdb').mockResolvedValue([]);
     jest.spyOn(igdb, 'isAdultFilterEnabled').mockResolvedValue(false);
+    return searchSpy;
   }
 
   it.each([
@@ -310,13 +311,18 @@ describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () =>
         steamAppId: appId,
         ...moderation,
       });
-      stubSearch(itadGame(`rok1843-zq-${label}`, `Rok1843 Zq ${label}`), appId);
+      const searchSpy = stubSearch(
+        itadGame(`rok1843-zq-${label}`, `Rok1843 Zq ${label}`),
+        appId,
+      );
 
       const res = await testApp.request.get(
         `/games/search?q=rok1843 zq ${label}`,
       );
 
       expect(res.status).toBe(200);
+      // The ITAD layer swallows errors and falls back — prove it really ran.
+      expect(searchSpy).toHaveBeenCalled();
       const ids = (res.body.data as { id: number }[]).map((g) => g.id);
       expect(ids).not.toContain(moderated.id);
       if (label === 'banned') {
