@@ -35,6 +35,22 @@ export function receivedSnapshotAt(
   return new Date(Math.min(fromUnix(snapshotAt).getTime(), nowMs));
 }
 
+/**
+ * AC4 — a held snapshot. The wire body is the plain `INVALID_PAYLOAD` one
+ * (no contract change); the extra facts drive the admin flag, written after
+ * the import transaction has rolled back (`addon-import-guild.flag.ts`).
+ */
+export class RosterHeldError extends AddonImportError {
+  constructor(
+    readonly guildId: number,
+    readonly removed: number,
+    readonly live: number,
+    readonly dropsEditor: boolean,
+  ) {
+    super('INVALID_PAYLOAD', ROSTER_HELD_MESSAGE);
+  }
+}
+
 export function isMassRemoval(live: number, removed: number): boolean {
   return removed >= MASS_REMOVAL_MIN && removed > live * MASS_REMOVAL_SHARE;
 }
@@ -91,7 +107,7 @@ async function assertNoWholesaleRemoval(
   logger.warn(
     `Held guild snapshot: guild=${guildId} user=${ctx.userId} removes ${removed.length}/${live.length}${dropsEditor ? ' incl. an editor' : ''}`,
   );
-  throw new AddonImportError('INVALID_PAYLOAD', ROSTER_HELD_MESSAGE);
+  throw new RosterHeldError(guildId, removed.length, live.length, dropsEditor);
 }
 
 /**

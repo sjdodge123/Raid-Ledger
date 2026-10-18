@@ -11,10 +11,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as bcrypt from 'bcrypt';
-import { count, eq, gte } from 'drizzle-orm';
+import { and, count, eq, gte } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
+import {
+  loginAsAdmin,
+  truncateAllTables,
+} from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
@@ -196,8 +199,42 @@ describe('ROK-1794 — unsigned guild snapshots', () => {
       .from(schema.guildMembers)
       .where(gte(schema.guildMembers.lastSeenAt, nonNull(g.lastSnapshotAt)));
     expect(live).toHaveLength(40);
+    // AC4 "flagged to admins": the admin gets an in-app notice (the held
+    // roster is rolled back, the flag is written after the transaction).
+    const flags = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(
+        and(
+          eq(schema.notifications.userId, testApp.seed.adminUser.id),
+          eq(schema.notifications.type, 'system'),
+        ),
+      );
+    expect(flags).toEqual([
+      expect.objectContaining({
+        title: 'Guild roster import held',
+        payload: expect.objectContaining({
+          guildId: g.id,
+          removed: 39,
+          live: 40,
+        }),
+      }),
+    ]);
   });
+});
 
+describe('ROK-1794 — staff, snapshot clock and audit', () => {
+  it(`${AC(2)}: staff may replace any roster, wholesale included`, async () => {
+    await seedRealGuild();
+    const token = await loginAsAdmin(testApp.request, testApp.seed);
+    const id = await createChar(token);
+    const staffGuid = 'Player-4395-0000CAFE';
+    const solo = buildGuildPayload([buildMember(0xcafe, { guid: staffGuid })]);
+    solo.who = buildWho({ guid: staffGuid });
+    const res = await apply(token, id, buildImportString(solo));
+    expect(res.status).toBe(200);
+    expect((await guildRow()).memberCount).toBe(1);
+  });
   it(`${AC(3)}: a post-dated snapshot is stored at the server clock`, async () => {
     const { token, id } = await seedRealGuild();
     const ahead = buildGuildPayload(roster());
