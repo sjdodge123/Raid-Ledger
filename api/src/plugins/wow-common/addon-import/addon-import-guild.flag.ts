@@ -2,7 +2,10 @@ import type { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
-import type { RosterHeldError } from './addon-import-guild.guard';
+import {
+  REMOVAL_WINDOW_HOURS,
+  type RosterHeldError,
+} from './addon-import-guild.guard';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -10,9 +13,9 @@ export const ROSTER_HELD_TITLE = 'Guild roster import held';
 
 function heldMessage(guildName: string, err: RosterHeldError): string {
   const editor = err.dropsEditor
-    ? ', including a member with editor rights'
+    ? ' It also drops a member with editor rights: if they left, remove their editor grant or import the roster yourself.'
     : '';
-  return `An import for ${guildName} would have removed ${err.removed} of ${err.live} current members${editor}. The roster was kept; import it yourself if the change is real.`;
+  return `An import for ${guildName} was held: with the last ${REMOVAL_WINDOW_HOURS}h of imports it would remove ${err.removed} and add ${err.added} of the ${err.live} members the guild had.${editor} The roster was kept; import it yourself if the change is real.`;
 }
 
 /**
@@ -50,14 +53,14 @@ async function insertFlags(
     .from(schema.users)
     .where(eq(schema.users.role, 'admin'));
   if (!guild || admins.length === 0) return;
-  const { guildId, removed, live, dropsEditor } = err;
+  const { guildId, removed, added, live, dropsEditor } = err;
   await db.insert(schema.notifications).values(
     admins.map((a) => ({
       userId: a.id,
       type: 'system' as const,
       title: ROSTER_HELD_TITLE,
       message: heldMessage(guild.name, err),
-      payload: { guildId, importerId, removed, live, dropsEditor },
+      payload: { guildId, importerId, removed, added, live, dropsEditor },
     })),
   );
 }

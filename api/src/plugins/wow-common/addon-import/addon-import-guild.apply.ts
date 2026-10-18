@@ -12,6 +12,7 @@ import {
   assertMayReplaceRoster,
   auditRosterReplaced,
   receivedSnapshotAt,
+  type RosterDelta,
 } from './addon-import-guild.guard';
 import {
   guildNameKey,
@@ -123,20 +124,21 @@ type StoredGuild = Awaited<ReturnType<typeof loadGuild>>;
 /**
  * ROK-1794 AC2/AC4: an existing guild's roster is only replaced by staff or
  * a live member, never wholesale. Returns whether the snapshot is stale and
- * how many live members it removes (audited for the rolling window).
+ * the members it removes and adds (audited for the rolling window). The
+ * guild-creating import counts 0/0: it is the window's baseline.
  */
 async function guardExisting(
   ctx: AddonApplyContext,
   guild: StoredGuild,
   payload: AddonGuildExport,
-): Promise<{ stale: boolean; removed: number }> {
-  if (!guild) return { stale: false, removed: 0 };
+): Promise<{ stale: boolean; delta: RosterDelta }> {
+  if (!guild) return { stale: false, delta: { removed: 0, added: 0 } };
   const stale = isStaleGuildSnapshot(
     guild.lastSnapshotAt,
     payload.data.snapshotAt,
   );
-  const removed = await assertMayReplaceRoster(ctx, guild.id, payload, !stale);
-  return { stale, removed };
+  const delta = await assertMayReplaceRoster(ctx, guild.id, payload, !stale);
+  return { stale, delta };
 }
 
 /** Dry run: NOT_IN_GUILD / guard / stale checks + new-vs-updated counts. */
@@ -261,7 +263,7 @@ export async function applyGuild(
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
   const guild = await loadGuild(ctx, payload.data.name);
-  const { removed } = await guardExisting(ctx, guild, payload);
+  const { delta } = await guardExisting(ctx, guild, payload);
   const seenAt = receivedSnapshotAt(payload.data.snapshotAt);
   const guildId = await upsertGuild(ctx, payload, seenAt);
   if (guildId === undefined) {
@@ -270,7 +272,7 @@ export async function applyGuild(
   }
   const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
   const members = payload.data.members.length;
-  await auditRosterReplaced(ctx, guildId, members, inserted, removed);
+  await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {
     status: 'applied',
     summary: buildGuildSummary(payload, pages, inserted),
