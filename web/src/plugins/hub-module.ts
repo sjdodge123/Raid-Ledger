@@ -123,8 +123,8 @@ export interface HubModule {
     membersSummary?: ComponentType<HubCtx>;
     /** Sub-title under the Members heading. */
     membersBlurb?: (page: GuildPage) => string;
-    /** Shown instead of the groups when there are none. */
-    membersEmpty?: string;
+    /** Shown instead of the groups when there are none (a function can read the page, e.g. visitor vs member). */
+    membersEmpty?: string | ((page: GuildPage) => string);
     /** Left-rule class per member row (WoW: the role colour). */
     memberRowClass?: (row: HubMemberRow) => string;
     /** Line under the hero's next-event chip (WoW: the LedgerLink import line). */

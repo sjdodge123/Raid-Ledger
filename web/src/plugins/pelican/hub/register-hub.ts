@@ -11,6 +11,9 @@ import { QuickPlayTab } from './quick-play-tab';
 import { serverHubGameTabs } from './server-hub-game-tabs';
 import { RecentArrivalsWidget } from './recent-arrivals-widget';
 
+/** A visitor gets no member rows (server-side), so the empty line invites a Join. */
+export const SERVER_MEMBERS_VISITOR_EMPTY = 'Join to see who plays here';
+
 export const pelicanHubModule: HubModule = {
     kind: 'game_server',
     get tabs() {
@@ -21,5 +24,5 @@ export const pelicanHubModule: HubModule = {
     heroPills: [ServerStatusPill, JoinLeavePill],
     memberRows: (page) => page.ranks.flatMap((g) => g.members),
     membersBlurb: () => 'Played here in the last 90 days, or joined',
-    membersEmpty: 'No one has played here yet.',
+    membersEmpty: (page) => (page.server?.viewerJoined === false ? SERVER_MEMBERS_VISITOR_EMPTY : 'No one has played here yet.'),
 };
