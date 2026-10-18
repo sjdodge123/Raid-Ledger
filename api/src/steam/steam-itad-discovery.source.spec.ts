@@ -15,6 +15,7 @@ import { withMockTransaction } from '../common/testing/drizzle-mock';
 // (discovery-moderation.integration.spec.ts); here no row is moderated.
 jest.mock('../igdb/games-moderation-match.helpers', () => ({
   findModeratedMatch: jest.fn().mockResolvedValue(null),
+  lockModerationKeys: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('./steam-igdb-enrichment.helpers', () => ({
