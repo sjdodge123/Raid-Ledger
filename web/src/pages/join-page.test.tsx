@@ -37,6 +37,19 @@ vi.mock('react-router-dom', async () => {
     };
 });
 
+// ROK-1839: the intent token is captured and stripped from the address bar
+// before Sentry initialises, so JoinPage falls back to the capture when the
+// URL no longer carries one. Mocked here to keep the fallback deterministic.
+const capture = vi.hoisted(() => ({ current: null as string | null }));
+const mockClearCaptured = vi.hoisted(() => vi.fn());
+vi.mock('../lib/query-token-capture', () => ({
+    peekCapturedQueryToken: () => capture.current,
+    clearCapturedQueryToken: () => {
+        mockClearCaptured();
+        capture.current = null;
+    },
+}));
+
 // Mock useAuth
 const mockUseAuth = vi.fn();
 vi.mock('../hooks/use-auth', () => ({
@@ -355,4 +368,49 @@ describe('JoinPage — part 4', () => {
         });
     });
 
+});
+
+describe('ROK-1839: the intent token comes from the pre-Sentry capture', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        sessionStorage.clear();
+        capture.current = null;
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    });
+
+    it('redeems the captured token when the address bar no longer carries one', async () => {
+        capture.current = 'captured.intent.token';
+        vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
+            success: true, eventId: 42, message: "You're signed up!",
+        });
+
+        renderJoinPage('?intent=signup&eventId=42');
+
+        await waitFor(() => {
+            expect(apiClient.redeemIntent).toHaveBeenCalledWith('captured.intent.token');
+        });
+        expect(mockClearCaptured, 'a redeemed token must not survive the exchange').toHaveBeenCalled();
+    });
+
+    it('hands the captured token to the Discord hop and clears it when signed out', async () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
+        capture.current = 'captured.intent.token';
+
+        renderJoinPage('?intent=signup&eventId=42');
+
+        await waitFor(() => {
+            expect(JSON.parse(sessionStorage.getItem('join_intent') ?? 'null')).toEqual({
+                intent: 'signup', eventId: '42', token: 'captured.intent.token',
+            });
+        });
+        expect(mockClearCaptured).toHaveBeenCalled();
+    });
+
+    it('still shows the invalid-link state when neither the URL nor the capture has a token', () => {
+        renderJoinPage('?intent=signup&eventId=42');
+
+        expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
+        expect(apiClient.redeemIntent).not.toHaveBeenCalled();
+    });
 });
