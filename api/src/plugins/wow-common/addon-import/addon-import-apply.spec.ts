@@ -285,6 +285,7 @@ describe('guild rows', () => {
       source: 'addon_import',
       lastSeenAt: at(EXPORTED_AT),
       capturedByUserId: 7,
+      introducedByUserId: 7,
     });
     expect(Object.keys(row).join(',')).not.toMatch(/officer/i);
     expect(

@@ -28,6 +28,7 @@ import {
   buildMember,
   buildWho,
 } from './testing/addon-fixture.builder';
+import { corroborateRoster } from './testing/corroborate-roster';
 import { FIXTURE_NOW_MS, pinExportClock } from './testing/pin-export-clock';
 import type { AddonGuildMember } from '@raid-ledger/contract';
 
@@ -161,6 +162,8 @@ async function seedRealGuild(): Promise<{ token: string; id: string }> {
   const token = await memberToken('realgm');
   const id = await createChar(token);
   expect((await apply(token, id, fixture('guild-1-page'))).status).toBe(200);
+  // Other members' imports have carried the roster since (Codex P1).
+  await corroborateRoster(testApp.db);
   return { token, id };
 }
 
@@ -344,5 +347,101 @@ describe('ROK-1794 — staff, snapshot clock and audit', () => {
       expect.objectContaining({ entityType: 'guild', entityId: g.id }),
     ]);
     expect(rows[0]?.actorId).toEqual(expect.any(Number));
+  });
+});
+
+/** A member-only GUID listed on a new, squatted guild roster. */
+const SQUAT = 'Squat Club';
+function squatRoster(step: number, extra: AddonGuildMember[] = []): string {
+  const payload = buildGuildPayload([
+    buildMember(0x5a0001, { guid: 'Player-4395-005A0001' }),
+    buildMember(0x5a0002, { guid: 'Player-4395-005A0002' }),
+    ...extra,
+  ]);
+  payload.data.name = SQUAT;
+  payload.who = buildWho({ guid: 'Player-4395-005A0001' });
+  payload.data.snapshotAt += step * 60;
+  return buildImportString(payload);
+}
+const squatMembers = async (): Promise<number> => {
+  const [g] = await testApp.db
+    .select({ n: count() })
+    .from(schema.guildMembers)
+    .innerJoin(schema.guilds, eq(schema.guilds.id, schema.guildMembers.guildId))
+    .where(eq(schema.guilds.name, SQUAT));
+  return Number(g?.n ?? 0);
+};
+
+describe('ROK-1794 — self-introduced roster rows (Codex P1)', () => {
+  it(`${AC(2)}: forged export → GUID claim → re-import is refused until another importer corroborates`, async () => {
+    const token = await memberToken('squatter');
+    const id = await createChar(token);
+    // The forged guild export claims 005A0001 for the squatter's character
+    // and introduces every row of the new guild itself.
+    expect((await apply(token, id, squatRoster(1))).status).toBe(200);
+    const fake = buildMember(0x5a0099, { guid: 'Player-4395-005A0099' });
+    const again = await apply(token, id, squatRoster(2, [fake]));
+    expect(again.status).toBe(422);
+    expect(again.body.code).toBe('NOT_IN_GUILD');
+    expect(await squatMembers()).toBe(2);
+    // A second importer, listed by someone else, carries the row.
+    const other = await memberToken('corroborator');
+    const otherId = await createChar(other);
+    const theirs = buildGuildPayload([
+      buildMember(0x5a0001, { guid: 'Player-4395-005A0001' }),
+      buildMember(0x5a0002, { guid: 'Player-4395-005A0002' }),
+    ]);
+    theirs.data.name = SQUAT;
+    theirs.who = buildWho({ guid: 'Player-4395-005A0002' });
+    theirs.data.snapshotAt += 3 * 60;
+    expect(
+      (await apply(other, otherId, buildImportString(theirs))).status,
+    ).toBe(200);
+    const after = await apply(token, id, squatRoster(4, [fake]));
+    expect(after.status).toBe(200);
+    expect(await squatMembers()).toBe(3);
+  });
+});
+
+describe('ROK-1794 — concurrent imports and the character-less route (Codex P2)', () => {
+  it(`${AC(4)}: two concurrent identical imports count a removal once`, async () => {
+    const { token, id } = await seedRealGuild();
+    const s = sliced(4, 1);
+    const [a, b] = await Promise.all([
+      apply(token, id, s),
+      apply(token, id, s),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const audits = await testApp.db
+      .select()
+      .from(schema.activityLog)
+      .where(eq(schema.activityLog.action, 'guild_roster_replaced'));
+    const removed = audits.map(
+      (r) => (r.metadata as { removed?: number }).removed ?? 0,
+    );
+    expect(removed.reduce((x, y) => x + y, 0)).toBe(4);
+    expect(await liveCount()).toBe(36);
+  });
+
+  it(`${AC(4)}: a roster held on the character-less route notifies admins`, async () => {
+    const { token } = await seedRealGuild();
+    const self = roster().filter((m) => m.guid === FIXTURE_GUID);
+    const res = await testApp.request
+      .post('/plugins/wow/characters/addon-import')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        importString: buildImportString(buildGuildPayload(self)),
+        dryRun: false,
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('INVALID_PAYLOAD');
+    expect(await liveCount()).toBe(40);
+    const flags = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, testApp.seed.adminUser.id));
+    expect(flags).toEqual([
+      expect.objectContaining({ title: 'Guild roster import held' }),
+    ]);
   });
 });
