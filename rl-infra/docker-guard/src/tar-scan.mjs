@@ -58,15 +58,16 @@ function endEntry(st, e) {
 }
 
 /**
- * Any entry that folds (case, `./`, `/`, trailing slash) onto a wanted name is a
- * hit; a second hit, or a hit whose raw name is not byte-equal to a wanted name,
- * is build_context_ambiguous — the guard never guesses which one the daemon uses.
+ * Names are cleaned as Docker does (`./`, `//`, trailing `/` → normName). Any
+ * entry whose cleaned name matches a wanted one case-insensitively is a hit; a
+ * second hit, or a hit not byte-equal to a wanted name after cleaning, is
+ * build_context_ambiguous — the guard never guesses which one the daemon uses.
  */
 function noteHit(st, wanted, rawName, name) {
   if (!st.fold.has(name.toLowerCase())) return;
   st.hits.push(rawName);
   if (st.hits.length > 1) st.error = `build_context_ambiguous: ${st.hits.map(show).join(' and ')} both resolve to the Dockerfile`;
-  else if (!wanted.has(rawName)) st.error = `build_context_ambiguous: ${show(rawName)} only resembles the Dockerfile name`;
+  else if (!wanted.has(name)) st.error = `build_context_ambiguous: ${show(rawName)} only resembles the Dockerfile name`;
 }
 
 function onHeader(st, wanted, h) {

@@ -25,15 +25,32 @@ test('an empty PAX path keeps the ustar name', () => {
   assert.equal(r.files[0]?.data.toString(), LEAK);
 });
 
-test('duplicates, case, ./ and trailing-slash variants are ambiguous', () => {
+test('duplicates and case variants (after Docker path cleaning) are ambiguous', () => {
   for (const entries of [
     [{ name: 'Dockerfile', data: PLAIN }, { name: 'Dockerfile', data: LEAK }],
     [{ name: 'Dockerfile', data: PLAIN }, { name: './Dockerfile', data: LEAK }],
     [{ name: 'Dockerfile', data: PLAIN }, { name: 'DOCKERFILE', data: LEAK }],
-    [{ name: 'Dockerfile/', type: '5' }],
-    [{ name: './Dockerfile', data: PLAIN }],
+    [{ name: 'Dockerfile', data: PLAIN }, { name: 'Dockerfile/', type: '5' }],
+    [{ name: 'DOCKERFILE', data: LEAK }],
   ]) assert.match(scan(entries).error ?? '', /^build_context_ambiguous/, JSON.stringify(entries.map((e) => e.name)));
   assert.match(scan([{ name: 'docker/Df', data: PLAIN }, { name: 'docker/DF', data: LEAK }], 'docker/Df').error ?? '', /^build_context_ambiguous/);
+});
+
+test('a lone ./Dockerfile is accepted and scanned; `tar -C dir .` contexts pass', () => {
+  const lone = scan([{ name: './Dockerfile', data: LEAK }]);
+  assert.equal(lone.error, null);
+  assert.equal(lone.files[0]?.data.toString(), LEAK);
+  const dotStyle = [{ name: './', type: '5' }, { name: './src/', type: '5' }, { name: './src/a.js', data: 'x' }, { name: './Dockerfile', data: PLAIN }, { name: './Dockerfile.allinone', data: PLAIN }];
+  for (const param of [undefined, 'Dockerfile.allinone']) {
+    const r = scan(dotStyle, param);
+    assert.equal(r.error, null, String(param));
+    assert.equal(r.files.length, 1, String(param));
+  }
+  assert.equal(scan([{ name: './/Dockerfile', data: PLAIN }]).files.length, 1);
+});
+
+test('./Dockerfile and Dockerfile together are ambiguous', () => {
+  assert.match(scan([{ name: './Dockerfile', data: PLAIN }, { name: 'Dockerfile', data: LEAK }]).error ?? '', /^build_context_ambiguous/);
 });
 
 test('a normal context and a GNU long name pass', () => {

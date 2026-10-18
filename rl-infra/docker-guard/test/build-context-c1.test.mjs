@@ -36,8 +36,7 @@ test('the tar scanner honours PAX path and GNU long names, and refuses a symlink
   const gnu = tarOf([{ name: '././@LongLink', type: 'L', data: 'Dockerfile\0' }, { name: 'innocent', data: LEAK }]);
   assert.equal(scan(gnu).files[0]?.data.toString(), LEAK);
   assert.notEqual(scan(tarOf([{ name: 'Dockerfile', type: '2' }])).error, null);
-  // c2: a `./` variant is never guessed at — build_context_ambiguous.
-  assert.match(scan(tarOf([{ name: './Dockerfile', data: PLAIN }])).error ?? '', /^build_context_ambiguous/);
+  assert.equal(scan(tarOf([{ name: './Dockerfile', data: PLAIN }])).files.length, 1);
 });
 
 let daemon;
