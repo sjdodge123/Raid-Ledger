@@ -21,7 +21,10 @@ const ROUTES = [
   R('GET', '/(_ping|version|info|events)', ALLOW),
   R('HEAD', '/_ping', ALLOW),
   R('GET', '/containers/json', ALLOW),
-  R('GET', `/containers/(${ID})/(json|logs|stats|top|changes)`, ALLOW),
+  // Inspect / logs of another slot's or an env's container would hand a runner
+  // its Env (Discord bot tokens, admin passwords) — owned only. stats is safe.
+  R('GET', `/containers/(${ID})/stats`, ALLOW),
+  R('GET', `/containers/(${ID})/(json|logs|top|changes)`, ownedContainer),
   R('GET', `/containers/(${ID})/(archive|export)`, ownedContainer),
   R('HEAD', `/containers/(${ID})/archive`, ownedContainer),
   R('PUT', `/containers/(${ID})/archive`, ownedContainer),
