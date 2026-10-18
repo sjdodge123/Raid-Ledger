@@ -59,7 +59,7 @@ export type ValheimCharacterSummary = z.infer<
   typeof ValheimCharacterSummarySchema
 >;
 
-/** `GET /plugins/valheim/characters`. */
+/** `GET /plugins/valheim/armory/characters`. */
 export const ValheimCharacterListResponseSchema = z
   .object({ data: z.array(ValheimCharacterSummarySchema) })
   .strict();
@@ -75,7 +75,7 @@ export type ValheimCharacterMapRef = z.infer<
   typeof ValheimCharacterMapRefSchema
 >;
 
-/** `GET /plugins/valheim/characters/:id` — summary plus the full sheet. */
+/** `GET /plugins/valheim/armory/characters/:id` — summary plus the full sheet. */
 export const ValheimCharacterDetailSchema =
   ValheimCharacterSummarySchema.extend({
     equipment: z.array(ValheimEquippedItemSchema),
@@ -100,7 +100,7 @@ export const ValheimMapBaseMapSchema = z
 export type ValheimMapBaseMap = z.infer<typeof ValheimMapBaseMapSchema>;
 
 /**
- * `GET /plugins/valheim/characters/:id/maps/:mapId` — metadata only; fog
+ * `GET /plugins/valheim/armory/characters/:id/maps/:mapId` — metadata only; fog
  * bitmaps and blob bytes are served by V7 (Q7). Pin labels are free text.
  */
 export const ValheimMapMetaSchema = z
@@ -116,7 +116,7 @@ export const ValheimMapMetaSchema = z
   .strict();
 export type ValheimMapMeta = z.infer<typeof ValheimMapMetaSchema>;
 
-/** `PUT /admin/plugins/valheim/characters/:id/owner` — null unassigns. */
+/** `PUT /admin/plugins/valheim/armory/characters/:id/owner` — null unassigns. */
 export const ValheimAssignOwnerBodySchema = z
   .object({ userId: Id.nullable() })
   .strict();
@@ -148,7 +148,7 @@ export const ValheimClaimEventSchema = z
   .strict();
 export type ValheimClaimEvent = z.infer<typeof ValheimClaimEventSchema>;
 
-/** `GET /admin/plugins/valheim/characters/:id/claim-events`, newest first. */
+/** `GET /admin/plugins/valheim/armory/characters/:id/claim-events`, newest first. */
 export const ValheimClaimEventListResponseSchema = z
   .object({ data: z.array(ValheimClaimEventSchema) })
   .strict();
