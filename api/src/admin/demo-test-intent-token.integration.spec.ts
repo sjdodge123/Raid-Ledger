@@ -8,6 +8,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { JwtService } from '@nestjs/jwt';
+import { z } from 'zod';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -29,14 +30,18 @@ const ROUTE = '/admin/test/intent-token';
 let testApp: TestApp;
 let adminToken: string;
 
-interface MintedToken {
-  token: string;
-  url: string;
-  eventId: number;
-  intent: string;
-  discordId: string;
-  expiresInSeconds: number;
-}
+/** The 200 body — parsed, never cast, so a shape drift fails loudly. */
+const MintedTokenSchema = z.object({
+  token: z.string().min(1),
+  url: z.string(),
+  eventId: z.number(),
+  intent: z.string(),
+  discordId: z.string(),
+  expiresInSeconds: z.number(),
+});
+
+/** The registered claims of a minted token (decoded, not verified). */
+const TokenTimesSchema = z.object({ iat: z.number(), exp: z.number() });
 
 async function enableDemoMode(): Promise<void> {
   process.env.DEMO_MODE = 'true';
@@ -165,10 +170,15 @@ describe('POST /admin/test/intent-token — DEMO_MODE on', () => {
     const adminId = testApp.seed.adminUser.id;
     const res = await mint({ eventId, intent: 'signup', userId: adminId });
     expect(res.status).toBe(200);
-    const minted = res.body as MintedToken;
+    const minted = MintedTokenSchema.parse(res.body);
     expect(minted.eventId).toBe(eventId);
     expect(minted.intent).toBe('signup');
     expect(minted.expiresInSeconds).toBe(INTENT_TOKEN_TTL_SECONDS);
+    const times = TokenTimesSchema.parse(
+      testApp.app.get(JwtService).decode(minted.token),
+    );
+    expect(times.exp - times.iat).toBe(INTENT_TOKEN_TTL_SECONDS);
+    expect(INTENT_TOKEN_TTL_SECONDS).toBe(900);
     expect(minted.discordId).toBe(testApp.seed.adminUser.discordId);
     expect(minted.url).toBe(
       `${CLIENT_URL}/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(minted.token)}`,
@@ -194,7 +204,7 @@ describe('POST /admin/test/intent-token — DEMO_MODE on', () => {
       userId: testApp.seed.adminUser.id,
     });
     expect(res.status).toBe(200);
-    const { token } = res.body as MintedToken;
+    const { token } = MintedTokenSchema.parse(res.body);
     expect((await redeem(token)).body).toMatchObject({ success: true });
     const second = await redeem(token);
     expect(second.body).toMatchObject({
@@ -207,7 +217,7 @@ describe('POST /admin/test/intent-token — DEMO_MODE on', () => {
     const eventId = await insertEvent('intent-token-no-user');
     const res = await mint({ eventId, intent: 'signup' });
     expect(res.status).toBe(200);
-    const minted = res.body as MintedToken;
+    const minted = MintedTokenSchema.parse(res.body);
     expect(minted.discordId).toBe(PLACEHOLDER_DISCORD_ID);
 
     // The seeded admin HAS a discordId, so the mismatch guard must refuse it.
