@@ -58,7 +58,10 @@ export function assertContentType(src: BoundedBodySource, want: string): void {
 }
 
 /** 413 when `Content-Length` declares more than `max`. */
-export function assertDeclaredLength(src: BoundedBodySource, max: number): void {
+export function assertDeclaredLength(
+  src: BoundedBodySource,
+  max: number,
+): void {
   const declared = Number(headerOf(src, 'content-length'));
   if (Number.isFinite(declared) && declared > max) throw tooLarge();
 }
