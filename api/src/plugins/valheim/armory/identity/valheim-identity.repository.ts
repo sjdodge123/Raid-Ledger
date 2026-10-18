@@ -11,8 +11,7 @@ import type { ValheimLinkTx } from '../../link/valheim-link-token-lock';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
-const { valheimProfiles: profiles, valheimProfileClaimEvents: events } =
-  schema;
+const { valheimProfiles: profiles, valheimProfileClaimEvents: events } = schema;
 
 /** Rows from a `RETURNING` raw statement (postgres.js RowList is an array). */
 function rowsOf<T>(result: unknown): T[] {
@@ -36,7 +35,10 @@ export class ValheimIdentityRepository {
   }
 
   /** A1: attach an UNCLAIMED profile to its verified Steam user; the user id or null. */
-  async autoAttachProfile(exec: Exec, profileId: number): Promise<number | null> {
+  async autoAttachProfile(
+    exec: Exec,
+    profileId: number,
+  ): Promise<number | null> {
     // Match against users.steam_id only (set by RL's Steam auth, R5).
     const res = await exec.execute(sql`
       UPDATE valheim_profiles p

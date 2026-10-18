@@ -80,8 +80,16 @@ describe('ValheimIdentityService link / unlink (A2, A3)', () => {
     expect(repo.attachBySteamId).toHaveBeenCalledWith(tx, 9, '765');
     const rows = repo.insertEvents.mock.calls[0]?.[1] as unknown[];
     expect(rows).toEqual([
-      expect.objectContaining({ profileId: 1, action: 'auto_attach', toUserId: 9 }),
-      expect.objectContaining({ profileId: 2, action: 'auto_attach', toUserId: 9 }),
+      expect.objectContaining({
+        profileId: 1,
+        action: 'auto_attach',
+        toUserId: 9,
+      }),
+      expect.objectContaining({
+        profileId: 2,
+        action: 'auto_attach',
+        toUserId: 9,
+      }),
     ]);
   });
 

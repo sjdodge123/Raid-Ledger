@@ -99,9 +99,7 @@ describe('ValheimArmoryClaimsService.assign', () => {
   it('404 for a missing character', async () => {
     const { repo, svc } = build();
     repo.lockOwner.mockResolvedValue(null);
-    await expect(svc.assign(7, 1, 5)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(svc.assign(7, 1, 5)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

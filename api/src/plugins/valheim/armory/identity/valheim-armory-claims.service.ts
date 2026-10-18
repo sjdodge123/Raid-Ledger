@@ -86,8 +86,7 @@ export class ValheimArmoryClaimsService {
 
   /** The character's audit trail, newest first (≤100). */
   async events(profileId: number): Promise<ValheimClaimEvent[]> {
-    if (!(await this.repo.profileExists(profileId)))
-      throw notFound();
+    if (!(await this.repo.profileExists(profileId))) throw notFound();
     return (await this.repo.listEvents(profileId)).map(toClaimEvent);
   }
 }
