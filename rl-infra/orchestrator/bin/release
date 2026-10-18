@@ -218,7 +218,17 @@ else
     done
     # Belt-and-suspenders: also catch any docker-labeled envs not in the
     # registry (would happen if env-spin crashed mid-write).
-    DOCKER_SLUGS=$(docker ps -a --filter "label=rl.slot=$SLOT" --filter "label=rl.role=env" --format '{{.Label "rl.env_slug"}}' 2>/dev/null | sort -u | grep -v '^$' || true)
+    # ROK-1846 — labels are whatever the container's creator wrote, so they are
+    # claims, not facts. Act on a slug only through a container that IS that
+    # env's (docker names are unique) and never on a slug env-registry gives
+    # to another slot: a forged rl.env_slug=<victim> must not force-destroy it.
+    DOCKER_ENVS=$(docker ps -a --filter "label=rl.slot=$SLOT" --filter "label=rl.role=env" --format '{{.Label "rl.env_slug"}} {{.Names}}' 2>/dev/null || true)
+    DOCKER_SLUGS=$(while read -r slug cname; do
+        [[ -n "$slug" ]] || continue
+        [[ "$cname" == "rl-env-${slug}-allinone" || "$cname" == "rl-env-${slug}-pg" ]] || continue
+        state::query "$RL_ENVS_FILE" -e --arg s "$slug" --argjson n "$SLOT" 'any(.[]?; .slug == $s and .slot != $n)' >/dev/null 2>&1 && continue
+        echo "$slug"
+    done <<<"$DOCKER_ENVS" | sort -u)
     for slug in $DOCKER_SLUGS; do
         [[ -z "$slug" ]] && continue
         if ! printf '%s\n' "${DESTROYED_LIST[@]+"${DESTROYED_LIST[@]}"}" | grep -qx "$slug"; then

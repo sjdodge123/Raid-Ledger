@@ -101,6 +101,20 @@ TEST_PLAN_ATTACHMENTS_DIR="${TEST_PLAN_ATTACHMENTS_DIR:-/state/test-plan-attachm
 # screenshot attachments are preserved for review. Operators clear
 # explicitly via rl_test_plan_clear when ready. The clean_test_plan
 # function stays as a no-op so callers in this script don't need touching.
+# ROK-1846 — the dead-claim and hoarded-slot reapers find envs by the
+# rl.slot / rl.role / rl.env_slug labels, which are whatever the container's
+# creator wrote. Reap a slug only through a container that IS that env's
+# (docker names are unique, so a forged container cannot hold the victim's
+# name) and never when env-registry gives the slug to another slot.
+env_container_belongs_to_slot() {
+    local slug="$1" cname="$2" slot="$3"
+    [[ "$cname" == "rl-env-${slug}-allinone" || "$cname" == "rl-env-${slug}-pg" ]] || return 1
+    if jq -e --arg s "$slug" --argjson n "$slot" 'any(.[]?; .slug == $s and .slot != $n)' "$ENVS" >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}
+
 clean_test_plan() {
     local _slug="$1"
     return 0
@@ -331,10 +345,16 @@ for slot in $DEAD_SLOTS; do
     # slot that never spun one". The ⏰ sweep below is GUILD-WIDE, so firing it
     # on an env-less release (the common validate-ci case) would delete a live
     # sibling env's channels.
+    SLOT_REAPED=0
     SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
-    while read -r slug cid; do
+        --format '{{ .Label "rl.env_slug" }} {{.ID}} {{.Names}}' 2>/dev/null || true)
+    while read -r slug cid cname; do
         [[ -z "$slug" ]] && continue
+        if ! env_container_belongs_to_slot "$slug" "$cname" "$slot"; then
+            log "WARN: container $cid ($cname) on slot $slot claims rl.env_slug=$slug but is not that env's or the slug is another slot's — not reaping it"
+            continue
+        fi
+        SLOT_REAPED=1
         log "  destroying env $slug (orphaned by dead claim)"
         docker rm -f "$cid" >/dev/null 2>&1 || true
         docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
@@ -348,7 +368,7 @@ for slot in $DEAD_SLOTS; do
     # Only when an env was actually destroyed — see the SLOT_ENVS comment above.
     # `if` rather than `[[ … ]] && …`: under `set -e` a false AND-list mid-body
     # would abort the whole sweeper cycle.
-    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
+    if (( SLOT_REAPED == 1 )); then sweeper_discord_sweep "$slot"; fi
     # Queued waiters are not promoted here. claim-wait wakes only on a change
     # to the lease-queue dir, and this reaper writes claims.json, not that dir,
     # so a queued waiter picks up the slot this freed on its next queue wake
@@ -374,10 +394,16 @@ HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AG
 for slot in $HOARDED_SLOTS; do
     log "releasing hoarded slot $slot (claim age > ${MAX_CLAIM_AGE_SECONDS}s, keep_alive=false, expires_at=null)"
     # ROK-1515 F1 — same capture-then-gate shape as §1 above.
+    SLOT_REAPED=0
     SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
-    while read -r slug cid; do
+        --format '{{ .Label "rl.env_slug" }} {{.ID}} {{.Names}}' 2>/dev/null || true)
+    while read -r slug cid cname; do
         [[ -z "$slug" ]] && continue
+        if ! env_container_belongs_to_slot "$slug" "$cname" "$slot"; then
+            log "WARN: container $cid ($cname) on slot $slot claims rl.env_slug=$slug but is not that env's or the slug is another slot's — not reaping it"
+            continue
+        fi
+        SLOT_REAPED=1
         docker rm -f "$cid" >/dev/null 2>&1 || true
         docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
         docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
@@ -388,7 +414,7 @@ for slot in $HOARDED_SLOTS; do
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false | .expires_at=null | .extends_count=0)'
     audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
-    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
+    if (( SLOT_REAPED == 1 )); then sweeper_discord_sweep "$slot"; fi
 done
 
 # 1d. ROK-1331 M5a — Claim-expiry reaper. Claims past `expires_at` get

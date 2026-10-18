@@ -123,7 +123,7 @@ _install_docker_shim() {
 case "\$1" in
     ps)
         if [[ "\$*" == *"rl.slot="* ]]; then
-            echo "$SLUG fakecid001"
+            printf '%s\n' "\${SHIM_SLOT_ENVS:-$SLUG fakecid001 rl-env-$SLUG-allinone}"
         fi
         ;;
     inspect)
@@ -261,10 +261,32 @@ test_running_status_without_pidfile_does_not_protect() {
     _cleanup_shim
 }
 
+# --- ROK-1846: forged env labels on a runner-made container -----------------
+# A runner can build an image carrying LABEL rl.role=env rl.env_slug=<victim>;
+# the reaper must not take the label's word for it. The victim is registered to
+# slot 2; the forger's container sits on slot 1 under its own name.
+test_forged_env_labels_do_not_reap_another_slots_env() {
+    CURRENT_TEST_NAME="ROK-1846: dead-claim reaper skips a forged rl.env_slug (wrong name, or another slot's slug)"
+    _prepare
+    _seed_task "donetask02" 1 "succeeded" "missing"
+    jq '. + [{slug:"victim", slot:2, image:"x", ttl:"24h", pinned:false}]' "$RL_STATE_DIR/env-registry.json" \
+        > "$RL_STATE_DIR/r.tmp" && mv "$RL_STATE_DIR/r.tmp" "$RL_STATE_DIR/env-registry.json"
+    export SHIM_SLOT_ENVS=$'victim forgedcid1 runner-child-xyz\nvictim forgedcid2 rl-env-victim-allinone'
+    _run_sweep "$SHIM_DIR" "$REAP_LOG"
+    unset SHIM_SLOT_ENVS
+    assert_eq "$(_claimed_flag)" "false" "the dead claim is still released"
+    assert_absent "$(cat "$REAP_LOG")" "rl-data-victim" "slot 2's rl-data-victim volume must not be removed by slot 1's reap"
+    assert_absent "$(cat "$REAP_LOG")" "rl-env-victim-pg" "slot 2's rl-env-victim-pg must not be removed by slot 1's reap"
+    assert_absent "$(cat "$REAP_LOG")" "forgedcid" "neither forged container is treated as an env"
+    _cleanup_shim
+}
+
 run_test "AC1 running task protects slot+envs" test_running_task_protects_slot_and_envs
 run_test "AC2 no running task still reaped"    test_no_running_task_still_reaped
 run_test "AC3 stale pidfile does not protect"  test_stale_pidfile_does_not_protect_slot
 run_test "AC4 guard is slot-scoped"            test_running_task_on_other_slot_does_not_protect
 run_test "AC5 pid-less running task no leak"   test_running_status_without_pidfile_does_not_protect
+
+run_test "rok-1846-forged-env-labels" test_forged_env_labels_do_not_reap_another_slots_env
 
 print_test_summary

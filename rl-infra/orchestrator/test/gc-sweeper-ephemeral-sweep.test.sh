@@ -79,7 +79,7 @@ STUB
     chmod +x "$GS_STUB_DIR/curl"
     # No containers exist by default → only the orphan reaper can fire. A test
     # that wants the dead-claim/hoarded reapers to find an env arms
-    # SW_SLOT_ENVS with "<slug> <cid>" lines; the slot-scoped `docker ps
+    # SW_SLOT_ENVS with "<slug> <cid> <name>" lines; the slot-scoped `docker ps
     # --filter label=rl.slot=N` those reapers issue is the only form served.
     export SW_SLOT_ENVS=""
     cat > "$GS_STUB_DIR/docker" <<'STUB'
@@ -293,7 +293,7 @@ test_dead_claim_with_env_sweeps_once() {
     CURRENT_TEST_NAME="AC1b: a dead-claim release that destroyed an env sweeps exactly once"
     gs_setup
     gs_arm_dead_claim
-    export SW_SLOT_ENVS="goner c-goner"
+    export SW_SLOT_ENVS="goner c-goner rl-env-goner-allinone"
     gs_run >/dev/null 2>&1
 
     assert_contains "$(gs_audit)" 'dead_claim_released' \
