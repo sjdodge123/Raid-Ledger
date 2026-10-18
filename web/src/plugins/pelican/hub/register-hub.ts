@@ -9,13 +9,14 @@ import { JoinLeavePill, ServerStatusPill } from './server-hero';
 import { SERVER_MEMBER_COLUMNS } from './server-member-columns';
 import { QuickPlayTab } from './quick-play-tab';
 import { serverHubGameTabs } from './server-hub-game-tabs';
+import { RecentArrivalsWidget } from './recent-arrivals-widget';
 
 export const pelicanHubModule: HubModule = {
     kind: 'game_server',
     get tabs() {
         return [{ id: 'quick-play', label: 'Quick Play', order: 10, component: QuickPlayTab }, ...serverHubGameTabs()];
     },
-    overviewWidgets: [],
+    overviewWidgets: [{ id: 'recent-arrivals', order: 55, component: RecentArrivalsWidget, visible: ({ page }) => page.server !== undefined }],
     memberColumns: SERVER_MEMBER_COLUMNS,
     heroPills: [ServerStatusPill, JoinLeavePill],
     memberRows: (page) => page.ranks.flatMap((g) => g.members),
