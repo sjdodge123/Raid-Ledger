@@ -44,6 +44,7 @@ export const startServer = async (stateDir, { agentToken = AGENT_TOKEN } = {}) =
   });
   return {
     port,
+    logs: () => out,
     kill: () => new Promise((r) => { child.once('exit', () => r()); child.kill('SIGTERM'); }),
   };
 };

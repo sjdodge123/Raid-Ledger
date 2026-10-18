@@ -74,3 +74,23 @@ export const checkTestUrl = (raw, publicDomain) => {
   }
   return { url: trimmed };
 };
+
+const hostOf = (raw) => {
+  try { return new URL(String(raw).trim()).hostname.toLowerCase(); } catch { return null; }
+};
+
+// Re-checks every step's test_url against the allow-list (Codex c1): plans
+// stored before the create-time check existed may carry any link. A failing
+// link is nulled and marked `test_url_blocked: true` so the UI shows a
+// "link blocked" note instead. Returns the safe plan plus one
+// { step_id, host } per stripped link (for the audit log). Pure.
+export const sanitizePlanTestUrls = (plan, publicDomain) => {
+  const blocked = [];
+  if (!plan || !Array.isArray(plan.steps)) return { plan, blocked };
+  const steps = plan.steps.map((s) => {
+    if (!s || !checkTestUrl(s.test_url, publicDomain).error) return s;
+    blocked.push({ step_id: s.id ?? null, host: hostOf(s.test_url) });
+    return { ...s, test_url: null, test_url_blocked: true };
+  });
+  return { plan: blocked.length ? { ...plan, steps } : plan, blocked };
+};

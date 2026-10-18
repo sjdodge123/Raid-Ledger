@@ -33,7 +33,7 @@ As soon as the branch's env is up (`rl_env_deploy` / `rl_env_spin`) and BEFORE t
 `rl_test_plan_create({ slug, story_id, goal, steps })` — one plan per story. Each step is ≤ 1 sentence with:
 
 - `expected` — what the tester (agent or operator) should see, concrete enough to be a PASS/FAIL assertion ("the Filters FAB opens a BottomSheet listing 3 genres", not "looks good").
-- `test_url` — a deep link into the env pointing at a **seeded object**, not a list page, on the env's slot URL (`https://slot-N.gamernight.net/...`). The dashboard rejects the whole plan with 400 for any other host, the legacy `<slug>test.<domain>` form included. A URL embedded in the description does not render as the step link.
+- `test_url` — a deep link into the env pointing at a **seeded object**, not a list page, on the env's slot URL (`https://slot-N.gamernight.net/...`). The dashboard rejects the whole plan with 400 for any other host, the legacy `<slug>test.<domain>` form included. A URL embedded in the description does not render as the step link. A stored link that fails the check (an older plan) is stripped on read and at dashboard startup; the step shows "Link blocked" — re-create the plan.
 - `reset_hint` — on every step that mutates state; it renders the ↻ button and doubles as the agent instruction.
 - Say in the description **which seeded user** the step runs as, and which viewport(s) it is about. Write design-judgement asks as their own steps so the lane can mark just those `OPERATOR`.
 

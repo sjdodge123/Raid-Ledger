@@ -14,7 +14,8 @@ import { createConnection } from 'node:net';
 import { readFile, writeFile, mkdir, unlink, readdir, open, rm, stat, rename } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import {
-  agentDenial, agentTokenOk, checkTestUrl, mintTesterToken, testerAllowed, withoutSecrets,
+  agentDenial, agentTokenOk, checkTestUrl, mintTesterToken, sanitizePlanTestUrls, testerAllowed,
+  withoutSecrets,
 } from './plan-auth.js';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
@@ -767,7 +768,7 @@ const summarizePlan = (plan) => {
 // Codex P2 follow-up — attachment_url is preserved (sanitized) so the tester
 // drawer can render previously-uploaded screenshot thumbnails after refresh.
 // The free-form `body` stays omitted.
-const stripCommentBodies = (plan) => ({
+const stripCommentBodiesRaw = (plan) => ({
   ...withoutSecrets(plan),
   title: stripWrapMaybe(plan.title),
   goal: stripWrapMaybe(plan.goal),
@@ -854,7 +855,7 @@ const sanitizeAttachmentUrl = (u) => {
 // the prompt-injection surface without adding auth.
 const stripWrapMaybe = (v) => (typeof v === 'string' ? stripWrapTags(v) : v);
 
-const wrapCommentBodies = (plan) => ({
+const wrapCommentBodiesRaw = (plan) => ({
   ...withoutSecrets(plan),
   title: stripWrapMaybe(plan.title),
   goal: stripWrapMaybe(plan.goal),
@@ -2071,6 +2072,46 @@ const gateTester = async (slug, planId, req, res) => {
   });
   return false;
 };
+
+// ROK-1847 Codex c1 — every plan projection re-checks test_url on the way
+// out, so a link that never passed (or no longer passes) the allow-list is
+// served stripped with `test_url_blocked: true`.
+const safeLinks = (plan) => sanitizePlanTestUrls(plan, PUBLIC_DOMAIN).plan;
+const stripCommentBodies = (plan) => stripCommentBodiesRaw(safeLinks(plan));
+const wrapCommentBodies = (plan) => wrapCommentBodiesRaw(safeLinks(plan));
+
+// One-shot startup rewrite of stored plans: a failing test_url is removed
+// (marked blocked) on disk, with one audit line per link. Skipped when
+// RL_PUBLIC_DOMAIN is unset — every slot link would "fail" and a
+// misconfigured boot must not destroy valid links (reads still strip them).
+const migrateStoredTestUrls = async () => {
+  if (!PUBLIC_DOMAIN) {
+    console.warn('[rl-dashboard] test_url migration skipped: RL_PUBLIC_DOMAIN unset');
+    return 0;
+  }
+  let dirs;
+  try { dirs = await readdir(TEST_PLANS_DIR, { withFileTypes: true }); }
+  catch (err) { if (err.code === 'ENOENT') return 0; throw err; }
+  let rewritten = 0;
+  for (const d of dirs) {
+    if (!d.isDirectory() || !validSlug(d.name)) continue;
+    for (const plan of await listPlans(d.name)) rewritten += await migratePlanLinks(d.name, plan);
+  }
+  return rewritten;
+};
+
+const migratePlanLinks = async (slug, stored) => {
+  const { plan, blocked } = sanitizePlanTestUrls(stored, PUBLIC_DOMAIN);
+  if (blocked.length === 0) return 0;
+  await writePlanAtomic(slug, plan.plan_id, plan);
+  for (const b of blocked) {
+    console.log(JSON.stringify({ event: 'test_url_blocked', slug, plan_id: plan.plan_id, ...b }));
+  }
+  return 1;
+};
+
+try { await migrateStoredTestUrls(); }
+catch (err) { console.warn(`[rl-dashboard] test_url migration failed: ${err.message}`); }
 
 const server = createServer(async (req, res) => {
   // Split path from query so the route regexes (which use $) still match
