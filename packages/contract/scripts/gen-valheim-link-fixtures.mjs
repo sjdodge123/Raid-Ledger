@@ -140,7 +140,12 @@ const itemsFiles = {
     ...itemsAtlas,
     atlas: null,
     items: [
-        itemDef('SwordIron', 'Iron sword', 'OneHandedWeapon', { kind: 'file', file: 'SwordIron.png' }),
+        // ROK-1833: one file icon references its uploaded blob, one does not.
+        itemDef('SwordIron', 'Iron sword', 'OneHandedWeapon', {
+            kind: 'file',
+            file: 'SwordIron.png',
+            blob: { sha256: sha('c'), byteLength: 4096, contentType: 'image/png', width: 64, height: 64 },
+        }),
         itemDef('FixtureModdedAxe', 'Fixture axe', 'TwoHandedWeapon', { kind: 'file', file: 'FixtureModdedAxe.png' }),
         itemDef('FixtureNoIcon', 'Fixture thing', 'Misc', null, { maxStack: 10, maxQuality: 1 }),
     ],
@@ -174,6 +179,7 @@ const invalid = {
     'durability-half-null': [(() => { const c = clone(characterVanilla); c.equipment[0].item = { ...sword, maxDurability: null }; return c; })(), { path: 'equipment.0.item.maxDurability', code: 'custom' }],
     'map-bitmap-size-mismatch': [{ ...mapPersonal, explored: disc(1024, 512, 512, 60) }, { path: 'explored', code: 'custom' }],
     'items-atlas-icon-without-atlas': [{ ...itemsAtlas, atlas: null }, { path: 'atlas', code: 'custom' }],
+    'items-file-icon-blob-bad-sha': [{ ...itemsFiles, items: [itemDef('SwordIron', 'Iron sword', 'OneHandedWeapon', { kind: 'file', file: 'SwordIron.png', blob: { sha256: 'nope', byteLength: 4096, contentType: 'image/png', width: 64, height: 64 } })] }, { path: 'items.0.icon.blob.sha256', code: 'invalid_format' }],
     'int64-out-of-range': [{ ...characterVanilla, character: { ...identity, playerId: '9223372036854775808' } }, { path: 'character.playerId', code: 'custom' }],
     'int64-leading-zero': [{ ...characterVanilla, character: { ...identity, playerId: '01000000000000001' } }, { path: 'character.playerId', code: 'invalid_format' }],
     'mod-version-not-semver': [{ ...characterVanilla, modVersion: '01.0.0' }, { path: 'modVersion', code: 'invalid_format' }],
