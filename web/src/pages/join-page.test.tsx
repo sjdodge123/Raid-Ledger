@@ -507,6 +507,13 @@ describe('ROK-1839: an unusable capture is ignored and dropped', () => {
  * leaves it clean and exercises the module-load capture instead.
  */
 describe('ROK-1839 r2: the mount strip and the cleanup read ONE capture', () => {
+    // An earlier case in this file permanently swapped `window.location` for a
+    // plain object, so jsdom navigation no longer reaches it — stub the shape
+    // the strip reads (`search`, `pathname`, `hash`) directly and restore it.
+    const realLocation = window.location;
+    const STRIPPED = '/join?intent=signup&eventId=42';
+    const SEARCH = '?intent=signup&eventId=42&token=fresh.url.token';
+
     beforeEach(() => {
         vi.clearAllMocks();
         mockNavigate.mockReset();
@@ -515,11 +522,14 @@ describe('ROK-1839 r2: the mount strip and the cleanup read ONE capture', () => 
         mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
         // Never settles: the redeem's own clear must not mask the cleanup's.
         vi.mocked(apiClient.redeemIntent).mockImplementation(() => new Promise(() => {}));
-        window.history.replaceState(null, '', '/join?intent=signup&eventId=42&token=fresh.url.token');
+        Object.defineProperty(window, 'location', {
+            value: { pathname: '/join', search: SEARCH, hash: '', href: `http://localhost${STRIPPED}&token=fresh.url.token` },
+            writable: true, configurable: true,
+        });
     });
 
     afterEach(() => {
-        window.history.replaceState(null, '', '/');
+        Object.defineProperty(window, 'location', { value: realLocation, writable: true, configurable: true });
     });
 
     it('keeps the token the strip just captured, despite a stale foreign capture in the tab', async () => {
@@ -529,7 +539,7 @@ describe('ROK-1839 r2: the mount strip and the cleanup read ONE capture', () => 
         // legitimate token the strip had just taken.
         capture.current = captureFor('99', 'abandoned.token');
 
-        renderJoinPage('?intent=signup&eventId=42&token=fresh.url.token');
+        renderJoinPage(SEARCH);
 
         await waitFor(() => expect(mockSetCaptured).toHaveBeenCalledWith({
             token: 'fresh.url.token', eventId: '42', intent: 'signup',
@@ -546,11 +556,11 @@ describe('ROK-1839 r2: the mount strip and the cleanup read ONE capture', () => 
     });
 
     it('strips the token through the router, preserving the entry state', async () => {
-        renderJoinPage('?intent=signup&eventId=42&token=fresh.url.token');
+        renderJoinPage(SEARCH);
 
         await waitFor(() => expect(
             mockNavigate,
             "a bare history.replaceState leaves ?token= in react-router's own location, where useSearchParams still reads it",
-        ).toHaveBeenCalledWith('/join?intent=signup&eventId=42', { replace: true, state: null }));
+        ).toHaveBeenCalledWith(STRIPPED, { replace: true, state: null }));
     });
 });
