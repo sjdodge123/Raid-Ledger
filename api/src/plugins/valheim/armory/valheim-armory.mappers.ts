@@ -32,7 +32,8 @@ export interface ArmorySnapshot {
   steamId: string | null;
   playerId: string | null;
   worldUid: string | null;
-  receivedAt: Date;
+  /** `received_at::text` — the row version the importer guards on. */
+  receivedAt: string;
   payload: unknown;
 }
 

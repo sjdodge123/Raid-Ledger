@@ -32,7 +32,7 @@ function snapshotOf(name: string, id = 11): ArmorySnapshot {
     steamId: row.steamId ?? null,
     playerId: row.playerId ?? null,
     worldUid: row.worldUid ?? null,
-    receivedAt: new Date('2026-10-17T20:16:00Z'),
+    receivedAt: '2026-10-17 20:16:00.123456+00',
     payload: msg,
   };
 }
