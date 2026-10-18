@@ -7,17 +7,13 @@
 //     Fails closed — 503 when RL_AGENT_TOKEN is unset, 401 otherwise.
 //   - tester writes (submit, step result, comment, reset, attachment): the
 //     agent token, OR the plan's own random tester token (minted at create
-//     and carried in the shared plan link as `?k=`), OR the LAN host.
+//     and carried in the shared plan link as `?k=`).
 //
-// LAN trust: Host `fleet.rl.lan` with no X-Forwarded-Host naming another
-// host. It is the same boundary the Traefik task-log block already relies
-// on — the public edge forwards `fleet.<public domain>`, never `.rl.lan`.
+// No header is ever a credential (Codex c1). An earlier "LAN host" shortcut
+// trusted `Host: fleet.rl.lan`, which any container on rl-net could send
+// straight to rl-dashboard:8080 (or via Traefik). It is gone: LAN testers
+// use `tester_url_lan`, which carries the same `k` token.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-
-const LAN_HOSTS = new Set(
-  (process.env.RL_LAN_DASHBOARD_HOSTS || 'fleet.rl.lan')
-    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
-);
 
 const digest = (s) => createHash('sha256').update(s, 'utf8').digest();
 
@@ -37,16 +33,6 @@ const header = (req, name) => {
 export const agentTokenOk = (req, agentToken) =>
   tokenMatches(header(req, 'x-agent-token'), agentToken);
 
-const hostName = (raw) => (raw || '').trim().toLowerCase().replace(/:\d+$/, '');
-
-export const isLanRequest = (req) => {
-  const host = hostName(header(req, 'host'));
-  if (!LAN_HOSTS.has(host)) return false;
-  const fwd = header(req, 'x-forwarded-host');
-  if (fwd === undefined) return true;
-  return fwd.split(',').every((h) => LAN_HOSTS.has(hostName(h)));
-};
-
 export const mintTesterToken = () => randomBytes(24).toString('base64url');
 
 // Returns null when the request may proceed, else { status, error }.
@@ -58,7 +44,6 @@ export const agentDenial = (req, agentToken) => {
 
 export const testerAllowed = (req, plan, agentToken) =>
   agentTokenOk(req, agentToken)
-  || isLanRequest(req)
   || tokenMatches(header(req, 'x-tester-token'), plan?.tester_token);
 
 // Drop server-only secrets from a plan before it is serialised.

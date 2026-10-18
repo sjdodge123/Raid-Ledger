@@ -115,18 +115,19 @@ test('AC2: a legacy plan with no tester token only accepts the agent token', asy
   assert.equal((await call(port, 'POST', path, { body, headers: { 'x-tester-token': '' } })).status, 401);
 });
 
-test('AC5: the LAN host fleet.rl.lan keeps tester writes working with no token', async () => {
+test('AC5 (Codex c1): Host is never a credential — a Host-only spoof is 401, the tester token is 200', async () => {
   const { dir, port } = await boot();
-  await seedPlanFile(dir, PLAN_A);
+  const plan = await seedPlanFile(dir, PLAN_A, { tester_token: 'tok-for-ac5' });
   const [, path, body] = testerRoutes(PLAN_A)[0];
-  const lan = await call(port, 'POST', path, { body, headers: { host: 'fleet.rl.lan' } });
-  assert.equal(lan.status, 200, lan.text);
-  const spoof = await call(port, 'POST', path, {
-    body, headers: { host: 'fleet.rl.lan', 'x-forwarded-host': 'fleet.gamernight.net' },
-  });
-  assert.equal(spoof.status, 401, 'a forwarded public host is not the LAN');
-  const pub = await call(port, 'POST', path, { body, headers: { host: 'fleet.gamernight.net' } });
-  assert.equal(pub.status, 401);
+  for (const headers of [{ host: 'fleet.rl.lan' }, { host: 'fleet.rl.lan', 'x-forwarded-host': 'fleet.rl.lan' },
+    { host: 'fleet.gamernight.net' }]) {
+    const r = await call(port, 'POST', path, { body, headers });
+    assert.equal(r.status, 401, `${JSON.stringify(headers)} must not authorize a tester write`);
+  }
+  const ok = await call(port, 'POST', path, { body, headers: { host: 'fleet.rl.lan', 'x-tester-token': plan.tester_token } });
+  assert.equal(ok.status, 200, ok.text);
+  const agent = await call(port, 'POST', path, { body, headers: agentHeaders });
+  assert.equal(agent.status, 200, agent.text);
 });
 
 test('AC2: the tester token never appears in any read response', async () => {
@@ -137,7 +138,7 @@ test('AC2: the tester token never appears in any read response', async () => {
   const reads = ['/api/test-plans', '/api/test-plans/foo', `/api/test-plans/foo/${PLAN_A}`,
     `/api/test-plans/foo/${PLAN_A}?include_comments=1`, '/api/state'];
   for (const path of reads) {
-    for (const headers of [{}, agentHeaders, { host: 'fleet.rl.lan' }]) {
+    for (const headers of [{}, agentHeaders]) {
       const r = await call(port, 'GET', path, { headers });
       assert.ok(!r.text.includes(token), `${path} leaked the tester token`);
     }

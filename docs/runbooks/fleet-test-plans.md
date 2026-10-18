@@ -26,7 +26,7 @@ As soon as the branch's env is up (`rl_env_deploy` / `rl_env_spin`) and BEFORE t
 **Two links (ROK-1847).** `rl_test_plan_create` returns:
 
 - `plan_url` — token-less, read-only on the public host. **This is "the plan link"** for the PR body, Linear and `CURRENT-STATE.md`.
-- `tester_url` (public) / `tester_url_lan` — carry the plan's tester token as `k`. On `fleet.gamernight.net` the dashboard refuses Submit, verdicts, comments, screenshot uploads and reset requests without it (401). Give it **only** to the person testing — in practice the operator's OPERATOR-step ask — and **never** put it in a PR, Linear, `CURRENT-STATE.md`, a commit or a lane report: anyone holding it can write verdicts. It is returned once and no later read recovers it; keep it for the run, and re-create the plan if it is lost. The LAN dashboard (`http://fleet.rl.lan`) needs no token.
+- `tester_url` (public) / `tester_url_lan` — carry the plan's tester token as `k`. On `fleet.gamernight.net` the dashboard refuses Submit, verdicts, comments, screenshot uploads and reset requests without it (401). Give it **only** to the person testing — in practice the operator's OPERATOR-step ask — and **never** put it in a PR, Linear, `CURRENT-STATE.md`, a commit or a lane report: anyone holding it can write verdicts. It is returned once and no later read recovers it; keep it for the run, and re-create the plan if it is lost. The LAN dashboard (`http://fleet.rl.lan`) needs it too — use `tester_url_lan`; no Host or network location stands in for the token.
 
 ## How
 
