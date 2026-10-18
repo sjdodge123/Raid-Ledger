@@ -132,7 +132,7 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
   it('puts recentArrivals on the server block', () => {
     const page = buildServerHubPage({
       guild,
-      role: 'visitor',
+      role: 'member',
       viewerId: 9,
       members: [rec({ firstSeenAt: new Date('2026-10-01') })],
       onlineSteamIds: new Set(),
@@ -144,5 +144,25 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
       },
     });
     expect(page.server?.recentArrivals).toHaveLength(1);
+  });
+
+  it('a visitor sees the member count but no rows and no arrivals (members-first)', () => {
+    const page = buildServerHubPage({
+      guild,
+      role: 'visitor',
+      viewerId: 9,
+      members: [rec({ firstSeenAt: new Date('2026-10-01') })],
+      onlineSteamIds: new Set(),
+      server: {
+        pelicanServerId: 5,
+        gameSlug: 'valheim',
+        gameIconUrl: null,
+        state: 'running',
+      },
+    });
+    expect(page.guild.memberCount).toBe(1);
+    expect(page.ranks[0]?.members).toEqual([]);
+    expect(page.server?.recentArrivals).toBeUndefined();
+    expect(page.server?.viewerJoined).toBe(false);
   });
 });
