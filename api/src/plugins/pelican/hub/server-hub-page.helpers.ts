@@ -1,4 +1,5 @@
 import type {
+  GuildServerArrival,
   GuildMemberRow,
   GuildPage,
   GuildPageServer,
@@ -18,7 +19,11 @@ export interface ServerMemberRecord {
   joinedAt: Date | null;
   leftAt: Date | null;
   characterName: string | null;
+  firstSeenAt: Date | null;
 }
+
+/** How many arrivals the Overview widget lists (contract max). */
+export const RECENT_ARRIVALS_LIMIT = 5;
 
 /** A member row with the game-server columns; every WoW column is null. */
 export function toServerMemberRow(
@@ -40,6 +45,7 @@ export function toServerMemberRow(
       onlineNow,
       characterName: r.characterName,
       source: r.source,
+      firstSeenAt: r.firstSeenAt?.toISOString() ?? null,
     },
   };
 }
@@ -55,6 +61,24 @@ export function orderServerMembers(rows: GuildMemberRow[]): GuildMemberRow[] {
   });
 }
 
+/** "Recent arrivals" (operator ruling: first-seen only) — newest first, never-seen skipped. */
+export function recentArrivals(
+  members: readonly ServerMemberRecord[],
+): GuildServerArrival[] {
+  const seen = members.flatMap((r) =>
+    r.firstSeenAt === null ? [] : [{ r, at: r.firstSeenAt }],
+  );
+  return seen
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
+    .slice(0, RECENT_ARRIVALS_LIMIT)
+    .map(({ r, at }) => ({
+      memberId: r.memberId,
+      name: r.name,
+      characterName: r.characterName,
+      firstSeenAt: at.toISOString(),
+    }));
+}
+
 /** Inputs of `buildServerHubPage`. */
 export interface ServerHubPageInput {
   guild: GuildSummary;
@@ -64,6 +88,14 @@ export interface ServerHubPageInput {
   onlineSteamIds: Set<string>;
   /** The hero block minus `viewerJoined`; undefined when the server is gone or unmapped. */
   server: Omit<GuildPageServer, 'viewerJoined'> | undefined;
+}
+
+function withViewer(
+  server: Omit<GuildPageServer, 'viewerJoined'>,
+  viewerJoined: boolean,
+  members: readonly ServerMemberRecord[],
+): GuildPageServer {
+  return { ...server, viewerJoined, recentArrivals: recentArrivals(members) };
 }
 
 /** ROK-1831: the `game_server` hub page — one unranked group, zero role counts. */
@@ -85,6 +117,8 @@ export function buildServerHubPage(input: ServerHubPageInput): GuildPage {
       { rankIndex: null, rankName: null, members: orderServerMembers(rows) },
     ],
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
-    ...(input.server ? { server: { ...input.server, viewerJoined } } : {}),
+    ...(input.server
+      ? { server: withViewer(input.server, viewerJoined, input.members) }
+      : {}),
   };
 }

@@ -28,6 +28,7 @@ export async function loadServerMembers(
       joinedAt: m.joinedAt,
       leftAt: m.leftAt,
       characterName: m.characterName,
+      firstSeenAt: m.firstSeenAt,
     })
     .from(m)
     .innerJoin(u, eq(u.id, m.userId))

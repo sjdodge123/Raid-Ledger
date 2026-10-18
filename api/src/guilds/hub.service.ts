@@ -26,6 +26,7 @@ import {
 } from './guild-access.service';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
+import { hubGameIcons } from './hub-game-icons.queries';
 import {
   HUB_NOT_FOUND,
   findHiddenAt,
@@ -62,9 +63,13 @@ export class HubService {
     const all = await this.access.myGuilds(actor.id);
     const visible = isStaff(actor) ? all : await this.dropHidden(all);
     const ids = visible.map((g) => g.id);
-    const [ranks, headlines] = await Promise.all([
+    const [ranks, headlines, icons] = await Promise.all([
       this.ranksFor(actor.id, ids),
       gmPostHeadlines(this.db, ids),
+      hubGameIcons(
+        this.db,
+        visible.map((g) => g.gameId),
+      ),
     ]);
     const guilds: MyGuild[] = [];
     for (const g of visible) {
@@ -75,6 +80,7 @@ export class HubService {
         rankName: rank?.rankName ?? null,
         canEdit: await this.access.canEdit(actor, g.id),
         gmPostHeadline: headlines.get(g.id) ?? null,
+        gameIconUrl: icons.get(g.gameId) ?? null,
       });
     }
     return { guilds };
