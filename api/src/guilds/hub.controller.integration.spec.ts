@@ -242,6 +242,41 @@ describe('ROK-1831 fix r1 — staff hidden flag + WoW alias hidden checks', () =
   });
 });
 
+/** Activate Pelican, add a game_server hub and make `hub-member` a manual member. */
+async function seedServerHubMember(plugin: string): Promise<number> {
+  const registry = testApp.app.get(PluginRegistryService);
+  await registry.ensureInstalled(plugin);
+  await registry.activate(plugin);
+  const [hub] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId: testApp.seed.game.id,
+        kind: 'game_server',
+        region: 'server',
+        name: 'Valheim Main',
+        nameKey: 'valheim main',
+        source: 'pelican',
+      })
+      .returning(),
+    'server hub',
+  );
+  const [user] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.username, 'hub-member')),
+    'member user',
+  );
+  await testApp.db.insert(schema.hubServerMembers).values({
+    guildId: hub.id,
+    userId: user.id,
+    source: 'manual',
+    joinedAt: new Date(),
+  });
+  return hub.id;
+}
+
 describe('ROK-1831 fix r1b — guilds/mine across kinds', () => {
   const PELICAN = 'pelican';
 
@@ -251,41 +286,28 @@ describe('ROK-1831 fix r1b — guilds/mine across kinds', () => {
   });
 
   it('a WoW guild member who also joined a server hub gets both, the WoW rank intact', async () => {
-    const registry = testApp.app.get(PluginRegistryService);
-    await registry.ensureInstalled(PELICAN);
-    await registry.activate(PELICAN);
-    const [hub] = nonEmpty(
-      await testApp.db
-        .insert(schema.guilds)
-        .values({
-          gameId: testApp.seed.game.id,
-          kind: 'game_server',
-          region: 'server',
-          name: 'Valheim Main',
-          nameKey: 'valheim main',
-          source: 'pelican',
-        })
-        .returning(),
-      'server hub',
-    );
-    const [user] = nonEmpty(
-      await testApp.db.select().from(schema.users).where(eq(schema.users.username, 'hub-member')),
-      'member user',
-    );
-    await testApp.db.insert(schema.hubServerMembers).values({
-      guildId: hub.id,
-      userId: user.id,
-      source: 'manual',
-      joinedAt: new Date(),
-    });
+    const hubId = await seedServerHubMember(PELICAN);
     const res = await get(`${CORE}/mine`, 'member');
     expect(res.status).toBe(200);
     const byId = new Map(
-      (res.body.guilds as { id: number; kind: string; rankIndex: number | null; rankName: string | null }[]).map(
-        (g) => [g.id, g],
-      ),
+      (
+        res.body.guilds as {
+          id: number;
+          kind: string;
+          rankIndex: number | null;
+          rankName: string | null;
+        }[]
+      ).map((g) => [g.id, g]),
     );
-    expect(byId.get(guildId)).toMatchObject({ kind: 'wow_guild', rankIndex: 2, rankName: 'Rank 2' });
-    expect(byId.get(hub.id)).toMatchObject({ kind: 'game_server', rankIndex: null, rankName: null });
+    expect(byId.get(guildId)).toMatchObject({
+      kind: 'wow_guild',
+      rankIndex: 2,
+      rankName: 'Rank 2',
+    });
+    expect(byId.get(hubId)).toMatchObject({
+      kind: 'game_server',
+      rankIndex: null,
+      rankName: null,
+    });
   });
 });
