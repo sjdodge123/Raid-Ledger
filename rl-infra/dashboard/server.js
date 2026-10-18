@@ -535,6 +535,11 @@ const isJsonContentType = (ct) => {
   return mainType === 'application/json';
 };
 
+// ROK-1848 — every handler reads `body.<field>`, so only a plain JSON
+// object is an acceptable body. `null`, arrays, strings and numbers used to
+// reach the handlers and crash the process on the first dereference.
+const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+
 // Read JSON body with a size cap so a misbehaving client can't OOM us.
 // Rejects with UnsupportedMediaTypeError (status=415) if the request
 // doesn't claim application/json — see CSRF rationale above.
@@ -556,8 +561,11 @@ const readJsonBody = (req, max = 64 * 1024) =>
       chunks.push(c);
     });
     req.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')); }
-      catch (err) { reject(err); }
+      let parsed;
+      try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}'); }
+      catch (err) { reject(err); return; }
+      if (!isPlainObject(parsed)) { reject(new Error('body must be a JSON object')); return; }
+      resolve(parsed);
     });
     req.on('error', reject);
   });
@@ -1034,6 +1042,8 @@ const handleTestPlanPut = async (slug, planId, req, res) => {
     return sendJson(res, 400, { ok: false, error: 'steps[] required' });
   if (body.steps.length > 100)
     return sendJson(res, 400, { ok: false, error: 'max 100 steps per plan' });
+  if (!body.steps.every(isPlainObject))
+    return sendJson(res, 400, { ok: false, error: 'steps[] items must be objects' });
 
   // ROK-1331 M6b chunk-3: env-registry existence gate. AC19-AC21 (shape
   // validation) tests use a curated registry where 'foo'/'bar'/'baz' all
@@ -1138,6 +1148,8 @@ const handleTestPlanSubmit = async (slug, planId, req, res) => {
     return sendJson(res, 400, { ok: false, error: 'verdicts[] required' });
   if (body.verdicts.length > 100)
     return sendJson(res, 400, { ok: false, error: 'max 100 verdicts per batch' });
+  if (!body.verdicts.every(isPlainObject))
+    return sendJson(res, 400, { ok: false, error: 'verdicts[] items must be objects' });
 
   const tester = typeof body.tester === 'string'
     ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
@@ -2054,7 +2066,7 @@ const RE_ATTACH_GET_V1 = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z
 // and fall through to the static 404 — by design.
 const RE_TASK_LOG = /^\/api\/tasks\/([A-Za-z0-9_]+)\/log$/;
 
-const server = createServer(async (req, res) => {
+const dispatch = async (req, res) => {
   // Split path from query so the route regexes (which use $) still match
   // when the client appends ?include_comments=1 etc. The full req.url
   // stays available via req.url (handlers that need the query string
@@ -2158,6 +2170,40 @@ const server = createServer(async (req, res) => {
     return handleTaskLog(taskLogMatch[1], req, res);
   }
   await serveStatic(req, res);
+};
+
+// ROK-1848 — log server-side only; the response never carries err.message
+// (it can hold absolute /state paths).
+const logInternalError = (req, err) => {
+  // eslint-disable-next-line no-console
+  console.error(JSON.stringify({
+    event: 'request_error',
+    method: req.method,
+    path: (req.url || '').split('?', 1)[0],
+    error: err && err.stack ? err.stack : String(err),
+  }));
+};
+
+// Every handler runs inside this try/catch: a throw or rejection in any of
+// them is a generic 500 for that request, never a process exit.
+const server = createServer(async (req, res) => {
+  try {
+    await dispatch(req, res);
+  } catch (err) {
+    logInternalError(req, err);
+    if (!res.headersSent) sendJson(res, 500, { ok: false, error: 'internal_error' });
+    else res.destroy();
+  }
+});
+
+// Backstop for a rejection that escapes the dispatcher (a stray promise in
+// a handler): Node >=15 exits on an unhandled rejection by default.
+process.on('unhandledRejection', (reason) => {
+  // eslint-disable-next-line no-console
+  console.error(JSON.stringify({
+    event: 'unhandled_rejection',
+    error: reason && reason.stack ? reason.stack : String(reason),
+  }));
 });
 
 server.listen(PORT, '0.0.0.0', async () => {
