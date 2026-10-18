@@ -136,7 +136,7 @@ export function checkContainerCreate(body, { allow, owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
   const hc = isObj(body.HostConfig) ? body.HostConfig : {};
   const mounts = Array.isArray(hc.Mounts) ? hc.Mounts : [];
-  const reason = foldReason(body, ['HostConfig', 'Labels'], 'body') ?? foldReason(hc, HC_FIELDS, 'HostConfig')
+  const reason = foldReason(body, ['HostConfig', 'Labels', 'Image', 'NetworkingConfig'], 'body') ?? foldReason(hc, HC_FIELDS, 'HostConfig')
     ?? foldEach(mounts, MOUNT_FIELDS, 'Mounts[]')
     ?? foldEach(mounts.map((m) => (isObj(m) ? m.VolumeOptions : null)), ['DriverConfig'], 'VolumeOptions')
     ?? checkPrivileges(hc) ?? checkNamespaces(hc) ?? checkBinds(hc.Binds, allow)

@@ -1,5 +1,16 @@
 // ROK-1846 — glue between the route plan and the body checkers. Pure.
 import { checkContainerCreate, checkExecCreate, checkNetworkCreate, checkVolumeCreate } from './body-policy.mjs';
+import { foldReason } from './key-fold.mjs';
+
+// Docker reads Container case-insensitively (Go encoding/json), so
+// {"Container":"owned","container":"victim"} would be owner-checked on one
+// key and acted on by the other: every field Docker reads must be spelled once,
+// exactly (key-fold.mjs).
+function checkNetworkConnect(body) {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, reason: 'body is not a JSON object' };
+  const fold = foldReason(body, ['Container', 'EndpointConfig', 'Force'], 'network-connect');
+  return fold ? { ok: false, reason: fold } : { ok: true, body };
+}
 
 const CHECKERS = {
   'container-create': checkContainerCreate,
@@ -8,7 +19,7 @@ const CHECKERS = {
   'network-create': checkNetworkCreate,
   // The body names the container being (dis)connected; ownership of it is
   // checked by the server (see bodyOwnedContainer).
-  'network-connect': (body) => ({ ok: true, body }),
+  'network-connect': checkNetworkConnect,
 };
 
 /** Run the named checker. ctx = { allow: string[], owner: { owner, slot } }. */
