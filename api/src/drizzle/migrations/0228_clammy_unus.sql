@@ -1,0 +1,2 @@
+ALTER TABLE "valheim_link_snapshots" DROP CONSTRAINT "valheim_link_snapshots_status_chk";--> statement-breakpoint
+ALTER TABLE "valheim_link_snapshots" ADD CONSTRAINT "valheim_link_snapshots_status_chk" CHECK ("valheim_link_snapshots"."status" IN ('pending','imported','failed','skipped_stale','waiting_blob'));
