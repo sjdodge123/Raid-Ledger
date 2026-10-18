@@ -86,7 +86,7 @@ RUN apk add --no-cache \
 # Alpine does not ship a postgresql16-pgvector package, so we compile.
 # Build dependencies are installed under a virtual package and removed after
 # install to keep the runtime image lean. JIT (clang/llvm) is intentionally
-# omitted — pgvector works fine without it and avoids Alpine version drift
+# omitted -- pgvector works fine without it and avoids Alpine version drift
 # on unversioned clang/llvm package names.
 RUN apk add --no-cache --virtual .pgvector-build \
     git build-base postgresql16-dev \
@@ -125,7 +125,7 @@ RUN sed -i 's|^error_log[[:space:]].*;|error_log /data/logs/nginx-error.log warn
 WORKDIR /app
 
 # ==================
-# Persistent data volume — mount as -v raid-ledger-data:/data
+# Persistent data volume -- mount as -v raid-ledger-data:/data
 # ==================
 RUN mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs /data/ollama/models /run/postgresql /run/redis && \
   chown -R postgres:postgres /data/postgresql /run/postgresql && \
@@ -158,7 +158,7 @@ COPY nginx/snippets/security-headers.conf /etc/nginx/snippets/security-headers.c
 # inspect BuildKit's /session + /grpc). Keep this Dockerfile classic-builder
 # compatible: no heredocs, no RUN --mount, no COPY --chmod/--link.
 # Context files carry whatever mode Mutagen synced, so every copied file gets
-# an absolute mode below (0644 configs, 0755 scripts) — what the heredocs had.
+# an absolute mode below (0644 configs, 0755 scripts) -- what the heredocs had.
 COPY docker/allinone/logrotate-raid-ledger /etc/logrotate.d/raid-ledger
 RUN chmod 0644 /etc/logrotate.d/raid-ledger
 
@@ -182,7 +182,7 @@ COPY --from=builder /app/api/seeds ./dist/seeds
 # files at 600 instead of laptop's 644 even with --permissions-mode=manual
 # (depends on prior session state and runner-side leftover), which then
 # bake into the COPY --from=builder layer with perms that the unprivileged
-# `app` user (uid 1001) can't read at runtime — drizzle migrations
+# `app` user (uid 1001) can't read at runtime -- drizzle migrations
 # (meta/_journal.json), the JS bundle, seed JSON, static assets. ROK-1325
 # (#828) added the same fix on origin/main with the same path list; this
 # branch's earlier commit `e961bdba` was a parallel solve. Resolved by
@@ -197,9 +197,9 @@ COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # Use absolute mode (0755) not `+x`. The Mutagen sync that feeds the
 # fleet build context occasionally lands source files at 600 instead of
 # the laptop's 644 (perm drift under stress). `chmod +x` on a 600 file
-# produces 711 — owner can rwx, group/others can ONLY exec, not READ.
-# The Alpine shell then can't open the script to interpret it →
-# "permission denied" → restart-loop. 0755 is deterministic.
+# produces 711 -- owner can rwx, group/others can ONLY exec, not READ.
+# The Alpine shell then can't open the script to interpret it ->
+# "permission denied" -> restart-loop. 0755 is deterministic.
 RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 # ==================
@@ -219,7 +219,7 @@ RUN chmod 0755 /app/start-api.sh
 COPY docker/allinone/init-db.sh /app/init-db.sh
 RUN chmod 0755 /app/init-db.sh
 
-# Supervisor event listener — logs process state changes (ROK-1023)
+# Supervisor event listener -- logs process state changes (ROK-1023)
 COPY docker/allinone/supervisor-events.sh /app/supervisor-events.sh
 RUN chmod 0755 /app/supervisor-events.sh
 
@@ -248,7 +248,7 @@ ENV ADMIN_PASSWORD=
 EXPOSE 80
 
 # Health check
-# Use 127.0.0.1 explicitly — Alpine's /etc/hosts maps `localhost` to
+# Use 127.0.0.1 explicitly -- Alpine's /etc/hosts maps `localhost` to
 # BOTH 127.0.0.1 and ::1, and getent returns ::1 first. nginx in this
 # image only listens on IPv4 (`listen 80;` without `listen [::]:80;`),
 # so wget on `localhost` got "Connection refused" and the container
