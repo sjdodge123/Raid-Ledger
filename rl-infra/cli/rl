@@ -283,7 +283,8 @@ cmd_claim() {
             if [[ "$INH_COUNT" != "0" && -n "$INH_COUNT" ]]; then
                 echo "[rl] inherited $INH_COUNT env(s) from prior holder (branch match)" >&2
             fi
-            ensure_mutagen_sync "$SLOT"
+            # ROK-1849: one shared path (also cmd_resync) — recreate a stale
+            # session, flush, purge synced secrets, repair exec bits.
             # ROK-1338 PR-1 fold-in (2026-05-21): block until Mutagen's initial
             # sync round actually completes — `mutagen sync create` (called
             # inside ensure_mutagen_sync) registers the session but returns
@@ -301,8 +302,8 @@ cmd_claim() {
             # it until the gc-sweeper reaps it. The slot is genuinely claimed
             # and still usable for non-script work; the warning is loud, and the
             # next `rl validate-ci` hard-aborts on the same condition.
-            flush_mutagen "$SLOT" || \
-                echo "[rl] WARNING: slot $SLOT claimed but its /workspace scripts are NOT executable (see above) — run 'rl resync' before any gate" >&2
+            sync_slot_and_purge "$SLOT" || \
+                echo "[rl] WARNING: slot $SLOT claimed but sync / secret purge / exec-bit repair failed (see above) — run 'rl resync' before any gate" >&2
             # ROK-1331 M4 AC11: heartbeat must start BEFORE scaffold so a slow
             # remote git fetch doesn't let the claim expire mid-scaffold.
             start_heartbeat_daemon "$SLOT"
@@ -409,6 +410,13 @@ cmd_release() {
 # Idempotent + safe to call mid-claim — it never drops the slot claim.
 # Used by the rl_force_resync MCP tool and auto-invoked by rl_env_deploy's
 # pre-build sync guard when it detects /workspace is stale.
+# Emit cmd_resync's failure JSON and exit 1.
+resync_fail() {
+    jq -nc --argjson slot "$1" --arg error "$2" --arg message "$3" \
+        '{ok:false, error:$error, slot:$slot, resynced:false, message:$message}'
+    exit 1
+}
+
 cmd_resync() {
     if [[ "$TARGET" == "local" ]]; then
         echo '{"ok":false,"error":"resync_remote_only","message":"rl resync only applies to the remote fleet (Mutagen one-way-replica). No-op in local mode."}'
@@ -442,27 +450,23 @@ cmd_resync() {
     # it, but a clean single-line stdout is friendlier to operators piping
     # through jq.)
     stop_mutagen_sync "$SLOT" >&2 || true
-    # Recreate the session — CHECKED. ensure_mutagen_sync's last command is
-    # `mutagen sync create`; a non-zero exit here means the session could not
-    # be re-established, so we must not claim success.
-    if ! ensure_mutagen_sync "$SLOT" >&2; then
-        jq -nc --argjson slot "$SLOT" \
-            '{ok:false, error:"resync_create_failed", slot:$slot, resynced:false, message:"failed to (re)create the Mutagen sync session — check `mutagen sync list` / daemon, then retry or release + re-claim the slot."}'
-        exit 1
-    fi
-    # Flush — CHECKED, NOT the error-swallowing flush_mutagen helper. A resync
-    # that can't reach in-sync is exactly the wedged state we're recovering
-    # from; reporting it as success would re-introduce the original bug.
-    if ! mutagen sync flush "rl-slot-$SLOT" >&2; then
-        jq -nc --argjson slot "$SLOT" \
-            '{ok:false, error:"resync_flush_failed", slot:$slot, resynced:false, message:"recreated the session but `mutagen sync flush` did not reach in-sync — it may still be wedged. Retry, or release + re-claim the slot."}'
-        exit 1
-    fi
+    # Recreate, flush, purge secrets, repair exec bits — CHECKED (strict=1),
+    # through the SAME path as cmd_claim (ROK-1849 Codex r1), so a resync can
+    # never upgrade a session while leaving its synced secrets readable.
+    local sync_rc=0
+    sync_slot_and_purge "$SLOT" 1 >&2 || sync_rc=$?
+    case "$sync_rc" in
+        0) ;;
+        1) resync_fail "$SLOT" resync_create_failed "failed to (re)create the Mutagen sync session — check \`mutagen sync list\` / daemon, then retry or release + re-claim the slot." ;;
+        2) resync_fail "$SLOT" resync_flush_failed "recreated the session but \`mutagen sync flush\` did not reach in-sync — it may still be wedged. Retry, or release + re-claim the slot." ;;
+        3) resync_fail "$SLOT" resync_purge_failed "session recreated but the .env secret purge failed — synced secrets may still be readable in /workspace. Run rl-infra/runner/purge-synced-secrets.sh on the VM." ;;
+        *) resync_fail "$SLOT" resync_exec_bits_failed "session recreated and secrets purged, but the exec-bit repair failed (rc=$sync_rc)." ;;
+    esac
     # .git scaffold is best-effort (a slot without .git is still buildable —
     # the build reads /workspace file contents, not the scaffold).
     scaffold_runner_git "$SLOT" "$branch" >&2 || true
     jq -nc --argjson slot "$SLOT" --arg branch "$branch" \
-        '{ok:true, slot:$slot, branch:$branch, resynced:true, message:"Mutagen session terminated + recreated, flushed to in-sync, and runner .git re-scaffolded."}'
+        '{ok:true, slot:$slot, branch:$branch, resynced:true, message:"Mutagen session terminated + recreated, flushed to in-sync, synced secrets purged, exec bits repaired, and runner .git re-scaffolded."}'
 }
 
 # force-release — operator-only: clear a stuck slot regardless of holder.
@@ -892,13 +896,23 @@ ensure_claim() {
     fi
 }
 
+# ROK-1849 Codex r1 — print the `rl-sync-config` label of the named session
+# (empty when the label is missing or the session is gone).
+mutagen_session_config_version() {
+    local session="$1"
+    mutagen sync list "$session" \
+        --template '{{range .}}{{index .Labels "rl-sync-config"}}{{"\n"}}{{end}}' \
+        2>/dev/null | head -1 || true
+}
+
 ensure_mutagen_sync() {
     local slot="$1"
     local session="rl-slot-$slot"
     # ROK-1849: bump this whenever the create flags below change (ignore list,
     # modes). A live session without the current label is recreated, because
     # Mutagen fixes ignores at create time and would otherwise keep the old set.
-    local config_label="rl-sync-config=2"
+    local config_version=2
+    local config_label="rl-sync-config=$config_version"
     if ! command -v mutagen >/dev/null; then
         echo "[rl] mutagen not installed — install from https://mutagen.io/" >&2
         return
@@ -927,13 +941,15 @@ ensure_mutagen_sync() {
             # with the current flag set. Ignores are baked in at create time,
             # so a session from before ROK-1849 keeps syncing .env secrets
             # forever unless it is recreated here.
-            local labelled
-            labelled=$(mutagen sync list --label-selector "$config_label" 2>/dev/null \
-                | grep -c "^Name: $session$" || true)
-            if (( labelled == 1 )); then
-                return
+            # Codex r1 P1: read the session's OWN label (not a selector that
+            # could match a same-named sibling) and treat missing, non-numeric
+            # or older-than-current as stale.
+            local have
+            have=$(mutagen_session_config_version "$session")
+            if [[ "$have" =~ ^[0-9]+$ ]] && (( have >= config_version )); then
+                return 0
             fi
-            echo "[rl] mutagen session $session predates sync config '$config_label' (ROK-1849 .env ignores), re-creating" >&2
+            echo "[rl] mutagen session $session has sync config '${have:-<none>}' < $config_version (ROK-1849 .env ignores), re-creating" >&2
         else
             echo "[rl] mutagen session $session points at '$current_alpha', re-creating for '$REPO_ROOT'" >&2
         fi
@@ -1013,35 +1029,87 @@ ensure_mutagen_sync() {
         "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}:/srv/rl-infra/runners/slot-${slot}/worktree"
 }
 
+# ROK-1849 Codex r1 — the ONE path that brings a slot's session up to the
+# current sync config and then purges secrets an older session left behind.
+# cmd_claim and cmd_resync both call it, so neither can skip the purge.
+# strict=1 (resync) makes a failed flush / purge fatal.
+# Returns 1 create failed, 2 flush failed, 3 purge failed, 97 exec bits.
+sync_slot_and_purge() {
+    local slot="$1" strict="${2:-0}"
+    ensure_mutagen_sync "$slot" || return 1
+    flush_mutagen "$slot" "$strict"
+}
+
 flush_mutagen() {
-    local slot="$1"
+    local slot="$1" strict="${2:-0}"
     command -v mutagen >/dev/null || return 0
-    mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+    local flush_rc=0
+    if (( strict )); then
+        mutagen sync flush "rl-slot-$slot" >&2 || flush_rc=$?
+    else
+        mutagen sync flush "rl-slot-$slot" 2>/dev/null || flush_rc=$?
+    fi
+    if (( flush_rc != 0 && strict )); then
+        return 2
+    fi
     # A3-B P2: the sync just (re)wrote files at 0644 — repair exec bits before
-    # anything tries to run them. This is the ONE place; both consumers
-    # (cmd_claim, cmd_validate_ci) already flush here, so no caller needs the
-    # old `chmod -R a+x` incantation. Returns 97 on an unrepairable tree.
-    # ROK-1849: purge first, so secrets an older session synced are gone even
-    # when the exec-bit repair then fails.
-    purge_runner_synced_secrets "$slot"
+    # anything tries to run them. Returns 97 on an unrepairable tree.
+    # ROK-1849: purge FIRST — before any script runs in the runner — so a
+    # secret an older session synced is gone before anything could read it.
+    if ! purge_runner_synced_secrets "$slot"; then
+        if (( strict )); then
+            return 3
+        fi
+    fi
     restore_runner_exec_bits "$slot"
+}
+
+# ROK-1849 Codex r1 — absolute path of the rl-infra dir this CLI runs from
+# (the operator's checkout, resolved through symlinks). Never /workspace.
+rl_infra_self_dir() {
+    if [[ -n "${RL_INFRA_SELF_DIR:-}" ]]; then
+        printf '%s' "$RL_INFRA_SELF_DIR"
+        return 0
+    fi
+    local src="${BASH_SOURCE[0]}" dir
+    while [[ -L "$src" ]]; do
+        dir="$(cd -P "$(dirname "$src")" && pwd)"
+        src="$(readlink "$src")"
+        [[ "$src" == /* ]] || src="$dir/$src"
+    done
+    (cd -P "$(dirname "$src")/.." && pwd)
+}
+
+# ROK-1849 Codex r1 — run one of the CLI's OWN runner/ scripts inside the
+# runner, streamed over stdin (`bash -s`). The synced /workspace copy is branch
+# content: running it while old secrets are still readable would let a hostile
+# branch exfiltrate them or skip the clean-up, so nothing is executed from it.
+run_operator_script_on_runner() {
+    local script
+    script="$(rl_infra_self_dir)/runner/$1"
+    shift
+    if [[ ! -f "$script" ]]; then
+        echo "[rl] operator script missing: $script" >&2
+        return 2
+    fi
+    ssh_run run-on-runner -- bash -s -- "$@" < "$script"
 }
 
 # ROK-1849 — remove .env secrets already synced into the runner's /workspace.
 # The session ignores them now, but Mutagen never deletes an ignored path on the
-# beta, so copies from a pre-fix session would stay readable there. Best-effort:
-# a failure (e.g. a branch that predates the script) WARNS and never fails the
-# claim — the ignore rules are the primary control, this is the clean-up.
+# beta, so copies from a pre-fix session would stay readable there. The script
+# comes from this CLI's checkout (see run_operator_script_on_runner). Returns
+# non-zero on failure; flush_mutagen decides whether that is fatal.
 purge_runner_synced_secrets() {
     local slot="$1"
     [[ -z "$slot" ]] && return 0
     local out rc=0
-    out=$(ssh_run run-on-runner -- \
-        bash /workspace/rl-infra/runner/purge-synced-secrets.sh /workspace 2>&1) || rc=$?
+    out=$(run_operator_script_on_runner purge-synced-secrets.sh /workspace 2>&1) || rc=$?
     if (( rc != 0 )); then
         [[ -n "$out" ]] && echo "$out" >&2
         echo "[rl] WARNING: secret purge failed on slot $slot (rc=$rc) — synced .env files may remain in /workspace." >&2
         echo "[rl] Operator: run rl-infra/runner/purge-synced-secrets.sh against /srv/rl-infra/runners/slot-$slot/worktree." >&2
+        return "$rc"
     fi
     return 0
 }
@@ -1058,15 +1126,14 @@ purge_runner_synced_secrets() {
 # deliberately NOT in the docker group, so a raw docker exec fails with
 # "permission denied while trying to connect to the docker API".
 #
-# Invoked with an EXPLICIT `bash`: the restore script is synced through the same
-# permission-stripping path as everything it repairs, so it cannot rely on its
-# own exec bit to run.
+# Streamed from this CLI's own checkout via `bash -s` (ROK-1849 Codex r1): the
+# repair is chmod only and executes nothing from the synced worktree — neither
+# the branch's copy of the script nor its exec bit is trusted.
 restore_runner_exec_bits() {
     local slot="$1"
     [[ -z "$slot" ]] && return 0
     local out rc=0
-    out=$(ssh_run run-on-runner -- \
-        bash /workspace/rl-infra/runner/restore-exec-bits.sh /workspace 2>&1) || rc=$?
+    out=$(run_operator_script_on_runner restore-exec-bits.sh /workspace 2>&1) || rc=$?
     if (( rc != 0 )); then
         [[ -n "$out" ]] && echo "$out" >&2
         echo "[rl] FATAL exec-bit restore failed on slot $slot (rc=$rc)." >&2

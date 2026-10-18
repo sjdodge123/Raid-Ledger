@@ -32,6 +32,8 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TEST_DIR/test_helpers.sh"
 
 WORKTREE_ROOT="$(cd "$TEST_DIR/../../.." && pwd)"
+export OPERATOR_INFRA="$WORKTREE_ROOT/rl-infra"
+export RL_INFRA_SELF_DIR="$OPERATOR_INFRA"
 RL_CLI="$WORKTREE_ROOT/rl-infra/cli/rl"
 TEMPLATE="$WORKTREE_ROOT/rl-infra/mutagen/sync-template.yml"
 PURGE="$WORKTREE_ROOT/rl-infra/runner/purge-synced-secrets.sh"
@@ -51,19 +53,31 @@ write_driver() {
         echo 'mutagen() {'
         echo '  { echo "CALL $1 ${2:-}"; printf "  %s\n" "$@"; } >> "$MUTAGEN_LOG"'
         echo '  if [[ "$1 ${2:-}" == "sync list" ]]; then'
-        echo '    case "${3:-}" in'
-        echo '      "") [[ "${MUTAGEN_HAS_SESSION:-0}" == 1 ]] && echo "Name: rl-slot-3" ;;'
-        echo '      --label-selector) [[ "${MUTAGEN_LABEL_MATCH:-0}" == 1 ]] && echo "Name: rl-slot-3" ;;'
-        echo '      *) printf "Alpha:\n\tURL: /tmp/fake-repo\n" ;;'
-        echo '    esac'
+        echo '    if [[ "$*" == *--template* ]]; then'
+        echo '      [[ -n "${MUTAGEN_LABEL_VALUE:-}" ]] && echo "$MUTAGEN_LABEL_VALUE"'
+        echo '    elif [[ -z "${3:-}" ]]; then'
+        echo '      [[ "${MUTAGEN_HAS_SESSION:-0}" == 1 ]] && echo "Name: rl-slot-3"'
+        echo '    else printf "Alpha:\n\tURL: /tmp/fake-repo\n"; fi'
         echo '  fi'
         echo '  return 0'
         echo '}'
+        # ssh_run: logs argv plus WHICH operator script arrived on stdin (by
+        # byte-comparison with the CLI checkout's copy), so tests prove the
+        # purge is the CLI's own script and never a /workspace path.
         echo 'ssh_run() {'
-        echo '  printf "%s\n" "$*" >> "$ARGV_LOG"'
-        echo '  case "$*" in *purge-synced-secrets.sh*) return "${PURGE_RC:-0}" ;; esac'
+        echo '  local in name=none; in=$(cat)'
+        echo '  [[ "$in" == "$(cat "$OPERATOR_INFRA/runner/purge-synced-secrets.sh")" ]] && name=purge'
+        echo '  [[ "$in" == "$(cat "$OPERATOR_INFRA/runner/restore-exec-bits.sh")" ]] && name=restore'
+        echo '  printf "%s [stdin=%s]\n" "$*" "$name" >> "$ARGV_LOG"'
+        echo '  case "$name" in purge) return "${PURGE_RC:-0}" ;; esac'
         echo '  return 0'
         echo '}'
+        echo 'require_repo_root() { :; }'
+        echo 'lookup_held_slot() { echo 3; }'
+        echo 'stop_mutagen_sync() { echo "CALL stop" >> "$MUTAGEN_LOG"; }'
+        echo 'scaffold_runner_git() { :; }'
+        echo 'git() { echo main; }'
+        echo 'TARGET=remote'
         echo 'REPO_ROOT=/tmp/fake-repo'
         echo 'RL_PROXMOX_USER=rl-agent'
         echo 'RL_PROXMOX_HOST=rl-infra'
@@ -76,7 +90,7 @@ write_driver() {
 run_ensure() {
     export MUTAGEN_LOG="$TMP_STATE/mutagen.log" ARGV_LOG="$TMP_STATE/argv.log"
     : > "$MUTAGEN_LOG"; : > "$ARGV_LOG"
-    write_driver "$TMP_STATE/driver.sh" 'ensure_mutagen_sync 3' ensure_mutagen_sync
+    write_driver "$TMP_STATE/driver.sh" 'ensure_mutagen_sync 3' ensure_mutagen_sync mutagen_session_config_version
     bash "$TMP_STATE/driver.sh" >/dev/null 2>&1
 }
 
@@ -105,6 +119,7 @@ test_s1_create_ignores_env_files() {
     assert_arg "$args" "--ignore=**/.env" "nested .env files (api/.env, tools/test-bot/.env) must never sync"
     assert_arg "$args" "--ignore=**/.env.*" ".env.local / .env.docker / .env.clone variants must never sync"
     assert_arg "$args" "--ignore=!**/.env.example" "the tracked .env.example templates must still sync"
+    assert_arg "$args" "--ignore=!**/.env.*.example" "the tracked .env.*.example templates must still sync"
 }
 
 env_rules_from_cli() {
@@ -125,23 +140,32 @@ test_s2_template_drift_guard() {
     assert_eq "$tpl" "$cli" "sync-template.yml and cli/rl must list the same .env ignore rules"
 }
 
-test_s3_stale_session_is_recreated() {
-    MUTAGEN_HAS_SESSION=1 MUTAGEN_LABEL_MATCH=0 run_ensure
+assert_recreated() {
     local log
     log=$(cat "$MUTAGEN_LOG")
     assert_contains "$log" "CALL sync terminate" \
-        "a session created before the .env ignores must be terminated — ignores are fixed at create time"
-    assert_contains "$log" "CALL sync create" "the stale session must be recreated with the new ignores"
-    local label selector
-    label=$(create_argv | grep -A1 -Fx -- "--label" | tail -1)
-    selector=$(awk '/^CALL sync list/{f=1;next} /^CALL /{f=0} f' "$MUTAGEN_LOG" \
-        | grep -A1 -F -- "--label-selector" | tail -1 | sed 's/^  //')
-    assert_contains "$label" "rl-sync-config=" "the new session must carry the config label it is checked against"
-    assert_eq "$selector" "$label" "the reuse check must select on exactly the label the create stamps"
+        "$1 must be terminated — ignores are fixed at create time"
+    assert_contains "$log" "CALL sync create" "$1 must be recreated with the new ignores"
+    assert_eq "$(create_argv | grep -A1 -Fx -- "--label" | tail -1)" "rl-sync-config=2" \
+        "the new session must be stamped with the current config label"
+    assert_contains "$log" '{{index .Labels "rl-sync-config"}}' \
+        "the reuse check must read the session's own rl-sync-config label"
+}
+
+test_s3_stale_session_is_recreated() {
+    MUTAGEN_HAS_SESSION=1 MUTAGEN_LABEL_VALUE="" run_ensure
+    assert_recreated "a session with NO rl-sync-config label (pre-ROK-1849)"
+}
+
+test_s3b_older_label_is_recreated() {
+    MUTAGEN_HAS_SESSION=1 MUTAGEN_LABEL_VALUE="1" run_ensure
+    assert_recreated "a session labelled rl-sync-config=1"
+    MUTAGEN_HAS_SESSION=1 MUTAGEN_LABEL_VALUE="junk" run_ensure
+    assert_recreated "a session with a non-numeric rl-sync-config label"
 }
 
 test_s4_current_session_is_reused() {
-    MUTAGEN_HAS_SESSION=1 MUTAGEN_LABEL_MATCH=1 run_ensure
+    MUTAGEN_HAS_SESSION=1 MUTAGEN_LABEL_VALUE=2 run_ensure
     local log
     log=$(cat "$MUTAGEN_LOG")
     if [[ "$log" == *"CALL sync create"* || "$log" == *"CALL sync terminate"* ]]; then
@@ -179,21 +203,96 @@ test_s5_purge_removes_synced_secrets() {
 test_s6_flush_runs_purge_non_fatally() {
     export MUTAGEN_LOG="$TMP_STATE/mutagen.log" ARGV_LOG="$TMP_STATE/argv.log"
     : > "$MUTAGEN_LOG"; : > "$ARGV_LOG"
-    write_driver "$TMP_STATE/driver.sh" 'restore_runner_exec_bits() { :; }; flush_mutagen 3' \
-        flush_mutagen purge_runner_synced_secrets
+    write_driver "$TMP_STATE/driver.sh" 'flush_mutagen 3' \
+        flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
     local out rc=0
     out=$(PURGE_RC=1 bash "$TMP_STATE/driver.sh" 2>&1) || rc=$?
-    assert_contains "$(cat "$ARGV_LOG")" "run-on-runner -- bash /workspace/rl-infra/runner/purge-synced-secrets.sh /workspace" \
-        "flush_mutagen must purge synced secrets inside the runner with an explicit bash"
+    local log
+    log=$(cat "$ARGV_LOG")
+    assert_eq "$(head -1 <<<"$log")" "run-on-runner -- bash -s -- /workspace [stdin=purge]" \
+        "the FIRST thing run in the runner must be the CLI checkout's own purge script, streamed over stdin"
+    assert_eq "$(sed -n 2p <<<"$log")" "run-on-runner -- bash -s -- /workspace [stdin=restore]" \
+        "the exec-bit repair must also be the CLI's own copy, after the purge"
+    if [[ "$log" == */workspace/rl-infra* ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: branch script executed")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] nothing may be executed from the synced /workspace/rl-infra (branch content)"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
     assert_exit_code "$rc" 0 "a failed purge must not fail the claim/validate-ci flush"
     assert_contains "$out" "secret purge" "a failed purge must be named on stderr"
+}
+
+# S7 — the operator script path is derived from the running CLI file itself
+# (through a symlink), never from /workspace.
+test_s7_self_dir_is_the_cli_checkout() {
+    local fake="$TMP_STATE/opinfra"
+    mkdir -p "$fake/cli" "$TMP_STATE/bin"
+    { slice_fn rl_infra_self_dir; echo; echo 'unset RL_INFRA_SELF_DIR; rl_infra_self_dir'; } > "$fake/cli/rl"
+    ln -sf "$fake/cli/rl" "$TMP_STATE/bin/rl"
+    local want got
+    want=$(cd -P "$fake" && pwd)
+    got=$(bash "$TMP_STATE/bin/rl")
+    assert_eq "$got" "$want" "operator scripts must resolve from the rl CLI's own checkout"
+    assert_contains "$(head -30 "$PURGE")" "set -euo pipefail" "the purge script must run with set -euo pipefail"
+}
+
+# S8/S9 — cmd_resync goes through the same ensure+purge path as cmd_claim.
+reset_logs() {
+    export MUTAGEN_LOG="$TMP_STATE/mutagen.log" ARGV_LOG="$TMP_STATE/argv.log"
+    : > "$MUTAGEN_LOG"; : > "$ARGV_LOG"
+}
+
+# Caller runs reset_logs first (run_resync is called inside $(...)).
+run_resync() {
+    write_driver "$TMP_STATE/driver.sh" 'cmd_resync' cmd_resync resync_fail sync_slot_and_purge \
+        ensure_mutagen_sync mutagen_session_config_version flush_mutagen purge_runner_synced_secrets \
+        restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
+    bash "$TMP_STATE/driver.sh" 2>/dev/null
+}
+
+test_s8_resync_purges() {
+    reset_logs
+    local out rc=0
+    out=$(MUTAGEN_HAS_SESSION=0 run_resync) || rc=$?
+    assert_exit_code "$rc" 0 "a healthy resync must succeed"
+    assert_contains "$out" '"ok":true' "a healthy resync reports ok"
+    assert_contains "$(cat "$ARGV_LOG")" "[stdin=purge]" "rl resync must purge synced secrets after recreating the session"
+    assert_contains "$(cat "$MUTAGEN_LOG")" "CALL sync create" "rl resync must recreate the session"
+}
+
+test_s9_resync_purge_failure_is_fatal() {
+    reset_logs
+    local out rc=0
+    out=$(MUTAGEN_HAS_SESSION=0 PURGE_RC=1 run_resync) || rc=$?
+    assert_neq "$rc" 0 "a resync whose purge failed must not report success"
+    assert_contains "$out" "resync_purge_failed" "the failure must be named"
+}
+
+test_s10_claim_uses_shared_path() {
+    local body
+    body=$(slice_fn cmd_claim)
+    assert_contains "$body" 'sync_slot_and_purge "$SLOT" ||' "cmd_claim must use the shared ensure+purge path, non-fatally"
+    if grep -qE '^[[:space:]]*(ensure_mutagen_sync|flush_mutagen) ' <<<"$body$(slice_fn cmd_resync)"; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: bypass")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] cmd_claim/cmd_resync must not call ensure_mutagen_sync/flush_mutagen directly (bypasses the purge)"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
 }
 
 run_test "S1 create ignores .env"        test_s1_create_ignores_env_files
 run_test "S2 template drift guard"       test_s2_template_drift_guard
 run_test "S3 stale session recreated"    test_s3_stale_session_is_recreated
+run_test "S3b older label recreated"     test_s3b_older_label_is_recreated
 run_test "S4 current session reused"     test_s4_current_session_is_reused
 run_test "S5 purge synced secrets"       test_s5_purge_removes_synced_secrets
 run_test "S6 flush runs purge"           test_s6_flush_runs_purge_non_fatally
+run_test "S7 self dir is CLI checkout"   test_s7_self_dir_is_the_cli_checkout
+run_test "S8 resync purges"              test_s8_resync_purges
+run_test "S9 resync purge failure fatal" test_s9_resync_purge_failure_is_fatal
+run_test "S10 claim shared path"         test_s10_claim_uses_shared_path
 
 print_test_summary
