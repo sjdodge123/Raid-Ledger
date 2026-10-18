@@ -211,6 +211,8 @@ async function insertQuickPlay(
   await tx.insert(schema.adHocParticipants).values({
     eventId: event.id,
     userId: q.creatorId,
+    // A steam row must carry an identity (`ad_hoc_participants_identity_check`).
+    steamId: `7656119900${String(q.serverId).padStart(7, '0')}`,
     discordUsername: 'Bjorn',
     source: 'steam',
     inVoice: false,
