@@ -1,6 +1,6 @@
 import { createHash, type Hash } from 'node:crypto';
-import { createWriteStream, type WriteStream } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import type { WriteStream } from 'node:fs';
+import { open, rm } from 'node:fs/promises';
 import {
   assertContentType,
   assertDeclaredLength,
@@ -49,7 +49,9 @@ export async function readBlobToFile(
   }
   assertContentType(src, 'image/png');
   assertDeclaredLength(src, opts.maxBytes);
-  const out = createWriteStream(opts.tmpPath, { flags: 'wx' });
+  // Opened up front so the cleanup below can never race a lazy open.
+  const handle = await open(opts.tmpPath, 'wx');
+  const out = handle.createWriteStream();
   try {
     return await pump(src, out, opts);
   } catch (err: unknown) {
