@@ -188,6 +188,39 @@ describe('ValheimLinkBearerGuard — pre-auth limiter (ROK-1833)', () => {
   });
 });
 
+describe('ValheimLinkBearerGuard — in-flight reservations (ROK-1833)', () => {
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_RATE_AUTH_PER_MIN;
+  });
+
+  it('300 concurrent lookups from one IP against limit 30: at most 30 reach the DB', async () => {
+    process.env.VALHEIM_LINK_RATE_AUTH_PER_MIN = '30';
+    const { guard, findByHash } = build(null);
+    const results = await Promise.all(
+      Array.from({ length: 300 }, () =>
+        codeOf(guard.canActivate(ctx(`Bearer ${TOKEN}`).c)),
+      ),
+    );
+    expect(findByHash.mock.calls.length).toBeLessThanOrEqual(30);
+    expect(results.filter((r) => String(r) === '401,invalid_token')).toHaveLength(
+      findByHash.mock.calls.length,
+    );
+    expect(results.filter((r) => String(r) === '429,rate_limited')).toHaveLength(
+      300 - findByHash.mock.calls.length,
+    );
+  });
+
+  it('a successful auth refunds its reservation', async () => {
+    process.env.VALHEIM_LINK_RATE_AUTH_PER_MIN = '1';
+    const { guard } = build(lookup());
+    for (let i = 0; i < 3; i += 1) {
+      await expect(guard.canActivate(ctx(`Bearer ${TOKEN}`).c)).resolves.toBe(
+        true,
+      );
+    }
+  });
+});
+
 describe('assertServerMatches (ROK-1833)', () => {
   const req: ValheimLinkRequest = {
     headers: {},

@@ -26,6 +26,7 @@ import {
 import { ValheimLinkRateLimiter } from './valheim-link-rate-limiter';
 import { ValheimLinkTokensRepository } from './valheim-link-tokens.repository';
 
+type HttpArgumentsHost = ReturnType<ExecutionContext['switchToHttp']>;
 type HeaderSink = { setHeader?: (n: string, v: string) => void } | undefined;
 
 const invalidToken = (): UnauthorizedException =>
@@ -44,8 +45,8 @@ function bearerOf(req: ValheimLinkRequest): string | null {
  * rotated or revoked token — one code, no oracle; 403 `server_not_valheim`
  * when the row was re-mapped or went missing. Attaches `req.valheimLink`.
  * Pre-auth limiter: an IP with `VALHEIM_LINK_RATE_AUTH_PER_MIN` (30) failed
- * attempts in the minute gets 429 `rate_limited` BEFORE the DB lookup;
- * successful auths do not count. This guard never logs: the header is a secret.
+ * attempts in the minute — counting lookups still in flight — gets 429
+ * `rate_limited` BEFORE the DB lookup; successful auths do not count. This guard never logs: the header is a secret.
  */
 @Injectable()
 export class ValheimLinkBearerGuard implements CanActivate {
@@ -61,21 +62,34 @@ export class ValheimLinkBearerGuard implements CanActivate {
     this.assertPluginsActive();
     const key = `valheim-link:auth:${req.ip ?? 'unknown'}`;
     const limit = authFailureLimit();
-    if (limit !== null && this.limiter.isExhausted(key, limit, WINDOW_MS)) {
-      const retry = String(this.limiter.retryAfter(key, WINDOW_MS));
-      http.getResponse<HeaderSink>()?.setHeader?.('Retry-After', retry);
-      throw rateLimited('Too many failed token attempts');
-    }
+    if (limit !== null) this.reserveOrThrow(http, key, limit);
+    let failed = false;
     try {
       req.valheimLink = await this.authenticate(req);
     } catch (err: unknown) {
-      if (limit !== null && err instanceof UnauthorizedException) {
-        this.limiter.hit(key, limit, WINDOW_MS);
-      }
+      failed = err instanceof UnauthorizedException;
       throw err;
+    } finally {
+      if (limit !== null) this.limiter.settle(key, failed, limit, WINDOW_MS);
     }
     await this.repo.touchLastUsed(req.valheimLink.tokenId);
     return true;
+  }
+
+  /**
+   * Reserve a failure-budget slot BEFORE the DB lookup: counted failures
+   * plus in-flight attempts at the limit → 429 with Retry-After. A success
+   * refunds the slot; a 401 turns it into a counted failure (`settle`).
+   */
+  private reserveOrThrow(
+    http: HttpArgumentsHost,
+    key: string,
+    limit: number,
+  ): void {
+    if (this.limiter.reserve(key, limit, WINDOW_MS)) return;
+    const retry = String(this.limiter.retryAfter(key, WINDOW_MS));
+    http.getResponse<HeaderSink>()?.setHeader?.('Retry-After', retry);
+    throw rateLimited('Too many failed token attempts');
   }
 
   /** Bearer → token row → auth record; throws the 401 / 403 above. */
