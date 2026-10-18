@@ -343,6 +343,38 @@ describe(
   describeAc3,
 );
 
+function describeAc3Game() {
+  it("400s an event from this poll whose game was PATCHed away from the poll's game", async () => {
+    const { creator, voterId, matchId, slotTime, eventId } =
+      await seedOwnPoll('ac3regame');
+    const [other] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Regame Game', slug: 'regame-game' })
+        .returning(),
+      'regame game',
+    );
+    const patch = await testApp.request
+      .patch(`/events/${eventId}`)
+      .set('Authorization', `Bearer ${creator.token}`)
+      .send({ gameId: other.id });
+    expect(patch.status).toBe(200);
+
+    const res = await complete(creator.token, matchId, {
+      eventId,
+      startTime: slotTime.toISOString(),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/no longer matches the poll/);
+    await expectUntouched(matchId, eventId, voterId);
+  });
+}
+describe(
+  "ROK-1844 AC3 — the event's current game must be the poll's",
+  describeAc3Game,
+);
+
 function describeAc4() {
   it('409s a repeat complete and fires no second round of signups', async () => {
     const { creator, voterId, matchId, slotTime, eventId } =

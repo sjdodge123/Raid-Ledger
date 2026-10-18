@@ -64,6 +64,7 @@ interface PollContext {
   pollCreatorId: number;
   visibility: 'public' | 'private';
   linkedEventId: number | null;
+  pollGameId: number;
 }
 
 /** Fetch a standalone match's ownership/linkage context, or null. */
@@ -78,6 +79,7 @@ async function fetchPollContext(
       pollCreatorId: schema.communityLineups.createdBy,
       visibility: schema.communityLineups.visibility,
       linkedEventId: schema.communityLineupMatches.linkedEventId,
+      pollGameId: schema.communityLineupMatches.gameId,
     })
     .from(schema.communityLineupMatches)
     .innerJoin(
@@ -143,6 +145,7 @@ async function assertMayUseEvent(
     .select({
       creatorId: schema.events.creatorId,
       createdFromPollId: schema.events.createdFromPollId,
+      gameId: schema.events.gameId,
       duration: schema.events.duration,
     })
     .from(schema.events)
@@ -154,13 +157,31 @@ async function assertMayUseEvent(
       'You can only sign voters up to your own event',
     );
   }
+  assertEventIsFromPoll(ctx, eventId, event);
+  return event.duration[0];
+}
+
+/**
+ * Provenance (403) plus the event's CURRENT game (400): provenance is stamped
+ * at creation, so an event whose game was PATCHed afterwards must not carry
+ * this poll's yes-voters into another game.
+ */
+function assertEventIsFromPoll(
+  ctx: PollContext,
+  eventId: number,
+  event: { createdFromPollId: number | null; gameId: number | null },
+): void {
   const fromThisPoll =
     eventId === ctx.linkedEventId ||
     (ctx.linkedEventId === null && event.createdFromPollId === ctx.matchId);
   if (!fromThisPoll) {
     throw new ForbiddenException('That event was not created from this poll');
   }
-  return event.duration[0];
+  if (event.gameId !== ctx.pollGameId) {
+    throw new BadRequestException(
+      "The event's game no longer matches the poll",
+    );
+  }
 }
 
 /**
