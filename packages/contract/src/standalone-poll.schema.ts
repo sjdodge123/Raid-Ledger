@@ -42,12 +42,18 @@ export type CreateSchedulingPollDto = z.infer<typeof CreateSchedulingPollSchema>
  * ROK-1844: request body for `POST /scheduling-polls/:matchId/complete`.
  * Strict — an unknown key is a 400. `eventId` is the event the poll's
  * yes-voters are auto-signed up to (the linked event, or one created from the
- * poll); `startTime` is the winning slot's instant.
+ * poll via `CreateEventDto.schedulingMatchId`); `startTime` is the winning
+ * slot's instant. A completion that signs voters up (`eventId`) must name the
+ * slot — the server 400s a `startTime` that is not one of the poll's slots
+ * and signs up only that slot's yes-voters. An empty body just closes the poll.
  */
 export const CompleteSchedulingPollSchema = z.object({
     eventId: z.number().int().positive().optional(),
     startTime: z.string().datetime({ offset: true }).optional(),
-}).strict();
+}).strict().refine((d) => d.eventId === undefined || d.startTime !== undefined, {
+    message: 'startTime is required when eventId is supplied',
+    path: ['startTime'],
+});
 
 export type CompleteSchedulingPollDto = z.infer<typeof CompleteSchedulingPollSchema>;
 
