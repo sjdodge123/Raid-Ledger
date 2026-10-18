@@ -35,6 +35,10 @@
     "path": "atlas",
     "code": "custom"
   },
+  "items-file-icon-blob-bad-sha": {
+    "path": "items.0.icon.blob.sha256",
+    "code": "invalid_format"
+  },
   "int64-out-of-range": {
     "path": "character.playerId",
     "code": "custom"

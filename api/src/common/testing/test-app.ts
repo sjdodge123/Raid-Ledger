@@ -55,6 +55,7 @@ import {
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 import { WOWHEAD_RESOLVER_DEPS } from '../../plugins/wow-common/wowhead-item/wow-item-meta.resolve';
 import { noNetworkWowheadDeps } from './wowhead-no-network';
+import { installValheimLinkBodyBypass } from '../../plugins/valheim/link/ingest/valheim-link-body-bypass';
 // ROK-1264: `supertest-persistent-agent` is intentionally NOT wired here.
 // The helper + spec exist as ready-to-deploy machinery if a future targeted
 // investigation needs single-socket pinning, but applying it globally
@@ -239,6 +240,7 @@ async function buildNestApp(
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,
   // which would 413 a request before any route (e.g. ROK-1724's 256 KB cap).
   // ROK-1313: mirror main.ts — POST /feedback gets 8 MB for screenshots.
+  installValheimLinkBodyBypass(app);
   installFeedbackBodyParser(app);
   app.useBodyParser('json', { limit: '2mb' });
   // ROK-1732: mirror prod's CORS policy. Registered before init() so it runs

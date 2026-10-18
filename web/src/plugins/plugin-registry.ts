@@ -34,7 +34,9 @@ export type PluginSlotName =
     /** Cards above New Members on /players (ROK-1785); no context. */
     | 'players:header-cards'
     /** Plugin sections on the game detail page (ROK-1785); context `{ gameId, gameSlug }`. */
-    | 'game-detail:sections';
+    | 'game-detail:sections'
+    /** Extra control on one Pelican admin server row (ROK-1833); context `{ serverId, gameId, serverName, inline? }` — `inline` in the ≥1024px table cell, absent in the phone card. */
+    | 'pelican-server:row-extras';
 
 export interface PluginBadgeMeta {
     /** Emoji string, or image URL (starting with "/" or "http") */
