@@ -152,6 +152,7 @@ describe("ValheimLinkIngestErrorCodeSchema", () => {
         "not_png",
         "payload_too_large",
         "png_too_large",
+        "quota_exceeded",
         "rate_limited",
         "schema_invalid",
         "server_mismatch",
