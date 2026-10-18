@@ -22,18 +22,26 @@ export function guildHref(guildId: number): string {
     return `/guilds/${guildId}`;
 }
 
-/** The viewer's guilds; `[]` while loading, on error, or signed out. */
-export function useMyGuilds(): MyGuild[] {
+/**
+ * The viewer's guilds WITH the query state. A caller that treats "no guilds"
+ * as a fact (the Players "get your guild" prompt) has to tell an empty answer
+ * apart from an unsettled or failed one — `useMyGuilds` cannot.
+ */
+export function useMyGuildsQuery(): UseQueryResult<{ guilds: MyGuild[] }, Error> {
     const { isAuthenticated } = useAuth();
     const viewer = useViewerCacheScope();
-    const q = useQuery({
+    return useQuery({
         queryKey: ['plugins', 'wow', 'guilds', 'mine', viewer],
         queryFn: () => fetchApi(`${BASE}/mine`, {}, MyGuildsSchema),
         enabled: isAuthenticated,
         staleTime: STALE_MS,
         retry: false,
     });
-    return q.data?.guilds ?? [];
+}
+
+/** The viewer's guilds; `[]` while loading, on error, or signed out. */
+export function useMyGuilds(): MyGuild[] {
+    return useMyGuildsQuery().data?.guilds ?? [];
 }
 
 /** Guilds of one game the viewer can open (same shape as `mine`); `[]` until known. */

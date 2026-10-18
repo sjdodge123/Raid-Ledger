@@ -1,16 +1,14 @@
 /**
  * ROK-1786/ROK-1830 — the Resources tab: rules and links (side by side from
- * md), then whatever sections the hub module adds below them (WoW: the
- * recommended addons).
+ * md), then the core "Recommended mods" frame, whose sources the hub module
+ * contributes (WoW: its addon panel).
  */
-import { Suspense, type JSX } from 'react';
+import type { JSX } from 'react';
+import { RecommendedMods } from './recommended-mods';
 import { GuildLinks } from './guild-links';
 import { GuildRules } from './guild-rules';
 import { useGuildProfile } from '../api/use-guild-content';
 import type { HubModule } from '../../../plugins/hub-module';
-
-/** The shared skeleton idiom, sized like one addon row, while a lazy section loads. */
-const SECTION_SKELETON = 'h-20 animate-pulse rounded-lg border border-edge bg-surface';
 
 interface GuildResourcesProps {
     guildId: number;
@@ -30,14 +28,7 @@ export function GuildResources({ guildId, canEdit, module: mod }: GuildResources
                 <GuildRules guildId={guildId} rules={profile.data.rules} canEdit={canEdit} />
                 <GuildLinks guildId={guildId} links={profile.data.links} canEdit={canEdit} />
             </div>
-            {(mod?.resourceSections ?? []).map((section) => (
-                <Suspense
-                    key={section.id}
-                    fallback={<div className={SECTION_SKELETON} aria-busy="true" data-testid={`guild-resource-loading-${section.id}`} />}
-                >
-                    <section.component guildId={guildId} canEdit={canEdit} />
-                </Suspense>
-            ))}
+            <RecommendedMods guildId={guildId} canEdit={canEdit} sources={mod?.modSources ?? []} />
         </div>
     );
 }

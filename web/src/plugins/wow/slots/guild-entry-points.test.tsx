@@ -122,10 +122,51 @@ describe('PlayersGuildCard (players:header-cards)', () => {
         expect(screen.getAllByTestId('players-guild-member-count')[1]).toHaveTextContent('1 member');
     });
 
-    it('not a member → nothing', async () => {
+    // ROK-1830 S5b (D11-B): the slot is no longer empty for a hub-less viewer —
+    // it offers core's dismissible "get your guild" prompt with the WoW how-to.
+    it('not a member → the "get your guild" prompt, with the LedgerLink line', async () => {
         serve([]);
+        server.use(http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })));
+        renderWithProviders(<PlayersGuildCard />);
+        await screen.findByTestId('get-your-guild-card');
+        expect(screen.getByTestId('get-your-guild-how')).toHaveTextContent('LedgerLink');
+        expect(screen.queryByTestId('players-guild-card')).not.toBeInTheDocument();
+    });
+
+    // PR-3 MAJOR: `useMyGuilds()` answered `[]` while loading, so a real
+    // member saw the hub-less prompt flash on every cold /players — and could
+    // dismiss a card they never meant to see. The onboarding query is served
+    // here so it settles FIRST, which is exactly the race that broke it.
+    it('while /guilds/mine is in flight → neither card', async () => {
+        server.use(
+            http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })),
+            http.get(`${API}/mine`, () => new Promise<never>(() => { /* never settles */ })),
+        );
         const { container } = renderWithProviders(<PlayersGuildCard />);
-        await expectEmpty(container, '/guilds/mine');
+        await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
+        await new Promise((r) => setTimeout(r, 0));
+        expect(container.innerHTML).toBe('');
+    });
+
+    it('when /guilds/mine fails → nothing, never the hub-less prompt', async () => {
+        let failed = false;
+        server.use(
+            http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })),
+            http.get(`${API}/mine`, () => { failed = true; return HttpResponse.json({ message: 'boom' }, { status: 500 }); }),
+        );
+        const { container } = renderWithProviders(<PlayersGuildCard />);
+        await waitFor(() => expect(failed).toBe(true));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument();
+        expect(container.innerHTML).toBe('');
+    });
+
+    it('a member never sees the hub-less prompt', async () => {
+        serve(ONE);
+        server.use(http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })));
+        renderWithProviders(<PlayersGuildCard />);
+        await screen.findByTestId('players-guild-card');
+        expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument();
     });
 });
 

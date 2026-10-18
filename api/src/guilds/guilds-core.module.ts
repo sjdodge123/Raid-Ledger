@@ -8,6 +8,8 @@ import { GuildEditorsService } from './guild-editors.service';
 import { GuildLeaderGuard } from './guild-leader.guard';
 import { GuildProfileService } from './guild-profile.service';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
+import { HubOnboardingController } from './hub-onboarding.controller';
+import { HubOnboardingService } from './hub-onboarding.service';
 import { HubKindRegistry } from './hub-kind.registry';
 
 /**
@@ -18,7 +20,7 @@ import { HubKindRegistry } from './hub-kind.registry';
  */
 @Module({
   imports: [ChannelMirrorModule],
-  controllers: [GuildDiscordController],
+  controllers: [GuildDiscordController, HubOnboardingController],
   providers: [
     GuildAccessService,
     GuildEditorGuard,
@@ -28,6 +30,7 @@ import { HubKindRegistry } from './hub-kind.registry';
     GuildDiscordService,
     HubKindActiveGuard,
     HubKindRegistry,
+    HubOnboardingService,
   ],
   exports: [
     GuildAccessService,
@@ -36,6 +39,7 @@ import { HubKindRegistry } from './hub-kind.registry';
     GuildEditorsService,
     GuildProfileService,
     HubKindRegistry,
+    HubOnboardingService,
   ],
 })
 export class GuildsCoreModule {}

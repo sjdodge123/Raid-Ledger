@@ -1,6 +1,6 @@
 /**
  * ROK-1830 — whether the WoW Resources section ("Recommended addons") has
- * anything in it. Core asks through `HubResourceSection.useVisible`, so the
+ * anything in it. Core asks through `HubModSource.useVisible`, so the
  * addons query and the rule that reads it both live in this plugin; core never
  * touches `/plugins/wow/guilds/:id/addons`.
  *

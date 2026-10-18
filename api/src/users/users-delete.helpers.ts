@@ -157,6 +157,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.calendarIgnoredDays,
     column: schema.calendarIgnoredDays.userId,
   },
+  // ROK-1830: hub onboarding dismissals are personal UI state (CASCADE) —
+  // no value once the user is wiped.
+  {
+    table: schema.hubOnboardingDismissals,
+    column: schema.hubOnboardingDismissals.userId,
+  },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {

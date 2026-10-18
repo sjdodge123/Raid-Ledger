@@ -233,6 +233,9 @@ export * from './discord-join-post.schema.js';
 export * from './guild-content.schema.js';
 export * from './guild-discord.schema.js';
 
+// Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
+export * from './hub-onboarding.schema.js';
+
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';
 // Per-game notification mute — the game-page bell (ROK-1797).

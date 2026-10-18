@@ -1307,3 +1307,29 @@ Rules that came out of these rounds (operator, 2026-09-16): prototype before act
 only decisions ship (prune losing candidates from `web/src/dev/**`); a shared component (`JourneyHero`)
 carries the same language on every mount, phone and desktop; iPads use the phone layouts.
 
+
+### 4.24 Onboarding prompt + setup checklist (hub, ROK-1830 S5b)
+
+Two dismissible prompts carry hub discovery (D11-B). Both are made of inventory pieces, and the dismissal is
+**server-side per user** (`GET|POST|DELETE /guilds/onboarding`, `useHubOnboarding`) rather than `localStorage`,
+so it follows the viewer to a second device.
+
+**DO — the prompt card** (`components/hub/onboarding/get-your-guild-card.tsx`, `data-testid="get-your-guild-card"`):
+the §4.2 panel surface (`rounded-xl border border-edge bg-panel p-4`) as a `<section aria-labelledby>`, a
+`text-lg font-semibold text-foreground` heading, one `text-sm text-secondary` line, an optional `text-sm text-muted`
+how-to line supplied by the game module, and a single `Button variant="secondary"` "Dismiss" on the right
+(stacked above it on phones, `sm:flex-row`). A failed dismiss rolls the card back and says so in a
+`role="alert"` `text-danger` line — never a silent hide.
+
+**DO — the setup checklist** (`components/hub/onboarding/setup-checklist.tsx`): a §4.2 `WidgetCard` in the
+Overview bento (`order: 5`, `span: 2`), header action `Button variant="ghost" size="sm"` "Dismiss", an
+`N of M done` progress line, then one `<li>` per step. A step is a 16px round mark —
+`border-success/40 bg-success/10 text-success` with a `✓` when done, `border-edge text-muted` when not —
+its label (`text-muted line-through` once done), an `sr-only` "done"/"not done yet" for screen readers, and a
+right-aligned action: an `<a href="#tab">` for a step that lives in another tab, a `ghost` button for one that
+opens an overlay, or a `text-xs text-muted` reason for a step that is blocked. **DON'T** hide a blocked step —
+list it with its reason; and don't count it toward the progress, or the checklist can never finish.
+
+**DON'T** derive "done" from stored progress. Each step reads the live page data (`useGuildProfile`,
+`useGuildDiscord`, the module's mod sources), so undoing the edit puts the step back; the whole card removes
+itself once every actionable step is done.

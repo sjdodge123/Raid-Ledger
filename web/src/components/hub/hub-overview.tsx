@@ -13,12 +13,21 @@ import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { GmPostCard } from './content/gm-post-card';
 import { useHubSettings } from './settings/hub-settings-context';
 
+
 /**
  * ROK-1788: lazy so the mirror (and its editor-only picker, a further lazy
  * chunk) stays out of the guild-page chunk. Fallback `null` matches the card's
  * own loading state, which renders nothing until the mirror query settles.
  */
 const GuildDiscordMirror = lazy(() => import('./discord/guild-discord-mirror').then((m) => ({ default: m.GuildDiscordMirror })));
+
+/**
+ * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
+ * derivation and the onboarding hook are dead weight for every member — and
+ * they pushed the `hub-page` route chunk over its gzip budget (13.2 KB vs the
+ * 12.6 KB cap the route carried before this story).
+ */
+const HubSetupChecklist = lazy(() => import('./onboarding/setup-checklist').then((m) => ({ default: m.HubSetupChecklist })));
 
 const SPAN_2 = 'md:col-span-2';
 const OVERVIEW_ATTENDANCE_TOP = 5;
@@ -33,9 +42,28 @@ interface Cell {
 }
 
 /** The core band. Module widgets land between these orders — WoW uses 50/60. */
-function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null): Cell[] {
+function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null, mods: ModsState): Cell[] {
     const data = raids.data;
+    // Above everything on purpose: it is the one widget that tells an editor
+    // what is still missing, and it removes itself once nothing is. A span-1
+    // Fragment cell, not a span-2 <div>: the card renders null for a
+    // dismissed or finished editor, and a wrapper would leave an empty grid
+    // item (a dead `gap-4` row) above the first widget. The card carries its
+    // own `md:col-span-2` when it does render.
+    const checklist: Cell[] = page.viewer.canEdit
+        ? [{
+            key: 'setup-checklist', order: 5, span: 1,
+            node: (
+                <Suspense fallback={null}>
+                    <HubSetupChecklist guildId={page.guild.id} canEdit memberCount={page.guild.memberCount}
+                        nextRaid={data === undefined ? undefined : data.nextRaid}
+                        modsConfigured={mods.configured} hasModSources={mods.hasSources} />
+                </Suspense>
+            ),
+        }]
+        : [];
     const cells: Cell[] = [
+        ...checklist,
         { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} /> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
@@ -52,9 +80,21 @@ function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
         .map((w) => ({ key: `module:${w.id}`, order: w.order, span: w.span ?? 1, node: <w.component {...ctx} /> }));
 }
 
-export function HubOverview({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
+/** Whether the hub kind has mod sources at all, and whether any reports content. */
+export interface ModsState {
+    hasSources: boolean;
+    configured: boolean;
+}
+
+interface HubOverviewProps {
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    mods: ModsState;
+}
+
+export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
-    const cells = [...coreCells(ctx, openChannelPicker), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const cells = [...coreCells(ctx, openChannelPicker, mods), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

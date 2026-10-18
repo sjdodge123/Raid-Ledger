@@ -1,6 +1,6 @@
 /**
- * ROK-1830 — "does the Resources tab have anything in it?" for the sections a
- * hub module contributes.
+ * ROK-1830 — "does the Resources tab have anything in it?" for the mod sources a
+ * hub module contributes (ROK-1830 S5b renamed them from resource sections).
  *
  * Core must not know what makes a module's section non-empty (before r2 it ran
  * the WoW addons query itself and pointed at `/plugins/wow/...`, which a
@@ -24,16 +24,16 @@
  * the key then only moves on a genuine plugin toggle from the admin page.
  */
 import type { JSX, ReactNode } from 'react';
-import type { HubResourceSection } from '../../plugins/hub-module';
+import type { HubModSource } from '../../plugins/hub-module';
 
 export interface HubResourceVisibilityProps {
-    sections: readonly HubResourceSection[];
+    sections: readonly HubModSource[];
     guildId: number;
     /** Rendered with `true` once any section reports it has something to show. */
     children: (anyVisible: boolean) => ReactNode;
 }
 
-type VisibilityHook = NonNullable<HubResourceSection['useVisible']>;
+type VisibilityHook = NonNullable<HubModSource['useVisible']>;
 
 /** Stable per-function id, so swapping an implementation under the same section id changes the key. */
 const hookIds = new WeakMap<VisibilityHook, number>();
@@ -52,7 +52,7 @@ function hookId(hook: VisibilityHook): number {
  * section id may call a different number of hooks internally, so the key has to
  * move with the function, not just with the id.
  */
-function sectionsKey(sections: readonly HubResourceSection[]): string {
+function sectionsKey(sections: readonly HubModSource[]): string {
     return sections.map((s) => `${s.id}:${s.useVisible ? `ask#${hookId(s.useVisible)}` : 'always'}`).join('|');
 }
 
