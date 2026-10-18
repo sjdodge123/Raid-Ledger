@@ -43,6 +43,24 @@ function CardHead({ onClose }: { onClose: () => void }): JSX.Element {
     );
 }
 
+function CardActions(
+    { hasHow, open, onToggle, onDismiss }: { hasHow: boolean; open: boolean; onToggle: () => void; onDismiss: () => void },
+): JSX.Element {
+    return (
+        <div className="flex flex-wrap gap-2">
+            {hasHow && (
+                <Button
+                    variant="primary" onClick={onToggle}
+                    aria-expanded={open} aria-controls={HOW_PANEL_ID} data-testid="get-your-guild-how-toggle"
+                >
+                    {open ? 'Hide steps' : 'How to import'}
+                </Button>
+            )}
+            <Button variant="secondary" onClick={onDismiss} data-testid="get-your-guild-dismiss">Not now</Button>
+        </div>
+    );
+}
+
 export function GetYourGuildCard({ how }: { how?: ReactNode }): JSX.Element | null {
     const prompt = useHubOnboarding('players-get-your-guild');
     const [open, setOpen] = useState(false);
@@ -55,17 +73,7 @@ export function GetYourGuildCard({ how }: { how?: ReactNode }): JSX.Element | nu
                     We couldn&apos;t dismiss that just now. Try again in a moment.
                 </p>
             )}
-            <div className="flex flex-wrap gap-2">
-                {how && (
-                    <Button
-                        variant="primary" onClick={() => { setOpen((v) => !v); }}
-                        aria-expanded={open} aria-controls={HOW_PANEL_ID} data-testid="get-your-guild-how-toggle"
-                    >
-                        {open ? 'Hide steps' : 'How to import'}
-                    </Button>
-                )}
-                <Button variant="secondary" onClick={prompt.dismiss} data-testid="get-your-guild-dismiss">Not now</Button>
-            </div>
+            <CardActions hasHow={how !== undefined} open={open} onToggle={() => { setOpen((v) => !v); }} onDismiss={prompt.dismiss} />
             {how && open && (
                 <div id={HOW_PANEL_ID} className="text-sm text-muted" data-testid="get-your-guild-how">{how}</div>
             )}
