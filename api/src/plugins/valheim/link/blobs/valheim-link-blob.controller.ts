@@ -7,6 +7,7 @@ import {
   Put,
   Req,
   Res,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -17,6 +18,7 @@ import {
   ValheimLinkRateLimitGuard,
 } from '../valheim-link-rate-limit.guard';
 import type { ValheimLinkRequest } from '../valheim-link-request';
+import { ValheimLinkConnectionCloseFilter } from '../valheim-link-connection-close.filter';
 import { ValheimLinkBearerGuard } from '../valheim-link-token.guard';
 import { ValheimLinkBlobService } from './valheim-link-blob.service';
 
@@ -27,6 +29,7 @@ import { ValheimLinkBlobService } from './valheim-link-blob.service';
  */
 @Controller('plugins/valheim/link/blobs')
 @SkipThrottle()
+@UseFilters(ValheimLinkConnectionCloseFilter)
 @UseGuards(ValheimLinkBearerGuard, ValheimLinkRateLimitGuard)
 @ValheimLinkRateBucket('blobs')
 export class ValheimLinkBlobController {
@@ -49,8 +52,6 @@ export class ValheimLinkBlobController {
       return result;
     } catch (err: unknown) {
       if (err instanceof HttpException) {
-        // Any rejection may leave body bytes unread; never reuse the socket.
-        res.setHeader('Connection', 'close');
         this.logger.warn(
           `valheim-link blob server=${req.valheimLink?.pelicanServerId ?? '-'} result=${err.getStatus()}`,
         );
