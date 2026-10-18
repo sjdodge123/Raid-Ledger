@@ -54,8 +54,19 @@ describe('AuthSuccessPage — invite code encoding (ROK-1845)', () => {
 
     it.each([false, true])('keeps a hostile invite inside /i/ (onboarded=%s)', async (onboarded) => {
         auth.user = makeUser(onboarded);
+        renderCallback('..?x#y');
+        await waitFor(() => expect(location()).toHaveTextContent('/i/..%3Fx%23y?claim=1'));
+    });
+
+    // nginx would decode %2F and collapse `..`, so a separator is never put in a path.
+    it.each([
+        [false, '/onboarding'],
+        [true, '/calendar'],
+    ])('an invite holding a path separator skips the invite redirect (onboarded=%s)', async (onboarded, target) => {
+        auth.user = makeUser(onboarded);
         renderCallback('../admin/settings');
-        await waitFor(() => expect(location()).toHaveTextContent('/i/..%2Fadmin%2Fsettings?claim=1'));
+        await waitFor(() => expect(location()).toHaveTextContent(target));
+        expect(location()).not.toHaveTextContent('/i/');
     });
 
     it('a bare ".." invite skips the invite redirect', async () => {

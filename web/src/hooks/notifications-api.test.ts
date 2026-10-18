@@ -26,9 +26,14 @@ describe('markNotificationRead (ROK-1845)', () => {
     });
 
     it('keeps a hostile id inside /notifications/<encoded>/read', async () => {
-        await markNotificationRead('../admin/settings/oauth/clear#');
-        expect(calledPath()).toBe('/api/notifications/..%2Fadmin%2Fsettings%2Foauth%2Fclear%23/read');
+        await markNotificationRead('..?x=1#frag');
+        expect(calledPath()).toBe('/api/notifications/..%3Fx%3D1%23frag/read');
         expect(mockFetch.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+    });
+
+    it('rejects an id holding a path separator without sending anything', async () => {
+        await expect(markNotificationRead('../admin/settings/oauth/clear#')).rejects.toThrow(/path segment/i);
+        expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('rejects a bare ".." id without sending anything', async () => {

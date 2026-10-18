@@ -14,8 +14,22 @@ describe('encodePathSegment (ROK-1845)', () => {
     });
 
     it('keeps a hostile value inside its own segment', () => {
-        const segment = encodePathSegment('../admin/settings/oauth/clear#');
-        expect(resolved(segment)).toBe('/api/things/..%2Fadmin%2Fsettings%2Foauth%2Fclear%23/read');
+        const segment = encodePathSegment('..?x=1#frag');
+        expect(resolved(segment)).toBe('/api/things/..%3Fx%3D1%23frag/read');
+    });
+
+    // nginx decodes %2F and collapses `..` before proxying, so a separator is
+    // refused rather than encoded.
+    it.each(['../admin/settings', '..\\..\\admin', 'a/b', 'a\\b', '/'])(
+        'rejects a value holding a path separator %j',
+        (value) => {
+            expect(() => encodePathSegment(value)).toThrow(/path segment/i);
+            expect(tryEncodePathSegment(value)).toBeNull();
+        },
+    );
+
+    it('double-encodes a literal %2F, so nginx decodes it back to text, not a slash', () => {
+        expect(encodePathSegment('..%2Fadmin')).toBe('..%252Fadmin');
     });
 
     it.each(['', '.', '..'])('rejects the dot/empty segment %j', (value) => {

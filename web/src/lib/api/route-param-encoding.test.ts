@@ -11,8 +11,10 @@ import { resolveInviteCode, claimInviteCode } from './discord-api';
 import { getCharacterDetail } from './characters-api';
 
 const mockFetchApi = vi.mocked(fetchApi);
-const HOSTILE = '../admin/settings/oauth/clear#';
-const ENCODED = '..%2Fadmin%2Fsettings%2Foauth%2Fclear%23';
+const HOSTILE = '..?claim=1#x';
+const ENCODED = '..%3Fclaim%3D1%23x';
+/** nginx decodes %2F and collapses `..` before proxying, so these send nothing. */
+const TRAVERSAL = '../../admin/settings';
 
 /** The path the request resolves to once the browser normalises it. */
 function resolvedPath(): string {
@@ -45,6 +47,13 @@ describe('route-param path encoding (ROK-1845)', () => {
     it('a bare ".." code sends no request at all', async () => {
         await expect(claimInviteCode('..')).rejects.toThrow(/path segment/i);
         await expect(getCharacterDetail('..')).rejects.toThrow(/path segment/i);
+        expect(mockFetchApi).not.toHaveBeenCalled();
+    });
+
+    it.each([TRAVERSAL, '..\\..\\admin'])('a code holding a path separator sends no request (%j)', async (value) => {
+        await expect(resolveInviteCode(value)).rejects.toThrow(/path segment/i);
+        await expect(claimInviteCode(value)).rejects.toThrow(/path segment/i);
+        await expect(getCharacterDetail(value)).rejects.toThrow(/path segment/i);
         expect(mockFetchApi).not.toHaveBeenCalled();
     });
 
