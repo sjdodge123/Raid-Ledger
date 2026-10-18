@@ -78,7 +78,7 @@ function noteHit(st, wanted, rawName, name) {
 
 function onHeader(st, wanted, h) {
   if (h.every((b) => b === 0)) return void (st.done = true);
-  const type = String.fromCharCode(h[156] ?? 0);
+  let type = String.fromCharCode(h[156] ?? 0);
   if (!REGULAR.has(type) && !META.has(type) && !OTHER.has(type)) return void (st.error = `tar entry type ${JSON.stringify(type)} is not inspected`);
   const ustar = h.toString('latin1', 257, 263) === 'ustar\0';
   if (ustar && h.toString('latin1', 508, 512) === 'tar\0') return void (st.error = 'star-format tar headers are not inspected');
@@ -90,6 +90,9 @@ function onHeader(st, wanted, h) {
   // Go order: mergePAX sets Name, then a non-empty GNU long name overrides it.
   const rawName = meta ? raw : st.next.gnu ?? st.next.pax ?? raw;
   const name = normName(rawName);
+  // c5: Go's Next() turns TypeRegA ('\0') with a trailing-`/` final name into
+  // TypeDir — a body-less entry whatever its size field says.
+  if (type === '\0' && rawName.endsWith('/')) type = '5';
   if (!meta) {
     st.next = {};
     noteHit(st, wanted, rawName, name);
