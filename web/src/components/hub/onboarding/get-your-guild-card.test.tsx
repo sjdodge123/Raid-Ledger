@@ -3,15 +3,20 @@
  * viewer with no hub, gone once dismissed, and never shown to a viewer who
  * already has one (the WoW slot renders their guild cards instead).
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { HubOnboardingStateDto, MyGuilds } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
+import { toast } from '../../../lib/toast';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { GetYourGuildCard } from './get-your-guild-card';
 import { PlayersGuildCard } from '../../../plugins/wow/slots/players-guild-card';
+
+vi.mock('../../../lib/toast', () => ({
+    toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -27,6 +32,20 @@ function serveOnboarding(state: HubOnboardingStateDto = EMPTY): void {
 }
 
 describe('GetYourGuildCard', () => {
+    beforeEach(() => { vi.mocked(toast.success).mockClear(); });
+
+    // ROK-1840 r2 gap 2: the prototype's pitch is the LedgerLink export, not a
+    // generic "a guild page gives your roster one place…" line.
+    it('pitches the LedgerLink export in the prototype\'s words', async () => {
+        serveOnboarding();
+        renderWithProviders(<GetYourGuildCard />);
+        const card = await screen.findByTestId('get-your-guild-card');
+        expect(card).toHaveTextContent(
+            'Playing WoW with a guild? Export it from the game with the LedgerLink addon and import it here. '
+            + 'Your guildmates get a shared page for raids, attendance and the leader post.',
+        );
+    });
+
     // ROK-1840: the S0 prototype folds the how-to behind a primary toggle
     // rather than showing it inline.
     it('shows the pitch, and the module how-to only once the steps are expanded', async () => {
@@ -77,6 +96,8 @@ describe('GetYourGuildCard', () => {
         renderWithProviders(<GetYourGuildCard />);
         await userEvent.click(await screen.findByTestId('get-your-guild-dismiss'));
         await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
+        // ROK-1840 r2 gap 5: the prototype flashes a toast on dismissal, once.
+        expect(vi.mocked(toast.success).mock.calls).toEqual([["Got it. We won't show this again."]]);
     });
 
     // Prototype parity: the × and "Not now" fire the SAME server-side
@@ -94,6 +115,7 @@ describe('GetYourGuildCard', () => {
         await userEvent.click(await screen.findByTestId('get-your-guild-close'));
         await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
         expect(posted).toBe(1);
+        expect(vi.mocked(toast.success).mock.calls).toEqual([["Got it. We won't show this again."]]);
     });
 
     it('a stored dismissal means it never appears', async () => {
@@ -122,5 +144,17 @@ describe('PlayersGuildCard', () => {
         server.use(http.get(MINE, () => HttpResponse.json({ guilds: [] } satisfies MyGuilds)));
         renderWithProviders(<PlayersGuildCard />);
         await screen.findByTestId('get-your-guild-card');
+    });
+
+    // ROK-1840 r2 gap 3: step 3 names where the paste goes, as the prototype
+    // words it — "Paste it here" left the destination out.
+    it('the WoW how-to sends the export to Guilds → Import guild', async () => {
+        serveOnboarding();
+        server.use(http.get(MINE, () => HttpResponse.json({ guilds: [] } satisfies MyGuilds)));
+        renderWithProviders(<PlayersGuildCard />);
+        await userEvent.click(await screen.findByTestId('get-your-guild-how-toggle'));
+        expect(screen.getByTestId('players-guild-how-steps')).toHaveTextContent(
+            'Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.',
+        );
     });
 });

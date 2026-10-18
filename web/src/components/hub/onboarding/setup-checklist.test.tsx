@@ -65,6 +65,15 @@ describe('HubSetupChecklist', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const blocked = await screen.findByTestId('setup-step-blocked-publish');
         expect(blocked).toHaveTextContent('hidden-by-default hub is coming');
+        // ROK-1840 r2 FAIL: the reason used to sit in the row's action cell,
+        // which is `shrink-0` — a sentence-length reason kept its max-content
+        // width and ran off the card at 375px. It now wraps under the label,
+        // inside the same block the description lives in, as `text-xs text-dim`.
+        const desc = await screen.findByTestId('setup-step-desc-publish');
+        expect(desc.parentElement, 'the reason shares the label block, not the action cell')
+            .toBe(blocked.parentElement);
+        expect(blocked.className.split(/\s+/)).toEqual(expect.arrayContaining(['block', 'text-xs', 'text-dim']));
+        expect(blocked.closest('.shrink-0'), 'nothing above it may refuse to shrink').toBeNull();
     });
 
     it('a viewer who cannot edit never sees it', async () => {

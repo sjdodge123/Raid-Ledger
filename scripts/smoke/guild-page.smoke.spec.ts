@@ -261,6 +261,20 @@ test('editor: the Overview setup checklist scores the seeded hub and stays dismi
         await expect(list.getByTestId('setup-step-action-rules')).toHaveAttribute('href', '#resources');
         await expect(list.getByTestId('setup-step-blocked-discord'), 'an Officer is told to ask the Leader (ruling 1)').toBeVisible();
         await expect(page.getByTestId('setup-step-blocked-publish'), 'hiding a hub lands in ROK-1831').toBeVisible();
+        // ROK-1840 r2 FAIL: a sentence-length blocked reason used to sit in the
+        // row's `shrink-0` action cell, so it kept its max-content width (469px
+        // measured against a 375px viewport) and ran off the card. It now wraps
+        // under the label — nothing may exceed the viewport on a phone.
+        const vw = page.viewportSize()?.width ?? 0;
+        if (vw > 0 && vw <= 480) {
+            const widths = await page.evaluate(() => ({
+                scroll: document.documentElement.scrollWidth, inner: window.innerWidth,
+            }));
+            expect(widths.scroll, `the checklist must not widen the document at ${vw}px`).toBeLessThanOrEqual(widths.inner);
+            const box = await page.getByTestId('setup-step-blocked-publish').boundingBox();
+            if (box === null) throw new Error('the blocked reason must render a box to measure');
+            expect(box.x + box.width, `the blocked reason must wrap inside the ${vw}px viewport`).toBeLessThanOrEqual(vw);
+        }
 
         await page.getByTestId('setup-checklist-dismiss').click();
         await expect(page.getByTestId('setup-checklist')).toHaveCount(0);
