@@ -316,8 +316,7 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
         (e.description ?? "").includes(voteHref);
       const msg = await pollForEmbed(
         channelId,
-        (m: SimpleMessage) =>
-          !ghostIds.has(m.id) && m.embeds.some(isThisPoll),
+        (m: SimpleMessage) => !ghostIds.has(m.id) && m.embeds.some(isThisPoll),
         ctx.config.timeoutMs,
       );
       const embed = msg.embeds.find(isThisPoll);
