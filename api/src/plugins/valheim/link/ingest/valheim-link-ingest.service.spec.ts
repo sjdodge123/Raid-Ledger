@@ -17,7 +17,7 @@ const req: ValheimLinkRequest = {
 const code = (c: string) => expect.objectContaining({ code: c });
 const buf = (o: unknown): Buffer => Buffer.from(JSON.stringify(o));
 
-function setup(written: boolean | 'revoked' = true) {
+function setup(written: boolean | 'revoked' | 'quota_exceeded' = true) {
   const result = written === true ? 'written' : written || 'stale';
   const repo = {
     upsertLatest: jest.fn().mockResolvedValue(result),
@@ -138,6 +138,19 @@ describe('ValheimLinkIngestService (ROK-1833)', () => {
 });
 
 describe('ValheimLinkIngestService — commit revalidation (ROK-1833)', () => {
+  it('413 quota_exceeded when a new key would pass the server snapshot caps', async () => {
+    const { service } = setup('quota_exceeded');
+    const r = await rejection(
+      service.ingest(
+        req,
+        'character',
+        buf(loadValheimFixture('character-vanilla')),
+        NOW,
+      ),
+    );
+    expect(r).toEqual({ status: 413, body: code('quota_exceeded') });
+  });
+
   it('401 invalid_token when the token was rotated/revoked after the guard', async () => {
     const { repo, service } = setup('revoked');
     const msg = loadValheimFixture('character-vanilla');

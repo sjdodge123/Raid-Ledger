@@ -9,6 +9,7 @@ import {
   type ValheimLinkTokenRef,
   type ValheimLinkTx,
 } from '../valheim-link-token-lock';
+import { admitSnapshotIn } from './valheim-link-snapshot.quota';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const { valheimLinkSnapshots: snapshots, valheimLinkBlobs: blobs } = schema;
@@ -21,8 +22,15 @@ export interface ValheimStoredBlob {
   height: number;
 }
 
-/** `written` / `stale` (older or equal capturedAt) / `revoked` (token died). */
-export type ValheimSnapshotWrite = 'written' | 'stale' | 'revoked';
+/**
+ * `written` / `stale` (older or equal capturedAt) / `revoked` (token died) /
+ * `quota_exceeded` (a new key past the server's snapshot caps).
+ */
+export type ValheimSnapshotWrite =
+  | 'written'
+  | 'stale'
+  | 'revoked'
+  | 'quota_exceeded';
 
 /** `valheim_link_snapshots` latest-wins writes + blob lookups for ingest. */
 @Injectable()
@@ -33,6 +41,7 @@ export class ValheimLinkSnapshotsRepository {
    * Latest wins on `valheim_link_snapshots_key_uq`, in one transaction that
    * first holds the authenticating token (`FOR SHARE`, CONTRACT auth): a
    * rotate/revoke that landed after the guard turns the write into `revoked`.
+   * Then the server's snapshot advisory lock + cap check (`admitSnapshotIn`).
    */
   async upsertLatest(
     row: schema.NewValheimLinkSnapshot,
@@ -40,6 +49,7 @@ export class ValheimLinkSnapshotsRepository {
   ): Promise<ValheimSnapshotWrite> {
     return this.db.transaction(async (tx) => {
       if (!(await holdActiveToken(tx, token))) return 'revoked';
+      if (!(await admitSnapshotIn(tx, row))) return 'quota_exceeded';
       return (await upsertIn(tx, row)) ? 'written' : 'stale';
     });
   }

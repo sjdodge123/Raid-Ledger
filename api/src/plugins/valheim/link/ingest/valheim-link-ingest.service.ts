@@ -19,6 +19,7 @@ import {
   assertNotFromFuture,
   parseValheimLinkMessage,
 } from './valheim-link-message.parse';
+import { quotaExceeded } from '../blobs/valheim-link-blob.quota';
 import { valheimSnapshotRow } from './valheim-link-snapshot.helpers';
 import {
   ValheimLinkSnapshotsRepository,
@@ -60,6 +61,9 @@ export class ValheimLinkIngestService {
       throw new UnauthorizedException(
         ingestError('invalid_token', 'Invalid token'),
       );
+    }
+    if (written === 'quota_exceeded') {
+      throw quotaExceeded('Snapshot storage quota for this server is full');
     }
     const status = written === 'written' ? 'accepted' : 'stale';
     this.logger.log(

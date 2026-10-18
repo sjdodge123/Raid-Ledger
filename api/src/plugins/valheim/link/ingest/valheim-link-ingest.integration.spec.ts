@@ -301,3 +301,28 @@ describe('Valheim Link ingest — token revalidated at commit (ROK-1833)', () =>
     },
   );
 });
+
+describe('Valheim Link snapshot quota (ROK-1833)', () => {
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_MAX_SNAPSHOTS_PER_SERVER;
+  });
+
+  it('a NEW key past the cap is 413 quota_exceeded; an update of a stored key still lands', async () => {
+    process.env.VALHEIM_LINK_MAX_SNAPSHOTS_PER_SERVER = '1';
+    const id = await valheimServer(1);
+    const token = await issueToken(id);
+    const first = message('character-vanilla', id, recent(10));
+    expect((await post('character', token, json(first))).status).toBe(202);
+    const other = message('map-shared-layer', id, recent(9));
+    const over = await post(String(other['kind']), token, json(other));
+    expect(over.status).toBe(413);
+    expect(over.body).toMatchObject({ code: 'quota_exceeded' });
+    const newer = message('character-vanilla', id, recent(1));
+    const upd = await post('character', token, json(newer));
+    expect(upd.status).toBe(202);
+    expect(ValheimLinkIngestResultSchema.parse(upd.body).status).toBe(
+      'accepted',
+    );
+    expect(await snapshots(id)).toHaveLength(1);
+  });
+});
