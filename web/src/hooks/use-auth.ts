@@ -78,6 +78,10 @@ export function getCachedUser(): User | null {
 function clearAllAuthStorage(): void {
     clearAccessToken();
     localStorage.removeItem(USER_CACHE_KEY);
+    // ROK-1839: the session is over (logout, a rejected refresh, an
+    // impersonation exit that could not re-mint) — an unredeemed join token
+    // must not outlive it and be replayed by whoever holds the tab next.
+    clearCapturedQueryToken();
 }
 
 /**
@@ -150,6 +154,8 @@ export async function fetchCurrentUser(context?: { client: QueryClient }): Promi
     // ROK-1753: a deactivated account is terminal — don't spend a refresh on it.
     if (await isDeactivatedResponse(response)) {
         endDeactivatedSession();
+        // ROK-1839: terminal session — drop any captured join token with it.
+        clearCapturedQueryToken();
         return null;
     }
 
@@ -198,6 +204,9 @@ function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
  * in-memory token and re-mints from the shared cookie as the new identity.
  */
 function signalIdentityChange(): void {
+    // ROK-1839: the viewer changed (impersonation start/stop), so a join token
+    // captured for the previous identity must not be redeemed as the new one.
+    clearCapturedQueryToken();
     bumpIdentityEpoch();
 }
 
@@ -310,8 +319,6 @@ export function useViewerCacheScope(): number | 'anon' {
 function performLogout(queryClient: ReturnType<typeof useQueryClient>): void {
     void serverLogout();
     clearAllAuthStorage();
-    // ROK-1839: an unredeemed join token must not outlive the session either.
-    clearCapturedQueryToken();
     clearSilentGuard();
     clearAuthMethod();
     dropViewerPrivateCaches(queryClient);

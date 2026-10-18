@@ -7,53 +7,110 @@
  * `./query-token` alone (a test pins it): anything that pulled in Sentry would
  * defeat this.
  *
- * Reload behaviour (operator default, ROK-1839): the token is mirrored into
+ * The capture is BOUND TO ITS PAGE — `{ token, eventId, intent }` read from
+ * the same URL. /join only falls back to a capture taken for the event and
+ * intent it is showing; one left over from an abandoned link is ignored and
+ * cleared rather than redeemed against the wrong page.
+ *
+ * Reload behaviour (operator default, ROK-1839): the record is mirrored into
  * `sessionStorage` under `rl.join_token` for the CURRENT TAB, so a reload of
- * the now-token-less URL still finds it. It is cleared the moment it has been
- * used (a successful redeem, or the hand-off into the Discord OAuth hop) and
- * on logout, and it dies with the tab by nature. It is never written to
+ * the now-token-less URL still finds it. It is cleared the moment the token
+ * has been spent — a redeem that SUCCEEDED, was REJECTED or threw — at the
+ * hand-off into the Discord OAuth hop, when the join page rules the link
+ * invalid, when a capture does not belong to the page reading it, and on every
+ * session end (logout, a rejected refresh, deactivation, an identity change in
+ * this tab or another). It dies with the tab by nature, and is never written to
  * localStorage, so it cannot outlive the session or reach another tab.
  */
 import { readQueryToken, stripQueryToken } from './query-token';
 
-/** sessionStorage key — tab-scoped, cleared on use and on logout. */
+/** sessionStorage key — tab-scoped, cleared on use and on every session end. */
 export const QUERY_TOKEN_STORAGE_KEY = 'rl.join_token';
 
-/** sessionStorage throws in some privacy modes; a missing token is survivable. */
-function readStored(): string | null {
+/** A captured join token together with the page context it was taken from. */
+export interface CapturedQueryToken {
+    token: string;
+    eventId: string | null;
+    intent: string | null;
+    capturedAt: number;
+}
+
+/** Tolerant reader: anything that is not a usable record reads as "none". */
+function parseStored(raw: string | null): CapturedQueryToken | null {
+    if (raw === null) return null;
     try {
-        return window.sessionStorage.getItem(QUERY_TOKEN_STORAGE_KEY);
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed !== 'object' || parsed === null) return null;
+        const { token, eventId, intent, capturedAt } = parsed as Record<string, unknown>;
+        if (typeof token !== 'string' || token === '') return null;
+        return {
+            token,
+            eventId: typeof eventId === 'string' ? eventId : null,
+            intent: typeof intent === 'string' ? intent : null,
+            capturedAt: typeof capturedAt === 'number' ? capturedAt : 0,
+        };
     } catch {
         return null;
     }
 }
 
-function writeStored(token: string): void {
+/** sessionStorage throws in some privacy modes; a missing token is survivable. */
+function readStored(): CapturedQueryToken | null {
     try {
-        window.sessionStorage.setItem(QUERY_TOKEN_STORAGE_KEY, token);
+        return parseStored(window.sessionStorage.getItem(QUERY_TOKEN_STORAGE_KEY));
+    } catch {
+        return null;
+    }
+}
+
+function writeStored(entry: CapturedQueryToken): void {
+    try {
+        window.sessionStorage.setItem(QUERY_TOKEN_STORAGE_KEY, JSON.stringify(entry));
     } catch {
         /* the in-memory copy still serves this page load */
     }
 }
 
-function captureFromUrl(): string | null {
+/** The `intent`/`eventId` a token arrived alongside — the capture's binding. */
+function contextOf(search: string): Pick<CapturedQueryToken, 'eventId' | 'intent'> {
+    const params = new URLSearchParams(search);
+    return { eventId: params.get('eventId'), intent: params.get('intent') };
+}
+
+function captureFromUrl(): CapturedQueryToken | null {
     const token = readQueryToken(window.location);
     // No token in the URL: this may be the reload AFTER a strip, so fall back
     // to whatever this tab captured earlier.
     if (token === null) return readStored();
-    window.history.replaceState(null, '', stripQueryToken(window.location));
-    writeStored(token);
-    return token;
+    const entry: CapturedQueryToken = {
+        token, ...contextOf(window.location.search), capturedAt: Date.now(),
+    };
+    // Keep `history.state`: react-router keys its history entry off it, and
+    // replacing it with null strips the router's own state from this entry.
+    window.history.replaceState(window.history.state, '', stripQueryToken(window.location));
+    writeStored(entry);
+    return entry;
 }
 
-let captured: string | null = captureFromUrl();
+let captured: CapturedQueryToken | null = captureFromUrl();
 
-/** The token this tab captured, if it has not been used yet. */
-export function peekCapturedQueryToken(): string | null {
+/** The token this tab captured, with its page context, if not yet spent. */
+export function peekCapturedQueryToken(): CapturedQueryToken | null {
     return captured;
 }
 
-/** Drop the token once it has been redeemed or handed off, and on logout. */
+/**
+ * Hand a token to the capture WITHOUT routing it through the address bar.
+ * The post-OAuth hop (auth-success-page) uses this instead of rebuilding
+ * `/join?...&token=`: that navigation is client-side, so the module-load strip
+ * never re-runs and Sentry + Session Replay are already recording.
+ */
+export function setCapturedQueryToken(entry: Omit<CapturedQueryToken, 'capturedAt'>): void {
+    captured = { ...entry, capturedAt: Date.now() };
+    writeStored(captured);
+}
+
+/** Drop the token once it is spent, abandoned, or the session has ended. */
 export function clearCapturedQueryToken(): void {
     captured = null;
     try {

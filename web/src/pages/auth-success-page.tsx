@@ -9,6 +9,7 @@ import { clearAccessToken } from '../lib/api/access-token-store';
 import { TokenResponseSchema } from '@raid-ledger/contract';
 import { consumePendingPollShare } from '../lib/poll-share-redirect';
 import { joinIntentPath, type StoredJoinIntent } from './join-intent-path';
+import { setCapturedQueryToken } from '../lib/query-token-capture';
 import { nativeFetch } from '../lib/api/native-fetch';
 
 /**
@@ -129,7 +130,15 @@ function resolveExistingUserRedirect(searchParams: URLSearchParams, navigate: Re
     if (storedIntent) {
         sessionStorage.removeItem('join_intent');
         try {
-            navigate(joinIntentPath(JSON.parse(storedIntent) as StoredJoinIntent), { replace: true });
+            const parsed = JSON.parse(storedIntent) as StoredJoinIntent;
+            // ROK-1839: hand the token over out-of-band. This is a CLIENT-SIDE
+            // navigation — the module-load strip cannot run for it and Sentry +
+            // Session Replay are already recording — so `joinIntentPath` builds
+            // a token-free URL and /join reads the token from the capture.
+            if (parsed.token) {
+                setCapturedQueryToken({ token: parsed.token, eventId: parsed.eventId, intent: parsed.intent });
+            }
+            navigate(joinIntentPath(parsed), { replace: true });
             return true;
         } catch { /* fall through */ }
     }
