@@ -3,6 +3,18 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-18 (additive)
+
+- **Additive.** A `file` item icon may carry an optional `blob` — a binary
+  ref (`sha256`, `byteLength`, `contentType`, `width`, `height`; the same
+  `ValheimBinaryRefSchema` as `baseMap` and `atlas`) — so its PNG uploads
+  through the content-addressed blob route (CONTRACT.md §1). The upload is
+  capped by `VALHEIM_LINK_BINARY_MAX_BYTES` (16 MiB, §7). Without `blob` the
+  message stays valid and the server leaves that icon unresolved (ROK-1833,
+  spec Q14). `schema.json` regenerated; `items-file-icons` now has one icon
+  with `blob` and one without; invalid fixture
+  `items-file-icon-blob-bad-sha` (29 in all).
+
 ## v1 — 2026-10-17 (initial)
 
 - **Breaking (new contract).** First formal, versioned contract between Raid

@@ -18,6 +18,7 @@ import {
 } from '@raid-ledger/contract';
 import type {
   PelicanPresencePluginRef,
+  PelicanServerUpdate,
   PelicanServerListResponse,
   PelicanServerRowDto,
 } from '@raid-ledger/contract';
@@ -31,6 +32,7 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import {
   PELICAN_PLUGIN_ID,
   PELICAN_PRESENCE_CONFIG_CHANGED,
+  PELICAN_SERVER_GAME_CHANGED,
 } from './pelican.constants';
 import {
   PelicanServersAdminRepository,
@@ -88,10 +90,27 @@ export class PelicanServersAdminController {
         "Quick Play detection isn't supported for this server's game",
       );
     }
+    await this.notifyMappingChanged(id, patch);
+    return PelicanServerRowSchema.parse(this.toDto(result.row, new Date()));
+  }
+
+  /**
+   * Nudge the presence supervisor (ROK-1800) and, on a game change, let game
+   * plugins react before the PATCH answers (ROK-1833: Valheim revokes its
+   * ingest token when the row leaves Valheim).
+   */
+  private async notifyMappingChanged(
+    id: number,
+    patch: PelicanServerUpdate,
+  ): Promise<void> {
     if (patch.presenceTracking !== undefined || patch.gameId !== undefined) {
       this.events.emit(PELICAN_PRESENCE_CONFIG_CHANGED, { serverId: id });
     }
-    return PelicanServerRowSchema.parse(this.toDto(result.row, new Date()));
+    if (patch.gameId !== undefined) {
+      await this.events.emitAsync(PELICAN_SERVER_GAME_CHANGED, {
+        serverId: id,
+      });
+    }
   }
 
   /**
