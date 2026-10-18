@@ -93,12 +93,17 @@ export interface ServerHubPageInput {
 function withViewer(
   server: Omit<GuildPageServer, 'viewerJoined'>,
   viewerJoined: boolean,
-  members: readonly ServerMemberRecord[],
+  members: readonly ServerMemberRecord[] | null,
 ): GuildPageServer {
+  if (members === null) return { ...server, viewerJoined };
   return { ...server, viewerJoined, recentArrivals: recentArrivals(members) };
 }
 
-/** ROK-1831: the `game_server` hub page — one unranked group, zero role counts. */
+/**
+ * ROK-1831: the `game_server` hub page — one unranked group, zero role counts.
+ * Members-first privacy: a visitor gets the hero, server block, Join and the
+ * member COUNT, but no member rows and no recent arrivals.
+ */
 export function buildServerHubPage(input: ServerHubPageInput): GuildPage {
   const rows = input.members.map((r) =>
     toServerMemberRow(
@@ -109,16 +114,27 @@ export function buildServerHubPage(input: ServerHubPageInput): GuildPage {
   const viewer = input.members.find((r) => r.userId === input.viewerId);
   const viewerJoined =
     viewer !== undefined && viewer.joinedAt !== null && viewer.leftAt === null;
+  const visitor = input.role === 'visitor';
   return {
     guild: { ...input.guild, memberCount: rows.length },
     importedBy: null,
     viewer: viewerAccess(input.role),
     ranks: [
-      { rankIndex: null, rankName: null, members: orderServerMembers(rows) },
+      {
+        rankIndex: null,
+        rankName: null,
+        members: visitor ? [] : orderServerMembers(rows),
+      },
     ],
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
     ...(input.server
-      ? { server: withViewer(input.server, viewerJoined, input.members) }
+      ? {
+          server: withViewer(
+            input.server,
+            viewerJoined,
+            visitor ? null : input.members,
+          ),
+        }
       : {}),
   };
 }
