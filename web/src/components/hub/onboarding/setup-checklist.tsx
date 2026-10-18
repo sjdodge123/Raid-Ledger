@@ -121,7 +121,7 @@ export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | 
         <div className={SPAN}><WidgetCard
             id="setup-checklist"
             title={title}
-            action={<Button variant="ghost" size="sm" onClick={prompt.dismiss} data-testid="setup-checklist-dismiss">Hide checklist</Button>}
+            action={<Button variant="ghost" size="sm" onClick={() => { prompt.dismiss(); }} data-testid="setup-checklist-dismiss">Hide checklist</Button>}
         >
             <ProgressRow label={progress.label} pct={progress.pct} />
             {prompt.failed && <p role="alert" data-testid="setup-checklist-error" className="mb-2 text-sm text-danger">We couldn&apos;t dismiss that just now. Try again in a moment.</p>}

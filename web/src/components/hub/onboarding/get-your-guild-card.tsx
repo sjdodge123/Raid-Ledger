@@ -70,11 +70,12 @@ export function GetYourGuildCard({ how }: { how?: ReactNode }): JSX.Element | nu
     const prompt = useHubOnboarding('players-get-your-guild');
     const [open, setOpen] = useState(false);
     // One handler behind both ways out, so a dismissal toasts exactly once.
-    // The toast is optimistic in step with the hide — a write that fails rolls
-    // the card back and says so in the alert line below.
+    // The toast is gated on the CONFIRMED write, not on the click: the hide is
+    // optimistic, and a rejected dismissal rolls the card back — promising
+    // "we won't show this again" over a card that is about to return is a lie
+    // (Codex P2 r2). A failure says so in the alert line below instead.
     const dismiss = (): void => {
-        prompt.dismiss();
-        toast.success(DISMISS_TOAST);
+        prompt.dismiss({ onSuccess: () => { toast.success(DISMISS_TOAST); } });
     };
     if (!prompt.visible) return null;
     return (

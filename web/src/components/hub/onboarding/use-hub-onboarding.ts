@@ -57,11 +57,21 @@ export function withDismissal(
     return { dismissed: [...current, { key, guildId, dismissedAt: at }] };
 }
 
+export interface HubOnboardingDismissOptions {
+    /**
+     * Fired only once the server has STORED the dismissal. Anything a caller
+     * promises the viewer ("we won't show this again") belongs here: the hide
+     * itself is optimistic and a rejected write rolls it back, so a caller
+     * that announced on `dismiss()` would have lied (Codex P2 r2).
+     */
+    onSuccess?: () => void;
+}
+
 export interface HubOnboardingPrompt {
     /** Signed in, state known, and not dismissed for this scope. */
     visible: boolean;
     /** Optimistic — the prompt goes the moment this is called, and comes back if the write fails. */
-    dismiss: () => void;
+    dismiss: (options?: HubOnboardingDismissOptions) => void;
     /** The last dismiss failed; the prompt is back on screen. */
     failed: boolean;
 }
@@ -118,7 +128,10 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
     });
     // Not memoized: `mutation` is a fresh object every render, so a
     // `useCallback` keyed on it memoized nothing (PR-3 nit).
-    const dismiss = (): void => { mutation.mutate(); };
+    const dismiss = (options?: HubOnboardingDismissOptions): void => {
+        const confirmed = options?.onSuccess;
+        mutation.mutate(undefined, confirmed === undefined ? undefined : { onSuccess: () => { confirmed(); } });
+    };
     const known = isAuthenticated && state.data !== undefined;
     return {
         visible: known && !isPromptDismissed(state.data, key, guildId),

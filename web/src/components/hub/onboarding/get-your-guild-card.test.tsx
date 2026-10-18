@@ -118,6 +118,40 @@ describe('GetYourGuildCard', () => {
         expect(vi.mocked(toast.success).mock.calls).toEqual([["Got it. We won't show this again."]]);
     });
 
+    // ROK-1840 r3 (Codex P2): the hide is optimistic, so the toast must wait
+    // for the stored write — on the old code it fired on the click.
+    it('toasts only once the server has stored the dismissal', async () => {
+        serveOnboarding();
+        let release!: () => void;
+        const stored = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.post(`${URL}/players-get-your-guild/dismiss`, async () => {
+            await stored;
+            return HttpResponse.json({
+                dismissed: [{ key: 'players-get-your-guild', guildId: null, dismissedAt: '2026-10-02T00:00:00.000Z' }],
+            } satisfies HubOnboardingStateDto);
+        }));
+        renderWithProviders(<GetYourGuildCard />);
+        await userEvent.click(await screen.findByTestId('get-your-guild-dismiss'));
+        await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
+        expect(vi.mocked(toast.success).mock.calls).toEqual([]);
+        release();
+        await waitFor(() => {
+            expect(vi.mocked(toast.success).mock.calls).toEqual([["Got it. We won't show this again."]]);
+        });
+    });
+
+    // The other half of the same gate: a rejected dismissal rolls the card
+    // back, so it must promise nothing at all.
+    it('a rejected dismissal brings the card back and never toasts', async () => {
+        serveOnboarding();
+        server.use(http.post(`${URL}/players-get-your-guild/dismiss`, () => new HttpResponse(null, { status: 500 })));
+        renderWithProviders(<GetYourGuildCard />);
+        await userEvent.click(await screen.findByTestId('get-your-guild-dismiss'));
+        await screen.findByTestId('get-your-guild-error');
+        expect(screen.getByTestId('get-your-guild-card')).toBeInTheDocument();
+        expect(vi.mocked(toast.success).mock.calls).toEqual([]);
+    });
+
     it('a stored dismissal means it never appears', async () => {
         serveOnboarding({ dismissed: [{ key: 'players-get-your-guild', guildId: null, dismissedAt: '2026-10-01T00:00:00.000Z' }] });
         renderWithProviders(<GetYourGuildCard />);
