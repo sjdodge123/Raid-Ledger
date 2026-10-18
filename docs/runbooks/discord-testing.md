@@ -90,8 +90,13 @@ the wire format.
 - Unknown event or unknown user → **404**. DEMO_MODE off (env **or** DB flag),
   or a non-admin caller → **403**, like every sibling.
 - Single-use, as in production: the second redeem of the same token is refused.
-- Consumers: `scripts/smoke/public-pages.smoke.spec.ts` (the `/join` flow),
-  `api/src/admin/demo-test-intent-token.integration.spec.ts`.
+- Consumers: `scripts/smoke/public-pages.smoke.spec.ts` (the `/join` flow,
+  redeemed as the smoke invitee fixture user — the event's creator is already
+  on its roster), `api/src/admin/demo-test-intent-token.integration.spec.ts`
+  (8 cases: the four gates, 400/404 rejections, a real redeem creating the
+  signup with a decoded 15-minute TTL, single-use, placeholder mismatch) and
+  `api/src/admin/demo-test-intent-token.helpers.spec.ts` (body parsing, and
+  parity with the bot's "Join & Sign Up" URL).
 
 Full list: `api/src/admin/demo-test-*.controller.ts` (start with `demo-test-core.controller.ts`).
 
