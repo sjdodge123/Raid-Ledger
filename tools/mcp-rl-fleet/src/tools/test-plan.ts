@@ -303,6 +303,21 @@ export interface CreatePlanParams {
   created_by?: string;
 }
 
+// ROK-1847 — plan create/clear are agent-only on the dashboard (401 without
+// X-Agent-Token, 503 when the dashboard has no RL_AGENT_TOKEN).
+const agentHeaders = (): Record<string, string> | undefined => {
+  const token = process.env.RL_AGENT_TOKEN;
+  return token ? { 'X-Agent-Token': token } : undefined;
+};
+
+// ROK-1847 — tester writes need the plan's tester token, which the dashboard
+// returns only at create. The shared link carries it as `k`.
+const testerUrls = (slug: string, planId: string, publicDomain: string, token: unknown) => {
+  if (typeof token !== 'string' || token.length === 0) return {};
+  const q = `?slug=${encodeURIComponent(slug)}&plan=${planId}&k=${encodeURIComponent(token)}`;
+  return { tester_url: `https://fleet.${publicDomain}/${q}`, tester_url_lan: `http://fleet.rl.lan/${q}` };
+};
+
 export async function executeCreate(p: CreatePlanParams) {
   if (!p.steps || p.steps.length === 0) {
     return { ok: false, error: 'steps[] required' };
@@ -357,6 +372,7 @@ export async function executeCreate(p: CreatePlanParams) {
         steps: p.steps,
         created_by: p.created_by ?? `${process.env.USER ?? 'agent'}-mcp`,
       },
+      agentHeaders(),
     );
     if (status === 409 && (body as { error?: string })?.error === 'env_not_found') {
       // Dashboard-side guard caught it (e.g. env got reaped between our
@@ -365,12 +381,14 @@ export async function executeCreate(p: CreatePlanParams) {
     }
     if (status >= 200 && status < 300) {
       const publicDomain = process.env.RL_PUBLIC_DOMAIN ?? 'gamernight.net';
+      const { tester_token: testerToken, ...rest } = (body ?? {}) as { tester_token?: unknown };
       return {
         ok: true,
         plan_id: planId,
-        ...(body as object),
+        ...rest,
         dashboard_url: `https://fleet.${publicDomain}`,
         env_url: `https://${p.slug}test.${publicDomain}`,
+        ...testerUrls(p.slug, planId, publicDomain, testerToken),
       };
     }
     return { ok: false, error: 'http_status_' + status, body };
@@ -657,7 +675,7 @@ export async function executeClear(p: { slug: string; plan_id?: string }) {
     } else {
       url = `/api/test-plans/${slugPath}`;
     }
-    const { status, body } = await curlOnVM('DELETE', url);
+    const { status, body } = await curlOnVM('DELETE', url, undefined, agentHeaders());
     if (status >= 200 && status < 300) {
       // Slug-wide clear: callers (agents + tests) expect `cleared_count`
       // surfaced unconditionally so they can confirm cleanup without

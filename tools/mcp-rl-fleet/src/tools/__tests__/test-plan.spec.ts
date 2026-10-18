@@ -24,6 +24,8 @@ let lastExecFileArgs: { file: string; args: string[] } | null = null;
 // AND the stdin payload so AC7 tests can assert the new contract.
 let lastSpawnArgs: { file: string; args: string[] } | null = null;
 let lastSpawnStdin: string | null = null;
+// ROK-1847 — overridable execFile stdout (executeCreate pre-reads /api/state).
+let cannedExecStdout = '{}\nRL_STATUS:200';
 
 vi.mock('node:child_process', async () => {
   return {
@@ -37,7 +39,7 @@ vi.mock('node:child_process', async () => {
       ) => void,
     ) => {
       lastExecFileArgs = { file, args };
-      cb(null, { stdout: '{}\nRL_STATUS:200', stderr: '' });
+      cb(null, { stdout: cannedExecStdout, stderr: '' });
       return { kill: () => undefined };
     },
     spawn: (file: string, args: string[]) => {
@@ -71,6 +73,7 @@ beforeEach(() => {
   lastExecFileArgs = null;
   lastSpawnArgs = null;
   lastSpawnStdin = null;
+  cannedExecStdout = '{}\nRL_STATUS:200';
 });
 
 afterEach(() => {
@@ -182,5 +185,43 @@ describe('AC7 — RL_AGENT_TOKEN does not appear in docker run argv', () => {
       if (prev === undefined) delete process.env.RL_AGENT_TOKEN;
       else process.env.RL_AGENT_TOKEN = prev;
     }
+  });
+});
+
+describe('ROK-1847 — plan create and clear send X-Agent-Token', () => {
+  const withToken = async (fn: () => Promise<void>) => {
+    const prev = process.env.RL_AGENT_TOKEN;
+    process.env.RL_AGENT_TOKEN = 'create-clear-token-1847';
+    try { await fn(); } finally {
+      if (prev === undefined) delete process.env.RL_AGENT_TOKEN;
+      else process.env.RL_AGENT_TOKEN = prev;
+    }
+  };
+
+  it('executeCreate POSTs the plan with the agent token via stdin', async () => {
+    const { executeCreate } = await import('../test-plan.js');
+    cannedExecStdout = '{"envs":[{"slug":"aaa"}]}\nRL_STATUS:200';
+    await withToken(async () => {
+      const r = await executeCreate({
+        slug: 'aaa', goal: 'check the create header', story_id: 'ROK-1847',
+        steps: [{ description: 'one' }],
+      });
+      expect(r.ok).toBe(true);
+      const remote = lastSpawnArgs?.args[lastSpawnArgs.args.length - 1] ?? '';
+      expect(remote).toContain('-X POST');
+      expect(remote).toContain('X-Agent-Token: $RL_AGENT_TOKEN_VALUE');
+      expect(lastSpawnStdin).toBe('create-clear-token-1847\n');
+    });
+  });
+
+  it('executeClear DELETEs with the agent token via stdin', async () => {
+    const { executeClear } = await import('../test-plan.js');
+    await withToken(async () => {
+      await executeClear({ slug: 'aaa' });
+      const remote = lastSpawnArgs?.args[lastSpawnArgs.args.length - 1] ?? '';
+      expect(remote).toContain('-X DELETE');
+      expect(remote).toContain('X-Agent-Token: $RL_AGENT_TOKEN_VALUE');
+      expect(lastSpawnStdin).toBe('create-clear-token-1847\n');
+    });
   });
 });
