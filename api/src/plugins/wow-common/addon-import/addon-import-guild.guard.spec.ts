@@ -5,6 +5,8 @@
  */
 import {
   MASS_REMOVAL_MIN,
+  ROSTER_HELD_MESSAGE,
+  RosterHeldError,
   isMassRemoval,
   receivedSnapshotAt,
 } from './addon-import-guild.guard';
@@ -34,5 +36,17 @@ describe('isMassRemoval (AC4)', () => {
     ['exactly a quarter', 40, 10, false],
   ])('%s', (_label, live, removed, want) => {
     expect(isMassRemoval(live, removed)).toBe(want);
+  });
+});
+
+describe('RosterHeldError (AC4 + AC7)', () => {
+  it('sends the plain INVALID_PAYLOAD body — no new wire fields', () => {
+    const err = new RosterHeldError(7, 39, 40, false);
+    expect(err.getStatus()).toBe(422);
+    expect(err.getResponse()).toEqual({
+      code: 'INVALID_PAYLOAD',
+      message: ROSTER_HELD_MESSAGE,
+    });
+    expect(err).toMatchObject({ guildId: 7, removed: 39, live: 40 });
   });
 });
