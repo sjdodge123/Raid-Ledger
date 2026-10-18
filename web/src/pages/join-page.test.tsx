@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { JoinPage } from './join-page';
@@ -497,5 +497,60 @@ describe('ROK-1839: an unusable capture is ignored and dropped', () => {
 
         await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true }));
         expect(mockClearCaptured, 'a token that errored out must not be replayable').toHaveBeenCalled();
+    });
+});
+
+/**
+ * ROK-1839 fix round r2 — Codex P2 (the cleanup read a stale snapshot) and
+ * Opus M1 (the strip bypassed react-router). These drive the MOUNT strip, so
+ * the jsdom address bar really carries a token; every other case in this file
+ * leaves it clean and exercises the module-load capture instead.
+ */
+describe('ROK-1839 r2: the mount strip and the cleanup read ONE capture', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        sessionStorage.clear();
+        capture.current = null;
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+        // Never settles: the redeem's own clear must not mask the cleanup's.
+        vi.mocked(apiClient.redeemIntent).mockImplementation(() => new Promise(() => {}));
+        window.history.replaceState(null, '', '/join?intent=signup&eventId=42&token=fresh.url.token');
+    });
+
+    afterEach(() => {
+        window.history.replaceState(null, '', '/');
+    });
+
+    it('keeps the token the strip just captured, despite a stale foreign capture in the tab', async () => {
+        // A leftover capture from an abandoned link for ANOTHER event is what
+        // the render pass sees; the strip replaces it between render and
+        // effects. The cleanup used to judge that stale value and wipe the
+        // legitimate token the strip had just taken.
+        capture.current = captureFor('99', 'abandoned.token');
+
+        renderJoinPage('?intent=signup&eventId=42&token=fresh.url.token');
+
+        await waitFor(() => expect(mockSetCaptured).toHaveBeenCalledWith({
+            token: 'fresh.url.token', eventId: '42', intent: 'signup',
+        }));
+        expect(
+            mockClearCaptured,
+            'the cleanup must not clear the capture the mount strip just took for this very page',
+        ).not.toHaveBeenCalled();
+        expect(
+            capture.current?.token,
+            'the freshly captured token has to survive the mount pass so a reload can still redeem it',
+        ).toBe('fresh.url.token');
+        expect(apiClient.redeemIntent).toHaveBeenCalledWith('fresh.url.token');
+    });
+
+    it('strips the token through the router, preserving the entry state', async () => {
+        renderJoinPage('?intent=signup&eventId=42&token=fresh.url.token');
+
+        await waitFor(() => expect(
+            mockNavigate,
+            "a bare history.replaceState leaves ?token= in react-router's own location, where useSearchParams still reads it",
+        ).toHaveBeenCalledWith('/join?intent=signup&eventId=42', { replace: true, state: null }));
     });
 });

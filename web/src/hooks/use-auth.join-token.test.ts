@@ -99,3 +99,52 @@ describe('ROK-1839: a session end drops the captured join token', () => {
         ).toBeNull();
     });
 });
+
+/** An unsigned JWT carrying `payload` — enough for the claim readers. */
+function jwt(payload: Record<string, unknown>): string {
+    const seg = (value: unknown): string =>
+        btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${seg({ alg: 'HS256', typ: 'JWT' })}.${seg(payload)}.not-a-signature`;
+}
+
+/**
+ * ROK-1839 fix round r2 — Codex P2. `signalIdentityChange()` drops the capture
+ * on the impersonation paths WE drive. Impersonation can also end underneath
+ * us — the cap expires, the target is banned, another tab stops it — and a
+ * plain token simply replaces the impersonating one with nothing of ours
+ * running. The viewer changed, so the capture must go there too.
+ */
+describe('ROK-1839: an impersonation that ends underneath us drops the capture', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        window.sessionStorage.clear();
+        clearAccessToken();
+        clearCapturedQueryToken();
+    });
+
+    it('clears the capture when the impersonating token is replaced by a plain one', () => {
+        setAccessToken(jwt({ sub: 9, impersonatedBy: 1 }));
+        captureHeld();
+
+        // Nobody called exitImpersonation: a refresh just handed back an
+        // ordinary admin token.
+        setAccessToken(jwt({ sub: 1 }));
+
+        expect(
+            peekCapturedQueryToken(),
+            'the viewer changed, so a join token captured as the impersonated user must not be redeemed as the admin',
+        ).toBeNull();
+    });
+
+    it('leaves the capture alone when the token is refreshed for the SAME identity', () => {
+        setAccessToken(jwt({ sub: 1 }));
+        captureHeld();
+
+        setAccessToken(jwt({ sub: 1, jti: 'refreshed' }));
+
+        expect(
+            peekCapturedQueryToken()?.token,
+            'a routine refresh is not an identity change and must not cost the flow its token',
+        ).toBe('rok1839.unredeemed.jwt');
+    });
+});

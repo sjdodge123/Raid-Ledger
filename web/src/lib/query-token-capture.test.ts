@@ -156,3 +156,65 @@ describe('ROK-1839: the strip is evaluated ahead of Sentry.init', () => {
         expect(importsOf('./query-token.ts')).toEqual([]);
     });
 });
+
+/**
+ * ROK-1839 fix round r2 — Opus M2 / Codex P3. `capturedAt` was written and
+ * never read, so a capture stayed redeemable for as long as the tab lived.
+ */
+describe('ROK-1839 r2: a capture expires with the intent token it carries', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        window.sessionStorage.clear();
+        window.history.replaceState(null, '', '/join?intent=signup&eventId=7');
+    });
+
+    function storeAgedCapture(ageMs: number): void {
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+            token: 'aged.token', eventId: '7', intent: 'signup', capturedAt: Date.now() - ageMs,
+        }));
+    }
+
+    it('serves a capture that is still inside the 15-minute TTL', async () => {
+        storeAgedCapture(14 * 60 * 1000);
+        const mod = await import('./query-token-capture');
+
+        expect(mod.CAPTURE_TTL_MS, "the TTL matches the intent token's own server-side lifetime")
+            .toBe(15 * 60 * 1000);
+        expect(mod.peekCapturedQueryToken()?.token, 'a 14-minute-old capture is still redeemable')
+            .toBe('aged.token');
+    });
+
+    it('ignores AND clears a capture past the TTL', async () => {
+        storeAgedCapture(15 * 60 * 1000 + 1);
+        const mod = await import('./query-token-capture');
+
+        expect(
+            mod.peekCapturedQueryToken(),
+            'a capture older than the 15-minute TTL must not be redeemable',
+        ).toBeNull();
+        expect(
+            window.sessionStorage.getItem(STORAGE_KEY),
+            'and the stale secret leaves storage on the read that notices it',
+        ).toBeNull();
+    });
+
+    it('treats a record with no timestamp as already expired', async () => {
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+            token: 'legacy.token', eventId: '7', intent: 'signup',
+        }));
+        const mod = await import('./query-token-capture');
+
+        expect(
+            mod.peekCapturedQueryToken(),
+            'a forged or legacy record carrying no `capturedAt` is dropped, not trusted',
+        ).toBeNull();
+    });
+
+    it('does not expire a token the OAuth hop just handed over', async () => {
+        const mod = await import('./query-token-capture');
+        mod.setCapturedQueryToken({ token: 'handed.over', eventId: '7', intent: 'signup' });
+
+        expect(mod.peekCapturedQueryToken()?.token, 'a fresh handover is stamped with now')
+            .toBe('handed.over');
+    });
+});

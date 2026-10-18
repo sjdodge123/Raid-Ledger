@@ -12,12 +12,26 @@ import { test, expect } from './base';
 import { apiGet, getAdminToken } from './api-helpers';
 
 
+/**
+ * `GET /events` answers a paginated `{ data, meta }` envelope, not a bare
+ * array — r1 read it as an array, so `seededEventId()` always returned null
+ * and the capture case below skipped on every project (Codex r2 P2). Both
+ * shapes are accepted so the helper cannot silently disarm the test again.
+ */
+function eventList(body: unknown): unknown[] {
+    if (Array.isArray(body)) return body;
+    if (typeof body === 'object' && body !== null && 'data' in body) {
+        const data: unknown = (body as { data: unknown }).data;
+        if (Array.isArray(data)) return data;
+    }
+    return [];
+}
+
 /** The id of a seeded upcoming event — the join landing needs a real one. */
 async function seededEventId(): Promise<number | null> {
     const token = await getAdminToken();
     const body: unknown = await apiGet(token, '/events?upcoming=true&limit=1');
-    const list = Array.isArray(body) ? body : [];
-    const first: unknown = list[0];
+    const first: unknown = eventList(body)[0];
     if (typeof first !== 'object' || first === null || !('id' in first)) return null;
     const id = (first as { id: unknown }).id;
     return typeof id === 'number' ? id : null;
@@ -70,9 +84,27 @@ test.describe('Join page (/join)', () => {
         test.skip(eventId === null, 'no upcoming event in the seed');
         const token = 'rok1839-smoke-capture-not-a-real-token';
 
+        // The load-bearing half: the strip must not cost the flow its token.
+        // Reading the landing URL alone cannot tell a redeem that carried the
+        // captured token from one that sent nothing (Codex r2 P2), so the
+        // POST body is inspected directly.
+        const redeemBodies: string[] = [];
+        await page.route('**/auth/redeem-intent', async (route) => {
+            redeemBodies.push(route.request().postData() ?? '');
+            await route.continue();
+        });
+
         await page.goto(`/join?intent=signup&eventId=${String(eventId)}&token=${token}`);
 
         await page.waitForURL(new RegExp(`/events/${String(eventId)}(\\?|#|$)`), { timeout: 20_000 });
+        expect(
+            redeemBodies.length,
+            'the stripped page must still have redeemed, exactly once, from its capture',
+        ).toBe(1);
+        expect(
+            redeemBodies[0] ?? '',
+            'the redeem POST must carry the token the address-bar strip captured',
+        ).toContain(token);
         const landed = new URL(page.url());
         expect(landed.href, 'the sign-in token must not survive into the landing URL').not.toContain(token);
         expect(landed.href, 'nor any fragment of it').not.toContain('rok1839-smoke');
