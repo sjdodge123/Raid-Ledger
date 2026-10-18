@@ -1,0 +1,10 @@
+{
+  "name": "rl-docker-guard",
+  "private": true,
+  "type": "module",
+  "description": "ROK-1846 validating Docker API proxy for the rl-infra runners",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/"
+  }
+}
