@@ -3,7 +3,7 @@
  * When a Steam game isn't in the DB, looks it up via ITAD and creates a game row.
  */
 import { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadGame } from '../itad/itad.constants';
@@ -26,6 +26,22 @@ export function isFullGame(itadGame: ItadGame): boolean {
 
 /** Type for a games table insert row. */
 type GameInsertRow = typeof schema.games.$inferInsert;
+
+/**
+ * A row discovery matched, with the moderation state the merge must respect
+ * (ROK-1843). Absent flags read as "not moderated".
+ */
+interface MatchedGame {
+  id: number;
+  hidden?: boolean | undefined;
+  banned?: boolean | undefined;
+}
+
+/** What discovery stored: the row id and its hidden flag after the write. */
+interface StoredGame {
+  id: number;
+  hidden: boolean;
+}
 
 /** Dependencies injected into the discovery pipeline. */
 export interface DiscoveryDeps {
@@ -100,47 +116,58 @@ function mergeIgdbEnrichment(
 async function upsertGame(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
-): Promise<{ id: number }[]> {
+): Promise<StoredGame | null> {
   return withGameNameLock(db, row.name ?? '', (tx) =>
     upsertGameLocked(tx, row),
   );
 }
 
-/** Find-then-insert body. MUST run inside the name lock. */
+/**
+ * Find-then-insert body. MUST run inside the name lock. Returns null when the
+ * matched row is banned (ROK-1843): nothing is written and nothing returned.
+ */
 async function upsertGameLocked(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
-): Promise<{ id: number }[]> {
+): Promise<StoredGame | null> {
   const bySlug = await db.query.games.findFirst({
     where: eq(schema.games.slug, row.slug ?? ''),
-    columns: { id: true, steamAppId: true },
+    columns: { id: true, steamAppId: true, hidden: true, banned: true },
   });
 
   if (bySlug) {
     // Slug taken by a different Steam game — skip itadGameId merge and create
     // a new row with a suffixed slug + nulled unique fields.
     if (bySlug.steamAppId && bySlug.steamAppId !== row.steamAppId) {
-      return insertAvoidingUniqueCollisions(db, row);
+      return insertNewGame(db, row);
     }
-    return mergeIntoExisting(db, bySlug.id, row);
+    return mergeIntoExisting(db, bySlug, row);
   }
 
   // Check for itadGameId collision before inserting
   const byItad = row.itadGameId
     ? await findByItadGameId(db, row.itadGameId)
     : null;
-  if (byItad) {
-    return mergeIntoExisting(db, byItad.id, row);
-  }
+  if (byItad) return mergeIntoExisting(db, byItad, row);
 
   // ROK-1113: collapse normalized-name duplicates (e.g., "Slay the Spire 2" vs
   // "Slay the Spire II") into a single row instead of inserting a parallel one.
   const byNormalized = await findByNormalizedName(db, row);
-  if (byNormalized) {
-    return mergeIntoExisting(db, byNormalized.id, row);
-  }
+  if (byNormalized) return mergeIntoExisting(db, byNormalized, row);
 
-  return insertAvoidingUniqueCollisions(db, row);
+  return insertNewGame(db, row);
+}
+
+/** Insert a brand-new row; its hidden flag is the one discovery computed. */
+async function insertNewGame(
+  db: PostgresJsDatabase<typeof schema>,
+  row: GameInsertRow,
+): Promise<StoredGame> {
+  const [inserted] = await insertAvoidingUniqueCollisions(db, row);
+  return {
+    id: defined(inserted, 'inserted game row').id,
+    hidden: row.hidden === true,
+  };
 }
 
 /**
@@ -150,7 +177,7 @@ async function upsertGameLocked(
 async function findByNormalizedName(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
-): Promise<{ id: number } | null> {
+): Promise<MatchedGame | null> {
   if (!row.name) return null;
   const match = await findGameByNormalizedName(db, row.name);
   if (!match) return null;
@@ -161,39 +188,55 @@ async function findByNormalizedName(
   ) {
     return null;
   }
-  return { id: match.id };
+  return { id: match.id, hidden: match.hidden, banned: match.banned };
 }
 
 /** Find a game by its ITAD game ID. */
 async function findByItadGameId(
   db: PostgresJsDatabase<typeof schema>,
   itadGameId: string,
-): Promise<{ id: number } | null> {
+): Promise<MatchedGame | null> {
   const found = await db.query.games.findFirst({
     where: eq(schema.games.itadGameId, itadGameId),
-    columns: { id: true },
+    columns: { id: true, hidden: true, banned: true },
   });
   return found ?? null;
 }
 
-/** Merge discovery data into an existing game row. */
+/**
+ * Merge discovery data into an existing game row.
+ *
+ * ROK-1843 — moderation is admin-only, so a merge never weakens it:
+ * - a banned match is skipped entirely (no write, null result);
+ * - `hidden` only ever moves false → true (stored = existing OR row), and the
+ *   write is a literal `true` so a concurrent admin hide can't be undone;
+ * - a non-null `itadGameId` is kept (COALESCE), never overwritten.
+ */
 async function mergeIntoExisting(
   db: PostgresJsDatabase<typeof schema>,
-  existingId: number,
+  existing: MatchedGame,
   row: GameInsertRow,
-): Promise<{ id: number }[]> {
+): Promise<StoredGame | null> {
+  if (existing.banned === true) {
+    logger.debug(`Skipped merge into banned game ${existing.id}`);
+    return null;
+  }
+  const g = schema.games;
   await db
-    .update(schema.games)
+    .update(g)
     .set({
       steamAppId: row.steamAppId,
       steamAppIdSource: row.steamAppIdSource,
-      itadGameId: row.itadGameId,
+      itadGameId: sql`COALESCE(${g.itadGameId}, ${row.itadGameId ?? null})`,
       coverUrl: row.coverUrl ?? undefined,
-      hidden: row.hidden,
+      ...(row.hidden === true ? { hidden: true } : {}),
     })
-    .where(eq(schema.games.id, existingId));
-  logger.debug(`Merged ITAD data into existing game ${existingId}`);
-  return [{ id: existingId }];
+    .where(eq(g.id, existing.id));
+  logger.debug(`Merged ITAD data into existing game ${existing.id}`);
+  return {
+    id: existing.id,
+    hidden: existing.hidden === true || row.hidden === true,
+  };
 }
 
 /**
@@ -315,8 +358,7 @@ export async function discoverGameViaItad(
   if (!isFullGame(itadGame)) return null; // Skip DLC/expansion items
 
   // Check if game is already banned by slug
-  const banned = await isBannedBySlug(deps.db, itadGame.slug);
-  if (banned) return null;
+  if (await isBannedBySlug(deps.db, itadGame.slug)) return null;
 
   let row = buildItadGameRow(itadGame, steamAppId, steamAppIdSource);
   let source: DiscoveryResult['source'] = 'itad';
@@ -339,9 +381,10 @@ export async function discoverGameViaItad(
     igdbThemes,
   );
 
-  const [result] = await upsertGame(deps.db, { ...row, hidden });
+  const stored = await upsertGame(deps.db, { ...row, hidden });
+  if (!stored) return null; // matched a banned row (ROK-1843)
 
-  return { gameId: defined(result, 'upserted game row').id, source, hidden };
+  return { gameId: stored.id, source, hidden: stored.hidden };
 }
 
 /** Check if a game slug is already banned. */

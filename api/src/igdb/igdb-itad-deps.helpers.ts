@@ -52,6 +52,7 @@ export function buildItadSearchDeps(
     getAdultFilter: params.getAdultFilter,
     findBannedOrHiddenSlugs: (slugs) =>
       findBannedOrHiddenSlugs(params.db, slugs),
+    findBannedOrHiddenIds: (ids) => findBannedOrHiddenIds(params.db, ids),
     upsertGame: (game) => upsertItadGame(params.db, game),
     ...(params.onUnenriched !== undefined
       ? { onUnenriched: params.onUnenriched }
@@ -142,4 +143,22 @@ async function findBannedOrHiddenSlugs(
       ),
     );
   return new Set(rows.map((r) => r.slug));
+}
+
+/** Return the subset of game `ids` that are banned or hidden (ROK-1843). */
+async function findBannedOrHiddenIds(
+  db: PostgresJsDatabase<typeof schema>,
+  ids: number[],
+): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(
+      and(
+        inArray(schema.games.id, ids),
+        or(eq(schema.games.hidden, true), eq(schema.games.banned, true)),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
 }

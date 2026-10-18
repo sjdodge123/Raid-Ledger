@@ -247,10 +247,7 @@ describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () =>
         steamAppId: appId,
         ...moderation,
       });
-      stubSearch(
-        itadGame(`rok1843-zq-${label}`, `Rok1843 Zq ${label}`),
-        appId,
-      );
+      stubSearch(itadGame(`rok1843-zq-${label}`, `Rok1843 Zq ${label}`), appId);
 
       const res = await testApp.request.get(
         `/games/search?q=rok1843 zq ${label}`,

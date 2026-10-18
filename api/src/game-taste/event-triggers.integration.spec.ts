@@ -320,6 +320,7 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
       enrichFromIgdb: jest.fn().mockResolvedValue(null),
       getAdultFilter: jest.fn().mockResolvedValue(false),
       findBannedOrHiddenSlugs: jest.fn().mockResolvedValue(new Set()),
+      findBannedOrHiddenIds: jest.fn().mockResolvedValue(new Set()),
       // Real upsert against the live test DB — this is the production path.
       upsertGame: (game: GameDetailDto) => upsertItadGame(testApp.db, game),
       onGameUpserted: (gameId) => received.push(gameId),

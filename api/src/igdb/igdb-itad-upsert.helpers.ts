@@ -48,6 +48,8 @@ async function upsertItadGameLocked(
     .onConflictDoUpdate({
       target: schema.games.slug,
       set: buildItadUpdateSet(game),
+      // ROK-1843: a banned row is never rewritten by a search hit.
+      setWhere: eq(schema.games.banned, false),
     });
 
   return fetchBySlug(tx, game.slug);
@@ -111,12 +113,17 @@ async function findExistingByName(
   return rows[0] ?? null;
 }
 
-/** Update an existing row (found by alt key) with ITAD data. */
+/**
+ * Update an existing row (found by alt key) with ITAD data. A banned row is
+ * returned as-is with no write (ROK-1843) — the search pipeline's by-id
+ * moderation filter then drops it from the results.
+ */
 async function updateExistingRow(
   db: PostgresJsDatabase<typeof schema>,
   existing: typeof schema.games.$inferSelect,
   game: GameDetailDto,
 ): Promise<GameDetailDto> {
+  if (existing.banned) return mapDbRowToDetail(existing);
   await db
     .update(schema.games)
     .set(buildItadUpdateSet(game))
