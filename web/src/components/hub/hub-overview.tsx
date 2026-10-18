@@ -55,7 +55,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
             key: 'setup-checklist', order: 5, span: 1,
             node: (
                 <Suspense fallback={null}>
-                    <HubSetupChecklist guildId={page.guild.id} canEdit memberCount={page.guild.memberCount}
+                    <HubSetupChecklist guildId={page.guild.id} canEdit guildName={page.guild.name} memberCount={page.guild.memberCount}
                         nextRaid={data === undefined ? undefined : data.nextRaid}
                         modsConfigured={mods.configured} hasModSources={mods.hasSources} />
                 </Suspense>

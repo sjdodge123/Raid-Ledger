@@ -76,12 +76,13 @@ describe('setupSteps', () => {
 describe('setupProgress', () => {
     it('counts only actionable steps, so a finished hub reads 7 of 7 and complete', () => {
         const progress = setupProgress(setupSteps(input({ profile: FULL, discord: BOUND, modsConfigured: true, hasNextRaid: true })));
-        expect(progress).toEqual({ done: 7, total: 7, complete: true, label: '7 of 7' });
+        expect(progress).toEqual({ done: 7, total: 7, pct: 100, complete: true, label: '7 of 7' });
     });
 
     it('a half-set-up hub is not complete', () => {
         const progress = setupProgress(setupSteps(input({ profile: FULL })));
         expect(progress.label).toBe('4 of 7');
+        expect(progress.pct).toBe(57);
         expect(progress.complete).toBe(false);
     });
 
@@ -94,6 +95,6 @@ describe('setupProgress', () => {
         const progress = setupProgress(setupSteps(input({
             profile: FULL, discord: UNSET, modsConfigured: true, hasNextRaid: true, canPickChannel: false,
         })));
-        expect(progress).toEqual({ done: 6, total: 6, complete: true, label: '6 of 6' });
+        expect(progress).toEqual({ done: 6, total: 6, pct: 100, complete: true, label: '6 of 6' });
     });
 });

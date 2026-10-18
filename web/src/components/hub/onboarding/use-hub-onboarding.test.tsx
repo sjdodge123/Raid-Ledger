@@ -31,7 +31,7 @@ function Probe({ guildId = null }: { guildId?: number | null }): JSX.Element {
         <div>
             <span data-testid="visible">{prompt.visible ? 'yes' : 'no'}</span>
             <span data-testid="failed">{prompt.failed ? 'yes' : 'no'}</span>
-            <button type="button" onClick={prompt.dismiss}>Dismiss</button>
+            <button type="button" onClick={() => { prompt.dismiss(); }}>Dismiss</button>
         </div>
     );
 }
@@ -44,8 +44,8 @@ function TwoPrompts(): JSX.Element {
         <div>
             <span data-testid="card-visible">{card.visible ? 'yes' : 'no'}</span>
             <span data-testid="checklist-visible">{checklist.visible ? 'yes' : 'no'}</span>
-            <button type="button" onClick={card.dismiss}>Dismiss card</button>
-            <button type="button" onClick={checklist.dismiss}>Dismiss checklist</button>
+            <button type="button" onClick={() => { card.dismiss(); }}>Dismiss card</button>
+            <button type="button" onClick={() => { checklist.dismiss(); }}>Dismiss checklist</button>
         </div>
     );
 }
@@ -61,8 +61,8 @@ function SamePairTwice(): JSX.Element {
             <span data-testid="a-failed">{a.failed ? 'yes' : 'no'}</span>
             <span data-testid="b-visible">{b.visible ? 'yes' : 'no'}</span>
             <span data-testid="witness-visible">{witness.visible ? 'yes' : 'no'}</span>
-            <button type="button" onClick={a.dismiss}>Dismiss A</button>
-            <button type="button" onClick={b.dismiss}>Dismiss B</button>
+            <button type="button" onClick={() => { a.dismiss(); }}>Dismiss A</button>
+            <button type="button" onClick={() => { b.dismiss(); }}>Dismiss B</button>
         </div>
     );
 }
@@ -81,8 +81,8 @@ function SiblingPrompts(): JSX.Element {
             <span data-testid="card-visible">{card.visible ? 'yes' : 'no'}</span>
             <span data-testid="checklist-visible">{checklist.visible ? 'yes' : 'no'}</span>
             <span data-testid="witness-visible">{witness.visible ? 'yes' : 'no'}</span>
-            <button type="button" onClick={card.dismiss}>Dismiss card</button>
-            <button type="button" onClick={checklist.dismiss}>Dismiss checklist</button>
+            <button type="button" onClick={() => { card.dismiss(); }}>Dismiss card</button>
+            <button type="button" onClick={() => { checklist.dismiss(); }}>Dismiss checklist</button>
         </div>
     );
 }

@@ -35,7 +35,17 @@ function GuildCard({ guild }: { guild: MyGuild }): JSX.Element {
     );
 }
 
-const WOW_HOW = 'Install the LedgerLink addon and run an export — your guild page appears as soon as the first roster snapshot lands.';
+/**
+ * ROK-1840: the S0 prototype expands the how-to into numbered steps behind the
+ * card's "How to import" toggle, rather than showing one always-on line.
+ */
+const WOW_HOW = (
+    <ol className="ml-4 list-decimal space-y-1" data-testid="players-guild-how-steps">
+        <li>Install LedgerLink from CurseForge or GitHub.</li>
+        <li>In game, open LedgerLink and copy your guild export.</li>
+        <li>Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.</li>
+    </ol>
+);
 
 export function PlayersGuildCard(): JSX.Element | null {
     // Nothing until `/guilds/mine` has actually answered: an empty list is

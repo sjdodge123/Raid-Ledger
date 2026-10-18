@@ -245,6 +245,14 @@ test('editor: the Overview setup checklist scores the seeded hub and stays dismi
         // roster + next-raid + mods are seeded; leader-post, rules and links
         // are profile copy the seed leaves empty — an exact 3, not a wildcard.
         await expect(page.getByTestId('setup-checklist-progress')).toHaveText('3 of 6 done');
+        // ROK-1840 — S0 prototype parity: the card is titled with the hub, the
+        // count sits beside a progress bar, each row explains itself, and the
+        // footer says the hiding is stored on the account.
+        await expect(page.getByRole('heading', { name: /^Set up Smoke / })).toBeVisible();
+        await expect(page.getByRole('meter', { name: 'Setup progress: 3 of 6 done' })).toHaveAttribute('aria-valuenow', '50');
+        await expect(list.getByTestId('setup-step-desc-leader-post')).toHaveText('It sits at the top of Overview.');
+        await expect(list.getByTestId('setup-step-action-leader-post'), 'rows carry the verb, not "Open"').toHaveText('Write post');
+        await expect(page.getByTestId('setup-checklist-footer')).toContainText('saved to your account');
         // The seed already satisfies three of them; the profile ones it does not.
         await expect(list.getByTestId('setup-step-roster'), 'the Officer is a seeded member').toHaveAttribute('data-done', 'true');
         await expect(list.getByTestId('setup-step-next-raid'), 'the seed tags raid nights').toHaveAttribute('data-done', 'true');
@@ -253,6 +261,20 @@ test('editor: the Overview setup checklist scores the seeded hub and stays dismi
         await expect(list.getByTestId('setup-step-action-rules')).toHaveAttribute('href', '#resources');
         await expect(list.getByTestId('setup-step-blocked-discord'), 'an Officer is told to ask the Leader (ruling 1)').toBeVisible();
         await expect(page.getByTestId('setup-step-blocked-publish'), 'hiding a hub lands in ROK-1831').toBeVisible();
+        // ROK-1840 r2 FAIL: a sentence-length blocked reason used to sit in the
+        // row's `shrink-0` action cell, so it kept its max-content width (469px
+        // measured against a 375px viewport) and ran off the card. It now wraps
+        // under the label — nothing may exceed the viewport on a phone.
+        const vw = page.viewportSize()?.width ?? 0;
+        if (vw > 0 && vw <= 480) {
+            const widths = await page.evaluate(() => ({
+                scroll: document.documentElement.scrollWidth, inner: window.innerWidth,
+            }));
+            expect(widths.scroll, `the checklist must not widen the document at ${vw}px`).toBeLessThanOrEqual(widths.inner);
+            const box = await page.getByTestId('setup-step-blocked-publish').boundingBox();
+            if (box === null) throw new Error('the blocked reason must render a box to measure');
+            expect(box.x + box.width, `the blocked reason must wrap inside the ${vw}px viewport`).toBeLessThanOrEqual(vw);
+        }
 
         await page.getByTestId('setup-checklist-dismiss').click();
         await expect(page.getByTestId('setup-checklist')).toHaveCount(0);

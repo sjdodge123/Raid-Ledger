@@ -16,8 +16,12 @@ export type SetupStepAction = { kind: 'tab'; hash: string } | { kind: 'channel' 
 export interface SetupStep {
     id: string;
     label: string;
+    /** One line under the label saying what the step buys (S0 prototype). */
+    description: string;
     done: boolean;
     action: SetupStepAction;
+    /** The verb on the row's button — the prototype labels the work, not "Open". */
+    actionLabel: string;
 }
 
 export interface SetupStepsInput {
@@ -56,27 +60,62 @@ export const CHANNEL_BLOCKED_REASON = 'Ask your Leader or an admin to set the hu
  */
 export const PUBLISH_BLOCKED_REASON = 'Hubs are visible to members already — a hidden-by-default hub is coming.';
 
-export function setupSteps(input: SetupStepsInput): SetupStep[] {
-    const { profile, discord, memberCount, hasNextRaid, modsConfigured, hasModSources, canPickChannel } = input;
-    const channel: SetupStepAction = canPickChannel ? { kind: 'channel' } : { kind: 'blocked', reason: CHANNEL_BLOCKED_REASON };
-    const steps: SetupStep[] = [
-        { id: 'leader', label: 'Assign a Leader', done: false, action: { kind: 'blocked', reason: LEADER_BLOCKED_REASON } },
-        { id: 'roster', label: 'Import your roster', done: memberCount > 0, action: { kind: 'tab', hash: '#members' } },
-        { id: 'leader-post', label: 'Write a leader post', done: (profile?.gmPost?.body ?? '').trim().length > 0, action: { kind: 'tab', hash: '#overview' } },
-        { id: 'rules', label: 'Add your guild rules', done: (profile?.rules.length ?? 0) > 0, action: { kind: 'tab', hash: '#resources' } },
-        { id: 'links', label: 'Add useful links', done: (profile?.links.length ?? 0) > 0, action: { kind: 'tab', hash: '#resources' } },
-        { id: 'discord', label: 'Pick a Discord channel', done: discord !== undefined && discord.state !== 'unset', action: channel },
+/** The steps every hub starts with, in the prototype's order. */
+function baseSteps(input: SetupStepsInput, channel: SetupStepAction): SetupStep[] {
+    const { profile, discord, memberCount } = input;
+    return [
+        {
+            id: 'leader', label: 'Assign a Leader', description: 'An admin names who runs this hub.',
+            done: false, action: { kind: 'blocked', reason: LEADER_BLOCKED_REASON }, actionLabel: 'Assign',
+        },
+        {
+            id: 'roster', label: 'Import your roster', description: 'Your guildmates appear on the Members tab.',
+            done: memberCount > 0, action: { kind: 'tab', hash: '#members' }, actionLabel: 'Import',
+        },
+        {
+            id: 'leader-post', label: 'Write a leader post', description: 'It sits at the top of Overview.',
+            done: (profile?.gmPost?.body ?? '').trim().length > 0, action: { kind: 'tab', hash: '#overview' }, actionLabel: 'Write post',
+        },
+        {
+            id: 'rules', label: 'Add your guild rules', description: 'They show on the Resources tab.',
+            done: (profile?.rules.length ?? 0) > 0, action: { kind: 'tab', hash: '#resources' }, actionLabel: 'Add rules',
+        },
+        {
+            id: 'links', label: 'Add useful links', description: 'Discord, logs and loot sheets, all on Resources.',
+            done: (profile?.links.length ?? 0) > 0, action: { kind: 'tab', hash: '#resources' }, actionLabel: 'Add links',
+        },
+        {
+            id: 'discord', label: 'Pick a Discord channel', description: 'Members see its latest posts.',
+            done: discord !== undefined && discord.state !== 'unset', action: channel, actionLabel: 'Pick channel',
+        },
     ];
+}
+
+export function setupSteps(input: SetupStepsInput): SetupStep[] {
+    const { hasNextRaid, modsConfigured, hasModSources, canPickChannel } = input;
+    const channel: SetupStepAction = canPickChannel ? { kind: 'channel' } : { kind: 'blocked', reason: CHANNEL_BLOCKED_REASON };
+    const steps = baseSteps(input, channel);
     if (hasModSources) {
-        steps.push({ id: 'mods', label: 'Recommend mods', done: modsConfigured, action: { kind: 'tab', hash: '#resources' } });
+        steps.push({
+            id: 'mods', label: 'Recommend mods', description: 'Point members at the addons you expect.',
+            done: modsConfigured, action: { kind: 'tab', hash: '#resources' }, actionLabel: 'Pick mods',
+        });
     }
-    steps.push({ id: 'next-raid', label: 'Tag your next raid', done: hasNextRaid, action: { kind: 'tab', hash: '#events' } });
-    steps.push({ id: 'publish', label: 'Publish this hub', done: false, action: { kind: 'blocked', reason: PUBLISH_BLOCKED_REASON } });
+    steps.push({
+        id: 'next-raid', label: 'Tag your next raid', description: 'Tagged events show on the Events tab.',
+        done: hasNextRaid, action: { kind: 'tab', hash: '#events' }, actionLabel: 'Tag a raid',
+    });
+    steps.push({
+        id: 'publish', label: 'Publish this hub', description: 'Decide who can find the hub.',
+        done: false, action: { kind: 'blocked', reason: PUBLISH_BLOCKED_REASON }, actionLabel: 'Publish',
+    });
     return steps;
 }
 
 export interface SetupProgress {
     done: number;
+    /** 0–100, for the progress bar the S0 prototype puts above the rows. */
+    pct: number;
     /** Blocked steps are excluded — one of them can never be ticked, so counting it would pin the checklist below 100% forever. */
     total: number;
     complete: boolean;
@@ -86,5 +125,9 @@ export interface SetupProgress {
 export function setupProgress(steps: readonly SetupStep[]): SetupProgress {
     const countable = steps.filter((s) => s.action.kind !== 'blocked');
     const done = countable.filter((s) => s.done).length;
-    return { done, total: countable.length, complete: done === countable.length, label: `${done} of ${countable.length}` };
+    const total = countable.length;
+    return {
+        done, total, pct: total === 0 ? 100 : Math.round((done / total) * 100),
+        complete: done === total, label: `${done} of ${total}`,
+    };
 }

@@ -3,50 +3,91 @@
  * Overview. Shown to anyone who can edit the hub (Leader, admin and Officers),
  * from page data the Overview already holds; it goes away on its own once
  * every actionable step is done, and can be dismissed per hub before then.
+ *
+ * A blocked step's reason wraps under its label rather than sitting in the
+ * row's action slot: that slot is `shrink-0`, so a sentence-length reason held
+ * its max-content width (469px measured at a 375px viewport) and ran off the
+ * card on a phone (ROK-1840 r2 FAIL).
+ *
+ * ROK-1840 brings it back to the approved S0 prototype: the card is titled
+ * with the hub's name, the count sits beside a progress bar, every row carries
+ * a description line and a button-styled action, and the footer says the
+ * hiding is remembered on the account rather than in this browser.
  */
 import type { JSX } from 'react';
 import { Button } from '../../ui/button';
-import { FOCUS_RING } from '../../ui/form-classes';
+import { buttonClass } from '../../ui/button-classes';
 import { WidgetCard } from '../hub-bits';
+import { GuildMeter } from '../events/guild-meter';
 import { useGuildProfile } from '../api/use-guild-content';
 import { useGuildDiscord } from '../discord/use-guild-discord';
 import { useHubSettings } from '../settings/hub-settings-context';
 import { useHubOnboarding } from './use-hub-onboarding';
 import { setupProgress, setupSteps, type SetupStep } from './setup-checklist.helpers';
 
-const MARK = 'mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px] leading-none';
-// `text-accent` / `ring-focus` were never declared tokens (ROK-1645): the
-// shipped inline-link idiom is `text-success` plus the shared FOCUS_RING.
-const LINK = `rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`;
+const MARK = 'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold leading-none';
+// A real anchor that must look like a button takes `buttonClass` (ROK-1599) —
+// the prototype's rows are buttons, and a tab step is still a hash link.
+const ROW_LINK = buttonClass({ variant: 'secondary', size: 'sm' });
 
 function StepAction({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() => void) | null }): JSX.Element | null {
-    if (step.done) return null;
-    if (step.action.kind === 'blocked') {
-        return <span className="text-xs text-muted" data-testid={`setup-step-blocked-${step.id}`}>{step.action.reason}</span>;
-    }
+    if (step.done) return <span className="text-xs font-medium text-success">Done</span>;
+    // A blocked step has no action — its reason is a wrapping line under the
+    // label (see StepRow), never a `shrink-0` cell in the row's action slot.
+    if (step.action.kind === 'blocked') return null;
     if (step.action.kind === 'channel') {
         if (!onPickChannel) return null;
-        return <Button variant="ghost" size="sm" onClick={onPickChannel} data-testid={`setup-step-action-${step.id}`}>Pick one</Button>;
+        return <Button variant="secondary" size="sm" onClick={onPickChannel} data-testid={`setup-step-action-${step.id}`}>{step.actionLabel}</Button>;
     }
-    return <a href={step.action.hash} className={LINK} data-testid={`setup-step-action-${step.id}`}>Open</a>;
+    return <a href={step.action.hash} className={ROW_LINK} data-testid={`setup-step-action-${step.id}`}>{step.actionLabel}</a>;
 }
 
 function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() => void) | null }): JSX.Element {
     return (
-        <li className="flex flex-wrap items-center gap-2" data-testid={`setup-step-${step.id}`} data-done={step.done ? 'true' : 'false'}>
-            <span aria-hidden className={`${MARK} ${step.done ? 'border-success/40 bg-success/10 text-success' : 'border-edge text-muted'}`}>
+        <li
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-edge-subtle py-2 last:border-b-0"
+            data-testid={`setup-step-${step.id}`}
+            data-done={step.done ? 'true' : 'false'}
+        >
+            <span aria-hidden className={`${MARK} ${step.done ? 'border-success/40 bg-success/10 text-success' : 'border-edge-strong text-muted'}`}>
                 {step.done ? '✓' : ''}
             </span>
-            <span className={`text-sm ${step.done ? 'text-muted line-through' : 'text-foreground'}`}>{step.label}</span>
-            <span className="sr-only">{step.done ? 'done' : 'not done yet'}</span>
-            <span className="ml-auto"><StepAction step={step} onPickChannel={onPickChannel} /></span>
+            <span className="min-w-0 flex-1">
+                <span className={`block text-sm font-medium ${step.done ? 'text-muted' : 'text-foreground'}`}>{step.label}</span>
+                <span className="block text-xs text-muted" data-testid={`setup-step-desc-${step.id}`}>{step.description}</span>
+                {!step.done && step.action.kind === 'blocked' && (
+                    <span className="block text-xs text-dim" data-testid={`setup-step-blocked-${step.id}`}>{step.action.reason}</span>
+                )}
+            </span>
+            {/* A done row already carries a visible "Done" chip — a second sr-only "done" reads it twice. */}
+            {!step.done && <span className="sr-only">not done yet</span>}
+            <span className="ml-auto shrink-0"><StepAction step={step} onPickChannel={onPickChannel} /></span>
         </li>
+    );
+}
+
+function ProgressRow({ label, pct }: { label: string; pct: number }): JSX.Element {
+    return (
+        <div className="mb-3 flex items-center gap-3">
+            <span className="flex-1"><GuildMeter pct={pct} label={`Setup progress: ${label} done`} /></span>
+            <span className="text-sm font-semibold tabular-nums text-foreground" data-testid="setup-checklist-progress">{label} done</span>
+        </div>
+    );
+}
+
+function ChecklistFooter(): JSX.Element {
+    return (
+        <p className="mt-3 text-xs text-dim" data-testid="setup-checklist-footer">
+            Only editors see this. Hiding it is saved to your account.
+        </p>
     );
 }
 
 export interface HubSetupChecklistProps {
     guildId: number;
     canEdit: boolean;
+    /** The hub's name — the prototype titles the card "Set up <guild>". */
+    guildName?: string | undefined;
     /** The hub's roster size (spec D11-B "roster imported"). */
     memberCount: number;
     /** `undefined` until the raids query settles; `null` = nothing tagged yet. */
@@ -60,7 +101,7 @@ export interface HubSetupChecklistProps {
 const SPAN = 'md:col-span-2';
 
 export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | null {
-    const { guildId, canEdit, memberCount, nextRaid, modsConfigured, hasModSources } = props;
+    const { guildId, canEdit, guildName, memberCount, nextRaid, modsConfigured, hasModSources } = props;
     const prompt = useHubOnboarding('hub-setup-checklist', guildId);
     const profile = useGuildProfile(guildId, canEdit);
     const discord = useGuildDiscord(guildId);
@@ -75,17 +116,19 @@ export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | 
     // an empty one, so an unsettled page would show every step as "not done".
     const settled = profile.data !== undefined && discord.data !== undefined && nextRaid !== undefined;
     if (!canEdit || !prompt.visible || !settled || progress.complete) return null;
+    const title = guildName?.trim() ? `Set up ${guildName.trim()}` : 'Finish setting up';
     return (
         <div className={SPAN}><WidgetCard
             id="setup-checklist"
-            title="Finish setting up"
-            action={<Button variant="ghost" size="sm" onClick={prompt.dismiss} data-testid="setup-checklist-dismiss">Dismiss</Button>}
+            title={title}
+            action={<Button variant="ghost" size="sm" onClick={() => { prompt.dismiss(); }} data-testid="setup-checklist-dismiss">Hide checklist</Button>}
         >
-            <p className="mb-2 text-sm text-secondary" data-testid="setup-checklist-progress">{progress.label} done</p>
+            <ProgressRow label={progress.label} pct={progress.pct} />
             {prompt.failed && <p role="alert" data-testid="setup-checklist-error" className="mb-2 text-sm text-danger">We couldn&apos;t dismiss that just now. Try again in a moment.</p>}
-            <ul className="flex flex-col gap-2" data-testid="setup-checklist">
+            <ul className="flex flex-col" data-testid="setup-checklist">
                 {steps.map((s) => <StepRow key={s.id} step={s} onPickChannel={openChannelPicker} />)}
             </ul>
+            <ChecklistFooter />
         </WidgetCard></div>
     );
 }

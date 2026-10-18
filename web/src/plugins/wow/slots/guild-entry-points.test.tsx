@@ -129,6 +129,10 @@ describe('PlayersGuildCard (players:header-cards)', () => {
         server.use(http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })));
         renderWithProviders(<PlayersGuildCard />);
         await screen.findByTestId('get-your-guild-card');
+        // ROK-1840: the S0 prototype folds the how-to behind a primary toggle.
+        const toggle = screen.getByTestId('get-your-guild-how-toggle');
+        expect(toggle).toHaveTextContent('How to import');
+        await userEvent.click(toggle);
         expect(screen.getByTestId('get-your-guild-how')).toHaveTextContent('LedgerLink');
         expect(screen.queryByTestId('players-guild-card')).not.toBeInTheDocument();
     });

@@ -27,7 +27,7 @@ const EMPTY_PROFILE: GuildProfile = { guildId: 7, gmPost: null, rules: [], links
 const UNSET: GuildDiscordMirrorDto = { state: 'unset' };
 
 /** The props every case shares: roster imported, a raid tagged, mods available. */
-const PROPS = { guildId: 7, memberCount: 40, nextRaid: null, hasModSources: true } as const;
+const PROPS = { guildId: 7, guildName: 'Ashen Vanguard', memberCount: 40, nextRaid: null, hasModSources: true } as const;
 
 function serve(profile: GuildProfile, discord: GuildDiscordMirrorDto, state: HubOnboardingStateDto = { dismissed: [] }): void {
     server.use(
@@ -43,9 +43,19 @@ describe('HubSetupChecklist', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const list = await screen.findByTestId('setup-checklist');
         expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('2 of 7 done');
+        // ROK-1840 (S0 prototype): the count sits beside a progress bar, the
+        // card is titled with the hub, every row carries its description line
+        // and a verb-labelled action, and the footer names where the hiding
+        // is stored.
+        expect(screen.getByRole('heading', { name: 'Set up Ashen Vanguard' })).toBeInTheDocument();
+        const meter = screen.getByRole('meter', { name: 'Setup progress: 2 of 7 done' });
+        expect(meter).toHaveAttribute('aria-valuenow', '29');
+        expect(within(list).getByTestId('setup-step-desc-leader-post')).toHaveTextContent('It sits at the top of Overview.');
+        expect(within(list).getByTestId('setup-step-action-leader-post')).toHaveTextContent('Write post');
+        expect(screen.getByTestId('setup-checklist-footer')).toHaveTextContent('Hiding it is saved to your account.');
         expect(within(list).getByTestId('setup-step-rules')).toHaveAttribute('data-done', 'true');
         expect(within(list).getByTestId('setup-step-leader-post')).toHaveAttribute('data-done', 'false');
-        // A done step offers no action — only the open ones do.
+        // A done step renders no action control — it shows the "Done" chip instead.
         expect(within(list).queryByTestId('setup-step-action-rules')).not.toBeInTheDocument();
         expect(within(list).getByTestId('setup-step-action-links')).toHaveAttribute('href', '#resources');
     });
@@ -55,6 +65,15 @@ describe('HubSetupChecklist', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const blocked = await screen.findByTestId('setup-step-blocked-publish');
         expect(blocked).toHaveTextContent('hidden-by-default hub is coming');
+        // ROK-1840 r2 FAIL: the reason used to sit in the row's action cell,
+        // which is `shrink-0` — a sentence-length reason kept its max-content
+        // width and ran off the card at 375px. It now wraps under the label,
+        // inside the same block the description lives in, as `text-xs text-dim`.
+        const desc = await screen.findByTestId('setup-step-desc-publish');
+        expect(desc.parentElement, 'the reason shares the label block, not the action cell')
+            .toBe(blocked.parentElement);
+        expect(blocked.className.split(/\s+/)).toEqual(expect.arrayContaining(['block', 'text-xs', 'text-dim']));
+        expect(blocked.closest('.shrink-0'), 'nothing above it may refuse to shrink').toBeNull();
     });
 
     it('a viewer who cannot edit never sees it', async () => {
