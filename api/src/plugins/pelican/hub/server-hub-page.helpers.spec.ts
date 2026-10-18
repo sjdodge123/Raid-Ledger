@@ -165,4 +165,28 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
     expect(page.server?.recentArrivals).toBeUndefined();
     expect(page.server?.viewerJoined).toBe(false);
   });
+
+  it('counts who is online for every viewer, visitors included (Codex r2 P3)', () => {
+    const input = {
+      guild,
+      viewerId: 9,
+      members: [
+        rec({ memberId: 1, steamId: 's1' }),
+        rec({ memberId: 2, steamId: 's2' }),
+        rec({ memberId: 3, steamId: null }),
+      ],
+      onlineSteamIds: new Set(['s1', 's2', 'stranger']),
+      server: {
+        pelicanServerId: 5,
+        gameSlug: 'valheim',
+        gameIconUrl: null,
+        state: 'running' as const,
+      },
+    };
+    const visitor = buildServerHubPage({ ...input, role: 'visitor' });
+    expect(visitor.ranks[0]?.members).toEqual([]);
+    expect(visitor.server?.onlineCount).toBe(2);
+    const member = buildServerHubPage({ ...input, role: 'member' });
+    expect(member.server?.onlineCount).toBe(2);
+  });
 });

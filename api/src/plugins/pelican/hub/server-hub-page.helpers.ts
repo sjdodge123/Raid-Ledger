@@ -92,11 +92,36 @@ export interface ServerHubPageInput {
 
 function withViewer(
   server: Omit<GuildPageServer, 'viewerJoined'>,
-  viewerJoined: boolean,
+  viewer: { joined: boolean; onlineCount: number },
   members: readonly ServerMemberRecord[] | null,
 ): GuildPageServer {
-  if (members === null) return { ...server, viewerJoined };
-  return { ...server, viewerJoined, recentArrivals: recentArrivals(members) };
+  const base = {
+    ...server,
+    viewerJoined: viewer.joined,
+    onlineCount: viewer.onlineCount,
+  };
+  if (members === null) return base;
+  return { ...base, recentArrivals: recentArrivals(members) };
+}
+
+/**
+ * The hero block for this viewer. `onlineCount` is counted for every viewer
+ * — a visitor gets no rows to count (Codex r2 P3).
+ */
+function serverBlock(
+  input: ServerHubPageInput,
+  server: Omit<GuildPageServer, 'viewerJoined'>,
+  rows: readonly GuildMemberRow[],
+  visitor: boolean,
+): GuildPageServer {
+  const me = input.members.find((r) => r.userId === input.viewerId);
+  const joined = me !== undefined && me.joinedAt !== null && me.leftAt === null;
+  const onlineCount = rows.filter((r) => r.server?.onlineNow === true).length;
+  return withViewer(
+    server,
+    { joined, onlineCount },
+    visitor ? null : input.members,
+  );
 }
 
 /**
@@ -111,9 +136,6 @@ export function buildServerHubPage(input: ServerHubPageInput): GuildPage {
       r.steamId !== null && input.onlineSteamIds.has(r.steamId),
     ),
   );
-  const viewer = input.members.find((r) => r.userId === input.viewerId);
-  const viewerJoined =
-    viewer !== undefined && viewer.joinedAt !== null && viewer.leftAt === null;
   const visitor = input.role === 'visitor';
   return {
     guild: { ...input.guild, memberCount: rows.length },
@@ -128,13 +150,7 @@ export function buildServerHubPage(input: ServerHubPageInput): GuildPage {
     ],
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
     ...(input.server
-      ? {
-          server: withViewer(
-            input.server,
-            viewerJoined,
-            visitor ? null : input.members,
-          ),
-        }
+      ? { server: serverBlock(input, input.server, rows, visitor) }
       : {}),
   };
 }

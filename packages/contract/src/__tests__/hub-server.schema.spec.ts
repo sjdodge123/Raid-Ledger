@@ -272,6 +272,17 @@ describe('L3-ii additive fields (ROK-1831)', () => {
     expect(GuildPageSchema.safeParse(extra).success).toBe(false);
   });
 
+  it('accepts server.onlineCount (absent or a non-negative int; Codex r2 P3)', () => {
+    const page = (onlineCount?: unknown) => ({
+      ...wowPage,
+      server: { ...serverBlock, ...(onlineCount === undefined ? {} : { onlineCount }) },
+    });
+    expect(GuildPageSchema.parse(page()).server?.onlineCount).toBeUndefined();
+    expect(GuildPageSchema.parse(page(3)).server?.onlineCount).toBe(3);
+    expect(GuildPageSchema.safeParse(page(-1)).success).toBe(false);
+    expect(GuildPageSchema.safeParse(page(1.5)).success).toBe(false);
+  });
+
   it('accepts MyGuild.gameIconUrl as a string, null or absent', () => {
     const mine = {
       ...summary,

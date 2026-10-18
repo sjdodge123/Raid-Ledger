@@ -13,7 +13,7 @@ import { getHubModuleRegistrations } from '../../plugin-registry';
 import type { HubCtx } from '../../hub-module';
 import '../register';
 import { pelicanHubModule } from './register-hub';
-import { JoinLeavePill } from './server-hero';
+import { JoinLeavePill, ServerStatusPill } from './server-hero';
 import { QuickPlayTab } from './quick-play-tab';
 import { lastSeenLabel } from './server-member.helpers';
 import { registerServerHubGameTab } from './server-hub-game-tabs';
@@ -74,6 +74,21 @@ describe('pelicanHubModule (ROK-1831)', () => {
         expect(screen.getByText('Online')).toBeInTheDocument();
         expect(screen.getByText('Offline')).toBeInTheDocument();
         expect(lastSeenLabel(second)).toBe('Joined, not played yet');
+    });
+
+    it('the hero reads server.onlineCount, so a visitor with no rows sees the real count (Codex r2 P3)', () => {
+        const c = ctx();
+        const server = c.page.server;
+        if (server === undefined) throw new Error('fixture has a server block');
+        const visitorPage = { ...c.page, ranks: [{ rankIndex: null, rankName: null, members: [] }], server: { ...server, onlineCount: 3 } };
+        renderWithProviders(<ServerStatusPill page={visitorPage} raids={c.raids} />);
+        expect(screen.getByTestId('server-hub-online')).toHaveTextContent('3 online');
+    });
+
+    it('the hero falls back to counting online rows when onlineCount is absent', () => {
+        const c = ctx();
+        renderWithProviders(<ServerStatusPill page={c.page} raids={c.raids} />);
+        expect(screen.getByTestId('server-hub-online')).toHaveTextContent('1 online');
     });
 
     it('Join calls POST /join; Leave confirms then calls DELETE /join', async () => {

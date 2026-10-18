@@ -9,7 +9,10 @@ import { Button } from '../../../components/ui/button';
 import { PelicanStateChip } from '../slots/pelican-state-chip';
 import { useHubJoin } from './server-hub-api';
 
+/** The server-side count (sent to visitors too); rows are the fallback for older payloads. */
 function onlineCount(ctx: HubCtx): number {
+    const sent = ctx.page.server?.onlineCount;
+    if (sent !== undefined) return sent;
     return ctx.page.ranks.reduce((n, g) => n + g.members.filter((m) => m.server?.onlineNow === true).length, 0);
 }
 

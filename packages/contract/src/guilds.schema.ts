@@ -140,6 +140,11 @@ export const GuildPageServerSchema = z
     viewerJoined: z.boolean(),
     /** Newest five members by first sighting; optional so older fixtures parse. */
     recentArrivals: z.array(GuildServerArrivalSchema).max(5).optional(),
+    /**
+     * Linked hub members on the server right now — sent to every viewer,
+     * visitors included (they get no rows to count). Optional: older fixtures.
+     */
+    onlineCount: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;
