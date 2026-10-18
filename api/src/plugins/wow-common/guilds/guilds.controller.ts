@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { HubVisibleGuard } from '../../../guilds/hub-visible.guard';
 import {
   DeleteGuildEditorParamsSchema,
   GuildListQuerySchema,
@@ -81,7 +82,7 @@ export class GuildsController {
   }
 
   @Get(':id')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   page(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -91,7 +92,7 @@ export class GuildsController {
 
   /** ROK-1787 — Raids tab + Overview widgets (members + staff). */
   @Get(':id/raids')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   raids(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,

@@ -12,6 +12,7 @@ import type {
   MyGuilds,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import type { HubMineRank } from '../../plugin-host/extension-points';
 import * as schema from '../../../drizzle/schema';
 import {
   GuildAccessService,
@@ -49,27 +50,46 @@ export class GuildPageService {
   /** The viewer's guilds with their best rank and edit right. */
   async mine(actor: GuildActor): Promise<MyGuilds> {
     const summaries = await this.access.myGuilds(actor.id);
-    const rows = await findLinkedMemberRows(this.db, actor.id);
-    const names = await rankNamesByMemberId(
-      this.db,
-      rows.map((r) => r.memberId),
-    );
-    const headlines = await gmPostHeadlines(
-      this.db,
-      summaries.map((g) => g.id),
-    );
+    const ids = summaries.map((g) => g.id);
+    const [ranks, headlines] = await Promise.all([
+      this.mineRanks(actor.id, ids),
+      gmPostHeadlines(this.db, ids),
+    ]);
     const guilds: MyGuild[] = [];
     for (const g of summaries) {
-      const best = bestRow(rows.filter((r) => r.guildId === g.id));
+      const rank = ranks.get(g.id);
       guilds.push({
         ...g,
-        rankIndex: best?.rankIndex ?? null,
-        rankName: best ? (names.get(best.memberId) ?? null) : null,
+        rankIndex: rank?.rankIndex ?? null,
+        rankName: rank?.rankName ?? null,
         canEdit: await this.access.canEdit(actor, g.id),
         gmPostHeadline: headlines.get(g.id) ?? null,
       });
     }
     return { guilds };
+  }
+
+  /** ROK-1831: the user's best (lowest) rank per guild, by guild id. */
+  async mineRanks(
+    userId: number,
+    guildIds: number[],
+  ): Promise<Map<number, HubMineRank>> {
+    const wanted = new Set(guildIds);
+    const rows = (await findLinkedMemberRows(this.db, userId)).filter((r) =>
+      wanted.has(r.guildId),
+    );
+    const names = await rankNamesByMemberId(
+      this.db,
+      rows.map((r) => r.memberId),
+    );
+    const out = new Map<number, HubMineRank>();
+    for (const id of wanted) {
+      const best = bestRow(rows.filter((r) => r.guildId === id));
+      if (!best) continue;
+      const rankName = names.get(best.memberId) ?? null;
+      out.set(id, { rankIndex: best.rankIndex, rankName });
+    }
+    return out;
   }
 
   /** Hero + roster; 403 unless the viewer may view, 404 when missing. */

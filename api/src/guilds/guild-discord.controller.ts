@@ -19,23 +19,24 @@ import type { AuthenticatedRequest } from '../auth/types';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildLeaderGuard } from './guild-leader.guard';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
+import { HubVisibleGuard } from './hub-visible.guard';
 
 const jwt = AuthGuard('jwt');
 
 /**
  * ROK-1788 (S4) — the guild's read-only Discord channel mirror under
- * `/plugins/wow/guilds/:id/discord`. The mirror read needs `canView` (in the
+ * `/plugins/wow/guilds/:id/discord` and its core alias `guilds/:id/discord`. The mirror read needs `canView` (in the
  * service); the channel list and the binding writes are Leader-only
  * (ROK-1830 D5-A, `GuildLeaderGuard`) — an Officer may edit page content but
  * not rebind the guild's Discord channel.
  */
-@Controller('plugins/wow/guilds/:id/discord')
+@Controller(['plugins/wow/guilds/:id/discord', 'guilds/:id/discord'])
 @UseGuards(HubKindActiveGuard)
 export class GuildDiscordController {
   constructor(private readonly discord: GuildDiscordService) {}
 
   @Get()
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   getMirror(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,

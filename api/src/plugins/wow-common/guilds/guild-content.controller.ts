@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { HubVisibleGuard } from '../../../guilds/hub-visible.guard';
 import type {
   GuildAddon,
   GuildAddonList,
@@ -47,7 +48,7 @@ export class GuildContentController {
   ) {}
 
   @Get('profile')
-  @UseGuards(jwt)
+  @UseGuards(jwt, HubVisibleGuard)
   getProfile(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
