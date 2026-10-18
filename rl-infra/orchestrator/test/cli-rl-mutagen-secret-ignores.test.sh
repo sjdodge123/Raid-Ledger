@@ -54,7 +54,8 @@ write_driver() {
         echo '  { echo "CALL $1 ${2:-}"; printf "  %s\n" "$@"; } >> "$MUTAGEN_LOG"'
         echo '  if [[ "$1 ${2:-}" == "sync list" ]]; then'
         echo '    if [[ "$*" == *--template* ]]; then'
-        echo '      [[ -n "${MUTAGEN_LABEL_VALUE:-}" ]] && echo "$MUTAGEN_LABEL_VALUE"'
+        echo '      if grep -q "^CALL sync create" "$MUTAGEN_LOG"; then echo 2'
+        echo '      elif [[ -n "${MUTAGEN_LABEL_VALUE:-}" ]]; then echo "$MUTAGEN_LABEL_VALUE"; fi'
         echo '    elif [[ -z "${3:-}" ]]; then'
         echo '      [[ "${MUTAGEN_HAS_SESSION:-0}" == 1 ]] && echo "Name: rl-slot-3"'
         echo '    else printf "Alpha:\n\tURL: /tmp/fake-repo\n"; fi'
@@ -247,7 +248,7 @@ reset_logs() {
 # Caller runs reset_logs first (run_resync is called inside $(...)).
 run_resync() {
     write_driver "$TMP_STATE/driver.sh" 'cmd_resync' cmd_resync resync_fail sync_slot_and_purge \
-        ensure_mutagen_sync mutagen_session_config_version flush_mutagen purge_runner_synced_secrets \
+        ensure_mutagen_sync mutagen_session_config_version require_current_sync_config flush_mutagen purge_runner_synced_secrets \
         restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
     bash "$TMP_STATE/driver.sh" 2>/dev/null
 }
@@ -283,6 +284,54 @@ test_s10_claim_uses_shared_path() {
     fi
 }
 
+# S11 — Codex r2 P1: `rl validate-ci` on a slot whose live session predates the
+# fix recreates it, then the CLI's own purge, then its exec-bit repair, then the
+# gate. validate-ci used to flush the old session directly and keep its ignores.
+test_s11_validate_recreates_unlabeled_session() {
+    reset_logs
+    write_driver "$TMP_STATE/driver.sh" 'current_slot() { echo 3; }; ensure_claim() { :; }; cmd_validate_ci --static </dev/null' \
+        cmd_validate_ci sync_slot_and_purge ensure_mutagen_sync mutagen_session_config_version \
+        require_current_sync_config flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits \
+        run_operator_script_on_runner rl_infra_self_dir ensure_runner_git
+    local rc=0
+    MUTAGEN_HAS_SESSION=1 bash "$TMP_STATE/driver.sh" >/dev/null 2>&1 || rc=$?
+    assert_exit_code "$rc" 0 "validate-ci on a recreated, purged session must proceed"
+    assert_contains "$(cat "$MUTAGEN_LOG")" "CALL sync create" "validate-ci must recreate a session with no rl-sync-config label"
+    local log
+    log=$(grep -v 'test -d /workspace/.git' "$ARGV_LOG")
+    assert_contains "$(sed -n 1p <<<"$log")" "[stdin=purge]" "first remote command: the CLI's streamed purge"
+    assert_contains "$(sed -n 2p <<<"$log")" "[stdin=restore]" "second remote command: the CLI's streamed exec-bit repair"
+    assert_contains "$(sed -n 3p <<<"$log")" "validate-ci.sh" "third remote command: the gate itself"
+}
+
+# S12 — the guard refuses a session whose label is missing or < 2.
+test_s12_guard_refuses_stale_label() {
+    reset_logs
+    write_driver "$TMP_STATE/driver.sh" 'require_current_sync_config 3 </dev/null' \
+        require_current_sync_config mutagen_session_config_version
+    local rc=0
+    MUTAGEN_LABEL_VALUE=1 bash "$TMP_STATE/driver.sh" >/dev/null 2>&1 || rc=$?
+    assert_neq "$rc" 0 "a session labelled rl-sync-config=1 must be refused"
+    rc=0
+    bash "$TMP_STATE/driver.sh" >/dev/null 2>&1 || rc=$?
+    assert_neq "$rc" 0 "an unlabelled session must be refused"
+    rc=0
+    MUTAGEN_LABEL_VALUE=2 bash "$TMP_STATE/driver.sh" >/dev/null 2>&1 || rc=$?
+    assert_exit_code "$rc" 0 "a session labelled rl-sync-config=2 passes"
+}
+
+# S13 — static: no branch-controlled runner script is executed, and nothing but
+# sync_slot_and_purge flushes (so every flush is ensure + guard first).
+test_s13_no_workspace_runner_script_execution() {
+    local hits
+    hits=$(cat "$RL_CLI" "$WORKTREE_ROOT"/rl-infra/orchestrator/bin/* \
+        | sed -e 's/^[[:space:]]*#.*$//' | grep -n '/workspace/rl-infra/runner/' || true)
+    assert_eq "$hits" "" "nothing may reference /workspace/rl-infra/runner/*.sh for execution"
+    local callers
+    callers=$(awk '/^[a-z_]+\(\) *\{/{fn=$1} /^[[:space:]]*[^#]*flush_mutagen "/{print fn}' "$RL_CLI" | sort -u | tr '\n' ' ')
+    assert_eq "$callers" "sync_slot_and_purge() " "flush_mutagen may only be called from sync_slot_and_purge"
+}
+
 run_test "S1 create ignores .env"        test_s1_create_ignores_env_files
 run_test "S2 template drift guard"       test_s2_template_drift_guard
 run_test "S3 stale session recreated"    test_s3_stale_session_is_recreated
@@ -294,5 +343,8 @@ run_test "S7 self dir is CLI checkout"   test_s7_self_dir_is_the_cli_checkout
 run_test "S8 resync purges"              test_s8_resync_purges
 run_test "S9 resync purge failure fatal" test_s9_resync_purge_failure_is_fatal
 run_test "S10 claim shared path"         test_s10_claim_uses_shared_path
+run_test "S11 validate recreates session" test_s11_validate_recreates_unlabeled_session
+run_test "S12 guard refuses stale label" test_s12_guard_refuses_stale_label
+run_test "S13 no /workspace script exec" test_s13_no_workspace_runner_script_execution
 
 print_test_summary

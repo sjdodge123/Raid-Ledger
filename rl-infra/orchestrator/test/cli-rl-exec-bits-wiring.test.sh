@@ -58,7 +58,7 @@ write_driver() {
         echo '  return 0'
         echo '}'
         echo "RL_INFRA_SELF_DIR=$(printf '%q' "$WORKTREE_ROOT/rl-infra")"
-        echo 'mutagen() { return 0; }'
+        echo 'mutagen() { [[ "$*" == *--template* ]] && echo 2; return 0; }'
         echo 'require_repo_root() { :; }'
         echo 'ensure_claim() { :; }'
         echo 'current_slot() { echo 3; }'
@@ -70,6 +70,7 @@ write_driver() {
         echo 'git() { echo main; }'
         echo 'TARGET=remote'
         echo 'REPO_ROOT=/tmp/fake-repo'
+        echo 'RL_PROXMOX_USER=rl-agent RL_PROXMOX_HOST=rl-infra'
         local fn
         for fn in "$@"; do
             slice_fn "$fn"
@@ -142,7 +143,8 @@ test_w3_validate_ci_aborts_before_dispatch() {
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
     write_driver "$driver" 'cmd_validate_ci --static' \
-        cmd_validate_ci flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
+        cmd_validate_ci sync_slot_and_purge ensure_mutagen_sync mutagen_session_config_version \
+        require_current_sync_config flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
 
     local out rc=0
     out=$(RESTORE_RC=$EXPECTED_FATAL_CODE bash "$driver" 2>&1) || rc=$?

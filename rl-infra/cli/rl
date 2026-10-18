@@ -691,10 +691,15 @@ cmd_validate_ci() {
     # a runner whose scripts exit 126 produces a red run with no assertion
     # output, which is precisely the wasted round-trip this fix removes. Abort
     # before spending the compute, with the reason named.
-    flush_mutagen "$SLOT" || {
-        echo "[rl] aborting validate-ci on slot $SLOT — refusing to spend a gate on a tree whose scripts are not executable" >&2
+    # ROK-1849 Codex r2: the same ensure + label guard + purge path as claim
+    # and resync — a session held from before the fix is recreated here, not
+    # flushed with its old ignores. Strict: a failed purge aborts the gate.
+    local sync_rc=0
+    sync_slot_and_purge "$SLOT" 1 || sync_rc=$?
+    if (( sync_rc != 0 )); then
+        echo "[rl] aborting validate-ci on slot $SLOT (sync/purge/exec-bit step rc=$sync_rc) — refusing to spend a gate on an unsafe or unrunnable tree" >&2
         return 97
-    }
+    fi
     # Bug R (ROK-1326) defensive re-scaffold: slots claimed BEFORE the
     # cmd_claim scaffold change landed will have a stale or empty .git
     # (mutagen ignore-list now excludes .git entirely). If /workspace/.git/objects
@@ -1031,13 +1036,31 @@ ensure_mutagen_sync() {
 
 # ROK-1849 Codex r1 — the ONE path that brings a slot's session up to the
 # current sync config and then purges secrets an older session left behind.
-# cmd_claim and cmd_resync both call it, so neither can skip the purge.
 # strict=1 (resync) makes a failed flush / purge fatal.
 # Returns 1 create failed, 2 flush failed, 3 purge failed, 97 exec bits.
+# cmd_claim, cmd_resync and cmd_validate_ci all call it; it is the only caller
+# of flush_mutagen. Returns 4 when the live session still lacks the current
+# rl-sync-config label after ensure (see require_current_sync_config).
 sync_slot_and_purge() {
     local slot="$1" strict="${2:-0}"
     ensure_mutagen_sync "$slot" || return 1
+    require_current_sync_config "$slot" || return 4
     flush_mutagen "$slot" "$strict"
+}
+
+# ROK-1849 Codex r2 — refuse to flush or reuse a session whose own
+# `rl-sync-config` label is missing or below the current version: such a session
+# still carries pre-fix ignores and would keep syncing .env secrets.
+# Keep the version in step with ensure_mutagen_sync's config_version.
+require_current_sync_config() {
+    local slot="$1" want=2 have
+    command -v mutagen >/dev/null || return 0
+    have=$(mutagen_session_config_version "rl-slot-$slot")
+    if [[ "$have" =~ ^[0-9]+$ ]] && (( have >= want )); then
+        return 0
+    fi
+    echo "[rl] REFUSING: mutagen session rl-slot-$slot has rl-sync-config '${have:-<none>}' < $want (pre-ROK-1849 ignores). Run: rl resync" >&2
+    return 1
 }
 
 flush_mutagen() {
