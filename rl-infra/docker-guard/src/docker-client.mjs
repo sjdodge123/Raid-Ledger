@@ -29,8 +29,9 @@ const LABEL_PATH = {
   network: (id) => [`/networks/${encodeURIComponent(id)}`, (j) => j?.Labels],
 };
 
-/** Labels of a container / volume / network, or null when it cannot be read. */
+/** Labels of a container / volume / network / exec, or null when it cannot be read. */
 export async function resourceLabels(socketPath, kind, id) {
+  if (kind === 'exec') return execLabels(socketPath, id);
   const entry = LABEL_PATH[kind];
   if (!entry || !id) return null;
   const [path, pick] = entry(id);
@@ -38,6 +39,15 @@ export async function resourceLabels(socketPath, kind, id) {
   if (status !== 200) return null;
   const labels = pick(json);
   return labels && typeof labels === 'object' ? labels : {};
+}
+
+/** An exec carries no labels of its own: ownership is its container's. */
+async function execLabels(socketPath, id) {
+  if (!id) return null;
+  const { status, json } = await dockerJson(socketPath, 'GET', `/exec/${encodeURIComponent(id)}/json`);
+  const containerId = status === 200 ? json?.ContainerID : undefined;
+  if (typeof containerId !== 'string' || containerId === '') return null;
+  return resourceLabels(socketPath, 'container', containerId);
 }
 
 /**

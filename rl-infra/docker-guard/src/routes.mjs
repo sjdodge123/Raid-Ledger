@@ -34,8 +34,10 @@ const ROUTES = [
   R('POST', `/containers/(${ID})/(start|stop|restart|kill|wait|attach|resize|pause|unpause)`, ownedContainer),
   R('POST', `/containers/(${ID})/exec`, { ...ownedContainer, body: 'exec-create' }),
   R('DELETE', `/containers/(${ID})`, ownedContainer),
-  R('GET', `/exec/(${ID})/json`, ALLOW),
-  R('POST', `/exec/(${ID})/(start|resize)`, ALLOW),
+  // GET /events streams every exec's execID, so an id is not a secret: the
+  // exec's container must be the caller's (docker-client.mjs resolves it).
+  R('GET', `/exec/(${ID})/json`, { owned: { kind: 'exec', group: 1 } }),
+  R('POST', `/exec/(${ID})/(start|resize)`, { owned: { kind: 'exec', group: 1 } }),
   R('GET', '/images/json', ALLOW),
   R('GET', `/images/(${IMG})/(json|history)`, ALLOW),
   R('GET', `/distribution/(${IMG})/json`, ALLOW),
