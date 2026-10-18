@@ -37,7 +37,8 @@ export function valheimBlobRefs(
   msg: ValheimLinkMessage,
 ): ValheimLinkBlobRefRow[] {
   const refs: ValheimLinkBlobRefRow[] = [];
-  if (msg.kind === 'map' && msg.baseMap) refs.push(toRef(msg.baseMap, 'baseMap'));
+  if (msg.kind === 'map' && msg.baseMap)
+    refs.push(toRef(msg.baseMap, 'baseMap'));
   if (msg.kind === 'items') {
     if (msg.atlas) refs.push(toRef(msg.atlas, 'atlas'));
     for (const item of msg.items) {

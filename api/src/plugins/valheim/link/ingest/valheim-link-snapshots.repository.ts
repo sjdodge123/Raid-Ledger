@@ -30,7 +30,11 @@ export class ValheimLinkSnapshotsRepository {
       .insert(snapshots)
       .values(row)
       .onConflictDoUpdate({
-        target: [snapshots.pelicanServerId, snapshots.kind, snapshots.snapshotKey],
+        target: [
+          snapshots.pelicanServerId,
+          snapshots.kind,
+          snapshots.snapshotKey,
+        ],
         set: {
           steamId: row.steamId,
           playerId: row.playerId,

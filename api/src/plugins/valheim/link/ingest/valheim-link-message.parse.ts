@@ -12,12 +12,14 @@ import { ingestError } from '../valheim-link-request';
 import { valheimBitmapIsValid } from './valheim-link-bitmap.helpers';
 
 /** CONTRACT §7 decoded-body cap per kind. */
-export const VALHEIM_LINK_KIND_MAX_BYTES: Record<ValheimLinkMessageKind, number> =
-  {
-    character: VALHEIM_LINK_CHARACTER_MAX_BYTES,
-    map: VALHEIM_LINK_MAP_MAX_BYTES,
-    items: VALHEIM_LINK_ITEMS_MAX_BYTES,
-  };
+export const VALHEIM_LINK_KIND_MAX_BYTES: Record<
+  ValheimLinkMessageKind,
+  number
+> = {
+  character: VALHEIM_LINK_CHARACTER_MAX_BYTES,
+  map: VALHEIM_LINK_MAP_MAX_BYTES,
+  items: VALHEIM_LINK_ITEMS_MAX_BYTES,
+};
 
 /** A schema issue as returned to the mod — never the offending value. */
 export interface ValheimLinkIssue {
