@@ -1323,7 +1323,7 @@ the §4.2 panel surface (`rounded-xl border border-edge bg-panel p-4`) as a `<se
 how-to **in place** — the panel is rendered **after** the action row with a stable `id` the toggle points
 `aria-controls` at — a `Button variant="ghost"` "Not now" (the prototype's tertiary way out), and a closing `text-xs text-dim`
 "Shown once, to signed-in players who are not in a guild yet." (ROK-1840, S0 prototype). The × and
-"Not now" are the SAME server-side dismissal — there is no session-only hide — so the × takes **"Not now"**
+"Not now" are the SAME server-side dismissal — there is no session-only hide — so the × takes the prototype's own label **"Dismiss: don't show this again"** and the ghost button reads **"Not now"**
 as its `aria-label` too: one action must not carry two names implying different durations. Either one
 flashes ONE `toast.success` (§4.8) — "Got it. We won't show this again." — from a single handler, in step
 with the optimistic hide. No module how-to,

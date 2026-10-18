@@ -13,7 +13,8 @@
  * "Got it." toast once. Both × and "Not now" are the SAME
  * server-side dismissal the prototype wires them to (one `gyg-dismiss`
  * action) — there is no softer session-only hide in the approved target, so
- * both carry the prototype's one piece of wording, "Not now": two accessible
+ * the × carries the prototype's own label, "Dismiss: don't show this again", and the
+ * ghost button reads "Not now": two accessible
  * names implying different durations for one permanent action is a lie (r1).
  * The revealed panel is rendered AFTER the toggle and pointed at by
  * `aria-controls`, so forward navigation from the button lands on it.
@@ -39,7 +40,7 @@ function CardHead({ onClose }: { onClose: () => void }): JSX.Element {
                 </p>
             </div>
             <Button
-                variant="ghost" size="sm" iconOnly aria-label="Not now"
+                variant="ghost" size="sm" iconOnly aria-label="Dismiss: don't show this again"
                 onClick={onClose} data-testid="get-your-guild-close"
             >
                 <span aria-hidden>×</span>

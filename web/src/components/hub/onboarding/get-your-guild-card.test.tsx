@@ -78,7 +78,7 @@ describe('GetYourGuildCard', () => {
         await screen.findByTestId('get-your-guild-card');
         expect(screen.getByTestId('get-your-guild-note'))
             .toHaveTextContent('Shown once, to signed-in players who are not in a guild yet.');
-        expect(screen.getByTestId('get-your-guild-close')).toHaveAttribute('aria-label', 'Not now');
+        expect(screen.getByTestId('get-your-guild-close')).toHaveAttribute('aria-label', "Dismiss: don't show this again");
     });
 
     it('offers no how-to toggle when the module supplies no steps', async () => {
