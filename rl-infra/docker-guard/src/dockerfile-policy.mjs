@@ -3,7 +3,7 @@
 // fetch from the VM host network — the body-blind loopback proxy included — so
 // remote ADD sources are refused, and so are variables that could expand to
 // one. COPY --from of an infra image is refused like a pull of it. Pure.
-import { parseImageRef, pullDenied } from './image-refs.mjs';
+import { baseImageReason, splitFrom } from './base-image-policy.mjs';
 import { astReading } from './dockerfile-ast-reading.mjs';
 
 const DIRECTIVE = /^#[ \t]*([a-zA-Z][a-zA-Z0-9]*)[ \t]*=[ \t]*(.+?)[ \t]*$/;
@@ -73,19 +73,10 @@ function splitInstr(line) {
   return m ? [m[1]?.toUpperCase() ?? '', m[2] ?? ''] : ['', ''];
 }
 
-const unquote = (v) => v.replace(/^(["'])(.*)\1$/, '$2');
 // Word processing strips quotes and escapes (`htt\p://` is http://).
 const bare = (v) => v.replace(/["'\\`]/g, '');
 
-function fromReason(value, stages) {
-  const v = unquote(value);
-  if (v.includes('$')) return `COPY --from=${v}: a variable --from could name any image`;
-  const ref = parseImageRef(v);
-  // Checked before stage aliases: a reading may see a FROM … AS <infra-name> line.
-  if (ref && pullDenied(ref.name)) return `COPY --from=${ref.name}: runners may not read an infra service image`;
-  if (stages.has(v.toLowerCase())) return null;
-  return ref ? null : `COPY --from=${v} is not a stage or a valid image reference`;
-}
+const unquote = (v) => v.replace(/^(["'])(.*)\1$/, '$2');
 
 function sourcesOf(rest) {
   const t = rest.trim();
@@ -98,11 +89,11 @@ function sourcesOf(rest) {
   return t.split(/\s+/).slice(0, -1);
 }
 
-function copyReason(instr, rest, stages) {
+function copyReason(instr, rest, stages, opts) {
   let s = rest;
   for (let m = /^\s*--(\S+)/.exec(s); m; m = /^\s*--(\S+)/.exec(s)) {
     const from = /^from=([\s\S]*)$/i.exec(m[1] ?? '');
-    const r = from ? fromReason(from[1] ?? '', stages) : null;
+    const r = from ? baseImageReason('COPY --from=', unquote(from[1] ?? ''), stages, opts) : null;
     if (r) return r;
     s = s.slice(m[0].length);
   }
@@ -114,18 +105,22 @@ function copyReason(instr, rest, stages) {
   return null;
 }
 
-function readingReason(lines) {
+function readingReason(lines, opts) {
   const stages = new Set();
+  let index = 0;
   for (const line of lines) {
     let [instr, rest] = splitInstr(line);
     if (instr === 'ONBUILD') [instr, rest] = splitInstr(rest);
     if (instr === 'FROM') {
-      const alias = /\sAS\s+(\S+)\s*$/i.exec(rest);
-      if (alias?.[1]) stages.add(alias[1].toLowerCase());
-      stages.add(String(stages.size));
+      // c5: every FROM is a (possible) pull — the image policy applies to it.
+      const { image, alias } = splitFrom(rest);
+      const r = baseImageReason('FROM', image, stages, opts);
+      if (r) return r;
+      if (alias) stages.add(alias.toLowerCase());
+      stages.add(String(index++));
       continue;
     }
-    const r = instr === 'ADD' || instr === 'COPY' ? copyReason(instr, rest, stages) : null;
+    const r = instr === 'ADD' || instr === 'COPY' ? copyReason(instr, rest, stages, opts) : null;
     if (r) return r;
   }
   return null;
@@ -159,13 +154,14 @@ function asciiReason(text) {
 /**
  * Null when the Dockerfile (Buffer or string) is acceptable under every
  * reading, else the refusal reason. Non-ASCII content is refused first.
+ * `opts.pull` is /build?pull= (a base outside the public allowlist may not be pulled).
  */
-export function dockerfileReason(input) {
+export function dockerfileReason(input, opts = {}) {
   const text = decode(input);
   const bad = asciiReason(text);
   if (bad || text === null) return bad;
   for (const lines of readings(text)) {
-    const r = readingReason(lines);
+    const r = readingReason(lines, opts);
     if (r) return r;
   }
   return null;

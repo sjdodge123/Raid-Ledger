@@ -60,7 +60,7 @@ function pump(req, out, scanner) {
  * Spool + inspect. Resolves { error: { status, reason } } or
  * { file, size } — the caller streams `file` upstream, then calls cleanup().
  */
-export async function spoolBuildContext(req, dockerfileParam, tmpDir = os.tmpdir()) {
+export async function spoolBuildContext(req, dockerfileParam, tmpDir = os.tmpdir(), opts = {}) {
   const dir = fs.mkdtempSync(path.join(tmpDir, 'rlg-ctx-'));
   const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
   const file = path.join(dir, 'context');
@@ -75,7 +75,7 @@ export async function spoolBuildContext(req, dockerfileParam, tmpDir = os.tmpdir
   if (scan.error) return policy(scan.error);
   if (scan.files.length === 0) return policy(`${candidates[0]} is not in the build context`);
   for (const f of scan.files) {
-    const reason = dockerfileReason(f.data);
+    const reason = dockerfileReason(f.data, opts);
     if (reason) return policy(`${f.name}: ${reason}`);
   }
   return { cleanup, file, size };
