@@ -15,6 +15,7 @@ import { ValheimLinkRemapListener } from './link/valheim-link-remap.listener';
 import { ValheimLinkTokensAdminController } from './link/valheim-link-tokens-admin.controller';
 import { ValheimLinkTokensRepository } from './link/valheim-link-tokens.repository';
 import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
+import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833).
@@ -22,6 +23,8 @@ import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
  * `ensureInstalled`, so an uninstall survives a restart (as Pelican).
  */
 @Module({
+  // ROK-1833 DEMO_MODE fixture route (admin + DemoModeGuard).
+  imports: [ValheimLinkDemoSeedModule],
   controllers: [
     ValheimLinkTokensAdminController,
     ValheimLinkIngestController,
