@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import type { ValheimLinkAuth } from './valheim-link-request';
@@ -36,4 +36,18 @@ export async function holdActiveToken(
     )
     .for('share');
   return rows.length > 0;
+}
+
+/**
+ * Serialise one server's quota check + write: `pg_advisory_xact_lock(
+ * hashtext('<scope>:' || serverId))`, released when the transaction ends.
+ * Call after `holdActiveToken`, before the usage read the write depends on.
+ */
+export async function holdServerLock(
+  tx: ValheimLinkTx,
+  scope: 'valheim-link-blobs' | 'valheim-link-snapshots',
+  pelicanServerId: number,
+): Promise<void> {
+  const key = `${scope}:${pelicanServerId}`;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
 }

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,7 +14,7 @@ let dir: string;
 let repo: jest.Mocked<
   Pick<
     ValheimLinkBlobsRepository,
-    'find' | 'insertIfTokenActive' | 'findRefs' | 'touch' | 'usage'
+    'find' | 'insertIfTokenActive' | 'findRefs' | 'touch' | 'usage' | 'remove'
   >
 >;
 let service: ValheimLinkBlobService;
@@ -44,14 +44,13 @@ beforeEach(async () => {
     insertIfTokenActive: jest.fn<
       ReturnType<ValheimLinkBlobsRepository['insertIfTokenActive']>,
       Parameters<ValheimLinkBlobsRepository['insertIfTokenActive']>
-    >(async (_row, _t, place) => {
-      await place();
-      return 'stored';
-    }),
+    >(),
+    remove: jest.fn().mockResolvedValue(undefined),
     usage: jest.fn().mockResolvedValue({ bytes: 0, count: 0 }),
     findRefs: jest.fn().mockResolvedValue([]),
     touch: jest.fn().mockResolvedValue(undefined),
   };
+  repo.insertIfTokenActive.mockResolvedValue('stored');
   service = new ValheimLinkBlobService(
     repo as unknown as ValheimLinkBlobsRepository,
   );
@@ -68,18 +67,21 @@ describe('ValheimLinkBlobService (ROK-1833)', () => {
     expect(await upload(png, sha)).toEqual({ status: 'stored', sha256: sha });
     expect(readFileSync(join(dir, '7', `${sha}.png`)).equals(png)).toBe(true);
     expect(files()).toEqual([`${sha}.png`]);
-    expect(repo.insertIfTokenActive).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pelicanServerId: 7,
-        sha256: sha,
-        byteLength: png.length,
-        width: 4,
-        height: 4,
-        storagePath: `7/${sha}.png`,
-      }),
-      { tokenId: 1, tokenHash: 'h' },
-      expect.any(Function),
-    );
+    // Exact call shape: the token ref only (no server fields), no callback.
+    expect(repo.insertIfTokenActive.mock.calls).toEqual([
+      [
+        {
+          pelicanServerId: 7,
+          sha256: sha,
+          byteLength: png.length,
+          contentType: 'image/png',
+          width: 4,
+          height: 4,
+          storagePath: `7/${sha}.png`,
+        },
+        { tokenId: 1, tokenHash: 'h' },
+      ],
+    ]);
     expect(repo.touch).not.toHaveBeenCalled();
   });
 
@@ -179,5 +181,35 @@ describe('ValheimLinkBlobService — quota + token revalidation (ROK-1833)', () 
     const r = await rejection(upload(png, sha256Of(png)));
     expect(r).toEqual({ status: 401, body: code('invalid_token') });
     expect(files()).toEqual([]);
+  });
+});
+
+describe('ValheimLinkBlobService — post-read quota + post-commit rename (ROK-1833)', () => {
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER;
+  });
+
+  it('no Content-Length at the byte cap passes the preflight, then 413 after the read', async () => {
+    process.env.VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER = '100';
+    repo.usage.mockResolvedValueOnce({ bytes: 100, count: 1 });
+    repo.insertIfTokenActive.mockResolvedValueOnce('quota_exceeded');
+    const png = fakePng(4, 4);
+    const r = await rejection(upload(png, sha256Of(png)));
+    expect(r).toEqual({ status: 413, body: code('quota_exceeded') });
+    expect(repo.findRefs).toHaveBeenCalled();
+    expect(repo.insertIfTokenActive).toHaveBeenCalledTimes(1);
+    expect(files()).toEqual([]);
+  });
+
+  it('a failed rename after commit deletes the row and the temp file; 500 with no path', async () => {
+    const png = fakePng(4, 4);
+    const sha = sha256Of(png);
+    // A directory at the final name makes the rename fail.
+    mkdirSync(join(dir, '7', `${sha}.png`), { recursive: true });
+    const r = await rejection(upload(png, sha));
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(r.body)).not.toContain(dir);
+    expect(repo.remove).toHaveBeenCalledWith(7, sha);
+    expect(files().filter((f) => f.startsWith('.upload-'))).toEqual([]);
   });
 });

@@ -252,4 +252,28 @@ describe('Valheim Link blob quota (ROK-1833)', () => {
     expect(await blobRow(a, sha256Of(second))).toBeUndefined();
     expect((await put(tokenB, sha256Of(second), second)).status).toBe(201);
   });
+
+  it('two concurrent uploads where only one fits: exactly one is stored', async () => {
+    const a = await valheimServer(1);
+    const token = await issueToken(a);
+    const first = fakePng(4, 4);
+    const second = fakePng(4, 5);
+    process.env.VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER = String(
+      Math.max(first.length, second.length),
+    );
+    try {
+      const res = await Promise.all([
+        put(token, sha256Of(first), first),
+        put(token, sha256Of(second), second),
+      ]);
+      expect(res.map((r) => r.status).sort()).toEqual([201, 413]);
+      const stored = await testApp.db
+        .select()
+        .from(schema.valheimLinkBlobs)
+        .where(eq(schema.valheimLinkBlobs.pelicanServerId, a));
+      expect(stored).toHaveLength(1);
+    } finally {
+      delete process.env.VALHEIM_LINK_MAX_BLOB_BYTES_PER_SERVER;
+    }
+  });
 });

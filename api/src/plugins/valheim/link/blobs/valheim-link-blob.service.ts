@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -28,7 +29,11 @@ import {
   commitBlob,
   discardBlob,
 } from './valheim-link-blob.store';
-import { assertUnderQuota, declaredLength } from './valheim-link-blob.quota';
+import {
+  assertUnderQuota,
+  declaredLength,
+  quotaExceeded,
+} from './valheim-link-blob.quota';
 import { ValheimLinkBlobsRepository } from './valheim-link-blobs.repository';
 import { VALHEIM_BLOB_EDGE_MAX } from './valheim-link-png.helpers';
 
@@ -100,13 +105,16 @@ export class ValheimLinkBlobService {
     }
   }
 
-  /** Insert the row + rename into place; `exists` when already stored. */
+  /**
+   * Insert the row (quota re-checked on the actual bytes), then — after
+   * the commit — rename into place; `exists` when already stored.
+   */
   private async store(
     auth: ValheimLinkAuth,
     got: BlobReadResult,
     tmpPath: string,
   ): Promise<ValheimLinkBlobResult['status']> {
-    const { pelicanServerId } = auth;
+    const { pelicanServerId, tokenId, tokenHash } = auth;
     if (await this.repo.find(pelicanServerId, got.sha256)) return 'exists';
     const storagePath = blobRelativePath(pelicanServerId, got.sha256);
     const result = await this.repo.insertIfTokenActive(
@@ -119,15 +127,41 @@ export class ValheimLinkBlobService {
         height: got.height,
         storagePath,
       },
-      auth,
-      () => commitBlob(tmpPath, storagePath),
+      { tokenId, tokenHash },
     );
     if (result === 'revoked') {
       throw new UnauthorizedException(
         ingestError('invalid_token', 'Invalid token'),
       );
     }
+    if (result === 'quota_exceeded') {
+      throw quotaExceeded('Blob storage quota for this server is full');
+    }
+    if (result === 'stored') await this.place(pelicanServerId, got, tmpPath);
     return result;
+  }
+
+  /**
+   * Post-commit rename. On failure, compensate: delete the just-committed
+   * row and the temp file, answer a generic 500 (no paths). A crash between
+   * commit and rename is not reconciled here (follow-up).
+   */
+  private async place(
+    pelicanServerId: number,
+    got: BlobReadResult,
+    tmpPath: string,
+  ): Promise<void> {
+    try {
+      await commitBlob(tmpPath, blobRelativePath(pelicanServerId, got.sha256));
+    } catch (err: unknown) {
+      await this.repo.remove(pelicanServerId, got.sha256);
+      await discardBlob(tmpPath);
+      const reason = err instanceof Error && 'code' in err ? err.code : '-';
+      this.logger.error(
+        `valheim-link blob server=${pelicanServerId} rename failed code=${String(reason)}`,
+      );
+      throw new InternalServerErrorException('Blob could not be stored');
+    }
   }
 }
 
