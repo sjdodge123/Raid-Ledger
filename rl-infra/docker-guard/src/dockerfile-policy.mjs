@@ -4,6 +4,7 @@
 // remote ADD sources are refused, and so are variables that could expand to
 // one. COPY --from of an infra image is refused like a pull of it. Pure.
 import { parseImageRef, pullDenied } from './image-refs.mjs';
+import { astReading } from './dockerfile-ast-reading.mjs';
 
 const DIRECTIVE = /^#[ \t]*([a-zA-Z][a-zA-Z0-9]*)[ \t]*=[ \t]*(.+?)[ \t]*$/;
 const isComment = (l) => /^\s*#/.test(l);
@@ -28,12 +29,12 @@ function declaredEscape(lines) {
  * One continuation model of BuildKit's parser loop: `#` lines and blank lines
  * inside a continuation are skipped, trailing [ \t] after the escape is ignored,
  * a continuation at EOF ends the instruction. `strict` is BuildKit's
- * `([^e])e[ \t]*$` (an escaped escape is not a continuation); the loose form
- * is the older `e[ \t]*$`.
+ * `([^e])e[ \t]*$|^e[ \t]*$` (an escaped escape is not a continuation, a lone
+ * escape on its own line is — c3); the loose form is the older `e[ \t]*$`.
  */
 function joined(lines, esc, strict) {
   const e = ESC[esc] ?? '\\\\';
-  const re = strict ? new RegExp(`([^${e}])${e}[ \\t]*$`) : new RegExp(`${e}[ \\t]*$`);
+  const re = strict ? new RegExp(`([^${e}])${e}[ \\t]*$|^${e}[ \\t]*$`) : new RegExp(`${e}[ \\t]*$`);
   const trim = (l) => (re.test(l) ? [l.replace(re, strict ? '$1' : ''), true] : [l, false]);
   const out = [];
   for (let i = 0; i < lines.length; i++) {
@@ -55,13 +56,15 @@ function joined(lines, esc, strict) {
  * Every reading the policy must hold under: the declared escape and both
  * tokens, BuildKit's strict and the legacy loose continuation rule, and — the
  * hard backstop — each physical line on its own (split on \r too), so no
- * continuation or heredoc mis-model can hide an `ADD`/`COPY` line.
+ * continuation or heredoc mis-model can hide an `ADD`/`COPY` line — plus the
+ * dockerfile-ast instruction stream (c3).
  */
 function readings(text) {
   const lines = physLines(text);
   const escapes = [...new Set([declaredEscape(lines), '\\', '`'])];
   const out = escapes.flatMap((esc) => [joined(lines, esc, true), joined(lines, esc, false)]);
   out.push(String(text).replace(/^\uFEFF/, '').split(/[\r\n]/).filter((l) => !isComment(l)));
+  out.push(astReading(text));
   return out;
 }
 
