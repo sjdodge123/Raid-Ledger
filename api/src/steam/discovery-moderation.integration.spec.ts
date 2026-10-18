@@ -243,6 +243,47 @@ describe('ROK-1843 sync merges keep moderation state', () => {
   });
 });
 
+describe('ROK-1843 a merge never moves a hidden row off its Steam app id', () => {
+  it('a name merge from another Steam app keeps the hidden row anchored', async () => {
+    const hidden = await insertGame({
+      slug: 'rok1843-anchor',
+      name: 'Rok1843 Anchor',
+      steamAppId: 184331,
+      steamAppIdSource: 'steam',
+      hidden: true,
+    });
+
+    await discoverGameViaItad(
+      184332,
+      syncDeps(itadGame('rok1843-anchor-itad', 'Rok1843 Anchor')),
+      'itad',
+    );
+
+    const after = await reload(hidden.id);
+    expect(after.steamAppId).toBe(184331);
+    expect(after.steamAppIdSource).toBe('steam');
+    expect(after.hidden).toBe(true);
+  });
+
+  it('a hidden row with no Steam app id takes the incoming one', async () => {
+    const hidden = await insertGame({
+      slug: 'rok1843-anchor-null',
+      name: 'Rok1843 Anchor Null',
+      hidden: true,
+    });
+
+    await discoverGameViaItad(
+      184333,
+      syncDeps(itadGame('rok1843-anchor-null-itad', 'Rok1843 Anchor Null')),
+      'itad',
+    );
+
+    const after = await reload(hidden.id);
+    expect(after.steamAppId).toBe(184333);
+    expect(after.steamAppIdSource).toBe('itad');
+  });
+});
+
 describe('ROK-1843 ITAD search never returns or rewrites a moderated row', () => {
   function stubSearch(game: ItadGame, steamAppId: number): void {
     const itad = testApp.app.get(ItadService);
