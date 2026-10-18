@@ -103,8 +103,8 @@ export const GAMES_MODERATION_KEY_LOCK_CLASS = 1843;
 
 /**
  * Codex r2 P2 (ROK-1843): take a transaction-scoped advisory lock per
- * alternate key present (itadGameId, steamAppId, igdbId), ALWAYS in that
- * fixed order so two transactions never acquire them crosswise (no deadlock).
+ * alternate key present (itadGameId, steamAppId, igdbId, slug), ALWAYS in
+ * that fixed order so two transactions never acquire them crosswise (no deadlock).
  *
  * The name lock only serialises discoveries for the SAME normalized name. Two
  * discoveries under different names that share an alternate key could both
@@ -123,6 +123,9 @@ export async function lockModerationKeys(
     lockKeys.push(`game-mod:steam:${keys.steamAppId}`);
   }
   if (keys.igdbId != null) lockKeys.push(`game-mod:igdb:${keys.igdbId}`);
+  // Codex r3 P2: the slug too — keyed on the exact slug the slug-collision
+  // lookup (`eq(games.slug, row.slug)`) matches, so it is not normalised.
+  if (keys.slug) lockKeys.push(`game-mod:slug:${keys.slug}`);
   for (const key of lockKeys) {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(${GAMES_MODERATION_KEY_LOCK_CLASS}::int4, hashtext(${key}))`,

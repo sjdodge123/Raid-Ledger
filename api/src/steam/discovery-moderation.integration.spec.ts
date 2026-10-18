@@ -506,6 +506,42 @@ describe('ROK-1843 Codex r2: igdbId key and cross-name serialisation', () => {
   });
 });
 
+describe('ROK-1843 Codex r3: slug serialisation', () => {
+  it('two discoveries with different names sharing only a slug leave no visible twin', async () => {
+    let discovery: Promise<DiscoveryResult | null> | undefined;
+    // An in-flight discovery for "Gamma" holds the slug lock and has inserted
+    // its hidden row but not yet committed; "Delta" shares only the slug.
+    await testApp.db.transaction(async (tx) => {
+      await lockModerationKeys(tx, { slug: 'rok1843-slug-shared' });
+      await tx.insert(schema.games).values({
+        slug: 'rok1843-slug-shared',
+        name: 'Rok1843 Slug Gamma',
+        itadGameId: 'itad-rok1843-slug-gamma',
+        steamAppId: 184373,
+        hidden: true,
+      });
+      discovery = discoverGameViaItad(
+        184374,
+        syncDeps(
+          itadGame(
+            'rok1843-slug-shared',
+            'Rok1843 Slug Delta',
+            'itad-rok1843-slug-delta',
+          ),
+        ),
+        'steam',
+      );
+      await waitForBlockedBackend(tx);
+    });
+
+    if (!discovery) throw new Error('discovery never started');
+    expect((await discovery)?.hidden).toBe(true);
+    const all = await rowsWhere(sql`${schema.games.name} LIKE 'Rok1843 Slug%'`);
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.every((r) => r.hidden)).toBe(true);
+  });
+});
+
 describe('ROK-1843 Codex r2: distinct editions', () => {
   it('a banned edition does not suppress a remake with a different igdbId', async () => {
     const banned = await insertGame({
