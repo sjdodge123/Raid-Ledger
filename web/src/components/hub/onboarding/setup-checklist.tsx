@@ -51,7 +51,8 @@ function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() 
                 <span className={`block text-sm font-medium ${step.done ? 'text-muted' : 'text-foreground'}`}>{step.label}</span>
                 <span className="block text-xs text-muted" data-testid={`setup-step-desc-${step.id}`}>{step.description}</span>
             </span>
-            <span className="sr-only">{step.done ? 'done' : 'not done yet'}</span>
+            {/* A done row already carries a visible "Done" chip — a second sr-only "done" reads it twice. */}
+            {!step.done && <span className="sr-only">not done yet</span>}
             <span className="ml-auto shrink-0"><StepAction step={step} onPickChannel={onPickChannel} /></span>
         </li>
     );

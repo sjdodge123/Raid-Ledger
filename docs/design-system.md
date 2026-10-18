@@ -1320,18 +1320,24 @@ the §4.2 panel surface (`rounded-xl border border-edge bg-panel p-4`) as a `<se
 `text-lg font-semibold text-foreground` heading, one `text-sm text-secondary` line, an icon-only
 `Button variant="ghost" size="sm" iconOnly` × top-right, then an action row: a `Button variant="primary"`
 "How to import" / "Hide steps" toggle (`aria-expanded`) that reveals the game module's `text-sm text-muted`
-how-to **in place**, and a `Button variant="secondary"` "Not now" (ROK-1840, S0 prototype). The × and
-"Not now" are the SAME server-side dismissal — there is no session-only hide. No module how-to, no toggle.
+how-to **in place** — the panel is rendered **after** the action row with a stable `id` the toggle points
+`aria-controls` at — a `Button variant="secondary"` "Not now", and a closing `text-xs text-dim`
+"Shown once, to signed-in players who are not in a guild yet." (ROK-1840, S0 prototype). The × and
+"Not now" are the SAME server-side dismissal — there is no session-only hide — so the × takes **"Not now"**
+as its `aria-label` too: one action must not carry two names implying different durations. No module how-to,
+no toggle.
 A failed dismiss rolls the card back and says so in a `role="alert"` `text-danger` line — never a silent hide.
 
 **DO — the setup checklist** (`components/hub/onboarding/setup-checklist.tsx`): a §4.2 `WidgetCard` in the
-Overview bento (`order: 5`, `span: 2`) titled **`Set up <hub name>`**, header action `Button variant="ghost"
+Overview bento (`order: 5`, `span: 1` — the card carries its own `md:col-span-2`, so a dismissed or finished
+editor leaves no empty grid cell) titled **`Set up <hub name>`**, header action `Button variant="ghost"
 size="sm"` "Hide checklist", then a progress row — the shipped `GuildMeter` (`role="meter"`, §3.2)
 filling the width beside an `N of M done` count — then one `<li>` per step, and a closing
 `text-xs text-dim` "Only editors see this. Hiding it is saved to your account." (ROK-1840, S0 prototype).
 A step row is a 24px round mark — `border-success/40 bg-success/10 text-success` with a `✓` when done,
 `border-edge-strong text-muted` when not — a two-line label block (`text-sm font-medium`, dimmed to
-`text-muted` once done, over a `text-xs text-muted` description), an `sr-only` "done"/"not done yet", and a
+`text-muted` once done, over a `text-xs text-muted` description), an `sr-only` "not done yet" on open rows only
+(a done row's visible "Done" chip already says it), and a
 right-aligned action, with rows separated by `border-b border-edge-subtle`. The action is a verb, never
 "Open": `buttonClass({ variant: 'secondary', size: 'sm' })` on an `<a href="#tab">` for a step that lives in
 another tab (ROK-1599), a `Button variant="secondary" size="sm"` for one that opens an overlay, a

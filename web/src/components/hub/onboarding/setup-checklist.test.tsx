@@ -55,7 +55,7 @@ describe('HubSetupChecklist', () => {
         expect(screen.getByTestId('setup-checklist-footer')).toHaveTextContent('Hiding it is saved to your account.');
         expect(within(list).getByTestId('setup-step-rules')).toHaveAttribute('data-done', 'true');
         expect(within(list).getByTestId('setup-step-leader-post')).toHaveAttribute('data-done', 'false');
-        // A done step offers no action — only the open ones do.
+        // A done step renders no action control — it shows the "Done" chip instead.
         expect(within(list).queryByTestId('setup-step-action-rules')).not.toBeInTheDocument();
         expect(within(list).getByTestId('setup-step-action-links')).toHaveAttribute('href', '#resources');
     });

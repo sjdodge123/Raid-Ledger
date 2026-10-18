@@ -39,9 +39,27 @@ describe('GetYourGuildCard', () => {
         expect(toggle).toHaveTextContent('How to import');
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await userEvent.click(toggle);
-        expect(screen.getByTestId('get-your-guild-how')).toHaveTextContent('Install LedgerLink.');
+        const panel = screen.getByTestId('get-your-guild-how');
+        expect(panel).toHaveTextContent('Install LedgerLink.');
         expect(toggle).toHaveAttribute('aria-expanded', 'true');
         expect(toggle).toHaveTextContent('Hide steps');
+        // Codex P3 / review MINOR-2: the toggle owns the panel, and the panel
+        // follows it, so forward navigation from the button reaches the steps.
+        expect(toggle).toHaveAttribute('aria-controls', panel.id);
+        expect(panel.id).toBe('get-your-guild-how-panel');
+        expect(toggle.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    // ROK-1840 r1: the prototype draws the display rule inside the card, and
+    // labels the x with the same "Not now" the sibling button shows — one
+    // permanent dismissal, one name.
+    it('carries the prototype footnote, and the x shares "Not now" as its name', async () => {
+        serveOnboarding();
+        renderWithProviders(<GetYourGuildCard how="Install LedgerLink." />);
+        await screen.findByTestId('get-your-guild-card');
+        expect(screen.getByTestId('get-your-guild-note'))
+            .toHaveTextContent('Shown once, to signed-in players who are not in a guild yet.');
+        expect(screen.getByTestId('get-your-guild-close')).toHaveAttribute('aria-label', 'Not now');
     });
 
     it('offers no how-to toggle when the module supplies no steps', async () => {
