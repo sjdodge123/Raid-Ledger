@@ -225,6 +225,12 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1833: `created_by` is SET NULL; a server's link token outlives the
   // admin who issued it (the mod keeps posting).
   schema.valheimLinkTokens,
+  // ROK-1835: `claimed_by` is SET NULL — a Valheim character is the game
+  // server's record (pushed by the mod), not user-authored, so it outlives the
+  // claimer (a hard delete leaves it unclaimed; an admin can reassign). The
+  // claim audit's from/to/actor columns are SET NULL history.
+  schema.valheimProfiles,
+  schema.valheimProfileClaimEvents,
 ];
 
 /**
