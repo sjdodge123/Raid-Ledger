@@ -11,6 +11,7 @@
 
 import path from 'node:path';
 import { foldEach, foldReason } from './key-fold.mjs';
+import { HC_MAY_SET, hostConfigAllowReason, networkingConfigReason } from './host-config-allow.mjs';
 
 export const OWNER_LABEL = 'rl.guard.owner';
 const COMPOSE_PREFIX = 'com.docker.compose.';
@@ -91,7 +92,8 @@ function checkPrivileges(hc) {
   if (Array.isArray(hc.SecurityOpt) && hc.SecurityOpt.some((o) => SECURITY_OPT_DENY.test(String(o)))) {
     return 'SecurityOpt weakens confinement';
   }
-  if (hc.MaskedPaths !== undefined || hc.ReadonlyPaths !== undefined) return 'MaskedPaths/ReadonlyPaths overrides are not allowed';
+  // null = Docker's default set (the CLI always sends it); [] would unmask /proc.
+  if ((hc.MaskedPaths ?? null) !== null || (hc.ReadonlyPaths ?? null) !== null) return 'MaskedPaths/ReadonlyPaths overrides are not allowed';
   if (typeof hc.Runtime === 'string' && hc.Runtime !== '' && hc.Runtime !== 'runc') return `Runtime=${hc.Runtime} is not allowed`;
   if (typeof hc.CgroupParent === 'string' && hc.CgroupParent !== '') return 'CgroupParent is not allowed';
   if (typeof hc.VolumeDriver === 'string' && hc.VolumeDriver !== '' && hc.VolumeDriver !== 'local') return `VolumeDriver=${hc.VolumeDriver} is not allowed`;
@@ -136,7 +138,9 @@ export function checkContainerCreate(body, { allow, owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
   const hc = isObj(body.HostConfig) ? body.HostConfig : {};
   const mounts = Array.isArray(hc.Mounts) ? hc.Mounts : [];
-  const reason = foldReason(body, ['HostConfig', 'Labels', 'Image', 'NetworkingConfig'], 'body') ?? foldReason(hc, HC_FIELDS, 'HostConfig')
+  const reason = foldReason(body, ['HostConfig', 'Labels', 'Image', 'NetworkingConfig'], 'body') ?? foldReason(hc, [...HC_FIELDS, ...HC_MAY_SET], 'HostConfig')
+    ?? foldReason(isObj(body.NetworkingConfig) ? body.NetworkingConfig : null, ['EndpointsConfig'], 'NetworkingConfig')
+    ?? hostConfigAllowReason(hc) ?? networkingConfigReason(body.NetworkingConfig)
     ?? foldEach(mounts, MOUNT_FIELDS, 'Mounts[]')
     ?? foldEach(mounts.map((m) => (isObj(m) ? m.VolumeOptions : null)), ['DriverConfig'], 'VolumeOptions')
     ?? checkPrivileges(hc) ?? checkNamespaces(hc) ?? checkBinds(hc.Binds, allow)
