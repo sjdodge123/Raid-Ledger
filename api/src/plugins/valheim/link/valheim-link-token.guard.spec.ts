@@ -110,7 +110,9 @@ describe('ValheimLinkBearerGuard (ROK-1833)', () => {
       expect(findByHash).not.toHaveBeenCalled();
     },
   );
+});
 
+describe('ValheimLinkBearerGuard — server checks (ROK-1833)', () => {
   it.each([
     ['re-mapped', { gameSlug: 'palworld' }],
     ['unmapped', { gameSlug: null }],

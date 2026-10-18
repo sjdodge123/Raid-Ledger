@@ -63,34 +63,34 @@ describe('bucketLimit (ROK-1833)', () => {
   });
 });
 
-describe('ValheimLinkRateLimitGuard (ROK-1833)', () => {
-  function setup(bucket: ValheimLinkBucket | undefined) {
-    const limiter = new ValheimLinkRateLimiter();
-    limiter.now = () => 0;
-    const reflector = {
-      getAllAndOverride: () => bucket,
-    } as unknown as Reflector;
-    const guard = new ValheimLinkRateLimitGuard(reflector, limiter);
-    const setHeader = jest.fn();
-    const ctxFor = (pelicanServerId: number): ExecutionContext =>
-      ({
-        getHandler: () => undefined,
-        getClass: () => undefined,
-        switchToHttp: () => ({
-          getRequest: () => ({
-            headers: {},
-            valheimLink: {
-              tokenId: 1,
-              pelicanServerId,
-              serverId: String(pelicanServerId),
-            },
-          }),
-          getResponse: () => ({ setHeader }),
+function setup(bucket: ValheimLinkBucket | undefined) {
+  const limiter = new ValheimLinkRateLimiter();
+  limiter.now = () => 0;
+  const reflector = {
+    getAllAndOverride: () => bucket,
+  } as unknown as Reflector;
+  const guard = new ValheimLinkRateLimitGuard(reflector, limiter);
+  const setHeader = jest.fn();
+  const ctxFor = (pelicanServerId: number): ExecutionContext =>
+    ({
+      getHandler: () => undefined,
+      getClass: () => undefined,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          headers: {},
+          valheimLink: {
+            tokenId: 1,
+            pelicanServerId,
+            serverId: String(pelicanServerId),
+          },
         }),
-      }) as unknown as ExecutionContext;
-    return { guard, setHeader, ctxFor };
-  }
+        getResponse: () => ({ setHeader }),
+      }),
+    }) as unknown as ExecutionContext;
+  return { guard, setHeader, ctxFor };
+}
 
+describe('ValheimLinkRateLimitGuard (ROK-1833)', () => {
   it('the 3rd message from server A is 429 rate_limited with Retry-After; B is unaffected', () => {
     delete process.env.THROTTLE_DISABLED;
     process.env.VALHEIM_LINK_RATE_MESSAGES_PER_MIN = '2';
@@ -113,14 +113,16 @@ describe('ValheimLinkRateLimitGuard (ROK-1833)', () => {
     expect(setHeader).toHaveBeenCalledWith('Retry-After', '60');
     expect(guard.canActivate(ctxFor(2))).toBe(true);
   });
+});
 
+describe('ValheimLinkRateLimitGuard buckets (ROK-1833)', () => {
   it('blobs draw from their own budget', () => {
     delete process.env.THROTTLE_DISABLED;
     process.env.VALHEIM_LINK_RATE_MESSAGES_PER_MIN = '1';
     process.env.VALHEIM_LINK_RATE_BLOBS_PER_MIN = '1';
     const msgs = setup('messages');
     const blobs = setup('blobs');
-    // Separate limiter instances would hide sharing; reuse one.
+    // One shared limiter, so a shared key would show up as a 429.
     const shared = new ValheimLinkRateLimiter();
     shared.now = () => 0;
     const reflect = (b: ValheimLinkBucket) =>

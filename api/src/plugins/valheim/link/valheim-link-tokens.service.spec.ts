@@ -28,9 +28,9 @@ function build(
     hash: null as string | null,
   };
   const repo = {
-    findServer: jest.fn(async () => server),
-    getStatus: jest.fn(async () => ({ ...state.row })),
-    upsertToken: jest.fn(async (_id: number, hash: string, hint: string) => {
+    findServer: jest.fn(() => Promise.resolve(server)),
+    getStatus: jest.fn(() => Promise.resolve({ ...state.row })),
+    upsertToken: jest.fn((_id: number, hash: string, hint: string) => {
       state.hash = hash;
       state.row = {
         ...state.row,
@@ -38,11 +38,14 @@ function build(
         createdAt: new Date(),
         revokedAt: null,
       };
+      return Promise.resolve();
     }),
-    revoke: jest.fn(async () => {
-      if (state.row.tokenHint === null || state.row.revokedAt) return false;
+    revoke: jest.fn(() => {
+      if (state.row.tokenHint === null || state.row.revokedAt) {
+        return Promise.resolve(false);
+      }
       state.row = { ...state.row, revokedAt: new Date() };
-      return true;
+      return Promise.resolve(true);
     }),
   };
   const service = new ValheimLinkTokensService(

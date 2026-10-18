@@ -240,21 +240,6 @@ describe('PATCH Quick Play guard + supervisor nudge (ROK-1800)', () => {
     },
   );
 
-  it.each<[string, PelicanServerUpdate, boolean]>([
-    ['the game changes', { gameId: 9 }, true],
-    ['the game is cleared', { gameId: null }, true],
-    ['only the Quick Play switch changes', { presenceTracking: false }, false],
-  ])(
-    'awaits PELICAN_SERVER_GAME_CHANGED when %s (ROK-1833)',
-    async (_l, patch, fired) => {
-      const { controller, emitAsync } = build({ kind: 'ok', row: makeRow() });
-      await controller.updateServer(4, patch);
-      expect(emitAsync.mock.calls).toEqual(
-        fired ? [[PELICAN_SERVER_GAME_CHANGED, { serverId: 4 }]] : [],
-      );
-    },
-  );
-
   it('rejects a non-boolean presenceTracking with 400 (ROK-1800)', async () => {
     const { controller, updateMapping } = build();
     await expect(
@@ -273,4 +258,21 @@ describe('PATCH Quick Play guard + supervisor nudge (ROK-1800)', () => {
     const res = await controller.listServers();
     expect(res.data[0]?.presenceSupported).toBe(expected);
   });
+});
+
+describe('PATCH game change → game plugins (ROK-1833)', () => {
+  it.each<[string, PelicanServerUpdate, boolean]>([
+    ['the game changes', { gameId: 9 }, true],
+    ['the game is cleared', { gameId: null }, true],
+    ['only the Quick Play switch changes', { presenceTracking: false }, false],
+  ])(
+    'awaits PELICAN_SERVER_GAME_CHANGED when %s (ROK-1833)',
+    async (_l, patch, fired) => {
+      const { controller, emitAsync } = build({ kind: 'ok', row: makeRow() });
+      await controller.updateServer(4, patch);
+      expect(emitAsync.mock.calls).toEqual(
+        fired ? [[PELICAN_SERVER_GAME_CHANGED, { serverId: 4 }]] : [],
+      );
+    },
+  );
 });
