@@ -596,6 +596,13 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     LAST_TOUCHED=$(jq -r '."rl.last_touched" // empty' <<<"$LABELS")
     SLOT=$(jq -r '."rl.slot" // empty' <<<"$LABELS")
     [[ -z "$SLUG" || -z "$TTL_RAW" || -z "$LAST_TOUCHED" ]] && continue
+    # ROK-1846 AC5 — rl.* labels are whatever the container's creator wrote, so
+    # they are claims, not facts. Reap only a slug env-registry knows (env-spin
+    # writes the row; nothing branch code can reach does)...
+    if ! jq -e --arg s "$SLUG" 'any(.[]?; .slug == $s)' "$ENVS" >/dev/null 2>&1; then
+        log "WARN: container $cid claims rl.env_slug=$SLUG, which is not in env-registry — skipping its TTL reap (forged or stale labels)"
+        continue
+    fi
     # env-spin labels BOTH the allinone and the pg sidecar `rl.role=env`, so
     # this loop sees each env TWICE. The DECISION must be computed for both
     # (either container is enough to destroy the env), but the spare's log line
@@ -603,6 +610,14 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     # spared env wrote ~192 duplicate `env_ttl_extended_pending_plan` rows a day
     # into the same audit log an operator greps for "where did my plan go?".
     CNAME=$(docker inspect "$cid" --format '{{.Name}}' 2>/dev/null || echo "")
+    # ...and only through a container that IS that env's: docker names are
+    # unique, so a forged container cannot be named rl-env-<victim>-allinone
+    # while the victim's real one exists. An unreadable name still proceeds
+    # (pre-ROK-1846 behaviour) because the registry check above already held.
+    if [[ -n "$CNAME" && "$CNAME" != "/rl-env-${SLUG}-allinone" && "$CNAME" != "/rl-env-${SLUG}-pg" ]]; then
+        log "WARN: container $cid ($CNAME) claims rl.env_slug=$SLUG but is not one of its containers — skipping its TTL reap"
+        continue
+    fi
     TTL_HOURS=$(sed 's/h$//' <<<"$TTL_RAW")
     # FAIL SAFE: this branch deletes containers, volumes, the registry row and
     # the env's test plans. Anything we cannot read confidently means KEEP.

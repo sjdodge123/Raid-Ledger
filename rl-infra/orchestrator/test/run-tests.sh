@@ -114,6 +114,8 @@ else
         # channels; ROK-1508 only wired env-destroy, so every reaped env
         # (orphan/unhealthy/TTL/dead-claim) still leaked its channel.
         "$TEST_DIR/gc-sweeper-ephemeral-sweep.test.sh"
+        "$TEST_DIR/docker-guard-policy.test.sh"
+        "$TEST_DIR/compose-docker-boundary.test.sh"
         # ROK-1600 — TTL step 2: the age clock now reads max(container label,
         # env-registry last_touched) so a redeploy extends the env, and an env
         # whose test plans still have verdictless steps gets a bounded grace

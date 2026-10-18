@@ -12,6 +12,13 @@ networks:
   rl-net:
     name: rl-net
     driver: bridge
+  # ROK-1846 — runners <-> rl-docker-guard only. Internal (no egress) and never
+  # joined by env containers (env-spin attaches them to rl-net), so branch code
+  # in a deployed env cannot reach any Docker API endpoint.
+  rl-docker-guard:
+    name: rl-docker-guard
+    driver: bridge
+    internal: true
 
 volumes:
   traefik-acme:
@@ -27,6 +34,24 @@ volumes:
   runner-2-cache: {}
   runner-3-cache: {}
   runner-4-cache: {}
+
+# ROK-1846 — how a runner reaches Docker. Merged into every runner-N
+# `environment:` (a service-level environment map replaces the anchor's, so
+# the merge has to happen inside each map).
+x-runner-docker-env: &runner-docker-env
+  # The validating guard, NOT the raw socket (which was VM root for any
+  # branch code: npm lifecycle scripts, hostile tests, rl_run_on_runner).
+  DOCKER_HOST: tcp://rl-docker-guard:2375
+  # The guard cannot inspect BuildKit's gRPC session (a RUN --network=host
+  # entitlement rides inside it), so runner builds use the legacy builder.
+  DOCKER_BUILDKIT: "0"
+  # Ryuk needs the raw socket bind-mounted, which the guard refuses. Orphans
+  # are reaped by orchestrator/bin/runner-testcontainers-reap on release (the
+  # guard stamps rl.slot on everything a runner creates).
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+  # Mapped testcontainer ports are published on the VM, not on the guard host
+  # named in DOCKER_HOST — point testcontainers at the host gateway.
+  TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
 
 x-runner-base: &runner-base
   build:
@@ -51,7 +76,9 @@ x-runner-base: &runner-base
   mem_reservation: 2g
   pids_limit: 4096
   init: true
-  networks: [rl-net]
+  networks: [rl-net, rl-docker-guard]
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   command: ["sleep", "infinity"]
   labels:
     rl.role: runner
@@ -64,8 +91,9 @@ x-runner-base: &runner-base
     NODE_OPTIONS: --max-old-space-size=4608
     # ROK-1838: error reporting is on by default; runner-booted api/web opt out.
     ENABLE_TELEMETRY: "false"
-  # Each runner needs the host docker socket so it can spin sibling containers
-  # (env stacks, testcontainers) and the host worktree dir mounted at /workspace.
+  # Each runner reaches Docker through rl-docker-guard (ROK-1846 — never the raw
+  # socket) to spin sibling containers (testcontainers, the redis sidecar,
+  # image builds), and gets the host worktree dir mounted at /workspace.
   # node_modules + caches live in named volumes (do NOT sync via Mutagen).
 
 services:
@@ -86,13 +114,16 @@ services:
     image: wollomatic/socket-proxy:1
     container_name: rl-docker-proxy
     restart: unless-stopped
-    networks: [rl-net]
+    # ROK-1846 — host network + loopback listener. It used to sit on rl-net
+    # accepting any source address, so every env container (branch code,
+    # internet-facing) could POST an unfiltered containers/create. Every
+    # consumer (orchestrator _state.sh, the MCP tools over SSH) dials
+    # 127.0.0.1:2375 on the VM host, which a bridge-network container cannot.
+    network_mode: host
     # Wollomatic runs as non-root (UID 65532). Match GID to the host's
     # docker group so the proxy can read /var/run/docker.sock without root.
     # Host docker GID is 1001 (verified on rl-infra VM 2026-05-18).
     user: "65532:1001"
-    ports:
-      - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     # wollomatic regex flags. Single regex per method, pipe-separated
@@ -105,8 +136,8 @@ services:
     # rl-grafana, rl-loki, rl-promtail, rl-registry, rl-gc-sweeper,
     # rl-docker-proxy.
     command:
-      - -listenip=0.0.0.0
-      - -allowfrom=0.0.0.0/0
+      - -listenip=127.0.0.1
+      - -allowfrom=127.0.0.1/32
       - -loglevel=INFO
       - -allowHEAD=^.*$
       - >-
@@ -130,6 +161,31 @@ services:
         -allowPOST=^(/v[0-9.]+)?/images/create(\?.*)?$|^(/v[0-9.]+)?/containers/create(\?.*)?$|^(/v[0-9.]+)?/networks/create$|^(/v[0-9.]+)?/volumes/create$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(start|wait|attach|resize)(\?.*)?$|^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])/(stop|restart|kill|exec)(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9]+/(start|resize)(\?.*)?$|^(/v[0-9.]+)?/(build|images|volumes)/prune(\?.*)?$
       - >-
         -allowDELETE=^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])(\?.*)?$|^(/v[0-9.]+)?/volumes/rl-data-[A-Za-z0-9_.-]+$|^(/v[0-9.]+)?/networks/[A-Za-z0-9_.-]+$
+    labels:
+      rl.role: infra
+
+  # ROK-1846 — the runners' ONLY Docker API. Validates containers/create (no
+  # Privileged, host binds outside GUARD_BIND_ALLOW, CapAdd, Devices, host
+  # namespaces), stamps rl.guard.owner/rl.slot on what a runner creates, and
+  # refuses exec/archive/kill/rm on anything the calling slot does not own
+  # (infra, env containers, other slots). Allowlist + rationale:
+  # docker-guard/src/routes.mjs; README "Docker API boundary".
+  docker-guard:
+    build:
+      context: ./docker-guard
+    image: rl-infra/docker-guard:latest
+    container_name: rl-docker-guard
+    restart: unless-stopped
+    networks: [rl-docker-guard]
+    # node (UID 1000) + the host docker GID (1001, as for rl-docker-proxy).
+    user: "1000:1001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Colon-separated host-path prefixes a runner may bind. Empty = none.
+      GUARD_BIND_ALLOW: ""
+      # "1" re-opens BuildKit's opaque /session + /grpc (accepted-risk switch).
+      GUARD_ALLOW_BUILDKIT: "0"
     labels:
       rl.role: infra
 
@@ -353,6 +409,7 @@ services:
     container_name: rl-runner-1
     hostname: slot-1
     environment:
+      <<: *runner-docker-env
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
       ENABLE_TELEMETRY: "false"
@@ -361,7 +418,6 @@ services:
       - /srv/rl-infra/runners/slot-1/worktree:/workspace
       - runner-1-node-modules:/workspace/node_modules
       - runner-1-cache:/root/.cache
-      - /var/run/docker.sock:/var/run/docker.sock
       # Fleet-wide flock area — Discord smoke serialization (run_discord_smoke
       # in validate-ci.sh flocks /state-locks/discord.lock).
       - /srv/rl-infra/state/locks:/state-locks:rw
@@ -376,6 +432,7 @@ services:
     container_name: rl-runner-2
     hostname: slot-2
     environment:
+      <<: *runner-docker-env
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
       ENABLE_TELEMETRY: "false"
@@ -384,7 +441,6 @@ services:
       - /srv/rl-infra/runners/slot-2/worktree:/workspace
       - runner-2-node-modules:/workspace/node_modules
       - runner-2-cache:/root/.cache
-      - /var/run/docker.sock:/var/run/docker.sock
       - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
@@ -403,6 +459,7 @@ services:
     container_name: rl-runner-3
     hostname: slot-3
     environment:
+      <<: *runner-docker-env
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
       ENABLE_TELEMETRY: "false"
@@ -411,7 +468,6 @@ services:
       - /srv/rl-infra/runners/slot-3/worktree:/workspace
       - runner-3-node-modules:/workspace/node_modules
       - runner-3-cache:/root/.cache
-      - /var/run/docker.sock:/var/run/docker.sock
       - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
@@ -423,6 +479,7 @@ services:
     container_name: rl-runner-4
     hostname: slot-4
     environment:
+      <<: *runner-docker-env
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
       ENABLE_TELEMETRY: "false"
@@ -431,7 +488,6 @@ services:
       - /srv/rl-infra/runners/slot-4/worktree:/workspace
       - runner-4-node-modules:/workspace/node_modules
       - runner-4-cache:/root/.cache
-      - /var/run/docker.sock:/var/run/docker.sock
       - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
