@@ -5,6 +5,7 @@
  * thin wire and the rules are unit-testable without Nest.
  */
 import { BadRequestException } from '@nestjs/common';
+import { z } from 'zod';
 
 /**
  * The intents the Discord bot actually mints. `IntentTokenPayloadSchema`
@@ -39,37 +40,30 @@ export interface IntentTokenResponse {
   expiresInSeconds: number;
 }
 
-interface RawBody {
-  eventId?: unknown;
-  intent?: unknown;
-  userId?: unknown;
-}
-
-function parsePositiveInt(raw: unknown, field: string): number {
-  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1) {
-    throw new BadRequestException(`${field} must be a positive integer`);
-  }
-  return raw;
-}
-
-function parseIntent(raw: unknown): SupportedIntent {
-  const known = SUPPORTED_INTENTS.find((i) => i === raw);
-  if (!known) {
-    throw new BadRequestException(
-      `intent must be one of: ${SUPPORTED_INTENTS.join(', ')}`,
-    );
-  }
-  return known;
-}
+/**
+ * The request body. `userId` may be omitted or `null` (placeholder discord id).
+ * Zod narrows the unknown body — no cast (Codex r1 P3).
+ */
+const IntentTokenBodySchema = z.object({
+  eventId: z.number().int().positive(),
+  intent: z.enum(SUPPORTED_INTENTS),
+  userId: z.number().int().positive().nullish(),
+});
 
 /** Validate the body: a real eventId, a known intent, an optional userId. */
 export function parseIntentTokenBody(body: unknown): IntentTokenRequest {
-  const raw = (body ?? {}) as RawBody;
-  const eventId = parsePositiveInt(raw.eventId, 'eventId');
-  const intent = parseIntent(raw.intent);
-  const hasUser = raw.userId !== undefined && raw.userId !== null;
-  const userId = hasUser ? parsePositiveInt(raw.userId, 'userId') : null;
-  return { eventId, intent, userId };
+  const parsed = IntentTokenBodySchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.join('.') || 'body';
+    const detail =
+      field === 'intent'
+        ? `intent must be one of: ${SUPPORTED_INTENTS.join(', ')}`
+        : `${field} must be a positive integer`;
+    throw new BadRequestException(detail);
+  }
+  const { eventId, intent, userId } = parsed.data;
+  return { eventId, intent, userId: userId ?? null };
 }
 
 /**
