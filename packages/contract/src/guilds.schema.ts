@@ -67,6 +67,8 @@ export const GuildMemberServerSchema = z
     characterName: z.string().nullable(),
     /** The last way they qualified: seen on the server, or pressed Join. */
     source: z.enum(['presence', 'manual']),
+    /** First sighting or Join (`hub_server_members.first_seen_at`); optional so older fixtures parse. */
+    firstSeenAt: isoDate.nullable().optional(),
   })
   .strict();
 export type GuildMemberServer = z.infer<typeof GuildMemberServerSchema>;
@@ -117,6 +119,17 @@ export const GuildRoleCountsSchema = z
 export type GuildRoleCounts = z.infer<typeof GuildRoleCountsSchema>;
 
 /** ROK-1831 — the game-server hero block of a `game_server` hub page. */
+/** ROK-1831 — one row of the server hub's "Recent arrivals" widget (first-seen only). */
+export const GuildServerArrivalSchema = z
+  .object({
+    memberId: id,
+    name: z.string(),
+    characterName: z.string().nullable(),
+    firstSeenAt: isoDate,
+  })
+  .strict();
+export type GuildServerArrival = z.infer<typeof GuildServerArrivalSchema>;
+
 export const GuildPageServerSchema = z
   .object({
     pelicanServerId: id,
@@ -125,6 +138,8 @@ export const GuildPageServerSchema = z
     state: GameServerStateSchema,
     /** The viewer pressed Join and has not left. */
     viewerJoined: z.boolean(),
+    /** Newest five members by first sighting; optional so older fixtures parse. */
+    recentArrivals: z.array(GuildServerArrivalSchema).max(5).optional(),
   })
   .strict();
 export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;
@@ -149,6 +164,8 @@ export const MyGuildSchema = GuildSummarySchema.extend({
   canEdit: z.boolean(),
   /** ROK-1786 — first line of the GM post (≤120 chars), null when unset. */
   gmPostHeadline: z.string().nullable(),
+  /** ROK-1831 D6 — the hub game's icon (`games.cover_url`) for the nav menu; null/absent = generic crest. */
+  gameIconUrl: z.string().nullable().optional(),
 }).strict();
 export type MyGuild = z.infer<typeof MyGuildSchema>;
 

@@ -9,6 +9,7 @@ import {
   GuildMemberRowSchema,
   GuildPageSchema,
   GuildSummarySchema,
+  MyGuildSchema,
 } from '../guilds.schema.js';
 import {
   PelicanServerRowSchema,
@@ -230,5 +231,60 @@ describe('hub-server payloads (ROK-1831)', () => {
     expect(HubQuickPlayListSchema.safeParse({ data: [bad] }).success).toBe(
       false,
     );
+  });
+});
+
+describe('L3-ii additive fields (ROK-1831)', () => {
+  const server = {
+    lastSeenAt: NOW,
+    onlineNow: false,
+    characterName: null,
+    source: 'presence',
+  };
+  const arrival = {
+    memberId: 3,
+    name: 'Ada',
+    characterName: 'Viking',
+    firstSeenAt: NOW,
+  };
+
+  it('accepts firstSeenAt (iso or null) on a server member block', () => {
+    for (const firstSeenAt of [NOW, null]) {
+      const row = GuildMemberRowSchema.parse({
+        ...wowMember,
+        server: { ...server, firstSeenAt },
+      });
+      expect(row.server?.firstSeenAt).toBe(firstSeenAt);
+    }
+  });
+
+  it('accepts recentArrivals (max 5) and rejects 6 or an extra key', () => {
+    const page = (recentArrivals: unknown[]) => ({
+      ...wowPage,
+      server: { ...serverBlock, recentArrivals },
+    });
+    expect(
+      GuildPageSchema.parse(page([arrival])).server?.recentArrivals,
+    ).toEqual([arrival]);
+    const six = Array.from({ length: 6 }, () => arrival);
+    expect(GuildPageSchema.safeParse(page(six)).success).toBe(false);
+    const extra = page([{ ...arrival, steamId: '7656' }]);
+    expect(GuildPageSchema.safeParse(extra).success).toBe(false);
+  });
+
+  it('accepts MyGuild.gameIconUrl as a string, null or absent', () => {
+    const mine = {
+      ...summary,
+      rankIndex: null,
+      rankName: null,
+      canEdit: false,
+      gmPostHeadline: null,
+    };
+    expect(MyGuildSchema.parse(mine).gameIconUrl).toBeUndefined();
+    expect(
+      MyGuildSchema.parse({ ...mine, gameIconUrl: 'https://x/y.png' })
+        .gameIconUrl,
+    ).toBe('https://x/y.png');
+    expect(MyGuildSchema.parse({ ...mine, gameIconUrl: null }).gameIconUrl).toBeNull();
   });
 });
