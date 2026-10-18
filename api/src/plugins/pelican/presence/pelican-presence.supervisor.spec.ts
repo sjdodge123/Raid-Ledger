@@ -311,6 +311,15 @@ describe('ROK-1801 read port', () => {
       open: [ALICE],
     });
     await h.reconcile();
+    // ROK-1831 Codex r2/r3: the boot roster is rebuilt state, so it is marked
+    // `rehydrated`; a later transition (here an empty) is not.
+    const boot = (pelicanServerId: number, gameId = 42) => [
+      SERVER_PRESENCE_EVENTS.CHANGED,
+      { pelicanServerId, gameId, rehydrated: true },
+    ];
+    expect(h.events.emit.mock.calls).toEqual([boot(1), boot(3, 43)]);
+    h.events.emit.mockClear();
+    await h.supervisor.handlePluginDeactivated({ slug: 'pelican' });
     expect(h.events.emit.mock.calls).toEqual([changed(1), changed(3, 43)]);
   });
 
