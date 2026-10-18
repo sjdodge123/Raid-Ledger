@@ -31,6 +31,7 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import {
   PELICAN_PLUGIN_ID,
   PELICAN_PRESENCE_CONFIG_CHANGED,
+  PELICAN_SERVER_GAME_CHANGED,
 } from './pelican.constants';
 import {
   PelicanServersAdminRepository,
@@ -90,6 +91,11 @@ export class PelicanServersAdminController {
     }
     if (patch.presenceTracking !== undefined || patch.gameId !== undefined) {
       this.events.emit(PELICAN_PRESENCE_CONFIG_CHANGED, { serverId: id });
+    }
+    if (patch.gameId !== undefined) {
+      await this.events.emitAsync(PELICAN_SERVER_GAME_CHANGED, {
+        serverId: id,
+      });
     }
     return PelicanServerRowSchema.parse(this.toDto(result.row, new Date()));
   }
