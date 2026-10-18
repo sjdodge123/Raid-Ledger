@@ -122,20 +122,21 @@ type StoredGuild = Awaited<ReturnType<typeof loadGuild>>;
 
 /**
  * ROK-1794 AC2/AC4: an existing guild's roster is only replaced by staff or
- * a live member, never wholesale. Returns whether the snapshot is stale.
+ * a live member, never wholesale. Returns whether the snapshot is stale and
+ * how many live members it removes (audited for the rolling window).
  */
 async function guardExisting(
   ctx: AddonApplyContext,
   guild: StoredGuild,
   payload: AddonGuildExport,
-): Promise<boolean> {
-  if (!guild) return false;
+): Promise<{ stale: boolean; removed: number }> {
+  if (!guild) return { stale: false, removed: 0 };
   const stale = isStaleGuildSnapshot(
     guild.lastSnapshotAt,
     payload.data.snapshotAt,
   );
-  await assertMayReplaceRoster(ctx, guild.id, payload, !stale);
-  return stale;
+  const removed = await assertMayReplaceRoster(ctx, guild.id, payload, !stale);
+  return { stale, removed };
 }
 
 /** Dry run: NOT_IN_GUILD / guard / stale checks + new-vs-updated counts. */
@@ -146,7 +147,7 @@ export async function previewGuild(
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
   const guild = await loadGuild(ctx, payload.data.name);
-  const stale = await guardExisting(ctx, guild, payload);
+  const { stale } = await guardExisting(ctx, guild, payload);
   const guids = payload.data.members.map((m) => m.guid);
   const known = guild ? await countKnownMembers(ctx, guild.id, guids) : 0;
   const summary = buildGuildSummary(payload, pages, guids.length - known);
@@ -259,7 +260,8 @@ export async function applyGuild(
   pages: number,
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
-  await guardExisting(ctx, await loadGuild(ctx, payload.data.name), payload);
+  const guild = await loadGuild(ctx, payload.data.name);
+  const { removed } = await guardExisting(ctx, guild, payload);
   const seenAt = receivedSnapshotAt(payload.data.snapshotAt);
   const guildId = await upsertGuild(ctx, payload, seenAt);
   if (guildId === undefined) {
@@ -268,7 +270,7 @@ export async function applyGuild(
   }
   const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
   const members = payload.data.members.length;
-  await auditRosterReplaced(ctx, guildId, members, inserted);
+  await auditRosterReplaced(ctx, guildId, members, inserted, removed);
   return {
     status: 'applied',
     summary: buildGuildSummary(payload, pages, inserted),

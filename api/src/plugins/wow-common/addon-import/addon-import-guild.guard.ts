@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { AddonGuildExport } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
@@ -14,13 +14,20 @@ import { fromUnix, type AddonApplyContext } from './addon-import-apply.types';
  * is already a live member of the STORED roster, and never wholesale.
  */
 
-const { guilds, guildMembers, guildEditors, characters, users } = schema;
+const { guilds, guildMembers, guildEditors, characters, users, activityLog } =
+  schema;
 const logger = new Logger('AddonImportGuildGuard');
 
 /** A snapshot dropping at least this many live members… */
 export const MASS_REMOVAL_MIN = 5;
 /** …and more than this share of them is held for staff. */
 export const MASS_REMOVAL_SHARE = 0.25;
+/**
+ * Removals are summed over this rolling window (review r1): per-import
+ * counting let a live member drop 4 members an import, 80 an hour.
+ */
+export const REMOVAL_WINDOW_HOURS = 24;
+const WINDOW = sql.raw(`interval '${REMOVAL_WINDOW_HOURS} hours'`);
 
 export const NOT_A_MEMBER_MESSAGE =
   'Only a current member of this guild can update its roster.';
@@ -94,43 +101,72 @@ async function liveRoster(ctx: AddonApplyContext, guildId: number) {
     .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()));
 }
 
+export const ROSTER_AUDIT_ENTITY = 'guild';
+export const ROSTER_AUDIT_ACTION = 'guild_roster_replaced';
+
+/**
+ * Members this guild's non-staff imports removed inside the window, read
+ * from the AC6 audit rows (`metadata.removed`; staff imports record 0).
+ * Uses the DB clock — `created_at` is stamped by the DB, not the export clock.
+ */
+export async function recentRemovals(
+  ctx: AddonApplyContext,
+  guildId: number,
+): Promise<number> {
+  const removed = sql<number>`coalesce(sum((${activityLog.metadata}->>'removed')::int), 0)::int`;
+  const [row] = await ctx.tx
+    .select({ n: removed })
+    .from(activityLog)
+    .where(
+      and(
+        eq(activityLog.entityType, ROSTER_AUDIT_ENTITY),
+        eq(activityLog.entityId, guildId),
+        eq(activityLog.action, ROSTER_AUDIT_ACTION),
+        sql`${activityLog.createdAt} >= now() - ${WINDOW}`,
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/** Held when this import plus the window's earlier removals is wholesale. */
 async function assertNoWholesaleRemoval(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
-): Promise<void> {
+): Promise<number> {
   const incoming = new Set(payload.data.members.map((m) => m.guid));
   const live = await liveRoster(ctx, guildId);
   const removed = live.filter((r) => r.guid === null || !incoming.has(r.guid));
   const dropsEditor = removed.some((r) => r.grantId !== null);
-  if (!dropsEditor && !isMassRemoval(live.length, removed.length)) return;
+  const prior = await recentRemovals(ctx, guildId);
+  const total = prior + removed.length;
+  const base = prior + live.length;
+  if (!dropsEditor && !isMassRemoval(base, total)) return removed.length;
   logger.warn(
-    `Held guild snapshot: guild=${guildId} user=${ctx.userId} removes ${removed.length}/${live.length}${dropsEditor ? ' incl. an editor' : ''}`,
+    `Held guild snapshot: guild=${guildId} user=${ctx.userId} removes ${removed.length}/${live.length} (${total}/${base} in ${REMOVAL_WINDOW_HOURS}h)${dropsEditor ? ' incl. an editor' : ''}`,
   );
-  throw new RosterHeldError(guildId, removed.length, live.length, dropsEditor);
+  throw new RosterHeldError(guildId, total, base, dropsEditor);
 }
 
 /**
  * Gate a snapshot of an EXISTING guild (a brand-new guild has no roster to
  * protect). Staff pass; anyone else must be a live member, and a fresh
  * snapshot may not drop members wholesale. `fresh` = not stale (a stale
- * snapshot writes nothing, so only membership is checked).
+ * snapshot writes nothing, so only membership is checked). Returns how many
+ * live members this snapshot removes (0 for staff — they never count).
  */
 export async function assertMayReplaceRoster(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
   fresh: boolean,
-): Promise<void> {
-  if (await importerIsStaff(ctx)) return;
+): Promise<number> {
+  if (await importerIsStaff(ctx)) return 0;
   if (!(await importerIsLiveMember(ctx, guildId))) {
     throw new AddonImportError('NOT_IN_GUILD', NOT_A_MEMBER_MESSAGE);
   }
-  if (fresh) await assertNoWholesaleRemoval(ctx, guildId, payload);
+  return fresh ? assertNoWholesaleRemoval(ctx, guildId, payload) : 0;
 }
-
-export const ROSTER_AUDIT_ENTITY = 'guild';
-export const ROSTER_AUDIT_ACTION = 'guild_roster_replaced';
 
 /** AC6 — which user's import replaced a guild's roster (shared activity_log). */
 export async function auditRosterReplaced(
@@ -138,12 +174,18 @@ export async function auditRosterReplaced(
   guildId: number,
   members: number,
   newMembers: number,
+  removed: number,
 ): Promise<void> {
   await ctx.tx.insert(schema.activityLog).values({
     entityType: ROSTER_AUDIT_ENTITY,
     entityId: guildId,
     action: ROSTER_AUDIT_ACTION,
     actorId: ctx.userId,
-    metadata: { characterId: ctx.characterId, members, newMembers },
+    metadata: {
+      characterId: ctx.characterId,
+      members,
+      newMembers,
+      removed,
+    },
   });
 }

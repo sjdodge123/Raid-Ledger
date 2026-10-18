@@ -223,6 +223,50 @@ describe('ROK-1794 — unsigned guild snapshots', () => {
   });
 });
 
+/** The real roster minus the first `n` other members, `step` minutes later. */
+function sliced(n: number, step: number): string {
+  const others = roster().filter((m) => m.guid !== FIXTURE_GUID);
+  const dropped = new Set(others.slice(0, n).map((m) => m.guid));
+  const payload = buildGuildPayload(
+    roster().filter((m) => !dropped.has(m.guid)),
+  );
+  payload.data.snapshotAt += step * 60;
+  return buildImportString(payload);
+}
+
+const liveCount = async (): Promise<number> => {
+  const g = await guildRow();
+  const live = await testApp.db
+    .select()
+    .from(schema.guildMembers)
+    .where(gte(schema.guildMembers.lastSeenAt, nonNull(g.lastSnapshotAt)));
+  return live.length;
+};
+
+describe('ROK-1794 — removals over a rolling window (review r1)', () => {
+  it(`${AC(4)}: dropping 4 members an import is held once the day's total is wholesale`, async () => {
+    const { token, id } = await seedRealGuild();
+    expect((await apply(token, id, sliced(4, 1))).status).toBe(200);
+    expect((await apply(token, id, sliced(8, 2))).status).toBe(200);
+    expect(await liveCount()).toBe(32);
+    // 12 of the 40 the guild had inside the window: over a quarter → held.
+    const res = await apply(token, id, sliced(12, 3));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('INVALID_PAYLOAD');
+    expect(await liveCount()).toBe(32);
+    const audits = await testApp.db
+      .select()
+      .from(schema.activityLog)
+      .where(eq(schema.activityLog.action, 'guild_roster_replaced'))
+      .orderBy(schema.activityLog.id);
+    expect(audits.map((a) => a.metadata)).toEqual([
+      expect.objectContaining({ removed: 0 }),
+      expect.objectContaining({ removed: 4 }),
+      expect.objectContaining({ removed: 4 }),
+    ]);
+  });
+});
+
 describe('ROK-1794 — staff, snapshot clock and audit', () => {
   it(`${AC(2)}: staff may replace any roster, wholesale included`, async () => {
     await seedRealGuild();
