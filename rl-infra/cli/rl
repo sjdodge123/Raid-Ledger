@@ -895,6 +895,10 @@ ensure_claim() {
 ensure_mutagen_sync() {
     local slot="$1"
     local session="rl-slot-$slot"
+    # ROK-1849: bump this whenever the create flags below change (ignore list,
+    # modes). A live session without the current label is recreated, because
+    # Mutagen fixes ignores at create time and would otherwise keep the old set.
+    local config_label="rl-sync-config=2"
     if ! command -v mutagen >/dev/null; then
         echo "[rl] mutagen not installed — install from https://mutagen.io/" >&2
         return
@@ -919,10 +923,20 @@ ensure_mutagen_sync() {
         current_alpha=$(mutagen sync list "$session" 2>/dev/null \
             | awk '/^Alpha:/{flag=1;next} flag && /URL:/{print $2; exit}')
         if [[ -n "$current_alpha" && "$current_alpha" == "$REPO_ROOT" ]]; then
-            # Single session, correct source — reuse.
-            return
+            # Single session, correct source — reuse ONLY if it was created
+            # with the current flag set. Ignores are baked in at create time,
+            # so a session from before ROK-1849 keeps syncing .env secrets
+            # forever unless it is recreated here.
+            local labelled
+            labelled=$(mutagen sync list --label-selector "$config_label" 2>/dev/null \
+                | grep -c "^Name: $session$" || true)
+            if (( labelled == 1 )); then
+                return
+            fi
+            echo "[rl] mutagen session $session predates sync config '$config_label' (ROK-1849 .env ignores), re-creating" >&2
+        else
+            echo "[rl] mutagen session $session points at '$current_alpha', re-creating for '$REPO_ROOT'" >&2
         fi
-        echo "[rl] mutagen session $session points at '$current_alpha', re-creating for '$REPO_ROOT'" >&2
     elif (( count > 1 )); then
         echo "[rl] WARNING: $count duplicate Mutagen sessions named $session — terminating all and recreating" >&2
     fi
@@ -949,8 +963,21 @@ ensure_mutagen_sync() {
     # scaffolds a fresh shallow .git on the runner side via `git init` +
     # `git fetch origin`. Bug W (ROK-1326): exclude *.tsbuildinfo so tsc
     # incremental caches don't clobber the runner's own build state.
+    # ROK-1849: never sync .env files. They are gitignored secrets (Discord
+    # client secret, JWT secret, admin password, Sentry write token, the
+    # settings-bundle key) and the beta lands them world-readable in every
+    # runner's /workspace. The `!` rules re-include the tracked templates
+    # (validate-ci reads .env.example). Ignored paths are never deleted on the
+    # beta, so flush_mutagen also purges any copy an older session left behind.
+    #
+    # File modes stay 0644/0755 (ROK-1849 AC5, reviewed): `docker build` COPYs
+    # the synced tree into the allinone image as root-owned files, which the
+    # non-root `app`/`nestjs` users must read — a 0640 tree breaks that the same
+    # way the 0600 tree of Bug S did. With secrets excluded, what remains is the
+    # branch's own source, which is not confidential to a VM account.
     mutagen sync create \
         --name "$session" \
+        --label "$config_label" \
         --mode=one-way-replica \
         --permissions-mode=manual \
         --default-file-mode-beta=0644 \
@@ -977,6 +1004,11 @@ ensure_mutagen_sync() {
         --ignore='scripts/.auth/**' \
         --ignore=.rl-perf.log \
         --ignore=.rl-perf.log.errors \
+        --ignore=.env \
+        --ignore='**/.env' \
+        --ignore='**/.env.*' \
+        --ignore='!**/.env.example' \
+        --ignore='!**/.env.*.example' \
         "$REPO_ROOT" \
         "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}:/srv/rl-infra/runners/slot-${slot}/worktree"
 }
@@ -989,7 +1021,29 @@ flush_mutagen() {
     # anything tries to run them. This is the ONE place; both consumers
     # (cmd_claim, cmd_validate_ci) already flush here, so no caller needs the
     # old `chmod -R a+x` incantation. Returns 97 on an unrepairable tree.
+    # ROK-1849: purge first, so secrets an older session synced are gone even
+    # when the exec-bit repair then fails.
+    purge_runner_synced_secrets "$slot"
     restore_runner_exec_bits "$slot"
+}
+
+# ROK-1849 — remove .env secrets already synced into the runner's /workspace.
+# The session ignores them now, but Mutagen never deletes an ignored path on the
+# beta, so copies from a pre-fix session would stay readable there. Best-effort:
+# a failure (e.g. a branch that predates the script) WARNS and never fails the
+# claim — the ignore rules are the primary control, this is the clean-up.
+purge_runner_synced_secrets() {
+    local slot="$1"
+    [[ -z "$slot" ]] && return 0
+    local out rc=0
+    out=$(ssh_run run-on-runner -- \
+        bash /workspace/rl-infra/runner/purge-synced-secrets.sh /workspace 2>&1) || rc=$?
+    if (( rc != 0 )); then
+        [[ -n "$out" ]] && echo "$out" >&2
+        echo "[rl] WARNING: secret purge failed on slot $slot (rc=$rc) — synced .env files may remain in /workspace." >&2
+        echo "[rl] Operator: run rl-infra/runner/purge-synced-secrets.sh against /srv/rl-infra/runners/slot-$slot/worktree." >&2
+    fi
+    return 0
 }
 
 # A3-B P2 — post-sync exec-bit restoration. See the long WHY in

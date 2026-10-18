@@ -96,7 +96,7 @@ test_w1_flush_invokes_restore_with_bash() {
     local driver="$TMP_STATE/driver.sh"
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
-    write_driver "$driver" 'flush_mutagen 3' flush_mutagen restore_runner_exec_bits
+    write_driver "$driver" 'flush_mutagen 3' flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits
 
     bash "$driver" >/dev/null 2>&1
     local log
@@ -117,7 +117,7 @@ test_w2_failed_restore_is_loud_and_nonzero() {
     local driver="$TMP_STATE/driver.sh"
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
-    write_driver "$driver" 'flush_mutagen 3' flush_mutagen restore_runner_exec_bits
+    write_driver "$driver" 'flush_mutagen 3' flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits
 
     local out rc=0
     out=$(RESTORE_RC=$EXPECTED_FATAL_CODE bash "$driver" 2>&1) || rc=$?
@@ -140,7 +140,7 @@ test_w3_validate_ci_aborts_before_dispatch() {
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
     write_driver "$driver" 'cmd_validate_ci --static' \
-        cmd_validate_ci flush_mutagen restore_runner_exec_bits
+        cmd_validate_ci flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits
 
     local out rc=0
     out=$(RESTORE_RC=$EXPECTED_FATAL_CODE bash "$driver" 2>&1) || rc=$?
