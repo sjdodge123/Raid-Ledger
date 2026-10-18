@@ -17,7 +17,7 @@ import { Checkbox } from '../ui/checkbox';
 import { SearchInput } from '../ui/search-input';
 import { Card, SectionTitle } from './hub-bits';
 import { HubMemberCards, HubMemberTable } from './hub-member-table';
-import { bandMembers, filterMembers, groupingColumn, membersCountLine } from './hub-members.helpers';
+import { bandMembers, filterMembers, groupingColumn, membersCountFor } from './hub-members.helpers';
 
 interface ToolsProps {
     query: string;
@@ -68,7 +68,7 @@ export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModul
                 {Summary && <Summary {...ctx} />}
                 <MemberTools query={query} onQuery={setQuery} grouped={grouped} onGrouped={setGrouped}
                     groupLabel={groupCol?.header ?? null} />
-                <p className="text-xs text-muted" data-testid="guild-members-count">{membersCountLine(rows.length, allRows.length)}</p>
+                <p className="text-xs text-muted" data-testid="guild-members-count">{membersCountFor(rows.length, allRows.length, page.guild.memberCount)}</p>
                 {allRows.length === 0 && <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-empty">{emptyLine(mod, page)}</p>}
                 {allRows.length > 0 && rows.length === 0 && (
                     <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>
