@@ -4,6 +4,11 @@
  * from page data the Overview already holds; it goes away on its own once
  * every actionable step is done, and can be dismissed per hub before then.
  *
+ * A blocked step's reason wraps under its label rather than sitting in the
+ * row's action slot: that slot is `shrink-0`, so a sentence-length reason held
+ * its max-content width (469px measured at a 375px viewport) and ran off the
+ * card on a phone (ROK-1840 r2 FAIL).
+ *
  * ROK-1840 brings it back to the approved S0 prototype: the card is titled
  * with the hub's name, the count sits beside a progress bar, every row carries
  * a description line and a button-styled action, and the footer says the
@@ -27,9 +32,9 @@ const ROW_LINK = buttonClass({ variant: 'secondary', size: 'sm' });
 
 function StepAction({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() => void) | null }): JSX.Element | null {
     if (step.done) return <span className="text-xs font-medium text-success">Done</span>;
-    if (step.action.kind === 'blocked') {
-        return <span className="text-xs text-muted" data-testid={`setup-step-blocked-${step.id}`}>{step.action.reason}</span>;
-    }
+    // A blocked step has no action — its reason is a wrapping line under the
+    // label (see StepRow), never a `shrink-0` cell in the row's action slot.
+    if (step.action.kind === 'blocked') return null;
     if (step.action.kind === 'channel') {
         if (!onPickChannel) return null;
         return <Button variant="secondary" size="sm" onClick={onPickChannel} data-testid={`setup-step-action-${step.id}`}>{step.actionLabel}</Button>;
@@ -50,6 +55,9 @@ function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() 
             <span className="min-w-0 flex-1">
                 <span className={`block text-sm font-medium ${step.done ? 'text-muted' : 'text-foreground'}`}>{step.label}</span>
                 <span className="block text-xs text-muted" data-testid={`setup-step-desc-${step.id}`}>{step.description}</span>
+                {!step.done && step.action.kind === 'blocked' && (
+                    <span className="block text-xs text-dim" data-testid={`setup-step-blocked-${step.id}`}>{step.action.reason}</span>
+                )}
             </span>
             {/* A done row already carries a visible "Done" chip — a second sr-only "done" reads it twice. */}
             {!step.done && <span className="sr-only">not done yet</span>}

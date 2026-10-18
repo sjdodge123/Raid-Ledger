@@ -9,7 +9,8 @@
  *
  * ROK-1840 restores the approved S0 prototype's shape: the how-to is folded
  * behind a primary "How to import" toggle, an icon-only × sits top-right, and
- * "Not now" is the secondary way out. Both × and "Not now" are the SAME
+ * a ghost "Not now" is the other way out, each flashing the prototype's
+ * "Got it." toast once. Both × and "Not now" are the SAME
  * server-side dismissal the prototype wires them to (one `gyg-dismiss`
  * action) — there is no softer session-only hide in the approved target, so
  * both carry the prototype's one piece of wording, "Not now": two accessible
@@ -19,10 +20,13 @@
  */
 import { useState, type JSX, type ReactNode } from 'react';
 import { Button } from '../../ui/button';
+import { toast } from '../../../lib/toast';
 import { useHubOnboarding } from './use-hub-onboarding';
 
 const CARD = 'flex flex-col gap-3 rounded-xl border border-edge bg-panel p-4';
 const HOW_PANEL_ID = 'get-your-guild-how-panel';
+/** The prototype flashes this once per dismissal, from either way out. */
+const DISMISS_TOAST = "Got it. We won't show this again.";
 
 function CardHead({ onClose }: { onClose: () => void }): JSX.Element {
     return (
@@ -30,7 +34,8 @@ function CardHead({ onClose }: { onClose: () => void }): JSX.Element {
             <div className="min-w-0">
                 <h2 id="get-your-guild-title" className="text-lg font-semibold text-foreground">Get your guild on Raid Ledger</h2>
                 <p className="mt-1 text-sm text-secondary">
-                    A guild page gives your roster one place for the leader&apos;s post, the rules, your links and the next raid.
+                    Playing WoW with a guild? Export it from the game with the LedgerLink addon and import it
+                    here. Your guildmates get a shared page for raids, attendance and the leader post.
                 </p>
             </div>
             <Button
@@ -56,7 +61,7 @@ function CardActions(
                     {open ? 'Hide steps' : 'How to import'}
                 </Button>
             )}
-            <Button variant="secondary" onClick={onDismiss} data-testid="get-your-guild-dismiss">Not now</Button>
+            <Button variant="ghost" onClick={onDismiss} data-testid="get-your-guild-dismiss">Not now</Button>
         </div>
     );
 }
@@ -64,16 +69,23 @@ function CardActions(
 export function GetYourGuildCard({ how }: { how?: ReactNode }): JSX.Element | null {
     const prompt = useHubOnboarding('players-get-your-guild');
     const [open, setOpen] = useState(false);
+    // One handler behind both ways out, so a dismissal toasts exactly once.
+    // The toast is optimistic in step with the hide — a write that fails rolls
+    // the card back and says so in the alert line below.
+    const dismiss = (): void => {
+        prompt.dismiss();
+        toast.success(DISMISS_TOAST);
+    };
     if (!prompt.visible) return null;
     return (
         <section className={CARD} data-testid="get-your-guild-card" aria-labelledby="get-your-guild-title">
-            <CardHead onClose={prompt.dismiss} />
+            <CardHead onClose={dismiss} />
             {prompt.failed && (
                 <p role="alert" data-testid="get-your-guild-error" className="text-sm text-danger">
                     We couldn&apos;t dismiss that just now. Try again in a moment.
                 </p>
             )}
-            <CardActions hasHow={how !== undefined} open={open} onToggle={() => { setOpen((v) => !v); }} onDismiss={prompt.dismiss} />
+            <CardActions hasHow={how !== undefined} open={open} onToggle={() => { setOpen((v) => !v); }} onDismiss={dismiss} />
             {how && open && (
                 <div id={HOW_PANEL_ID} className="text-sm text-muted" data-testid="get-your-guild-how">{how}</div>
             )}

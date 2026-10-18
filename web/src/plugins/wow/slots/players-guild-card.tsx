@@ -43,7 +43,7 @@ const WOW_HOW = (
     <ol className="ml-4 list-decimal space-y-1" data-testid="players-guild-how-steps">
         <li>Install LedgerLink from CurseForge or GitHub.</li>
         <li>In game, open LedgerLink and copy your guild export.</li>
-        <li>Paste it here — your roster, ranks and raid schedule come with it.</li>
+        <li>Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.</li>
     </ol>
 );
 
