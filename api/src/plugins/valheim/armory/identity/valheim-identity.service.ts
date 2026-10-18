@@ -41,6 +41,9 @@ export class ValheimIdentityService implements ValheimProfileUpsertedHook {
     profile: ValheimProfileRow,
   ): Promise<void> {
     if (profile.claimedBy !== null) return;
+    // Taken only for an unclaimed profile, so a concurrent detach never waits
+    // on this row while holding the lock (no lock-order inversion).
+    await this.repo.lockSteamIdentity(tx, profile.steamId);
     const userId = await this.repo.autoAttachProfile(tx, profile.id);
     if (userId === null) return;
     await this.repo.insertEvents(tx, [
@@ -51,6 +54,7 @@ export class ValheimIdentityService implements ValheimProfileUpsertedHook {
   /** A2 — the user verified `steamId64` through RL's Steam auth. */
   attachForUser(userId: number, steamId64: string): Promise<void> {
     return this.repo.transaction(async (tx) => {
+      await this.repo.lockSteamIdentity(tx, steamId64);
       const ids = await this.repo.attachBySteamId(tx, userId, steamId64);
       if (ids.length === 0) return;
       await this.repo.insertEvents(
@@ -63,6 +67,7 @@ export class ValheimIdentityService implements ValheimProfileUpsertedHook {
   /** A3 — the user unlinked `steamId64`; only `auto` claims detach. */
   detachForUser(userId: number, steamId64: string): Promise<void> {
     return this.repo.transaction(async (tx) => {
+      await this.repo.lockSteamIdentity(tx, steamId64);
       const ids = await this.repo.detachAutoBySteamId(tx, userId, steamId64);
       if (ids.length === 0) return;
       await this.repo.insertEvents(

@@ -5,7 +5,7 @@
  * assign/unassign and the audit trail, claim release on user hard-delete,
  * plugin-inactive 403 and bad path ids 400.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ValheimCharacterSummarySchema,
@@ -32,6 +32,7 @@ import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../../link/ingest/valheim-link-snapshot.helpers';
 import { ValheimArmoryImportService } from '../valheim-armory-import.service';
+import { ValheimIdentityService } from './valheim-identity.service';
 
 const STEAM = '76561198000000001'; // character-vanilla fixture
 const PLUGINS = [PELICAN_PLUGIN_ID, VALHEIM_PLUGIN_ID];
@@ -441,5 +442,59 @@ describe('Valheim armory route guards (ROK-1835 T17, ids)', () => {
       ]);
       expect(codes.map((r) => r.status)).toEqual([400, 400, 400, 400]);
     }
+  });
+});
+
+/** Poll pg_locks until some session waits on an advisory lock (bounded). */
+async function waitForAdvisoryWaiter(): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    const rows = (await testApp.db.execute(
+      sql`SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`,
+    )) as unknown as unknown[];
+    if (rows.length > 0) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error('no session waited on the valheim-identity lock');
+}
+
+/** A linked member + an unclaimed imported profile row for STEAM. */
+async function linkedMemberWithUnclaimedProfile() {
+  const id = await importCharacter(await makeServer(1));
+  const token = await memberToken(testApp, 'racer');
+  await testApp.db
+    .update(schema.users)
+    .set({ steamId: STEAM })
+    .where(eq(schema.users.username, 'racer'));
+  const [row] = nonEmpty(
+    await testApp.db.select().from(P).where(eq(P.id, id)),
+    'row',
+  );
+  return { id, token, row };
+}
+
+describe('Valheim armory attach vs unlink race (ROK-1835 Codex r1)', () => {
+  const identity = () => testApp.app.get(ValheimIdentityService);
+  const unlink = (t: string) =>
+    testApp.request.delete('/auth/steam/link').set(auth(t));
+
+  it('an import attach after a committed unlink leaves no claim', async () => {
+    const { id, token, row } = await linkedMemberWithUnclaimedProfile();
+    await testApp.db.transaction(async (tx) => {
+      expect((await unlink(token)).status).toBe(204);
+      await identity().onProfileUpserted(tx, row);
+    });
+    expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
+  });
+
+  it('an unlink during an in-flight import attach waits, then detaches it', async () => {
+    const { id, token, row } = await linkedMemberWithUnclaimedProfile();
+    let pending: Promise<number> | undefined;
+    await testApp.db.transaction(async (tx) => {
+      await identity().onProfileUpserted(tx, row);
+      pending = unlink(token).then((r) => r.status);
+      await waitForAdvisoryWaiter();
+    });
+    expect(await pending).toBe(204);
+    expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
   });
 });

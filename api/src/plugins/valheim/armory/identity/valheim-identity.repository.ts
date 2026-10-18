@@ -34,6 +34,18 @@ export class ValheimIdentityRepository {
     return this.db.transaction(fn);
   }
 
+  /**
+   * Serialise every Steam auto-match write for `steamId64` (import attach,
+   * link attach, unlink detach) until `exec`'s transaction ends. Statements
+   * after it see whatever an unlink committed first (READ COMMITTED), so a
+   * stale attach cannot follow a detach that already ran.
+   */
+  async lockSteamIdentity(exec: Exec, steamId64: string): Promise<void> {
+    await exec.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('valheim-identity:' || ${steamId64}))`,
+    );
+  }
+
   /** A1: attach an UNCLAIMED profile to its verified Steam user; the user id or null. */
   async autoAttachProfile(
     exec: Exec,

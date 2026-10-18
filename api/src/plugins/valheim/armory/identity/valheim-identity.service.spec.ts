@@ -11,10 +11,16 @@ import { ValheimIdentityService } from './valheim-identity.service';
 const tx = {} as ValheimLinkTx;
 
 function build() {
+  const order: string[] = [];
+  const track = (name: string, value: unknown) => (): Promise<unknown> => {
+    order.push(name);
+    return Promise.resolve(value);
+  };
   const repo = {
-    autoAttachProfile: jest.fn().mockResolvedValue(null),
-    attachBySteamId: jest.fn().mockResolvedValue([]),
-    detachAutoBySteamId: jest.fn().mockResolvedValue([]),
+    lockSteamIdentity: jest.fn(track('lock', undefined)),
+    autoAttachProfile: jest.fn(track('autoAttach', null)),
+    attachBySteamId: jest.fn(track('attach', [])),
+    detachAutoBySteamId: jest.fn(track('detach', [])),
     insertEvents: jest.fn().mockResolvedValue([]),
     transaction: jest.fn((fn: (t: ValheimLinkTx) => Promise<unknown>) =>
       fn(tx),
@@ -23,7 +29,7 @@ function build() {
   const svc = new ValheimIdentityService(
     repo as unknown as ValheimIdentityRepository,
   );
-  return { repo, svc };
+  return { repo, svc, order };
 }
 
 const profile = (over: Partial<ValheimProfileRow> = {}): ValheimProfileRow =>
@@ -34,6 +40,31 @@ const profile = (over: Partial<ValheimProfileRow> = {}): ValheimProfileRow =>
     claimSource: null,
     ...over,
   }) as ValheimProfileRow;
+
+describe('ValheimIdentityService Steam lock (ROK-1835 Codex r1)', () => {
+  it('locks the SteamID inside the import tx before the auto-attach', async () => {
+    const { repo, svc, order } = build();
+    await svc.onProfileUpserted(tx, profile());
+    expect(repo.lockSteamIdentity).toHaveBeenCalledWith(
+      tx,
+      '76561198000000001',
+    );
+    expect(order).toEqual(['lock', 'autoAttach']);
+  });
+
+  it('locks before attach-on-link and before detach-on-unlink', async () => {
+    const { svc, order } = build();
+    await svc.attachForUser(1, 'S');
+    await svc.detachForUser(1, 'S');
+    expect(order).toEqual(['lock', 'attach', 'lock', 'detach']);
+  });
+
+  it('takes no lock for an already-claimed profile', async () => {
+    const { repo, svc } = build();
+    await svc.onProfileUpserted(tx, profile({ claimedBy: 3 }));
+    expect(repo.lockSteamIdentity).not.toHaveBeenCalled();
+  });
+});
 
 describe('ValheimIdentityService.onProfileUpserted (A1)', () => {
   it.each(['manual', 'admin', 'auto'] as const)(
