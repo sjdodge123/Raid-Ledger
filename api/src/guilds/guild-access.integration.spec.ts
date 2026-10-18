@@ -143,7 +143,12 @@ describe('GuildAccessService (real DB)', () => {
       edit: false,
       manage: false,
     });
-    expect(await rights(officer.actor, guildId)).toEqual(editor);
+    // ROK-1794 AC1: a rank grant confers nothing (rank_index is unsigned).
+    expect(await rights(officer.actor, guildId)).toEqual({
+      view: true,
+      edit: false,
+      manage: false,
+    });
     expect(await rights(picked.actor, guildId)).toEqual(editor);
     expect(await rights(plain.actor, guildId)).toEqual({
       view: true,
@@ -239,7 +244,7 @@ describe('GuildAccessService ladder (ROK-1830, real DB)', () => {
     const cases: [string, GuildActor, string][] = [
       ['admin', admin, 'leader'],
       ['operator', { ...plain.actor, role: 'operator' }, 'leader'],
-      ['rank delegate', rank.actor, 'officer'],
+      ['rank delegate (ROK-1794: inert)', rank.actor, 'member'],
       ['member delegate', pick.actor, 'officer'],
       ['GM without a grant', gm.actor, 'member'],
       ['plain member', plain.actor, 'member'],
@@ -328,5 +333,32 @@ describe('GuildAccessService membership region (real DB)', () => {
       charRegion: 'US',
     });
     expect(await access.isMember(m.actor.id, guildId)).toBe(true);
+  });
+});
+
+describe('ROK-1794 AC5 — a member grant follows the staff-confirmed link', () => {
+  it('a GUID claimed after the grant (repin) confers no delegation', async () => {
+    const guildId = await seedGuild('Repin Watch');
+    const real = await seedMember({ guildId, username: 'rp1', rankIndex: 4 });
+    await testApp.db
+      .insert(schema.guildEditors)
+      .values({ guildId, kind: 'member', guildMemberId: real.memberId });
+    expect(await access.resolveLadder(real.actor, guildId)).toBe('officer');
+    const [ch] = nonEmpty(
+      await testApp.db
+        .select({ id: schema.characters.id })
+        .from(schema.characters)
+        .where(eq(schema.characters.userId, real.actor.id)),
+      'character',
+    );
+    await testApp.db.insert(schema.activityLog).values({
+      entityType: 'addon_guid',
+      entityId: real.actor.id,
+      action: 'addon_guid_claimed',
+      actorId: real.actor.id,
+      metadata: { characterId: ch.id },
+      createdAt: sql`now() + interval '1 second'`,
+    });
+    expect(await access.resolveLadder(real.actor, guildId)).toBe('member');
   });
 });

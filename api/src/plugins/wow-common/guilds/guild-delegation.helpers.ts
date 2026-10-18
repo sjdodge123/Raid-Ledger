@@ -15,8 +15,12 @@ export const RANK_GRANTS_CONFER_EDIT = false;
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { guildEditors: ge, guildMembers: gm, characters: c, activityLog: al } =
-  schema;
+const {
+  guildEditors: ge,
+  guildMembers: gm,
+  characters: c,
+  activityLog: al,
+} = schema;
 
 /**
  * A GUID claim (first pin or repin) by the linking character AFTER the grant
@@ -36,6 +40,12 @@ function claimedSinceGrant(db: Db) {
     );
 }
 
+/** The user's own characters that link to the granted member row. */
+function linkingCharacter(rows: LinkedMemberRow[]) {
+  const ids = rows.map((r) => r.characterId);
+  return and(eq(c.addonGuid, gm.guid), inArray(c.id, ids));
+}
+
 /**
  * A member-kind grant applies only to the link staff saw when granting: the
  * linking character existed at grant time and has claimed no GUID since. A
@@ -51,16 +61,7 @@ async function hasConfirmedMemberGrant(
     .select({ id: ge.id })
     .from(ge)
     .innerJoin(gm, eq(gm.id, ge.guildMemberId))
-    .innerJoin(
-      c,
-      and(
-        eq(c.addonGuid, gm.guid),
-        inArray(
-          c.id,
-          rows.map((r) => r.characterId),
-        ),
-      ),
-    )
+    .innerJoin(c, linkingCharacter(rows))
     .where(
       and(
         eq(ge.guildId, guildId),
@@ -82,7 +83,9 @@ async function hasRankGrant(
   guildId: number,
   rows: LinkedMemberRow[],
 ): Promise<boolean> {
-  const ranks = rows.flatMap((r) => (r.rankIndex === null ? [] : [r.rankIndex]));
+  const ranks = rows.flatMap((r) =>
+    r.rankIndex === null ? [] : [r.rankIndex],
+  );
   if (!RANK_GRANTS_CONFER_EDIT || ranks.length === 0) return false;
   const grants = await db
     .select({ id: ge.id })
