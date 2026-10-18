@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { redeemIntent } from '../lib/api-client';
 import { LoadingSpinner } from '../components/ui/loading-spinner';
@@ -7,7 +7,6 @@ import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../lib/config';
 import {
     clearCapturedQueryToken, peekCapturedQueryToken, setCapturedQueryToken,
-    type CapturedQueryToken,
 } from '../lib/query-token-capture';
 import { readQueryToken, stripQueryToken } from '../lib/query-token';
 
@@ -59,36 +58,63 @@ async function redeemAndNavigate(token: string, eventId: string | null, navigate
  * `window.history.state` so react-router's own entry state survives.
  */
 function useAddressBarStrip(intent: string | null, eventId: string | null): void {
+    const navigate = useNavigate();
+    const { state } = useLocation();
     useEffect(() => {
         const token = readQueryToken(window.location);
         if (token === null) return;
         setCapturedQueryToken({ token, eventId, intent });
-        window.history.replaceState(window.history.state, '', stripQueryToken(window.location));
-    }, [intent, eventId]);
+        // r2 (Opus M1): go through the ROUTER, not a bare
+        // `history.replaceState`. The latter never notifies react-router, so
+        // its in-memory location — and every `useSearchParams()` reader after
+        // us — would keep `?token=` for the life of this history entry even
+        // though the address bar is clean. `replace` keeps Back working and
+        // `state` carries this entry's own router state across, which is what
+        // passing `window.history.state` protected before.
+        navigate(stripQueryToken(window.location), { replace: true, state });
+    }, [intent, eventId, navigate, state]);
+}
+
+/** What this page may spend, and whether a stored capture must be dropped. */
+interface ResolvedJoinToken {
+    /** The token to redeem — from the address bar, or this tab's capture. */
+    token: string | null;
+    /** A stored capture this page must not keep: it belongs to another page. */
+    unusable: boolean;
 }
 
 /**
- * A capture only serves the page it was taken for. A record from an abandoned
- * link (another event, another intent) sitting in this tab must never be
- * redeemed against the event now on screen.
+ * r2 (Codex P2): the capture is read ONCE and both decisions — which token to
+ * spend, and whether a stored one has to go — come out of that single read.
+ * Reading it again inside the cleanup effect was a race: the mount strip
+ * writes a capture between render and effect, so the effect judged the
+ * PREVIOUS snapshot and could clear the token this page had just legitimately
+ * captured (or keep one it had just ruled unusable).
+ *
+ * A capture only serves the page it was taken for: a record from an abandoned
+ * link (another event, another intent) must never be redeemed against the
+ * event now on screen. An expired one never gets this far — `peek` drops it.
  */
-function capturedMatchesPage(
-    captured: CapturedQueryToken | null, intent: string | null, eventId: string | null,
-): boolean {
-    return captured !== null && captured.eventId === eventId && captured.intent === intent;
+function resolveJoinToken(
+    urlToken: string | null, intent: string | null, eventId: string | null,
+): ResolvedJoinToken {
+    if (urlToken !== null) return { token: urlToken, unusable: false };
+    const captured = peekCapturedQueryToken();
+    if (captured === null) return { token: null, unusable: false };
+    const matches = captured.eventId === eventId && captured.intent === intent;
+    return matches ? { token: captured.token, unusable: false } : { token: null, unusable: true };
 }
 
 /**
  * Lead ruling (ROK-1839): an unredeemed token must not survive an abandoned or
  * invalid link. Drop a capture this page will not use — one bound to another
- * page, or any left over once the link has been ruled invalid.
+ * page, or any left over once the link has been ruled invalid. The clear is
+ * idempotent, so running it on a page that captured nothing costs nothing.
  */
-function useUnusableCaptureCleanup(
-    captured: CapturedQueryToken | null, matches: boolean, isValid: boolean,
-): void {
+function useUnusableCaptureCleanup(unusable: boolean, isValid: boolean): void {
     useEffect(() => {
-        if (captured !== null && (!matches || !isValid)) clearCapturedQueryToken();
-    }, [captured, matches, isValid]);
+        if (unusable || !isValid) clearCapturedQueryToken();
+    }, [unusable, isValid]);
 }
 
 function useJoinEffect(authLoading: boolean, isAuthenticated: boolean, isValid: boolean, intent: string | null, eventId: string | null, token: string | null, navigate: ReturnType<typeof useNavigate>) {
@@ -118,14 +144,14 @@ export function JoinPage() {
 
     const intent = searchParams.get('intent');
     const eventId = searchParams.get('eventId');
-    const captured = peekCapturedQueryToken();
-    const matches = capturedMatchesPage(captured, intent, eventId);
     const urlToken = searchParams.get('token');
-    const token = urlToken ?? (matches && captured ? captured.token : null);
+    const { token, unusable } = useMemo(
+        () => resolveJoinToken(urlToken, intent, eventId), [urlToken, intent, eventId],
+    );
     const isValid = useMemo(() => intent === 'signup' && !!eventId && !!token, [intent, eventId, token]);
 
     useAddressBarStrip(intent, eventId);
-    useUnusableCaptureCleanup(captured, matches, isValid);
+    useUnusableCaptureCleanup(unusable, isValid);
     useJoinEffect(authLoading, isAuthenticated, isValid, intent, eventId, token, navigate);
 
     if (!isValid) return <JoinInvalidState navigate={navigate} />;

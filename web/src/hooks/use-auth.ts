@@ -218,7 +218,17 @@ let heldImpersonation = isImpersonatingToken();
 subscribeAccessToken(() => {
     const next = getAccessToken();
     const nowImpersonating = isImpersonatingToken(next);
-    if (heldImpersonation && next !== null && !nowImpersonating) toast.info('Impersonation ended');
+    if (heldImpersonation && next !== null && !nowImpersonating) {
+        // ROK-1839 fix round r2 (Codex P2): the viewer just changed WITHOUT
+        // any of our own exit paths running, so nothing called
+        // `signalIdentityChange`. The capture clear it performs has to happen
+        // here too, or a join token captured while impersonating is redeemed
+        // as the admin who takes the tab back. Only the clear — not
+        // `bumpIdentityEpoch`: this listener fires on a token the OTHER tabs
+        // already know about, and re-broadcasting it would loop them.
+        clearCapturedQueryToken();
+        toast.info('Impersonation ended');
+    }
     heldImpersonation = nowImpersonating;
 });
 

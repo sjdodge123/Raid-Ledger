@@ -27,6 +27,17 @@ import { readQueryToken, stripQueryToken } from './query-token';
 /** sessionStorage key — tab-scoped, cleared on use and on every session end. */
 export const QUERY_TOKEN_STORAGE_KEY = 'rl.join_token';
 
+/**
+ * ROK-1839 fix round r2 (Opus M2 / Codex P3): `capturedAt` is enforced, not
+ * decorative. 15 minutes matches the intent token's own server-side lifetime,
+ * so a capture can never outlive the thing it unlocks: a tab left open on a
+ * half-finished join flow stops being redeemable at the same moment the
+ * server would reject it anyway. A record with no usable timestamp reads as
+ * `capturedAt: 0` and is therefore already expired — a forged or legacy entry
+ * is dropped rather than trusted.
+ */
+export const CAPTURE_TTL_MS = 15 * 60 * 1000;
+
 /** A captured join token together with the page context it was taken from. */
 export interface CapturedQueryToken {
     token: string;
@@ -94,8 +105,22 @@ function captureFromUrl(): CapturedQueryToken | null {
 
 let captured: CapturedQueryToken | null = captureFromUrl();
 
-/** The token this tab captured, with its page context, if not yet spent. */
+function isExpired(entry: CapturedQueryToken): boolean {
+    return Date.now() - entry.capturedAt >= CAPTURE_TTL_MS;
+}
+
+/**
+ * The token this tab captured, with its page context, if not yet spent and
+ * still inside its TTL. An expired capture is not merely ignored — it is
+ * cleared here, so the stale secret leaves memory and sessionStorage on the
+ * first read that notices it rather than waiting for the tab to close.
+ */
 export function peekCapturedQueryToken(): CapturedQueryToken | null {
+    if (captured === null) return null;
+    if (isExpired(captured)) {
+        clearCapturedQueryToken();
+        return null;
+    }
     return captured;
 }
 
