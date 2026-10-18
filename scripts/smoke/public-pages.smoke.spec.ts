@@ -7,9 +7,11 @@
  *  - Invalid/missing tokens show a graceful error state
  *  - Community branding (header link) is visible
  *  - Unauthenticated visitors can reach the pages
+ *  - A REDEEMABLE intent token (ROK-1841 fixture) actually signs the viewer
+ *    up, and the landing leaves no `token=` behind (ROK-1839)
  */
 import { test, expect } from './base';
-import { apiGet, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
 
 
 /**
@@ -135,6 +137,82 @@ test.describe('Join page (/join)', () => {
         await expect(page.getByText('This join link is invalid or has expired.')).toBeVisible();
 
         await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Join page — /join with a REDEEMABLE intent token (ROK-1841)
+// ---------------------------------------------------------------------------
+
+interface EventDetail {
+    roster?: { signups?: { user?: { id?: number } }[] };
+}
+
+/** User ids currently on the event's roster — a pure read for `expect.poll`. */
+async function rosterUserIds(token: string, eventId: number): Promise<number[]> {
+    const detail = (await apiGet(token, `/events/${eventId}/detail`)) as EventDetail | null;
+    return (detail?.roster?.signups ?? []).flatMap((s) => (typeof s.user?.id === 'number' ? [s.user.id] : []));
+}
+
+test.describe('Join page (/join) — redeemable intent token', () => {
+    let adminToken = '';
+    let adminUserId = 0;
+    const eventIds: number[] = [];
+
+    test.beforeAll(async () => {
+        adminToken = await getAdminToken();
+        const me = (await apiGet(adminToken, '/auth/me')) as { id?: number } | null;
+        if (typeof me?.id !== 'number') throw new Error(`GET /auth/me returned no id: ${JSON.stringify(me)}`);
+        adminUserId = me.id;
+    });
+
+    test.afterAll(async () => {
+        for (const id of eventIds.splice(0)) await apiDelete(adminToken, `/events/${id}`).catch(() => undefined);
+    });
+
+    /** A fresh event nobody is signed up to, claimed for cleanup before any assertion. */
+    async function freshEvent(project: string): Promise<number> {
+        const start = new Date(Date.now() + 30 * 86_400_000);
+        const event = (await apiPost(adminToken, '/events', {
+            title: `smoke-rok-1841-join-${project}-${Date.now()}`,
+            startTime: start.toISOString(),
+            endTime: new Date(start.getTime() + 2 * 3_600_000).toISOString(),
+            maxAttendees: 10,
+        })) as { id?: number };
+        if (typeof event.id !== 'number') throw new Error(`POST /events returned no id: ${JSON.stringify(event)}`);
+        eventIds.push(event.id);
+        return event.id;
+    }
+
+    test('redeems the token, signs the viewer up, and leaves no token in the URL', async ({ page }, testInfo) => {
+        const eventId = await freshEvent(testInfo.project.name);
+        const minted = (await apiPost(adminToken, '/admin/test/intent-token', {
+            eventId,
+            intent: 'signup',
+            userId: adminUserId,
+        })) as { token?: string };
+        const token = minted.token;
+        if (typeof token !== 'string' || token === '') {
+            throw new Error(`POST /admin/test/intent-token returned no token: ${JSON.stringify(minted)}`);
+        }
+        expect(await rosterUserIds(adminToken, eventId), 'the fixture event starts with an empty roster').toEqual([]);
+
+        await page.goto(`/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(token)}`);
+
+        // The landing hands off to the event page…
+        await expect(page).toHaveURL(new RegExp(`/events/${eventId}(?:[?#]|$)`), { timeout: 20_000 });
+        // …and ROK-1839: nothing carries the token forward into the URL.
+        expect(page.url(), 'the join token must not survive into the landing URL').not.toContain('token=');
+        expect(page.url(), 'the join token must not survive into the landing URL').not.toContain(token.slice(0, 24));
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // The sign-in half of the flow actually happened, not just the redirect.
+        await expect
+            .poll(() => rosterUserIds(adminToken, eventId), {
+                message: `redeeming the intent token must sign user ${adminUserId} up to event ${eventId}`,
+                timeout: 15_000,
+            })
+            .toContain(adminUserId);
     });
 });
 
