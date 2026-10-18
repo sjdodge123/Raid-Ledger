@@ -120,6 +120,8 @@ jobs:
               - 'Dockerfile*'
               - 'api/Dockerfile'
               - 'api/scripts/docker-entrypoint.sh'
+              # ROK-1846: the allinone's supervisor config + boot scripts (ex-heredocs).
+              - 'docker/allinone/**'
               - 'nginx/**'
               - 'api/src/ai/providers/ollama-docker*'
               - 'api/src/ai/providers/ollama-setup*'

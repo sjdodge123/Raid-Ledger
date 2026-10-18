@@ -1,0 +1,9 @@
+/data/logs/*.log {
+    daily
+    rotate 60
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

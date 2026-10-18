@@ -529,7 +529,7 @@ detect_scope() {
     echo -e "  Migrations changed: no"
   fi
 
-  if echo "$changed_files" | grep -qE 'Dockerfile|nginx/|docker-entrypoint'; then
+  if echo "$changed_files" | grep -qE 'Dockerfile|nginx/|docker-entrypoint|^docker/allinone/'; then
     container_changed=true
     echo -e "  Container files changed: ${YELLOW}yes${NC}"
   else
