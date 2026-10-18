@@ -291,6 +291,12 @@ describe('Discord login callback state binding (ROK-1808)', () => {
     expect(refreshCookieSet(cb)).toBe(true);
   });
 
+  it('invite: a code outside the invite format is never signed (ROK-1845)', async () => {
+    const start = browser();
+    await h.ctrl.discordInviteLogin('../admin/settings', start.req, start.res);
+    expect(start.res.location()).toMatch(/\/calendar$/);
+  });
+
   it('invite: a forwarded invite state is rejected', async () => {
     const attacker = browser();
     await h.ctrl.discordInviteLogin('INV-1', attacker.req, attacker.res);
