@@ -42,6 +42,7 @@ import { verifyDiscordLinkState } from './discord-link-state.helpers';
 import { signBrowserBoundLoginState } from './discord-login-state.helpers';
 import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
 import { verifiedLoginStateOf } from './discord-verified-login-state';
+import { isInviteCodeFormat } from './invite-code-format';
 
 interface RequestWithUser extends Request {
   user: {
@@ -126,7 +127,8 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    if (!inviteCode) {
+    // ROK-1845: a code outside the format is never signed into state.
+    if (!isInviteCodeFormat(inviteCode)) {
       res.redirect(`${clientUrl}/calendar`);
       return;
     }
