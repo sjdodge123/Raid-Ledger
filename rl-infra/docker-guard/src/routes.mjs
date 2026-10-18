@@ -31,13 +31,16 @@ const ROUTES = [
   R('HEAD', `/containers/(${ID})/archive`, ownedContainer),
   R('PUT', `/containers/(${ID})/archive`, ownedContainer),
   R('POST', '/containers/create', { body: 'container-create', query: 'container-create' }),
-  R('POST', `/containers/(${ID})/(start|stop|restart|kill|wait|attach|resize|pause|unpause)`, ownedContainer),
+  // attach + exec start are the only routes that may hijack (Upgrade: tcp).
+  R('POST', `/containers/(${ID})/attach`, { ...ownedContainer, hijack: true }),
+  R('POST', `/containers/(${ID})/(start|stop|restart|kill|wait|resize|pause|unpause)`, ownedContainer),
   R('POST', `/containers/(${ID})/exec`, { ...ownedContainer, body: 'exec-create' }),
   R('DELETE', `/containers/(${ID})`, ownedContainer),
   // GET /events streams every exec's execID, so an id is not a secret: the
   // exec's container must be the caller's (docker-client.mjs resolves it).
   R('GET', `/exec/(${ID})/json`, { owned: { kind: 'exec', group: 1 } }),
-  R('POST', `/exec/(${ID})/(start|resize)`, { owned: { kind: 'exec', group: 1 } }),
+  R('POST', `/exec/(${ID})/start`, { owned: { kind: 'exec', group: 1 }, hijack: true }),
+  R('POST', `/exec/(${ID})/resize`, { owned: { kind: 'exec', group: 1 } }),
   R('GET', '/images/json', ALLOW),
   R('GET', `/images/(${IMG})/(json|history)`, ALLOW),
   R('GET', `/distribution/(${IMG})/json`, ALLOW),
@@ -131,6 +134,7 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
     if (reason) return { ok: false, reason };
     const out = { ok: true };
     if (plan.body) out.body = plan.body;
+    if (plan.hijack) out.hijack = true;
     if (plan.owned) out.owned = { kind: plan.owned.kind, id: m[plan.owned.group] ?? '' };
     return out;
   }
