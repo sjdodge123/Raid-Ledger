@@ -150,7 +150,7 @@ test('AC2: the tester token never appears in any read response', async () => {
 
 test('AC4: test_url is limited to https://slot-N.<public domain> and *.rl.lan', async () => {
   const { port } = await boot();
-  const put = (n, url) => call(port, 'PUT', `/api/test-plans/foo/2026-10-18-1200-00${n}0`, {
+  const put = (n, url) => call(port, 'PUT', `/api/test-plans/foo/2026-10-18-1200-00${n.toString(16).padStart(2, '0')}`, {
     body: planBody({ steps: [{ description: 'one', test_url: url }] }), headers: agentHeaders,
   });
   const rejected = ['https://evil.example.com/x', 'http://slot-1.gamernight.net/x',

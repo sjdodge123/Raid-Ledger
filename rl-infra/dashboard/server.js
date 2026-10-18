@@ -13,7 +13,9 @@ import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
 import { readFile, writeFile, mkdir, unlink, readdir, open, rm, stat, rename } from 'node:fs/promises';
 import { join, extname } from 'node:path';
-import { timingSafeEqual } from 'node:crypto';
+import {
+  agentDenial, agentTokenOk, checkTestUrl, mintTesterToken, testerAllowed, withoutSecrets,
+} from './plan-auth.js';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
@@ -41,20 +43,15 @@ const FLEET_HEALTH_AUDIT_TAIL_BYTES = 256 * 1024; // 256 KiB — enough for 200 
 // as links per env. env-spin already writes Traefik routes for both.
 const PUBLIC_DOMAIN = process.env.RL_PUBLIC_DOMAIN || '';
 
-// Agent-only auth for the comments-leak path. `?include_comments=1` is the
-// agent's read channel for tester comment bodies + attachment URLs. Without
-// gating, any slug-knower can scrape every comment by appending the query
-// param. Default: default-allow with a boot warning so dev/local stays
-// frictionless; production sets RL_AGENT_TOKEN in /srv/rl-infra/.env and the
-// MCP server (mcp-rl-fleet/src/lib/dashboard-fetch.*) sends it as
-// X-Agent-Token on every rl_test_plan_status call. When the token IS set,
-// requests without a matching header get the same response a tester would
-// (comment bodies stripped) — they don't 401, so the dashboard UI keeps
-// working with no client changes.
+// ROK-1847 — RL_AGENT_TOKEN gates every agent-only test-plan route (plan
+// create, both DELETEs) and the `?include_comments=1` read. It fails CLOSED:
+// unset means those routes answer 503 and comment bodies are never returned.
+// Production sets it in /srv/rl-infra/.env; the MCP server sends it as
+// X-Agent-Token. Tester writes are gated in plan-auth.js.
 const RL_AGENT_TOKEN = process.env.RL_AGENT_TOKEN || '';
 if (!RL_AGENT_TOKEN) {
   // eslint-disable-next-line no-console
-  console.warn('[rl-dashboard] RL_AGENT_TOKEN unset — ?include_comments=1 is OPEN to any slug-knower. Set in /srv/rl-infra/.env for prod.');
+  console.warn('[rl-dashboard] RL_AGENT_TOKEN unset — plan create/delete answer 503 and comment bodies are withheld. Set it in /srv/rl-infra/.env.');
 }
 
 const MIME = {
@@ -771,7 +768,7 @@ const summarizePlan = (plan) => {
 // drawer can render previously-uploaded screenshot thumbnails after refresh.
 // The free-form `body` stays omitted.
 const stripCommentBodies = (plan) => ({
-  ...plan,
+  ...withoutSecrets(plan),
   title: stripWrapMaybe(plan.title),
   goal: stripWrapMaybe(plan.goal),
   created_by: stripWrapMaybe(plan.created_by),
@@ -858,7 +855,7 @@ const sanitizeAttachmentUrl = (u) => {
 const stripWrapMaybe = (v) => (typeof v === 'string' ? stripWrapTags(v) : v);
 
 const wrapCommentBodies = (plan) => ({
-  ...plan,
+  ...withoutSecrets(plan),
   title: stripWrapMaybe(plan.title),
   goal: stripWrapMaybe(plan.goal),
   // story_id is server-side-pinned to /^ROK-\d+$/ — no wrap needed.
@@ -898,23 +895,12 @@ const wrapCommentBodies = (plan) => ({
 // POST handlers that return the plan.
 //
 // `?include_comments=1` is the agent-facing path and exposes comment bodies +
-// attachment URLs. When RL_AGENT_TOKEN is configured, the caller MUST send a
-// matching X-Agent-Token header or the comments stay stripped (we don't 401
-// — testers and the dashboard UI still get a useful response). When the env
-// var is unset (dev/local), the query alone is enough — a boot-time warning
-// is logged so the operator knows it's open.
-const agentAuthorized = (req) => {
-  if (!RL_AGENT_TOKEN) return true; // dev mode: allow with warning at boot
-  const header = req?.headers?.['x-agent-token'];
-  if (typeof header !== 'string') return false;
-  const a = Buffer.from(header, 'utf8');
-  const b = Buffer.from(RL_AGENT_TOKEN, 'utf8');
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-};
+// attachment URLs. The caller MUST send a matching X-Agent-Token; otherwise
+// the bodies stay stripped (no 401 — testers and the dashboard UI still get a
+// useful response). With RL_AGENT_TOKEN unset nothing matches (ROK-1847).
 const planForResponse = (plan, req) => {
   const includeComments = req && req.url && req.url.includes('include_comments=1');
-  return includeComments && agentAuthorized(req)
+  return includeComments && agentTokenOk(req, RL_AGENT_TOKEN)
     ? wrapCommentBodies(plan)
     : stripCommentBodies(plan);
 };
@@ -1035,6 +1021,15 @@ const handleTestPlanPut = async (slug, planId, req, res) => {
   if (body.steps.length > 100)
     return sendJson(res, 400, { ok: false, error: 'max 100 steps per plan' });
 
+  // ROK-1847 — test_url is the tester's primary call to action, so a plan
+  // must not be able to point it at a look-alike host.
+  const testUrls = [];
+  for (const [idx, s] of body.steps.entries()) {
+    const checked = checkTestUrl(s?.test_url, PUBLIC_DOMAIN);
+    if (checked.error) return sendJson(res, 400, { ok: false, error: `steps[${idx}]: ${checked.error}` });
+    testUrls.push(checked.url);
+  }
+
   // ROK-1331 M6b chunk-3: env-registry existence gate. AC19-AC21 (shape
   // validation) tests use a curated registry where 'foo'/'bar'/'baz' all
   // exist, so this guard fires only for genuinely-missing envs.
@@ -1081,16 +1076,18 @@ const handleTestPlanPut = async (slug, planId, req, res) => {
     title: typeof body.title === 'string' ? body.title.slice(0, 200) : null,
     created_at: new Date().toISOString(),
     created_by: typeof body.created_by === 'string' ? body.created_by.slice(0, 200) : null,
+    // ROK-1847 — per-plan secret for tester writes. Stored server-side,
+    // returned ONLY in this 201 (the agent builds the shared link from it),
+    // stripped from every other response by withoutSecrets().
+    tester_token: mintTesterToken(),
     steps: body.steps.map((s, idx) => ({
       id: idx + 1,
       description: String(s.description ?? '').slice(0, 500),
       expected: s.expected ? String(s.expected).slice(0, 500) : null,
       category: s.category ? String(s.category).slice(0, 50) : null,
       // Optional deep link the tester taps to jump straight to the test
-      // scenario (e.g. https://<slug>test.gamernight.net/lineups#common-ground).
-      // URLs are validated to start with http:// or https:// — we don't try
-      // to enforce same-origin since envs use multiple hostnames.
-      test_url: validateUrl(s.test_url),
+      // scenario. Allow-listed above (checkTestUrl, ROK-1847).
+      test_url: testUrls[idx] ?? null,
       // Free-form hint shown to the tester as a tooltip on the reset button
       // (e.g. "Refresh data via /admin/seed-lineups"). Agent-authored at plan
       // creation time — NEVER from tester input. Safe to render.
@@ -1107,16 +1104,10 @@ const handleTestPlanPut = async (slug, planId, req, res) => {
   sendJson(res, 201, {
     ok: true,
     plan_id: planId,
+    tester_token: plan.tester_token,
     plan: stripCommentBodies(plan),
     summary: summarizePlan(plan),
   });
-};
-
-const validateUrl = (raw) => {
-  if (!raw || typeof raw !== 'string') return null;
-  const trimmed = raw.trim().slice(0, 500);
-  if (!/^https?:\/\//i.test(trimmed)) return null;
-  return trimmed;
 };
 
 // POST /api/test-plans/<slug>/submit
@@ -2054,6 +2045,33 @@ const RE_ATTACH_GET_V1 = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z
 // and fall through to the static 404 — by design.
 const RE_TASK_LOG = /^\/api\/tasks\/([A-Za-z0-9_]+)\/log$/;
 
+// ROK-1847 — route gates. Each returns true when the handler may run;
+// otherwise it has already sent the 401/404/503.
+const gateAgent = (req, res) => {
+  const denial = agentDenial(req, RL_AGENT_TOKEN);
+  if (!denial) return true;
+  sendJson(res, denial.status, { ok: false, error: denial.error });
+  return false;
+};
+const gateTester = async (slug, planId, req, res) => {
+  // Shape-invalid ids fall through so the handler emits its usual 400.
+  if (!validSlug(slug) || !validPlanId(planId)) return true;
+  let plan;
+  try { plan = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8')); }
+  catch (err) {
+    if (err.code === 'ENOENT') sendJson(res, 404, { ok: false, error: 'no plan for slug' });
+    else sendJson(res, 500, { ok: false, error: 'plan_unreadable' });
+    return false;
+  }
+  if (testerAllowed(req, plan, RL_AGENT_TOKEN)) return true;
+  sendJson(res, 401, {
+    ok: false,
+    error: 'tester_token_required',
+    hint: 'Open the plan from the tester link rl_test_plan_create returned (it carries ?k=...).',
+  });
+  return false;
+};
+
 const server = createServer(async (req, res) => {
   // Split path from query so the route regexes (which use $) still match
   // when the client appends ?include_comments=1 etc. The full req.url
@@ -2095,26 +2113,31 @@ const server = createServer(async (req, res) => {
   const stepMatch = RE_STEP.exec(pathOnly);
   if (stepMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    if (!(await gateTester(stepMatch[1], stepMatch[2], req, res))) return;
     return handleTestPlanStepResult(stepMatch[1], stepMatch[2], stepMatch[3], req, res);
   }
   const resetMatch = RE_RESET.exec(pathOnly);
   if (resetMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    if (!(await gateTester(resetMatch[1], resetMatch[2], req, res))) return;
     return handleTestPlanStepResetRequest(resetMatch[1], resetMatch[2], resetMatch[3], req, res);
   }
   const commentMatch = RE_COMMENT.exec(pathOnly);
   if (commentMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    if (!(await gateTester(commentMatch[1], commentMatch[2], req, res))) return;
     return handleTestPlanStepComment(commentMatch[1], commentMatch[2], commentMatch[3], req, res);
   }
   const submitMatch = RE_SUBMIT.exec(pathOnly);
   if (submitMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    if (!(await gateTester(submitMatch[1], submitMatch[2], req, res))) return;
     return handleTestPlanSubmit(submitMatch[1], submitMatch[2], req, res);
   }
   const attachPostMatch = RE_ATTACH_POST.exec(pathOnly);
   if (attachPostMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    if (!(await gateTester(attachPostMatch[1], attachPostMatch[2], req, res))) return;
     return handleAttachmentUpload(attachPostMatch[1], attachPostMatch[2], req, res);
   }
   const attachGetMatch = RE_ATTACH_GET.exec(pathOnly);
@@ -2138,8 +2161,10 @@ const server = createServer(async (req, res) => {
     const slug = planOneMatch[1];
     const planId = planOneMatch[2];
     if (req.method === 'GET') return handleTestPlanGet(slug, planId, req, res);
-    if (req.method === 'PUT' || req.method === 'POST') return handleTestPlanPut(slug, planId, req, res);
-    if (req.method === 'DELETE') return handleTestPlanDelete(slug, planId, res);
+    if (req.method === 'PUT' || req.method === 'POST') {
+      return gateAgent(req, res) ? handleTestPlanPut(slug, planId, req, res) : undefined;
+    }
+    if (req.method === 'DELETE') return gateAgent(req, res) ? handleTestPlanDelete(slug, planId, res) : undefined;
     res.writeHead(405); res.end('Method Not Allowed'); return;
   }
   // Slug-only routes: list (GET) + slug-wide clear (DELETE).
@@ -2147,7 +2172,7 @@ const server = createServer(async (req, res) => {
   if (planListMatch) {
     const slug = planListMatch[1];
     if (req.method === 'GET') return handleTestPlanListForSlug(slug, req, res);
-    if (req.method === 'DELETE') return handleTestPlanDeleteSlug(slug, res);
+    if (req.method === 'DELETE') return gateAgent(req, res) ? handleTestPlanDeleteSlug(slug, res) : undefined;
     res.writeHead(405); res.end('Method Not Allowed'); return;
   }
   const taskLogMatch = RE_TASK_LOG.exec(pathOnly);
