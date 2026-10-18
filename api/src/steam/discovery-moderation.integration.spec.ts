@@ -121,6 +121,28 @@ describe('ROK-1843 by-steam-id never rediscovers a moderated game', () => {
     expect(res.status).toBe(404);
     expect((await reload(hidden.id)).hidden).toBe(true);
   });
+
+  it('a second Steam app mapping to a hidden game slug 404s and creates no visible twin', async () => {
+    await insertGame({
+      slug: 'rok1843-twin',
+      name: 'Rok1843 Twin',
+      steamAppId: 184304,
+      hidden: true,
+    });
+    jest
+      .spyOn(testApp.app.get(ItadService), 'lookupBySteamAppId')
+      .mockResolvedValue(itadGame('rok1843-twin', 'Rok1843 Twin'));
+
+    const res = await testApp.request.get('/games/by-steam-id/184305');
+
+    expect(res.status).toBe(404);
+    const rows = await testApp.db
+      .select({ hidden: schema.games.hidden })
+      .from(schema.games)
+      .where(eq(schema.games.name, 'Rok1843 Twin'));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.hidden)).toBe(true);
+  });
 });
 
 describe('ROK-1843 sync merges keep moderation state', () => {

@@ -139,7 +139,7 @@ async function upsertGameLocked(
     // Slug taken by a different Steam game — skip itadGameId merge and create
     // a new row with a suffixed slug + nulled unique fields.
     if (bySlug.steamAppId && bySlug.steamAppId !== row.steamAppId) {
-      return insertNewGame(db, row);
+      return insertSlugTwin(db, bySlug, row);
     }
     return mergeIntoExisting(db, bySlug, row);
   }
@@ -156,6 +156,22 @@ async function upsertGameLocked(
   if (byNormalized) return mergeIntoExisting(db, byNormalized, row);
 
   return insertNewGame(db, row);
+}
+
+/**
+ * Insert a suffixed-slug twin of a row another Steam app owns. ROK-1843: the
+ * twin inherits the original's moderation — a banned original yields no twin,
+ * a hidden one a hidden twin — so a second Steam app id that ITAD maps to the
+ * same game can't bring a moderated game back as a visible duplicate.
+ */
+async function insertSlugTwin(
+  db: PostgresJsDatabase<typeof schema>,
+  original: MatchedGame,
+  row: GameInsertRow,
+): Promise<StoredGame | null> {
+  if (original.banned === true) return null;
+  if (original.hidden !== true) return insertNewGame(db, row);
+  return insertNewGame(db, { ...row, hidden: true });
 }
 
 /** Insert a brand-new row; its hidden flag is the one discovery computed. */
