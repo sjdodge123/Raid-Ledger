@@ -22,17 +22,20 @@ export interface BoundedBodyOptions {
   contentType: string;
 }
 
-const tooLarge = (): PayloadTooLargeException =>
+/** 413 `payload_too_large`. */
+export const tooLarge = (): PayloadTooLargeException =>
   new PayloadTooLargeException(
-    ingestError('payload_too_large', 'body exceeds the cap for this kind'),
+    ingestError('payload_too_large', 'body exceeds the cap for this route'),
   );
 
-const unsupported = (what: string): UnsupportedMediaTypeException =>
+/** 415 `unsupported_media`. */
+export const unsupported = (what: string): UnsupportedMediaTypeException =>
   new UnsupportedMediaTypeException(
     ingestError('unsupported_media', `unsupported ${what}`),
   );
 
-function headerOf(src: BoundedBodySource, name: string): string {
+/** A request header, joined, trimmed and lower-cased (`''` when absent). */
+export function headerOf(src: BoundedBodySource, name: string): string {
   const value = src.headers[name];
   return (Array.isArray(value) ? value.join(',') : (value ?? ''))
     .trim()
@@ -47,13 +50,15 @@ function encodingOf(src: BoundedBodySource): 'gzip' | 'identity' {
   throw unsupported('content-encoding');
 }
 
-function assertContentType(src: BoundedBodySource, want: string): void {
+/** 415 unless the (bypassed) media type is `want`. */
+export function assertContentType(src: BoundedBodySource, want: string): void {
   const raw = src[VALHEIM_LINK_CONTENT_TYPE] ?? headerOf(src, 'content-type');
   const type = (raw.split(';')[0] ?? '').trim().toLowerCase();
   if (type !== want) throw unsupported('content-type');
 }
 
-function assertDeclaredLength(src: BoundedBodySource, max: number): void {
+/** 413 when `Content-Length` declares more than `max`. */
+export function assertDeclaredLength(src: BoundedBodySource, max: number): void {
   const declared = Number(headerOf(src, 'content-length'));
   if (Number.isFinite(declared) && declared > max) throw tooLarge();
 }
