@@ -35,8 +35,7 @@ import {
 } from './addon-import.run';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
-import { RosterHeldError } from './addon-import-guild.guard';
-import { flagHeldRoster } from './addon-import-guild.flag';
+import { flagIfRosterHeld } from './addon-import-guild.flag';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -76,10 +75,8 @@ export class AddonImportService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) result = err.code;
-      // ROK-1794 AC4: the tx rolled back — flag the held roster to admins.
-      if (err instanceof RosterHeldError) {
-        await flagHeldRoster(this.db, userId, err, this.logger);
-      }
+      // ROK-1794 AC4: the tx rolled back — flag a held roster to admins.
+      await flagIfRosterHeld(this.db, userId, err, this.logger);
       throw err;
     } finally {
       await this.finish(userId, characterId, facts, result, perSection);

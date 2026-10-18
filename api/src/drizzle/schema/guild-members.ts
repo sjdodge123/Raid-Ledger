@@ -43,6 +43,18 @@ export const guildMembers = pgTable(
       () => users.id,
       { onDelete: 'set null' },
     ),
+    /**
+     * ROK-1794 (Codex P1): the user whose import first inserted this row.
+     * Set on insert only. A row the importer introduced themselves confers
+     * no guild-import rights on them until `corroborated_at` is set. Null =
+     * pre-ROK-1794 row (or the user was deleted).
+     */
+    introducedByUserId: integer('introduced_by_user_id').references(
+      () => users.id,
+      { onDelete: 'set null' },
+    ),
+    /** ROK-1794: when an import by a user other than the introducer carried it. */
+    corroboratedAt: timestamp('corroborated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -58,6 +70,9 @@ export const guildMembers = pgTable(
     // ROK-1157: FK backing indexes — the partial unique above does not count.
     index('idx_guild_members_guild_id').on(table.guildId),
     index('idx_guild_members_captured_by_user_id').on(table.capturedByUserId),
+    index('idx_guild_members_introduced_by_user_id').on(
+      table.introducedByUserId,
+    ),
   ],
 );
 

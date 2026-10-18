@@ -4,7 +4,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import {
   REMOVAL_WINDOW_HOURS,
-  type RosterHeldError,
+  RosterHeldError,
 } from './addon-import-guild.guard';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -36,6 +36,21 @@ export async function flagHeldRoster(
     logger.warn(
       `ROK-1794: held-roster flag failed for guild ${err.guildId}: ${e instanceof Error ? e.message : 'Unknown error'}`,
     );
+  }
+}
+
+/**
+ * ROK-1794 Codex P2 — the ONE place both import routes (per-character and
+ * character-less) send a failed import: flags it when it was a held roster.
+ */
+export async function flagIfRosterHeld(
+  db: Db,
+  importerId: number,
+  err: unknown,
+  logger: Logger,
+): Promise<void> {
+  if (err instanceof RosterHeldError) {
+    await flagHeldRoster(db, importerId, err, logger);
   }
 }
 

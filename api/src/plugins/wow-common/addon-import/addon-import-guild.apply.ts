@@ -11,6 +11,7 @@ import { AddonImportError } from './addon-import.errors';
 import {
   assertMayReplaceRoster,
   auditRosterReplaced,
+  lockGuildImport,
   receivedSnapshotAt,
   type RosterDelta,
 } from './addon-import-guild.guard';
@@ -84,6 +85,8 @@ export function memberValues(
     source: 'addon_import',
     lastSeenAt: seenAt,
     capturedByUserId: ctx.userId,
+    // Insert-only (not in the conflict set): who first introduced the row.
+    introducedByUserId: ctx.userId,
     updatedAt: new Date(),
   };
 }
@@ -224,10 +227,17 @@ const EXCLUDED_MEMBER_COLUMNS = [
 const camel = (c: string) =>
   c.replace(/_(\w)/g, (_m, ch: string) => ch.toUpperCase());
 
-/** `SET col = excluded.col` for every mutable member column. */
-const memberConflictSet = Object.fromEntries(
-  EXCLUDED_MEMBER_COLUMNS.map((c) => [camel(c), sql.raw(`excluded.${c}`)]),
-);
+/**
+ * `SET col = excluded.col` for every mutable member column, plus ROK-1794
+ * corroboration: the first import by a user other than the row's introducer
+ * stamps `corroborated_at` (`excluded.introduced_by_user_id` = this importer).
+ */
+const memberConflictSet = {
+  ...Object.fromEntries(
+    EXCLUDED_MEMBER_COLUMNS.map((c) => [camel(c), sql.raw(`excluded.${c}`)]),
+  ),
+  corroboratedAt: sql`CASE WHEN ${guildMembers.corroboratedAt} IS NULL AND ${guildMembers.introducedByUserId} IS DISTINCT FROM excluded.introduced_by_user_id THEN now() ELSE ${guildMembers.corroboratedAt} END`,
+};
 
 /** Upsert members by (guild_id, guid); returns how many were inserted. */
 async function upsertMembers(
@@ -262,6 +272,7 @@ export async function applyGuild(
   pages: number,
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
+  await lockGuildImport(ctx, guildNameKey(payload.data.name));
   const guild = await loadGuild(ctx, payload.data.name);
   const { delta } = await guardExisting(ctx, guild, payload);
   const seenAt = receivedSnapshotAt(payload.data.snapshotAt);

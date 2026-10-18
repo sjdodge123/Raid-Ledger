@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import type { AddonGuildExport } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
@@ -71,7 +71,37 @@ async function importerIsStaff(ctx: AddonApplyContext): Promise<boolean> {
   return row?.role === 'admin' || row?.role === 'operator';
 }
 
-/** The importing character's STORED GUID is a live row of the guild. */
+/**
+ * ROK-1794 Codex P2 — serialise applies of one guild (keyed by game, region
+ * and name key, so two first snapshots of a NEW guild serialise too): read
+ * roster → count removals → write audit can't interleave, so two identical
+ * concurrent imports count a removal once (the second reads the first's
+ * roster and removes nothing). Released at commit/rollback.
+ */
+export async function lockGuildImport(
+  ctx: AddonApplyContext,
+  nameKey: string,
+): Promise<void> {
+  const key = `guild-import:${ctx.gameId}:${ctx.region}:${nameKey}`;
+  await ctx.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${key}))`);
+}
+
+/**
+ * ROK-1794 Codex P1 — a roster row the importer's OWN upload introduced
+ * proves nothing (they may have claimed its GUID with a forged character
+ * export too). It counts only once corroborated: introduced by someone else
+ * (or before introducers were recorded), carried by another user's import
+ * since, or holding a staff-made member grant.
+ */
+const corroboratedFor = (userId: number) =>
+  or(
+    isNull(guildMembers.introducedByUserId),
+    ne(guildMembers.introducedByUserId, userId),
+    isNotNull(guildMembers.corroboratedAt),
+    isNotNull(guildEditors.id),
+  );
+
+/** The importing character's STORED GUID is a live, corroborated row. */
 async function importerIsLiveMember(
   ctx: AddonApplyContext,
   guildId: number,
@@ -81,11 +111,13 @@ async function importerIsLiveMember(
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .innerJoin(characters, eq(characters.addonGuid, guildMembers.guid))
+    .leftJoin(guildEditors, eq(guildEditors.guildMemberId, guildMembers.id))
     .where(
       and(
         eq(characters.id, ctx.characterId),
         eq(guildMembers.guildId, guildId),
         inLatestSnapshot(),
+        corroboratedFor(ctx.userId),
       ),
     )
     .limit(1);
