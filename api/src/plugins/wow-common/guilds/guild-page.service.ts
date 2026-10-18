@@ -32,6 +32,7 @@ import {
   rankNamesByMemberId,
 } from './guild-queries.helpers';
 import { gmPostHeadlines } from '../../../guilds/guild-profile.queries';
+import { hubGameIcons } from '../../../guilds/hub-game-icons.queries';
 import {
   dropHiddenFor,
   isHiddenFrom,
@@ -59,9 +60,14 @@ export class GuildPageService {
       await this.access.myGuilds(actor.id),
     );
     const ids = summaries.map((g) => g.id);
-    const [ranks, headlines] = await Promise.all([
+    // Same shape as core `guilds/mine` (ROK-1831 D6 nav icon).
+    const [ranks, headlines, icons] = await Promise.all([
       this.mineRanks(actor.id, ids),
       gmPostHeadlines(this.db, ids),
+      hubGameIcons(
+        this.db,
+        summaries.map((g) => g.gameId),
+      ),
     ]);
     const guilds: MyGuild[] = [];
     for (const g of summaries) {
@@ -72,6 +78,7 @@ export class GuildPageService {
         rankName: rank?.rankName ?? null,
         canEdit: await this.access.canEdit(actor, g.id),
         gmPostHeadline: headlines.get(g.id) ?? null,
+        gameIconUrl: icons.get(g.gameId) ?? null,
       });
     }
     return { guilds };
