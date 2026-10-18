@@ -17,10 +17,7 @@ import { fitsQuota, type ValheimBlobUsage } from './valheim-link-blob.quota';
  * died; `quota_exceeded` = the actual bytes would pass the server's caps.
  */
 export type ValheimBlobInsertResult =
-  | 'stored'
-  | 'exists'
-  | 'revoked'
-  | 'quota_exceeded';
+  'stored' | 'exists' | 'revoked' | 'quota_exceeded';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const { valheimLinkSnapshots: snapshots, valheimLinkBlobs: blobs } = schema;

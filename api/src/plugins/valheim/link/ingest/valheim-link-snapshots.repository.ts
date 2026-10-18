@@ -27,10 +27,7 @@ export interface ValheimStoredBlob {
  * `quota_exceeded` (a new key past the server's snapshot caps).
  */
 export type ValheimSnapshotWrite =
-  | 'written'
-  | 'stale'
-  | 'revoked'
-  | 'quota_exceeded';
+  'written' | 'stale' | 'revoked' | 'quota_exceeded';
 
 /** `valheim_link_snapshots` latest-wins writes + blob lookups for ingest. */
 @Injectable()

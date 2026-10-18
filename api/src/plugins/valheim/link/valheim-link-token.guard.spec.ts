@@ -202,12 +202,12 @@ describe('ValheimLinkBearerGuard — in-flight reservations (ROK-1833)', () => {
       ),
     );
     expect(findByHash.mock.calls.length).toBeLessThanOrEqual(30);
-    expect(results.filter((r) => String(r) === '401,invalid_token')).toHaveLength(
-      findByHash.mock.calls.length,
-    );
-    expect(results.filter((r) => String(r) === '429,rate_limited')).toHaveLength(
-      300 - findByHash.mock.calls.length,
-    );
+    expect(
+      results.filter((r) => String(r) === '401,invalid_token'),
+    ).toHaveLength(findByHash.mock.calls.length);
+    expect(
+      results.filter((r) => String(r) === '429,rate_limited'),
+    ).toHaveLength(300 - findByHash.mock.calls.length);
   });
 
   it('a successful auth refunds its reservation', async () => {

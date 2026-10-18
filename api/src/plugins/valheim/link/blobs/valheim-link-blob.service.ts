@@ -34,7 +34,10 @@ import {
   declaredLength,
   quotaExceeded,
 } from './valheim-link-blob.quota';
-import { ValheimLinkBlobsRepository } from './valheim-link-blobs.repository';
+import {
+  ValheimLinkBlobsRepository,
+  type ValheimBlobInsertResult,
+} from './valheim-link-blobs.repository';
 import { VALHEIM_BLOB_EDGE_MAX } from './valheim-link-png.helpers';
 
 /** A request the blob service reads (Express request after the guards). */
@@ -129,14 +132,7 @@ export class ValheimLinkBlobService {
       },
       { tokenId, tokenHash },
     );
-    if (result === 'revoked') {
-      throw new UnauthorizedException(
-        ingestError('invalid_token', 'Invalid token'),
-      );
-    }
-    if (result === 'quota_exceeded') {
-      throw quotaExceeded('Blob storage quota for this server is full');
-    }
+    assertAdmitted(result);
     if (result === 'stored') await this.place(pelicanServerId, got, tmpPath);
     return result;
   }
@@ -162,6 +158,20 @@ export class ValheimLinkBlobService {
       );
       throw new InternalServerErrorException('Blob could not be stored');
     }
+  }
+}
+
+/** 401 when the token died before commit; 413 when the actual bytes don't fit. */
+function assertAdmitted(
+  result: ValheimBlobInsertResult,
+): asserts result is 'stored' | 'exists' {
+  if (result === 'revoked') {
+    throw new UnauthorizedException(
+      ingestError('invalid_token', 'Invalid token'),
+    );
+  }
+  if (result === 'quota_exceeded') {
+    throw quotaExceeded('Blob storage quota for this server is full');
   }
 }
 
