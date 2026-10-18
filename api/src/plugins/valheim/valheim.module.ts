@@ -2,6 +2,9 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { VALHEIM_MANIFEST } from './valheim.manifest';
 import { ValheimAdapterRegistration } from './valheim-adapters';
+import { ValheimLinkIngestController } from './link/ingest/valheim-link-ingest.controller';
+import { ValheimLinkIngestService } from './link/ingest/valheim-link-ingest.service';
+import { ValheimLinkSnapshotsRepository } from './link/ingest/valheim-link-snapshots.repository';
 import { ValheimLinkBearerGuard } from './link/valheim-link-token.guard';
 import { ValheimLinkRateLimitGuard } from './link/valheim-link-rate-limit.guard';
 import { ValheimLinkRateLimiter } from './link/valheim-link-rate-limiter';
@@ -16,7 +19,7 @@ import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
  * `ensureInstalled`, so an uninstall survives a restart (as Pelican).
  */
 @Module({
-  controllers: [ValheimLinkTokensAdminController],
+  controllers: [ValheimLinkTokensAdminController, ValheimLinkIngestController],
   providers: [
     ValheimAdapterRegistration,
     // ROK-1833 Valheim Link: token lifecycle + ingest guards (L3 uses them).
@@ -26,6 +29,8 @@ import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
     ValheimLinkRateLimiter,
     ValheimLinkBearerGuard,
     ValheimLinkRateLimitGuard,
+    ValheimLinkSnapshotsRepository,
+    ValheimLinkIngestService,
   ],
 })
 export class ValheimModule implements OnModuleInit {

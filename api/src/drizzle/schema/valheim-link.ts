@@ -56,7 +56,8 @@ export interface ValheimLinkBlobRefRow {
   byteLength: number;
   width: number;
   height: number;
-  role: 'baseMap' | 'atlas';
+  /** `fileIcon` = an items `file` icon's optional `blob` (ROK-1833). */
+  role: 'baseMap' | 'atlas' | 'fileIcon';
 }
 
 /**
