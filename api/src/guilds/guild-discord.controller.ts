@@ -45,7 +45,7 @@ export class GuildDiscordController {
   }
 
   @Get('channels')
-  @UseGuards(jwt, GuildLeaderGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildLeaderGuard)
   listChannels(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildDiscordChannelListDto> {
@@ -53,7 +53,7 @@ export class GuildDiscordController {
   }
 
   @Put('channel')
-  @UseGuards(jwt, GuildLeaderGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildLeaderGuard)
   setChannel(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -63,7 +63,7 @@ export class GuildDiscordController {
   }
 
   @Delete('channel')
-  @UseGuards(jwt, GuildLeaderGuard)
+  @UseGuards(jwt, HubVisibleGuard, GuildLeaderGuard)
   @HttpCode(204)
   async clearChannel(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.discord.clearChannel(id);
