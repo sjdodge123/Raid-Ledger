@@ -133,6 +133,11 @@ export const ABSENCE_MIN_DATE = '2000-01-01';
 export const ABSENCE_MAX_DATE = '2100-12-31';
 /** Longest absence, in days counted inclusively (ROK-1842). */
 export const ABSENCE_MAX_SPAN_DAYS = 366;
+/**
+ * Most manual absences one user may store (ROK-1842): without a cap,
+ * repeated valid POSTs grew every composite read without bound.
+ */
+export const ABSENCE_MAX_PER_USER = 100;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -26,6 +26,7 @@ import type { SignupsPreviewMap } from './game-time-signups.helpers';
 import { buildEventBlocks } from './game-time-blocks.helpers';
 import { defined } from '../common/defined.helpers';
 import { expandWithinWindow } from '../calendar-sync/read/calendar-away-derive.helpers';
+import { mergeWithinWindow } from './game-time-absence-merge.helpers';
 
 /** Select columns for signed-up event queries. */
 const SIGNED_UP_EVENT_COLUMNS = {
@@ -227,13 +228,18 @@ export function compositeWeekWindow(
 /**
  * Absence dates inside the rendered week, for quick lookup. Each absence is
  * clipped to `window` BEFORE expanding (ROK-1842): a stored
- * 0001-01-01..9999-12-31 row costs 7 dates, not 3.64M.
+ * 0001-01-01..9999-12-31 row costs 7 dates, not 3.64M. Overlapping and
+ * duplicate rows merge first, so N rows over one week cost one span.
  */
 export function buildAbsenceDateSet(
   absences: Array<{ startDate: string; endDate: string }>,
   window: WeekWindow,
 ): Set<string> {
-  return new Set(absences.flatMap((a) => expandWithinWindow(a, window)));
+  return new Set(
+    mergeWithinWindow(absences, window).flatMap((s) =>
+      expandWithinWindow(s, window),
+    ),
+  );
 }
 
 /** Assemble the full composite view result from all fetched data. */
