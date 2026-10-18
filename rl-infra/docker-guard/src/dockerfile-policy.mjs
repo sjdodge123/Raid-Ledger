@@ -5,32 +5,63 @@
 // one. COPY --from of an infra image is refused like a pull of it. Pure.
 import { parseImageRef, pullDenied } from './image-refs.mjs';
 
-const DIRECTIVE = /^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$/;
+const DIRECTIVE = /^#[ \t]*([a-zA-Z][a-zA-Z0-9]*)[ \t]*=[ \t]*(.+?)[ \t]*$/;
+const isComment = (l) => /^\s*#/.test(l);
+const ESC = { '\\': '\\\\', '`': '`' };
 
-/** Logical instruction lines: parser directives, comments and continuations resolved. */
-function logicalLines(text) {
-  const phys = String(text).replace(/\r\n?/g, '\n').split('\n');
-  let escape = '\\';
-  let i = 0;
-  for (; i < phys.length; i++) {
-    const m = DIRECTIVE.exec(phys[i] ?? '');
+/** Physical lines as Go's bufio.ScanLines yields them: split on \n, one trailing \r dropped, BOM stripped. */
+function physLines(text) {
+  return String(text).replace(/^\uFEFF/, '').split('\n').map((l) => l.replace(/\r$/, ''));
+}
+
+/** The `# escape=` token BuildKit's directive parser would honour (default `\`). */
+function declaredEscape(lines) {
+  for (const line of lines) {
+    const m = DIRECTIVE.exec(line);
     if (!m) break;
-    if (m[1]?.toLowerCase() === 'escape' && (m[2] === '`' || m[2] === '\\')) escape = m[2];
+    if (m[1]?.toLowerCase() === 'escape' && (m[2] === '`' || m[2] === '\\')) return m[2];
   }
-  const cont = new RegExp(`${escape === '`' ? '`' : '\\\\'}[ \\t]*$`);
+  return '\\';
+}
+
+/**
+ * One continuation model of BuildKit's parser loop: `#` lines and blank lines
+ * inside a continuation are skipped, trailing [ \t] after the escape is ignored,
+ * a continuation at EOF ends the instruction. `strict` is BuildKit's
+ * `([^e])e[ \t]*$` (an escaped escape is not a continuation); the loose form
+ * is the older `e[ \t]*$`.
+ */
+function joined(lines, esc, strict) {
+  const e = ESC[esc] ?? '\\\\';
+  const re = strict ? new RegExp(`([^${e}])${e}[ \\t]*$`) : new RegExp(`${e}[ \\t]*$`);
+  const trim = (l) => (re.test(l) ? [l.replace(re, strict ? '$1' : ''), true] : [l, false]);
   const out = [];
-  let cur = null;
-  for (; i < phys.length; i++) {
-    const line = phys[i] ?? '';
-    if (line.trim().startsWith('#') || (cur !== null && line.trim() === '')) continue;
-    const more = cont.test(line);
-    cur = (cur ?? '') + (more ? line.replace(cont, '') : line);
-    if (!more) {
-      out.push(cur);
-      cur = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (isComment(lines[i] ?? '')) continue;
+    let [cur, more] = trim((lines[i] ?? '').replace(/^\s+/, ''));
+    while (more && ++i < lines.length) {
+      const l = lines[i] ?? '';
+      if (isComment(l) || l.trim() === '') continue;
+      const [c, m] = trim(l);
+      cur += c;
+      more = m;
     }
+    if (cur.trim() !== '') out.push(cur);
   }
-  if (cur !== null) out.push(cur);
+  return out;
+}
+
+/**
+ * Every reading the policy must hold under: the declared escape and both
+ * tokens, BuildKit's strict and the legacy loose continuation rule, and — the
+ * hard backstop — each physical line on its own (split on \r too), so no
+ * continuation or heredoc mis-model can hide an `ADD`/`COPY` line.
+ */
+function readings(text) {
+  const lines = physLines(text);
+  const escapes = [...new Set([declaredEscape(lines), '\\', '`'])];
+  const out = escapes.flatMap((esc) => [joined(lines, esc, true), joined(lines, esc, false)]);
+  out.push(String(text).replace(/^\uFEFF/, '').split(/[\r\n]/).filter((l) => !isComment(l)));
   return out;
 }
 
@@ -46,10 +77,11 @@ const bare = (v) => v.replace(/["'\\`]/g, '');
 function fromReason(value, stages) {
   const v = unquote(value);
   if (v.includes('$')) return `COPY --from=${v}: a variable --from could name any image`;
-  if (stages.has(v.toLowerCase())) return null;
   const ref = parseImageRef(v);
-  if (!ref) return `COPY --from=${v} is not a stage or a valid image reference`;
-  return pullDenied(ref.name) ? `COPY --from=${ref.name}: runners may not read an infra service image` : null;
+  // Checked before stage aliases: a reading may see a FROM … AS <infra-name> line.
+  if (ref && pullDenied(ref.name)) return `COPY --from=${ref.name}: runners may not read an infra service image`;
+  if (stages.has(v.toLowerCase())) return null;
+  return ref ? null : `COPY --from=${v} is not a stage or a valid image reference`;
 }
 
 function sourcesOf(rest) {
@@ -79,10 +111,9 @@ function copyReason(instr, rest, stages) {
   return null;
 }
 
-/** Null when the Dockerfile is acceptable, else the refusal reason. */
-export function dockerfileReason(text) {
+function readingReason(lines) {
   const stages = new Set();
-  for (const line of logicalLines(text)) {
+  for (const line of lines) {
     let [instr, rest] = splitInstr(line);
     if (instr === 'ONBUILD') [instr, rest] = splitInstr(rest);
     if (instr === 'FROM') {
@@ -92,6 +123,15 @@ export function dockerfileReason(text) {
       continue;
     }
     const r = instr === 'ADD' || instr === 'COPY' ? copyReason(instr, rest, stages) : null;
+    if (r) return r;
+  }
+  return null;
+}
+
+/** Null when the Dockerfile is acceptable under every reading, else the refusal reason. */
+export function dockerfileReason(text) {
+  for (const lines of readings(text)) {
+    const r = readingReason(lines);
     if (r) return r;
   }
   return null;
