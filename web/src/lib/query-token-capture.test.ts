@@ -57,18 +57,35 @@ describe('ROK-1839: the join token is captured and stripped at module load', () 
         );
         expect(window.location.hash).toBe('#roster');
         expect(window.location.href).not.toContain('abc.def');
-        expect(mod.peekCapturedQueryToken()).toBe('abc.def');
+        expect(mod.peekCapturedQueryToken()?.token).toBe('abc.def');
+    });
+
+    it('binds the capture to the eventId and intent it arrived with', async () => {
+        window.history.replaceState(null, '', '/join?intent=signup&eventId=7&token=abc.def');
+        const mod = await import('./query-token-capture');
+        expect(mod.peekCapturedQueryToken(), 'the capture carries its page context').toMatchObject({
+            token: 'abc.def', eventId: '7', intent: 'signup',
+        });
+    });
+
+    it('keeps the history entry state the router put there', async () => {
+        window.history.replaceState({ usr: 'router-state' }, '', '/join?eventId=7&token=abc.def');
+        await import('./query-token-capture');
+        expect(window.history.state, "replaceState(null, ...) would discard the router's own entry state")
+            .toEqual({ usr: 'router-state' });
     });
 
     it('mirrors the token into sessionStorage so a reload of the stripped URL still has it', async () => {
         window.history.replaceState(null, '', '/join?intent=signup&eventId=7&token=abc.def');
         await import('./query-token-capture');
-        expect(window.sessionStorage.getItem(STORAGE_KEY)).toBe('abc.def');
+        expect(JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? 'null')).toMatchObject({
+            token: 'abc.def', eventId: '7', intent: 'signup',
+        });
 
         // The reload: same tab, the already-stripped URL, a fresh module graph.
         vi.resetModules();
         const reloaded = await import('./query-token-capture');
-        expect(reloaded.peekCapturedQueryToken(), 'a reload must not lose the token').toBe('abc.def');
+        expect(reloaded.peekCapturedQueryToken()?.token, 'a reload must not lose the token').toBe('abc.def');
         expect(window.location.search).toBe('?intent=signup&eventId=7');
     });
 
@@ -91,6 +108,28 @@ describe('ROK-1839: the join token is captured and stripped at module load', () 
         expect(spy).not.toHaveBeenCalled();
         expect(mod.peekCapturedQueryToken()).toBeNull();
         expect(window.location.search).toBe('?intent=signup');
+        spy.mockRestore();
+    });
+
+    /**
+     * ROK-1839 (Codex P1 / Opus MAJOR): the post-OAuth hop hands the token
+     * over through this door instead of a `/join?...&token=` navigation,
+     * which would put it in the address bar with Sentry already running.
+     */
+    it('accepts a handed-over token without ever touching the address bar', async () => {
+        window.history.replaceState(null, '', '/join?intent=signup&eventId=7');
+        const mod = await import('./query-token-capture');
+        const spy = vi.spyOn(window.history, 'replaceState');
+
+        mod.setCapturedQueryToken({ token: 'handed.over', eventId: '7', intent: 'signup' });
+
+        expect(spy, 'handing a token over must not rewrite the URL').not.toHaveBeenCalled();
+        expect(window.location.href).not.toContain('handed.over');
+        expect(mod.peekCapturedQueryToken()).toMatchObject({
+            token: 'handed.over', eventId: '7', intent: 'signup',
+        });
+        expect(JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? 'null'), 'and it survives a reload')
+            .toMatchObject({ token: 'handed.over', eventId: '7' });
         spy.mockRestore();
     });
 });

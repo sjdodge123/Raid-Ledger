@@ -7,6 +7,9 @@ import { QueryClient } from '@tanstack/react-query';
 import { AUTH_METHOD_KEY } from './auth-storage-keys';
 import { getAccessToken, setAccessToken } from './access-token-store';
 import { IDENTITY_EPOCH_KEY, bumpIdentityEpoch, installCrossTabAuth } from './cross-tab-auth';
+import {
+    clearCapturedQueryToken, peekCapturedQueryToken, setCapturedQueryToken,
+} from '../query-token-capture';
 
 const refresh = vi.hoisted(() => vi.fn());
 // Review m1: an identity change uses freshRefresh (never joins a stale in-flight POST).
@@ -113,5 +116,60 @@ describe('ROK-1754 B2: cross-tab auth signals', () => {
         setAccessToken('secret.jwt.value');
         bumpIdentityEpoch();
         expect(localStorage.getItem(IDENTITY_EPOCH_KEY)).toMatch(/^\d+$/);
+    });
+});
+
+/**
+ * ROK-1839 fix round r1 (Codex P2): a sibling tab ending the session, or
+ * switching who we are, must drop this tab's unredeemed join capture too —
+ * otherwise the next identity in this tab can redeem the previous one's token.
+ */
+describe('ROK-1839: cross-tab session ends drop the captured join token', () => {
+    let queryClient: QueryClient;
+    let uninstall: () => void;
+
+    beforeEach(() => {
+        localStorage.clear();
+        window.sessionStorage.clear();
+        refresh.mockReset();
+        refresh.mockResolvedValue({ kind: 'ok', token: 'fresh.identity.jwt' });
+        toastInfo.mockReset();
+        queryClient = new QueryClient();
+        uninstall = installCrossTabAuth(queryClient);
+        clearCapturedQueryToken();
+        setCapturedQueryToken({ token: 'rok1839.unredeemed.jwt', eventId: '42', intent: 'signup' });
+    });
+    afterEach(() => {
+        uninstall();
+        clearCapturedQueryToken();
+    });
+
+    it('marker removed in another tab (logout/deactivation) clears it', () => {
+        setAccessToken('this-tab-token');
+
+        siblingTabWrote(AUTH_METHOD_KEY, 'discord', null);
+
+        expect(
+            peekCapturedQueryToken(),
+            "a sibling tab's logout ends this tab's session, so the join token goes too",
+        ).toBeNull();
+    });
+
+    it('an identity change in another tab clears it', async () => {
+        setAccessToken('previous-identity-token');
+
+        siblingTabWrote(IDENTITY_EPOCH_KEY, '1', String(Date.now()));
+        await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+
+        expect(
+            peekCapturedQueryToken(),
+            "a token captured as the previous viewer must not be redeemed as the new one",
+        ).toBeNull();
+    });
+
+    it('a sign-in appearing in another tab leaves it alone', () => {
+        siblingTabWrote(AUTH_METHOD_KEY, null, 'discord');
+
+        expect(peekCapturedQueryToken()?.token, 'that is not a session end').toBe('rok1839.unredeemed.jwt');
     });
 });

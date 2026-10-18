@@ -40,15 +40,26 @@ vi.mock('react-router-dom', async () => {
 // ROK-1839: the intent token is captured and stripped from the address bar
 // before Sentry initialises, so JoinPage falls back to the capture when the
 // URL no longer carries one. Mocked here to keep the fallback deterministic.
-const capture = vi.hoisted(() => ({ current: null as string | null }));
+interface FakeCapture { token: string; eventId: string | null; intent: string | null; capturedAt: number }
+const capture = vi.hoisted(() => ({ current: null as FakeCapture | null }));
 const mockClearCaptured = vi.hoisted(() => vi.fn());
+const mockSetCaptured = vi.hoisted(() => vi.fn());
 vi.mock('../lib/query-token-capture', () => ({
     peekCapturedQueryToken: () => capture.current,
+    setCapturedQueryToken: (entry: Omit<FakeCapture, 'capturedAt'>) => {
+        mockSetCaptured(entry);
+        capture.current = { ...entry, capturedAt: 0 };
+    },
     clearCapturedQueryToken: () => {
         mockClearCaptured();
         capture.current = null;
     },
 }));
+
+/** A capture taken for `/join?intent=signup&eventId=<eventId>`. */
+function captureFor(eventId: string | null, token = 'captured.intent.token', intent: string | null = 'signup'): FakeCapture {
+    return { token, eventId, intent, capturedAt: 0 };
+}
 
 // Mock useAuth
 const mockUseAuth = vi.fn();
@@ -380,7 +391,7 @@ describe('ROK-1839: the intent token comes from the pre-Sentry capture', () => {
     });
 
     it('redeems the captured token when the address bar no longer carries one', async () => {
-        capture.current = 'captured.intent.token';
+        capture.current = captureFor('42');
         vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
             success: true, eventId: 42, message: "You're signed up!",
         });
@@ -395,7 +406,7 @@ describe('ROK-1839: the intent token comes from the pre-Sentry capture', () => {
 
     it('hands the captured token to the Discord hop and clears it when signed out', async () => {
         mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
-        capture.current = 'captured.intent.token';
+        capture.current = captureFor('42');
 
         renderJoinPage('?intent=signup&eventId=42');
 
@@ -412,5 +423,79 @@ describe('ROK-1839: the intent token comes from the pre-Sentry capture', () => {
 
         expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
         expect(apiClient.redeemIntent).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * ROK-1839 fix round r1. Codex P2 / Opus MINOR: the capture is bound to the
+ * page it was taken for, and an unredeemed token never outlives the link
+ * (Lead ruling 2).
+ */
+describe('ROK-1839: an unusable capture is ignored and dropped', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        sessionStorage.clear();
+        capture.current = null;
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    });
+
+    it('ignores and clears a capture taken for a DIFFERENT event', async () => {
+        capture.current = captureFor('99', 'other.events.token');
+
+        renderJoinPage('?intent=signup&eventId=42');
+
+        expect(
+            screen.getByRole('heading', { name: /invalid link/i }),
+            "a capture for event 99 must not be redeemed on event 42's page",
+        ).toBeInTheDocument();
+        expect(apiClient.redeemIntent, 'the wrong event\'s token is never redeemed').not.toHaveBeenCalled();
+        await waitFor(() => expect(mockClearCaptured).toHaveBeenCalled());
+        expect(capture.current, 'and it does not sit in the tab waiting for the next page').toBeNull();
+    });
+
+    it('ignores and clears a capture taken for a DIFFERENT intent', async () => {
+        capture.current = captureFor('42', 'poll.intent.token', 'poll');
+
+        renderJoinPage('?intent=signup&eventId=42');
+
+        expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
+        expect(apiClient.redeemIntent).not.toHaveBeenCalled();
+        await waitFor(() => expect(mockClearCaptured).toHaveBeenCalled());
+    });
+
+    it('clears a matching capture when the link itself is invalid', async () => {
+        capture.current = captureFor('42', 'captured.intent.token', 'other');
+
+        renderJoinPage('?intent=other&eventId=42');
+
+        expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
+        await waitFor(() => expect(
+            mockClearCaptured,
+            'an abandoned/invalid link must not leave a live token in the tab',
+        ).toHaveBeenCalled());
+    });
+
+    it('clears the token when the redeem is REJECTED, not just when it succeeds', async () => {
+        capture.current = captureFor('42');
+        vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
+            success: false, eventId: 42, message: 'Intent token is invalid, expired, or already used',
+        });
+
+        renderJoinPage('?intent=signup&eventId=42');
+
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true }));
+        expect(mockClearCaptured, 'a rejected token is spent too').toHaveBeenCalled();
+        expect(capture.current).toBeNull();
+    });
+
+    it('clears the token when the redeem THROWS', async () => {
+        capture.current = captureFor('42');
+        vi.mocked(apiClient.redeemIntent).mockRejectedValueOnce(new Error('Network error'));
+
+        renderJoinPage('?intent=signup&eventId=42');
+
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true }));
+        expect(mockClearCaptured, 'a token that errored out must not be replayable').toHaveBeenCalled();
     });
 });

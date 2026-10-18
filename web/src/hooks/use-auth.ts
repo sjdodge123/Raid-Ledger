@@ -154,8 +154,6 @@ export async function fetchCurrentUser(context?: { client: QueryClient }): Promi
     // ROK-1753: a deactivated account is terminal — don't spend a refresh on it.
     if (await isDeactivatedResponse(response)) {
         endDeactivatedSession();
-        // ROK-1839: terminal session — drop any captured join token with it.
-        clearCapturedQueryToken();
         return null;
     }
 

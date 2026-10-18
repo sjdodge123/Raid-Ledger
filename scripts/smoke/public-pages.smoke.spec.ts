@@ -9,6 +9,19 @@
  *  - Unauthenticated visitors can reach the pages
  */
 import { test, expect } from './base';
+import { apiGet, getAdminToken } from './api-helpers';
+
+
+/** The id of a seeded upcoming event — the join landing needs a real one. */
+async function seededEventId(): Promise<number | null> {
+    const token = await getAdminToken();
+    const body: unknown = await apiGet(token, '/events?upcoming=true&limit=1');
+    const list = Array.isArray(body) ? body : [];
+    const first: unknown = list[0];
+    if (typeof first !== 'object' || first === null || !('id' in first)) return null;
+    const id = (first as { id: unknown }).id;
+    return typeof id === 'number' ? id : null;
+}
 
 // ---------------------------------------------------------------------------
 // Join page — /join
@@ -38,6 +51,35 @@ test.describe('Join page (/join)', () => {
         expect(landed.search, 'the sign-in token must be gone from the address bar').not.toContain('token=');
         expect(landed.href, 'no part of the URL may carry the token value').not.toContain('rok1839-smoke');
         expect(landed.searchParams.get('intent'), 'every other query param survives the strip').toBe('signup');
+    });
+
+    /**
+     * ROK-1839, the AC's second half. The strip must not cost the flow its
+     * token: a signed-in visitor following a join link still gets through to
+     * the event, driven off the CAPTURE (the address bar no longer has one by
+     * the time /join renders).
+     *
+     * The token here is deliberately not redeemable — nothing mints an intent
+     * token outside the Discord bot, and no DEMO_MODE fixture endpoint exists
+     * for it (see HANDOVER-ROK-1839.md "deliberately not done"). The flow it
+     * proves is the one the strip could break: capture → redeem call → land on
+     * the event. A redeemable token would additionally assert the signup row.
+     */
+    test('a signed-in join link still redeems from the capture and lands on the event (ROK-1839)', async ({ page }) => {
+        const eventId = await seededEventId();
+        test.skip(eventId === null, 'no upcoming event in the seed');
+        const token = 'rok1839-smoke-capture-not-a-real-token';
+
+        await page.goto(`/join?intent=signup&eventId=${String(eventId)}&token=${token}`);
+
+        await page.waitForURL(new RegExp(`/events/${String(eventId)}(\\?|#|$)`), { timeout: 20_000 });
+        const landed = new URL(page.url());
+        expect(landed.href, 'the sign-in token must not survive into the landing URL').not.toContain(token);
+        expect(landed.href, 'nor any fragment of it').not.toContain('rok1839-smoke');
+        await expect(
+            page.locator('body'),
+            'the join landing must render the event page, not the error boundary',
+        ).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
     });
 
     test('does not trigger the error boundary', async ({ page }) => {
