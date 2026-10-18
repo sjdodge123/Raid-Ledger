@@ -46,7 +46,13 @@ function onMeta(st, e) {
   const rec = parsePax(data);
   if (!rec) return void (st.error = 'tar PAX header is malformed');
   if (Object.keys(rec).some((k) => k.startsWith('GNU.sparse'))) return void (st.error = 'sparse tar entries are not inspected');
-  if (e.type === 'g') return void (rec.path || rec.size ? (st.error = 'global PAX path/size headers are not inspected') : null);
+  // Go's Next(): each x/g header REPLACES the pending PAX map (paxHdrs = parsePAX),
+  // and a g header is returned as its own entry, so all pending state ends there.
+  if (e.type === 'g') {
+    st.next = {};
+    return void (rec.path || rec.size ? (st.error = 'global PAX path/size headers are not inspected') : null);
+  }
+  st.next = st.next.gnu === undefined ? {} : { gnu: st.next.gnu };
   if (rec.path) st.next.pax = rec.path;
   if (rec.size) st.next.size = /^[0-9]+$/.test(rec.size) ? Number(rec.size) : NaN;
 }
