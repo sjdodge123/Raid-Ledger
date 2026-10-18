@@ -24,7 +24,8 @@ export function valheimLinkBodyBypass(
   _res: Response,
   next: NextFunction,
 ): void {
-  if (req.path.startsWith(VALHEIM_LINK_PATH_PREFIX)) {
+  // Express routing is case-insensitive, so the match must be too.
+  if (req.path.toLowerCase().startsWith(VALHEIM_LINK_PATH_PREFIX)) {
     const bypassed = req as ValheimLinkBypassedRequest;
     const type = req.headers['content-type'];
     if (typeof type === 'string') bypassed[VALHEIM_LINK_CONTENT_TYPE] = type;

@@ -32,7 +32,7 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
   ],
   providers: [
     ValheimAdapterRegistration,
-    // ROK-1833 Valheim Link: token lifecycle + ingest guards (L3 uses them).
+    // ROK-1833 Valheim Link: token lifecycle + ingest guards.
     ValheimLinkTokensRepository,
     ValheimLinkTokensService,
     ValheimLinkRemapListener,

@@ -64,8 +64,9 @@ export class ValheimLinkIngestController {
       return await this.ingest.ingest(req, kind, body);
     } catch (err: unknown) {
       if (err instanceof HttpException) {
-        // The unread remainder of a capped body must not poison keep-alive.
-        if (err.getStatus() === 413) res.setHeader('Connection', 'close');
+        // Any error may leave unread body bytes (cap, bad gzip, paused
+        // reader) — they must not poison the keep-alive socket.
+        res.setHeader('Connection', 'close');
         this.logger.warn(
           `valheim-link ingest kind=${kind} server=${req.valheimLink?.pelicanServerId ?? '-'} result=${err.getStatus()}`,
         );
