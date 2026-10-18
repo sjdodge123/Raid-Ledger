@@ -6,7 +6,7 @@
  * by `order`, which is what keeps a game's widgets in their prototype slots.
  */
 import { Fragment, lazy, Suspense, type JSX, type ReactNode } from 'react';
-import type { HubCtx, HubModule } from '../../plugins/hub-module';
+import type { CoreWidgetId, HubCtx, HubModule } from '../../plugins/hub-module';
 import { GuildAttendance } from './events/guild-attendance';
 import { GuildEvents } from './events/guild-events';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
@@ -35,7 +35,7 @@ const OVERVIEW_ATTENDANCE_TOP = 5;
 const EVENTS_TAB = 'events';
 
 interface Cell {
-    key: string;
+    key: CoreWidgetId | 'setup-checklist' | `module:${string}`;
     order: number;
     span: 1 | 2;
     node: ReactNode;
@@ -64,14 +64,25 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
         : [];
     const cells: Cell[] = [
         ...checklist,
-        { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} /> },
+        { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} kind={page.guild.kind} /> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
     if (!data) return cells;
-    cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} /> });
+    cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} kind={page.guild.kind} /> });
     cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={EVENTS_TAB} /> });
-    cells.push({ key: 'attendance', order: 70, span: 1, node: <GuildAttendance attendance={data.attendance} limit={OVERVIEW_ATTENDANCE_TOP} /> });
+    cells.push({ key: 'attendance', order: 70, span: 1, node: <GuildAttendance attendance={data.attendance} limit={OVERVIEW_ATTENDANCE_TOP} kind={page.guild.kind} /> });
     return cells;
+}
+
+/** ROK-1831: drop the core widgets the hub module hides for this viewer. */
+function isCoreWidget(key: Cell['key']): key is CoreWidgetId {
+    return key !== 'setup-checklist' && !key.startsWith('module:');
+}
+
+function visibleCoreCells(cells: Cell[], ctx: HubCtx, mod: HubModule | undefined): Cell[] {
+    const visible = mod?.coreWidgetVisible;
+    if (!visible) return cells;
+    return cells.filter((c) => !isCoreWidget(c.key) || visible(c.key, ctx));
 }
 
 function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
@@ -94,7 +105,7 @@ interface HubOverviewProps {
 
 export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
-    const cells = [...coreCells(ctx, openChannelPicker, mods), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const cells = [...visibleCoreCells(coreCells(ctx, openChannelPicker, mods), ctx, mod), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

@@ -12,7 +12,7 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import { getHubModuleRegistrations } from '../../plugin-registry';
 import type { HubCtx } from '../../hub-module';
 import '../register';
-import { pelicanHubModule } from './register-hub';
+import { pelicanHubModule, serverCoreWidgetVisible } from './register-hub';
 import { JoinLeavePill, ServerStatusPill } from './server-hero';
 import { QuickPlayTab } from './quick-play-tab';
 import { lastSeenLabel } from './server-member.helpers';
@@ -118,6 +118,17 @@ describe('pelicanHubModule (ROK-1831)', () => {
         server.use(http.get(`${HUB}/quick-play`, () => HttpResponse.json({ data: [] })));
         renderWithProviders(<QuickPlayTab {...ctx()} />);
         expect(await screen.findByTestId('server-hub-quick-play-empty')).toBeInTheDocument();
+    });
+
+    it('hides the leader post and Discord mirror from a visitor, shows them to members and staff (ROK-1831)', () => {
+        expect(serverCoreWidgetVisible('gm-post', ctx(false))).toBe(false);
+        expect(serverCoreWidgetVisible('discord', ctx(false))).toBe(false);
+        expect(serverCoreWidgetVisible('schedule', ctx(false))).toBe(true);
+        expect(serverCoreWidgetVisible('gm-post', ctx(true))).toBe(true);
+        const staff = ctx(false);
+        const leader: HubCtx = { ...staff, page: { ...staff.page, viewer: { role: 'leader', canEdit: true, canManageEditors: true } } };
+        expect(serverCoreWidgetVisible('discord', leader)).toBe(true);
+        expect(pelicanHubModule.coreWidgetVisible).toBe(serverCoreWidgetVisible);
     });
 
     it('a per-game tab shows only on hubs of its game', () => {
