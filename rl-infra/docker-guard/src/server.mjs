@@ -14,5 +14,6 @@ const server = createGuardServer({
   allow: ALLOW,
   allowBuildkit: ALLOW_BUILDKIT,
   logger: log,
+  tmpDir: process.env.GUARD_TMPDIR || undefined,
 });
 server.listen(PORT, '0.0.0.0', () => log(`rl-docker-guard listening on :${PORT} (bind allowlist: ${ALLOW.join(',') || 'none'}, buildkit: ${ALLOW_BUILDKIT})`));

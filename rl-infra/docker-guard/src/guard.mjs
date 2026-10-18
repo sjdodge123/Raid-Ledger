@@ -12,6 +12,8 @@ import { OWNER_LABEL } from './body-policy.mjs';
 import { forward, wantsUpgrade } from './forward.mjs';
 import { spliceHijack } from './hijack.mjs';
 import { contentTypeReason } from './request-policy.mjs';
+import fs from 'node:fs';
+import { spoolBuildContext } from './build-context.mjs';
 import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
 import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
@@ -22,6 +24,7 @@ const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 415: 'Unsupported Me
 let SOCKET = '/var/run/docker.sock';
 let ALLOW = [];
 let ALLOW_BUILDKIT = false;
+let TMPDIR;
 let log = () => {};
 
 function refuse(res, reason, status = 403) {
@@ -90,7 +93,20 @@ async function onRequest(req, res) {
   if (media) return refuse(res, media.reason, media.status);
   const auth = await authorize(req, plan);
   if (auth.reason) return refuse(res, auth.reason);
+  if (plan.context) return forwardBuild(req, res);
   forward(SOCKET, req, res, auth.body ? { buf: auth.body } : undefined, (r) => refuse(res, r, 502));
+}
+
+/** /build: spool + inspect the context, then stream the spooled copy upstream. */
+async function forwardBuild(req, res) {
+  const param = new URL(req.url ?? '/', 'http://guard.invalid').searchParams.get('dockerfile');
+  const ctx = await spoolBuildContext(req, param ?? '', TMPDIR);
+  if (ctx.error) {
+    ctx.cleanup();
+    return refuse(res, ctx.error.reason, ctx.error.status);
+  }
+  res.on('close', ctx.cleanup);
+  forward(SOCKET, req, res, { stream: fs.createReadStream(ctx.file), length: ctx.size }, (r) => refuse(res, r, 502));
 }
 
 function refuseSocket(socket, status, reason) {
@@ -113,7 +129,8 @@ async function onUpgrade(req, socket, head) {
 }
 
 /** Build the guard's http.Server (not listening). */
-export function createGuardServer({ socket, allow = [], allowBuildkit = false, logger = () => {} }) {
+export function createGuardServer({ socket, allow = [], allowBuildkit = false, logger = () => {}, tmpDir = undefined }) {
+  TMPDIR = tmpDir;
   SOCKET = socket;
   ALLOW = allow;
   ALLOW_BUILDKIT = allowBuildkit;

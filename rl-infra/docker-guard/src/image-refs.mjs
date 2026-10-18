@@ -14,6 +14,11 @@ const WRITE_REPOS = new Set(['registry.rl.lan:5000/rl-allinone', 'docker.io/libr
 const PULL_DENY = [/^docker\.io\/rl-infra\//, /^docker\.io\/wollomatic\//, /^docker\.io\/grafana\//,
   /^docker\.io\/library\/(traefik|registry|rl)$/, /^docker\.io\/rl$/];
 
+/** True when `name` (normalised) is an infra service image runners may not pull or read. */
+export function pullDenied(name) {
+  return PULL_DENY.some((re) => re.test(name));
+}
+
 const PATH_RE = /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$/;
 const TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
 
@@ -85,7 +90,7 @@ export function pullReason(query) {
   for (const img of images) {
     const ref = parseImageRef(joinRef(img, query.get('tag') ?? ''));
     if (!ref) return `image name ${img} is not a valid reference`;
-    if (PULL_DENY.some((re) => re.test(ref.name))) return `runners may not pull ${ref.name} (an infra service image name)`;
+    if (pullDenied(ref.name)) return `runners may not pull ${ref.name} (an infra service image name)`;
   }
   return null;
 }
