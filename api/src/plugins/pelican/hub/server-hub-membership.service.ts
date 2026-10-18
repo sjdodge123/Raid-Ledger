@@ -43,16 +43,25 @@ export class ServerHubMembershipService {
     private readonly presence: PelicanPresenceSupervisor | null = null,
   ) {}
 
-  /** A presence transition: upsert the sighting, clear `left_at`. False when the server has no hub. */
+  /**
+   * A presence transition: upsert the sighting and (when `rejoin`) clear
+   * `left_at`. `rejoin: false` is a "still online" touch. False when the
+   * server has no hub.
+   */
   async recordPresence(
     serverId: number,
     userId: number,
     characterName: string | null,
     at: Date,
+    rejoin = true,
   ): Promise<boolean> {
     const guildId = (await hubIdsForServers(this.db, [serverId])).get(serverId);
     if (guildId === undefined) return false;
-    await upsertSighting(this.db, { guildId, userId, characterName, at }, true);
+    await upsertSighting(
+      this.db,
+      { guildId, userId, characterName, at },
+      rejoin,
+    );
     await refreshMemberCount(this.db, guildId, at);
     return true;
   }
@@ -127,9 +136,12 @@ export class ServerHubMembershipService {
     const players = this.players().filter(
       (p) => p.pelicanServerId === serverId,
     );
-    const prev = this.rosters.get(serverId) ?? new Set<string>();
+    const prev = this.rosters.get(serverId);
     this.rosters.set(serverId, new Set(players.map((p) => p.steamId)));
-    const arrived = players.filter((p) => !prev.has(p.steamId));
+    // No baseline (first CHANGED since boot): everyone online is rehydrated,
+    // not arriving — a touch that never clears a Leave (Codex r1 / review m1).
+    const rejoin = prev !== undefined;
+    const arrived = players.filter((p) => !prev?.has(p.steamId));
     if (arrived.length === 0) return;
     const users = await usersBySteamId(
       this.db,
@@ -138,7 +150,7 @@ export class ServerHubMembershipService {
     for (const p of arrived) {
       const userId = users.get(p.steamId);
       if (userId !== undefined)
-        await this.recordPresence(serverId, userId, p.name, at);
+        await this.recordPresence(serverId, userId, p.name, at, rejoin);
     }
   }
 
