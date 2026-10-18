@@ -19,26 +19,32 @@ import { useHubOnboarding } from './use-hub-onboarding';
 
 const CARD = 'flex flex-col gap-3 rounded-xl border border-edge bg-panel p-4';
 
+function CardHead({ onClose }: { onClose: () => void }): JSX.Element {
+    return (
+        <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+                <h2 id="get-your-guild-title" className="text-lg font-semibold text-foreground">Get your guild on Raid Ledger</h2>
+                <p className="mt-1 text-sm text-secondary">
+                    A guild page gives your roster one place for the leader&apos;s post, the rules, your links and the next raid.
+                </p>
+            </div>
+            <Button
+                variant="ghost" size="sm" iconOnly aria-label="Dismiss: don't show this again"
+                onClick={onClose} data-testid="get-your-guild-close"
+            >
+                <span aria-hidden>×</span>
+            </Button>
+        </div>
+    );
+}
+
 export function GetYourGuildCard({ how }: { how?: ReactNode }): JSX.Element | null {
     const prompt = useHubOnboarding('players-get-your-guild');
     const [open, setOpen] = useState(false);
     if (!prompt.visible) return null;
     return (
         <section className={CARD} data-testid="get-your-guild-card" aria-labelledby="get-your-guild-title">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <h2 id="get-your-guild-title" className="text-lg font-semibold text-foreground">Get your guild on Raid Ledger</h2>
-                    <p className="mt-1 text-sm text-secondary">
-                        A guild page gives your roster one place for the leader&apos;s post, the rules, your links and the next raid.
-                    </p>
-                </div>
-                <Button
-                    variant="ghost" size="sm" iconOnly aria-label="Dismiss: don't show this again"
-                    onClick={prompt.dismiss} data-testid="get-your-guild-close"
-                >
-                    <span aria-hidden>×</span>
-                </Button>
-            </div>
+            <CardHead onClose={prompt.dismiss} />
             {how && open && <div className="text-sm text-muted" data-testid="get-your-guild-how">{how}</div>}
             {prompt.failed && (
                 <p role="alert" data-testid="get-your-guild-error" className="text-sm text-danger">

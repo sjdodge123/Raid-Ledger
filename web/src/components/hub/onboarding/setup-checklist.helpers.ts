@@ -60,10 +60,10 @@ export const CHANNEL_BLOCKED_REASON = 'Ask your Leader or an admin to set the hu
  */
 export const PUBLISH_BLOCKED_REASON = 'Hubs are visible to members already — a hidden-by-default hub is coming.';
 
-export function setupSteps(input: SetupStepsInput): SetupStep[] {
-    const { profile, discord, memberCount, hasNextRaid, modsConfigured, hasModSources, canPickChannel } = input;
-    const channel: SetupStepAction = canPickChannel ? { kind: 'channel' } : { kind: 'blocked', reason: CHANNEL_BLOCKED_REASON };
-    const steps: SetupStep[] = [
+/** The steps every hub starts with, in the prototype's order. */
+function baseSteps(input: SetupStepsInput, channel: SetupStepAction): SetupStep[] {
+    const { profile, discord, memberCount } = input;
+    return [
         {
             id: 'leader', label: 'Assign a Leader', description: 'An admin names who runs this hub.',
             done: false, action: { kind: 'blocked', reason: LEADER_BLOCKED_REASON }, actionLabel: 'Assign',
@@ -89,6 +89,12 @@ export function setupSteps(input: SetupStepsInput): SetupStep[] {
             done: discord !== undefined && discord.state !== 'unset', action: channel, actionLabel: 'Pick channel',
         },
     ];
+}
+
+export function setupSteps(input: SetupStepsInput): SetupStep[] {
+    const { hasNextRaid, modsConfigured, hasModSources, canPickChannel } = input;
+    const channel: SetupStepAction = canPickChannel ? { kind: 'channel' } : { kind: 'blocked', reason: CHANNEL_BLOCKED_REASON };
+    const steps = baseSteps(input, channel);
     if (hasModSources) {
         steps.push({
             id: 'mods', label: 'Recommend mods', description: 'Point members at the addons you expect.',

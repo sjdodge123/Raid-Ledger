@@ -57,6 +57,23 @@ function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() 
     );
 }
 
+function ProgressRow({ label, pct }: { label: string; pct: number }): JSX.Element {
+    return (
+        <div className="mb-3 flex items-center gap-3">
+            <span className="flex-1"><GuildMeter pct={pct} label={`Setup progress: ${label} done`} /></span>
+            <span className="text-sm font-semibold tabular-nums text-foreground" data-testid="setup-checklist-progress">{label} done</span>
+        </div>
+    );
+}
+
+function ChecklistFooter(): JSX.Element {
+    return (
+        <p className="mt-3 text-xs text-dim" data-testid="setup-checklist-footer">
+            Only editors see this. Hiding it is saved to your account.
+        </p>
+    );
+}
+
 export interface HubSetupChecklistProps {
     guildId: number;
     canEdit: boolean;
@@ -97,17 +114,12 @@ export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | 
             title={title}
             action={<Button variant="ghost" size="sm" onClick={prompt.dismiss} data-testid="setup-checklist-dismiss">Hide checklist</Button>}
         >
-            <div className="mb-3 flex items-center gap-3">
-                <span className="flex-1"><GuildMeter pct={progress.pct} label={`Setup progress: ${progress.label} done`} /></span>
-                <span className="text-sm font-semibold tabular-nums text-foreground" data-testid="setup-checklist-progress">{progress.label} done</span>
-            </div>
+            <ProgressRow label={progress.label} pct={progress.pct} />
             {prompt.failed && <p role="alert" data-testid="setup-checklist-error" className="mb-2 text-sm text-danger">We couldn&apos;t dismiss that just now. Try again in a moment.</p>}
             <ul className="flex flex-col" data-testid="setup-checklist">
                 {steps.map((s) => <StepRow key={s.id} step={s} onPickChannel={openChannelPicker} />)}
             </ul>
-            <p className="mt-3 text-xs text-dim" data-testid="setup-checklist-footer">
-                Only editors see this. Hiding it is saved to your account.
-            </p>
+            <ChecklistFooter />
         </WidgetCard></div>
     );
 }

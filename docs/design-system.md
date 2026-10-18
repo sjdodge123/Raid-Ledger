@@ -353,6 +353,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `CharacterQuestsSection` (`components/character-quests-section.tsx`) + `character-quest-log.tsx`, `character-completed-quests.tsx`, `hooks/use-character-quests.ts` | `plugins/wow/` (ROK-1745) | WoW: Forever quest tracking on the character page, rendered by `CharacterDetailSections` after Talents and before Professions. Same card chrome as Talents (`bg-panel border border-edge rounded-lg p-6`, `h2` "Quests") with a `text-xs text-muted` summary "N completed · M known · via addon · <date> · T quests total" (`lib/addon-source-line.ts::formatAddonSourceLine`, shared with the Equipment source line). **In progress (k):** the objective checklist pattern: each quest title + Wowhead link (`quest-card__name` / `quest-card__wowhead-icon` classes from `slots/quest-prep-panel.css`, not the quest-card components), an `<ul>` of objectives where done = `text-success` + `aria-hidden` ✓ + sr-only "done" and open = `text-warning`, with `have/need` appended in `font-mono`; rows `flex-wrap`. **Completed dungeon quests:** one `ScrollCollapsible defaultOpen={false}` per instance titled "<Instance> · c/k"; rows name + `(LvN)` + Wowhead link, and when the chain has >1 step a `quest-prereq` line with `quest-prereq__step` + `text-success`/`text-warning`. No overlap → "0 of M known dungeon quests". Renders nothing while loading, on error or on `{ quests: null }` (no skeleton), and requests only for the `wow_forever` variant. |
 | `CharacterLockoutsSection` (`components/character-lockouts-section.tsx`) + `lib/lockout-reset.ts` | `plugins/wow/` (ROK-1743) | WoW: Forever saved instances from the addon snapshot (`CharacterDto.lockouts`), rendered by `CharacterDetailSections` after Quests and before Professions. Same card chrome as Quests/Talents (`bg-panel border border-edge rounded-lg p-6`, `h2` "Saved instances") with a `text-xs text-muted` source line from `formatAddonSourceLine`. `<ul className="space-y-2">` of `data-lockout-row` `flex-wrap` rows: name (`text-sm text-foreground break-words`) · difficulty (`text-xs text-muted`, omitted when null) · `killed/total` in `font-mono` (`text-success` when cleared, else `text-muted`; sr-only "bosses killed") · "Resets in 3d 4h / 5h 12m / 12m / <1m" (`text-xs text-muted ml-auto`, `formatResetIn` reusing `lib/format-duration.ts` under a day). One `useNowTick` clock drops rows whose reset passes while the page is open. Renders nothing when `lockouts` is absent or every lockout has expired (no empty state). |
 | `ThreadMessageRow` (`ThreadMessageRow.tsx`) + `DiscordText`, `discord-markdown.helpers.ts` | `components/discord/` (ROK-1483; reused outside threads by ROK-1788) | Rendering ANY mirrored Discord message read-only: avatar/initials, author, relative time, `(edited)`, safe Discord-markdown body, attachment links, reaction counts. An `<li>` chip (`bg-overlay`) — put it in a `<ul>`. Surface-specific extras (the guild channel mirror's embed block, `guild-discord-mirror.tsx`) go in its optional `children` slot, rendered under the body — never fork the row. The folder is under `read-only.guard.test.ts`: no write affordance, no hardcoded colour. |
+| `GuildMeter` (`guild-meter.tsx`) | `components/hub/events/` (ROK-1787; second adopter ROK-1840) | A thin quantity/progress bar: `role="meter"` with `aria-label`/`aria-valuenow`, `h-1.5 rounded-full bg-overlay` track, `bg-success` (or `bg-warning`) fill, `pct` clamped 0–100. Use it for ANY proportion bar (raid roster fill, the §4.24 setup-checklist progress) instead of hand-rolling a track + fill. |
 
 ### 3.3 Shared hooks
 
@@ -1316,19 +1317,27 @@ so it follows the viewer to a second device.
 
 **DO — the prompt card** (`components/hub/onboarding/get-your-guild-card.tsx`, `data-testid="get-your-guild-card"`):
 the §4.2 panel surface (`rounded-xl border border-edge bg-panel p-4`) as a `<section aria-labelledby>`, a
-`text-lg font-semibold text-foreground` heading, one `text-sm text-secondary` line, an optional `text-sm text-muted`
-how-to line supplied by the game module, and a single `Button variant="secondary"` "Dismiss" on the right
-(stacked above it on phones, `sm:flex-row`). A failed dismiss rolls the card back and says so in a
-`role="alert"` `text-danger` line — never a silent hide.
+`text-lg font-semibold text-foreground` heading, one `text-sm text-secondary` line, an icon-only
+`Button variant="ghost" size="sm" iconOnly` × top-right, then an action row: a `Button variant="primary"`
+"How to import" / "Hide steps" toggle (`aria-expanded`) that reveals the game module's `text-sm text-muted`
+how-to **in place**, and a `Button variant="secondary"` "Not now" (ROK-1840, S0 prototype). The × and
+"Not now" are the SAME server-side dismissal — there is no session-only hide. No module how-to, no toggle.
+A failed dismiss rolls the card back and says so in a `role="alert"` `text-danger` line — never a silent hide.
 
 **DO — the setup checklist** (`components/hub/onboarding/setup-checklist.tsx`): a §4.2 `WidgetCard` in the
-Overview bento (`order: 5`, `span: 2`), header action `Button variant="ghost" size="sm"` "Dismiss", an
-`N of M done` progress line, then one `<li>` per step. A step is a 16px round mark —
-`border-success/40 bg-success/10 text-success` with a `✓` when done, `border-edge text-muted` when not —
-its label (`text-muted line-through` once done), an `sr-only` "done"/"not done yet" for screen readers, and a
-right-aligned action: an `<a href="#tab">` for a step that lives in another tab, a `ghost` button for one that
-opens an overlay, or a `text-xs text-muted` reason for a step that is blocked. **DON'T** hide a blocked step —
-list it with its reason; and don't count it toward the progress, or the checklist can never finish.
+Overview bento (`order: 5`, `span: 2`) titled **`Set up <hub name>`**, header action `Button variant="ghost"
+size="sm"` "Hide checklist", then a progress row — the shipped `GuildMeter` (`role="meter"`, §3.2)
+filling the width beside an `N of M done` count — then one `<li>` per step, and a closing
+`text-xs text-dim` "Only editors see this. Hiding it is saved to your account." (ROK-1840, S0 prototype).
+A step row is a 24px round mark — `border-success/40 bg-success/10 text-success` with a `✓` when done,
+`border-edge-strong text-muted` when not — a two-line label block (`text-sm font-medium`, dimmed to
+`text-muted` once done, over a `text-xs text-muted` description), an `sr-only` "done"/"not done yet", and a
+right-aligned action, with rows separated by `border-b border-edge-subtle`. The action is a verb, never
+"Open": `buttonClass({ variant: 'secondary', size: 'sm' })` on an `<a href="#tab">` for a step that lives in
+another tab (ROK-1599), a `Button variant="secondary" size="sm"` for one that opens an overlay, a
+`text-xs text-muted` reason for a blocked step, and a `text-xs text-success` "Done" once ticked.
+**DON'T** hide a blocked step — list it with its reason; and don't count it toward the progress, or the
+checklist can never finish.
 
 **DON'T** derive "done" from stored progress. Each step reads the live page data (`useGuildProfile`,
 `useGuildDiscord`, the module's mod sources), so undoing the edit puts the step back; the whole card removes

@@ -1,7 +1,9 @@
 /**
  * ROK-1787 — thin quantity bar (prototype `proposed/proposed-bits.tsx` `Meter`).
- * New pattern: nothing in the design-system inventory is a quantity meter.
- * Plugin-local (one adopter); tokens only, so it reads in every scheme.
+ * Nothing in the design-system inventory was a quantity meter, so this is the
+ * one; tokens only, so it reads in every scheme. ROK-1840 gave it a second
+ * adopter (the hub setup checklist's progress bar), so it is now listed in
+ * design-system.md §3.2 — reuse it rather than hand-rolling a track + fill.
  */
 import type { JSX } from 'react';
 
