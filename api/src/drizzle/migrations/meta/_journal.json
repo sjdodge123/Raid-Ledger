@@ -1583,6 +1583,13 @@
       "when": 1792347258530,
       "tag": "0226_tearful_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1792362646743,
+      "tag": "0227_narrow_patriot",
+      "breakpoints": true
     }
   ]
 }
