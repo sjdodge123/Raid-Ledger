@@ -55,9 +55,12 @@ describe('PrivacyPage', () => {
         expect(page).toHaveTextContent('we strip usernames, email addresses and IP addresses wherever they can be detected');
         expect(page).toHaveTextContent('we remove the secrets that appear in web addresses, headers and sign-in links from the report and from feedback you send');
         // ROK-1838 r3: the copy must still name what is NOT scrubbed.
-        expect(page).toHaveTextContent('Two things this does not cover:');
-        expect(page).toHaveTextContent('the page address stored with a session recording can still contain a sign-in link');
+        expect(page).toHaveTextContent('One thing this does not cover:');
         expect(page).toHaveTextContent('a screenshot you attach is sent exactly as captured, so anything visible in it is sent too');
+        // ROK-1839: the sign-in token is stripped from the address bar before
+        // Sentry starts, so the page-address carve-out is gone for good.
+        expect(page).not.toHaveTextContent('the page address stored with a session recording can still contain a sign-in link');
+        expect(page).not.toHaveTextContent('Two things this does not cover:');
         expect(page).toHaveTextContent("Error reports are on by default, and this site's admins can turn them off.");
     });
 

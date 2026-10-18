@@ -2,6 +2,10 @@
 // initialises, so it never reaches breadcrumbs, tracing or replay. This MUST
 // stay the very first import (magic-link-capture.test.ts pins it).
 import './lib/magic-link-capture';
+// ROK-1839: the join flow's `?token=` lives in the query string, which DOES
+// reach `window.location.href` — the source of a Session Replay's rrweb Meta
+// href, the one href no scrub hook of ours can reach. Strip it here too.
+import './lib/query-token-capture';
 // ROK-306 / ROK-1779: Sentry next. Importing it installs the boot error
 // buffer; nothing initialises until the telemetry decision below.
 import { Sentry, initSentry } from './sentry';

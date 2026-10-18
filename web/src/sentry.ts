@@ -14,6 +14,10 @@
  * chunking). magic-link-capture.test.ts pins it.
  */
 import './lib/magic-link-capture';
+// ROK-1839: and the join flow's query-string `?token=`, for the same reason —
+// Session Replay builds its Meta (type 4) href from `window.location.href`
+// inside the SDK and never offers it to `beforeAddRecordingEvent`.
+import './lib/query-token-capture';
 import * as Sentry from '@sentry/react';
 import { buildSentryOptions, replaySampleRates } from './lib/sentry-options';
 import { shouldInitTelemetry } from './lib/telemetry-gate';

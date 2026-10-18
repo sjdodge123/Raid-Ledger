@@ -4,6 +4,7 @@ import { clearAccessToken, isImpersonatingToken } from './access-token-store';
 import { freshRefresh } from './refresh-client';
 import { toast } from '../toast';
 import { dropViewerPrivateCaches, installViewerPrivateCacheGuard } from '../../hooks/viewer-private-caches';
+import { clearCapturedQueryToken } from '../query-token-capture';
 
 /**
  * ROK-1754 §3.3: tabs no longer share a token, so they share SIGNALS instead,
@@ -33,6 +34,9 @@ export function bumpIdentityEpoch(): void {
 async function followIdentityChange(queryClient: QueryClient): Promise<void> {
   const wasImpersonating = isImpersonatingToken();
   clearAccessToken();
+  // ROK-1839: another tab changed who we are — a join token captured for the
+  // previous identity must not be redeemed as the new one.
+  clearCapturedQueryToken();
   dropViewerPrivateCaches(queryClient);
   // Never join a refresh POSTed under the old identity (review m1).
   const outcome = await freshRefresh();
@@ -45,6 +49,9 @@ async function followIdentityChange(queryClient: QueryClient): Promise<void> {
 function onMarkerChange(event: StorageEvent, queryClient: QueryClient): void {
   if (event.newValue === null) {
     clearAccessToken();
+    // ROK-1839: logged out (or deactivated) in another tab — the captured join
+    // token dies with the session here too.
+    clearCapturedQueryToken();
     dropViewerPrivateCaches(queryClient);
     queryClient.setQueryData(['auth', 'me'], null);
   } else if (event.oldValue === null) {
