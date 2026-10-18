@@ -120,6 +120,9 @@ describe('ValheimLinkTokenControl', () => {
         expect(steps).toHaveTextContent(`PUT ${origin}/api/plugins/valheim/link/blobs/{sha256}`);
     });
 
+});
+
+describe('ValheimLinkTokenControl — rotate, revoke, errors', () => {
     it('Rotate asks first, then calls the rotate route and shows the new token', async () => {
         const user = userEvent.setup();
         const calls = serve([valheimTokenActive]);

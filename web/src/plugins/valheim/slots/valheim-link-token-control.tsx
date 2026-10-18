@@ -79,7 +79,7 @@ function MappedControl({ status, serverName, inline }: { status: ValheimLinkToke
 
 function TokenStatusLine({ status }: { status: ValheimLinkTokenStatus }): JSX.Element {
     if (status.state === 'none') return <span className="text-sm text-muted">Not connected</span>;
-    if (status.state === 'revoked') return <StatusChip tone="neutral">Revoked</StatusChip>;
+    if (status.state === 'revoked') return <StatusChip tone="neutral" title="Mod token revoked">Revoked</StatusChip>;
     const since = status.rotatedAt ?? status.createdAt;
     return (
         <div className="flex flex-wrap items-center gap-2">
