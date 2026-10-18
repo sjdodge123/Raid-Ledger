@@ -66,7 +66,11 @@ export type ValheimAdminCharacterSummary = ValheimCharacterSummary & {
 
 function toOwner(row: ArmoryProfileReadRow): ValheimCharacterOwner | null {
   if (row.ownerId === null || row.ownerUsername === null) return null;
-  return { id: row.ownerId, username: row.ownerUsername, avatar: row.ownerAvatar };
+  return {
+    id: row.ownerId,
+    username: row.ownerUsername,
+    avatar: row.ownerAvatar,
+  };
 }
 
 /** Member-visible list entry; never carries the SteamID64. */
@@ -127,7 +131,10 @@ export function toMapMeta(row: ArmoryMapReadRow): ValheimMapMeta {
   return {
     id: row.id,
     worldUid: row.worldUid,
-    grid: { textureSize: row.textureSize, pixelSizeMetres: row.pixelSizeMetres },
+    grid: {
+      textureSize: row.textureSize,
+      pixelSizeMetres: row.pixelSizeMetres,
+    },
     pins: row.pins,
     hasSharedExplored: row.hasSharedExplored,
     baseMap: toBaseMap(row),

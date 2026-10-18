@@ -16,8 +16,12 @@ import type {
 } from './valheim-armory-read.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-const { valheimProfiles: p, valheimMaps: m, pelicanServers: s, users: u } =
-  schema;
+const {
+  valheimProfiles: p,
+  valheimMaps: m,
+  pelicanServers: s,
+  users: u,
+} = schema;
 const blobs = schema.valheimLinkBlobs;
 
 /** List filters + page window. */
