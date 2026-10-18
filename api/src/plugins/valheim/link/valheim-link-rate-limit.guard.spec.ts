@@ -47,6 +47,53 @@ describe('ValheimLinkRateLimiter (ROK-1833)', () => {
   });
 });
 
+describe('ValheimLinkRateLimiter — bounded storage (ROK-1833)', () => {
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_RATE_MAX_KEYS;
+  });
+
+  it('10,000 distinct keys insert with a linear sweep cost', () => {
+    const limiter = new ValheimLinkRateLimiter();
+    limiter.now = () => 1_000;
+    for (let i = 0; i < 10_000; i += 1) limiter.hit(`k${i}`, 5, 60_000);
+    expect(limiter.size).toBe(10_000);
+    // One stop-check per insert, nothing else: never a full-map scan.
+    expect(limiter.sweepSteps).toBe(10_000);
+  });
+
+  it('past VALHEIM_LINK_RATE_MAX_KEYS the oldest key is evicted', () => {
+    process.env.VALHEIM_LINK_RATE_MAX_KEYS = '100';
+    const limiter = new ValheimLinkRateLimiter();
+    limiter.now = () => 1_000;
+    for (let i = 0; i < 1_000; i += 1) limiter.hit(`k${i}`, 1, 60_000);
+    expect(limiter.size).toBe(100);
+    expect(limiter.sweepSteps).toBeLessThanOrEqual(2 * 1_000);
+    expect(limiter.isExhausted('k0', 1, 60_000)).toBe(false);
+    expect(limiter.isExhausted('k999', 1, 60_000)).toBe(true);
+  });
+
+  it('expired windows are dropped from the front on the next insert', () => {
+    let t = 0;
+    const limiter = new ValheimLinkRateLimiter();
+    limiter.now = () => t;
+    for (let i = 0; i < 50; i += 1) limiter.hit(`old${i}`, 5, 60_000);
+    t = 60_000;
+    limiter.hit('new', 5, 60_000);
+    expect(limiter.size).toBe(1);
+  });
+
+  it('reserve counts in-flight attempts; a failed settle becomes a hit', () => {
+    const limiter = new ValheimLinkRateLimiter();
+    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
+    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
+    expect(limiter.reserve('ip', 2, 60_000)).toBe(false);
+    limiter.settle('ip', false, 2, 60_000);
+    limiter.settle('ip', true, 2, 60_000);
+    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
+    expect(limiter.reserve('ip', 2, 60_000)).toBe(false);
+  });
+});
+
 describe('bucketLimit (ROK-1833)', () => {
   it('defaults to 60 messages / 20 blobs per minute', () => {
     delete process.env.THROTTLE_DISABLED;
