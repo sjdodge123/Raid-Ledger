@@ -24,6 +24,7 @@ import {
   enableGracefulShutdown,
 } from './main.helpers';
 import type { LogLevelEnv } from './main.helpers';
+import { installValheimLinkBodyBypass } from './plugins/valheim/link/ingest/valheim-link-body-bypass';
 
 function configureStaticAssets(
   app: NestExpressApplication,
@@ -66,6 +67,8 @@ async function bootstrap() {
   // 400) on a malformed report body. ROK-1158 / ROK-1365.
   installCspReportBodyParser(app);
   // ROK-1313: 8 MB JSON for POST /feedback (screenshots) — before the 2 MB one.
+  // ROK-1833: Valheim Link routes read their own body under the kind's cap.
+  installValheimLinkBodyBypass(app);
   installFeedbackBodyParser(app);
   app.useBodyParser('json', { limit: '2mb' });
   app.use(helmet(buildHelmetOptions()));
