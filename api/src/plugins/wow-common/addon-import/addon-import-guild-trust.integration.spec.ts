@@ -157,6 +157,21 @@ const guildRow = async () =>
     'guild',
   )[0];
 
+/**
+ * A Forever name+region is one player's (`wow-forever-identity`): a second
+ * importer's character must use another name, or `POST /users/me/characters`
+ * answers 409. The export's `who` must carry that same name (NAME_MISMATCH).
+ */
+const OTHER_NAME = 'Bob Forever';
+const otherChar = (token: string): Promise<string> =>
+  createChar(token, { name: OTHER_NAME });
+const whoAsOther = (guid: string) =>
+  buildWho({
+    guid,
+    fullName: OTHER_NAME,
+    raw: { getUnitName: OTHER_NAME, unitName: [OTHER_NAME, null] },
+  });
+
 /** A real member (FIXTURE_GUID) creates the 40-member guild and is pinned. */
 async function seedRealGuild(): Promise<{ token: string; id: string }> {
   const token = await memberToken('realgm');
@@ -172,13 +187,13 @@ describe('ROK-1794 — unsigned guild snapshots', () => {
     await seedRealGuild();
     const before = await guildRow();
     const token = await memberToken('forger');
-    const id = await createChar(token);
+    const id = await otherChar(token);
     const forgerGuid = 'Player-4395-0000BEEF';
     const forged = buildGuildPayload([
       ...roster(),
       buildMember(0xbeef, { guid: forgerGuid, rankIndex: 1, rank: 'Officer' }),
     ]);
-    forged.who = buildWho({ guid: forgerGuid });
+    forged.who = whoAsOther(forgerGuid);
     const res = await apply(token, id, buildImportString(forged));
     expect(res.status).toBe(422);
     expect(res.body.code).toBe('NOT_IN_GUILD');
@@ -320,10 +335,10 @@ describe('ROK-1794 — staff, snapshot clock and audit', () => {
   it(`${AC(2)}: staff may replace any roster, wholesale included`, async () => {
     await seedRealGuild();
     const token = await loginAsAdmin(testApp.request, testApp.seed);
-    const id = await createChar(token);
+    const id = await otherChar(token);
     const staffGuid = 'Player-4395-0000CAFE';
     const solo = buildGuildPayload([buildMember(0xcafe, { guid: staffGuid })]);
-    solo.who = buildWho({ guid: staffGuid });
+    solo.who = whoAsOther(staffGuid);
     const res = await apply(token, id, buildImportString(solo));
     expect(res.status).toBe(200);
     expect((await guildRow()).memberCount).toBe(1);
@@ -386,13 +401,13 @@ describe('ROK-1794 — self-introduced roster rows (Codex P1)', () => {
     expect(await squatMembers()).toBe(2);
     // A second importer, listed by someone else, carries the row.
     const other = await memberToken('corroborator');
-    const otherId = await createChar(other);
+    const otherId = await otherChar(other);
     const theirs = buildGuildPayload([
       buildMember(0x5a0001, { guid: 'Player-4395-005A0001' }),
       buildMember(0x5a0002, { guid: 'Player-4395-005A0002' }),
     ]);
     theirs.data.name = SQUAT;
-    theirs.who = buildWho({ guid: 'Player-4395-005A0002' });
+    theirs.who = whoAsOther('Player-4395-005A0002');
     theirs.data.snapshotAt += 3 * 60;
     expect(
       (await apply(other, otherId, buildImportString(theirs))).status,
