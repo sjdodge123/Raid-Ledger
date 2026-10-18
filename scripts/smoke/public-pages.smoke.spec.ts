@@ -9,6 +9,33 @@
  *  - Unauthenticated visitors can reach the pages
  */
 import { test, expect } from './base';
+import { apiGet, getAdminToken } from './api-helpers';
+
+
+/**
+ * `GET /events` answers a paginated `{ data, meta }` envelope, not a bare
+ * array — r1 read it as an array, so `seededEventId()` always returned null
+ * and the capture case below skipped on every project (Codex r2 P2). Both
+ * shapes are accepted so the helper cannot silently disarm the test again.
+ */
+function eventList(body: unknown): unknown[] {
+    if (Array.isArray(body)) return body;
+    if (typeof body === 'object' && body !== null && 'data' in body) {
+        const data: unknown = (body as { data: unknown }).data;
+        if (Array.isArray(data)) return data;
+    }
+    return [];
+}
+
+/** The id of a seeded upcoming event — the join landing needs a real one. */
+async function seededEventId(): Promise<number | null> {
+    const token = await getAdminToken();
+    const body: unknown = await apiGet(token, '/events?upcoming=true&limit=1');
+    const first: unknown = eventList(body)[0];
+    if (typeof first !== 'object' || first === null || !('id' in first)) return null;
+    const id = (first as { id: unknown }).id;
+    return typeof id === 'number' ? id : null;
+}
 
 // ---------------------------------------------------------------------------
 // Join page — /join
@@ -20,6 +47,77 @@ test.describe('Join page (/join)', () => {
         await expect(page.getByRole('heading', { name: 'Invalid Link' })).toBeVisible({ timeout: 10_000 });
         await expect(page.getByText('This join link is invalid or has expired.')).toBeVisible();
         await expect(page.getByRole('button', { name: 'Go to Calendar' })).toBeVisible();
+    });
+
+    /**
+     * ROK-1839: the intent token is captured and `history.replaceState`d out of
+     * the address bar before Sentry initialises, so a Session Replay's rrweb
+     * Meta (type 4) href — built from `window.location.href` inside the SDK,
+     * where no `beforeAddRecordingEvent` hook reaches — can never carry it.
+     * A token with no `eventId` is an invalid link, so the page settles here
+     * instead of navigating on to Discord or the event.
+     */
+    test('strips ?token= from the address bar on load (ROK-1839)', async ({ page }) => {
+        await page.goto('/join?intent=signup&token=rok1839-smoke-not-a-real-token');
+        await expect(page.getByRole('heading', { name: 'Invalid Link' })).toBeVisible({ timeout: 10_000 });
+
+        const landed = new URL(page.url());
+        expect(landed.search, 'the sign-in token must be gone from the address bar').not.toContain('token=');
+        expect(landed.href, 'no part of the URL may carry the token value').not.toContain('rok1839-smoke');
+        expect(landed.searchParams.get('intent'), 'every other query param survives the strip').toBe('signup');
+    });
+
+    /**
+     * ROK-1839, the AC's second half. The strip must not cost the flow its
+     * token: a signed-in visitor following a join link still gets through to
+     * the event, driven off the CAPTURE (the address bar no longer has one by
+     * the time /join renders).
+     *
+     * The token here is deliberately not redeemable — nothing mints an intent
+     * token outside the Discord bot, and no DEMO_MODE fixture endpoint exists
+     * for it (see HANDOVER-ROK-1839.md "deliberately not done"). The flow it
+     * proves is the one the strip could break: capture → redeem call → land on
+     * the event. A redeemable token would additionally assert the signup row.
+     */
+    test('a signed-in join link still redeems from the capture and lands on the event (ROK-1839)', async ({ page }) => {
+        const eventId = await seededEventId();
+        test.skip(eventId === null, 'no upcoming event in the seed');
+        const token = 'rok1839-smoke-capture-not-a-real-token';
+
+        // The load-bearing half: the strip must not cost the flow its token.
+        // Reading the landing URL alone cannot tell a redeem that carried the
+        // captured token from one that sent nothing (Codex r2 P2), so the
+        // POST body is inspected directly.
+        // r3 (Codex P3): a body substring would also accept a PUT, or a POST
+        // that carried the token under some other key — record the method and
+        // the PARSED `token` field so only the real redemption passes.
+        const redeemCalls: { method: string; token: unknown }[] = [];
+        await page.route('**/auth/redeem-intent', async (route) => {
+            const request = route.request();
+            let parsed: unknown = null;
+            try {
+                parsed = (JSON.parse(request.postData() ?? '') as { token?: unknown }).token ?? null;
+            } catch {
+                parsed = null;
+            }
+            redeemCalls.push({ method: request.method(), token: parsed });
+            await route.continue();
+        });
+
+        await page.goto(`/join?intent=signup&eventId=${String(eventId)}&token=${token}`);
+
+        await page.waitForURL(new RegExp(`/events/${String(eventId)}(\\?|#|$)`), { timeout: 20_000 });
+        expect(
+            redeemCalls,
+            'exactly one POST /auth/redeem-intent must carry the captured token as its `token` field',
+        ).toEqual([{ method: 'POST', token }]);
+        const landed = new URL(page.url());
+        expect(landed.href, 'the sign-in token must not survive into the landing URL').not.toContain(token);
+        expect(landed.href, 'nor any fragment of it').not.toContain('rok1839-smoke');
+        await expect(
+            page.locator('body'),
+            'the join landing must render the event page, not the error boundary',
+        ).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
     });
 
     test('does not trigger the error boundary', async ({ page }) => {

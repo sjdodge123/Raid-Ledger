@@ -12,6 +12,7 @@ import { readClaims } from '../lib/api/token-expiry';
 import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
+import { clearCapturedQueryToken } from '../lib/query-token-capture';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
 import type { UserRole } from '@raid-ledger/contract';
@@ -77,6 +78,10 @@ export function getCachedUser(): User | null {
 function clearAllAuthStorage(): void {
     clearAccessToken();
     localStorage.removeItem(USER_CACHE_KEY);
+    // ROK-1839: the session is over (logout, a rejected refresh, an
+    // impersonation exit that could not re-mint) — an unredeemed join token
+    // must not outlive it and be replayed by whoever holds the tab next.
+    clearCapturedQueryToken();
 }
 
 /**
@@ -197,6 +202,9 @@ function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
  * in-memory token and re-mints from the shared cookie as the new identity.
  */
 function signalIdentityChange(): void {
+    // ROK-1839: the viewer changed (impersonation start/stop), so a join token
+    // captured for the previous identity must not be redeemed as the new one.
+    clearCapturedQueryToken();
     bumpIdentityEpoch();
 }
 
@@ -210,7 +218,17 @@ let heldImpersonation = isImpersonatingToken();
 subscribeAccessToken(() => {
     const next = getAccessToken();
     const nowImpersonating = isImpersonatingToken(next);
-    if (heldImpersonation && next !== null && !nowImpersonating) toast.info('Impersonation ended');
+    if (heldImpersonation && next !== null && !nowImpersonating) {
+        // ROK-1839 fix round r2 (Codex P2): the viewer just changed WITHOUT
+        // any of our own exit paths running, so nothing called
+        // `signalIdentityChange`. The capture clear it performs has to happen
+        // here too, or a join token captured while impersonating is redeemed
+        // as the admin who takes the tab back. Only the clear — not
+        // `bumpIdentityEpoch`: this listener fires on a token the OTHER tabs
+        // already know about, and re-broadcasting it would loop them.
+        clearCapturedQueryToken();
+        toast.info('Impersonation ended');
+    }
     heldImpersonation = nowImpersonating;
 });
 
