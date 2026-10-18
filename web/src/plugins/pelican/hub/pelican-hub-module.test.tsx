@@ -64,12 +64,13 @@ describe('pelicanHubModule (ROK-1831)', () => {
     it('lists every member flat and renders the server columns from row.server', () => {
         const rows = pelicanHubModule.memberRows(page(false));
         expect(rows.map((r) => r.memberId)).toEqual([1, 2]);
-        const [character, online] = pelicanHubModule.memberColumns;
-        if (character === undefined || online === undefined) throw new Error('expected server columns');
+        const [player, character, online] = pelicanHubModule.memberColumns;
+        if (player === undefined || character === undefined || online === undefined) throw new Error('expected server columns');
         const first = rows[0];
         const second = rows[1];
         if (first === undefined || second === undefined) throw new Error('expected two rows');
-        render(<><character.cell row={first} /><online.cell row={first} /><online.cell row={second} /></>);
+        render(<><player.cell row={first} /><character.cell row={first} /><online.cell row={first} /><online.cell row={second} /></>);
+        expect(screen.getByTestId('server-member-player')).toHaveTextContent(first.name);
         expect(screen.getByText('Bjorn')).toBeInTheDocument();
         expect(screen.getByText('Online')).toBeInTheDocument();
         expect(screen.getByText('Offline')).toBeInTheDocument();

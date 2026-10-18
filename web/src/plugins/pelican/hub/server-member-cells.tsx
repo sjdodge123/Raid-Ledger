@@ -7,6 +7,11 @@ import type { JSX } from 'react';
 import type { HubMemberRow } from '../../hub-module';
 import { lastSeenLabel } from './server-member.helpers';
 
+/** The member's Raid Ledger name — the row's identity (phone card line), so a never-played member is not an anonymous "—". */
+export function PlayerCell({ row }: { row: HubMemberRow }): JSX.Element {
+    return <span className="font-medium text-foreground" data-testid="server-member-player">{row.name}</span>;
+}
+
 export function CharacterCell({ row }: { row: HubMemberRow }): JSX.Element {
     return <span data-testid="server-member-character">{row.server?.characterName ?? '—'}</span>;
 }
