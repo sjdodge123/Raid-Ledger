@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { redeemIntent } from '../lib/api-client';
@@ -145,10 +145,14 @@ export function JoinPage() {
     const intent = searchParams.get('intent');
     const eventId = searchParams.get('eventId');
     const urlToken = searchParams.get('token');
-    const { token, unusable } = useMemo(
-        () => resolveJoinToken(urlToken, intent, eventId), [urlToken, intent, eventId],
-    );
-    const isValid = useMemo(() => intent === 'signup' && !!eventId && !!token, [intent, eventId, token]);
+    // r3 (Codex P2): resolved on EVERY render, never memoized on the URL
+    // fields. The capture is mutable and time-bound — an impersonation that
+    // auto-ends, a cross-tab logout or the 15-minute TTL retires it — and auth
+    // settles on a LATER render than the one that first resolved it. A memo
+    // keyed on the URL would hand the join effect a token the tab had already
+    // dropped. Still ONE read per render, which is what r2's cleanup needs.
+    const { token, unusable } = resolveJoinToken(urlToken, intent, eventId);
+    const isValid = intent === 'signup' && !!eventId && !!token;
 
     useAddressBarStrip(intent, eventId);
     useUnusableCaptureCleanup(unusable, isValid);

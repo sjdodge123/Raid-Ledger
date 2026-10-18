@@ -23,26 +23,32 @@ import {
 
 vi.mock('../lib/api-client', () => ({ redeemIntent: vi.fn() }));
 vi.mock('../lib/toast', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
-vi.mock('../hooks/use-auth', () => ({ useAuth: () => ({ isAuthenticated: true, isLoading: false }) }));
+const auth = vi.hoisted(() => ({ current: { isAuthenticated: true, isLoading: false } }));
+vi.mock('../hooks/use-auth', () => ({ useAuth: () => auth.current }));
 
 const HANDED_OVER = 'hop.handed.intent.token';
 
-function renderJoin(search: string) {
-    return render(
+function joinTree(search: string) {
+    return (
         <MemoryRouter initialEntries={[`/join${search}`]}>
             <Routes>
                 <Route path="/join" element={<JoinPage />} />
                 <Route path="/events/:id" element={<div>Event Page</div>} />
                 <Route path="/calendar" element={<div>Calendar Page</div>} />
             </Routes>
-        </MemoryRouter>,
+        </MemoryRouter>
     );
+}
+
+function renderJoin(search: string) {
+    return render(joinTree(search));
 }
 
 describe('ROK-1839: the post-OAuth hand-off works against the REAL capture module', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         window.sessionStorage.clear();
+        auth.current = { isAuthenticated: true, isLoading: false };
         clearCapturedQueryToken();
         window.history.replaceState(null, '', '/');
     });
@@ -97,5 +103,35 @@ describe('ROK-1839: the post-OAuth hand-off works against the REAL capture modul
             peekCapturedQueryToken(),
             'and it does not sit in the tab waiting for the next page',
         ).toBeNull());
+    });
+
+    /**
+     * r3 (Codex P2). The TTL is enforced on every READ of the capture, so it
+     * only protects the page if the page reads again when it matters. Auth
+     * settles on a later render than the one that first resolved the capture:
+     * a visitor who takes longer than the capture's life to come back signed
+     * in used to have the memoized, long-dead token submitted for them.
+     */
+    it('does not redeem a hand-off that crosses the TTL while auth is still settling', () => {
+        setCapturedQueryToken({ token: HANDED_OVER, eventId: '42', intent: 'signup' });
+        auth.current = { isAuthenticated: false, isLoading: true };
+        // A FRESH element each pass: React bails out of re-rendering a
+        // subtree handed the identical element object, so reusing one would
+        // never let the page resolve the capture again.
+        const { rerender } = render(joinTree('?intent=signup&eventId=42'));
+
+        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + CAPTURE_TTL_MS + 1);
+        auth.current = { isAuthenticated: true, isLoading: false };
+        rerender(joinTree('?intent=signup&eventId=42'));
+
+        expect(
+            vi.mocked(redeemIntent).mock.calls,
+            'a capture that aged past its TTL while auth was settling must never reach the server',
+        ).toEqual([]);
+        expect(
+            screen.getByRole('heading', { name: /invalid link/i }),
+            'an expired hand-off leaves the page with no token, which is an invalid link',
+        ).toBeInTheDocument();
+        expect(peekCapturedQueryToken(), 'and the dead capture is gone from the tab').toBeNull();
     });
 });

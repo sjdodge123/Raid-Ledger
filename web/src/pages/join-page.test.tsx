@@ -564,3 +564,66 @@ describe('ROK-1839 r2: the mount strip and the cleanup read ONE capture', () => 
         ).toHaveBeenCalledWith(STRIPPED, { replace: true, state: null }));
     });
 });
+
+
+/**
+ * ROK-1839 r3 (Codex P2). `resolveJoinToken` reads mutable, time-bound state,
+ * so memoizing it on the URL fields froze a token the tab had already retired.
+ * Auth settles on a LATER render than the one that first resolved the capture
+ * — exactly the window an impersonation auto-end or a cross-tab logout lands
+ * in (`use-auth.ts` clears the capture on both).
+ */
+describe('ROK-1839 r3: a capture retired while auth was pending is never redeemed', () => {
+    // An earlier case in this file permanently swapped `window.location` for a
+    // plain object; give the mount strip the shape it reads (token-free here,
+    // so the strip is a no-op and only the capture is in play) and restore it.
+    const realLocation = window.location;
+    const SEARCH = '?intent=signup&eventId=42';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        sessionStorage.clear();
+        capture.current = captureFor('42');
+        // Never settles: an in-flight redeem must not clear anything itself.
+        vi.mocked(apiClient.redeemIntent).mockImplementation(() => new Promise(() => {}));
+        Object.defineProperty(window, 'location', {
+            value: { pathname: '/join', search: SEARCH, hash: '', href: `http://localhost/join${SEARCH}` },
+            writable: true, configurable: true,
+        });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(window, 'location', { value: realLocation, writable: true, configurable: true });
+    });
+
+    it('drops a capture cleared mid-flight by an auto-ended impersonation', () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: true });
+        // A FRESH element each pass: React bails out of re-rendering a
+        // subtree handed the identical element object.
+        const tree = () => (
+            <MemoryRouter initialEntries={[`/join${SEARCH}`]}>
+                <Routes>
+                    <Route path="/join" element={<JoinPage />} />
+                    <Route path="/calendar" element={<div>Calendar Page</div>} />
+                    <Route path="/events/:id" element={<div>Event Page</div>} />
+                </Routes>
+            </MemoryRouter>
+        );
+        const { rerender } = render(tree());
+
+        // What `use-auth` does when the impersonation ends itself.
+        capture.current = null;
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+        rerender(tree());
+
+        expect(
+            vi.mocked(apiClient.redeemIntent).mock.calls,
+            'the capture was retired before auth settled — the join effect must not spend it',
+        ).toEqual([]);
+        expect(
+            screen.getByRole('heading', { name: /invalid link/i }),
+            'with its only token gone, the page is an invalid link, not a spinner',
+        ).toBeInTheDocument();
+    });
+});

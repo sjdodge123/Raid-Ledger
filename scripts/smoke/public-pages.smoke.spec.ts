@@ -88,9 +88,19 @@ test.describe('Join page (/join)', () => {
         // Reading the landing URL alone cannot tell a redeem that carried the
         // captured token from one that sent nothing (Codex r2 P2), so the
         // POST body is inspected directly.
-        const redeemBodies: string[] = [];
+        // r3 (Codex P3): a body substring would also accept a PUT, or a POST
+        // that carried the token under some other key — record the method and
+        // the PARSED `token` field so only the real redemption passes.
+        const redeemCalls: { method: string; token: unknown }[] = [];
         await page.route('**/auth/redeem-intent', async (route) => {
-            redeemBodies.push(route.request().postData() ?? '');
+            const request = route.request();
+            let parsed: unknown = null;
+            try {
+                parsed = (JSON.parse(request.postData() ?? '') as { token?: unknown }).token ?? null;
+            } catch {
+                parsed = null;
+            }
+            redeemCalls.push({ method: request.method(), token: parsed });
             await route.continue();
         });
 
@@ -98,13 +108,9 @@ test.describe('Join page (/join)', () => {
 
         await page.waitForURL(new RegExp(`/events/${String(eventId)}(\\?|#|$)`), { timeout: 20_000 });
         expect(
-            redeemBodies.length,
-            'the stripped page must still have redeemed, exactly once, from its capture',
-        ).toBe(1);
-        expect(
-            redeemBodies[0] ?? '',
-            'the redeem POST must carry the token the address-bar strip captured',
-        ).toContain(token);
+            redeemCalls,
+            'exactly one POST /auth/redeem-intent must carry the captured token as its `token` field',
+        ).toEqual([{ method: 'POST', token }]);
         const landed = new URL(page.url());
         expect(landed.href, 'the sign-in token must not survive into the landing URL').not.toContain(token);
         expect(landed.href, 'nor any fragment of it').not.toContain('rok1839-smoke');
