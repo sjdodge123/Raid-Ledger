@@ -40,6 +40,32 @@ export async function applyCommunityHub(
   await refreshMemberCount(tx, guildId, now);
 }
 
+/**
+ * ROK-1831 ruling "the hub name follows the server": copy the server's name
+ * and game onto its hub. A cleared mapping hides the hub instead (no game to
+ * authorise event tagging against); `communityHub: true` re-enables it once a
+ * game is mapped again. No-op when the server has no hub.
+ */
+export async function syncServerHub(
+  tx: PelicanTx,
+  server: { id: number; name: string; gameId: number | null },
+  now: Date,
+): Promise<void> {
+  const g = schema.guilds;
+  if (server.gameId === null) {
+    await tx
+      .update(g)
+      .set({ hiddenAt: now })
+      .where(and(eq(g.pelicanServerId, server.id), isNull(g.hiddenAt)));
+    return;
+  }
+  const name = server.name.slice(0, 64);
+  await tx
+    .update(g)
+    .set({ name, nameKey: name.toLowerCase(), gameId: server.gameId })
+    .where(eq(g.pelicanServerId, server.id));
+}
+
 /** Server deleted / missing from the panel → hide its hub, keep the data. */
 export async function hideServerHubs(
   tx: PelicanExecutor,

@@ -12,7 +12,10 @@ import {
   type PelicanServerRow,
 } from '../../drizzle/schema';
 import type { PelicanTx } from './pelican-servers.repository';
-import { applyCommunityHub } from './hub/server-hub-toggle.helpers';
+import {
+  applyCommunityHub,
+  syncServerHub,
+} from './hub/server-hub-toggle.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -121,6 +124,7 @@ export class PelicanServersAdminRepository {
         .where(eq(pelicanServers.id, server.id));
     }
     const { gameId } = server;
+    await syncServerHub(tx, server, new Date());
     if (patch.communityHub === undefined) return;
     if (patch.communityHub && gameId === null) return;
     await applyCommunityHub(
