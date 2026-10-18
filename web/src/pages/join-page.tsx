@@ -5,6 +5,7 @@ import { redeemIntent } from '../lib/api-client';
 import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../lib/config';
+import { clearCapturedQueryToken, peekCapturedQueryToken } from '../lib/query-token-capture';
 
 /**
  * /join route — Deferred signup landing page (ROK-137).
@@ -18,15 +19,24 @@ import { API_BASE_URL } from '../lib/config';
  *
  * Graceful fallback: if token is invalid/expired, redirect to event page
  * with manual signup prompt.
+ *
+ * ROK-1839: the intent token is no longer read from the address bar — it is
+ * captured and stripped before Sentry initialises (lib/query-token-capture.ts)
+ * so no Session Replay records it, and handed over from this tab's
+ * sessionStorage. `searchParams` is still consulted first so any caller that
+ * navigates to /join client-side keeps working.
  */
 function redirectToDiscord(intent: string | null, eventId: string | null, token: string | null) {
     sessionStorage.setItem('join_intent', JSON.stringify({ intent, eventId, token }));
+    // Handed off to the OAuth hop's own record: the capture has done its job.
+    clearCapturedQueryToken();
     window.location.href = `${API_BASE_URL}/auth/discord`;
 }
 
 async function redeemAndNavigate(token: string, eventId: string | null, navigate: ReturnType<typeof useNavigate>) {
     try {
         const result = await redeemIntent(token);
+        clearCapturedQueryToken();
         if (result.success) toast.success("You're signed up!", { description: 'Your signup has been confirmed.' });
         else toast.info('Join link expired', { description: 'You can still sign up manually on the event page.' });
     } catch { /* fall through */ }
@@ -60,7 +70,7 @@ export function JoinPage() {
 
     const intent = searchParams.get('intent');
     const eventId = searchParams.get('eventId');
-    const token = searchParams.get('token');
+    const token = searchParams.get('token') ?? peekCapturedQueryToken();
     const isValid = useMemo(() => intent === 'signup' && !!eventId && !!token, [intent, eventId, token]);
 
     useJoinEffect(authLoading, isAuthenticated, isValid, intent, eventId, token, navigate);
