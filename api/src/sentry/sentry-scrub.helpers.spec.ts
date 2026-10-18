@@ -229,4 +229,20 @@ describe('instrument.ts wiring', () => {
     });
     expect(JSON.stringify(out)).not.toContain(SECRET);
   });
+
+  it('ROK-1833: no Valheim Link token survives a header, free text or an issue body', () => {
+    const token = `rlvl_${'Ab3_-'.repeat(8)}xyz`;
+    const event = scrubSecrets({
+      request: {
+        url: '/api/plugins/valheim/link/v1/messages/character',
+        headers: { Authorization: `Bearer ${token}`, 'X-Debug': token },
+        data: JSON.stringify({ token, serverId: '7' }),
+      },
+      message: `pasted ${token} into a note`,
+      extra: { body: { issued: { token } } },
+      exception: { values: [{ value: `boom ${token}` }] },
+    });
+    expect(JSON.stringify(event)).not.toContain('rlvl_');
+    expect(scrubString(`a ${token} b`)).toBe(`a ${REDACTED} b`);
+  });
 });

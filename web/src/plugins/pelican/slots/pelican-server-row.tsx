@@ -10,6 +10,7 @@ import type { IgdbGameDto, PelicanServerRowDto, PelicanServerUpdate } from '@rai
 import { Switch } from '../../../components/ui/switch';
 import { GameSearchInput } from '../../../components/events/game-search-input';
 import { PelicanStateChip } from './pelican-state-chip';
+import { PluginSlot } from '../../plugin-slot';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { PLUGINS_HREF, quickPlayHint, quickPlayPluginToActivate } from './pelican-servers.helpers';
 
@@ -133,12 +134,19 @@ function LastSynced({ at }: { at: string | null }) {
     return <span className="text-sm text-secondary" title={date.toLocaleString()}>{formatDistanceToNow(date, { addSuffix: true })}</span>;
 }
 
+/** Game-plugin controls for this server (ROK-1833) — Pelican stays game-agnostic. */
+function RowExtras({ row, inline = false }: { row: PelicanServerRowDto; inline?: boolean }) {
+    const context = { serverId: row.id, gameId: row.gameId, serverName: row.name, ...(inline ? { inline: true } : {}) };
+    return <PluginSlot name="pelican-server:row-extras" context={context} />;
+}
+
 /**
  * Desktop: one `<tr>` in the §4.21-idiom table. Sized to fit the admin content
  * box without inner scroll: the game picker holds 10rem, every other column
- * shrinks to its longest word. No timezone column (ROK-1795).
+ * shrinks to its longest word. No timezone column (ROK-1795). The plugin
+ * "Mod link" cell renders only with `showExtras` (the table's slot check).
  */
-export function PelicanServerRow(p: ServerRowProps) {
+export function PelicanServerRow(p: ServerRowProps & { showExtras?: boolean }) {
     return (
         <tr data-testid={`pelican-server-row-${p.row.id}`} className="align-top">
             <td className="px-2 py-3"><ServerName row={p.row} /></td>
@@ -147,6 +155,7 @@ export function PelicanServerRow(p: ServerRowProps) {
             <td className="px-2 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
             <td className="px-2 py-3"><QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><LastSynced at={p.row.lastSyncedAt} /></td>
+            {p.showExtras && <td className="px-2 py-3"><RowExtras row={p.row} inline /></td>}
         </tr>
     );
 }
@@ -169,6 +178,7 @@ export function PelicanServerCard(p: ServerRowProps) {
                 <QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} />
             </div>
             <p className="text-xs text-muted">Last synced <LastSynced at={p.row.lastSyncedAt} /></p>
+            <RowExtras row={p.row} />
         </div>
     );
 }

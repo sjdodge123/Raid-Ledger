@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "items",
+  "locale": "English",
+  "atlas": null,
+  "items": [
+    {
+      "prefab": "SwordIron",
+      "name": "Iron sword",
+      "category": "OneHandedWeapon",
+      "maxStack": 1,
+      "maxQuality": 4,
+      "variants": 0,
+      "icon": {
+        "kind": "file",
+        "file": "SwordIron.png",
+        "blob": {
+          "sha256": "nope",
+          "byteLength": 4096,
+          "contentType": "image/png",
+          "width": 64,
+          "height": 64
+        }
+      }
+    }
+  ]
+}

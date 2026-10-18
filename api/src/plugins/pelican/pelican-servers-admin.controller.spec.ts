@@ -4,7 +4,10 @@ import {
   type PelicanServerUpdate,
 } from '@raid-ledger/contract';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import { PELICAN_PRESENCE_CONFIG_CHANGED } from './pelican.constants';
+import {
+  PELICAN_PRESENCE_CONFIG_CHANGED,
+  PELICAN_SERVER_GAME_CHANGED,
+} from './pelican.constants';
 import { PelicanServersAdminController } from './pelican-servers-admin.controller';
 import {
   toMappingSet,
@@ -55,15 +58,16 @@ function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
   // No parser is suspended behind an inactive plugin by default (ROK-1819).
   const getSuspendedAdapterOwner = jest.fn(() => undefined);
   const emit = jest.fn();
+  const emitAsync = jest.fn().mockResolvedValue([]);
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
     {
       getAdapter,
       getSuspendedAdapterOwner,
     } as unknown as PluginRegistryService,
-    { emit } as unknown as EventEmitter2,
+    { emit, emitAsync } as unknown as EventEmitter2,
   );
-  return { controller, listForAdmin, updateMapping, emit };
+  return { controller, listForAdmin, updateMapping, emit, emitAsync };
 }
 
 describe('toAdminServerRowDto (ROK-1094)', () => {
@@ -254,4 +258,21 @@ describe('PATCH Quick Play guard + supervisor nudge (ROK-1800)', () => {
     const res = await controller.listServers();
     expect(res.data[0]?.presenceSupported).toBe(expected);
   });
+});
+
+describe('PATCH game change → game plugins (ROK-1833)', () => {
+  it.each<[string, PelicanServerUpdate, boolean]>([
+    ['the game changes', { gameId: 9 }, true],
+    ['the game is cleared', { gameId: null }, true],
+    ['only the Quick Play switch changes', { presenceTracking: false }, false],
+  ])(
+    'awaits PELICAN_SERVER_GAME_CHANGED when %s (ROK-1833)',
+    async (_l, patch, fired) => {
+      const { controller, emitAsync } = build({ kind: 'ok', row: makeRow() });
+      await controller.updateServer(4, patch);
+      expect(emitAsync.mock.calls).toEqual(
+        fired ? [[PELICAN_SERVER_GAME_CHANGED, { serverId: 4 }]] : [],
+      );
+    },
+  );
 });
