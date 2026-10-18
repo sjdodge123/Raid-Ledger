@@ -1321,10 +1321,12 @@ the §4.2 panel surface (`rounded-xl border border-edge bg-panel p-4`) as a `<se
 `Button variant="ghost" size="sm" iconOnly` × top-right, then an action row: a `Button variant="primary"`
 "How to import" / "Hide steps" toggle (`aria-expanded`) that reveals the game module's `text-sm text-muted`
 how-to **in place** — the panel is rendered **after** the action row with a stable `id` the toggle points
-`aria-controls` at — a `Button variant="secondary"` "Not now", and a closing `text-xs text-dim`
+`aria-controls` at — a `Button variant="ghost"` "Not now" (the prototype's tertiary way out), and a closing `text-xs text-dim`
 "Shown once, to signed-in players who are not in a guild yet." (ROK-1840, S0 prototype). The × and
 "Not now" are the SAME server-side dismissal — there is no session-only hide — so the × takes **"Not now"**
-as its `aria-label` too: one action must not carry two names implying different durations. No module how-to,
+as its `aria-label` too: one action must not carry two names implying different durations. Either one
+flashes ONE `toast.success` (§4.8) — "Got it. We won't show this again." — from a single handler, in step
+with the optimistic hide. No module how-to,
 no toggle.
 A failed dismiss rolls the card back and says so in a `role="alert"` `text-danger` line — never a silent hide.
 
@@ -1340,8 +1342,11 @@ A step row is a 24px round mark — `border-success/40 bg-success/10 text-succes
 (a done row's visible "Done" chip already says it), and a
 right-aligned action, with rows separated by `border-b border-edge-subtle`. The action is a verb, never
 "Open": `buttonClass({ variant: 'secondary', size: 'sm' })` on an `<a href="#tab">` for a step that lives in
-another tab (ROK-1599), a `Button variant="secondary" size="sm"` for one that opens an overlay, a
-`text-xs text-muted` reason for a blocked step, and a `text-xs text-success` "Done" once ticked.
+another tab (ROK-1599), a `Button variant="secondary" size="sm"` for one that opens an overlay, and a
+`text-xs text-success` "Done" once ticked. A **blocked** step has no action cell at all: its reason is a
+`text-xs text-dim` line that wraps **under the label**, inside the same block as the description. It must
+not live in the action cell — that cell is `shrink-0`, so a sentence-length reason keeps its max-content
+width (469px measured against a 375px viewport) and runs off the card on a phone (ROK-1840).
 **DON'T** hide a blocked step — list it with its reason; and don't count it toward the progress, or the
 checklist can never finish.
 
