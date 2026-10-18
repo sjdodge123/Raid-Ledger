@@ -19,7 +19,9 @@ jest.mock('./steam-http.util', () => ({
   verifySteamOpenId: (...a: unknown[]) => verifyOpenIdMock(...a),
 }));
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SteamAuthController } from './steam-auth.controller';
+import { STEAM_ACCOUNT_LINKED } from './steam.constants';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SteamService } from './steam.service';
@@ -48,6 +50,7 @@ interface Mocks {
   getSteamApiKey: jest.Mock;
   linkSteam: jest.Mock;
   claim: jest.Mock;
+  emitAsync: jest.Mock;
 }
 
 /** In-memory stand-in for the Redis SET NX store: true once per nonce. */
@@ -67,6 +70,7 @@ async function build(): Promise<{ ctrl: SteamAuthController; m: Mocks }> {
     getSteamApiKey: jest.fn().mockResolvedValue(null),
     linkSteam: jest.fn().mockResolvedValue(undefined),
     claim: fakeClaim(),
+    emitAsync: jest.fn().mockResolvedValue([]),
   };
   const config = {
     get: (k: string) => ({ JWT_SECRET: SECRET, CLIENT_URL })[k],
@@ -81,6 +85,7 @@ async function build(): Promise<{ ctrl: SteamAuthController; m: Mocks }> {
       { provide: SteamService, useValue: {} },
       { provide: SteamWishlistService, useValue: {} },
       { provide: SteamOpenIdNonceStore, useValue: { claim: m.claim } },
+      { provide: EventEmitter2, useValue: { emitAsync: m.emitAsync } },
     ],
   }).compile();
   return { ctrl: moduleRef.get(SteamAuthController), m };
@@ -209,6 +214,11 @@ describe('SteamAuthController — link callback is bound to the hop browser (ROK
 
     expect(m.claim).toHaveBeenCalledWith(NONCE);
     expect(m.linkSteam).toHaveBeenCalledWith(42, '76561190000000001');
+    // ROK-1835: the verified link is announced for the armory auto-match.
+    expect(m.emitAsync).toHaveBeenCalledWith(STEAM_ACCOUNT_LINKED, {
+      userId: 42,
+      steamId64: '76561190000000001',
+    });
     expect(onlyRedirect(res)).toEqual([
       `${CLIENT_URL}/profile?steam=success&steam_private=true`,
     ]);

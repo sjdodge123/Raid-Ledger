@@ -19,10 +19,12 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
 import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
 import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
 import { ValheimArmoryRepository } from './armory/valheim-armory.repository';
-import {
-  NOOP_PROFILE_UPSERTED_HOOK,
-  VALHEIM_PROFILE_UPSERTED_HOOK,
-} from './armory/valheim-armory-profile.hook';
+import { VALHEIM_PROFILE_UPSERTED_HOOK } from './armory/valheim-armory-profile.hook';
+import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-claims.controller';
+import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
+import { ValheimIdentityRepository } from './armory/identity/valheim-identity.repository';
+import { ValheimIdentityService } from './armory/identity/valheim-identity.service';
+import { ValheimSteamLinkListener } from './armory/identity/valheim-steam-link.listener';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -37,6 +39,7 @@ import {
     ValheimLinkTokensAdminController,
     ValheimLinkIngestController,
     ValheimLinkBlobController,
+    ValheimArmoryClaimsController,
   ],
   providers: [
     ValheimAdapterRegistration,
@@ -51,13 +54,17 @@ import {
     ValheimLinkIngestService,
     ValheimLinkBlobsRepository,
     ValheimLinkBlobService,
-    // ROK-1835 armory importer (30 s drain). L3 swaps the hook provider.
+    // ROK-1835 armory importer (30 s drain) + Steam identity / claims.
     ValheimArmoryRepository,
     ValheimArmoryImportService,
     ValheimArmoryImportCron,
+    ValheimIdentityRepository,
+    ValheimIdentityService,
+    ValheimSteamLinkListener,
+    ValheimArmoryClaimsService,
     {
       provide: VALHEIM_PROFILE_UPSERTED_HOOK,
-      useValue: NOOP_PROFILE_UPSERTED_HOOK,
+      useExisting: ValheimIdentityService,
     },
   ],
 })

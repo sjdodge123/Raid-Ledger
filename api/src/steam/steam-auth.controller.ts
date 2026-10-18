@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
@@ -38,6 +39,10 @@ import {
 import { assertFreshSteamAssertion } from './steam-openid-guard.helpers';
 import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
 import {
+  STEAM_ACCOUNT_LINKED,
+  STEAM_ACCOUNT_UNLINKED,
+} from './steam.constants';
+import {
   signSteamLinkState,
   verifySteamLinkState,
 } from './steam-link-state.helpers';
@@ -63,6 +68,7 @@ export class SteamAuthController {
     private readonly steamService: SteamService,
     private readonly steamWishlistService: SteamWishlistService,
     private readonly nonceStore: SteamOpenIdNonceStore,
+    private readonly events: EventEmitter2,
   ) {}
 
   private verifyState(state: string): Record<string, unknown> | null {
@@ -234,6 +240,11 @@ export class SteamAuthController {
     if (!steamId) throw new Error('Steam verification failed');
     await this.usersService.linkSteam(userId, steamId);
     this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
+    // ROK-1835: users.steam_id is now a verified link (listeners swallow).
+    await this.events.emitAsync(STEAM_ACCOUNT_LINKED, {
+      userId,
+      steamId64: steamId,
+    });
     return { userId, steamId };
   }
 
@@ -338,7 +349,14 @@ export class SteamAuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
   async unlinkSteam(@Req() req: AuthenticatedExpressRequest) {
+    const before = await this.usersService.findById(req.user.id);
     await this.usersService.unlinkSteam(req.user.id);
     this.logger.log(`Steam account unlinked for user ${req.user.id}`);
+    // ROK-1835: tell listeners which verified SteamID went away.
+    if (before?.steamId)
+      await this.events.emitAsync(STEAM_ACCOUNT_UNLINKED, {
+        userId: req.user.id,
+        steamId64: before.steamId,
+      });
   }
 }
