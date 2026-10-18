@@ -5,6 +5,7 @@
  * hides it from members (404) while staff still see it.
  */
 import * as bcrypt from 'bcrypt';
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
@@ -238,5 +239,53 @@ describe('ROK-1831 fix r1 — staff hidden flag + WoW alias hidden checks', () =
     await hide(false, 'admin');
     const back = await get(`${WOW}/by-character/${char.id}`, 'member');
     expect(back.body.data.guild.id).toBe(guildId);
+  });
+});
+
+describe('ROK-1831 fix r1b — guilds/mine across kinds', () => {
+  const PELICAN = 'pelican';
+
+  afterAll(async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    if (registry.isActive(PELICAN)) await registry.deactivate(PELICAN);
+  });
+
+  it('a WoW guild member who also joined a server hub gets both, the WoW rank intact', async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.ensureInstalled(PELICAN);
+    await registry.activate(PELICAN);
+    const [hub] = nonEmpty(
+      await testApp.db
+        .insert(schema.guilds)
+        .values({
+          gameId: testApp.seed.game.id,
+          kind: 'game_server',
+          region: 'server',
+          name: 'Valheim Main',
+          nameKey: 'valheim main',
+          source: 'pelican',
+        })
+        .returning(),
+      'server hub',
+    );
+    const [user] = nonEmpty(
+      await testApp.db.select().from(schema.users).where(eq(schema.users.username, 'hub-member')),
+      'member user',
+    );
+    await testApp.db.insert(schema.hubServerMembers).values({
+      guildId: hub.id,
+      userId: user.id,
+      source: 'manual',
+      joinedAt: new Date(),
+    });
+    const res = await get(`${CORE}/mine`, 'member');
+    expect(res.status).toBe(200);
+    const byId = new Map(
+      (res.body.guilds as { id: number; kind: string; rankIndex: number | null; rankName: string | null }[]).map(
+        (g) => [g.id, g],
+      ),
+    );
+    expect(byId.get(guildId)).toMatchObject({ kind: 'wow_guild', rankIndex: 2, rankName: 'Rank 2' });
+    expect(byId.get(hub.id)).toMatchObject({ kind: 'game_server', rankIndex: null, rankName: null });
   });
 });
