@@ -245,6 +245,14 @@ test('editor: the Overview setup checklist scores the seeded hub and stays dismi
         // roster + next-raid + mods are seeded; leader-post, rules and links
         // are profile copy the seed leaves empty — an exact 3, not a wildcard.
         await expect(page.getByTestId('setup-checklist-progress')).toHaveText('3 of 6 done');
+        // ROK-1840 — S0 prototype parity: the card is titled with the hub, the
+        // count sits beside a progress bar, each row explains itself, and the
+        // footer says the hiding is stored on the account.
+        await expect(page.getByRole('heading', { name: /^Set up Smoke / })).toBeVisible();
+        await expect(page.getByRole('meter', { name: 'Setup progress: 3 of 6 done' })).toHaveAttribute('aria-valuenow', '50');
+        await expect(list.getByTestId('setup-step-desc-leader-post')).toHaveText('It sits at the top of Overview.');
+        await expect(list.getByTestId('setup-step-action-leader-post'), 'rows carry the verb, not "Open"').toHaveText('Write post');
+        await expect(page.getByTestId('setup-checklist-footer')).toContainText('saved to your account');
         // The seed already satisfies three of them; the profile ones it does not.
         await expect(list.getByTestId('setup-step-roster'), 'the Officer is a seeded member').toHaveAttribute('data-done', 'true');
         await expect(list.getByTestId('setup-step-next-raid'), 'the seed tags raid nights').toHaveAttribute('data-done', 'true');

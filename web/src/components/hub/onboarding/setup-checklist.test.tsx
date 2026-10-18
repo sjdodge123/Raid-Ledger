@@ -27,7 +27,7 @@ const EMPTY_PROFILE: GuildProfile = { guildId: 7, gmPost: null, rules: [], links
 const UNSET: GuildDiscordMirrorDto = { state: 'unset' };
 
 /** The props every case shares: roster imported, a raid tagged, mods available. */
-const PROPS = { guildId: 7, memberCount: 40, nextRaid: null, hasModSources: true } as const;
+const PROPS = { guildId: 7, guildName: 'Ashen Vanguard', memberCount: 40, nextRaid: null, hasModSources: true } as const;
 
 function serve(profile: GuildProfile, discord: GuildDiscordMirrorDto, state: HubOnboardingStateDto = { dismissed: [] }): void {
     server.use(
@@ -43,6 +43,16 @@ describe('HubSetupChecklist', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const list = await screen.findByTestId('setup-checklist');
         expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('2 of 7 done');
+        // ROK-1840 (S0 prototype): the count sits beside a progress bar, the
+        // card is titled with the hub, every row carries its description line
+        // and a verb-labelled action, and the footer names where the hiding
+        // is stored.
+        expect(screen.getByRole('heading', { name: 'Set up Ashen Vanguard' })).toBeInTheDocument();
+        const meter = screen.getByRole('meter', { name: 'Setup progress: 2 of 7 done' });
+        expect(meter).toHaveAttribute('aria-valuenow', '29');
+        expect(within(list).getByTestId('setup-step-desc-leader-post')).toHaveTextContent('It sits at the top of Overview.');
+        expect(within(list).getByTestId('setup-step-action-leader-post')).toHaveTextContent('Write post');
+        expect(screen.getByTestId('setup-checklist-footer')).toHaveTextContent('Hiding it is saved to your account.');
         expect(within(list).getByTestId('setup-step-rules')).toHaveAttribute('data-done', 'true');
         expect(within(list).getByTestId('setup-step-leader-post')).toHaveAttribute('data-done', 'false');
         // A done step offers no action — only the open ones do.

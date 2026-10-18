@@ -27,15 +27,31 @@ function serveOnboarding(state: HubOnboardingStateDto = EMPTY): void {
 }
 
 describe('GetYourGuildCard', () => {
-    it('shows the pitch and the module how-to line', async () => {
+    // ROK-1840: the S0 prototype folds the how-to behind a primary toggle
+    // rather than showing it inline.
+    it('shows the pitch, and the module how-to only once the steps are expanded', async () => {
         serveOnboarding();
         renderWithProviders(<GetYourGuildCard how="Install LedgerLink." />);
         await screen.findByTestId('get-your-guild-card');
         expect(screen.getByRole('heading', { name: 'Get your guild on Raid Ledger' })).toBeInTheDocument();
+        expect(screen.queryByTestId('get-your-guild-how')).not.toBeInTheDocument();
+        const toggle = screen.getByTestId('get-your-guild-how-toggle');
+        expect(toggle).toHaveTextContent('How to import');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await userEvent.click(toggle);
         expect(screen.getByTestId('get-your-guild-how')).toHaveTextContent('Install LedgerLink.');
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(toggle).toHaveTextContent('Hide steps');
     });
 
-    it('dismissing it takes the card off the page', async () => {
+    it('offers no how-to toggle when the module supplies no steps', async () => {
+        serveOnboarding();
+        renderWithProviders(<GetYourGuildCard />);
+        await screen.findByTestId('get-your-guild-card');
+        expect(screen.queryByTestId('get-your-guild-how-toggle')).not.toBeInTheDocument();
+    });
+
+    it('"Not now" takes the card off the page', async () => {
         serveOnboarding();
         server.use(http.post(`${URL}/players-get-your-guild/dismiss`, () => HttpResponse.json({
             dismissed: [{ key: 'players-get-your-guild', guildId: null, dismissedAt: '2026-10-02T00:00:00.000Z' }],
@@ -43,6 +59,23 @@ describe('GetYourGuildCard', () => {
         renderWithProviders(<GetYourGuildCard />);
         await userEvent.click(await screen.findByTestId('get-your-guild-dismiss'));
         await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
+    });
+
+    // Prototype parity: the × and "Not now" fire the SAME server-side
+    // dismissal — the approved target shows no softer session-only hide.
+    it('the × dismisses it the same way "Not now" does', async () => {
+        serveOnboarding();
+        let posted = 0;
+        server.use(http.post(`${URL}/players-get-your-guild/dismiss`, () => {
+            posted += 1;
+            return HttpResponse.json({
+                dismissed: [{ key: 'players-get-your-guild', guildId: null, dismissedAt: '2026-10-02T00:00:00.000Z' }],
+            } satisfies HubOnboardingStateDto);
+        }));
+        renderWithProviders(<GetYourGuildCard />);
+        await userEvent.click(await screen.findByTestId('get-your-guild-close'));
+        await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
+        expect(posted).toBe(1);
     });
 
     it('a stored dismissal means it never appears', async () => {
