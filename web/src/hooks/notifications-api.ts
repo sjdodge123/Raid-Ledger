@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import type { Notification, NotificationPreferences, UpdatePreferencesInput, ChannelAvailability } from './use-notifications';
 import { nativeFetch } from '../lib/api/native-fetch';
+import { encodePathSegment } from '../lib/api/path-segment';
 
 /** Fetch all notifications for the current user */
 export async function fetchNotifications(
@@ -51,9 +52,11 @@ export async function markNotificationRead(
 ): Promise<void> {
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
+    // ROK-1845: the id can come from a shared `?notif=` link.
+    const id = encodePathSegment(notificationId);
 
     const response = await nativeFetch(
-        `${API_BASE_URL}/notifications/${notificationId}/read`,
+        `${API_BASE_URL}/notifications/${id}/read`,
         { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
     );
 
