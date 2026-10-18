@@ -3,7 +3,7 @@
  * When a Steam game isn't in the DB, looks it up via ITAD and creates a game row.
  */
 import { Logger } from '@nestjs/common';
-import { eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadGame } from '../itad/itad.constants';
@@ -15,6 +15,7 @@ import {
 import { checkAdultContent } from './steam-content-filter.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
+import { findModeratedMatch } from '../igdb/games-moderation-match.helpers';
 import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
@@ -123,13 +124,23 @@ async function upsertGame(
 }
 
 /**
- * Find-then-insert body. MUST run inside the name lock. Returns null when the
- * matched row is banned (ROK-1843): nothing is written and nothing returned.
+ * Find-then-insert body. MUST run inside the name lock. ROK-1843: moderation
+ * is read first, on every key, under the lock (`findModeratedMatch`) — any
+ * banned match means nothing is written and nothing returned; any hidden
+ * match means a newly inserted row or slug twin is born hidden.
  */
 async function upsertGameLocked(
   db: PostgresJsDatabase<typeof schema>,
-  row: GameInsertRow,
+  candidate: GameInsertRow,
 ): Promise<StoredGame | null> {
+  const moderated = await findModeratedMatch(db, {
+    slug: candidate.slug,
+    itadGameId: candidate.itadGameId,
+    steamAppId: candidate.steamAppId,
+    name: candidate.name,
+  });
+  if (moderated?.banned === true) return null;
+  const row = moderated?.hidden ? { ...candidate, hidden: true } : candidate;
   const bySlug = await db.query.games.findFirst({
     where: eq(schema.games.slug, row.slug ?? ''),
     columns: { id: true, steamAppId: true, hidden: true, banned: true },
@@ -246,7 +257,8 @@ async function mergeIntoExisting(
       coverUrl: row.coverUrl ?? undefined,
       ...(row.hidden === true ? { hidden: true } : {}),
     })
-    .where(eq(g.id, existing.id));
+    // Belt and braces: the row is locked by findModeratedMatch already.
+    .where(and(eq(g.id, existing.id), eq(g.banned, false)));
   logger.debug(`Merged ITAD data into existing game ${existing.id}`);
   return {
     id: existing.id,

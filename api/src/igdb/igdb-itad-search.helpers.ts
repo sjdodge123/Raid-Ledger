@@ -32,6 +32,9 @@ export interface ItadSearchDeps {
    * Re-applied after the upsert, which can land on a moderated row by
    * steamAppId / igdbId / name even though its incoming slug was clean. */
   findBannedOrHiddenIds: (ids: number[]) => Promise<Set<number>>;
+  /** ROK-1843: whether a candidate collides with a banned/hidden row on ANY
+   * key — consulted when its upsert failed, before the in-memory fallback. */
+  hasModeratedMatch: (game: GameDetailDto) => Promise<boolean>;
   upsertGame: (game: GameDetailDto) => Promise<GameDetailDto>;
   /** ROK-986: Callback when a game is upserted without IGDB data. */
   onUnenriched?: (gameId: number) => void;
@@ -213,11 +216,29 @@ async function upsertAll(
     try {
       results.push({ game: await deps.upsertGame(game), persisted: true });
     } catch {
+      if (await isModeratedCandidate(deps, game)) continue;
       logger.warn(`Failed to upsert game "${game.slug}", using in-memory`);
       results.push({ game, persisted: false });
     }
   }
   return results;
+}
+
+/**
+ * ROK-1843: a candidate whose upsert failed is surfaced in-memory only when
+ * no banned/hidden row matches it on any key. Fails closed: if the lookup
+ * itself fails, the candidate is dropped.
+ */
+async function isModeratedCandidate(
+  deps: ItadSearchDeps,
+  game: GameDetailDto,
+): Promise<boolean> {
+  try {
+    return await deps.hasModeratedMatch(game);
+  } catch {
+    logger.warn(`Moderation lookup failed for "${game.slug}", dropping it`);
+    return true;
+  }
 }
 
 /** Fire the upsert callbacks for persisted rows that survived moderation. */

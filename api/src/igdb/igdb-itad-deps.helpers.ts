@@ -19,7 +19,11 @@ import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
 } from './igdb-itad-enrich.helpers';
-import { upsertItadGame } from './igdb-itad-upsert.helpers';
+import {
+  itadModerationKeys,
+  upsertItadGame,
+} from './igdb-itad-upsert.helpers';
+import { findModeratedMatch } from './games-moderation-match.helpers';
 
 const logger = new Logger('ItadSearchDeps');
 
@@ -53,6 +57,8 @@ export function buildItadSearchDeps(
     findBannedOrHiddenSlugs: (slugs) =>
       findBannedOrHiddenSlugs(params.db, slugs),
     findBannedOrHiddenIds: (ids) => findBannedOrHiddenIds(params.db, ids),
+    hasModeratedMatch: async (game) =>
+      (await findModeratedMatch(params.db, itadModerationKeys(game))) !== null,
     upsertGame: (game) => upsertItadGame(params.db, game),
     ...(params.onUnenriched !== undefined
       ? { onUnenriched: params.onUnenriched }
