@@ -39,6 +39,20 @@ export class ValheimLinkRateLimiter {
     return { allowed: true, retryAfterSec };
   }
 
+  /** True when `key` already has `limit` hits in its live window (no count). */
+  isExhausted(key: string, limit: number, windowMs: number): boolean {
+    const w = this.windows.get(key);
+    if (!w || this.now() - w.startedAt >= windowMs) return false;
+    return w.count >= limit;
+  }
+
+  /** Retry-After seconds for `key` (1 when it has no live window). */
+  retryAfter(key: string, windowMs: number): number {
+    const w = this.windows.get(key);
+    if (!w) return 1;
+    return Math.max(1, Math.ceil((w.startedAt + windowMs - this.now()) / 1000));
+  }
+
   private prune(now: number, windowMs: number): void {
     for (const [key, w] of this.windows) {
       if (now - w.startedAt >= windowMs) this.windows.delete(key);

@@ -80,6 +80,7 @@ function setup(bucket: ValheimLinkBucket | undefined) {
           headers: {},
           valheimLink: {
             tokenId: 1,
+            tokenHash: 'h',
             pelicanServerId,
             serverId: String(pelicanServerId),
           },

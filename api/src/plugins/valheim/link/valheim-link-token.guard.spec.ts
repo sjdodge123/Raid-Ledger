@@ -1,9 +1,10 @@
 import {
   ForbiddenException,
-  UnauthorizedException,
+  HttpException,
   type ExecutionContext,
 } from '@nestjs/common';
 import type { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { ValheimLinkRateLimiter } from './valheim-link-rate-limiter';
 import { ValheimLinkBearerGuard } from './valheim-link-token.guard';
 import {
   generateValheimLinkToken,
@@ -45,17 +46,25 @@ function build(
     {
       getActiveSlugsSync: () => new Set(active),
     } as unknown as PluginRegistryService,
+    new ValheimLinkRateLimiter(),
   );
   return { guard, findByHash, touchLastUsed };
 }
 
-function ctx(authorization?: string): {
+function ctx(
+  authorization?: string,
+  ip = '10.0.0.1',
+  setHeader: jest.Mock = jest.fn(),
+): {
   c: ExecutionContext;
   req: ValheimLinkRequest;
 } {
-  const req: ValheimLinkRequest = { headers: { authorization } };
+  const req: ValheimLinkRequest = { headers: { authorization }, ip };
   const c = {
-    switchToHttp: () => ({ getRequest: () => req }),
+    switchToHttp: () => ({
+      getRequest: () => req,
+      getResponse: () => ({ setHeader }),
+    }),
   } as unknown as ExecutionContext;
   return { c, req };
 }
@@ -64,7 +73,7 @@ const codeOf = async (p: Promise<unknown>): Promise<unknown> =>
   p.then(
     () => 'resolved',
     (e: unknown) =>
-      e instanceof UnauthorizedException || e instanceof ForbiddenException
+      e instanceof HttpException
         ? [e.getStatus(), (e.getResponse() as { code?: string }).code]
         : e,
   );
@@ -132,6 +141,7 @@ describe('ValheimLinkBearerGuard — server checks (ROK-1833)', () => {
     expect(findByHash).toHaveBeenCalledWith(hashValheimLinkToken(TOKEN));
     expect(req.valheimLink).toEqual({
       tokenId: 3,
+      tokenHash: hashValheimLinkToken(TOKEN),
       pelicanServerId: 7,
       serverId: '7',
     });
@@ -139,10 +149,54 @@ describe('ValheimLinkBearerGuard — server checks (ROK-1833)', () => {
   });
 });
 
+describe('ValheimLinkBearerGuard — pre-auth limiter (ROK-1833)', () => {
+  beforeEach(() => {
+    process.env.VALHEIM_LINK_RATE_AUTH_PER_MIN = '3';
+  });
+  afterEach(() => {
+    delete process.env.VALHEIM_LINK_RATE_AUTH_PER_MIN;
+  });
+
+  it('429 rate_limited after N failed attempts per IP, before the DB lookup', async () => {
+    const { guard, findByHash } = build(null);
+    for (let i = 0; i < 3; i += 1) {
+      expect(await codeOf(guard.canActivate(ctx(`Bearer ${TOKEN}`).c))).toEqual(
+        [401, 'invalid_token'],
+      );
+    }
+    const setHeader = jest.fn();
+    const blocked = ctx(`Bearer ${TOKEN}`, '10.0.0.1', setHeader).c;
+    expect(await codeOf(guard.canActivate(blocked))).toEqual([
+      429,
+      'rate_limited',
+    ]);
+    expect(findByHash).toHaveBeenCalledTimes(3);
+    expect(setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    // Another IP is unaffected.
+    expect(
+      await codeOf(guard.canActivate(ctx(`Bearer ${TOKEN}`, '10.0.0.2').c)),
+    ).toEqual([401, 'invalid_token']);
+  });
+
+  it('successful auths do not count toward the limit', async () => {
+    const { guard } = build(lookup());
+    for (let i = 0; i < 5; i += 1) {
+      await expect(guard.canActivate(ctx(`Bearer ${TOKEN}`).c)).resolves.toBe(
+        true,
+      );
+    }
+  });
+});
+
 describe('assertServerMatches (ROK-1833)', () => {
   const req: ValheimLinkRequest = {
     headers: {},
-    valheimLink: { tokenId: 1, pelicanServerId: 7, serverId: '7' },
+    valheimLink: {
+      tokenId: 1,
+      tokenHash: 'h',
+      pelicanServerId: 7,
+      serverId: '7',
+    },
   };
 
   it('returns the auth record on a match', () => {

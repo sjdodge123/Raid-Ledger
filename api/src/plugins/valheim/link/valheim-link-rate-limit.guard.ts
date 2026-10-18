@@ -17,7 +17,7 @@ export const VALHEIM_LINK_BUCKET_KEY = 'valheimLinkBucket';
 export const ValheimLinkRateBucket = (bucket: ValheimLinkBucket) =>
   SetMetadata(VALHEIM_LINK_BUCKET_KEY, bucket);
 
-const WINDOW_MS = 60_000;
+export const WINDOW_MS = 60_000;
 const DEFAULTS: Record<ValheimLinkBucket, number> = { messages: 60, blobs: 20 };
 const ENV: Record<ValheimLinkBucket, string> = {
   messages: 'VALHEIM_LINK_RATE_MESSAGES_PER_MIN',
@@ -25,16 +25,34 @@ const ENV: Record<ValheimLinkBucket, string> = {
 };
 
 /**
- * Per-minute limit for a bucket, read per call (integration specs set it).
+ * A per-minute limit from `env`, read per call (integration specs set it).
  * null = unlimited: `THROTTLE_DISABLED=true` lifts the DEFAULT only — an
  * explicit env override still applies. DEMO_MODE never lifts it.
  */
-export function bucketLimit(bucket: ValheimLinkBucket): number | null {
-  const raw = process.env[ENV[bucket]];
+export function envLimit(env: string, fallback: number): number | null {
+  const raw = process.env[env];
   const parsed = raw === undefined ? NaN : Number.parseInt(raw, 10);
   if (Number.isInteger(parsed) && parsed > 0) return parsed;
   if (process.env.THROTTLE_DISABLED === 'true') return null;
-  return DEFAULTS[bucket];
+  return fallback;
+}
+
+/** Per-minute limit for a per-server bucket (see `envLimit`). */
+export function bucketLimit(bucket: ValheimLinkBucket): number | null {
+  return envLimit(ENV[bucket], DEFAULTS[bucket]);
+}
+
+/** Pre-auth failed attempts per minute per IP (`VALHEIM_LINK_RATE_AUTH_PER_MIN`, 30). */
+export function authFailureLimit(): number | null {
+  return envLimit('VALHEIM_LINK_RATE_AUTH_PER_MIN', 30);
+}
+
+/** 429 `rate_limited` body + status, shared by both Valheim Link limiters. */
+export function rateLimited(message: string): HttpException {
+  return new HttpException(
+    ingestError('rate_limited', message),
+    HttpStatus.TOO_MANY_REQUESTS,
+  );
 }
 
 /**
@@ -67,9 +85,6 @@ export class ValheimLinkRateLimitGuard implements CanActivate {
     http
       .getResponse<{ setHeader(n: string, v: string): void }>()
       .setHeader('Retry-After', String(hit.retryAfterSec));
-    throw new HttpException(
-      ingestError('rate_limited', 'Too many requests for this server'),
-      HttpStatus.TOO_MANY_REQUESTS,
-    );
+    throw rateLimited('Too many requests for this server');
   }
 }
