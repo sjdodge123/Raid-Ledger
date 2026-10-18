@@ -250,3 +250,41 @@ describe('Valheim armory admin owner list (ROK-1835 L4)', () => {
     expect(res.text).not.toContain(STEAM);
   });
 });
+
+describe('Valheim armory — another member owns the character (ROK-1835 T14)', () => {
+  it('a member reads a character owned by someone else: 200, owner shown, no SteamID64', async () => {
+    const { id } = await seedCharacter(1);
+    const reader = await memberToken(testApp, 'alice');
+    await memberToken(testApp, 'bob');
+    const U = schema.users;
+    const [bob] = nonEmpty(
+      await testApp.db
+        .select({ id: U.id, username: U.username })
+        .from(U)
+        .where(eq(U.username, 'bob')),
+      'bob',
+    );
+    const P = schema.valheimProfiles;
+    await testApp.db
+      .update(P)
+      .set({ claimedBy: bob.id, claimSource: 'manual', claimedAt: new Date() })
+      .where(eq(P.id, id));
+    const detail = await get(`${BASE}/${id}`, reader);
+    expect(detail.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      id,
+      claimedBy: { id: bob.id, username: 'bob' },
+    });
+    expect(detail.text).not.toContain(STEAM);
+    expect(detail.text).not.toContain('steamId64');
+    const list = await get(BASE, reader);
+    const [row] = nonEmpty(
+      ValheimCharacterListResponseSchema.parse(list.body).data,
+      'list row',
+    );
+    expect(row.claimedBy).toEqual(
+      expect.objectContaining({ id: bob.id, username: 'bob' }),
+    );
+    expect(list.text).not.toContain(STEAM);
+  });
+});

@@ -12,7 +12,11 @@ import { fakeServer } from '../../pelican/testing/pelican-fixtures';
 import { VALHEIM_GAME_SLUG } from '../valheim.constants';
 import { loadValheimFixture } from '../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../link/ingest/valheim-link-snapshot.helpers';
-import { ValheimArmoryImportService } from './valheim-armory-import.service';
+import {
+  ValheimArmoryImportService,
+  type ArmoryDrainSummary,
+} from './valheim-armory-import.service';
+import { ValheimArmoryRepository } from './valheim-armory.repository';
 
 let testApp: TestApp;
 let server: number;
@@ -80,6 +84,27 @@ async function statusOf(
   );
   return row;
 }
+
+/** Rewrite the stored snapshot as ingest's replace does (bumps received_at). */
+async function replaceSnapshot(
+  id: number,
+  capturedAt: string,
+  bumpMs: number,
+): Promise<void> {
+  await testApp.db
+    .update(S)
+    .set({
+      payload: { ...loadValheimFixture('character-vanilla'), capturedAt },
+      capturedAt: new Date(capturedAt),
+      receivedAt: new Date(Date.now() + bumpMs),
+      status: 'pending',
+    })
+    .where(eq(S.id, id));
+}
+
+/** Rows a drain finished (anything but `busy`). */
+const done = (s: ArmoryDrainSummary): number =>
+  s.imported + s.failed + s.skipped_stale + s.waiting_blob;
 
 const profiles = () => testApp.db.select().from(schema.valheimProfiles);
 const mapsRows = () => testApp.db.select().from(schema.valheimMaps);
@@ -205,5 +230,69 @@ describe('Valheim armory importer (integration)', () => {
       file: 'SwordIron.png',
       sha256: 'c'.repeat(64),
     });
+  });
+
+  it('a snapshot replaced mid-import stays pending; the newer wins and an older replay is skipped_stale (T4)', async () => {
+    const id = await push('character-vanilla', {
+      capturedAt: '2026-10-17T20:00:00Z',
+    });
+    const repo = testApp.app.get(ValheimArmoryRepository);
+    const real = repo.listCandidates.bind(repo);
+    const spy = jest
+      .spyOn(repo, 'listCandidates')
+      .mockImplementationOnce(async (limit: number) => {
+        const listed = await real(limit);
+        await replaceSnapshot(id, '2026-10-17T21:00:00Z', 60_000);
+        return listed;
+      });
+    try {
+      expect((await drain()).busy).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await statusOf(id)).status).toBe('pending');
+    expect(await profiles()).toHaveLength(0);
+    expect((await drain()).imported).toBe(1);
+    const newer = '2026-10-17T21:00:00.000Z';
+    expect((await profiles())[0]?.capturedAt.toISOString()).toBe(newer);
+    await replaceSnapshot(id, '2026-10-17T20:00:00Z', 120_000);
+    expect((await drain()).skipped_stale).toBe(1);
+    expect((await statusOf(id)).status).toBe('skipped_stale');
+    expect((await profiles())[0]?.capturedAt.toISOString()).toBe(newer);
+  });
+
+  it('two concurrent drains process each snapshot exactly once (SKIP LOCKED)', async () => {
+    const [u] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:steamy',
+          username: 'steamy',
+          role: 'member',
+          steamId: '76561198000000001',
+        })
+        .returning({ id: schema.users.id }),
+      'user',
+    );
+    const ids = [
+      await push('character-vanilla'),
+      await push('items-file-icons'),
+    ];
+    const [a, b] = await Promise.all([drain(), drain()]);
+    expect(done(a) + done(b)).toBe(ids.length);
+    expect(a.failed + b.failed).toBe(0);
+    for (const id of ids) expect((await statusOf(id)).status).toBe('imported');
+    const [p] = nonEmpty(await profiles(), 'profile');
+    expect(await profiles()).toHaveLength(1);
+    expect(p.claimedBy).toBe(u.id);
+    const E = schema.valheimProfileClaimEvents;
+    const attaches = await testApp.db
+      .select()
+      .from(E)
+      .where(eq(E.action, 'auto_attach'));
+    expect(attaches).toHaveLength(1);
+    expect(
+      await testApp.db.select().from(schema.valheimItemCatalogs),
+    ).toHaveLength(1);
   });
 });

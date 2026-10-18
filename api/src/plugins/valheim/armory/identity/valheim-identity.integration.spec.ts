@@ -391,7 +391,9 @@ describe('Valheim armory claims vs user hard-delete (ROK-1835 B1)', () => {
         claimSource: null,
         claimedAt: null,
       });
-      const detach = (await audit(id)).filter((e) => e.action === 'auto_detach');
+      const detach = (await audit(id)).filter(
+        (e) => e.action === 'auto_detach',
+      );
       expect(detach).toEqual([
         expect.objectContaining({ actorUserId: null, toUserId: null }),
       ]);
@@ -413,10 +415,7 @@ describe('Valheim armory route guards (ROK-1835 T17, ids)', () => {
       testApp.request.get(`${base}/${id}/maps/1`).set(auth(member)),
       testApp.request.post(claimUrl(id)).set(auth(member)),
       testApp.request.get(adminBase).set(auth(admin)),
-      testApp.request
-        .put(ownerUrl(id))
-        .set(auth(admin))
-        .send({ userId: null }),
+      testApp.request.put(ownerUrl(id)).set(auth(admin)).send({ userId: null }),
       testApp.request.get(`${adminBase}/${id}/claim-events`).set(auth(admin)),
     ];
     const codes = (await Promise.all(calls)).map((r) => r.status);
