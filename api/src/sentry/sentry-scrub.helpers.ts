@@ -29,6 +29,9 @@ const JSON_SECRET =
 // ROK-1599: so does the ICS subscribe-link token (`/cal/u/<token>.ics`).
 const PATH_SECRET =
   /(\/(?:scheduling-polls\/share|p\/poll|cal\/u)\/)[A-Za-z0-9_-]{16,}/g;
+// ROK-1833: a Valheim Link ingest token anywhere in a string (header dump,
+// pasted into free text, an issue-response body).
+const VALHEIM_LINK_TOKEN = /rlvl_[A-Za-z0-9_-]{43}/g;
 // ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
 // every Calendar v3 call; `primary` names no one and stays for triage.
 const CALENDAR_PATH =
@@ -52,6 +55,7 @@ export function scrubString(value: string): string {
     .replace(QUERY_SECRET, `$1$2${REDACTED}`)
     .replace(PATH_SECRET, `$1${REDACTED}`)
     .replace(CALENDAR_PATH, `$1${REDACTED}`)
+    .replace(VALHEIM_LINK_TOKEN, REDACTED)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }
 

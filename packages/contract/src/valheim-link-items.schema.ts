@@ -29,10 +29,16 @@ export const ValheimAtlasIconSchema = z.object({
     h: z.number().int().min(1).max(512),
 }).strict();
 
-/** A separately uploaded PNG, by file name (`<prefab>.png` by convention). */
+/**
+ * A separately uploaded PNG, by file name (`<prefab>.png` by convention).
+ * `blob` (optional, additive — ROK-1833) references the uploaded bytes the
+ * same way the base map and atlas do, so the PNG goes through the blob
+ * route (CONTRACT.md §1); without it the server leaves the icon unresolved.
+ */
 export const ValheimFileIconSchema = z.object({
     kind: z.literal('file'),
     file: z.string().regex(/^[A-Za-z0-9_.-]{1,100}\.png$/),
+    blob: ValheimBinaryRefSchema.optional(),
 }).strict();
 
 export const ValheimItemIconSchema = z.discriminatedUnion('kind', [

@@ -33,7 +33,10 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
   checks the hash and length, and reads the PNG's `IHDR` width/height and
   rejects the blob unless they equal the reference's `width`/`height`
   **before** decoding any pixels (a 16 384² decode is 1 GiB). It accepts the
-  message and its blob in either order.
+  message and its blob in either order. A `file` item icon (§5) may
+  reference its PNG the same way (optional `blob`) and is uploaded through
+  the same blob route; the mod may omit it, in which case that icon stays
+  unresolved.
 - Latest wins: Raid Ledger keeps the newest `capturedAt` per snapshot key and
   ignores an older one. No history in v1. Keys always include `serverId`,
   because a Valheim character is portable and may be pushed by several
@@ -154,8 +157,11 @@ Definition: `prefab`; `name` 1–96 (localised display name); `category` =
 `Material`, `Trophy`…; open set); `maxStack` 1–100 000; `maxQuality` 1–10;
 `variants` 0–64; `icon` (variant 0) = one of
 `{ kind: "atlas", x, y, w, h }` (sprite rect in atlas pixels, top-left
-origin, inside the atlas) · `{ kind: "file", file: "<name>.png" }` (a
-separately uploaded PNG) · `null` (no sprite).
+origin, inside the atlas) · `{ kind: "file", file: "<name>.png", blob? }`
+(a separately uploaded PNG) · `null` (no sprite). A `file` icon's optional
+`blob` is a binary ref (same shape as `atlas`, capped by
+`VALHEIM_LINK_BINARY_MAX_BYTES`, §7) and the PNG is uploaded through the §1
+blob route; without `blob` the server leaves the icon unresolved.
 
 ## 6. Strict keys and refinements
 
@@ -205,7 +211,7 @@ all pass Zod.
 | `VALHEIM_LINK_BITMAP_DATA_MAX_CHARS` | 3 000 000 | one bitmap's `data` | a 2048² mask is 512 KiB raw before gzip; ≤ ~700 KB base64 even if incompressible |
 | `VALHEIM_LINK_BITMAP_EDGE_MAX` | 4096 | `textureSize`, bitmap edges | 2048 vanilla |
 | `VALHEIM_LINK_ITEMS_MAX_BYTES` | 10 485 760 (10 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid ≈ 9.4 MB |
-| `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
+| `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas, file icon) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
 | array caps | see §3–§5 | | |
 
 The body caps were **raised** (not the array caps tightened) so that each is

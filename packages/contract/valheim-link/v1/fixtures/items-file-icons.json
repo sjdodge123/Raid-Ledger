@@ -17,7 +17,14 @@
       "variants": 0,
       "icon": {
         "kind": "file",
-        "file": "SwordIron.png"
+        "file": "SwordIron.png",
+        "blob": {
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "byteLength": 4096,
+          "contentType": "image/png",
+          "width": 64,
+          "height": 64
+        }
       }
     },
     {
