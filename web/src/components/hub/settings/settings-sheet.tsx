@@ -20,10 +20,8 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { useGuildDiscord } from '../discord/use-guild-discord';
 import { HubEditorsSection } from './settings-editors';
-import { SettingsSection, SettingsSwitchRow } from './settings-rows';
-
-/** Q7: `guilds.hidden_at` and its filtering land with the guild directory (ROK-1831). */
-const HIDE_HUB_REASON = 'Hiding a hub isn’t available yet — it arrives with the guild directory.';
+import { SettingsSection } from './settings-rows';
+import { HideHubRow } from './hide-hub-row';
 
 function channelLine(mirror: GuildDiscordMirrorDto): string {
     if (mirror.state === 'ok') return `#${mirror.channel.name}`;
@@ -79,8 +77,7 @@ function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetP
                 <HubEditorsSection ctx={ctx} module={mod} />
             </SettingsSection>
             <SettingsSection title="Visibility" testId="guild-settings-visibility">
-                <SettingsSwitchRow label="Hide this hub" hint={HIDE_HUB_REASON} checked={false} disabled
-                    testId="guild-settings-hide-hub" />
+                <HideHubRow page={ctx.page} />
             </SettingsSection>
         </div>
     );

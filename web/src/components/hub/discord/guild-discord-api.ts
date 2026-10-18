@@ -9,7 +9,7 @@ import type {
 import { GuildDiscordChannelListSchema, GuildDiscordMirrorSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 
-const base = (guildId: number): string => `/plugins/wow/guilds/${guildId}/discord`;
+const base = (guildId: number): string => `/guilds/${guildId}/discord`;
 
 export function fetchGuildDiscord(guildId: number): Promise<GuildDiscordMirrorDto> {
     return fetchApi(base(guildId), {}, GuildDiscordMirrorSchema);

@@ -38,7 +38,7 @@ const TWO = [guild(11, 'Iron Vanguard'), guild(12, 'Dusk Wardens', 1)];
 
 function serve(guilds: MyGuild[]): void {
     server.use(
-        http.get(`${API}/mine`, () => HttpResponse.json({ guilds })),
+        http.get(`http://localhost:3000/guilds/mine`, () => HttpResponse.json({ guilds })),
         http.get(API, () => HttpResponse.json({ guilds })),
     );
 }
@@ -144,7 +144,7 @@ describe('PlayersGuildCard (players:header-cards)', () => {
     it('while /guilds/mine is in flight → neither card', async () => {
         server.use(
             http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })),
-            http.get(`${API}/mine`, () => new Promise<never>(() => { /* never settles */ })),
+            http.get(`http://localhost:3000/guilds/mine`, () => new Promise<never>(() => { /* never settles */ })),
         );
         const { container } = renderWithProviders(<PlayersGuildCard />);
         await waitFor(() => expect(screen.queryByTestId('get-your-guild-card')).not.toBeInTheDocument());
@@ -156,7 +156,7 @@ describe('PlayersGuildCard (players:header-cards)', () => {
         let failed = false;
         server.use(
             http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })),
-            http.get(`${API}/mine`, () => { failed = true; return HttpResponse.json({ message: 'boom' }, { status: 500 }); }),
+            http.get(`http://localhost:3000/guilds/mine`, () => { failed = true; return HttpResponse.json({ message: 'boom' }, { status: 500 }); }),
         );
         const { container } = renderWithProviders(<PlayersGuildCard />);
         await waitFor(() => expect(failed).toBe(true));

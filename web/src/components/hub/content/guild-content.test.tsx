@@ -18,7 +18,9 @@ import { at } from '../../../test/defined';
 import { guildPageKey } from '../api/use-guild';
 import { GuildPage } from '../hub-page';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = 'http://localhost:3000/guilds/7';
+/** Addons stay on the WoW plugin's routes (ROK-1831 moved only the profile to core). */
+const ADDONS = 'http://localhost:3000/plugins/wow/guilds/7';
 
 function makePage(canEdit: boolean): GuildPageDto {
     return {
@@ -53,10 +55,10 @@ function serve(canEdit: boolean, profile: GuildProfile = EMPTY_PROFILE, addons: 
         http.get(BASE, () => HttpResponse.json(makePage(canEdit))),
         http.get(`${BASE}/profile`, () => HttpResponse.json(profile)),
         http.patch(`${BASE}/profile`, async ({ request }) => { await record(request); return HttpResponse.json(profile); }),
-        http.get(`${BASE}/addons`, () => HttpResponse.json(addons)),
-        http.post(`${BASE}/addons`, async ({ request }) => { await record(request); return HttpResponse.json(addon(99, 'Details')); }),
-        http.delete(`${BASE}/addons/:addonId`, async ({ request }) => { await record(request); return new HttpResponse(null, { status: 204 }); }),
-        http.put(`${BASE}/addons/order`, async ({ request }) => { await record(request); return HttpResponse.json(addons); }),
+        http.get(`${ADDONS}/addons`, () => HttpResponse.json(addons)),
+        http.post(`${ADDONS}/addons`, async ({ request }) => { await record(request); return HttpResponse.json(addon(99, 'Details')); }),
+        http.delete(`${ADDONS}/addons/:addonId`, async ({ request }) => { await record(request); return new HttpResponse(null, { status: 204 }); }),
+        http.put(`${ADDONS}/addons/order`, async ({ request }) => { await record(request); return HttpResponse.json(addons); }),
     );
 }
 
@@ -203,11 +205,11 @@ describe('Resources: recommended addons', () => {
         await userEvent.type(screen.getByLabelText('Addon link'), 'https://www.curseforge.com/wow/addons/details');
         expect(screen.getByTestId('guild-addon-preview')).toHaveTextContent('Adding Details');
         await userEvent.click(screen.getByTestId('guild-addon-add'));
-        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'POST', url: `${BASE}/addons`, body: { url: 'https://www.curseforge.com/wow/addons/details', note: null, requirement: 'optional', flavor: null } }));
+        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'POST', url: `${ADDONS}/addons`, body: { url: 'https://www.curseforge.com/wow/addons/details', note: null, requirement: 'optional', flavor: null } }));
         await userEvent.click(screen.getByRole('button', { name: 'Remove DBM' }));
-        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', url: `${BASE}/addons/1`, body: null }));
+        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', url: `${ADDONS}/addons/1`, body: null }));
         await userEvent.click(screen.getByRole('button', { name: 'Move DBM down' }));
-        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PUT', url: `${BASE}/addons/order`, body: { ids: [2, 1] } }));
+        await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PUT', url: `${ADDONS}/addons/order`, body: { ids: [2, 1] } }));
     });
 });
 
@@ -215,7 +217,7 @@ describe('Resources: addon write failures', () => {
     it('a failed edit keeps the editor open with the server error; a retry that succeeds closes it', async () => {
         serve(true, EMPTY_PROFILE, list);
         let fail = true;
-        server.use(http.patch(`${BASE}/addons/:addonId`, async ({ request }) => {
+        server.use(http.patch(`${ADDONS}/addons/:addonId`, async ({ request }) => {
             await record(request);
             return fail
                 ? HttpResponse.json({ message: 'Note is too long' }, { status: 400 })
@@ -238,8 +240,8 @@ describe('Resources: addon write failures', () => {
     it('a failed remove or reorder shows the server error above the list', async () => {
         serve(true, EMPTY_PROFILE, list);
         server.use(
-            http.delete(`${BASE}/addons/:addonId`, () => HttpResponse.json({ message: 'Addon not found' }, { status: 404 })),
-            http.put(`${BASE}/addons/order`, () => HttpResponse.json({ message: 'ids must list every addon of the guild' }, { status: 400 })),
+            http.delete(`${ADDONS}/addons/:addonId`, () => HttpResponse.json({ message: 'Addon not found' }, { status: 404 })),
+            http.put(`${ADDONS}/addons/order`, () => HttpResponse.json({ message: 'ids must list every addon of the guild' }, { status: 400 })),
         );
         renderPage('#resources');
         await userEvent.click(await screen.findByRole('button', { name: 'Remove DBM' }));
@@ -250,7 +252,7 @@ describe('Resources: addon write failures', () => {
 
     it('a rejected add shows the server message, and a bad known-host link is caught before submit', async () => {
         serve(true, EMPTY_PROFILE, list);
-        server.use(http.post(`${BASE}/addons`, () => HttpResponse.json({ message: 'This addon is already on the guild list' }, { status: 409 })));
+        server.use(http.post(`${ADDONS}/addons`, () => HttpResponse.json({ message: 'This addon is already on the guild list' }, { status: 409 })));
         renderPage('#resources');
         const input = await screen.findByLabelText('Addon link');
         await userEvent.type(input, 'https://www.curseforge.com/wow/other/details');
@@ -271,7 +273,7 @@ describe('Resources: addon write failures', () => {
 describe('Resources: the addons section while it loads and when it fails', () => {
     it('holds the skeleton while the addons query is still in flight', async () => {
         serve(true, EMPTY_PROFILE, list);
-        server.use(http.get(`${BASE}/addons`, () => new Promise<never>(() => { /* never settles */ })));
+        server.use(http.get(`${ADDONS}/addons`, () => new Promise<never>(() => { /* never settles */ })));
         renderPage('#resources');
         const skeleton = await screen.findByTestId('guild-addons-loading');
         expect(skeleton, 'a pending addons fetch must keep a busy placeholder, not vanish').toHaveAttribute('aria-busy', 'true');
@@ -280,7 +282,7 @@ describe('Resources: the addons section while it loads and when it fails', () =>
 
     it('tells an editor the addons failed to load instead of silently dropping the panel', async () => {
         serve(true, EMPTY_PROFILE, list);
-        server.use(http.get(`${BASE}/addons`, () => HttpResponse.json({ message: 'nope' }, { status: 500 })));
+        server.use(http.get(`${ADDONS}/addons`, () => HttpResponse.json({ message: 'nope' }, { status: 500 })));
         renderPage('#resources');
         const failure = await screen.findByTestId('guild-addons-load-error');
         expect(failure).toHaveTextContent("We couldn't load this guild's recommended addons. Try again in a moment.");

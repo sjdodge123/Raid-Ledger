@@ -24,7 +24,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 }));
 
 const URL = 'http://localhost:3000/guilds/onboarding';
-const MINE = 'http://localhost:3000/plugins/wow/guilds/mine';
+const MINE = 'http://localhost:3000/guilds/mine';
 const EMPTY: HubOnboardingStateDto = { dismissed: [] };
 
 function serveOnboarding(state: HubOnboardingStateDto = EMPTY): void {
