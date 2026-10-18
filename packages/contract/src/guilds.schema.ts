@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CharacterRoleSchema } from './characters.schema.js';
+import { GameServerStateSchema } from './game-servers.schema.js';
 
 /**
  * ROK-1785 (S1 of ROK-1781): guild page `/guilds/:id` — read shapes and the
@@ -51,9 +52,24 @@ export const GuildSummarySchema = z
     faction: z.string().nullable(),
     memberCount: z.number().int().nonnegative(),
     lastSnapshotAt: isoDate.nullable(),
+    /** ROK-1831 — `guilds.hidden_at` is set; sent to staff only. */
+    hidden: z.boolean().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
+
+/** ROK-1831 — the game-server columns of one hub member (WoW rows omit it). */
+export const GuildMemberServerSchema = z
+  .object({
+    lastSeenAt: isoDate.nullable(),
+    onlineNow: z.boolean(),
+    /** Last in-game character name presence saw on this server. */
+    characterName: z.string().nullable(),
+    /** The last way they qualified: seen on the server, or pressed Join. */
+    source: z.enum(['presence', 'manual']),
+  })
+  .strict();
+export type GuildMemberServer = z.infer<typeof GuildMemberServerSchema>;
 
 /** One roster row. Unlinked rows have `characterId: null` and no role. */
 export const GuildMemberRowSchema = z
@@ -69,6 +85,7 @@ export const GuildMemberRowSchema = z
     /** `characters.id` is a UUID; null when no RL character links (D9). */
     characterId: z.string().uuid().nullable(),
     isMain: z.boolean(),
+    server: GuildMemberServerSchema.optional(),
   })
   .strict();
 export type GuildMemberRow = z.infer<typeof GuildMemberRowSchema>;
@@ -99,6 +116,19 @@ export const GuildRoleCountsSchema = z
   .strict();
 export type GuildRoleCounts = z.infer<typeof GuildRoleCountsSchema>;
 
+/** ROK-1831 — the game-server hero block of a `game_server` hub page. */
+export const GuildPageServerSchema = z
+  .object({
+    pelicanServerId: id,
+    gameSlug: z.string(),
+    gameIconUrl: z.string().nullable(),
+    state: GameServerStateSchema,
+    /** The viewer pressed Join and has not left. */
+    viewerJoined: z.boolean(),
+  })
+  .strict();
+export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;
+
 export const GuildPageSchema = z
   .object({
     guild: GuildSummarySchema,
@@ -107,6 +137,7 @@ export const GuildPageSchema = z
     viewer: GuildViewerAccessSchema,
     ranks: z.array(GuildRankGroupSchema),
     roleCounts: GuildRoleCountsSchema,
+    server: GuildPageServerSchema.optional(),
   })
   .strict();
 export type GuildPage = z.infer<typeof GuildPageSchema>;

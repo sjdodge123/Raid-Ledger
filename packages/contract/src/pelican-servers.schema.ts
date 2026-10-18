@@ -91,6 +91,17 @@ export const PelicanServerRowSchema = z
     statusCheckedAt: isoOrNull,
     /** The last complete listing did not include this server. */
     missing: z.boolean(),
+    /**
+     * ROK-1831 — the server's community hub (`guilds.kind = 'game_server'`);
+     * null when "Make a community hub" was never switched on. `hidden` = the
+     * switch is off again (`guilds.hidden_at` set, data kept). Optional so a
+     * row built before the hub layer still parses (additive).
+     */
+    communityHub: z
+      .object({ guildId: z.number().int().positive(), hidden: z.boolean() })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 export type PelicanServerRowDto = z.infer<typeof PelicanServerRowSchema>;
@@ -111,6 +122,8 @@ export const PelicanServerUpdateSchema = z
     gameId: z.number().int().positive().nullable(),
     showOnCalendar: z.boolean(),
     presenceTracking: z.boolean(),
+    /** ROK-1831 — on creates or un-hides the hub; off hides it. */
+    communityHub: z.boolean(),
   })
   .partial()
   .strict()
