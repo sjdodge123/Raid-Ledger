@@ -32,7 +32,20 @@ import {
 export const WHEEL_ZOOM_SENSITIVITY = 0.002;
 export const BUTTON_ZOOM_FACTOR = 1.5;
 
+/** CSS px per `DOM_DELTA_LINE` line (Firefox mouse wheels report lines). */
+export const WHEEL_LINE_PX = 16;
+
 type Pointers = Map<number, Point>;
+
+/** Wheel `deltaY` in px: lines ×16, pages × the surface height (`DOM_DELTA_*`). */
+export function wheelDeltaPx(
+    e: Pick<WheelEvent, 'deltaY' | 'deltaMode'>,
+    pageHeight: number,
+): number {
+    if (e.deltaMode === 1) return e.deltaY * WHEEL_LINE_PX;
+    if (e.deltaMode === 2) return e.deltaY * pageHeight;
+    return e.deltaY;
+}
 
 function localPoint(el: Element, clientX: number, clientY: number): Point {
     const r = el.getBoundingClientRect();
@@ -128,7 +141,8 @@ function useWheelZoom(
         if (!el) return;
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
-            const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_SENSITIVITY);
+            const px = wheelDeltaPx(e, el.clientHeight);
+            const factor = Math.exp(-px * WHEEL_ZOOM_SENSITIVITY);
             dispatch({
                 type: 'zoomBy',
                 factor,

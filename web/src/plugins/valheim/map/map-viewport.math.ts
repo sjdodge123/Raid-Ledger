@@ -32,6 +32,7 @@ export type ViewportAction =
     | { type: 'resize'; view: Size }
     | { type: 'pan'; dx: number; dy: number }
     | { type: 'zoomBy'; factor: number; anchor?: Point }
+    | { type: 'pinch'; before: PinchGeometry; after: PinchGeometry }
     | { type: 'fit' };
 
 export function clamp(value: number, min: number, max: number): number {
@@ -142,26 +143,35 @@ export interface PinchGeometry {
 
 /**
  * One pinch step: zoom about the PREVIOUS midpoint (where the fingers held
- * the texture), then pan by the midpoint's travel — so the texture point
- * under the fingers follows them without drift.
+ * the texture), then pan by the midpoint's travel — composed, then clamped
+ * ONCE so an edge clamp on the intermediate zoom cannot drift the result.
  */
+function pinchVp(
+    state: ViewportState,
+    before: PinchGeometry,
+    after: PinchGeometry,
+): Viewport {
+    const { vp, view, content } = state;
+    if (before.dist === 0) return vp;
+    const min = fitScale(view, content);
+    const scale = clamp(
+        vp.scale * (after.dist / before.dist),
+        min,
+        Math.max(min, MAX_NATIVE_SCALE),
+    );
+    const zoomed = zoomAbout(vp, before.mid, scale);
+    const x = zoomed.x + after.mid.x - before.mid.x;
+    const y = zoomed.y + after.mid.y - before.mid.y;
+    return clampViewport({ scale, x, y }, view, content);
+}
+
+/** The single atomic action for one pinch step. */
 export function pinchActions(
     before: PinchGeometry,
     after: PinchGeometry,
 ): ViewportAction[] {
     if (before.dist === 0) return [];
-    return [
-        {
-            type: 'zoomBy',
-            factor: after.dist / before.dist,
-            anchor: before.mid,
-        },
-        {
-            type: 'pan',
-            dx: after.mid.x - before.mid.x,
-            dy: after.mid.y - before.mid.y,
-        },
-    ];
+    return [{ type: 'pinch', before, after }];
 }
 
 export function viewportReducer(
@@ -184,6 +194,11 @@ export function viewportReducer(
             return {
                 ...state,
                 vp: zoomBy(state, action.factor, action.anchor),
+            };
+        case 'pinch':
+            return {
+                ...state,
+                vp: pinchVp(state, action.before, action.after),
             };
     }
 }

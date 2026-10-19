@@ -38,6 +38,7 @@ function DemoLayers({ scale, shared, labels }: DemoState & { scale: number }) {
             <img
                 src={DEMO_BASE_MAP_URL}
                 alt=""
+                draggable={false}
                 className="absolute"
                 style={BOX}
             />
