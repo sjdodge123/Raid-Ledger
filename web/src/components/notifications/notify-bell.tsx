@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 import { usePortalTarget } from '../ui/use-anchored-popup';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
-import type { NotifyPanelState } from './notify-bell-panel';
+import type { NotifyPanelState, PopoverAlign } from './notify-bell-panel';
 
 /**
  * Lazy so the panel stays out of the host page's chunk (hub-page budget). It
@@ -36,6 +36,8 @@ export interface NotifyBellProps {
     /** `<prefix>-bell`, `<prefix>-switch`, `<prefix>-popover`. */
     testIdPrefix: string;
     mutedHint: string;
+    /** Popover edge aligned to the bell (≥1024px): `end` for a bell at the right of its row. Default `start`. */
+    align?: PopoverAlign;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
 }
@@ -72,7 +74,7 @@ export function NotifyBell(props: NotifyBellProps): JSX.Element {
             </Button>
             <Suspense fallback={null}>
                 <NotifyBellShell isDesktop={isDesktop} open={isOpen} onClose={close} anchorRef={anchorRef}
-                    bellRef={bellRef} container={container} panel={panel} />
+                    bellRef={bellRef} container={container} panel={panel} align={props.align ?? 'start'} />
             </Suspense>
         </div>
     );

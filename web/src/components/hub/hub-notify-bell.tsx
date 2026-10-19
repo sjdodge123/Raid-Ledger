@@ -17,7 +17,7 @@ function MemberBell({ page }: { page: GuildPage }): JSX.Element {
     const { muted, isReady, isPending, setMuted } = useHubNotificationMute(page);
     return (
         <NotifyBell subjectName={page.guild.name} muted={muted} isReady={isReady} isPending={isPending} onToggle={setMuted}
-            settingsHref={HUB_NOTIFICATION_SETTINGS_HREF} testIdPrefix="hub-notify" mutedHint={HUB_MUTED_HINT} />
+            settingsHref={HUB_NOTIFICATION_SETTINGS_HREF} testIdPrefix="hub-notify" mutedHint={HUB_MUTED_HINT} align="end" />
     );
 }
 

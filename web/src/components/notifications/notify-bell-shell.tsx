@@ -6,7 +6,7 @@
  */
 import type { JSX, RefObject } from 'react';
 import { BottomSheet } from '../ui/bottom-sheet';
-import { NotifyPanelBody, NotifyPopover, type NotifyPanelState } from './notify-bell-panel';
+import { NotifyPanelBody, NotifyPopover, type NotifyPanelState, type PopoverAlign } from './notify-bell-panel';
 
 export interface NotifyBellShellProps {
     isDesktop: boolean;
@@ -16,12 +16,13 @@ export interface NotifyBellShellProps {
     bellRef: RefObject<HTMLButtonElement | null>;
     container: HTMLElement;
     panel: NotifyPanelState;
+    align: PopoverAlign;
 }
 
 /** Popover or BottomSheet around the shared panel body; renders nothing while closed. */
-export default function NotifyBellShell({ isDesktop, open, onClose, anchorRef, bellRef, container, panel }: NotifyBellShellProps): JSX.Element | null {
+export default function NotifyBellShell({ isDesktop, open, onClose, anchorRef, bellRef, container, panel, align }: NotifyBellShellProps): JSX.Element | null {
     if (isDesktop) {
-        return <NotifyPopover open={open} onClose={onClose} anchorRef={anchorRef} bellRef={bellRef} container={container} panel={panel} />;
+        return <NotifyPopover open={open} onClose={onClose} anchorRef={anchorRef} bellRef={bellRef} container={container} panel={panel} align={align} />;
     }
     return (
         <BottomSheet isOpen={open} onClose={onClose} title={`Notifications for ${panel.subjectName}`}>

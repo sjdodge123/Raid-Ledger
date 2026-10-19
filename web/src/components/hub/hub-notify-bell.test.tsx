@@ -70,6 +70,14 @@ async function openSwitch(user: ReturnType<typeof userEvent.setup>): Promise<HTM
 }
 
 describe('HubNotifyBell', () => {
+    it('right-aligns the popover to the bell (the hero puts the bell at the right edge)', async () => {
+        serve(MEMBER);
+        const user = userEvent.setup();
+        renderWithProviders(<Harness />);
+        await user.click(await screen.findByTestId('hub-notify-bell'));
+        expect(await screen.findByTestId('hub-notify-popover')).toHaveClass('-translate-x-full');
+    });
+
     it('mutes with POST and the label flips to muted', async () => {
         const calls = serve(MEMBER);
         const user = userEvent.setup();

@@ -57,6 +57,22 @@ describe('NotifyBell', () => {
         expect(onToggle).toHaveBeenCalledWith(true);
     });
 
+    it('opens the popover from the bell\'s left edge by default', async () => {
+        setDesktop(true);
+        const user = userEvent.setup();
+        renderBell();
+        await user.click(screen.getByTestId('hub-notify-bell'));
+        expect(await screen.findByTestId('hub-notify-popover')).not.toHaveClass('-translate-x-full');
+    });
+
+    it('align="end" right-aligns the popover to the bell so it stays in the viewport', async () => {
+        setDesktop(true);
+        const user = userEvent.setup();
+        renderBell({ align: 'end' });
+        await user.click(screen.getByTestId('hub-notify-bell'));
+        expect(await screen.findByTestId('hub-notify-popover')).toHaveClass('-translate-x-full');
+    });
+
     it('<1024px opens a BottomSheet instead of the popover', async () => {
         setDesktop(false);
         const user = userEvent.setup();
