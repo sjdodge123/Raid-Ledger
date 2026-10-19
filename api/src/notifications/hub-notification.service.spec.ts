@@ -26,6 +26,8 @@ function setup(opts: { claimed?: boolean; marked?: boolean } = {}) {
     isMarked: jest.fn().mockResolvedValue(opts.marked ?? true),
   };
   q.findGuildName.mockResolvedValue('Onyx');
+  q.hasPostedEmbed.mockResolvedValue(false);
+  q.findPriorEventNoticeUserIds.mockResolvedValue(new Set());
   absent.mockResolvedValue(new Set());
   q.filterGroupRecipients.mockImplementation((_db, ids) =>
     Promise.resolve([...ids]),
@@ -153,6 +155,31 @@ describe('HubNotificationService.notifyLateTag (D6b)', () => {
     const { svc, notifications } = setup({ marked: false });
     await svc.notifyLateTag(9);
     expect(notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('treats an event whose embed the scheduler posted as announced', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, notifications } = setup({ marked: false });
+    q.hasPostedEmbed.mockResolvedValue(true);
+    await svc.notifyLateTag(9);
+    expect(q.hasPostedEmbed).toHaveBeenCalledWith({}, 9);
+    expect(notifications.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips a member who already has a notice for the event, and claims for them', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, notifications, dedup } = setup();
+    q.findPriorEventNoticeUserIds.mockResolvedValue(new Set([2]));
+    await svc.notifyLateTag(9);
+    expect(q.findPriorEventNoticeUserIds).toHaveBeenCalledWith({}, 9, [2, 3]);
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 3 }),
+    );
+    expect(dedup.checkAndMarkSent).toHaveBeenCalledWith(
+      'event-notice:9:user:2',
+      expect.any(Number),
+    );
   });
 
   it('does nothing once the event has started', async () => {

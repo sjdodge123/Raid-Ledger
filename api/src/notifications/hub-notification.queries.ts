@@ -108,3 +108,41 @@ export async function findEventGuildId(
     .limit(1);
   return row?.guildId ?? null;
 }
+
+/**
+ * D6b: an event the scheduler announced (`EmbedSchedulerService` posts the
+ * deferred embed without the `game-alert:event:<id>` marker) has an embed row.
+ */
+export async function hasPostedEmbed(db: Db, eventId: number): Promise<boolean> {
+  const m = schema.discordEventMessages;
+  const [row] = await db
+    .select({ id: m.id })
+    .from(m)
+    .where(eq(m.eventId, eventId))
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * D4 backfill: users who already hold a game or group notice for the event —
+ * notices sent before the per-user `event-notice:*` claims existed.
+ */
+export async function findPriorEventNoticeUserIds(
+  db: Db,
+  eventId: number,
+  userIds: readonly number[],
+): Promise<Set<number>> {
+  if (userIds.length === 0) return new Set();
+  const n = schema.notifications;
+  const rows = await db
+    .selectDistinct({ userId: n.userId })
+    .from(n)
+    .where(
+      and(
+        inArray(n.userId, [...userIds]),
+        inArray(n.type, ['subscribed_game', 'hub_event_tagged']),
+        sql`${n.payload}->>'eventId' = ${String(eventId)}`,
+      ),
+    );
+  return new Set(rows.map((r) => r.userId));
+}

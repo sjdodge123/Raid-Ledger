@@ -7,7 +7,11 @@ import { HubKindRegistry } from '../guilds/hub-kind.registry';
 import { gmPostHeadline } from '../guilds/guild-profile.queries';
 import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
-import { sendClaimedEventNotice } from './event-notice-plan.helpers';
+import {
+  EVENT_NOTICE_TTL_SECONDS,
+  eventNoticeKey,
+  sendClaimedEventNotice,
+} from './event-notice-plan.helpers';
 import { findAbsentUserIds } from './game-affinity-recipients.helpers';
 import {
   HUB_NOTIFICATION_EVENTS,
@@ -18,6 +22,8 @@ import {
   filterGroupRecipients,
   findGuildName,
   findLateTagEvent,
+  findPriorEventNoticeUserIds,
+  hasPostedEmbed,
   type LateTagEvent,
 } from './hub-notification.queries';
 
@@ -114,19 +120,21 @@ export class HubNotificationService {
   /**
    * D6b: group-only fan-out for an already-announced, not-started event, with
    * the announce path's exclusions: ROK-503 absences here, and ROK-1371
-   * follow-up attendees through the per-user notice keys the announce claimed.
+   * follow-up attendees through the per-user notice keys the announce claimed
+   * (plus the notices stored before those keys existed).
    */
   async notifyLateTag(eventId: number): Promise<void> {
     const event = await findLateTagEvent(this.db, eventId);
     if (!event || event.guildId === null || event.cancelledAt) return;
     if (event.startTime.getTime() <= Date.now()) return;
-    if (!(await this.dedup.isMarked(`game-alert:event:${eventId}`))) return;
+    if (!(await this.isAnnounced(eventId))) return;
     const guildId = event.guildId;
     const guildName = (await findGuildName(this.db, guildId)) ?? 'your group';
-    const ids = await this.presentOn(
+    const present = await this.presentOn(
       await this.resolveGroupEventRecipients(eventId, guildId, event.creatorId),
       event.startTime,
     );
+    const ids = await this.withoutPriorNotice(eventId, present);
     const payload = buildTaggedPayload(event, guildId, guildName);
     await Promise.allSettled(
       ids.map((userId) =>
@@ -141,6 +149,32 @@ export class HubNotificationService {
         ),
       ),
     );
+  }
+
+  /** Announced by the create/publish path (marker) or the deferred-embed scheduler. */
+  private async isAnnounced(eventId: number): Promise<boolean> {
+    if (await this.dedup.isMarked(`game-alert:event:${eventId}`)) return true;
+    return hasPostedEmbed(this.db, eventId);
+  }
+
+  /**
+   * Drop users who already hold a notice row for the event and claim their
+   * per-user key, so notices sent before the claims existed still dedupe.
+   */
+  private async withoutPriorNotice(
+    eventId: number,
+    ids: number[],
+  ): Promise<number[]> {
+    const prior = await findPriorEventNoticeUserIds(this.db, eventId, ids);
+    await Promise.allSettled(
+      [...prior].map((id) =>
+        this.dedup.checkAndMarkSent(
+          eventNoticeKey(eventId, id),
+          EVENT_NOTICE_TTL_SECONDS,
+        ),
+      ),
+    );
+    return ids.filter((id) => !prior.has(id));
   }
 
   /** ROK-503: drop the users with an absence covering the event date. */

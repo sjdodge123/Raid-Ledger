@@ -83,6 +83,13 @@ describe('sendClaimedEventNotice (ROK-1832 D4)', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('releases the key when the send creates nothing (channel off)', async () => {
+    const d = dedup(false);
+    const send = jest.fn().mockResolvedValue(null);
+    await expect(sendClaimedEventNotice(d, 9, 3, send)).resolves.toBe(false);
+    expect(d.releaseKey).toHaveBeenCalledWith('event-notice:9:user:3');
+  });
+
   it('releases the key and rethrows when the send fails', async () => {
     const d = dedup(false);
     const send = jest.fn().mockRejectedValue(new Error('boom'));
