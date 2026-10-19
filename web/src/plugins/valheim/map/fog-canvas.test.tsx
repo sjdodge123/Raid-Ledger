@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { FogCanvas } from './fog-canvas';
 import { parseCssRgb } from './fog-theme';
 import { FOG_ALPHA_SHARED_ONLY, FOG_ALPHA_UNEXPLORED } from './fog-bitmap';
@@ -53,6 +53,9 @@ beforeEach(() => {
     });
 });
 afterEach(() => {
+    // Unmount first: a still-mounted canvas would see the class reset below
+    // after the mocks are gone (the 'not wrapped in act' warning).
+    cleanup();
     vi.restoreAllMocks();
     document.documentElement.className = '';
 });

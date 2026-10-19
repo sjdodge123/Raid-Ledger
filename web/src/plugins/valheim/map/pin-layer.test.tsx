@@ -94,9 +94,19 @@ describe('PinLayer (ROK-1837 D8)', () => {
         renderLayer(2);
         expect(screen.getByText('Home').getAttribute('data-open')).toBe('true');
     });
+});
 
+describe('PinLayer labels prop (ROK-1837 D9 Pin labels switch)', () => {
     it('the Pin labels switch shows every label at 1x', () => {
-        render(<PinLayer grid={GRID} pins={PINS} scale={1} showShared={false} labels />);
+        render(
+            <PinLayer
+                grid={GRID}
+                pins={PINS}
+                scale={1}
+                showShared={false}
+                labels
+            />,
+        );
         expect(screen.getByText('Home').getAttribute('data-open')).toBe('true');
     });
 });

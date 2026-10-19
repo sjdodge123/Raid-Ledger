@@ -82,8 +82,16 @@ function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
     return (
         <div className="flex gap-1 rounded-lg border border-edge bg-surface p-1">
             {items.map(({ label, Icon, run }) => (
-                <Button key={label} variant="ghost" size="sm" iconOnly aria-label={label}
-                    className="min-h-11" disabled={!run} onClick={run}>
+                <Button
+                    key={label}
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    aria-label={label}
+                    className="min-h-11"
+                    disabled={!run}
+                    onClick={run}
+                >
                     <Icon aria-hidden="true" className="h-5 w-5" />
                 </Button>
             ))}
@@ -102,13 +110,21 @@ export function MapControls({ commands, ...layers }: MapControlsProps) {
                     <LayerSwitches {...layers} />
                 </div>
             ) : (
-                <Button variant="secondary" size="sm" className="min-h-11"
-                    onClick={() => setSheetOpen(true)}>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={() => setSheetOpen(true)}
+                >
                     Layers
                 </Button>
             )}
             {!wide && (
-                <BottomSheet isOpen={sheetOpen} onClose={() => setSheetOpen(false)} title="Layers">
+                <BottomSheet
+                    isOpen={sheetOpen}
+                    onClose={() => setSheetOpen(false)}
+                    title="Layers"
+                >
                     <LayerSwitches {...layers} />
                 </BottomSheet>
             )}
