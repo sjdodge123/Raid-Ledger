@@ -179,7 +179,11 @@ describe('armory claim events resolve users (ROK-1836 follow-up)', () => {
         ['alice', 'bob'].map((n) => ({ discordId: `local:${n}`, username: n })),
       )
       .returning({ id: U.id, name: U.username });
-    const idOf = (n: string) => users.find((u) => u.name === n)?.id ?? 0;
+    const idOf = (n: string): number => {
+      const u = users.find((x) => x.name === n);
+      if (!u) throw new Error(`seeded user ${n} missing`);
+      return u.id;
+    };
     const admin = await loginAsAdmin(testApp.request, testApp.seed);
     const adminUser = testApp.seed.adminUser;
     for (const userId of [idOf('alice'), idOf('bob')]) {

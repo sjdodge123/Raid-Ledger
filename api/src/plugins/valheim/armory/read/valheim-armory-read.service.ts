@@ -53,7 +53,11 @@ export class ValheimArmoryReadService {
   }
 
   /** One page plus the filtered total (same filters, one COUNT). */
-  private page(q: ArmoryListQuery) {
+  private page(
+    q: ArmoryListQuery,
+  ): Promise<
+    [Awaited<ReturnType<ValheimArmoryReadRepository['listProfiles']>>, number]
+  > {
     return Promise.all([this.repo.listProfiles(q), this.repo.countProfiles(q)]);
   }
 
