@@ -424,4 +424,61 @@ run_test "ac6.5-trap-cleanup-after-pg"          test_trap_cleanup_after_pg
 run_test "ac6.6a-unclaimed-slot-reclaim"        test_unclaimed_slot_reclaim_positive
 run_test "ac6.6b-claimed-slot-refuses"          test_claimed_slot_still_refuses
 
+
+# Codex r2 P2 — redeploying another branch's env on this slot is refused
+# unless --takeover re-stamps provenance to the acting branch + agent.
+_seed_same_slot_row() {
+    local owner="$1" pinned="$2"
+    jq -n --arg o "$owner" --argjson p "$pinned" \
+        '[{slug:"owned", slot:1, image:"x", ttl:"24h", created_at:"2026-06-07T00:00:00Z", last_touched:"2026-06-07T00:00:00Z",
+           public_domain:"", pinned:$p, claimable_by_next:true, created_for_branch:$o}]' > "$RL_ENVS_FILE"
+    export ES_APP_EXISTS="true" ES_PG_EXISTS="true" ES_APP_SLOT="1"
+}
+
+test_foreign_env_spin_refused() {
+    CURRENT_TEST_NAME="env-spin onto another branch's env on this slot is refused"
+    es_setup
+    _seed_same_slot_row "feat-a" true
+    run_env_spin owned
+    assert_exit_code "$ES_RC" "1" "foreign env spin must refuse"
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "error code"
+    assert_contains "$(jq -r '.message' <<<"$ES_OUT" 2>/dev/null)" "feat-a" "message names the owning branch"
+    assert_eq "$(jq -r '.[0].created_for_branch' "$RL_ENVS_FILE")" "feat-a" "provenance untouched on refusal"
+    assert_contains "$(cat "$RL_AUDIT_LOG" 2>/dev/null)" "env_spin_refused_foreign_env" "audit records the refusal"
+    es_teardown
+}
+
+test_foreign_unpinned_env_spin_refused() {
+    CURRENT_TEST_NAME="env-spin onto an UNPINNED foreign env on this slot is refused too (provenance, not pin)"
+    es_setup
+    _seed_same_slot_row "feat-a" false
+    run_env_spin owned
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "unpinned foreign refused"
+    es_teardown
+}
+
+test_foreign_env_spin_takeover_restamps() {
+    CURRENT_TEST_NAME="env-spin --takeover re-stamps provenance to the acting branch + agent"
+    es_setup
+    _seed_same_slot_row "feat-a" true
+    run_env_spin owned --takeover
+    assert_neq "$(jq -r '.error // "none"' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "takeover not refused"
+    assert_eq "$(jq -r '.[0] | "\(.created_for_branch) \(.created_by_agent) \(.claimable_by_next)"' "$RL_ENVS_FILE")" \
+        "fix/rok-1357 es-agent false" "row re-stamped to acting branch + agent"
+    es_teardown
+}
+
+test_own_branch_env_spin_allowed() {
+    CURRENT_TEST_NAME="env-spin onto this branch's own env is not refused"
+    es_setup
+    _seed_same_slot_row "fix/rok-1357" false
+    run_env_spin owned
+    assert_neq "$(jq -r '.error // "none"' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "own env allowed"
+    es_teardown
+}
+
+run_test "foreign-env-spin-refused"            test_foreign_env_spin_refused
+run_test "foreign-unpinned-env-spin-refused"   test_foreign_unpinned_env_spin_refused
+run_test "foreign-env-spin-takeover-restamps"  test_foreign_env_spin_takeover_restamps
+run_test "own-branch-env-spin-allowed"         test_own_branch_env_spin_allowed
 print_test_summary

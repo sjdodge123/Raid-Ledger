@@ -202,12 +202,14 @@ IMAGE="registry.rl.lan:5000/rl-allinone:latest"
 # a branch-built env onto default-image content. Surfaced during the
 # fix/batch-2026-06-07 live dogfood.
 IMAGE_EXPLICIT=0
+TAKEOVER=0
 TTL_HOURS="${DEFAULT_ENV_TTL_HOURS:-24}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --slug) SLUG="$2"; shift 2 ;;
         --image) IMAGE="$2"; IMAGE_EXPLICIT=1; shift 2 ;;
         --ttl) TTL_HOURS="$2"; shift 2 ;;
+        --takeover) TAKEOVER=1; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
@@ -218,6 +220,39 @@ done
 if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required" >&2; exit 2; fi
 SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 [[ -z "$SLOT" ]] && { echo "no slot — run claim first" >&2; exit 2; }
+
+# Provenance guard (Codex fleet-claim r2). An env belongs to its
+# created_for_branch, never to whoever holds the slot: redeploying another
+# branch's env (on this slot, or a pinned one anywhere) would hand that branch
+# our image under its own stamp. Refuse unless --takeover, which re-stamps the
+# row to the acting branch + agent. A cross-slot unpinned row is left to the
+# unclaimed-slot reclaim below, which already drops the stale stamp.
+env_spin::guard_foreign_env() {
+    local acting row owner row_slot pinned
+    acting=$(state::branch_for_agent "$RL_AGENT_ID")
+    row=$(state::query "$RL_ENVS_FILE" -c --arg g "$SLUG" '[.[] | select(.slug == $g)] | first // empty' 2>/dev/null || true)
+    if [[ -z "$row" ]]; then return 0; fi
+    owner=$(jq -r '.created_for_branch // ""' <<<"$row")
+    row_slot=$(jq -r '.slot // ""' <<<"$row")
+    pinned=$(jq -r '.pinned // false' <<<"$row")
+    if [[ -z "$owner" || "$owner" == "$acting" ]]; then return 0; fi
+    if [[ "$row_slot" != "$SLOT" && "$pinned" != "true" ]]; then return 0; fi
+    local detail
+    detail=$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg owner "$owner" --arg acting "$acting" \
+        '{slug:$slug, slot:$slot, owned_by_branch:$owner, acting_branch:$acting}')
+    if [[ "$TAKEOVER" == "1" ]]; then
+        state::mutate "$RL_ENVS_FILE" --arg g "$SLUG" --arg b "$acting" --arg a "$RL_AGENT_ID" \
+            'map(if .slug == $g then .created_for_branch = $b | .created_by_agent = $a
+                 | .claimable_by_next = false else . end)'
+        audit::log env-spin env_spin_takeover_foreign_env "$detail"
+        return 0
+    fi
+    audit::log env-spin env_spin_refused_foreign_env "$detail"
+    jq -c '{ok:false, error:"env_spin_refused_foreign_env"} + . + {message:("Env \"" + .slug + "\" belongs to branch \"" + .owned_by_branch + "\", not \"" + .acting_branch + "\". Spin a different slug, or pass --takeover to re-stamp it to your branch.")}' <<<"$detail"
+    ENV_SPIN_HANDLED=1
+    exit 1
+}
+env_spin::guard_foreign_env
 
 # Per-slot env-count cap. Prevents one agent from accidentally spinning N
 # envs and OOMing the VM. Tunable via MAX_ENVS_PER_SLOT env var. Counts
