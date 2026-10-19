@@ -5,7 +5,7 @@
  * - POST rejects an oversized or out-of-window range with 400.
  * - A row stored before the cap (seeded straight into the DB) still renders,
  *   clamped to the week, without the multi-second stall.
- * - Migration 0227 trims such rows in place.
+ * - Migration 0228 trims such rows in place.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -99,7 +99,7 @@ describe('composite view with a pre-cap oversized row (ROK-1842)', () => {
 async function runCapMigration(): Promise<void> {
   const file = join(
     __dirname,
-    '../drizzle/migrations/0227_cap_game_time_absence_span.sql',
+    '../drizzle/migrations/0228_cap_game_time_absence_span.sql',
   );
   const statements = readFileSync(file, 'utf8')
     .split('--> statement-breakpoint')
@@ -110,7 +110,7 @@ async function runCapMigration(): Promise<void> {
   }
 }
 
-describe('migration 0227 trims oversized absences (ROK-1842)', () => {
+describe('migration 0228 trims oversized absences (ROK-1842)', () => {
   it('clamps, caps and drops rows the old contract let through', async () => {
     const { userId } = await member('mig');
     const a = schema.gameTimeAbsences;
