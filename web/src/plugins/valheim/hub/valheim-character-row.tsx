@@ -4,6 +4,7 @@ import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { STRETCHED_ACTION_CLASS } from '../../../components/ui/stretched-action';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { AvatarWithFallback } from '../../../components/shared/AvatarWithFallback';
+import { buildDiscordAvatarUrl } from '../../../lib/avatar';
 import { ownerChip, updatedAgo } from '../lib/valheim-owner.helpers';
 import { valheimCharacterHref } from '../lib/valheim-routes';
 
@@ -20,7 +21,7 @@ function Owner({ character }: { character: ValheimCharacterSummary }) {
     return (
         <span className="inline-flex items-center gap-1.5 text-secondary">
             <AvatarWithFallback
-                avatarUrl={owner.avatar ?? null}
+                avatarUrl={buildDiscordAvatarUrl(owner.discordId, owner.avatar)}
                 username={owner.username}
                 sizeClassName="h-5 w-5"
                 alt=""
