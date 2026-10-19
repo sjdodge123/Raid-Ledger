@@ -12,7 +12,8 @@ export function parseCharacterId(raw: string | undefined): number | null {
 
 /** Only an in-app hub path from router state is trusted for the crumb. */
 export function hubPathFrom(state: unknown): string | null {
-    if (typeof state !== 'object' || state === null || !('hubPath' in state)) return null;
+    if (typeof state !== 'object' || state === null || !('hubPath' in state))
+        return null;
     const p = state.hubPath;
     return typeof p === 'string' && p.startsWith('/guilds/') ? p : null;
 }

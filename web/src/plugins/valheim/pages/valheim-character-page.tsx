@@ -15,14 +15,22 @@ import { ValheimCharacterOwnerActions } from '../character/character-owner-actio
 
 function Crumb({ to, label }: { to: string; label: string }) {
     return (
-        <Link to={to} className="-ml-2 mb-2 inline-flex min-h-[44px] items-center gap-1 px-2 text-sm text-muted hover:text-foreground">
-            <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />{label}
+        <Link
+            to={to}
+            className="-ml-2 mb-2 inline-flex min-h-[44px] items-center gap-1 px-2 text-sm text-muted hover:text-foreground"
+        >
+            <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
+            {label}
         </Link>
     );
 }
 
 function Quiet({ children, role }: { children: string; role?: 'alert' }) {
-    return <div className="py-12 text-center" role={role}><p className="text-sm text-muted">{children}</p></div>;
+    return (
+        <div className="py-12 text-center" role={role}>
+            <p className="text-sm text-muted">{children}</p>
+        </div>
+    );
 }
 
 export function ValheimCharacterPage() {
@@ -31,15 +39,41 @@ export function ValheimCharacterPage() {
     const query = useValheimCharacter(id);
     const c = query.data;
     const viewer = useAuth().user ?? null;
-    const notFound = id === null || (query.isError && isNotFoundError(query.error));
+    const notFound =
+        id === null || (query.isError && isNotFoundError(query.error));
     return (
-        <div className="mx-auto max-w-6xl px-4 py-6" aria-busy={query.isPending && id !== null}>
-            {hubPath !== null && <Crumb to={hubPath} label={c ? `${c.serverName} · Characters` : 'Characters'} />}
-            {notFound && <Quiet>This character doesn't exist or was removed. Open one from a server's Characters tab.</Quiet>}
-            {!notFound && query.isError && <Quiet role="alert">Couldn't load this character. Try again in a moment.</Quiet>}
+        <div
+            className="mx-auto max-w-6xl px-4 py-6"
+            aria-busy={query.isPending && id !== null}
+        >
+            {hubPath !== null && (
+                <Crumb
+                    to={hubPath}
+                    label={c ? `${c.serverName} · Characters` : 'Characters'}
+                />
+            )}
+            {notFound && (
+                <Quiet>
+                    This character doesn't exist or was removed. Open one from a
+                    server's Characters tab.
+                </Quiet>
+            )}
+            {!notFound && query.isError && (
+                <Quiet role="alert">
+                    Couldn't load this character. Try again in a moment.
+                </Quiet>
+            )}
             {c !== undefined && (
                 <>
-                    <ValheimCharacterHeader character={c} actions={<ValheimCharacterOwnerActions character={c} viewer={viewer} />} />
+                    <ValheimCharacterHeader
+                        character={c}
+                        actions={
+                            <ValheimCharacterOwnerActions
+                                character={c}
+                                viewer={viewer}
+                            />
+                        }
+                    />
                     <ValheimCharacterSections character={c} />
                 </>
             )}

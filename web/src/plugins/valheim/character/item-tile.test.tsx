@@ -4,27 +4,50 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ValheimItemStack } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { valheimAtlas, valheimBlobHandler, valheimCatalogue, VALHEIM_FILE_ICON_SHA } from '../../../test/mocks/valheim-armory-handlers';
+import {
+    valheimAtlas,
+    valheimBlobHandler,
+    valheimCatalogue,
+    VALHEIM_FILE_ICON_SHA,
+} from '../../../test/mocks/valheim-armory-handlers';
 import { ItemTile } from './item-tile';
 import type { ItemIconContext } from './use-item-icons';
 
 const media = vi.hoisted(() => ({ desktop: false }));
-vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: () => media.desktop }));
+vi.mock('../../../hooks/use-media-query', () => ({
+    useMediaQuery: () => media.desktop,
+}));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
     getAuthToken: vi.fn(() => 'test-token'),
 }));
 
 const ctx = (over: Partial<ItemIconContext> = {}): ItemIconContext => ({
-    serverId: 7, items: valheimCatalogue, atlas: valheimAtlas, atlasUrl: 'blob:atlas', ...over,
+    serverId: 7,
+    items: valheimCatalogue,
+    atlas: valheimAtlas,
+    atlasUrl: 'blob:atlas',
+    ...over,
 });
-const stack = (prefab: string, over: Partial<ValheimItemStack> = {}): ValheimItemStack => ({
-    prefab, stack: 1, quality: 1, variant: 0, durability: null, maxDurability: null, ...over,
+const stack = (
+    prefab: string,
+    over: Partial<ValheimItemStack> = {},
+): ValheimItemStack => ({
+    prefab,
+    stack: 1,
+    quality: 1,
+    variant: 0,
+    durability: null,
+    maxDurability: null,
+    ...over,
 });
 
 beforeEach(() => {
     media.desktop = false;
-    Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:file-icon'), revokeObjectURL: vi.fn() });
+    Object.assign(URL, {
+        createObjectURL: vi.fn(() => 'blob:file-icon'),
+        revokeObjectURL: vi.fn(),
+    });
 });
 
 describe('ItemTile faces — D7 ladder', () => {
@@ -33,53 +56,114 @@ describe('ItemTile faces — D7 ladder', () => {
         const sprite = screen.getByRole('img', { name: 'Iron sword' });
         expect(sprite.style.backgroundImage).toBe('url("blob:atlas")');
         expect(sprite.style.backgroundPosition).toBe('-32px 0px');
-        expect(screen.getByRole('button', { name: 'Iron sword' })).toHaveAttribute('data-kind', 'icon');
+        expect(
+            screen.getByRole('button', { name: 'Iron sword' }),
+        ).toHaveAttribute('data-kind', 'icon');
     });
     it('atlas not loaded yet → initials tile, never a bare API url', () => {
-        const { container } = renderWithProviders(<ItemTile item={stack('SwordIron')} ctx={ctx({ atlasUrl: null })} />);
+        const { container } = renderWithProviders(
+            <ItemTile
+                item={stack('SwordIron')}
+                ctx={ctx({ atlasUrl: null })}
+            />,
+        );
         expect(screen.queryByRole('img')).toBeNull();
-        expect(container.querySelector('[data-face="initials"]')?.textContent).toBe('IS');
+        expect(
+            container.querySelector('[data-face="initials"]')?.textContent,
+        ).toBe('IS');
         expect(container.innerHTML).not.toContain('/blobs/');
     });
     it('catalogue entry with no icon → initials tile with the name', () => {
-        renderWithProviders(<ItemTile item={stack('Resin', { stack: 30 })} ctx={ctx()} />);
-        expect(screen.getByRole('button', { name: 'Resin, 30' })).toHaveAttribute('data-kind', 'initials');
+        renderWithProviders(
+            <ItemTile item={stack('Resin', { stack: 30 })} ctx={ctx()} />,
+        );
+        expect(
+            screen.getByRole('button', { name: 'Resin, 30' }),
+        ).toHaveAttribute('data-kind', 'initials');
     });
     it('prefab not in the catalogue → its id on a neutral tile', () => {
-        const { container } = renderWithProviders(<ItemTile item={stack('ModdedAxe')} ctx={ctx()} />);
-        expect(screen.getByRole('button', { name: 'ModdedAxe' })).toHaveAttribute('data-kind', 'unknown');
-        expect(container.querySelector('[data-face="prefab"]')?.textContent).toBe('ModdedAxe');
+        const { container } = renderWithProviders(
+            <ItemTile item={stack('ModdedAxe')} ctx={ctx()} />,
+        );
+        expect(
+            screen.getByRole('button', { name: 'ModdedAxe' }),
+        ).toHaveAttribute('data-kind', 'unknown');
+        expect(
+            container.querySelector('[data-face="prefab"]')?.textContent,
+        ).toBe('ModdedAxe');
     });
     it('file icon → <img alt> from the authorised object URL; a load error swaps to initials', async () => {
         server.use(valheimBlobHandler());
-        const { container } = renderWithProviders(<ItemTile item={stack('TrophyBoar')} ctx={ctx()} />);
+        const { container } = renderWithProviders(
+            <ItemTile item={stack('TrophyBoar')} ctx={ctx()} />,
+        );
         const img = await screen.findByRole('img', { name: 'Boar trophy' });
         expect(img).toHaveAttribute('src', 'blob:file-icon');
         fireEvent.error(img);
         expect(screen.queryByRole('img')).toBeNull();
-        expect(container.querySelector('[data-face="initials"]')?.textContent).toBe('BT');
+        expect(
+            container.querySelector('[data-face="initials"]')?.textContent,
+        ).toBe('BT');
     });
     it('a missing file blob leaves the initials tile', async () => {
         server.use(valheimBlobHandler([VALHEIM_FILE_ICON_SHA]));
-        const { container } = renderWithProviders(<ItemTile item={stack('TrophyBoar')} ctx={ctx()} />);
-        await waitFor(() => expect(container.querySelector('[data-face="initials"]')).not.toBeNull());
+        const { container } = renderWithProviders(
+            <ItemTile item={stack('TrophyBoar')} ctx={ctx()} />,
+        );
+        await waitFor(() =>
+            expect(
+                container.querySelector('[data-face="initials"]'),
+            ).not.toBeNull(),
+        );
         expect(screen.queryByRole('img')).toBeNull();
     });
     it('shows quality pips, a durability meter and the equipped marker', () => {
-        renderWithProviders(<ItemTile item={stack('SwordIron', { quality: 3, durability: 40, maxDurability: 200 })} ctx={ctx()} equipped />);
-        const tile = screen.getByRole('button', { name: 'Iron sword, quality 3, equipped' });
-        expect(within(tile).getByTestId('valheim-quality-pips').children).toHaveLength(3);
-        expect(within(tile).getByTestId('valheim-equipped-marker')).toBeInTheDocument();
-        expect(tile.querySelector('[role="meter"]')).toHaveAttribute('aria-valuenow', '20');
+        renderWithProviders(
+            <ItemTile
+                item={stack('SwordIron', {
+                    quality: 3,
+                    durability: 40,
+                    maxDurability: 200,
+                })}
+                ctx={ctx()}
+                equipped
+            />,
+        );
+        const tile = screen.getByRole('button', {
+            name: 'Iron sword, quality 3, equipped',
+        });
+        expect(
+            within(tile).getByTestId('valheim-quality-pips').children,
+        ).toHaveLength(3);
+        expect(
+            within(tile).getByTestId('valheim-equipped-marker'),
+        ).toBeInTheDocument();
+        expect(tile.querySelector('[role="meter"]')).toHaveAttribute(
+            'aria-valuenow',
+            '20',
+        );
     });
 });
 
 describe('ItemTile detail — D11', () => {
     it('phone: opens a BottomSheet with the wiki link (new tab, noopener, encoded name)', async () => {
-        renderWithProviders(<ItemTile item={stack('SwordIron', { durability: 40, maxDurability: 200 })} ctx={ctx()} />);
+        renderWithProviders(
+            <ItemTile
+                item={stack('SwordIron', {
+                    durability: 40,
+                    maxDurability: 200,
+                })}
+                ctx={ctx()}
+            />,
+        );
         fireEvent.click(screen.getByRole('button', { name: 'Iron sword' }));
-        const link = await screen.findByRole('link', { name: /open on the valheim wiki/i });
-        expect(link).toHaveAttribute('href', 'https://valheim.weirdgloop.org/w/Iron_sword');
+        const link = await screen.findByRole('link', {
+            name: /open on the valheim wiki/i,
+        });
+        expect(link).toHaveAttribute(
+            'href',
+            'https://valheim.weirdgloop.org/w/Iron_sword',
+        );
         expect(link).toHaveAttribute('target', '_blank');
         expect(link.getAttribute('rel')).toMatch(/noopener/);
         expect(screen.getByText('40 / 200')).toBeInTheDocument();
@@ -87,8 +171,12 @@ describe('ItemTile detail — D11', () => {
     });
     it('desktop: opens an anchored popover dialog; Escape closes it', async () => {
         media.desktop = true;
-        renderWithProviders(<ItemTile item={stack('SwordIron')} ctx={ctx()} equipped />);
-        fireEvent.click(screen.getByRole('button', { name: 'Iron sword, equipped' }));
+        renderWithProviders(
+            <ItemTile item={stack('SwordIron')} ctx={ctx()} equipped />,
+        );
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Iron sword, equipped' }),
+        );
         const pop = await screen.findByTestId('valheim-item-popover');
         expect(pop).toHaveAttribute('role', 'dialog');
         expect(within(pop).getByText('Equipped')).toBeInTheDocument();
@@ -101,6 +189,8 @@ describe('ItemTile detail — D11', () => {
         fireEvent.click(screen.getByRole('button', { name: 'ModdedAxe' }));
         const pop = await screen.findByTestId('valheim-item-popover');
         expect(within(pop).queryByRole('link')).toBeNull();
-        expect(within(pop).getByText(/isn't in the server's item catalogue/)).toBeInTheDocument();
+        expect(
+            within(pop).getByText(/isn't in the server's item catalogue/),
+        ).toBeInTheDocument();
     });
 });

@@ -25,9 +25,30 @@ export interface ValheimCharacterSectionDef {
     component: ComponentType<ValheimCharacterSectionProps>;
 }
 
-export const VALHEIM_CHARACTER_SECTIONS: readonly ValheimCharacterSectionDef[] = [
-    { id: 'equipment', title: 'Equipment', column: 'left', component: EquipmentSection },
-    { id: 'skills', title: 'Skills', column: 'left', component: SkillsSection },
-    { id: 'inventory', title: 'Inventory', column: 'right', component: InventorySection },
-    { id: 'trophies', title: 'Trophies', column: 'right', component: TrophiesSection },
-];
+export const VALHEIM_CHARACTER_SECTIONS: readonly ValheimCharacterSectionDef[] =
+    [
+        {
+            id: 'equipment',
+            title: 'Equipment',
+            column: 'left',
+            component: EquipmentSection,
+        },
+        {
+            id: 'skills',
+            title: 'Skills',
+            column: 'left',
+            component: SkillsSection,
+        },
+        {
+            id: 'inventory',
+            title: 'Inventory',
+            column: 'right',
+            component: InventorySection,
+        },
+        {
+            id: 'trophies',
+            title: 'Trophies',
+            column: 'right',
+            component: TrophiesSection,
+        },
+    ];
