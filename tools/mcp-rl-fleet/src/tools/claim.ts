@@ -8,7 +8,7 @@
 //   - wait=false: single-shot call. Returns immediately with either a slot
 //     or queued=true. Caller polls manually.
 
-import { runRl, parseJsonFromStdout } from '../exec.js';
+import { runRl, parseJsonFromStdout, execFileP } from '../exec.js';
 
 export const TOOL_NAME = 'rl_claim';
 // The ONE SLOT PER WORKTREE paragraph below is asserted by
@@ -41,6 +41,8 @@ export interface ClaimResult {
   inherited_envs?: Array<{ slug: string; url: string }>;
   // M5a — populated when branch-mismatch handoff destroys the prior envs:
   destroyed_envs?: string[];
+  // Pinned envs a branch-mismatch claim left on the slot (never destroyed):
+  preserved_pinned?: string[];
   // M5a — ISO 8601 of when this claim auto-expires (24h default).
   expires_at?: string | null;
   // Polling-completed timeout path:
@@ -86,6 +88,35 @@ export interface ClaimParams {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+type BranchResolution = { branch: string | undefined } | { refusal: ClaimResult };
+
+/**
+ * Resolve the branch label sent as `--branch`. An explicit `branch` wins;
+ * otherwise, when `worktree_path` is given, it is read from that worktree's
+ * HEAD. A detached HEAD or a failing git call REFUSES the claim — an empty
+ * branch branch-mismatch-destroyed a pinned env on 2026-10-19.
+ */
+export async function resolveClaimBranch(params: ClaimParams): Promise<BranchResolution> {
+  if (params.branch) return { branch: params.branch };
+  const wt = params.worktree_path;
+  if (!wt) return { branch: undefined };
+  const refuse = (why: string): BranchResolution => ({
+    refusal: {
+      ok: false,
+      error: 'claim_branch_unresolved',
+      message: `Could not derive a branch from worktree_path ${wt}: ${why}. Check out a branch or pass branch explicitly — an empty branch would branch-mismatch-destroy envs on the slot.`,
+    },
+  });
+  try {
+    const { stdout } = await execFileP('git', ['-C', wt, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 10_000 });
+    const branch = stdout.trim();
+    if (!branch || branch === 'HEAD') return refuse('HEAD is detached');
+    return { branch };
+  } catch (err) {
+    return refuse(err instanceof Error ? err.message : String(err));
+  }
+}
+
 async function singleClaim(branch?: string, cwd?: string, slot?: number): Promise<ClaimResult> {
   const args = ['claim'];
   if (branch) args.push('--branch', branch);
@@ -109,7 +140,16 @@ export async function execute(params: ClaimParams): Promise<ClaimResult> {
   // one transition cycle. Treat either as the wait-and-retry signal.
   const isQueued = (r: ClaimResult): boolean => Boolean(r.queued || r.enqueued);
 
-  const first = await singleClaim(params.branch, params.worktree_path, params.slot);
+  const resolved = await resolveClaimBranch(params);
+  if ('refusal' in resolved) return resolved.refusal;
+  const branch = resolved.branch;
+  // Echo the branch actually sent (the orchestrator's own echo wins if present).
+  const claimOnce = async (): Promise<ClaimResult> => {
+    const r = await singleClaim(branch, params.worktree_path, params.slot);
+    return branch && r.branch === undefined ? { ...r, branch } : r;
+  };
+
+  const first = await claimOnce();
   if (!wait || !isQueued(first)) return first;
 
   // Poll the queue (queue_position decrements as we advance). Each
@@ -119,7 +159,7 @@ export async function execute(params: ClaimParams): Promise<ClaimResult> {
   let last = first;
   while ((Date.now() - startedAt) / 1000 < timeoutS) {
     await sleep(intervalS * 1000);
-    last = await singleClaim(params.branch, params.worktree_path, params.slot);
+    last = await claimOnce();
     if (!isQueued(last)) return last;
   }
 
