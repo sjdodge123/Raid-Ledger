@@ -32,6 +32,7 @@ export interface ArmoryProfileReadRow {
   ownerId: number | null;
   ownerUsername: string | null;
   ownerAvatar: string | null;
+  ownerDiscordId: string | null;
 }
 
 /** The list row plus the character sheet columns. */
@@ -70,6 +71,7 @@ function toOwner(row: ArmoryProfileReadRow): ValheimCharacterOwner | null {
     id: row.ownerId,
     username: row.ownerUsername,
     avatar: row.ownerAvatar,
+    discordId: row.ownerDiscordId,
   };
 }
 

@@ -259,7 +259,7 @@ describe('Valheim armory — another member owns the character (ROK-1835 T14)', 
     const U = schema.users;
     const [bob] = nonEmpty(
       await testApp.db
-        .select({ id: U.id, username: U.username })
+        .select({ id: U.id, username: U.username, discordId: U.discordId })
         .from(U)
         .where(eq(U.username, 'bob')),
       'bob',
@@ -273,7 +273,7 @@ describe('Valheim armory — another member owns the character (ROK-1835 T14)', 
     expect(detail.status).toBe(200);
     expect(detail.body).toMatchObject({
       id,
-      claimedBy: { id: bob.id, username: 'bob' },
+      claimedBy: { id: bob.id, username: 'bob', discordId: bob.discordId },
     });
     expect(detail.text).not.toContain(STEAM);
     expect(detail.text).not.toContain('steamId64');

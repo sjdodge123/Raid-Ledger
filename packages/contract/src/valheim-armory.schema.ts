@@ -36,7 +36,10 @@ export const ValheimCharacterOwnerSchema = z
   .object({
     id: Id,
     username: z.string(),
+    /** Discord avatar hash (or a full URL for a custom avatar), as on every user DTO. */
     avatar: z.string().nullable().optional(),
+    /** ROK-1836 follow-up (additive): needed with `avatar` to build the Discord CDN URL (`buildDiscordAvatarUrl`). */
+    discordId: z.string().nullable().optional(),
   })
   .strict();
 export type ValheimCharacterOwner = z.infer<typeof ValheimCharacterOwnerSchema>;

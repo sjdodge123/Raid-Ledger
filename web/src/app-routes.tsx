@@ -35,6 +35,7 @@ import {
   BindingAdminWireframesPage,
   DesignSystemPage,
   SchedulingWireframesPage, ServerScheduleWireframesPage, ViewportProbePage,
+  ValheimCharacterPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -150,6 +151,7 @@ export function AppRoutes() {
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
         <Route path="/guilds/:id" element={<GuildPage />} />
+        <Route path="/valheim/characters/:id" element={<ValheimCharacterPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/event-metrics" element={<Navigate to="/insights/events" replace />} />
