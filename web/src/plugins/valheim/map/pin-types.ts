@@ -5,6 +5,7 @@
  * unknown type falls back to the generic map pin.
  */
 import type { ComponentType, SVGProps } from 'react';
+import type { ValheimMapPin } from '@raid-ledger/contract';
 import {
     FireIcon,
     HomeIcon,
@@ -75,4 +76,17 @@ export function pinStyleFor(type: string): PinStyle {
 export function pinDisplayLabel(label: string, type: string): string {
     const trimmed = label.trim();
     return trimmed.length > 0 ? trimmed : pinStyleFor(type).typeLabel;
+}
+
+/**
+ * The pin button's accessible name (approved prototype):
+ * `<label> (<type>[, cartography table][, checked])`.
+ */
+export function pinAccessibleName(
+    pin: Pick<ValheimMapPin, 'label' | 'type' | 'shared' | 'checked'>,
+): string {
+    const parts = [pin.type];
+    if (pin.shared) parts.push('cartography table');
+    if (pin.checked) parts.push('checked');
+    return `${pinDisplayLabel(pin.label, pin.type)} (${parts.join(', ')})`;
 }

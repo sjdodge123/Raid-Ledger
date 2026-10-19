@@ -128,8 +128,13 @@ describe('ValheimMapView (ROK-1837 T6)', () => {
         expect(
             screen.getByRole('button', { name: 'Home (Bed)' }),
         ).toBeInTheDocument();
+        // Prototype legend + snapshot footer.
+        expect(screen.getByRole('list', { name: 'Map legend' })).toBeTruthy();
+        expect(screen.getByText(/Latest snapshot · captured/)).toBeTruthy();
         expect(
-            screen.queryByRole('button', { name: 'Table camp (Bed)' }),
+            screen.queryByRole('button', {
+                name: 'Table camp (Bed, cartography table)',
+            }),
         ).toBeNull();
         await waitFor(() =>
             expect(document.querySelector('img')).toHaveAttribute(
@@ -155,7 +160,9 @@ describe('ValheimMapView (ROK-1837 T6)', () => {
         );
         expect(sharedHits).toEqual(['shared']);
         expect(
-            screen.getByRole('button', { name: 'Table camp (Bed)' }),
+            screen.getByRole('button', {
+                name: 'Table camp (Bed, cartography table)',
+            }),
         ).toBeInTheDocument();
     });
 

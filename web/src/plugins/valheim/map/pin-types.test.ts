@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     PIN_CHECKED_CLASS,
     PIN_DISC_CLASS,
+    pinAccessibleName,
     pinDisplayLabel,
     pinStyleFor,
 } from './pin-types';
@@ -74,5 +75,28 @@ describe('pinDisplayLabel', () => {
         expect(pinDisplayLabel('Home base', 'Bed')).toBe('Home base');
         expect(pinDisplayLabel('  ', 'Death')).toBe('Death');
         expect(pinDisplayLabel('', 'Icon2')).toBe('Pin');
+    });
+});
+
+describe('pinAccessibleName (prototype naming)', () => {
+    const base = { label: 'Camp', type: 'Bed', checked: false, shared: false };
+    it('is "<label> (<type>)" for a plain personal pin', () => {
+        expect(pinAccessibleName(base)).toBe('Camp (Bed)');
+    });
+    it('falls back to the type name when the label is blank', () => {
+        expect(pinAccessibleName({ ...base, label: ' ', type: 'Shout' })).toBe(
+            'Shout (Shout)',
+        );
+    });
+    it('appends ", cartography table" then ", checked"', () => {
+        expect(pinAccessibleName({ ...base, shared: true })).toBe(
+            'Camp (Bed, cartography table)',
+        );
+        expect(pinAccessibleName({ ...base, checked: true })).toBe(
+            'Camp (Bed, checked)',
+        );
+        expect(
+            pinAccessibleName({ ...base, shared: true, checked: true }),
+        ).toBe('Camp (Bed, cartography table, checked)');
     });
 });

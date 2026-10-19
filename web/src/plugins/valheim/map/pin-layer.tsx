@@ -12,6 +12,7 @@ import { worldToScreen } from './valheim-grid';
 import {
     PIN_CHECKED_CLASS,
     PIN_DISC_CLASS,
+    pinAccessibleName,
     pinDisplayLabel,
     pinStyleFor,
 } from './pin-types';
@@ -120,7 +121,7 @@ function PinButton(props: PinButtonProps) {
     return (
         <button
             type="button"
-            aria-label={`${text} (${pin.type})`}
+            aria-label={pinAccessibleName(pin)}
             aria-expanded={open}
             data-checked={pin.checked}
             {...pinPlacement(pin, grid, scale)}

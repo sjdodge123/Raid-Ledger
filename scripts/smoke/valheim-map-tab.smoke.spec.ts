@@ -122,7 +122,7 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     await expect(map).toBeVisible({ timeout: 15_000 });
     await expect(map.locator("img")).toBeVisible();
 
-    // AC3: 3 personal pins, each with an accessible "<label> (<type>)" name.
+    // AC3: 3 personal pins, each named "<label> (<type>[, checked])".
     await expect(pins(map)).toHaveCount(3);
     for (const pin of await pins(map).all()) {
       await expect(pin).toHaveAccessibleName(/\(.+\)$/);
@@ -150,5 +150,11 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     await expect(shared).toHaveAttribute("aria-checked", "true");
     await closeLayers(page, wide);
     await expect(pins(map)).toHaveCount(4);
+    // The shared pin's name carries the prototype's ", cartography table" suffix.
+    await expect(
+      map.getByRole("button", {
+        name: /\(.+, cartography table(, checked)?\)$/,
+      }),
+    ).toHaveCount(1);
   });
 });

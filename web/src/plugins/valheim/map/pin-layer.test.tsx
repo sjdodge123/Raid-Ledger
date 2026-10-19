@@ -36,14 +36,14 @@ function renderLayer(scale = 1, showShared = false) {
 }
 
 describe('PinLayer (ROK-1837 D8)', () => {
-    it('names each pin "<label or type> (<type>)"', () => {
+    it('names each pin "<label or type> (<type>[, cartography table][, checked])"', () => {
         renderLayer();
         expect(screen.getByRole('button', { name: 'Home (Bed)' })).toBeTruthy();
         expect(
             screen.getByRole('button', { name: 'Death (Death)' }),
         ).toBeTruthy();
         expect(
-            screen.getByRole('button', { name: 'Portal (Icon2)' }),
+            screen.getByRole('button', { name: 'Portal (Icon2, checked)' }),
         ).toBeTruthy();
     });
 
@@ -63,17 +63,23 @@ describe('PinLayer (ROK-1837 D8)', () => {
     it('hides cartography-table pins until the shared layer is on', () => {
         const { rerender } = renderLayer(1, false);
         expect(
-            screen.queryByRole('button', { name: 'Eikthyr (Boss)' }),
+            screen.queryByRole('button', {
+                name: 'Eikthyr (Boss, cartography table)',
+            }),
         ).toBeNull();
         rerender(<PinLayer grid={GRID} pins={PINS} scale={1} showShared />);
         expect(
-            screen.getByRole('button', { name: 'Eikthyr (Boss)' }),
+            screen.getByRole('button', {
+                name: 'Eikthyr (Boss, cartography table)',
+            }),
         ).toBeTruthy();
     });
 
     it('strikes through a checked pin', () => {
         renderLayer();
-        const portal = screen.getByRole('button', { name: 'Portal (Icon2)' });
+        const portal = screen.getByRole('button', {
+            name: 'Portal (Icon2, checked)',
+        });
         expect(portal.getAttribute('data-checked')).toBe('true');
         // The label is absolutely positioned: a decoration on the button never
         // reaches it, so the strike-through must sit on the label itself.
