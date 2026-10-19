@@ -119,13 +119,47 @@ const ABSENCE_DATE_KEYS: PropertyKey[] = ['startDate', 'endDate'];
 /**
  * Absence input schema (for creating absences).
  * Both dates are strict ISO calendar dates (YYYY-MM-DD) and the range may not
- * end before it starts. The order check only runs once both dates parsed, so
+ * end before it starts. ROK-1842: both dates must fall inside
+ * `ABSENCE_MIN_DATE..ABSENCE_MAX_DATE` and the range may span at most
+ * `ABSENCE_MAX_SPAN_DAYS` — an unbounded 0001..9999 row made every composite
+ * read walk 3.64M days. The range checks only run once both dates parsed, so
  * a malformed date reports one issue on its own field.
  *
  * Supplying `when` replaces zod's default guard, so it must also skip a
  * root-level issue (a missing body or a non-object input): otherwise the
  * refine reads `endDate` off `undefined` and throws.
  */
+export const ABSENCE_MIN_DATE = '2000-01-01';
+export const ABSENCE_MAX_DATE = '2100-12-31';
+/** Longest absence, in days counted inclusively (ROK-1842). */
+export const ABSENCE_MAX_SPAN_DAYS = 366;
+/**
+ * Most manual absences one user may store (ROK-1842): without a cap,
+ * repeated valid POSTs grew every composite read without bound.
+ */
+export const ABSENCE_MAX_PER_USER = 100;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Inclusive day count of an ordered pair of ISO dates. */
+function inclusiveDays(startDate: string, endDate: string): number {
+  const ms =
+    Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`);
+  return Math.round(ms / DAY_MS) + 1;
+}
+
+const inWindow = (date: string) =>
+  date >= ABSENCE_MIN_DATE && date <= ABSENCE_MAX_DATE;
+
+/** True while no date (or root-level) issue has been reported yet. */
+const noDateIssues = ({ issues }: z.core.ParsePayload) =>
+  !issues.some((i) => {
+    const key = i.path?.[0];
+    return key === undefined || ABSENCE_DATE_KEYS.includes(key);
+  });
+
+const WINDOW_MESSAGE = `date must be between ${ABSENCE_MIN_DATE} and ${ABSENCE_MAX_DATE}`;
+
 export const GameTimeAbsenceInputSchema = z
   .object({
     startDate: z.iso.date(),
@@ -136,12 +170,26 @@ export const GameTimeAbsenceInputSchema = z
   .refine((v) => v.endDate >= v.startDate, {
     message: 'endDate must be on or after startDate',
     path: ['endDate'],
-    when: ({ issues }) =>
-      !issues.some((i) => {
-        const key = i.path?.[0];
-        return key === undefined || ABSENCE_DATE_KEYS.includes(key);
-      }),
-  });
+    when: noDateIssues,
+  })
+  .refine((v) => inWindow(v.startDate), {
+    message: WINDOW_MESSAGE,
+    path: ['startDate'],
+    when: noDateIssues,
+  })
+  .refine((v) => inWindow(v.endDate), {
+    message: WINDOW_MESSAGE,
+    path: ['endDate'],
+    when: noDateIssues,
+  })
+  .refine(
+    (v) => inclusiveDays(v.startDate, v.endDate) <= ABSENCE_MAX_SPAN_DAYS,
+    {
+      message: `an absence may span at most ${ABSENCE_MAX_SPAN_DAYS} days`,
+      path: ['endDate'],
+      when: noDateIssues,
+    },
+  );
 export type GameTimeAbsenceInput = z.infer<typeof GameTimeAbsenceInputSchema>;
 
 /**

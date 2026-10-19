@@ -25,6 +25,8 @@ export { buildEventBlocks } from './game-time-blocks.helpers';
 import type { SignupsPreviewMap } from './game-time-signups.helpers';
 import { buildEventBlocks } from './game-time-blocks.helpers';
 import { defined } from '../common/defined.helpers';
+import { expandWithinWindow } from '../calendar-sync/read/calendar-away-derive.helpers';
+import { mergeWithinWindow } from './game-time-absence-merge.helpers';
 
 /** Select columns for signed-up event queries. */
 const SIGNED_UP_EVENT_COLUMNS = {
@@ -206,23 +208,38 @@ export function buildCompositeSlots(
   return slots;
 }
 
-/** Build absence date set for quick lookup. */
+/** The inclusive `YYYY-MM-DD` window a composite week renders. */
+export interface WeekWindow {
+  firstDate: string;
+  lastDate: string;
+}
+
+/** `[weekStart, weekEnd)` as inclusive dates (weekEnd is exclusive). */
+export function compositeWeekWindow(
+  weekStart: Date,
+  weekEnd: Date,
+): WeekWindow {
+  return {
+    firstDate: weekStart.toISOString().slice(0, 10),
+    lastDate: new Date(weekEnd.getTime() - 1).toISOString().slice(0, 10),
+  };
+}
+
+/**
+ * Absence dates inside the rendered week, for quick lookup. Each absence is
+ * clipped to `window` BEFORE expanding (ROK-1842): a stored
+ * 0001-01-01..9999-12-31 row costs 7 dates, not 3.64M. Overlapping and
+ * duplicate rows merge first, so N rows over one week cost one span.
+ */
 export function buildAbsenceDateSet(
   absences: Array<{ startDate: string; endDate: string }>,
+  window: WeekWindow,
 ): Set<string> {
-  const absenceDates = new Set<string>();
-  for (const absence of absences) {
-    const start = new Date(absence.startDate);
-    const end = new Date(absence.endDate);
-    const cursor = new Date(start);
-    while (cursor <= end) {
-      absenceDates.add(
-        defined(cursor.toISOString().split('T')[0], 'absence date'),
-      );
-      cursor.setDate(cursor.getDate() + 1);
-    }
-  }
-  return absenceDates;
+  return new Set(
+    mergeWithinWindow(absences, window).flatMap((s) =>
+      expandWithinWindow(s, window),
+    ),
+  );
 }
 
 /** Assemble the full composite view result from all fetched data. */
@@ -243,7 +260,10 @@ export function assembleCompositeView(
     weekEnd,
     tzOffset,
   );
-  const absenceDates = buildAbsenceDateSet(absenceRows);
+  const absenceDates = buildAbsenceDateSet(
+    absenceRows,
+    compositeWeekWindow(weekStart, weekEnd),
+  );
   const overrideMap = new Map<string, string>();
   for (const o of overrideRows)
     overrideMap.set(`${o.date}:${o.hour}`, o.status);
