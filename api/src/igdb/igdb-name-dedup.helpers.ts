@@ -30,6 +30,9 @@ interface NameDedupRow {
   igdbId: number | null;
   steamAppId: number | null;
   itadGameId: string | null;
+  /** ROK-1843: moderation state, so a name-dedup merge can respect it. */
+  hidden?: boolean | undefined;
+  banned?: boolean | undefined;
 }
 
 /** First "significant" token (length >= 2) used as a coarse SQL prefilter. */
@@ -77,6 +80,8 @@ async function selectCandidatesByToken(
       igdbId: g.igdbId,
       steamAppId: g.steamAppId,
       itadGameId: g.itadGameId,
+      hidden: g.hidden,
+      banned: g.banned,
     })
     .from(g)
     .where(ilike(g.name, `%${escaped}%`));
