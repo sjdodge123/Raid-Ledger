@@ -158,6 +158,10 @@ describe('claim flow (cont.)', () => {
         );
         const sheet = screen.getByRole('dialog', { name: 'Claim character' });
         expect(sheet).toHaveAttribute('aria-modal', 'true');
+        // BottomSheet-only trait: Modal renders no `bottom-sheet-footer`.
+        expect(
+            within(sheet).queryByTestId('bottom-sheet-footer'),
+        ).toBeInTheDocument();
         await waitFor(() =>
             expect(sheet.contains(document.activeElement)).toBe(true),
         );
