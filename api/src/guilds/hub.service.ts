@@ -46,12 +46,14 @@ export class HubService {
 
   /**
    * The hub page, built by the guild kind's adapter. ROK-1832: core adds the
-   * viewer's per-group mute flag for anyone above `visitor` (a visitor cannot
-   * mute, so the key is omitted rather than reported false).
+   * viewer's per-group mute flag only for a member — the same predicate the
+   * mute POST enforces. A visitor or a staff non-member cannot mute, so the
+   * key is omitted rather than reported false.
    */
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
     const page = await (await this.adapterFor(guildId)).page(actor, guildId);
     if (page.viewer.role === 'visitor') return page;
+    if (!(await this.access.isMember(actor.id, guildId))) return page;
     const notificationsMuted = await isHubMuted(this.db, actor.id, guildId);
     return { ...page, viewer: { ...page.viewer, notificationsMuted } };
   }

@@ -8,7 +8,7 @@
  *
  * A WoW hub refuses a visitor's page with 403, so "no flag for a visitor" is
  * pinned in `hub.service.spec.ts`; here the staff non-member (leader rung)
- * proves the flag is reported false rather than omitted above `visitor`.
+ * proves the flag is omitted for anyone the mute POST would refuse.
  */
 import * as bcrypt from 'bcrypt';
 import { and, eq } from 'drizzle-orm';
@@ -199,9 +199,9 @@ describe('GET guilds/:id viewer.notificationsMuted', () => {
     expect(open.body.viewer.notificationsMuted).toBe(false);
   });
 
-  it('is false (not omitted) for staff above the visitor rung', async () => {
+  it('is omitted for a staff non-member (leader rung, cannot mute)', async () => {
     const res = await get(`/guilds/${guildId}`, 'admin');
     expect(res.status).toBe(200);
-    expect(res.body.viewer.notificationsMuted).toBe(false);
+    expect(res.body.viewer.notificationsMuted).toBeUndefined();
   });
 });
