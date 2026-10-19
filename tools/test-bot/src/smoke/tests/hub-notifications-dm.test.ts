@@ -25,6 +25,8 @@ const HUB_MEMBER = "/admin/test/hub-member";
 const TYPE = "hub_leader_post";
 const ADJUST_LABEL = "Adjust Notifications";
 const VIEW_GROUP_LABEL = "View group";
+/** `buildNotificationEmbed` prefixes the DM title with the type emoji. */
+const DM_TITLE_EMOJI = "📣";
 /** discord-api-types ComponentType.Button. */
 const BUTTON_COMPONENT_TYPE = 2;
 /** `buildAdjustNotificationsUrl`: hub_leader_post → its settings row. */
@@ -121,8 +123,9 @@ async function assertDmEmbed(ctx: TestContext, n: HubNotification, guildId: numb
     message: n.message ?? "",
     payload: n.payload ?? {},
   });
-  if (res.embed.title !== `New post in ${name}`) {
-    fail(`expected the DM title "New post in ${name}", got "${res.embed.title}"`);
+  const expected = `${DM_TITLE_EMOJI} New post in ${name}`;
+  if (res.embed.title !== expected) {
+    fail(`expected the DM title "${expected}", got "${res.embed.title}"`);
   }
   assertButtons(res, guildId);
 }
