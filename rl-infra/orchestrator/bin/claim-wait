@@ -88,6 +88,13 @@ while true; do
         echo "$LAST_RESULT"
         exit 0
     fi
+    # A hard error on a re-poll (e.g. branch_required, queue_corrupt) never
+    # resolves by waiting — surface it now instead of at the timeout.
+    POLL_ERR=$(jq -r 'if (.ok == false) and (.error != null) then .error else empty end' <<<"$LAST_RESULT" 2>/dev/null || echo "")
+    if [[ -n "$POLL_ERR" ]]; then
+        echo "$LAST_RESULT"
+        exit 2
+    fi
 done
 
 # Timed out — emit the last queued-shape response with wait_timed_out:true.

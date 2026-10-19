@@ -158,6 +158,44 @@ test_direct_claim_empty_branch_refused_with_envs() {
     test_teardown
 }
 
+test_direct_claim_unknown_branch_refused_with_envs() {
+    CURRENT_TEST_NAME="direct claim: --branch unknown on a slot with claimable envs → branch_required"
+    test_setup
+    seed_free_slot_with_env "feat-old" false
+    local out
+    out=$(bash "$BIN_DIR/claim" --branch unknown --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "branch_required" "unknown treated as empty"
+    assert_eq "$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json")" "false" "slot not claimed"
+    assert_eq "$(jq 'length' "$RL_STATE_DIR/env-registry.json")" "1" "env not destroyed"
+    test_teardown
+}
+
+# TOCTOU guard on the DIRECT path (mirrors lease-advance's 2026-06-07 guard):
+# the destroy loop re-reads each row and destroys only an env STILL claimable
+# on THIS slot. Extracts claim::env_still_claimable_here verbatim.
+test_direct_claim_destroy_recheck_skips_moved_env() {
+    CURRENT_TEST_NAME="direct claim TOCTOU: destroy re-check passes only envs still claimable on this slot"
+    test_setup
+    local fn_src
+    fn_src=$(sed -n '/^claim::env_still_claimable_here() {/,/^}/p' "$BIN_DIR/claim")
+    assert_neq "$fn_src" "" "claim::env_still_claimable_here defined in bin/claim"
+    eval "$fn_src"
+    export RL_ENVS_FILE="$RL_STATE_DIR/env-registry.json"
+    echo '[{"slug":"e1","slot":2,"claimable_by_next":true}]' > "$RL_ENVS_FILE"
+    local r=0; claim::env_still_claimable_here e1 2 2>/dev/null || r=$?
+    assert_eq "$r" "0" "still claimable here → destroy"
+    echo '[{"slug":"e1","slot":1,"claimable_by_next":false}]' > "$RL_ENVS_FILE"
+    r=0; claim::env_still_claimable_here e1 2 2>/dev/null || r=$?
+    assert_eq "$r" "1" "moved slots → skip"
+    echo '[]' > "$RL_ENVS_FILE"
+    r=0; claim::env_still_claimable_here e1 2 2>/dev/null || r=$?
+    assert_eq "$r" "1" "row gone → skip"
+    local loop
+    loop=$(sed -n '/done < <(jq -r .\.\[\] | \.slug. <<<"\$MISMATCHING")/q;p' "$BIN_DIR/claim" | grep -c 'claim::env_still_claimable_here "\$mslug"')
+    assert_eq "$loop" "1" "direct-path destroy loop calls the re-check"
+    test_teardown
+}
+
 run_test "ac9-unknown-returns-persisted" test_ac9_unknown_returns_persisted
 run_test "ac9-empty-returns-persisted" test_ac9_empty_returns_persisted
 run_test "ac9-explicit-override" test_ac9_explicit_real_branch_overrides
@@ -166,4 +204,6 @@ run_test "direct-claim-pinned-preserved" test_direct_claim_preserves_pinned_mism
 run_test "direct-claim-unpinned-destroyed" test_direct_claim_destroys_unpinned_mismatch
 run_test "direct-claim-empty-branch-refused" test_direct_claim_empty_branch_refused_with_envs
 
+run_test "direct-claim-unknown-branch-refused" test_direct_claim_unknown_branch_refused_with_envs
+run_test "direct-claim-toctou-recheck" test_direct_claim_destroy_recheck_skips_moved_env
 print_test_summary

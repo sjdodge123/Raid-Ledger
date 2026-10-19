@@ -150,6 +150,23 @@ if [[ -n "$EXISTING" ]]; then
     exit 0
 fi
 
+# Past the idempotent path, the literal "unknown" (`rl claim`'s fallback when
+# git fails) is as branchless as "" — never match-or-destroy or enqueue on it.
+[[ "$BRANCH" == "unknown" ]] && BRANCH=""
+
+# TOCTOU guard (mirrors lease-advance, 2026-06-07 incident): an env-spin
+# RECLAIM can move an env to another slot between the CLAIMABLE selection and
+# the destroy loop. Re-read the row at destroy time: only destroy an env that
+# is STILL claimable on THIS slot. Returns 0 = safe to destroy.
+claim::env_still_claimable_here() {
+    local slug="$1" slot="$2" still
+    still=$(jq -r --arg slug "$slug" --argjson s "$slot" \
+        '[.[] | select(.slug == $slug and .slot == $s
+                       and (.claimable_by_next // false) == true)] | length' \
+        "$RL_ENVS_FILE" 2>/dev/null || echo "0")
+    [[ "$still" == "1" ]]
+}
+
 # H-VM-3: Validate state files BEFORE reading them. Corrupted JSON makes
 # command substitutions silently echo empty under `set -e`, which (in
 # the prior implementation) let claim proceed as if "queue is empty,
@@ -256,12 +273,17 @@ if [[ -n "$TARGET_SLOT" ]]; then
             if [[ "$(jq 'length' <<<"$MISMATCHING")" -gt 0 ]]; then
                 while read -r mslug; do
                     [[ -z "$mslug" ]] && continue
+                    if ! claim::env_still_claimable_here "$mslug" "$TARGET_SLOT"; then
+                        audit::log claim destroy_skipped_env_moved \
+                            "$(jq -nc --argjson slot "$TARGET_SLOT" --arg slug "$mslug" '{slot:$slot, slug:$slug, reason:"row missing, moved slots, or claimable cleared since selection"}')"
+                        continue
+                    fi
+                    DESTROYED=$(jq -c --arg slug "$mslug" '. + [$slug]' <<<"$DESTROYED")
                     audit::log claim destroy_starting \
                         "$(jq -nc --argjson slot "$TARGET_SLOT" --arg slug "$mslug" --arg b "$BRANCH" '{slot:$slot, slug:$slug, new_branch:$b}')"
                     "$(dirname "$0")/env-destroy" --slug "$mslug" --force >/dev/null 2>&1 || \
                         audit::log claim destroy_failed "$(jq -nc --arg slug "$mslug" '{slug:$slug}')"
                 done < <(jq -r '.[] | .slug' <<<"$MISMATCHING")
-                DESTROYED=$(jq -c '[.[] | .slug]' <<<"$MISMATCHING")
             fi
             if [[ "$(jq 'length' <<<"$MATCHING")" -gt 0 ]]; then
                 # ROK-1336 #6 — per-slug subdomain, never bare. See _inherited_for_slot.
@@ -291,6 +313,15 @@ if [[ -n "$TARGET_SLOT" ]]; then
         emit_slot_result "$TARGET_SLOT" "$INHERITED" "$DESTROYED" "$EXPIRES_AT" "$PRESERVED"
         exit 0
     fi
+fi
+
+# Fleet-claim fix R2 — a branchless waiter never enters a queue: lease-advance
+# would have to drop it at the head, and until then it blocks every waiter
+# behind it. Refuse on every enqueue path, targeted (--slot) or not.
+if [[ -z "$BRANCH" ]]; then
+    audit::log claim refused_branch_required "$(jq -nc --arg agent "$RL_AGENT_ID" '{agent:$agent, path:"enqueue"}')"
+    jq -nc '{ok:false, error:"branch_required", message:"--branch is required to queue for a slot: a branchless queue head would block every waiter behind it"}'
+    exit 2
 fi
 
 # Enqueue path (M5a hard cutover — no legacy busy-error response shape).

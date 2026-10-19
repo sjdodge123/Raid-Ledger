@@ -179,6 +179,25 @@ test_claim_wait_bad_slot_bails() {
     assert_eq "$err" "invalid_slot" "claim-wait must surface invalid_slot from the inner claim"
 }
 
+# A hard error on a RE-POLL (not just the first claim) must surface at once,
+# not be swallowed until the timeout. Stubbed inotifywait/timeout make each
+# wake immediate; the stub corrupts queue.json so the re-poll errors.
+test_claim_wait_repoll_error_surfaces() {
+    CURRENT_TEST_NAME="claim-wait surfaces a re-poll error immediately (exit 2, no timeout)"
+    _seed_claims busy busy
+    export RL_AGENT_ID="cw-repoll"
+    local stub="$RL_STATE_DIR/stubbin"
+    mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nprintf garbage > "$RL_STATE_DIR/queue.json"\nexit 0\n' > "$stub/inotifywait"
+    printf '#!/usr/bin/env bash\nshift\nexec "$@"\n' > "$stub/timeout"
+    chmod +x "$stub/inotifywait" "$stub/timeout"
+    local out exit_code=0
+    out=$(PATH="$stub:$PATH" bash "$BIN_DIR/claim-wait" --branch feat-cw --timeout 5 2>/dev/null) || exit_code=$?
+    assert_exit_code "$exit_code" "2" "re-poll error exits 2"
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "queue_corrupt" "re-poll error JSON surfaced"
+    assert_eq "$(jq -r '.wait_timed_out // empty' <<<"$out" 2>/dev/null)" "" "not reported as a timeout"
+}
+
 run_test "slot-targets-requested-free" test_slot_targets_requested_free_slot
 run_test "slot-enqueues-on-requested-busy" test_slot_enqueues_on_requested_when_busy_not_other_free
 run_test "slot-out-of-range-errors" test_slot_out_of_range_errors
@@ -189,4 +208,5 @@ run_test "slot-zero-padded-enqueues-canonical" test_slot_zero_padded_enqueues_ca
 run_test "claim-wait-forwards-slot-grant" test_claim_wait_forwards_slot_grant
 run_test "claim-wait-bad-slot-bails" test_claim_wait_bad_slot_bails
 
+run_test "claim-wait-repoll-error-surfaces" test_claim_wait_repoll_error_surfaces
 print_test_summary
