@@ -24,33 +24,24 @@ import {
 
 const SIZE = DEMO_GRID.textureSize;
 
-function DemoLayers({
-    scale,
-    shared,
-    labels,
-}: {
-    scale: number;
+const BOX = { width: SIZE, height: SIZE };
+
+interface DemoState {
     shared: boolean;
     labels: boolean;
-}): JSX.Element {
+}
+
+function DemoLayers({ scale, shared, labels }: DemoState & { scale: number }) {
+    const fog = shared ? DEMO_SHARED_FOG : null;
     return (
-        <div
-            className="absolute left-0 top-0"
-            style={{ width: SIZE, height: SIZE }}
-            data-zoom={scale.toFixed(2)}
-        >
+        <div className="absolute left-0 top-0" style={BOX} data-zoom={scale}>
             <img
                 src={DEMO_BASE_MAP_URL}
                 alt=""
-                draggable={false}
-                className="absolute left-0 top-0"
-                style={{ width: SIZE, height: SIZE }}
+                className="absolute"
+                style={BOX}
             />
-            <FogCanvas
-                size={SIZE}
-                personal={DEMO_PERSONAL_FOG}
-                shared={shared ? DEMO_SHARED_FOG : null}
-            />
+            <FogCanvas size={SIZE} personal={DEMO_PERSONAL_FOG} shared={fog} />
             <PinLayer
                 grid={DEMO_GRID}
                 pins={DEMO_PINS}
@@ -75,19 +66,14 @@ function MapDemo(): JSX.Element {
                 className="absolute inset-0"
             >
                 {(vp) => (
-                    <DemoLayers
-                        scale={vp.scale}
-                        shared={shared}
-                        labels={labels}
-                    />
+                    <DemoLayers scale={vp.scale} {...{ shared, labels }} />
                 )}
             </MapViewport>
             <div className="absolute right-2 top-2 z-10">
                 <MapControls
-                    commands={commands}
+                    {...{ commands, sharedAvailable: true }}
                     showShared={shared}
                     onShowShared={setShared}
-                    sharedAvailable
                     pinLabels={labels}
                     onPinLabels={setLabels}
                 />
