@@ -17,7 +17,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { evaluateSentinel, recordTaskSha, SENTINEL_PREFIX } from '../playwright-sentinel.js';
+import {
+  evaluateSentinel,
+  recordTaskSha,
+  resolveGateTier,
+  SENTINEL_PREFIX,
+} from '../playwright-sentinel.js';
 import { playwrightRowStatus } from '../gate-summary.js';
 import type { ExecuteStatusReturn } from '../tools/task-schemas.js';
 
@@ -235,5 +240,42 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
     );
 
     expect(result?.gate_verified).toBe(false);
+  });
+});
+
+// ROK-1793 S2 — the merged table _gate_merge.sh prints at the end of a parallel
+// parent's log: canonical rows whose NOTE carries the owning child.
+const MERGED_CHILDREN = [
+  { task_id: 'f6e5d4c3b2a1a', role: 'a' as const, slot: 1, borrowed: false },
+  { task_id: 'f6e5d4c3b2a1b', role: 'b' as const, slot: 2, borrowed: true },
+];
+function mergedTail(playwright: string, marker = true): string {
+  const row = (n: string, st: string, c: string): string => `${n.padEnd(30)}  ${st} — child f6e5d4c3b2a1${c}`;
+  return [
+    'Lint (all): PASS',
+    'Playwright (desktop + mobile): PASS',
+    '========== Summary ==========',
+    `${'Check'.padEnd(30)}  Result`,
+    row('Build (all workspaces)', 'PASS', 'a slot 1'),
+    row('TypeScript (all)', 'PASS', 'a slot 1'),
+    row('Lint (all)', 'PASS', 'a slot 1'),
+    row('Playwright (desktop + mobile)', playwright, 'b slot 2'),
+    '',
+    marker ? '[parallel] merged: 4 rows from 2 children' : '',
+  ].join('\n');
+}
+
+describe('resolveGateTier — merged parallel table (ROK-1793 S2)', () => {
+  it('earns the static tier from merged rows whose notes name the child', () => {
+    const st = status({ children: MERGED_CHILDREN, log_tail: mergedTail('SKIPPED') });
+    expect(resolveGateTier(st)).toBe('static');
+  });
+  it('earns the playwright tier from the merged Playwright row', () => {
+    expect(resolveGateTier(status({ children: MERGED_CHILDREN, log_tail: mergedTail('PASS') }))).toBe('playwright');
+  });
+  it('earns nothing from a parent without the merged block (relayed raw PASS lines only)', () => {
+    const raw = status({ children: MERGED_CHILDREN, log_tail: 'Build (all workspaces): PASS\nTypeScript (all): PASS\nLint (all): PASS\nPlaywright (desktop + mobile): PASS\n' });
+    expect(resolveGateTier(raw)).toBeNull();
+    expect(resolveGateTier(status({ parallel: { mode: 'parallel', borrowed_slot: 2 }, log_tail: mergedTail('PASS', false) }))).toBeNull();
   });
 });

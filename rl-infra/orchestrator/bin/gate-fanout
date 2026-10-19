@@ -64,6 +64,7 @@ trap 'exit 130' INT
 serial_run() {
     local rc=0
     echo "[parallel] fallback: serial ($1)"
+    state::mutate "$RL_TASKS_DIR/$P.json" '.parallel = {mode: "serial_fallback", borrowed_slot: null}' || true
     RL_AGENT_ID="$OWNER_AGENT" run-on-runner-with-heartbeat --weight heavy \
         -- bash -c "$(fanout::inner "" "$SERIAL_ARGS")" || rc=$?
     exit "$rc"
@@ -78,6 +79,7 @@ case "$RC" in
 esac
 BORROWED="$B"
 echo "[parallel] borrowed slot $B"
+state::mutate "$RL_TASKS_DIR/$P.json" --argjson b "$B" '.parallel = {mode: "parallel", borrowed_slot: $b}' || true
 if ! borrow::copy_tree "$OWNER_SLOT" "$B"; then
     borrow::release "$B" "$P" || true
     BORROWED=""
