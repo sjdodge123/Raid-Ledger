@@ -3386,3 +3386,7 @@ same day (#1278, #1279, #1280).
   Suggested: use Object.hasOwn guards or a ReadonlyMap, as race-icons.ts does.
 - **[nit]** `web/src/dev/simplify-wireframes/SimplifyWireframesPage.tsx:192` — The web/src/dev/** chunks, which carry internal planning paths and memory-file names, ship in the prod bundle; the DEMO_MODE check only gates rendering. Pre-existing: on main @ 6aa64d965.
   Suggested: exclude dev routes from production builds with a build-time flag.
+
+### 2026-10-19 — fix/rok-1851-quickplay-voice-dedup (surfaced during the ROK-1851 review)
+
+- **med** — `api/src/discord-bot/services/ad-hoc-event.service.ts:266` — `adoptEvent` registers a server-born Quick Play under the monitor key with a fresh `memberSet` instead of sharing state through `adoptEventState`, so when the voice key was registered first the two keys hold separate member sets and one key can empty and start grace while the other key's member set is still populated. Pre-existing: `adoptEvent` landed with ROK-1800 (a616c0ae4) and the ROK-1851 branch does not touch it; the review flagged it because same-channel double registration is now the normal case. Suggested: have `adoptEvent` reuse an existing state for the same eventId (via `adoptEventState`) rather than minting a new `memberSet`.
