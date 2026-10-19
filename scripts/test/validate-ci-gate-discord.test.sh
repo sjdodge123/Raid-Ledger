@@ -108,8 +108,11 @@ INVOKE_RC=0
 # _check_state_locks_mount and exit 98 on /nonexistent-lock-dir before the
 # mocked smoke runs. Strip every inherited RL_* that routes to the runner path
 # (and RL_VALIDATE_CI_DRY, which would turn the run into a source-only dry run).
+# The inherited Playwright/Discord selectors change routing too: E2E_SPECS with
+# --no-e2e exits 2, and E2E_SCOPE / SMOKE_CHANNEL_SET re-scope the tiers.
 RUNNER_ENV_UNSET=(-u RL_SLOT -u RL_SLOT_DISCORD_CLIENT_ID -u RL_DISCORD_LOCK_ALWAYS -u RL_TASK_ID
-    -u RL_TEST_REDIS_CNAME -u RL_WORKSPACE_ROOT -u RL_VALIDATE_CI_DRY)
+    -u RL_TEST_REDIS_CNAME -u RL_WORKSPACE_ROOT -u RL_VALIDATE_CI_DRY
+    -u E2E_SPECS -u E2E_SCOPE -u SMOKE_CHANNEL_SET)
 
 # invoke <RL_GATE_DISCORD> <RL_GATE_E2E> -- <validate-ci flags...>
 # Companion-bot credentials are fake but present, so the Discord tier is in
