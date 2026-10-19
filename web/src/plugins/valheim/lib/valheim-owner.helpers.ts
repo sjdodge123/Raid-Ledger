@@ -1,5 +1,5 @@
 /** ROK-1836 — owner chip + "updated" copy shared by the hub row and the page header. */
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistance } from 'date-fns';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import type { StatusChipTone } from '../../../components/ui/status-chip';
 
@@ -18,5 +18,5 @@ export function ownerChip(c: Pick<ValheimCharacterSummary, 'claimedBy' | 'claimS
 export function updatedAgo(capturedAt: string, now: Date = new Date()): string {
     const at = new Date(capturedAt);
     if (Number.isNaN(at.getTime()) || at > now) return 'Updated just now';
-    return `Updated ${formatDistanceToNow(at, { addSuffix: true })}`;
+    return `Updated ${formatDistance(at, now, { addSuffix: true })}`;
 }
