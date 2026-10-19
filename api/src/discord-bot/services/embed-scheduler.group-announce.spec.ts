@@ -142,7 +142,6 @@ describe('EmbedSchedulerService — deferred group announce (ROK-1832 D6a)', () 
     await run();
     expect(notify).not.toHaveBeenCalled();
   });
-
 });
 
 describe('EmbedSchedulerService — deferred group announce without a bot (Codex r5)', () => {
