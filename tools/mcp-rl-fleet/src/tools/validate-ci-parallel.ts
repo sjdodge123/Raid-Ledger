@@ -98,19 +98,29 @@ export type MutagenLister = () => Promise<string>;
 const defaultLister: MutagenLister = async () =>
   (await execFileP('mutagen', ['sync', 'list'], { timeout: 15_000, maxBuffer: 4 * 1024 * 1024 })).stdout;
 
+/** A listing we can trust: at least one session, or Mutagen's explicit "none". */
+const LISTING_SHAPE = /^\s*Name:\s*\S|no (synchronization )?sessions found/im;
+
+/** gate-fanout's --force-serial reason when the busy slots are unknown. */
+export const ENUMERATION_FAILED = 'slot enumeration failed';
+
 /**
- * Slots with a live laptop Mutagen session. A failed listing returns [] — the
- * orchestrator still refuses claimed/queued slots, and the ones this misses are
- * other agents' claimed slots, which borrow::try never takes anyway.
+ * Slots with a live laptop Mutagen session, or null when they are unknown — the
+ * listing threw (non-zero exit, timeout) or its output has no recognisable
+ * shape. Unknown is NOT "none busy" (Codex r2 P1): an orphaned session on an
+ * unclaimed slot would overwrite child B's copied tree, so the caller must not
+ * fan out.
  *
  * @param lister - Override for tests.
  */
-export async function busySlotsFromMutagen(lister: MutagenLister = defaultLister): Promise<number[]> {
+export async function busySlotsFromMutagen(lister: MutagenLister = defaultLister): Promise<number[] | null> {
+  let listing: string;
   try {
-    return parseBusySlots(await lister());
+    listing = await lister();
   } catch {
-    return [];
+    return null;
   }
+  return LISTING_SHAPE.test(listing) ? parseBusySlots(listing) : null;
 }
 
 /**
@@ -118,29 +128,34 @@ export async function busySlotsFromMutagen(lister: MutagenLister = defaultLister
  *
  * @param params - The rl_validate_ci params (reads fail_fast).
  * @param innerEnv - The `KEY=value ` prefix every child's validate-ci.sh gets.
- * @param busySlots - Slots to exclude from borrowing.
+ * @param busySlots - Slots to exclude from borrowing; null = unknown, which
+ *   makes gate-fanout run the serial gate (`--force-serial`).
  * @param target - P's id, slot A and the resolved argv.
  */
 export function buildFanoutCommand(
   params: ParallelParams,
   innerEnv: string,
-  busySlots: number[],
+  busySlots: number[] | null,
   target: FanoutTarget,
 ): string {
   const rest = target.args.filter((a) => a !== '--fleet' && !E2E_FORCING_FLAGS.includes(a));
+  // B / C keep every caller flag (--ci, --with-e2e, ...) after their own pair, so
+  // an explicit --with-e2e still overrides --fleet-e2e's diff gate (Codex r2 P2).
+  const eArgs = [...E2E_CHILD_ARGS, ...target.args.filter((a) => a !== '--fleet' && a !== '--fleet-e2e')];
   const join = (argv: string[]): string => argv.map((a) => shellQuote(a)).join(' ');
   const parts = [
     GATE_FANOUT,
     shellQuote(target.taskId),
     `--owner-slot ${target.ownerSlot}`,
-    `--exclude-slots ${shellQuote(busySlots.join(','))}`,
+    `--exclude-slots ${shellQuote((busySlots ?? []).join(','))}`,
     `--inner-env ${shellQuote(innerEnv)}`,
     `--a-args ${shellQuote(join(['--fleet', '--no-e2e', ...rest]))}`,
-    `--b-args ${shellQuote(join(E2E_CHILD_ARGS))}`,
+    `--b-args ${shellQuote(join(eArgs))}`,
     `--serial-args ${shellQuote(join(target.args))}`,
     `--child-timeout ${target.childTimeout}`,
   ];
   if (params.fail_fast === true) parts.push('--fail-fast');
+  if (busySlots === null) parts.push(`--force-serial ${shellQuote(ENUMERATION_FAILED)}`);
   return parts.join(' ');
 }
 

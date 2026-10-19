@@ -198,6 +198,38 @@ test_children_record_outcome() {
         '[{"role":"a","status":"succeeded","exit":0},{"role":"b","status":"failed","exit":1}]' "status + exit per child"
 }
 
+test_force_serial() {
+    CURRENT_TEST_NAME="--force-serial <reason> (MCP could not enumerate Mutagen slots) -> serial, nothing borrowed"
+    _seed free
+    local out rc=0; out=$(_fanout --force-serial "slot enumeration failed") || rc=$?
+    assert_contains "$out" "[parallel] fallback: serial (slot enumeration failed)" "fallback line names the reason"
+    assert_eq "$(grep -c '^start' "$CALLS")" "0" "no child dispatched"
+    assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 never borrowed"
+    assert_eq "$(jq -r '.parallel.mode' "$RL_TASKS_DIR/$P.json")" "serial_fallback" "P records serial_fallback"
+    assert_exit_code "$rc" "0" "serial exit passes through"
+}
+
+test_b_released_when_b_finishes() {
+    CURRENT_TEST_NAME="B terminal while A runs -> borrow released before A ends; final release is a no-op"
+    _seed free; export SHIM_A=hang SHIM_B=pass
+    PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" --inner-env "" \
+        --a-args "--fleet --no-e2e" --b-args "--only-e2e" --serial-args "--fleet" >/dev/null 2>&1 &
+    local pid=$! i released=no
+    for i in $(seq 1 100); do
+        if [[ "$(_children | jq length)" == "2" && "$(_slot2)" == '{"claimed":false,"agent_id":null}' ]]; then released=yes; break; fi
+        sleep 0.1
+    done
+    assert_eq "$released" "yes" "slot 2 released while A still runs"
+    assert_eq "$(jq -r .status "$RL_TASKS_DIR/${P}a.json")" "running" "A was still running at release"
+    local f="$RL_TASKS_DIR/${P}a.json"; jq '.status = "succeeded" | .script_exit_code = 0' "$f" > "$f.t" && mv "$f.t" "$f"
+    for i in $(seq 1 100); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    assert_eq "$(jq -s '[.[] | select(.cmd == "borrow" and .outcome == "released")] | length' "$RL_STATE_DIR/audit.log")" "1" "exactly one borrow release audited (the post-wait + trap releases are no-ops)"
+    unset SHIM_A SHIM_B
+}
+
+run_test "force-serial" test_force_serial
+run_test "b-released-when-b-finishes" test_b_released_when_b_finishes
 run_test "specs-env-only-e2e-children" test_specs_env_only_reaches_e2e_children
 run_test "children-record-outcome" test_children_record_outcome
 run_test "fallback-no-free-slot" test_fallback_no_free_slot

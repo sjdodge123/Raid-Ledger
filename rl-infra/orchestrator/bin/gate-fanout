@@ -3,7 +3,7 @@
 #
 # Usage: gate-fanout <P> --owner-slot A --exclude-slots csv --inner-env str
 #            --a-args str --b-args str --serial-args str [--fail-fast]
-#            [--child-timeout N]
+#            [--child-timeout N] [--force-serial reason]
 #
 # Runs as task P (weight light, holds no admission). Borrows a FREE second slot
 # B, copies slot A's tree onto it, dispatches child A (A: `RL_GATE_E2E=deferred`
@@ -12,7 +12,10 @@
 # lines, and — only when B printed `[parallel] discord-deferred` — runs phase-2
 # child C on A (`RL_GATE_DISCORD=only` + b-args, light). Then exec's
 # _gate_merge.sh P (exit code = merge's). No free slot / low memory / a failed
-# copy run the serial args on A exactly as a non-parallel gate (exit passthrough).
+# copy run the serial args on A exactly as a non-parallel gate (exit passthrough);
+# so does --force-serial <reason> (the MCP could not enumerate Mutagen-busy slots,
+# so no slot is known to be safe to borrow — Codex r2 P1). B is released the
+# moment child B is terminal, not when A also ends (Codex r2 P2).
 # The EXIT trap cancels live children and releases the borrow on EVERY path.
 set -euo pipefail
 BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
@@ -32,7 +35,7 @@ source "$BIN_DIR_SELF/_fanout.sh"
 
 P="${1:-}"; shift || true
 [[ "$P" =~ ^[a-z0-9]{8,32}$ ]] || { echo '{"ok":false,"error":"invalid_parent_task_id"}' >&2; exit 2; }
-OWNER_SLOT="" EXCLUDE="" INNER_ENV="" A_ARGS="" B_ARGS="" SERIAL_ARGS="" FAIL_FAST=0 CHILD_TIMEOUT=5400
+OWNER_SLOT="" EXCLUDE="" INNER_ENV="" A_ARGS="" B_ARGS="" SERIAL_ARGS="" FAIL_FAST=0 CHILD_TIMEOUT=5400 FORCE_SERIAL=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --owner-slot) OWNER_SLOT="$2"; shift 2 ;;
@@ -43,6 +46,7 @@ while [[ $# -gt 0 ]]; do
         --serial-args) SERIAL_ARGS="$2"; shift 2 ;;
         --fail-fast) FAIL_FAST=1; shift ;;
         --child-timeout) CHILD_TIMEOUT="$2"; shift 2 ;;
+        --force-serial) FORCE_SERIAL="$2"; shift 2 ;;
         *) echo "{\"ok\":false,\"error\":\"unknown_arg\"}" >&2; exit 2 ;;
     esac
 done
@@ -70,6 +74,8 @@ serial_run() {
     exit "$rc"
 }
 
+[[ -z "$FORCE_SERIAL" ]] || serial_run "$FORCE_SERIAL"
+
 B=""; RC=0
 B=$(borrow::try "$OWNER_SLOT" "$P" "$EXCLUDE") || RC=$?
 case "$RC" in
@@ -91,10 +97,12 @@ CA=$(fanout::child_id "$P" a); CB=$(fanout::child_id "$P" b)
 # E2E_SPECS — so A drops the Playwright selectors; B, C and serial keep them.
 fanout::dispatch a "$OWNER_SLOT" heavy "$OWNER_AGENT" false "env -u E2E_SPECS -u E2E_SCOPE RL_GATE_E2E=deferred " "$A_ARGS"
 fanout::dispatch b "$B" medium "$(borrow::agent_id "$P")" true "RL_GATE_DISCORD=defer " "$B_ARGS"
+# wait_all frees the borrow as soon as CB is terminal, so B's queue moves while
+# A still runs; the release below (and the EXIT trap) are backstops.
+FANOUT_BORROW_CHILD="$CB"
 fanout::wait_all "$FAIL_FAST" "$CA" "$CB"
 
-# B is idle from here on — free it before phase 2 so its queue moves sooner.
-borrow::release "$BORROWED" "$P" || true
+if [[ -n "$BORROWED" ]]; then borrow::release "$BORROWED" "$P" || true; fi
 BORROWED=""
 
 if grep -q '^\[parallel\] discord-deferred' "$RL_TASKS_DIR/$CB.log" 2>/dev/null \

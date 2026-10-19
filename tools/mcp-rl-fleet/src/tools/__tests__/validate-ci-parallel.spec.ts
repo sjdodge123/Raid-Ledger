@@ -49,9 +49,14 @@ describe('busy slots from mutagen', () => {
   it('parses rl-slot-N session names only, de-duplicated and sorted', () => {
     expect(parseBusySlots(LISTING)).toEqual([1, 3]);
   });
-  it('uses the injected lister and fails open to [] on error', async () => {
+  it('uses the injected lister and returns null (unknown) when the listing fails (Codex r2 P1)', async () => {
     expect(await busySlotsFromMutagen(async () => LISTING)).toEqual([1, 3]);
-    expect(await busySlotsFromMutagen(async () => Promise.reject(new Error('no mutagen')))).toEqual([]);
+    expect(await busySlotsFromMutagen(async () => Promise.reject(new Error('no mutagen')))).toBeNull();
+  });
+  it('returns null for output it cannot parse, [] only for an explicit no-sessions listing', async () => {
+    expect(await busySlotsFromMutagen(async () => 'Error: unable to connect to daemon')).toBeNull();
+    expect(await busySlotsFromMutagen(async () => '')).toBeNull();
+    expect(await busySlotsFromMutagen(async () => '-----\nNo synchronization sessions found\n-----')).toEqual([]);
   });
 });
 
@@ -103,6 +108,21 @@ describe('e2e forcing (Codex r1 P2)', () => {
   });
 });
 
+describe('caller flags reach the e2e children (Codex r2 P2)', () => {
+  const bArgs = (c: string): string => c.split('--b-args ')[1]?.split(' --serial-args')[0] ?? '';
+  const aArgs = (c: string): string => c.split('--a-args ')[1]?.split(' --b-args')[0] ?? '';
+  it("forwards --ci to B (and so C) after B's own --only-e2e --fleet-e2e", () => {
+    const c = buildFanoutCommand({}, ENV, [], { ...TARGET, args: ['--ci', '--fleet'] });
+    expect(bArgs(c)).toBe(`''\\''--only-e2e'\\'' '\\''--fleet-e2e'\\'' '\\''--ci'\\'''`);
+    expect(aArgs(c)).toContain('--ci');
+  });
+  it('forwards --with-e2e to B after --fleet-e2e (explicit wins) but never to A', () => {
+    const c = buildFanoutCommand({}, ENV, [], { ...TARGET, args: ['--fleet', '--with-e2e'] });
+    expect(bArgs(c)).toBe(`''\\''--only-e2e'\\'' '\\''--fleet-e2e'\\'' '\\''--with-e2e'\\'''`);
+    expect(aArgs(c)).not.toContain('--with-e2e');
+  });
+});
+
 describe('parallelTarget', () => {
   it('refuses an ineligible request and an unclaimed caller', async () => {
     expect(await parallelTarget({ parallel: true }, 'abcdef123456', 1, ENV, [], 5400)).toMatchObject({
@@ -115,6 +135,17 @@ describe('parallelTarget', () => {
   it('builds the command with the listed busy slots', async () => {
     const r = await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', 1, ENV, ['--fleet'], 5400, async () => LISTING);
     expect('cmd' in r && r.cmd).toContain("--exclude-slots '1,3'");
+    expect('cmd' in r && r.cmd).not.toContain('--force-serial');
+  });
+  it('forces the serial fallback when the listing throws (Codex r2 P1)', async () => {
+    const r = await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', 1, ENV, ['--fleet'], 5400,
+      async () => Promise.reject(new Error('timeout')));
+    expect('cmd' in r && r.cmd).toContain("--force-serial 'slot enumeration failed'");
+  });
+  it('forces the serial fallback when the listing is unparsable', async () => {
+    const r = await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', 1, ENV, ['--fleet'], 5400,
+      async () => 'garbage');
+    expect('cmd' in r && r.cmd).toContain("--force-serial 'slot enumeration failed'");
   });
 });
 
