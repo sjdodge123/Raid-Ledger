@@ -61,7 +61,11 @@ export type ValheimCharacterSummary = z.infer<
 
 /** `GET /plugins/valheim/armory/characters`. */
 export const ValheimCharacterListResponseSchema = z
-  .object({ data: z.array(ValheimCharacterSummarySchema) })
+  .object({
+    data: z.array(ValheimCharacterSummarySchema),
+    /** ROK-1836 follow-up (additive): total rows for this server/filter. */
+    total: z.number().int().nonnegative().optional(),
+  })
   .strict();
 export type ValheimCharacterListResponse = z.infer<
   typeof ValheimCharacterListResponseSchema
@@ -132,6 +136,8 @@ export const ValheimCharacterDetailSchema =
     maps: z.array(ValheimCharacterMapRefSchema),
     items: z.record(ValheimPrefabIdSchema, ValheimCatalogEntrySchema).optional(),
     atlas: ValheimMapBaseMapSchema.nullable().optional(),
+    /** ROK-1836 follow-up (additive): the server's community hub (ROK-1831), null when the server is not a hub. */
+    hubId: Id.nullable().optional(),
   }).strict();
 export type ValheimCharacterDetail = z.infer<
   typeof ValheimCharacterDetailSchema
@@ -182,6 +188,10 @@ export const ValheimClaimEventSchema = z
     toUserId: Id.nullable(),
     actorUserId: Id.nullable(),
     createdAt: Iso,
+    /** ROK-1836 follow-up (additive): resolved users for the ids above, for display. */
+    fromUser: ValheimCharacterOwnerSchema.nullable().optional(),
+    toUser: ValheimCharacterOwnerSchema.nullable().optional(),
+    actor: ValheimCharacterOwnerSchema.nullable().optional(),
   })
   .strict();
 export type ValheimClaimEvent = z.infer<typeof ValheimClaimEventSchema>;
