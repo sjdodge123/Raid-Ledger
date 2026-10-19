@@ -74,8 +74,13 @@ describe('PinLayer (ROK-1837 D8)', () => {
     it('strikes through a checked pin', () => {
         renderLayer();
         const portal = screen.getByRole('button', { name: 'Portal (Icon2)' });
-        expect(portal.className).toContain('line-through');
         expect(portal.getAttribute('data-checked')).toBe('true');
+        // The label is absolutely positioned: a decoration on the button never
+        // reaches it, so the strike-through must sit on the label itself.
+        expect(screen.getByText('Portal').className).toContain('line-through');
+        expect(screen.getByText('Home').className).not.toContain(
+            'line-through',
+        );
     });
 
     it('tapping a pin opens its label; tapping again or Escape closes it', () => {

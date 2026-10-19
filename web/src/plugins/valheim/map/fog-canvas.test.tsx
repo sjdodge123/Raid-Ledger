@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useLayoutEffect } from 'react';
+import type { ReactNode } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { FogCanvas } from './fog-canvas';
 import { parseCssRgb } from './fog-theme';
@@ -161,5 +163,33 @@ describe('FogCanvas theme scope (ROK-1837 review)', () => {
         expect(Array.from(painted.at(-1)?.data.slice(0, 3) ?? [])).toEqual([
             248, 250, 252,
         ]);
+    });
+});
+
+/** Records how many fog paints had landed when its layout effect ran. */
+function PaintProbe({
+    onLayout,
+    children,
+}: {
+    onLayout: () => void;
+    children: ReactNode;
+}) {
+    useLayoutEffect(onLayout);
+    return <>{children}</>;
+}
+
+describe('FogCanvas paint timing (ROK-1837 Codex r4)', () => {
+    it('paints before the browser can paint (no unfogged base-image frame)', () => {
+        // A parent's layout effect runs after the child's layout effects and
+        // before the browser paints; a passive-effect paint lands after it.
+        let paintsAtLayout = -1;
+        render(
+            <PaintProbe
+                onLayout={() => (paintsAtLayout = put.mock.calls.length)}
+            >
+                <FogCanvas size={SIZE} personal={bits([0])} shared={null} />
+            </PaintProbe>,
+        );
+        expect(paintsAtLayout).toBe(1);
     });
 });
