@@ -30,7 +30,8 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { HubNotifyBell, hubBellVisible } from './hub-notify-bell';
+import { HubNotifyBell } from './hub-notify-bell';
+import { hubBellVisible } from './hub-notify-bell.helpers';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));

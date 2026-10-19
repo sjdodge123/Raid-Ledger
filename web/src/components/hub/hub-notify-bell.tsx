@@ -6,19 +6,13 @@
  * staff included).
  */
 import type { JSX } from 'react';
-import type { GuildPage, GuildViewerAccess } from '@raid-ledger/contract';
+import type { GuildPage } from '@raid-ledger/contract';
 import { NotifyBell } from '../notifications/notify-bell';
 import { useHubNotificationMute } from '../../hooks/use-hub-notification-mute';
+import { hubBellVisible } from './hub-notify-bell.helpers';
 
-export const HUB_NOTIFICATION_SETTINGS_HREF = '/profile/notifications#notif-hub_leader_post';
+const HUB_NOTIFICATION_SETTINGS_HREF = '/profile/notifications#notif-hub_leader_post';
 const HUB_MUTED_HINT = 'Leader posts and events tagged to this group. Muting keeps you in the group.';
-const MEMBER_ROLES: ReadonlySet<GuildViewerAccess['role']> = new Set(['member', 'officer', 'leader']);
-
-/** D11 — the viewer is a real member of this group. */
-export function hubBellVisible(viewer: GuildViewerAccess): boolean {
-    return MEMBER_ROLES.has(viewer.role) && viewer.notificationsMuted !== undefined;
-}
-
 function MemberBell({ page }: { page: GuildPage }): JSX.Element {
     const { muted, isReady, isPending, setMuted } = useHubNotificationMute(page);
     return (

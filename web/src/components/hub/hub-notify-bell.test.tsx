@@ -3,6 +3,7 @@
  * (D11), toggles optimistically through `/guilds/:id/notification-mute`, and
  * rolls back with a toast when the write fails.
  */
+import type { JSX } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
