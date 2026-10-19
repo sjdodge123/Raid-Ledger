@@ -104,7 +104,13 @@ export function ItemIcon({
     if (icon === null) return <InitialsFace label={resolved.label} />;
     if (icon.kind === 'file')
         return (
-            <FileFace sha256={icon.sha256} label={resolved.label} ctx={ctx} />
+            // Keyed by identity: a load failure belongs to that image, not the tile.
+            <FileFace
+                key={`${ctx.serverId}:${icon.sha256}`}
+                sha256={icon.sha256}
+                label={resolved.label}
+                ctx={ctx}
+            />
         );
     return <AtlasFace icon={icon} label={resolved.label} ctx={ctx} />;
 }

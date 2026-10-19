@@ -67,7 +67,11 @@ export function useRovingGrid(rows: number, cols: number) {
         const at = cellOf(e.target);
         if (at) setActive(at);
     }, []);
+    // A refreshed snapshot can shrink the grid under the active cell: clamp so
+    // exactly one remaining cell keeps the tab stop.
+    const ar = Math.max(0, Math.min(active.r, rows - 1));
+    const ac = Math.max(0, Math.min(active.c, cols - 1));
     const tabIndexFor = (r: number, c: number): number =>
-        r === active.r && c === active.c ? 0 : -1;
+        r === ar && c === ac ? 0 : -1;
     return { tabIndexFor, gridProps: { onKeyDown, onFocus } };
 }
