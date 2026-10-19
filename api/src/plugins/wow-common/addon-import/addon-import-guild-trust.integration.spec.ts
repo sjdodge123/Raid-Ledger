@@ -23,6 +23,7 @@ import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import {
   FIXTURE_GUID,
+  buildCharPayload,
   buildGuildPayload,
   buildImportString,
   buildMember,
@@ -402,6 +403,12 @@ describe('ROK-1794 — self-introduced roster rows (Codex P1)', () => {
     // A second importer, listed by someone else, carries the row.
     const other = await memberToken('corroborator');
     const otherId = await otherChar(other);
+    // The guard reads the importer's STORED GUID, and a paste pins it only
+    // after its sections ran — so they link their character first.
+    const pin = buildCharPayload({ who: whoAsOther('Player-4395-005A0002') });
+    expect((await apply(other, otherId, buildImportString(pin))).status).toBe(
+      200,
+    );
     const theirs = buildGuildPayload([
       buildMember(0x5a0001, { guid: 'Player-4395-005A0001' }),
       buildMember(0x5a0002, { guid: 'Player-4395-005A0002' }),
