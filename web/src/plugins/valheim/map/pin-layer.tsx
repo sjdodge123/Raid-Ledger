@@ -84,6 +84,7 @@ interface PinButtonProps {
     grid: ValheimMapGrid;
     scale: number;
     open: boolean;
+    labels: boolean;
     onToggle: () => void;
     onClose: () => void;
 }
@@ -93,6 +94,7 @@ function PinButton({
     grid,
     scale,
     open,
+    labels,
     onToggle,
     onClose,
 }: PinButtonProps) {
@@ -109,7 +111,7 @@ function PinButton({
             <PinDisc pin={pin} />
             <PinLabel
                 text={text}
-                shown={open || scale >= PIN_LABELS_ALWAYS_SCALE}
+                shown={open || labels || scale >= PIN_LABELS_ALWAYS_SCALE}
             />
         </button>
     );
@@ -122,9 +124,12 @@ export interface PinLayerProps {
     scale: number;
     /** The shared (cartography table) layer toggle. */
     showShared: boolean;
+    /** The "Pin labels" switch (D9): every label shown at any zoom. */
+    labels?: boolean;
 }
 
-export function PinLayer({ grid, pins, scale, showShared }: PinLayerProps) {
+export function PinLayer(props: PinLayerProps) {
+    const { grid, pins, scale, showShared, labels = false } = props;
     const [openKey, setOpenKey] = useState<string | null>(null);
     const size = grid.textureSize;
     return (
@@ -142,6 +147,7 @@ export function PinLayer({ grid, pins, scale, showShared }: PinLayerProps) {
                         grid={grid}
                         scale={scale}
                         open={openKey === key}
+                        labels={labels}
                         onToggle={() =>
                             setOpenKey(openKey === key ? null : key)
                         }
