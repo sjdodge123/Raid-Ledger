@@ -12,6 +12,7 @@ import {
 } from '../../../test/mocks/valheim-armory-handlers';
 import type { HubCtx } from '../../hub-module';
 import { serverHubGameTabs } from '../../pelican/hub/server-hub-game-tabs';
+import { usePluginStore } from '../../../stores/plugin-store';
 import '../register';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -94,6 +95,7 @@ describe('Valheim hub Characters tab (ROK-1836)', () => {
                 });
             }),
         );
+        usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
         const tab = charactersTab();
         expect(tab.label).toBe('Characters');
         expect(tab.order).toBe(15);
