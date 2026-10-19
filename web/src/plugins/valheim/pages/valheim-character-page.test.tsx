@@ -85,7 +85,16 @@ describe('ValheimCharacterPage', () => {
 });
 
 describe('ValheimCharacterPage (cont.)', () => {
-    it('draws no crumb on a cold deep link (no hub id in the detail yet)', async () => {
+    it('falls back to the detail hub id on a cold deep link', async () => {
+        server.use(valheimCharacterHandler(valheimCharacterDetail({ hubId: 4 })));
+        renderPage('/valheim/characters/12');
+        const crumb = await screen.findByRole('link', {
+            name: 'Fixtureheim · Characters',
+        });
+        expect(crumb).toHaveAttribute('href', '/guilds/4#characters');
+    });
+
+    it('draws no crumb on a cold deep link with no hub id in the detail', async () => {
         server.use(valheimCharacterHandler(valheimCharacterDetail()));
         renderPage('/valheim/characters/12');
         await screen.findByRole('heading', { level: 1 });

@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
+    hubCharactersPath,
     hubPathFrom,
     parseCharacterId,
     valheimCharacterHref,
 } from './valheim-routes';
 
 describe('valheim routes', () => {
+    it('builds the hub Characters tab path', () =>
+        expect(hubCharactersPath(4)).toBe('/guilds/4#characters'));
     it('builds the character href', () =>
         expect(valheimCharacterHref(11)).toBe('/valheim/characters/11'));
     it.each([

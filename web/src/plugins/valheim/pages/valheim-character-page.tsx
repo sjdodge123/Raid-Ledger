@@ -10,7 +10,11 @@ import { useValheimCharacter } from '../hooks/use-valheim-characters';
 import { isNotFoundError } from '../lib/valheim-armory-api';
 import { ValheimCharacterHeader } from '../character/character-header';
 import { ValheimCharacterSections } from '../character/character-sections';
-import { hubPathFrom, parseCharacterId } from '../lib/valheim-routes';
+import {
+    hubCharactersPath,
+    hubPathFrom,
+    parseCharacterId,
+} from '../lib/valheim-routes';
 import { useAuth } from '../../../hooks/use-auth';
 import {
     characterPageState,
@@ -91,11 +95,18 @@ function CharacterBody({ character }: { character: ValheimCharacterDetail }) {
     );
 }
 
+/** A cold deep link has no router state: the detail's hub id still finds the way back. */
+function fallbackHubPath(c: ValheimCharacterDetail | undefined): string | null {
+    const hubId = c?.hubId;
+    return typeof hubId === 'number' ? hubCharactersPath(hubId) : null;
+}
+
 export function ValheimCharacterPage() {
     const id = parseCharacterId(useParams<{ id: string }>().id);
-    const hubPath = hubPathFrom(useLocation().state);
+    const fromState = hubPathFrom(useLocation().state);
     const query = useValheimCharacter(id);
     const c = query.data;
+    const hubPath = fromState ?? fallbackHubPath(c);
     const state = characterPageState({
         hasId: id !== null,
         isPending: query.isPending,
