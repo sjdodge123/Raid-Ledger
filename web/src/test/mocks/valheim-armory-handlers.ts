@@ -122,6 +122,32 @@ const stack = (
     ...over,
 });
 
+function sheetInventory(
+    sword: ValheimItemStack,
+): ValheimCharacterDetail['inventory'] {
+    return {
+        grid: {
+            width: 8,
+            height: 7,
+            extraRows: [
+                { y: 4, purpose: 'equipment' },
+                { y: 5, purpose: 'equipment' },
+                { y: 6, purpose: 'quickslot' },
+            ],
+        },
+        items: [
+            {
+                x: 0,
+                y: 0,
+                equipped: false,
+                item: stack('Resin', { stack: 30 }),
+            },
+            { x: 1, y: 0, equipped: false, item: stack('ModdedAxe') },
+            { x: 0, y: 4, equipped: true, item: sword },
+        ],
+    };
+}
+
 /** A full sheet: 8×7 EAQS grid (2 equipment rows + 1 quick-slot row), one unknown prefab. */
 export function valheimSheetFixture(
     over: Partial<ValheimCharacterDetail> = {},
@@ -136,27 +162,7 @@ export function valheimSheetFixture(
             { slot: 'rightHand', item: sword },
             { slot: 'head', item: stack('HelmetBronze') },
         ],
-        inventory: {
-            grid: {
-                width: 8,
-                height: 7,
-                extraRows: [
-                    { y: 4, purpose: 'equipment' },
-                    { y: 5, purpose: 'equipment' },
-                    { y: 6, purpose: 'quickslot' },
-                ],
-            },
-            items: [
-                {
-                    x: 0,
-                    y: 0,
-                    equipped: false,
-                    item: stack('Resin', { stack: 30 }),
-                },
-                { x: 1, y: 0, equipped: false, item: stack('ModdedAxe') },
-                { x: 0, y: 4, equipped: true, item: sword },
-            ],
-        },
+        inventory: sheetInventory(sword),
         skills: [
             { id: 'Swords', level: 34.25, accumulator: 0 },
             { id: 'Run', level: 41, accumulator: 0 },

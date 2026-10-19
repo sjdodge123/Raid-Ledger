@@ -4,6 +4,7 @@
  * the ROK-1831 `HubTab` seam once that lands.
  */
 import { useLocation } from 'react-router-dom';
+import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { useValheimCharacters } from '../hooks/use-valheim-characters';
 import { ValheimCharacterRow } from './valheim-character-row';
 
@@ -12,6 +13,48 @@ function Quiet({ children, role }: { children: string; role?: 'alert' }) {
         <div className="py-12 text-center" role={role}>
             <p className="text-sm text-muted">{children}</p>
         </div>
+    );
+}
+
+function TabHeading({ count }: { count: number | null }) {
+    return (
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-edge pb-2">
+            <h2
+                id="valheim-characters-h"
+                className="text-lg font-semibold text-foreground"
+            >
+                Characters{' '}
+                {count !== null && (
+                    <span className="text-sm font-medium text-muted">
+                        {count}
+                    </span>
+                )}
+            </h2>
+            <span className="text-xs text-dim">
+                Characters seen on this server by the Valheim Link mod
+            </span>
+        </div>
+    );
+}
+
+function RowList({
+    rows,
+    hubPath,
+}: {
+    rows: ValheimCharacterSummary[];
+    hubPath: string;
+}) {
+    if (rows.length === 0) return null;
+    return (
+        <ul className="flex flex-col gap-2">
+            {rows.map((c) => (
+                <ValheimCharacterRow
+                    key={c.id}
+                    character={c}
+                    hubPath={hubPath}
+                />
+            ))}
+        </ul>
     );
 }
 
@@ -24,22 +67,7 @@ export function ValheimCharactersTab({ serverId }: { serverId: number }) {
             aria-labelledby="valheim-characters-h"
             aria-busy={query.isPending}
         >
-            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-edge pb-2">
-                <h2
-                    id="valheim-characters-h"
-                    className="text-lg font-semibold text-foreground"
-                >
-                    Characters{' '}
-                    {query.isSuccess && (
-                        <span className="text-sm font-medium text-muted">
-                            {rows.length}
-                        </span>
-                    )}
-                </h2>
-                <span className="text-xs text-dim">
-                    Characters seen on this server by the Valheim Link mod
-                </span>
-            </div>
+            <TabHeading count={query.isSuccess ? rows.length : null} />
             {query.isError && (
                 <Quiet role="alert">
                     Couldn't load characters. Try again in a moment.
@@ -51,17 +79,7 @@ export function ValheimCharactersTab({ serverId }: { serverId: number }) {
                     Valheim Link mod.
                 </Quiet>
             )}
-            {rows.length > 0 && (
-                <ul className="flex flex-col gap-2">
-                    {rows.map((c) => (
-                        <ValheimCharacterRow
-                            key={c.id}
-                            character={c}
-                            hubPath={`${pathname}${search}#characters`}
-                        />
-                    ))}
-                </ul>
-            )}
+            <RowList rows={rows} hubPath={`${pathname}${search}#characters`} />
         </section>
     );
 }

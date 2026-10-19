@@ -84,7 +84,9 @@ describe('ValheimCharactersTab', () => {
             ),
         ).toBeInTheDocument();
     });
+});
 
+describe('ValheimCharactersTab (cont.)', () => {
     it('says what to do when the server has no characters', async () => {
         server.use(valheimCharactersHandler([]));
         renderTab();

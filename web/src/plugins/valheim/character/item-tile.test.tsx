@@ -92,6 +92,9 @@ describe('ItemTile faces — D7 ladder', () => {
             container.querySelector('[data-face="prefab"]')?.textContent,
         ).toBe('ModdedAxe');
     });
+});
+
+describe('ItemTile faces — D7 ladder (cont.)', () => {
     it('file icon → <img alt> from the authorised object URL; a load error swaps to initials', async () => {
         server.use(valheimBlobHandler());
         const { container } = renderWithProviders(

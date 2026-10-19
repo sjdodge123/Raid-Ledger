@@ -134,7 +134,9 @@ describe('claim flow', () => {
         });
         expect(toast.success).not.toHaveBeenCalled();
     });
+});
 
+describe('claim flow (cont.)', () => {
     it('surfaces any other failure with its own message', async () => {
         server.use(valheimClaimHandler(500));
         renderActions(valheimCharacterUnclaimed, member);
@@ -162,25 +164,23 @@ describe('claim flow', () => {
     });
 });
 
-describe('admin change owner', () => {
-    async function openSheet() {
-        const bodies: unknown[] = [];
-        server.use(
-            valheimOwnerHandler(bodies),
-            valheimClaimEventsHandler(),
-            valheimMemberSearchHandler(),
-        );
-        const rendered = renderActions(valheimCharacterClaimed, admin);
-        await userEvent.click(
-            screen.getByRole('button', { name: 'Change owner' }),
-        );
-        return {
-            ...rendered,
-            bodies,
-            dialog: screen.getByRole('dialog', { name: 'Change owner' }),
-        };
-    }
+async function openSheet() {
+    const bodies: unknown[] = [];
+    server.use(
+        valheimOwnerHandler(bodies),
+        valheimClaimEventsHandler(),
+        valheimMemberSearchHandler(),
+    );
+    const rendered = renderActions(valheimCharacterClaimed, admin);
+    await userEvent.click(screen.getByRole('button', { name: 'Change owner' }));
+    return {
+        ...rendered,
+        bodies,
+        dialog: screen.getByRole('dialog', { name: 'Change owner' }),
+    };
+}
 
+describe('admin change owner', () => {
     it('assigns the picked member: PUT {userId}, toast, invalidates the history', async () => {
         const { bodies, dialog, invalidate } = await openSheet();
         await userEvent.type(
@@ -210,7 +210,9 @@ describe('admin change owner', () => {
             within(dialog).getByRole('button', { name: 'Assign' }),
         ).toBeDisabled();
     });
+});
 
+describe('admin change owner (cont.)', () => {
     it('Remove owner sends userId null', async () => {
         const { bodies, dialog } = await openSheet();
         await userEvent.click(

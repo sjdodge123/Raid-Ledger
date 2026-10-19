@@ -4,6 +4,7 @@
  * section grid; L3 fills the sections, L4 adds claim / owner actions.
  */
 import { Link, useLocation, useParams } from 'react-router-dom';
+import type { ValheimCharacterDetail } from '@raid-ledger/contract';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
 import { useValheimCharacter } from '../hooks/use-valheim-characters';
 import { isNotFoundError } from '../lib/valheim-armory-api';
@@ -33,12 +34,53 @@ function Quiet({ children, role }: { children: string; role?: 'alert' }) {
     );
 }
 
+function ErrorState({
+    notFound,
+    failed,
+}: {
+    notFound: boolean;
+    failed: boolean;
+}) {
+    return (
+        <>
+            {notFound && (
+                <Quiet>
+                    This character doesn't exist or was removed. Open one from a
+                    server's Characters tab.
+                </Quiet>
+            )}
+            {!notFound && failed && (
+                <Quiet role="alert">
+                    Couldn't load this character. Try again in a moment.
+                </Quiet>
+            )}
+        </>
+    );
+}
+
+function CharacterBody({ character }: { character: ValheimCharacterDetail }) {
+    const viewer = useAuth().user ?? null;
+    return (
+        <>
+            <ValheimCharacterHeader
+                character={character}
+                actions={
+                    <ValheimCharacterOwnerActions
+                        character={character}
+                        viewer={viewer}
+                    />
+                }
+            />
+            <ValheimCharacterSections character={character} />
+        </>
+    );
+}
+
 export function ValheimCharacterPage() {
     const id = parseCharacterId(useParams<{ id: string }>().id);
     const hubPath = hubPathFrom(useLocation().state);
     const query = useValheimCharacter(id);
     const c = query.data;
-    const viewer = useAuth().user ?? null;
     const notFound =
         id === null || (query.isError && isNotFoundError(query.error));
     return (
@@ -52,31 +94,8 @@ export function ValheimCharacterPage() {
                     label={c ? `${c.serverName} · Characters` : 'Characters'}
                 />
             )}
-            {notFound && (
-                <Quiet>
-                    This character doesn't exist or was removed. Open one from a
-                    server's Characters tab.
-                </Quiet>
-            )}
-            {!notFound && query.isError && (
-                <Quiet role="alert">
-                    Couldn't load this character. Try again in a moment.
-                </Quiet>
-            )}
-            {c !== undefined && (
-                <>
-                    <ValheimCharacterHeader
-                        character={c}
-                        actions={
-                            <ValheimCharacterOwnerActions
-                                character={c}
-                                viewer={viewer}
-                            />
-                        }
-                    />
-                    <ValheimCharacterSections character={c} />
-                </>
-            )}
+            <ErrorState notFound={notFound} failed={query.isError} />
+            {c !== undefined && <CharacterBody character={c} />}
         </div>
     );
 }

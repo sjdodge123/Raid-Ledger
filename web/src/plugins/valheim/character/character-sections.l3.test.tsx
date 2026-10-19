@@ -70,7 +70,9 @@ describe('Valheim character sections', () => {
         });
         expect(swords).toHaveAttribute('aria-valuenow', '25');
     });
+});
 
+describe('Valheim character sections (cont.)', () => {
     it('Inventory: width × height cells (AC2 — an unknown prefab keeps the geometry), EAQS bands, usage', () => {
         renderWithProviders(
             <ValheimCharacterSections character={valheimSheetFixture()} />,
@@ -104,7 +106,9 @@ describe('Valheim character sections', () => {
             within(tr).getByRole('button', { name: 'TrophyDeer' }),
         ).toHaveAttribute('data-kind', 'unknown');
     });
+});
 
+describe('Valheim character sections (cont.) (cont.)', () => {
     it('empty sheet: §4.5 sentences, no banner (nothing to name)', () => {
         renderWithProviders(
             <ValheimCharacterSections

@@ -151,19 +151,21 @@ function useDisclosure(): {
     return { open, toggle, close };
 }
 
+interface ItemTileProps {
+    item: ValheimItemStack;
+    ctx: ItemIconContext;
+    equipped?: boolean;
+}
+
 export function ItemTile({
     item,
     ctx,
     equipped = false,
-}: {
-    item: ValheimItemStack;
-    ctx: ItemIconContext;
-    equipped?: boolean;
-}): JSX.Element {
-    const resolved = resolveItem(item.prefab, ctx.items, ctx.atlas);
+}: ItemTileProps): JSX.Element {
     const { open, toggle, close } = useDisclosure();
     const buttonRef = useRef<HTMLButtonElement | null>(null);
     const { anchorRef, setAnchorRef, container } = usePortalTarget();
+    const resolved = resolveItem(item.prefab, ctx.items, ctx.atlas);
     const data = { resolved, item, equipped };
     return (
         <div ref={setAnchorRef} className="inline-flex">
@@ -175,12 +177,9 @@ export function ItemTile({
                 {...data}
             />
             <ItemDetail
-                open={open}
+                {...{ open, anchorRef, container, ...data }}
                 onClose={close}
-                anchorRef={anchorRef}
                 returnRef={buttonRef}
-                container={container}
-                {...data}
             />
         </div>
     );

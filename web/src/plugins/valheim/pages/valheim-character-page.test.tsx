@@ -82,7 +82,9 @@ describe('ValheimCharacterPage', () => {
         });
         expect(crumb).toHaveAttribute('href', '/guilds/4#characters');
     });
+});
 
+describe('ValheimCharacterPage (cont.)', () => {
     it('draws no crumb on a cold deep link (no hub id in the detail yet)', async () => {
         server.use(valheimCharacterHandler(valheimCharacterDetail()));
         renderPage('/valheim/characters/12');

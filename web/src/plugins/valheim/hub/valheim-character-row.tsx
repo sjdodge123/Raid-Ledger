@@ -30,6 +30,23 @@ function Owner({ character }: { character: ValheimCharacterSummary }) {
     );
 }
 
+function RowBody({ character }: { character: ValheimCharacterSummary }) {
+    return (
+        <div className="min-w-0 flex-1">
+            <div className="truncate font-semibold text-foreground">
+                {character.name}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <Owner character={character} />
+                <span className="text-muted">World {character.worldName}</span>
+                <span className="text-muted">
+                    {updatedAgo(character.capturedAt)}
+                </span>
+            </div>
+        </div>
+    );
+}
+
 /** `hubPath` rides in router state so the character page's crumb can return to this hub tab. */
 export function ValheimCharacterRow({
     character,
@@ -49,20 +66,7 @@ export function ValheimCharacterRow({
                     })
                 }
             />
-            <div className="min-w-0 flex-1">
-                <div className="truncate font-semibold text-foreground">
-                    {character.name}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <Owner character={character} />
-                    <span className="text-muted">
-                        World {character.worldName}
-                    </span>
-                    <span className="text-muted">
-                        {updatedAgo(character.capturedAt)}
-                    </span>
-                </div>
-            </div>
+            <RowBody character={character} />
             <span className="text-faint" aria-hidden="true">
                 ›
             </span>

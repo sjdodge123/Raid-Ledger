@@ -72,7 +72,9 @@ describe('useValheimBlobUrl', () => {
         expect(result.current).toBeNull();
         expect(create).not.toHaveBeenCalled();
     });
+});
 
+describe('useValheimBlobUrl (cont.)', () => {
     it('fetches a shared blob ONCE for several consumers on one page', async () => {
         let hits = 0;
         server.use(

@@ -1,5 +1,5 @@
 /** ROK-1836 — character page header (§4.9): name, server + world, owner line, updated line. L4 fills `actions`. */
-import type { ReactNode } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { AvatarWithFallback } from '../../../components/shared/AvatarWithFallback';
