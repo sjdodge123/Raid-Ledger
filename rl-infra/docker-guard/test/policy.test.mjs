@@ -28,7 +28,10 @@ test('unknown and dangerous endpoints are refused', () => {
     ['POST', '/plugins/pull'], ['POST', '/swarm/init'], ['POST', '/containers/x/update'],
     ['POST', '/commit?container=rl-traefik'], ['POST', '/containers/prune'], ['POST', '/grpc'],
   ]) assert.equal(classify(m, u).ok, false, `${m} ${u}`);
-  assert.equal(classify('POST', '/grpc', { allowBuildkit: true }).ok, true, 'BuildKit only behind the switch');
+  // c8: the switch never opens BuildKit (its upgrades are not proxied) — it is an explicit 400.
+  const bk = classify('POST', '/grpc', { allowBuildkit: true });
+  assert.equal(bk.ok, false, 'BuildKit stays closed even behind the switch');
+  assert.match(bk.reason ?? '', /^buildkit_session_unsupported/);
 });
 
 test('read-only listing stays open without ownership', () => {

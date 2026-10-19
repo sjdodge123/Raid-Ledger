@@ -62,11 +62,13 @@ const ROUTES = [
   R('DELETE', `/volumes/(${ID})`, { owned: { kind: 'volume', group: 1 } }),
 ];
 
-// BuildKit's /session + /grpc are opaque gRPC streams the guard cannot
-// inspect (a `RUN --network=host` entitlement rides inside them). Runners use
-// the legacy builder (DOCKER_BUILDKIT=0); GUARD_ALLOW_BUILDKIT=1 re-opens it as
-// an operator-accepted risk (README "Docker API boundary").
-const BUILDKIT = [R('POST', '/session', ALLOW), R('POST', '/grpc', ALLOW)];
+// BuildKit's /session + /grpc are opaque gRPC streams over a connection upgrade
+// the guard cannot inspect (a `RUN --network=host` entitlement rides inside
+// them), so they are never proxied. Runners use the legacy builder
+// (DOCKER_BUILDKIT=0). c8: GUARD_ALLOW_BUILDKIT=1 opens nothing — it only turns
+// the generic 403 into an explicit 400 (plus a startup warning in guard.mjs).
+const BUILDKIT_PATH = /^\/(session|grpc)$/;
+const BUILDKIT_UNSUPPORTED = 'buildkit_session_unsupported: rl-docker-guard does not proxy BuildKit /session or /grpc upgrades; build with DOCKER_BUILDKIT=0';
 
 /**
  * Split `/v1.45/containers/x/json?all=1` into { path: '/containers/x/json', query }.
@@ -145,8 +147,8 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
   }
   const dfBad = dockerfileParamReason(parsed.query.get('dockerfile'));
   if (dfBad) return { ok: false, status: 400, reason: `bad_request_target: ${dfBad}` };
-  const table = allowBuildkit ? [...ROUTES, ...BUILDKIT] : ROUTES;
-  for (const route of table) {
+  if (allowBuildkit && method === 'POST' && BUILDKIT_PATH.test(parsed.path)) return { ok: false, status: 400, reason: BUILDKIT_UNSUPPORTED };
+  for (const route of ROUTES) {
     if (route.method !== method) continue;
     const m = route.re.exec(parsed.path);
     if (!m) continue;

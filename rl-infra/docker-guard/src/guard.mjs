@@ -115,13 +115,25 @@ async function forwardEvents(req, res) {
   forward(SOCKET, req, res, undefined, (r) => refuse(res, r, 502), url);
 }
 
-/** /build: spool + inspect the context, then stream the spooled copy upstream. */
+/**
+ * /build: spool + inspect the context, then stream the spooled copy upstream.
+ * c8: the client's close is watched BEFORE the spool is awaited — a runner that
+ * cancels while the spool finishes gets nothing forwarded and its context removed.
+ */
 async function forwardBuild(req, res, plan) {
+  let gone = false;
+  const onGone = () => { gone = true; };
+  res.on('close', onGone);
   // c5: the dockerfile= value classify() decoded (Go's table) — never re-parsed.
   const ctx = await spoolBuildContext(req, plan.dockerfile ?? '', TMPDIR, { pull: plan.pull === true });
+  res.off('close', onGone);
   if (ctx.error) {
     ctx.cleanup();
     return refuse(res, ctx.error.reason, ctx.error.status);
+  }
+  if (gone || res.destroyed) {
+    ctx.cleanup();
+    return log('DROP /build: the client went away before its context finished spooling');
   }
   res.on('close', ctx.cleanup);
   forward(SOCKET, req, res, { stream: fs.createReadStream(ctx.file), length: ctx.size }, (r) => refuse(res, r, 502));
@@ -129,7 +141,8 @@ async function forwardBuild(req, res, plan) {
 
 function refuseSocket(socket, status, reason) {
   log(`DENY ${reason}`);
-  socket.end(`HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? 'Error'}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`);
+  const body = JSON.stringify({ message: `rl-docker-guard: ${reason}` });
+  socket.end(`HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? 'Error'}\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`);
 }
 
 /**
@@ -153,6 +166,8 @@ export function createGuardServer({ socket, allow = [], allowBuildkit = false, l
   ALLOW = allow;
   ALLOW_BUILDKIT = allowBuildkit;
   log = logger;
+  // c8: the flag does not open BuildKit (routes.mjs) — say so once, loudly.
+  if (allowBuildkit) log('WARN GUARD_ALLOW_BUILDKIT=1: BuildKit /session and /grpc upgrades are not proxied by rl-docker-guard; they are refused 400 buildkit_session_unsupported. Build with DOCKER_BUILDKIT=0.');
   const server = http.createServer((req, res) => {
     onRequest(req, res).catch((e) => refuse(res, `guard error ${e.message}`));
   });
