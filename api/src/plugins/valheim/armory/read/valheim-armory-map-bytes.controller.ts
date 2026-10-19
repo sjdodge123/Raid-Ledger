@@ -40,6 +40,16 @@ const BASE_MAP_CACHE = 'private, no-cache';
 const FOG_CACHE = 'private, no-cache';
 const MAP = 'plugins/valheim/armory/characters/:id/maps/:mapId';
 
+/** Success headers for the base-map PNG (200 or 304 only). */
+function baseMapHeaders(etag: string): Record<string, string> {
+  return {
+    'Content-Type': 'image/png',
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': BASE_MAP_CACHE,
+    ETag: etag,
+  };
+}
+
 /** `?layer=personal|shared` (default `personal`; 400 otherwise). */
 export class FogLayerPipe implements PipeTransform<
   unknown,
@@ -74,15 +84,19 @@ export class ValheimArmoryMapBytesController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile | undefined> {
     const { sha256, absPath } = await this.bytes.baseMap(id, mapId);
-    res.set({
-      'Content-Type': 'image/png',
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': BASE_MAP_CACHE,
-      ETag: `"${sha256}"`,
-    });
-    if (req.fresh) return undefined; // 304 before the file is opened
+    const etag = `"${sha256}"`;
+    // `req.fresh` compares against the response ETag, so set it to ask —
+    // a 304 carries no body, so it may keep the validator (file unopened).
+    res.set('ETag', etag);
+    if (req.fresh) {
+      res.set(baseMapHeaders(etag));
+      return undefined;
+    }
+    // Until the bytes are in hand a failure must stay no-store, no ETag.
+    res.removeHeader('ETag');
     const file = await openBlob(absPath, 'base_map_not_ready');
     const size = await sizeOf(file);
+    res.set(baseMapHeaders(etag));
     return new StreamableFile(file.createReadStream(), {
       type: 'image/png',
       length: size,
