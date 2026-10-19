@@ -271,3 +271,29 @@ describe('ItemTile — review fixes', () => {
         expect(pop.style.top).toBe('456px');
     });
 });
+
+describe('ItemTile detail — keyboard / screen-reader fixes', () => {
+    it('phone: a closed item sheet exposes no Close button or wiki link', () => {
+        renderWithProviders(<ItemTile item={stack('SwordIron')} ctx={ctx()} />);
+        expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+        expect(
+            screen.queryByRole('link', { name: /open on the valheim wiki/i }),
+        ).toBeNull();
+    });
+    it('desktop: focus moves into the popover once it is visible', async () => {
+        media.desktop = true;
+        const realFocus = HTMLElement.prototype.focus;
+        // A browser refuses to focus a `visibility: hidden` element.
+        vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (
+            this: HTMLElement,
+            opts?: FocusOptions,
+        ) {
+            if (this.style.visibility === 'hidden') return;
+            realFocus.call(this, opts);
+        });
+        renderWithProviders(<ItemTile item={stack('SwordIron')} ctx={ctx()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Iron sword' }));
+        const pop = await screen.findByTestId('valheim-item-popover');
+        await waitFor(() => expect(document.activeElement).toBe(pop));
+    });
+});

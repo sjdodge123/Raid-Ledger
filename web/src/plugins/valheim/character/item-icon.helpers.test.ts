@@ -139,3 +139,18 @@ describe('item helpers', () => {
         ).toBe('Iron sword, quality 3, durability 20%, equipped');
     });
 });
+
+describe('resolveItem — inherited Object members are not catalogue entries', () => {
+    it.each(['constructor', 'toString', '__proto__'])(
+        'prefab %s → the unknown-item fallback, never an inherited member',
+        (prefab) => {
+            expect(() => resolveItem(prefab, ITEMS, ATLAS)).not.toThrow();
+            expect(resolveItem(prefab, ITEMS, ATLAS)).toEqual({
+                label: prefab,
+                category: null,
+                kind: 'unknown',
+                icon: null,
+            });
+        },
+    );
+});
