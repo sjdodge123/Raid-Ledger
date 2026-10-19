@@ -148,7 +148,7 @@ export async function parallelTarget(
   const refusal = parallelError(params);
   if (refusal) return { error: 'invalid_parallel', message: refusal };
   if (ownerSlot === null) {
-    return { error: 'parallel_requires_claim', message: 'parallel:true needs a claimed slot (rl_claim first).' };
+    return { error: 'parallel_requires_claim', message: 'parallel:true needs a claimed slot: rl_claim first (if it returns enqueued, rl_claim_wait until granted).' };
   }
   const busy = await busySlotsFromMutagen(lister);
   return { cmd: buildFanoutCommand(params, innerEnv, busy, { taskId, ownerSlot, args, childTimeout }) };
