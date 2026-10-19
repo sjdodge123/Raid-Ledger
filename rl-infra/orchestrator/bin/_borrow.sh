@@ -115,6 +115,15 @@ borrow::release() {
 # untouched; (2) only then move staging onto B's tree with --delay-updates, so
 # changed files land in one rename pass at the end. The worktree dir itself is
 # never renamed: the runner container bind-mounts it.
+# What the copy skips: B-local build output, plus exactly what the laptop's
+# Mutagen session ignores (rl-infra/cli/rl ensure_mutagen — keep in sync), so B
+# never holds a secret A's replica would not. `.git` is the exception: it is
+# runner-scaffolded on A and B needs it. Includes first: rsync's first match wins.
+BORROW_COPY_FILTER=(--include=.env.example --include='.env.*.example' --exclude=.env --exclude='.env.*'
+    --exclude=node_modules --exclude=dist --exclude=coverage --exclude=test-results
+    --exclude=playwright-report --exclude=/scripts/.auth --exclude='*.tsbuildinfo'
+    --exclude=/.rl-perf.log --exclude=/.rl-perf.log.errors)
+
 borrow::copy_tree() {
     local a="$1" b="$2" src dst stage t0 files
     src="$RL_RUNNERS_DIR/slot-$a/worktree"
@@ -123,18 +132,14 @@ borrow::copy_tree() {
     [[ -d "$src" && -d "$dst" ]] || { echo "[parallel] copy failed: missing worktree dir" >&2; return 1; }
     t0=$(date +%s)
     mkdir -p "$stage" || return 1
-    if ! rsync -a --delete --exclude=node_modules --exclude=dist --exclude=coverage \
-        --exclude=test-results --exclude=playwright-report --exclude=/scripts/.auth \
-        "$src/" "$stage/"; then
+    if ! rsync -a --delete "${BORROW_COPY_FILTER[@]}" "$src/" "$stage/"; then
         # rsync -a copies a source dir's mode, so an unreadable dir lands as 000.
         chmod -R u+rwX "$stage" 2>/dev/null || true
         rm -rf "$stage"
         echo "[parallel] copy failed: staging rsync (slot $b tree untouched)" >&2
         return 1
     fi
-    if ! rsync -a --delete --delay-updates --exclude=node_modules --exclude=dist \
-        --exclude=coverage --exclude=test-results --exclude=playwright-report \
-        --exclude=/scripts/.auth "$stage/" "$dst/"; then
+    if ! rsync -a --delete --delay-updates "${BORROW_COPY_FILTER[@]}" "$stage/" "$dst/"; then
         find "$dst" -name '.~tmp~' -type d -prune -exec rm -rf {} + 2>/dev/null || true
         echo "[parallel] copy failed: swap onto slot $b" >&2
         return 1

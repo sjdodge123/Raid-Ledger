@@ -49,7 +49,7 @@ case "$mode" in
   hang)  st=running ;;
 esac
 printf '%s\n' "$log" > "$RL_TASKS_DIR/$id.log"
-jq -n --arg id "$id" --arg st "$st" --argjson s "$slot" '{task_id:$id, status:$st, slot:$s}' > "$RL_TASKS_DIR/$id.json"
+jq -n --arg id "$id" --arg st "$st" --argjson s "$slot" '{task_id:$id, status:$st, slot:$s, script_exit_code:({succeeded:0, failed:1}[$st])}' > "$RL_TASKS_DIR/$id.json"
 echo "{\"ok\":true,\"task_id\":\"$id\"}"
 SH
     cat > "$SHIM_DIR/task-cancel" <<'SH'
@@ -178,6 +178,28 @@ test_merge_missing() {
     assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "borrow released"
 }
 
+test_specs_env_only_reaches_e2e_children() {
+    CURRENT_TEST_NAME="E2E_SPECS/E2E_SCOPE never reach child A (--no-e2e would exit 2); B and serial keep them"
+    _seed free
+    PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" \
+        --inner-env "E2E_SCOPE='auto' E2E_SPECS='scripts/smoke/a.smoke.spec.ts' " --a-args "--fleet --no-e2e" \
+        --b-args "--only-e2e" --serial-args "--fleet" >/dev/null 2>&1 || true
+    local a b; a=$(grep 'role=a' "$CALLS"); b=$(grep 'role=b' "$CALLS")
+    assert_contains "$a" "env -u E2E_SPECS -u E2E_SCOPE RL_GATE_E2E=deferred bash /workspace/scripts/validate-ci.sh --fleet --no-e2e" "A unsets both"
+    assert_eq "$(grep -c 'env -u' <<<"$b")" "0" "B is not stripped"
+    assert_contains "$b" "E2E_SPECS='scripts/smoke/a.smoke.spec.ts' RL_GATE_DISCORD=defer bash" "B keeps E2E_SPECS"
+}
+
+test_children_record_outcome() {
+    CURRENT_TEST_NAME="children[] carries each child's terminal status + exit"
+    _seed free; export SHIM_B=fail
+    _fanout >/dev/null || true
+    assert_eq "$(jq -c '[.children[] | {role, status, exit}]' "$RL_TASKS_DIR/$P.json")" \
+        '[{"role":"a","status":"succeeded","exit":0},{"role":"b","status":"failed","exit":1}]' "status + exit per child"
+}
+
+run_test "specs-env-only-e2e-children" test_specs_env_only_reaches_e2e_children
+run_test "children-record-outcome" test_children_record_outcome
 run_test "fallback-no-free-slot" test_fallback_no_free_slot
 run_test "fallback-memory" test_fallback_memory
 run_test "parallel-two-children" test_parallel_two_children

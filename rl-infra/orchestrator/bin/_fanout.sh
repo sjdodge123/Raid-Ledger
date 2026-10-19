@@ -90,6 +90,16 @@ fanout::fail_fast() {
     done
 }
 
+# fanout::record_outcome <task_id> — copy the child's terminal status and
+# script_exit_code onto its children[] entry in P's JSON (rl_task_status reads it).
+fanout::record_outcome() {
+    local st ex
+    st=$(fanout::status "$1")
+    ex=$(jq -c '.script_exit_code // null' "$RL_TASKS_DIR/$1.json" 2>/dev/null || echo null)
+    state::mutate "$RL_TASKS_DIR/$P.json" --arg id "$1" --arg st "$st" --argjson ex "${ex:-null}" \
+        '.children = [(.children // [])[] | if .task_id == $id then .status = $st | .exit = $ex else . end]' || true
+}
+
 # fanout::cleanup — EXIT trap: cancel live children, release the borrow.
 fanout::cleanup() {
     local id
@@ -98,6 +108,7 @@ fanout::cleanup() {
             task-cancel "$id" "parent_exit: $P" >/dev/null 2>&1 || true
         fi
         rm -f "$RL_TASKS_DIR/$P.relay-$id"
+        fanout::record_outcome "$id"
     done
     if [[ -n "${BORROWED:-}" ]]; then borrow::release "$BORROWED" "$P" || true; BORROWED=""; fi
 }

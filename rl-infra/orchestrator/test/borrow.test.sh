@@ -129,6 +129,18 @@ test_failed_copy_leaves_b_untouched() {
     assert_eq "$(find "$s2" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "a z " "a good copy mirrors A onto B"
 }
 
+test_copy_skips_mutagen_ignored_secrets() {
+    CURRENT_TEST_NAME="copy_tree skips what Mutagen ignores (.env secrets, tsbuildinfo) but keeps .env templates"
+    _seed free free free; _lib
+    export RL_RUNNERS_DIR="$RL_STATE_DIR/runners"
+    local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree"
+    mkdir -p "$s1/api" "$s2"
+    for f in .env .env.local api/.env api/.env.test .env.example api/.env.test.example tsconfig.tsbuildinfo keep.ts; do echo x > "$s1/$f"; done
+    borrow::copy_tree 1 2 >/dev/null 2>&1
+    assert_eq "$(cd "$s2" && find . -type f | sort | tr '\n' ' ')" "./.env.example ./api/.env.test.example ./keep.ts " "only templates + source copied"
+}
+
+run_test "copy-skips-mutagen-ignored-secrets" test_copy_skips_mutagen_ignored_secrets
 run_test "failed-copy-leaves-b-untouched" test_failed_copy_leaves_b_untouched
 run_test "free-slot-borrowed" test_free_slot_is_borrowed
 run_test "queued-slot-skipped" test_queued_slot_is_skipped
