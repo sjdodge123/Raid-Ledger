@@ -62,7 +62,8 @@ async function openBlob(absPath: string): Promise<FileHandle> {
   }
 }
 
-async function sizeOf(file: FileHandle): Promise<number> {
+/** Size of an open blob; closes the handle if `stat` throws. */
+export async function sizeOf(file: FileHandle): Promise<number> {
   try {
     return (await file.stat()).size;
   } catch (err: unknown) {
