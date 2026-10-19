@@ -31,8 +31,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { isTerminalStatus, type ExecuteStatusReturn } from './tools/task-schemas.js';
-import { playwrightRowStatus, staticGateGreen } from './gate-summary.js';
-import { parallelParentUnmerged } from './tools/task-parallel.js';
+import { playwrightRowStatus, splitGateClean, staticGateGreen } from './gate-summary.js';
+import { isSplitParent, parallelParentUnmerged } from './tools/task-parallel.js';
 
 /** The validate-ci.sh summary row (and orchestrator step name) we key on. */
 export const PLAYWRIGHT_STEP = 'Playwright (desktop + mobile)';
@@ -202,6 +202,8 @@ export function resolveGateTier(status: ExecuteStatusReturn): GateTier | null {
   if (!ran) return null;
   // ROK-1793 S2: a split parent's verdict is its merged table, nothing else.
   if (parallelParentUnmerged(status)) return null;
+  // Review P1: its children ran concurrently, so a child-A FAIL voids B's PASS.
+  if (isSplitParent(status) && !splitGateClean(status.log_tail)) return null;
   if (playwrightPassed(status)) return 'playwright';
   const staticGreen =
     status.mcp_runtime_status === 'succeeded' && staticGateGreen(status.log_tail);

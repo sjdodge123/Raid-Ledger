@@ -39,6 +39,14 @@ export function withParallelInfo<T extends ExecuteStatusReturn>(
  * @returns true when this is a split parent with no merged table in its tail.
  */
 export function parallelParentUnmerged(status: ExecuteStatusReturn): boolean {
-  const split = (status.children?.length ?? 0) > 0 || status.parallel?.mode === 'parallel';
-  return split && !(status.log_tail ?? '').includes(MERGED_MARKER);
+  return isSplitParent(status) && !(status.log_tail ?? '').includes(MERGED_MARKER);
+}
+
+/**
+ * Did this task fan out into children (as opposed to a serial run or fallback)?
+ *
+ * @param status - A task status.
+ */
+export function isSplitParent(status: ExecuteStatusReturn): boolean {
+  return (status.children?.length ?? 0) > 0 || status.parallel?.mode === 'parallel';
 }

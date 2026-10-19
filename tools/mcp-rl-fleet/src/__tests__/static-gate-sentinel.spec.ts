@@ -279,3 +279,41 @@ describe('resolveGateTier — merged parallel table (ROK-1793 S2)', () => {
     expect(resolveGateTier(status({ parallel: { mode: 'parallel', borrowed_slot: 2 }, log_tail: mergedTail('PASS', false) }))).toBeNull();
   });
 });
+
+// ROK-1793 S2 review P1 — a split parent's children run CONCURRENTLY, so child
+// B's Playwright PASS says nothing about child A's Build/TypeScript/Lint/unit/
+// integration rows. The ROK-1533 "a later tier failed" exception assumed serial
+// order (where `--fleet` stops before Playwright); only Discord keeps it here.
+function splitTail(a: string, unit: string, pw: string, discord = 'PASS'): string {
+  const row = (n: string, st: string, c: string): string => `${n.padEnd(30)}  ${st} — child f6e5d4c3b2a1${c}`;
+  return [
+    '========== Summary ==========',
+    row('Build (all workspaces)', a, 'a slot 1'),
+    row('TypeScript (all)', 'PASS', 'a slot 1'),
+    row('Lint (all)', 'PASS', 'a slot 1'),
+    row('Unit tests (api)', unit, 'a slot 1'),
+    row('Playwright (desktop + mobile)', pw, 'b slot 2'),
+    row('Discord smoke (companion bot)', discord, 'c slot 1'),
+    '[parallel] merged: 6 rows from 3 children',
+  ].join('\n');
+}
+
+describe('resolveGateTier — split parent needs every non-Discord row clean (ROK-1793 S2 P1)', () => {
+  const split = (tail: string, rt: 'succeeded' | 'failed' = 'failed'): ReturnType<typeof status> =>
+    status({ children: MERGED_CHILDREN, mcp_runtime_status: rt, log_tail: tail });
+  it('A FAIL (Build) + B PASS -> null', () => {
+    expect(resolveGateTier(split(splitTail('FAIL', 'PASS', 'PASS')))).toBeNull();
+  });
+  it('A FAIL (unit) + B PASS -> null', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'FAIL', 'PASS')))).toBeNull();
+  });
+  it('A PASS + B PASS -> playwright', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'PASS', 'PASS'), 'succeeded'))).toBe('playwright');
+  });
+  it('A PASS + B FAIL -> null', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'PASS', 'FAIL')))).toBeNull();
+  });
+  it('Discord-only FAIL keeps the ROK-1533 behaviour -> playwright', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'PASS', 'PASS', 'FAIL')))).toBe('playwright');
+  });
+});
