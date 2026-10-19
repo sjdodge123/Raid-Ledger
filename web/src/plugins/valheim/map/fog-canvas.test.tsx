@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
-import { FogCanvas, parseCssRgb } from './fog-canvas';
+import { FogCanvas } from './fog-canvas';
+import { parseCssRgb } from './fog-theme';
 import { FOG_ALPHA_SHARED_ONLY, FOG_ALPHA_UNEXPLORED } from './fog-bitmap';
 
 const SIZE = 8;

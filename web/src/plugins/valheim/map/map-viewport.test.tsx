@@ -52,6 +52,14 @@ describe('MapViewport (ROK-1837 D5/D10)', () => {
         expect(layer.style.transformOrigin).toBe('0 0');
         expect(layer.style.transform).toMatch(/^translate\(.+\) scale\(.+\)$/);
     });
+});
+
+describe('MapViewport gestures (ROK-1837 D10)', () => {
+    let restore: () => void = () => undefined;
+    beforeEach(() => {
+        restore = stubSize();
+    });
+    afterEach(() => restore());
 
     it('wheel up zooms in (transform scale grows)', () => {
         const { app, layer } = renderViewport();

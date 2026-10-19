@@ -31,45 +31,55 @@ export interface MapViewportProps {
 const SURFACE_CLASS =
     'rounded-lg bg-panel border border-edge cursor-grab active:cursor-grabbing select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success';
 
-function MapViewportSurface({
-    contentSize,
-    label,
-    onCommands,
-    className,
-    children,
-}: MapViewportProps) {
-    const api = useMapViewport(contentSize);
-    const { zoomIn, zoomOut, fit } = api;
+interface TextureLayerProps {
+    size: number;
+    transform: string;
+    children: ReactNode;
+}
+
+/** The texture-space layer: one transform aligns base map, fog and pins. */
+function TextureLayer({ size, transform, children }: TextureLayerProps) {
+    return (
+        <div
+            data-testid="map-texture-layer"
+            style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: size,
+                height: size,
+                transform,
+                transformOrigin: '0 0',
+            }}
+        >
+            {children}
+        </div>
+    );
+}
+
+function MapViewportSurface(props: MapViewportProps) {
+    const { contentSize, label, onCommands, className, children } = props;
+    const { ref, viewport, transform, handlers, style, zoomIn, zoomOut, fit } =
+        useMapViewport(contentSize);
     useEffect(() => {
         onCommands?.({ zoomIn, zoomOut, fit });
     }, [onCommands, zoomIn, zoomOut, fit]);
     return (
         <div
-            ref={api.ref}
+            ref={ref}
             role="application"
             aria-label={label}
             aria-roledescription="map"
             tabIndex={0}
-            {...api.handlers}
-            style={api.style}
+            {...handlers}
+            style={style}
             className={
                 className ? `${SURFACE_CLASS} ${className}` : SURFACE_CLASS
             }
         >
-            <div
-                data-testid="map-texture-layer"
-                style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    width: contentSize,
-                    height: contentSize,
-                    transform: api.transform,
-                    transformOrigin: '0 0',
-                }}
-            >
-                {children(api.viewport)}
-            </div>
+            <TextureLayer size={contentSize} transform={transform}>
+                {children(viewport)}
+            </TextureLayer>
         </div>
     );
 }

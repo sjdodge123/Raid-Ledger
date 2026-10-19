@@ -5,6 +5,7 @@
  * a cartography table (`shared`) render only while that layer is on.
  */
 import { useState } from 'react';
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import type { ValheimMapGrid, ValheimMapPin } from '@raid-ledger/contract';
 import { worldToScreen } from './valheim-grid';
 import {
@@ -21,6 +22,47 @@ const BUTTON_CLASS =
     'group pointer-events-auto absolute flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success';
 const LABEL_CLASS =
     'pointer-events-none absolute bottom-[calc(100%-4px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-edge bg-surface px-1.5 py-0.5 text-xs font-medium text-foreground';
+
+function PinDisc({ pin }: { pin: ValheimMapPin }) {
+    const { Icon, toneClass } = pinStyleFor(pin.type);
+    const edge = pin.shared
+        ? 'border-dashed border-slot'
+        : 'border-edge-strong';
+    return (
+        <span
+            className={`flex h-7 w-7 items-center justify-center rounded-full border ${edge} ${PIN_DISC_CLASS}`}
+        >
+            <Icon aria-hidden="true" className={`h-4 w-4 ${toneClass}`} />
+        </span>
+    );
+}
+
+function PinLabel({ text, shown }: { text: string; shown: boolean }) {
+    const visibility = shown
+        ? 'block'
+        : 'hidden group-hover:block group-focus-visible:block';
+    return (
+        <span
+            aria-hidden="true"
+            data-open={shown}
+            className={`${LABEL_CLASS} ${visibility}`}
+        >
+            {text}
+        </span>
+    );
+}
+
+/** Keep pin gestures off the viewport (no pan/zoom from a pin tap); Esc closes the label. */
+function pinHandlers(onToggle: () => void, onClose: () => void) {
+    return {
+        onPointerDown: (e: PointerEvent) => e.stopPropagation(),
+        onDoubleClick: (e: MouseEvent) => e.stopPropagation(),
+        onClick: onToggle,
+        onKeyDown: (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        },
+    };
+}
 
 interface PinButtonProps {
     pin: ValheimMapPin;
@@ -39,13 +81,9 @@ function PinButton({
     onToggle,
     onClose,
 }: PinButtonProps) {
-    const { Icon, toneClass } = pinStyleFor(pin.type);
     const text = pinDisplayLabel(pin.label, pin.type);
     const { left, top } = worldToScreen(grid, pin.x, pin.z);
-    const shown = open || scale >= PIN_LABELS_ALWAYS_SCALE;
-    const disc = pin.shared
-        ? 'border-dashed border-slot'
-        : 'border-edge-strong';
+    const transform = `translate(-50%, -50%) scale(${1 / scale})`;
     return (
         <button
             type="button"
@@ -57,30 +95,14 @@ function PinButton({
                     ? `${BUTTON_CLASS} ${PIN_CHECKED_CLASS}`
                     : BUTTON_CLASS
             }
-            style={{
-                left,
-                top,
-                transform: `translate(-50%, -50%) scale(${1 / scale})`,
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => e.stopPropagation()}
-            onClick={onToggle}
-            onKeyDown={(e) => {
-                if (e.key === 'Escape') onClose();
-            }}
+            style={{ left, top, transform }}
+            {...pinHandlers(onToggle, onClose)}
         >
-            <span
-                className={`flex h-7 w-7 items-center justify-center rounded-full border ${disc} ${PIN_DISC_CLASS}`}
-            >
-                <Icon aria-hidden="true" className={`h-4 w-4 ${toneClass}`} />
-            </span>
-            <span
-                aria-hidden="true"
-                data-open={shown}
-                className={`${LABEL_CLASS} ${shown ? 'block' : 'hidden group-hover:block group-focus-visible:block'}`}
-            >
-                {text}
-            </span>
+            <PinDisc pin={pin} />
+            <PinLabel
+                text={text}
+                shown={open || scale >= PIN_LABELS_ALWAYS_SCALE}
+            />
         </button>
     );
 }
