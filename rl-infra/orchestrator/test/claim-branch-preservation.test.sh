@@ -248,4 +248,26 @@ run_test "direct-claim-unknown-branch-refused" test_direct_claim_unknown_branch_
 run_test "direct-claim-toctou-recheck" test_direct_claim_destroy_recheck_skips_moved_env
 run_test "idempotent-claim-partitions-pinned" test_idempotent_claim_partitions_preserved_pinned
 run_test "release-keeps-pin-provenance" test_release_keeps_preserved_pin_provenance
+
+# Codex r2 P2 — provenance is created_for_branch, never the pin flag: after an
+# operator unpins A's preserved env, B's release still must not re-stamp it.
+test_release_keeps_unpinned_foreign_provenance() {
+    CURRENT_TEST_NAME="B preserves pinned A, A is unpinned, B releases → A keeps its stamp; next A inherits it"
+    test_setup
+    unset RL_ENVS_FILE
+    seed_free_slot_with_env "feat-a" true
+    export RL_AGENT_ID="agent-b1"
+    bash "$BIN_DIR/claim" --branch feat-b --slot 1 >/dev/null 2>&1 || true
+    jq 'map(if .slug=="pinned-env" then .pinned=false else . end)' \
+        "$RL_STATE_DIR/env-registry.json" > "$RL_STATE_DIR/r.tmp" && mv "$RL_STATE_DIR/r.tmp" "$RL_STATE_DIR/env-registry.json"
+    bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    assert_eq "$(jq -r '.[] | select(.slug=="pinned-env") | .created_for_branch' "$RL_STATE_DIR/env-registry.json")" "feat-a" "unpinned A env keeps A's stamp"
+    export RL_AGENT_ID="agent-a2"
+    local out
+    out=$(bash "$BIN_DIR/claim" --branch feat-a --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -c '[.inherited_envs[].slug]' <<<"$out" 2>/dev/null)" '["pinned-env"]' "next A claim inherits its env"
+    test_teardown
+}
+
+run_test "release-keeps-unpinned-foreign-provenance" test_release_keeps_unpinned_foreign_provenance
 print_test_summary

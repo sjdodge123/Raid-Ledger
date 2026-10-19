@@ -218,18 +218,19 @@ env_registry::set_pinned() {
         'map(if .slug == $slug then .pinned = ($p == true) else . end)'
 }
 
-# A pinned env still claimable_by_next with ANOTHER branch's non-empty stamp is
-# one a branch-mismatch claim PRESERVED (claim clears every other row's flag).
-# The releasing claim never owned it, so it is never re-stamped — else the next
-# claimant of the releasing branch inherits the other branch's deployment
-# (Codex fleet-claim r1). gc-sweeper/sweep.sh's expiry reaper mirrors this.
-ENV_REGISTRY_FOREIGN_PIN_JQ='((.claimable_by_next // false) == true and (.pinned // false) == true
-    and (.created_for_branch // "") != "" and .created_for_branch != $b)'
+# An env's provenance is its created_for_branch, never the pin flag. An env
+# stamped with ANOTHER branch (non-empty, != the releasing claim's) is one a
+# branch-mismatch claim preserved; the releasing claim never owned it, so it is
+# never re-stamped — pinned or not (an operator may unpin it mid-claim). Else
+# the next claimant of the releasing branch inherits the other branch's
+# deployment (Codex fleet-claim r1 + r2). gc-sweeper/sweep.sh's expiry reaper
+# mirrors this predicate.
+ENV_REGISTRY_FOREIGN_JQ='((.created_for_branch // "") != "" and .created_for_branch != $b)'
 
 env_registry::mark_claimable_by_next() {
     local slot="$1" branch="$2"
     state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
-        "map(if .slot == \$s and ($ENV_REGISTRY_FOREIGN_PIN_JQ | not)
+        "map(if .slot == \$s and ($ENV_REGISTRY_FOREIGN_JQ | not)
              then .claimable_by_next = true
                 | .created_for_branch = \$b
              else . end)"
