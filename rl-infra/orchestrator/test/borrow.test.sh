@@ -142,13 +142,21 @@ test_copy_skips_mutagen_ignored_secrets() {
     assert_eq "$(cd "$s2" && find . -type f | sort | tr '\n' ' ')" "./.env.example ./api/.env.test.example ./keep.ts " "only templates + source copied"
 }
 
-# A PATH `docker` shim that logs its argv; DOCKER_SHIM_FAIL=1 makes `docker cp` fail.
+# A PATH `docker` shim modelling the socket proxy: it logs its argv and ALWAYS
+# fails `docker cp` (the proxy has no /containers/{id}/archive route).
+# `exec ... tar -cf -` emits a fake archive; `exec -i ... tar -xf -` records
+# what it read on stdin. DOCKER_SHIM_EXEC_FAIL=1 makes the tar execs fail.
 _docker_shim() {
     local shim="$RL_STATE_DIR/docker-shim"; mkdir -p "$shim"
     cat > "$shim/docker" <<'SHIM'
 #!/usr/bin/env bash
 echo "$*" >> "$RL_STATE_DIR/docker.log"
-[[ "$1" == "cp" && "${DOCKER_SHIM_FAIL:-0}" == "1" ]] && { echo "docker cp: simulated failure" >&2; exit 1; }
+[[ "$1" == "cp" ]] && { echo "Error response from daemon: 403 Forbidden (socket proxy)" >&2; exit 1; }
+if [[ "$1" == "exec" && " $* " == *" tar "* ]]; then
+    [[ "${DOCKER_SHIM_EXEC_FAIL:-0}" == "1" ]] && { echo "tar: simulated failure" >&2; exit 1; }
+    [[ " $* " == *" -cf - "* ]] && printf 'FAKE-GIT-TAR'
+    [[ " $* " == *" -xf -"* ]] && cat > "$RL_STATE_DIR/tar-stdin"
+fi
 exit 0
 SHIM
     chmod +x "$shim/docker"; : > "$RL_STATE_DIR/docker.log"
@@ -156,32 +164,34 @@ SHIM
 }
 
 test_git_copied_container_to_container() {
-    CURRENT_TEST_NAME=".git is excluded from the host rsync and copied rl-runner-A -> rl-runner-B with docker cp"
+    CURRENT_TEST_NAME=".git is excluded from the host rsync and streamed rl-runner-A -> rl-runner-B via exec tar (proxy blocks docker cp)"
     _seed free free free; _lib
     export RL_RUNNERS_DIR="$RL_STATE_DIR/runners"
     local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree" shim rc=0
     mkdir -p "$s1/.git/objects" "$s2"; echo ref > "$s1/.git/HEAD"; echo x > "$s1/keep.ts"
     shim=$(_docker_shim)
     PATH="$shim:$PATH" borrow::copy_tree 1 2 >/dev/null 2>&1 || rc=$?
-    assert_exit_code "$rc" "0" "copy succeeds"
+    assert_exit_code "$rc" "0" "copy succeeds through the proxy-allowed exec path"
     assert_eq "$([[ -e "$s2/.git" ]] && echo host-copied || echo absent)" "absent" "the host rsync never writes B/.git"
-    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "cp rl-runner-1:/workspace/.git -" ".git read out of runner A's container"
-    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "cp - rl-runner-2:/workspace/.rl-git-staging" ".git streamed into runner B's staging dir"
+    assert_eq "$(grep -c '^cp ' "$RL_STATE_DIR/docker.log")" "0" "docker cp (archive API, blocked by the proxy) is never used"
+    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "exec rl-runner-1 tar -C /workspace -cf - .git" ".git read out of runner A's container"
+    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "exec -i rl-runner-2 tar -C /workspace/.rl-git-staging -xf -" ".git streamed into runner B's staging dir"
+    assert_eq "$(cat "$RL_STATE_DIR/tar-stdin" 2>/dev/null)" "FAKE-GIT-TAR" "A's archive is what B's tar reads"
     assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "exec rl-runner-2 sh -c rm -rf /workspace/.git && mv /workspace/.rl-git-staging/.git /workspace/.git" "staged .git swapped in on B"
 }
 
 test_failed_git_copy_leaves_b_untouched() {
-    CURRENT_TEST_NAME="a failing docker cp of .git -> copy fails, B's tree untouched"
+    CURRENT_TEST_NAME="a failing exec-tar stream of .git -> copy fails (serial fallback), B's tree untouched"
     _seed free free free; _lib
     export RL_RUNNERS_DIR="$RL_STATE_DIR/runners"
     local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree" shim rc=0
     mkdir -p "$s1/.git" "$s2"; echo ref > "$s1/.git/HEAD"; echo new > "$s1/new.ts"; echo old > "$s2/keep.txt"
     shim=$(_docker_shim)
-    DOCKER_SHIM_FAIL=1 PATH="$shim:$PATH" borrow::copy_tree 1 2 2>/dev/null >/dev/null || rc=$?
-    assert_exit_code "$rc" "1" "failing docker cp -> copy fails (serial fallback)"
+    DOCKER_SHIM_EXEC_FAIL=1 PATH="$shim:$PATH" borrow::copy_tree 1 2 2>/dev/null >/dev/null || rc=$?
+    assert_exit_code "$rc" "1" "failing exec tar -> copy fails (serial fallback)"
     assert_eq "$(find "$s2" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "keep.txt " "B keeps exactly its old tree"
     assert_eq "$([[ -e "$RL_RUNNERS_DIR/slot-2/.worktree-staging" ]] && echo left || echo gone)" "gone" "staging dir removed"
-    assert_eq "$(tail -1 "$RL_STATE_DIR/docker.log")" "exec rl-runner-2 rm -rf /workspace/.rl-git-staging" "B's .git staging cleaned up after the failed cp"
+    assert_eq "$(tail -1 "$RL_STATE_DIR/docker.log")" "exec rl-runner-2 rm -rf /workspace/.rl-git-staging" "B's .git staging cleaned up after the failed stream"
 }
 
 run_test "git-copied-container-to-container" test_git_copied_container_to_container

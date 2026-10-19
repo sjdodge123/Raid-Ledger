@@ -111,16 +111,23 @@ borrow::release() {
 #
 # Staged so a failed copy never leaves B half-copied: (1) rsync A into a
 # staging dir under slot B (kept between runs, so the next copy is
-# incremental); (2) stream A's `.git` container-to-container into a staging
+# incremental); (2) stream A's `.git` container-to-container (tar over docker exec) into a staging
 # dir inside B's /workspace; (3) only then move the host staging onto B's tree
 # with --delay-updates and rename the staged `.git` into place. A failure in
 # (1) or (2) cleans both stagings and leaves B untouched. The worktree dir
 # itself is never renamed: the runner container bind-mounts it.
 #
-# Why `.git` goes through `docker cp`: it is runner-scaffolded and root-owned
-# on a previously used slot, so the host rsync (rl-agent) cannot update it, and
-# nothing else re-creates `.git` on a borrowed slot. Inside the containers the
-# copy runs as root.
+# Why `.git` goes container-to-container: it is runner-scaffolded and
+# root-owned on a previously used slot, so the host rsync (rl-agent) cannot
+# update it, and nothing else re-creates `.git` on a borrowed slot. Inside the
+# containers the copy runs as root.
+# Why a `tar` pipe through two `docker exec`s and NOT `docker cp` (Codex r3
+# P1): the orchestrator reaches Docker through the wollomatic socket proxy
+# (rl-infra/docker-compose.yml), whose allow-list has no
+# `/containers/{id}/archive` route, so `docker cp` is a 403 on every default
+# scaffold. `POST /containers/rl-runner-N/exec` + `POST /exec/{id}/start`
+# (attached, stdin included) ARE allowed — the same path `_exec_bits.sh`
+# already uses with `docker exec -i`. Do not widen the proxy for this.
 # What the host copy skips: `.git` (above), the git staging dir, B-local build
 # output, plus exactly what the laptop's Mutagen session ignores
 # (rl-infra/cli/rl ensure_mutagen — keep in sync), so B never holds a secret
@@ -143,7 +150,8 @@ borrow::_stage_git() {
     ra=$(borrow::_runner "$1"); rb=$(borrow::_runner "$2")
     borrow::_drop_git_stage "$2"
     if docker exec "$rb" mkdir -p "$BORROW_GIT_STAGE"; then
-        docker cp "$ra:/workspace/.git" - | docker cp - "$rb:$BORROW_GIT_STAGE"
+        docker exec "$ra" tar -C /workspace -cf - .git \
+            | docker exec -i "$rb" tar -C "$BORROW_GIT_STAGE" -xf -
         rc_out=${PIPESTATUS[0]} rc_in=${PIPESTATUS[1]}
         (( rc_out == 0 && rc_in == 0 )) && return 0
     fi
@@ -182,7 +190,7 @@ borrow::copy_tree() {
         || { borrow::_fail_stage "$b" "$stage" "staging rsync"; return 1; }
     if [[ -e "$src/.git" ]]; then
         git=1
-        borrow::_stage_git "$a" "$b" || { borrow::_fail_stage "$b" "$stage" ".git docker cp"; return 1; }
+        borrow::_stage_git "$a" "$b" || { borrow::_fail_stage "$b" "$stage" ".git exec-tar stream"; return 1; }
     fi
     if ! rsync -a --delete --delay-updates "${BORROW_COPY_FILTER[@]}" "$stage/" "$dst/"; then
         find "$dst" -name '.~tmp~' -type d -prune -exec rm -rf {} + 2>/dev/null || true
