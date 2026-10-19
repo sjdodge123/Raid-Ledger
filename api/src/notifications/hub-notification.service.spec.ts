@@ -112,6 +112,10 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
     expect(dedup.checkAndMarkSent).toHaveBeenCalledWith('hub-post:7', 3600);
     expect(dedup.releaseKey).toHaveBeenCalledWith('hub-post:7');
   });
+});
+
+describe('HubNotificationService.notifyLeaderPost opted-out recipients (Codex r2)', () => {
+  beforeEach(() => jest.clearAllMocks());
 
   it('gives the cooldown back when the only "success" is an opted-out recipient', async () => {
     const { svc, notifications, dedup } = setup();

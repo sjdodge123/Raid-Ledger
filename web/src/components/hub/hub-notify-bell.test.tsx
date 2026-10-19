@@ -69,16 +69,20 @@ async function openSwitch(user: ReturnType<typeof userEvent.setup>): Promise<HTM
     return screen.findByTestId('hub-notify-switch');
 }
 
+/** The bell's anchor spans x 1160–1200; the 320px popover sits wherever its inline `left` puts it. */
+function stubRects() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const isPopover = this.getAttribute('data-testid') === 'hub-notify-popover';
+        const left = isPopover && this instanceof HTMLElement ? parseFloat(this.style.left) || 0 : 1160;
+        const width = isPopover ? 320 : 40;
+        return { x: left, y: 100, left, top: 100, width, height: 40, right: left + width, bottom: 140, toJSON: () => ({}) };
+    });
+}
+
 describe('HubNotifyBell', () => {
     it('right-aligns the popover to the bell (the hero puts the bell at the right edge)', async () => {
         serve(MEMBER);
-        // The bell's anchor spans x 1160–1200; the 320px popover sits wherever its inline `left` puts it.
-        const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-            const isPopover = this.getAttribute('data-testid') === 'hub-notify-popover';
-            const left = isPopover && this instanceof HTMLElement ? parseFloat(this.style.left) || 0 : 1160;
-            const width = isPopover ? 320 : 40;
-            return { x: left, y: 100, left, top: 100, width, height: 40, right: left + width, bottom: 140, toJSON: () => ({}) };
-        });
+        const rect = stubRects();
         const user = userEvent.setup();
         renderWithProviders(<Harness />);
         await user.click(await screen.findByTestId('hub-notify-bell'));
