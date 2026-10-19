@@ -1,10 +1,10 @@
 /**
- * ROK-1836 D8 — DEMO_MODE armory character fixture data (anonymised, from
- * the `packages/contract/valheim-link/v1/fixtures/character-vanilla` shape;
- * inlined because the runtime image does not ship the contract fixtures).
- * The catalogue covers SwordIron, HelmetBronze, Wood and TrophyBoar; the
- * sheet also references CookedMeat + TrophyEikthyr so the prefab fallback
- * (D7) has something to show.
+ * ROK-1836 D8 — DEMO_MODE armory fixture writes: the server's catalogue +
+ * atlas (and a modded file icon), and one keyed character (`c1`…`c3`, see
+ * `valheim-armory-demo-sheet.ts`). The catalogue covers SwordIron,
+ * HelmetBronze, Wood, TrophyBoar and the modded blade; the sheet also
+ * references CookedMeat + TrophyEikthyr so the prefab fallback (D7) has
+ * something to show.
  */
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -21,6 +21,12 @@ import {
   blobRelativePath,
 } from '../link/blobs/valheim-link-blob.store';
 import { encodeDemoPng, type PixelFn } from './valheim-armory-demo-png';
+import {
+  ARMORY_FIXTURE_IDENTITIES,
+  ARMORY_FIXTURE_MOD_PREFAB,
+  fixtureSheet,
+  type ArmoryFixtureKey,
+} from './valheim-armory-demo-sheet';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -34,58 +40,13 @@ const COLOURS: [number, number, number][] = [
   [120, 72, 40],
 ];
 
-/** Request: `{ slot?, claimedBy?, withCatalog? }`. */
+/** Request: `{ slot?, key?, claimedBy?, withCatalog?, extraRows? }`. */
 export interface ArmoryCharacterFixtureRequest {
   slot: number;
+  key: ArmoryFixtureKey;
   claimedBy: number | null;
   withCatalog: boolean;
-}
-
-const weapon = (prefab: string, quality: number, dur: number, max: number) => ({
-  prefab,
-  stack: 1,
-  quality,
-  variant: 0,
-  durability: dur,
-  maxDurability: max,
-});
-const stack = (prefab: string, n: number) => ({
-  prefab,
-  stack: n,
-  quality: 1,
-  variant: 0,
-  durability: null,
-  maxDurability: null,
-});
-
-/** The sheet columns of the fixture profile. */
-function fixtureSheet(): Pick<
-  NewValheimProfile,
-  'equipment' | 'inventory' | 'skills' | 'trophies'
-> {
-  const sword = weapon('SwordIron', 3, 180.5, 250);
-  const helmet = weapon('HelmetBronze', 2, 300, 400);
-  return {
-    equipment: [
-      { slot: 'rightHand', item: sword },
-      { slot: 'head', item: helmet },
-    ],
-    inventory: {
-      grid: { width: 8, height: 4, extraRows: [] },
-      items: [
-        { x: 0, y: 0, equipped: true, item: sword },
-        { x: 1, y: 0, equipped: true, item: helmet },
-        { x: 2, y: 0, equipped: false, item: stack('Wood', 50) },
-        { x: 7, y: 3, equipped: false, item: stack('CookedMeat', 12) },
-      ],
-    },
-    skills: [
-      { id: 'Swords', level: 34.25, accumulator: 12.5 },
-      { id: 'Run', level: 41, accumulator: 0 },
-      { id: '-1287461328', level: 3.5, accumulator: 1.75 },
-    ],
-    trophies: ['TrophyBoar', 'TrophyEikthyr'],
-  };
+  extraRows: boolean;
 }
 
 const atlasEntry = (
@@ -101,18 +62,36 @@ const atlasEntry = (
   icon: { kind: 'atlas', x: cell * 64, y: 0, w: 64, h: 64 },
 });
 
-const FIXTURE_ITEMS: Record<string, ValheimItemCatalogEntryRow> = {
-  SwordIron: atlasEntry('Iron sword', 'OneHandedWeapon', 0),
-  HelmetBronze: atlasEntry('Bronze helmet', 'Helmet', 1),
-  Wood: atlasEntry('Wood', 'Material', 2),
-  TrophyBoar: atlasEntry('Boar trophy', 'Trophy', 3),
-};
+function fixtureItems(
+  modIconSha256: string,
+): Record<string, ValheimItemCatalogEntryRow> {
+  return {
+    SwordIron: atlasEntry('Iron sword', 'OneHandedWeapon', 0),
+    HelmetBronze: atlasEntry('Bronze helmet', 'Helmet', 1),
+    Wood: atlasEntry('Wood', 'Material', 2),
+    TrophyBoar: atlasEntry('Boar trophy', 'Trophy', 3),
+    [ARMORY_FIXTURE_MOD_PREFAB]: {
+      name: 'Mythic blade',
+      category: 'OneHandedWeapon',
+      maxStack: 1,
+      maxQuality: 4,
+      variants: 0,
+      icon: { kind: 'file', file: 'RtDMythicBlade.png', sha256: modIconSha256 },
+    },
+  };
+}
 
 const atlasPixel: PixelFn = (x) => COLOURS[Math.floor(x / 64)] ?? [0, 0, 0];
+const modIconPixel: PixelFn = () => [148, 0, 211];
 
-/** Write the atlas PNG + its blob row (idempotent); returns its sha256. */
-async function storeAtlas(db: Db, serverId: number): Promise<string> {
-  const bytes = encodeDemoPng(ATLAS_W, ATLAS_H, atlasPixel);
+/** Write a PNG + its blob row (idempotent); returns its sha256. */
+async function storePng(
+  db: Db,
+  serverId: number,
+  [w, h]: [number, number],
+  pixel: PixelFn,
+): Promise<string> {
+  const bytes = encodeDemoPng(w, h, pixel);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   const rel = blobRelativePath(serverId, sha256);
   await mkdir(path.dirname(blobAbsolutePath(rel)), { recursive: true });
@@ -124,8 +103,8 @@ async function storeAtlas(db: Db, serverId: number): Promise<string> {
       sha256,
       byteLength: bytes.length,
       contentType: 'image/png',
-      width: ATLAS_W,
-      height: ATLAS_H,
+      width: w,
+      height: h,
       storagePath: rel,
     })
     .onConflictDoNothing();
@@ -133,7 +112,13 @@ async function storeAtlas(db: Db, serverId: number): Promise<string> {
 }
 
 async function insertCatalog(db: Db, serverId: number): Promise<void> {
-  const atlasSha256 = await storeAtlas(db, serverId);
+  const atlasSha256 = await storePng(
+    db,
+    serverId,
+    [ATLAS_W, ATLAS_H],
+    atlasPixel,
+  );
+  const modSha256 = await storePng(db, serverId, [64, 64], modIconPixel);
   await db.insert(schema.valheimItemCatalogs).values({
     pelicanServerId: serverId,
     gameVersion: ARMORY_FIXTURE_GAME_VERSION,
@@ -141,16 +126,14 @@ async function insertCatalog(db: Db, serverId: number): Promise<void> {
     atlasSha256,
     atlasWidth: ATLAS_W,
     atlasHeight: ATLAS_H,
-    items: FIXTURE_ITEMS,
+    items: fixtureItems(modSha256),
     capturedAt: new Date(),
   });
 }
 
-/** Drop the server's fixture profile + catalogue (idempotent re-run). */
-async function resetArmoryRows(db: Db, serverId: number): Promise<void> {
-  const P = schema.valheimProfiles;
+/** Drop the server's fixture catalogue (shared by every key). */
+async function resetCatalog(db: Db, serverId: number): Promise<void> {
   const C = schema.valheimItemCatalogs;
-  await db.delete(P).where(eq(P.pelicanServerId, serverId));
   await db
     .delete(C)
     .where(
@@ -161,44 +144,64 @@ async function resetArmoryRows(db: Db, serverId: number): Promise<void> {
     );
 }
 
+/** Drop ONLY this key's profile — the other keys' characters survive. */
+async function resetProfile(
+  db: Db,
+  serverId: number,
+  key: ArmoryFixtureKey,
+): Promise<void> {
+  const P = schema.valheimProfiles;
+  const { steamId, playerId } = ARMORY_FIXTURE_IDENTITIES[key];
+  await db
+    .delete(P)
+    .where(
+      and(
+        eq(P.pelicanServerId, serverId),
+        eq(P.steamId, steamId),
+        eq(P.playerId, playerId),
+      ),
+    );
+}
+
 function profileValues(
   serverId: number,
-  claimedBy: number | null,
+  req: ArmoryCharacterFixtureRequest,
 ): NewValheimProfile {
+  const { claimedBy } = req;
   return {
     pelicanServerId: serverId,
-    steamId: '76561198000000001',
-    playerId: '1000000000000001',
+    ...ARMORY_FIXTURE_IDENTITIES[req.key],
     worldUid: '1234567890123',
     worldName: 'Fixtureheim',
-    name: 'Testviking',
     claimedBy,
     claimSource: claimedBy === null ? null : 'admin',
     claimedAt: claimedBy === null ? null : new Date(),
     gameVersion: ARMORY_FIXTURE_GAME_VERSION,
     modVersion: '1.0.0',
     capturedAt: new Date(),
-    ...fixtureSheet(),
+    ...fixtureSheet(req.extraRows),
     knownItems: [],
     knownRecipes: [],
   };
 }
 
 /**
- * Reset the server's armory rows to one fixture character (+ catalogue
- * and atlas when `withCatalog`); returns the profile id.
+ * Reset `req.key`'s character (idempotent per key) and the server's
+ * fixture catalogue (re-inserted with its atlas when `withCatalog`, so the
+ * last call decides it for every key); returns the profile id.
  */
 export async function seedArmoryCharacter(
   db: Db,
   serverId: number,
   req: ArmoryCharacterFixtureRequest,
 ): Promise<number> {
-  await resetArmoryRows(db, serverId);
+  await resetProfile(db, serverId, req.key);
+  await resetCatalog(db, serverId);
   if (req.withCatalog) await insertCatalog(db, serverId);
   const P = schema.valheimProfiles;
   const [row] = await db
     .insert(P)
-    .values(profileValues(serverId, req.claimedBy))
+    .values(profileValues(serverId, req))
     .returning({ id: P.id });
   if (!row) throw new Error('Armory fixture insert returned no row');
   return row.id;

@@ -160,3 +160,54 @@ describe('POST /admin/test/valheim/armory-character (ROK-1836 D8)', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('armory-character keys + claimant check (ROK-1836 M2, m2)', () => {
+  it('seeds c1 + c2 + c3 on one hub; c3 carries EAQS rows + a modded prefab; re-running c1 keeps all three', async () => {
+    const c1 = await seed({ key: 'c1' });
+    const c2 = await seed({ key: 'c2' });
+    const c3 = await seed({ key: 'c3', extraRows: true });
+    expect([c2.serverId, c3.serverId]).toEqual([c1.serverId, c1.serverId]);
+    const member = await memberToken(testApp, 'bob');
+    const names = [];
+    for (const f of [c1, c2, c3]) {
+      names.push((await readDetail(f.characterId, member)).name);
+    }
+    expect(names).toEqual(['Testviking', 'Shieldmaiden', 'Modviking']);
+    const d3 = await readDetail(c3.characterId, member);
+    expect(d3.inventory.grid.extraRows.map((r) => r.purpose)).toEqual([
+      'equipment',
+      'quickslot',
+    ]);
+    expect(d3.items?.RtD_MythicBlade?.icon).toMatchObject({ kind: 'file' });
+    const again = await seed({ key: 'c1' });
+    const P = schema.valheimProfiles;
+    const rows = await testApp.db.select({ name: P.name }).from(P);
+    expect(rows.map((r) => r.name).sort()).toEqual([
+      'Modviking',
+      'Shieldmaiden',
+      'Testviking',
+    ]);
+    expect(again.characterId).not.toBe(c1.characterId);
+  });
+
+  it('400s with a readable message when claimedBy names no user', async () => {
+    const res = await testApp.request
+      .post(ROUTE)
+      .set(bearer(adminToken))
+      .send({ claimedBy: 999999 });
+    expect(res.status).toBe(400);
+    expect((res.body as { message?: unknown }).message).toBe(
+      'claimedBy: no user 999999',
+    );
+  });
+
+  it('400s on an unknown key or a non-boolean extraRows', async () => {
+    for (const body of [{ key: 'c4' }, { extraRows: 'yes' }]) {
+      const res = await testApp.request
+        .post(ROUTE)
+        .set(bearer(adminToken))
+        .send(body);
+      expect(res.status).toBe(400);
+    }
+  });
+});

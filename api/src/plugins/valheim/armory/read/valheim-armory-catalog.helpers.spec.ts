@@ -41,7 +41,7 @@ function catalog(
 describe('projectCatalog own-property lookup', () => {
   it('treats constructor / toString / __proto__ as not in the catalogue', () => {
     const prefabs = ['SwordIron', '__proto__', 'constructor', 'toString'];
-    let out: ArmoryCatalogProjection | 'threw' = 'threw';
+    let out: ArmoryCatalogProjection | 'threw';
     try {
       out = projectCatalog(prefabs, catalog());
     } catch {

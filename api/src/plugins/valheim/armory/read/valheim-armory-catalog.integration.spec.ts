@@ -288,3 +288,19 @@ describe('GET plugins/valheim/armory/servers/:serverId/blobs/:sha256 (D5)', () =
     expect(res.status).toBe(401);
   });
 });
+
+describe('blob error responses are never cached (ROK-1836 M1)', () => {
+  it('a not-ready 404 is no-store, never the immutable blob policy', async () => {
+    const serverId = await makeServer(14);
+    const res = await getBlob(blobUrl(serverId, 'e'.repeat(64)));
+    expect(res.status).toBe(404);
+    expect(`${res.headers['cache-control']}`).not.toContain('immutable');
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('a malformed-sha 400 is no-store', async () => {
+    const res = await getBlob(blobUrl(1, 'abc'));
+    expect(res.status).toBe(400);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+});
