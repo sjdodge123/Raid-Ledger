@@ -102,8 +102,7 @@ fanout::dispatch b "$B" medium "$(borrow::agent_id "$P")" true "RL_GATE_DISCORD=
 FANOUT_BORROW_CHILD="$CB"
 fanout::wait_all "$FAIL_FAST" "$CA" "$CB"
 
-if [[ -n "$BORROWED" ]]; then borrow::release "$BORROWED" "$P" || true; fi
-BORROWED=""
+fanout::release_borrow
 
 if grep -q '^\[parallel\] discord-deferred' "$RL_TASKS_DIR/$CB.log" 2>/dev/null \
     && ! { [[ "$FAIL_FAST" == "1" ]] && { fanout::failed "$CA" || fanout::failed "$CB"; }; }; then

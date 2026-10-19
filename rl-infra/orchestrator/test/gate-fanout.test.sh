@@ -62,7 +62,8 @@ SH
 #!/usr/bin/env bash
 echo "serial agent=${RL_AGENT_ID:-} $*" >> "$CALLS"; echo "Build: PASS"; exit "${SHIM_SERIAL_RC:-0}"
 SH
-    printf '#!/usr/bin/env bash\nexit 0\n' > "$SHIM_DIR/docker"
+    # docker: success, except `pgrep` (runner drain) reports no lingering process.
+    printf '#!/usr/bin/env bash\n[[ " $* " == *" pgrep "* ]] && exit 1\nexit 0\n' > "$SHIM_DIR/docker"
     printf '#!/usr/bin/env bash\necho "MERGED $1"; exit 0\n' > "$SHIM_DIR/merge"
     chmod +x "$SHIM_DIR"/*
     export RL_GATE_MERGE="$SHIM_DIR/merge"
@@ -228,6 +229,54 @@ test_b_released_when_b_finishes() {
     unset SHIM_A SHIM_B
 }
 
+# A docker shim for runner-side drain: `exec rl-runner-2 pgrep` reports a
+# lingering child-B process for the first $SHIM_LINGER calls (exit 0 + pid),
+# then none (exit 1). Every pgrep/pkill call logs slot 2's claimed flag AT THAT
+# MOMENT, so the order "drained, then released" is observable.
+_drain_docker_shim() {
+    cat > "$SHIM_DIR/docker" <<'SH'
+#!/usr/bin/env bash
+c=$(jq -r '.[] | select(.slot == 2) | .claimed' "$RL_STATE_DIR/claims.json")
+case " $* " in
+  *" rl-runner-2 pgrep "*)
+    n=$(( $(cat "$RL_STATE_DIR/pgrep.n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$RL_STATE_DIR/pgrep.n"
+    echo "docker pgrep claimed=$c" >> "$CALLS"
+    (( n <= ${SHIM_LINGER:-0} )) && { echo 4242; exit 0; }
+    exit 1 ;;
+  *" rl-runner-2 pkill "*) echo "docker pkill claimed=$c $*" >> "$CALLS"; exit 0 ;;
+esac
+exit 0
+SH
+    chmod +x "$SHIM_DIR/docker"
+}
+
+_run_b_done_a_ok() {
+    PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" --inner-env "" \
+        --a-args "--fleet --no-e2e" --b-args "--only-e2e" --serial-args "--fleet" >/dev/null 2>&1
+}
+
+test_b_drained_before_release() {
+    CURRENT_TEST_NAME="B's runner-side processes are drained before the borrowed slot is released"
+    _seed free; _drain_docker_shim; export SHIM_LINGER=1 RL_FANOUT_DRAIN_POLL_SECONDS=0.1
+    _run_b_done_a_ok
+    assert_eq "$(grep '^docker pgrep' "$CALLS" | head -2 | tr '\n' '|')" "docker pgrep claimed=true|docker pgrep claimed=true|" "slot 2 still borrowed while a B process lingers and at the all-clear poll"
+    assert_eq "$(grep -c '^docker pkill' "$CALLS")" "0" "no kill when the process exits on its own"
+    assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 released after the drain"
+    unset SHIM_LINGER RL_FANOUT_DRAIN_POLL_SECONDS
+}
+
+test_b_lingering_killed_before_release() {
+    CURRENT_TEST_NAME="B's processes that outlive the drain window are killed, then the slot is released"
+    _seed free; _drain_docker_shim; export SHIM_LINGER=999 RL_FANOUT_DRAIN_SECONDS=0.3 RL_FANOUT_DRAIN_POLL_SECONDS=0.1
+    _run_b_done_a_ok
+    assert_contains "$(grep '^docker pkill' "$CALLS" | head -1)" "docker pkill claimed=true" "lingering B processes killed while slot 2 is still borrowed"
+    assert_contains "$(grep '^docker pkill' "$CALLS" | head -1)" "-KILL -f" "SIGKILL by command-line pattern"
+    assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 released after the kill"
+    unset SHIM_LINGER RL_FANOUT_DRAIN_SECONDS RL_FANOUT_DRAIN_POLL_SECONDS
+}
+
+run_test "b-drained-before-release" test_b_drained_before_release
+run_test "b-lingering-killed-before-release" test_b_lingering_killed_before_release
 run_test "force-serial" test_force_serial
 run_test "b-released-when-b-finishes" test_b_released_when_b_finishes
 run_test "specs-env-only-e2e-children" test_specs_env_only_reaches_e2e_children

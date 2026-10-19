@@ -56,14 +56,46 @@ fanout::failed() {
     grep -Eq ': FAIL(\x1b\[[0-9;]*m)?$' "$RL_TASKS_DIR/$1.log" 2>/dev/null
 }
 
+# Child-B process pattern on the borrowed runner: release's RUNNER_PROC_PATTERN
+# plus playwright. The borrowed runner runs nothing but child B, so every match
+# there is B's.
+FANOUT_RUNNER_PROC_PATTERN='validate-ci\.sh|jest|vitest|playwright|npm |node '
+
+# fanout::drain_runner <slot> — wait (≤ RL_FANOUT_DRAIN_SECONDS, default 60)
+# until no child-B process remains in rl-runner-<slot>, then SIGKILL any that
+# outlived the window. Codex r3 P2: a timed-out/cancelled child's `docker exec`
+# client dies first, but its container-side Playwright can keep using the
+# workspace; releasing before this would hand a live workspace to a waiter.
+# pgrep runs directly (no `sh -c`) so it never matches its own command line;
+# exit 1 (none) or any docker error ends the wait.
+fanout::drain_runner() {
+    local r="rl-runner-$1" end
+    end=$(awk -v n="$(date +%s)" -v d="${RL_FANOUT_DRAIN_SECONDS:-60}" 'BEGIN { printf "%d", n + d + 0.999 }')
+    while docker exec "$r" pgrep -f "$FANOUT_RUNNER_PROC_PATTERN" >/dev/null 2>&1; do
+        if (( $(date +%s) >= end )); then
+            echo "[parallel] slot $1: child B processes outlived the drain window, killing them"
+            docker exec "$r" pkill -KILL -f "$FANOUT_RUNNER_PROC_PATTERN" >/dev/null 2>&1 || true
+            return 0
+        fi
+        sleep "${RL_FANOUT_DRAIN_POLL_SECONDS:-1}"
+    done
+}
+
+# fanout::release_borrow — drain the borrowed runner, then release the borrow.
+fanout::release_borrow() {
+    [[ -n "${BORROWED:-}" ]] || return 0
+    fanout::drain_runner "$BORROWED"
+    borrow::release "$BORROWED" "$P" || true
+    BORROWED=""
+}
+
 # fanout::release_borrow_if_done — free the borrowed slot once the child running
 # on it ($FANOUT_BORROW_CHILD) is terminal; a no-op otherwise or when already freed.
 fanout::release_borrow_if_done() {
     [[ -n "${BORROWED:-}" && -n "${FANOUT_BORROW_CHILD:-}" ]] || return 0
     case "$(fanout::status "$FANOUT_BORROW_CHILD")" in running|queued|pending|unknown|missing|"") return 0 ;; esac
-    echo "[parallel] released borrowed slot $BORROWED (child ${FANOUT_BORROW_CHILD: -1} done)"
-    borrow::release "$BORROWED" "$P" || true
-    BORROWED=""
+    echo "[parallel] releasing borrowed slot $BORROWED (child ${FANOUT_BORROW_CHILD: -1} done)"
+    fanout::release_borrow
 }
 
 # fanout::wait_all <fail_fast> <ids...> — relay until every id is terminal.
@@ -121,5 +153,5 @@ fanout::cleanup() {
         rm -f "$RL_TASKS_DIR/$P.relay-$id"
         fanout::record_outcome "$id"
     done
-    if [[ -n "${BORROWED:-}" ]]; then borrow::release "$BORROWED" "$P" || true; BORROWED=""; fi
+    fanout::release_borrow
 }
