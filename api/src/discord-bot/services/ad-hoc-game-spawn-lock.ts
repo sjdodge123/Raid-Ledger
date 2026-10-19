@@ -11,13 +11,17 @@
  * No catch-and-retry inside: under postgres.js a failed statement poisons the
  * whole transaction (see CLAUDE.md, games-table INSERT paths).
  */
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { Logger } from '@nestjs/common';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LiveGameEvent } from './ad-hoc-server-presence.helpers';
 import { createAdHocEventRow, findAdminFallback } from './ad-hoc-event.helpers';
+import { bornOnSpawningChannel } from './ad-hoc-event-channel-scope.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+const logger = new Logger('AdHocGameSpawn');
 
 /** Advisory-lock class for per-game Quick Play spawns (two-int form). */
 export const AD_HOC_GAME_SPAWN_LOCK_CLASS = 1801;
@@ -38,9 +42,8 @@ export async function withGameSpawnLock<T>(
 
 /**
  * The live event a VOICE spawn must join instead of creating one: the game's
- * live Quick Play that is server-born (no binding) or already on this
- * binding. Another voice binding's event for the same game stays separate,
- * as it was before ROK-1800.
+ * live (or in-grace) Quick Play that is server-born or was created by a
+ * binding on the spawning binding's Discord channel.
  */
 export async function findVoiceSpawnTarget(
   db: Db,
@@ -61,7 +64,7 @@ export async function findVoiceSpawnTarget(
         eq(e.gameId, gameId),
         inArray(e.adHocStatus, ['live', 'grace_period']),
         isNull(e.cancelledAt),
-        or(isNull(e.channelBindingId), eq(e.channelBindingId, bindingId)),
+        bornOnSpawningChannel(bindingId),
       ),
     )
     // No `.limit(1)`: at most a handful of rows, and it keeps this lookup
@@ -71,8 +74,9 @@ export async function findVoiceSpawnTarget(
 }
 
 /**
- * The voice path's create: under the game's spawn lock, join the live
- * server-born (or same-binding) Quick Play when one exists, else insert.
+ * The voice path's create: under the game's spawn lock, join the game's live
+ * same-channel (or server-born) Quick Play when one exists (the caller
+ * registers it under its own key), else insert.
  * A null game (general lobby) has nothing to dedup against and skips it.
  */
 export async function createVoiceQuickPlay(
@@ -87,10 +91,17 @@ export async function createVoiceQuickPlay(
   const gameId = binding.gameId ?? null;
   const create = (on: Db) =>
     createAdHocEventRow(on, bindingId, { gameId }, creatorId, resolvedGameName);
-  if (gameId === null) return { eventId: await create(db), existing: false };
-  return withGameSpawnLock(db, gameId, async (tx) => {
-    const live = await findVoiceSpawnTarget(tx, gameId, bindingId);
-    if (live) return { eventId: live.id, existing: true };
-    return { eventId: await create(tx), existing: false };
-  });
+  const result =
+    gameId === null
+      ? { eventId: await create(db), existing: false }
+      : await withGameSpawnLock(db, gameId, async (tx) => {
+          const live = await findVoiceSpawnTarget(tx, gameId, bindingId);
+          if (live) return { eventId: live.id, existing: true };
+          return { eventId: await create(tx), existing: false };
+        });
+  if (!result.existing)
+    logger.log(
+      `Voice binding ${bindingId} spawned Quick Play ${result.eventId}`,
+    );
+  return result;
 }

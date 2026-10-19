@@ -258,6 +258,36 @@ describe('AdHocNotificationService — Quick Play Announcements (real DB)', () =
     expect(editedIds(after)).toEqual([`${QP_TEXT}/msg-1`]);
   });
 
+  it('a lobby reusing a monitor-born event finds its fallback-channel card after a restart (ROK-1851)', async () => {
+    const monitor = await insertBinding({
+      channelId: MONITOR_VOICE,
+      channelType: 'voice',
+      bindingPurpose: 'game-voice-monitor',
+      gameId: gameId(),
+      config: { notificationChannelId: MONITOR_NOTIFY },
+    });
+    const lobby = await insertBinding({
+      channelId: LOBBY_VOICE,
+      channelType: 'voice',
+      bindingPurpose: 'general-lobby',
+      gameId: null,
+    });
+    const eventId = await insertLiveEvent(monitor);
+    const before = stubs();
+    await spawn(buildService(before), eventId, monitor);
+    expect(sentTo(before)).toEqual([MONITOR_NOTIFY]);
+
+    // Restart, then the lobby (reusing the monitor's event) enqueues an update.
+    const after = stubs();
+    const restarted = buildService(after);
+    restarted.queueUpdate(eventId, lobby);
+    await flush(restarted);
+
+    expect(editedIds(after)).toEqual([`${MONITOR_NOTIFY}/msg-1`]);
+    const cache = restarted as unknown as { untracked: Set<number> };
+    expect(cache.untracked.has(eventId)).toBe(false);
+  });
+
   it('lobby event with NO QP binding: a restart never adopts its share/unfurl row (AC8)', async () => {
     const lobby = await insertBinding({
       channelId: LOBBY_VOICE,

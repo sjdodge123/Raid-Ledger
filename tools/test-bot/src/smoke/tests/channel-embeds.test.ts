@@ -5,7 +5,7 @@
  * When an MMO game + character are available, events use slot configs
  * and signups include character/role assignment.
  */
-import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
+import { pollForEmbed, waitForEmbedUpdate } from "../../helpers/polling.js";
 import {
   createEvent,
   signup,
@@ -16,30 +16,30 @@ import {
   awaitProcessing,
   channelForTest,
   channelForGame,
-} from '../fixtures.js';
+} from "../fixtures.js";
 import {
   assertEmbedTitle,
   assertEmbedCount,
   assertHasButton,
   assertEmbedColor,
   imminentAuthorPattern,
-} from '../assert.js';
-import type { SmokeTest, TestContext } from '../types.js';
-import { must } from './must.js';
-import type { SimpleEmbed } from '../../helpers/messages.js';
-import type { ApiClient } from '../api.js';
+} from "../assert.js";
+import type { SmokeTest, TestContext } from "../types.js";
+import { must } from "./must.js";
+import type { SimpleEmbed } from "../../helpers/messages.js";
+import type { ApiClient } from "../api.js";
 
 /** EMBED_COLORS.REMINDER — the `needs_you` colour a soon-to-start event wears. */
 const REMINDER_AMBER = 0xf59e0b;
 /** EMBED_COLORS.ERROR — the `cancelled` colour. */
 const CANCELLED_RED = 0xef4444;
 /** Same fallback the API applies when no community name is configured. */
-const DEFAULT_COMMUNITY = 'Raid Ledger';
+const DEFAULT_COMMUNITY = "Raid Ledger";
 
 /** The community name the chrome renders, read from the API's own branding. */
 async function fetchCommunityName(api: ApiClient): Promise<string> {
   const branding = await api
-    .get<{ communityName: string | null }>('/system/branding')
+    .get<{ communityName: string | null }>("/system/branding")
     .catch(() => null);
   const name = branding?.communityName?.trim();
   return name ? name : DEFAULT_COMMUNITY;
@@ -58,7 +58,7 @@ function embedShowsSignupCount(
   return (
     !!e.title?.includes(title) &&
     !!e.author?.includes(`${count} of `) &&
-    !e.description?.includes('ROSTER:')
+    !e.description?.includes("ROSTER:")
   );
 }
 
@@ -85,14 +85,14 @@ function mmoOverrides(ctx: TestContext) {
   if (!ctx.mmoGameId) return {};
   return {
     gameId: ctx.mmoGameId,
-    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
+    slotConfig: { type: "mmo", tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
   };
 }
 
 /** Build signup overrides with character + preferred roles. */
 function mmoSignupOpts(ctx: TestContext, roles?: string[]) {
   if (!ctx.testCharId) return {};
-  const preferred = roles ?? [ctx.testCharRole ?? 'dps'];
+  const preferred = roles ?? [ctx.testCharRole ?? "dps"];
   return { characterId: ctx.testCharId, preferredRoles: preferred };
 }
 
@@ -104,6 +104,27 @@ function embedInChannel(chId: string, title: string, timeoutMs: number) {
   );
 }
 
+/**
+ * Poll until THIS event's card shows `count` signups. `POST /events` posts the
+ * card, then signs the creator up; that re-render is a delayed (coalesced, 2s)
+ * embed-sync job `awaitProcessing` does not wait for, so a single title-only
+ * read can return the pre-signup card (`0 of 10`).
+ */
+async function pollForCountedCard(
+  chId: string,
+  title: string,
+  count: number,
+  timeoutMs: number,
+): Promise<SimpleEmbed> {
+  const matches = (e: SimpleEmbed) => embedShowsSignupCount(e, title, count);
+  const msg = await pollForEmbed(
+    chId,
+    (m) => m.embeds.some(matches),
+    timeoutMs,
+  );
+  return must(msg.embeds.find(matches), "the card showing the signup count");
+}
+
 /** The author line must carry the state, not the bare community name. */
 function assertAuthorMatches(e: SimpleEmbed, pattern: RegExp): void {
   if (!e.author || !pattern.test(e.author)) {
@@ -113,21 +134,33 @@ function assertAuthorMatches(e: SimpleEmbed, pattern: RegExp): void {
 
 /** The community name lives in the footer once the author carries the state. */
 function assertFooterIs(e: SimpleEmbed, community: string): void {
-  if ((e.footer ?? '').split(' \u00b7 ')[0] !== community) {
-    throw new Error(`Expected footer to start with "${community}", got "${e.footer}"`);
+  if ((e.footer ?? "").split(" \u00b7 ")[0] !== community) {
+    throw new Error(
+      `Expected footer to start with "${community}", got "${e.footer}"`,
+    );
   }
 }
 
 const eventEmbedPosted: SmokeTest = {
-  name: 'Event embed posted to channel',
-  category: 'embed',
+  name: "Event embed posted to channel",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 0);
-    const ev = await createEvent(ctx.api, 'embed-post', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-post", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
-      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(
+        ch.channelId,
+        ev.title,
+        ctx.config.timeoutMs,
+      );
       assertEmbedCount(msg.embeds, 1);
-      assertEmbedTitle(must(msg.embeds[0], 'the posted embed'), new RegExp(ev.title));
+      assertEmbedTitle(
+        must(msg.embeds[0], "the posted embed"),
+        new RegExp(ev.title),
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -135,14 +168,17 @@ const eventEmbedPosted: SmokeTest = {
 };
 
 const embedFilling: SmokeTest = {
-  name: 'Embed updates to FILLING on signup',
-  category: 'embed',
+  name: "Embed updates to FILLING on signup",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 1);
-    const ev = await createEvent(ctx.api, 'embed-filling', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-filling", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
-      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ["dps"]));
       await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
@@ -156,8 +192,9 @@ const embedFilling: SmokeTest = {
 };
 
 /** ROK-1804: the description excerpt every event embed opens with. */
-const SMOKE_DESCRIPTION = 'Bring frost resist @everyone, meet at the portal.';
-const SMOKE_DESCRIPTION_RENDERED = 'Bring frost resist @\u200Beveryone, meet at the portal.';
+const SMOKE_DESCRIPTION = "Bring frost resist @everyone, meet at the portal.";
+const SMOKE_DESCRIPTION_RENDERED =
+  "Bring frost resist @\u200Beveryone, meet at the portal.";
 
 /** The embed opens with the (mention-escaped) description, then a blank line. */
 function opensWithDescription(e: SimpleEmbed, title: string): boolean {
@@ -168,11 +205,11 @@ function opensWithDescription(e: SimpleEmbed, title: string): boolean {
 }
 
 const embedShowsDescription: SmokeTest = {
-  name: 'Event embed shows the event description, POSTED and FILLING (ROK-1804)',
-  category: 'embed',
+  name: "Event embed shows the event description, POSTED and FILLING (ROK-1804)",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 1);
-    const ev = await createEvent(ctx.api, 'embed-desc', {
+    const ev = await createEvent(ctx.api, "embed-desc", {
       ...mmoOverrides(ctx),
       ...(ch.gameId ? { gameId: ch.gameId } : {}),
       description: SMOKE_DESCRIPTION,
@@ -183,13 +220,15 @@ const embedShowsDescription: SmokeTest = {
         (m) => m.embeds.some((e) => opensWithDescription(e, ev.title)),
         ctx.config.timeoutMs,
       );
-      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ["dps"]));
       await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
         (m) =>
           m.embeds.some(
-            (e) => embedShowsSignupCount(e, ev.title, 1) && opensWithDescription(e, ev.title),
+            (e) =>
+              embedShowsSignupCount(e, ev.title, 1) &&
+              opensWithDescription(e, ev.title),
           ),
         ctx.config.timeoutMs,
       );
@@ -200,14 +239,17 @@ const embedShowsDescription: SmokeTest = {
 };
 
 const embedTentative: SmokeTest = {
-  name: 'Tentative signup reflected in embed',
-  category: 'embed',
+  name: "Tentative signup reflected in embed",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 2);
-    const ev = await createEvent(ctx.api, 'embed-tentative', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-tentative", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
-      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['healer']));
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ["healer"]));
       await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
@@ -221,14 +263,17 @@ const embedTentative: SmokeTest = {
 };
 
 const embedCancelSignup: SmokeTest = {
-  name: 'Embed updates when signup cancelled',
-  category: 'embed',
+  name: "Embed updates when signup cancelled",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 3);
-    const ev = await createEvent(ctx.api, 'embed-unsignup', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-unsignup", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
-      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['tank']));
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ["tank"]));
       await awaitProcessing(ctx.api);
       // Wait for embed to show the signup in the roster
       await waitForEmbedUpdate(
@@ -252,11 +297,14 @@ const embedCancelSignup: SmokeTest = {
 };
 
 const embedCancelled: SmokeTest = {
-  name: 'Event cancellation updates embed',
-  category: 'embed',
+  name: "Event cancellation updates embed",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 4);
-    const ev = await createEvent(ctx.api, 'embed-cancel', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-cancel", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
@@ -267,7 +315,8 @@ const embedCancelled: SmokeTest = {
         // title keeps only its strikethrough.
         (m) =>
           m.embeds.some(
-            (e) => !!e.author?.includes('CANCELLED') && !!e.title?.includes('~~'),
+            (e) =>
+              !!e.author?.includes("CANCELLED") && !!e.title?.includes("~~"),
           ),
         ctx.config.timeoutMs,
       );
@@ -278,11 +327,14 @@ const embedCancelled: SmokeTest = {
 };
 
 const embedReschedule: SmokeTest = {
-  name: 'Reschedule updates embed time',
-  category: 'embed',
+  name: "Reschedule updates embed time",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 5);
-    const ev = await createEvent(ctx.api, 'embed-resched', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-resched", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
       const original = await embedInChannel(
         ch.channelId,
@@ -290,8 +342,8 @@ const embedReschedule: SmokeTest = {
         ctx.config.timeoutMs,
       );
       // Capture the original timestamp from the embed description
-      const originalDesc = original.embeds[0]?.description ?? '';
-      const originalTs = originalDesc.match(/<t:(\d+):f>/)?.[1] ?? '';
+      const originalDesc = original.embeds[0]?.description ?? "";
+      const originalTs = originalDesc.match(/<t:(\d+):f>/)?.[1] ?? "";
       await rescheduleEvent(ctx.api, ev.id, 180);
       await awaitProcessing(ctx.api);
       // Wait for the embed timestamp to change from the original
@@ -301,7 +353,7 @@ const embedReschedule: SmokeTest = {
           m.embeds.some(
             (e) =>
               e.title?.includes(ev.title) &&
-              !!e.description?.includes('<t:') &&
+              !!e.description?.includes("<t:") &&
               !e.description.includes(`<t:${originalTs}:f>`),
           ),
         ctx.config.timeoutMs,
@@ -313,14 +365,21 @@ const embedReschedule: SmokeTest = {
 };
 
 const embedHasButtons: SmokeTest = {
-  name: 'Event embed has signup buttons',
-  category: 'embed',
+  name: "Event embed has signup buttons",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 6);
-    const ev = await createEvent(ctx.api, 'embed-btns', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-btns", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
-      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
-      assertHasButton(msg.components, 'Sign Up');
+      const msg = await embedInChannel(
+        ch.channelId,
+        ev.title,
+        ctx.config.timeoutMs,
+      );
+      assertHasButton(msg.components, "Sign Up");
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -328,27 +387,29 @@ const embedHasButtons: SmokeTest = {
 };
 
 const nonMmoNoWowAvatars: SmokeTest = {
-  name: 'Non-MMO event roster does not show WoW character avatars (ROK-918)',
-  category: 'embed',
+  name: "Non-MMO event roster does not show WoW character avatars (ROK-918)",
+  category: "embed",
   async run(ctx) {
     // Find a non-MMO game (hasRoles=false) so the gameId-based filter runs.
     // Using gameId: null would skip the filter entirely (original behavior).
     type GameRow = { id: number; name: string; hasRoles: boolean };
     const configuredGames = await ctx.api
-      .get<{ data: GameRow[] }>('/games/configured')
-      .then((r) => (Array.isArray(r.data) ? r.data : (r as unknown as GameRow[])))
+      .get<{ data: GameRow[] }>("/games/configured")
+      .then((r) =>
+        Array.isArray(r.data) ? r.data : (r as unknown as GameRow[]),
+      )
       .catch(() => [] as GameRow[]);
     const nonMmoGame = configuredGames.find(
       (g) => !g.hasRoles && g.id !== ctx.mmoGameId,
     );
     if (!nonMmoGame) {
-      console.log('    SKIP: No non-MMO game found in configured games');
+      console.log("    SKIP: No non-MMO game found in configured games");
       return;
     }
     // Create event with the non-MMO gameId so the game filter is exercised.
     // Use channelForGame to poll the channel bound to this specific game.
     const pollCh = channelForGame(ctx, nonMmoGame.id);
-    const ev = await createEvent(ctx.api, 'embed-nowow', {
+    const ev = await createEvent(ctx.api, "embed-nowow", {
       gameId: nonMmoGame.id,
       maxAttendees: 10,
     });
@@ -363,10 +424,11 @@ const nonMmoNoWowAvatars: SmokeTest = {
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
-      const desc = found.embeds[0]?.description ?? '';
+      const desc = found.embeds[0]?.description ?? "";
       // WoW class emojis use custom emoji format: <:ClassName:id>
       // A non-MMO-game event should NOT show WoW class emojis
-      const wowClassPattern = /<:(?:Warrior|Mage|Rogue|Priest|Paladin|Druid|Shaman|Hunter|Warlock|Monk|DemonHunter|DeathKnight|Evoker):/i;
+      const wowClassPattern =
+        /<:(?:Warrior|Mage|Rogue|Priest|Paladin|Druid|Shaman|Hunter|Warlock|Monk|DemonHunter|DeathKnight|Evoker):/i;
       if (wowClassPattern.test(desc)) {
         throw new Error(
           `Non-MMO game event embed contains WoW class emoji: "${desc.slice(0, 200)}"`,
@@ -379,17 +441,24 @@ const nonMmoNoWowAvatars: SmokeTest = {
 };
 
 const embedChromePerState: SmokeTest = {
-  name: 'Event embed chrome: per-state colour + author line (ROK-1460)',
-  category: 'embed',
+  name: "Event embed chrome: per-state colour + author line (ROK-1460)",
+  category: "embed",
   async run(ctx) {
     const ch = channelForTest(ctx, 7);
     const community = await fetchCommunityName(ctx.api);
-    const ev = await createEvent(ctx.api, 'embed-chrome', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    const ev = await createEvent(ctx.api, "embed-chrome", {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+    });
     try {
       await awaitProcessing(ctx.api);
       const { count, max } = await fetchSignupCount(ctx.api, ev.id);
-      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
-      const posted = must(msg.embeds[0], 'the posted embed');
+      const posted = await pollForCountedCard(
+        ch.channelId,
+        ev.title,
+        count,
+        ctx.config.timeoutMs,
+      );
       // Smoke events start 60 minutes out -> IMMINENT -> needs_you amber.
       assertEmbedColor(posted, REMINDER_AMBER);
       assertAuthorMatches(posted, imminentAuthorPattern(count, max));
@@ -402,8 +471,9 @@ const embedChromePerState: SmokeTest = {
       // contains "CANCELLED". The unscoped probe matched that ghost and
       // asserted ITS colour: `Expected #ef4444, got #64748b` on every main
       // run since the poll card grew terminal states (#1246).
-      const isThisCancelledCard = (e: (typeof msg.embeds)[number]): boolean =>
-        !!e.title?.includes(ev.title) && !!e.author?.includes('\u2715 CANCELLED');
+      const isThisCancelledCard = (e: SimpleEmbed): boolean =>
+        !!e.title?.includes(ev.title) &&
+        !!e.author?.includes("\u2715 CANCELLED");
       const cancelled = await waitForEmbedUpdate(
         ch.channelId,
         (m) => m.embeds.some(isThisCancelledCard),
@@ -414,7 +484,7 @@ const embedChromePerState: SmokeTest = {
       assertAuthorMatches(card, /\u2715 CANCELLED/);
       assertFooterIs(card, community);
       if (card.thumbnail) {
-        throw new Error('Cancelled embed must drop the cover art (AC4)');
+        throw new Error("Cancelled embed must drop the cover art (AC4)");
       }
     } finally {
       await deleteEvent(ctx.api, ev.id);
