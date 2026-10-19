@@ -138,8 +138,13 @@ export class EmbedSchedulerService {
       this.logger.log(
         `Scheduler posted deferred embed for event ${event.id} ("${event.title}")`,
       );
-      await this.announceGroup(event);
     }
+    // ROK-1832 (Codex r5): the in-app group notice does not need Discord. A
+    // bot-less install never posts, so a due group-tagged event announces
+    // here regardless (as the bot-less create path does); the per-event and
+    // per-(user, event) claims keep every later tick and a later successful
+    // post a no-op.
+    await this.announceGroup(event);
     return success;
   }
 
