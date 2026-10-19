@@ -16,6 +16,11 @@ describe('valheimSkillName — D12', () => {
         expect(valheimSkillName('BeastTaming')).toBe('Beast taming');
         expect(valheimSkillName('rune_magic')).toBe('Rune magic');
     });
+    it('ids naming inherited members are humanised strings, not prototype values', () => {
+        expect(valheimSkillName('__proto__')).toBe('Proto');
+        expect(valheimSkillName('constructor')).toBe('Constructor');
+        expect(valheimSkillName('toString')).toBe('To string');
+    });
 });
 
 describe('sortSkillsByLevel', () => {
@@ -33,5 +38,17 @@ describe('sortSkillsByLevel', () => {
             'Jump',
         ]);
         expect(input[0]?.id).toBe('Run');
+    });
+    it('ties between inherited-member ids sort by name instead of throwing', () => {
+        const input = [
+            { id: '__proto__', level: 5, accumulator: 0 },
+            { id: 'constructor', level: 5, accumulator: 0 },
+            { id: 'Run', level: 5, accumulator: 0 },
+        ];
+        expect(sortSkillsByLevel(input).map((s) => s.id)).toEqual([
+            'constructor',
+            '__proto__',
+            'Run',
+        ]);
     });
 });
