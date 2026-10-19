@@ -36,6 +36,8 @@ export function buildBaseValues(
     privateVoice: dto.privateVoice ?? null,
     // ROK-1787: guild tag — recurring instances inherit it.
     guildId: dto.guildId ?? null,
+    // ROK-1844: provenance for the poll-completion signup guard.
+    createdFromPollId: dto.schedulingMatchId ?? null,
   };
 }
 
