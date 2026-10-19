@@ -206,7 +206,7 @@ async function openSheet() {
     return {
         ...rendered,
         bodies,
-        dialog: screen.getByRole('dialog', { name: 'Change owner' }),
+        dialog: await screen.findByRole('dialog', { name: 'Change owner' }),
     };
 }
 

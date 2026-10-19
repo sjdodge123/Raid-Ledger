@@ -3,7 +3,16 @@
  * a ≥44px `<button>` with the icon face (D6/D7), quality pips, stack count,
  * durability meter and the equipped corner; it opens `ItemDetail`.
  */
-import { useCallback, useRef, useState, type JSX, type Ref } from 'react';
+import {
+    lazy,
+    Suspense,
+    useCallback,
+    useRef,
+    useState,
+    type ComponentProps,
+    type JSX,
+    type Ref,
+} from 'react';
 import type { ValheimItemStack } from '@raid-ledger/contract';
 import { usePortalTarget } from '../../../components/ui/use-anchored-popup';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
@@ -14,8 +23,24 @@ import {
     type ResolvedItem,
 } from './item-icon.helpers';
 import { ItemIcon } from './item-icon';
-import { ItemDetail } from './item-detail';
 import type { ItemIconContext } from './use-item-icons';
+
+/** The detail popover/sheet is its own chunk (keeps the page's first paint small). */
+const ItemDetail = lazy(() =>
+    import('./item-detail').then((m) => ({ default: m.ItemDetail })),
+);
+
+function LazyItemDetail(
+    props: ComponentProps<typeof ItemDetail>,
+): JSX.Element | null {
+    // Closed → nothing mounted, so the chunk is fetched on the first open only.
+    if (!props.open) return null;
+    return (
+        <Suspense fallback={null}>
+            <ItemDetail {...props} />
+        </Suspense>
+    );
+}
 
 const TILE =
     'relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border';
@@ -197,7 +222,7 @@ export function ItemTile({
                 ctx={ctx}
                 {...data}
             />
-            <ItemDetail
+            <LazyItemDetail
                 {...{ open, anchorRef, container, ...data }}
                 onClose={close}
                 returnRef={buttonRef}
