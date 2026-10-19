@@ -22,7 +22,7 @@ import { reservedVolumeReason } from './volume-reserve.mjs';
 import { scopedEventsUrl } from './events-scope.mjs';
 
 const MAX_BODY = 1024 * 1024;
-const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 415: 'Unsupported Media Type' };
+const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 415: 'Unsupported Media Type', 500: 'Internal Server Error', 502: 'Bad Gateway', 507: 'Insufficient Storage' };
 let SOCKET = '/var/run/docker.sock';
 let ALLOW = [];
 let ALLOW_BUILDKIT = false;

@@ -69,8 +69,7 @@ test('a client that aborts mid-upload (cancelled build) closes the upstream requ
 // process, which is exactly the failure — the child must survive and print 507.
 const CHILD = `
 import fs from 'node:fs';
-import { PassThrough } from 'node:stream';
-import { spawnSync } from 'node:child_process';
+import { PassThrough, Writable } from 'node:stream';
 const { spoolBuildContext } = await import(process.argv[1]);
 fs.createWriteStream = () => new Writable({ write(c, e, cb) { cb(Object.assign(new Error('no space left on device'), { code: 'ENOSPC' })); } });
 const input = new PassThrough();
