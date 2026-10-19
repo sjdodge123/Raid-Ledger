@@ -142,6 +142,50 @@ test_copy_skips_mutagen_ignored_secrets() {
     assert_eq "$(cd "$s2" && find . -type f | sort | tr '\n' ' ')" "./.env.example ./api/.env.test.example ./keep.ts " "only templates + source copied"
 }
 
+# A PATH `docker` shim that logs its argv; DOCKER_SHIM_FAIL=1 makes `docker cp` fail.
+_docker_shim() {
+    local shim="$RL_STATE_DIR/docker-shim"; mkdir -p "$shim"
+    cat > "$shim/docker" <<'SHIM'
+#!/usr/bin/env bash
+echo "$*" >> "$RL_STATE_DIR/docker.log"
+[[ "$1" == "cp" && "${DOCKER_SHIM_FAIL:-0}" == "1" ]] && { echo "docker cp: simulated failure" >&2; exit 1; }
+exit 0
+SHIM
+    chmod +x "$shim/docker"; : > "$RL_STATE_DIR/docker.log"
+    echo "$shim"
+}
+
+test_git_copied_container_to_container() {
+    CURRENT_TEST_NAME=".git is excluded from the host rsync and copied rl-runner-A -> rl-runner-B with docker cp"
+    _seed free free free; _lib
+    export RL_RUNNERS_DIR="$RL_STATE_DIR/runners"
+    local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree" shim rc=0
+    mkdir -p "$s1/.git/objects" "$s2"; echo ref > "$s1/.git/HEAD"; echo x > "$s1/keep.ts"
+    shim=$(_docker_shim)
+    PATH="$shim:$PATH" borrow::copy_tree 1 2 >/dev/null 2>&1 || rc=$?
+    assert_exit_code "$rc" "0" "copy succeeds"
+    assert_eq "$([[ -e "$s2/.git" ]] && echo host-copied || echo absent)" "absent" "the host rsync never writes B/.git"
+    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "cp rl-runner-1:/workspace/.git -" ".git read out of runner A's container"
+    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "cp - rl-runner-2:/workspace/.rl-git-staging" ".git streamed into runner B's staging dir"
+    assert_contains "$(cat "$RL_STATE_DIR/docker.log")" "exec rl-runner-2 sh -c rm -rf /workspace/.git && mv /workspace/.rl-git-staging/.git /workspace/.git" "staged .git swapped in on B"
+}
+
+test_failed_git_copy_leaves_b_untouched() {
+    CURRENT_TEST_NAME="a failing docker cp of .git -> copy fails, B's tree untouched"
+    _seed free free free; _lib
+    export RL_RUNNERS_DIR="$RL_STATE_DIR/runners"
+    local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree" shim rc=0
+    mkdir -p "$s1/.git" "$s2"; echo ref > "$s1/.git/HEAD"; echo new > "$s1/new.ts"; echo old > "$s2/keep.txt"
+    shim=$(_docker_shim)
+    DOCKER_SHIM_FAIL=1 PATH="$shim:$PATH" borrow::copy_tree 1 2 2>/dev/null >/dev/null || rc=$?
+    assert_exit_code "$rc" "1" "failing docker cp -> copy fails (serial fallback)"
+    assert_eq "$(find "$s2" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "keep.txt " "B keeps exactly its old tree"
+    assert_eq "$([[ -e "$RL_RUNNERS_DIR/slot-2/.worktree-staging" ]] && echo left || echo gone)" "gone" "staging dir removed"
+    assert_eq "$(tail -1 "$RL_STATE_DIR/docker.log")" "exec rl-runner-2 rm -rf /workspace/.rl-git-staging" "B's .git staging cleaned up after the failed cp"
+}
+
+run_test "git-copied-container-to-container" test_git_copied_container_to_container
+run_test "failed-git-copy-leaves-b-untouched" test_failed_git_copy_leaves_b_untouched
 run_test "copy-skips-mutagen-ignored-secrets" test_copy_skips_mutagen_ignored_secrets
 run_test "failed-copy-leaves-b-untouched" test_failed_copy_leaves_b_untouched
 run_test "free-slot-borrowed" test_free_slot_is_borrowed

@@ -105,43 +105,93 @@ borrow::release() {
     "${BIN_DIR_SELF:-$(dirname "${BASH_SOURCE[0]}")}/lease-advance" --slot "$slot" >/dev/null 2>&1 || true
 }
 
-# borrow::copy_tree <A> <B> — host-side copy of slot A's /workspace tree
-# (including the runner-scaffolded .git) onto slot B's. node_modules and build
-# output stay B's own; B's node_modules is a separate named volume.
+# borrow::copy_tree <A> <B> — copy slot A's /workspace tree onto slot B's.
+# node_modules and build output stay B's own; B's node_modules is a separate
+# named volume.
 #
-# Two phases so a failed copy never leaves B half-copied: (1) rsync A into a
+# Staged so a failed copy never leaves B half-copied: (1) rsync A into a
 # staging dir under slot B (kept between runs, so the next copy is
-# incremental) — a failure there removes the staging dir and B's tree is
-# untouched; (2) only then move staging onto B's tree with --delay-updates, so
-# changed files land in one rename pass at the end. The worktree dir itself is
-# never renamed: the runner container bind-mounts it.
-# What the copy skips: B-local build output, plus exactly what the laptop's
-# Mutagen session ignores (rl-infra/cli/rl ensure_mutagen — keep in sync), so B
-# never holds a secret A's replica would not. `.git` is the exception: it is
-# runner-scaffolded on A and B needs it. Includes first: rsync's first match wins.
+# incremental); (2) stream A's `.git` container-to-container into a staging
+# dir inside B's /workspace; (3) only then move the host staging onto B's tree
+# with --delay-updates and rename the staged `.git` into place. A failure in
+# (1) or (2) cleans both stagings and leaves B untouched. The worktree dir
+# itself is never renamed: the runner container bind-mounts it.
+#
+# Why `.git` goes through `docker cp`: it is runner-scaffolded and root-owned
+# on a previously used slot, so the host rsync (rl-agent) cannot update it, and
+# nothing else re-creates `.git` on a borrowed slot. Inside the containers the
+# copy runs as root.
+# What the host copy skips: `.git` (above), the git staging dir, B-local build
+# output, plus exactly what the laptop's Mutagen session ignores
+# (rl-infra/cli/rl ensure_mutagen — keep in sync), so B never holds a secret
+# A's replica would not. Includes first: rsync's first match wins. Excluded
+# paths are also protected from --delete.
+BORROW_GIT_STAGE=/workspace/.rl-git-staging
 BORROW_COPY_FILTER=(--include=.env.example --include='.env.*.example' --exclude=.env --exclude='.env.*'
+    --exclude=/.git --exclude=/.rl-git-staging
     --exclude=node_modules --exclude=dist --exclude=coverage --exclude=test-results
     --exclude=playwright-report --exclude=/scripts/.auth --exclude='*.tsbuildinfo'
     --exclude=/.rl-perf.log --exclude=/.rl-perf.log.errors)
 
+# borrow::_runner <slot> — the runner container name (bin/claim, bin/release).
+borrow::_runner() { printf 'rl-runner-%s' "$1"; }
+
+# borrow::_stage_git <A> <B> — stream A's /workspace/.git into B's git staging
+# dir. Exit 1 (staging removed) on any failure; B's live .git is not touched.
+borrow::_stage_git() {
+    local ra rb rc_out rc_in
+    ra=$(borrow::_runner "$1"); rb=$(borrow::_runner "$2")
+    borrow::_drop_git_stage "$2"
+    if docker exec "$rb" mkdir -p "$BORROW_GIT_STAGE"; then
+        docker cp "$ra:/workspace/.git" - | docker cp - "$rb:$BORROW_GIT_STAGE"
+        rc_out=${PIPESTATUS[0]} rc_in=${PIPESTATUS[1]}
+        (( rc_out == 0 && rc_in == 0 )) && return 0
+    fi
+    borrow::_drop_git_stage "$2"
+    return 1
+}
+
+# borrow::_drop_git_stage <B> — remove B's git staging dir (best effort).
+borrow::_drop_git_stage() { docker exec "$(borrow::_runner "$1")" rm -rf "$BORROW_GIT_STAGE" >/dev/null 2>&1 || true; }
+
+# borrow::_commit_git <B> — replace B's .git with the staged one.
+borrow::_commit_git() {
+    docker exec "$(borrow::_runner "$1")" sh -c \
+        "rm -rf /workspace/.git && mv $BORROW_GIT_STAGE/.git /workspace/.git && rmdir $BORROW_GIT_STAGE"
+}
+
+# borrow::_fail_stage <B> <stage> <msg> — remove the host staging, report,
+# exit 1 (_stage_git already removed its own staging on failure).
+borrow::_fail_stage() {
+    # rsync -a copies a source dir's mode, so an unreadable dir lands as 000.
+    chmod -R u+rwX "$2" 2>/dev/null || true
+    rm -rf "$2"
+    echo "[parallel] copy failed: $3 (slot $1 tree untouched)" >&2
+    return 1
+}
+
 borrow::copy_tree() {
-    local a="$1" b="$2" src dst stage t0 files
+    local a="$1" b="$2" src dst stage t0 files git=0
     src="$RL_RUNNERS_DIR/slot-$a/worktree"
     dst="$RL_RUNNERS_DIR/slot-$b/worktree"
     stage="$RL_RUNNERS_DIR/slot-$b/.worktree-staging"
     [[ -d "$src" && -d "$dst" ]] || { echo "[parallel] copy failed: missing worktree dir" >&2; return 1; }
     t0=$(date +%s)
     mkdir -p "$stage" || return 1
-    if ! rsync -a --delete "${BORROW_COPY_FILTER[@]}" "$src/" "$stage/"; then
-        # rsync -a copies a source dir's mode, so an unreadable dir lands as 000.
-        chmod -R u+rwX "$stage" 2>/dev/null || true
-        rm -rf "$stage"
-        echo "[parallel] copy failed: staging rsync (slot $b tree untouched)" >&2
-        return 1
+    rsync -a --delete "${BORROW_COPY_FILTER[@]}" "$src/" "$stage/" \
+        || { borrow::_fail_stage "$b" "$stage" "staging rsync"; return 1; }
+    if [[ -e "$src/.git" ]]; then
+        git=1
+        borrow::_stage_git "$a" "$b" || { borrow::_fail_stage "$b" "$stage" ".git docker cp"; return 1; }
     fi
     if ! rsync -a --delete --delay-updates "${BORROW_COPY_FILTER[@]}" "$stage/" "$dst/"; then
         find "$dst" -name '.~tmp~' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+        (( git )) && borrow::_drop_git_stage "$b"
         echo "[parallel] copy failed: swap onto slot $b" >&2
+        return 1
+    fi
+    if (( git )) && ! borrow::_commit_git "$b"; then
+        echo "[parallel] copy failed: .git swap on slot $b" >&2
         return 1
     fi
     files=$(find "$dst" -type f -not -path '*/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
