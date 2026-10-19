@@ -4,11 +4,17 @@
  * inlined because the runtime image does not ship the contract fixtures).
  * Three keyed identities (`c1`…`c3`) share one hub server so a fleet plan
  * can seed C1/C2/C3; `extraRows` adds EAQS rows holding a modded prefab.
+ * A fourth identity, `map`, belongs to the ROK-1837 map fixture only (not
+ * exposed by the armory route), so neither fixture resets the other's
+ * character or nulls the map's `profile_id`.
  */
 import type { NewValheimProfile } from '../../../drizzle/schema';
 
 export const ARMORY_FIXTURE_KEYS = ['c1', 'c2', 'c3'] as const;
-export type ArmoryFixtureKey = (typeof ARMORY_FIXTURE_KEYS)[number];
+/** The ROK-1837 map fixture's own character key. */
+export const ARMORY_MAP_FIXTURE_KEY = 'map';
+export type ArmoryFixtureKey =
+  (typeof ARMORY_FIXTURE_KEYS)[number] | typeof ARMORY_MAP_FIXTURE_KEY;
 
 /** The modded prefab the EAQS rows hold (catalogued with a file icon). */
 export const ARMORY_FIXTURE_MOD_PREFAB = 'RtD_MythicBlade';
@@ -38,6 +44,11 @@ export const ARMORY_FIXTURE_IDENTITIES: Record<
     name: 'Modviking',
     steamId: '76561198000000003',
     playerId: '1000000000000003',
+  },
+  map: {
+    name: 'Mapmaker',
+    steamId: '76561198000000009',
+    playerId: '1000000000000009',
   },
 };
 

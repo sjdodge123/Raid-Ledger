@@ -86,7 +86,9 @@ async function assertClaimant(
  * ROK-1836 D8 — DEMO_MODE fixture: one keyed Valheim character (`key`
  * c1…c3, claimed by `claimedBy` or unclaimed; `extraRows` adds EAQS rows
  * and a modded prefab) on the slot's Valheim Pelican server, plus the item
- * catalogue and real atlas/icon PNGs unless `withCatalog: false`.
+ * catalogue and real atlas/icon PNGs unless `withCatalog: false`. The
+ * ROK-1837 map fixture's character is a separate `map` identity, so
+ * re-seeding `c1` never touches it or the map's `profile_id`.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
