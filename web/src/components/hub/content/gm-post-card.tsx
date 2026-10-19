@@ -4,7 +4,9 @@
  */
 import { useState, type JSX } from 'react';
 import { PencilSquareIcon } from '@heroicons/react/24/outline';
-import { GUILD_GM_POST_MAX, type GuildGmPost } from '@raid-ledger/contract';
+import { GUILD_GM_POST_MAX, type GuildGmPost, type GuildKind } from '@raid-ledger/contract';
+import { httpStatusOf } from '../../../lib/api/api-error';
+import { hubCopy } from '../hub-copy';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
 import { Button } from '../../ui/button';
 import { Field } from '../../ui/field';
@@ -56,9 +58,11 @@ function PostError(): JSX.Element {
     return <p role="alert" className="text-sm text-danger" data-testid="guild-gm-post-error">Couldn’t load the guild post. Try again later.</p>;
 }
 
-function PostBody({ post, canEdit, onEdit }: { post: GuildGmPost | null; canEdit: boolean; onEdit: () => void }): JSX.Element {
+interface PostBodyProps { post: GuildGmPost | null; canEdit: boolean; onEdit: () => void; empty: string }
+
+function PostBody({ post, canEdit, onEdit, empty }: PostBodyProps): JSX.Element {
     if (!post) {
-        if (!canEdit) return <p className="text-sm text-muted" data-testid="guild-gm-post-empty">No post from the guild master yet.</p>;
+        if (!canEdit) return <p className="text-sm text-muted" data-testid="guild-gm-post-empty">{empty}</p>;
         return (
             <div className="flex flex-col items-start gap-2" data-testid="guild-gm-post-prompt">
                 <p className="text-sm text-muted">Share news, raid plans or a welcome with everyone in the guild.</p>
@@ -74,9 +78,14 @@ function PostBody({ post, canEdit, onEdit }: { post: GuildGmPost | null; canEdit
     );
 }
 
-export function GmPostCard({ guildId, canEdit }: { guildId: number; canEdit: boolean }): JSX.Element {
+interface GmPostCardProps { guildId: number; canEdit: boolean; kind?: GuildKind | undefined }
+
+/** A 403 (a visitor on a members-first hub) hides the card rather than painting an error (ROK-1831). */
+export function GmPostCard({ guildId, canEdit, kind }: GmPostCardProps): JSX.Element | null {
     const [editing, setEditing] = useState(false);
     const profile = useGuildProfile(guildId);
+    const copy = hubCopy(kind);
+    if (httpStatusOf(profile.error) === 403) return null;
     const post = profile.data?.gmPost ?? null;
     const ready = !profile.isPending && !profile.isError;
     return (
@@ -84,8 +93,8 @@ export function GmPostCard({ guildId, canEdit }: { guildId: number; canEdit: boo
             <Card className="h-full border-l-4 border-l-success">
                 <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <Pill tone="success">From the guild master</Pill>
-                        <h2 id="gm-post-title" className="sr-only">Message from the guild master</h2>
+                        <Pill tone="success">{copy.leaderPostPill}</Pill>
+                        <h2 id="gm-post-title" className="sr-only">{copy.leaderPostHeading}</h2>
                     </div>
                     {canEdit && ready && post && !editing && (
                         <Button variant="secondary" size="sm" aria-label="Edit the guild post" onClick={() => setEditing(true)}>
@@ -97,7 +106,7 @@ export function GmPostCard({ guildId, canEdit }: { guildId: number; canEdit: boo
                     : profile.isError ? <PostError />
                     : editing && canEdit
                         ? <PostEditor guildId={guildId} initial={post?.body ?? ''} onDone={() => setEditing(false)} />
-                        : <PostBody post={post} canEdit={canEdit} onEdit={() => setEditing(true)} />}
+                        : <PostBody post={post} canEdit={canEdit} onEdit={() => setEditing(true)} empty={copy.leaderPostEmpty} />}
             </Card>
         </section>
     );

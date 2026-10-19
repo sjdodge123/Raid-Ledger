@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import type { GuildMemberRow } from '@raid-ledger/contract';
 import type { HubMemberColumn } from '../../plugins/hub-module';
-import { bandMembers, filterMembers, groupingColumn, membersCountLine } from './hub-members.helpers';
+import { bandMembers, filterMembers, groupingColumn, membersCountFor, membersCountLine } from './hub-members.helpers';
 
 function row(memberId: number, name: string, rankName: string, cls: string): GuildMemberRow {
     return { memberId, name, class: cls, level: 60, rankIndex: memberId, rankName, effectiveRole: null, characterId: null, isMain: false };
@@ -65,5 +65,11 @@ describe('groupingColumn + membersCountLine', () => {
         expect(membersCountLine(142, 142)).toBe('142 members');
         expect(membersCountLine(7, 142)).toBe('7 of 142 members');
         expect(membersCountLine(1, 1)).toBe('1 member');
+    });
+
+    it('falls back to the page member count when no rows were sent (ROK-1831 visitor)', () => {
+        expect(membersCountFor(0, 0, 3)).toBe('3 members');
+        expect(membersCountFor(0, 0, 1)).toBe('1 member');
+        expect(membersCountFor(2, 5, 9)).toBe('2 of 5 members');
     });
 });

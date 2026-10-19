@@ -16,7 +16,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { GuildPage } from './hub-page';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = 'http://localhost:3000/guilds/7';
 const LINKED_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
 
 function row(overrides: Partial<GuildMemberRow> & Pick<GuildMemberRow, 'memberId' | 'name'>): GuildMemberRow {
@@ -143,9 +143,9 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
         expect(within(sheet).getByTestId('guild-editors-panel')).toBeInTheDocument();
         expect(within(sheet).getByTestId('guild-settings-choose-channel')).toBeInTheDocument();
         const hide = within(sheet).getByTestId('guild-settings-hide-hub');
-        expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831), so the switch must be off and disabled').toBeDisabled();
+        expect(hide, 'hiding is admin-only (ROK-1831) and this viewer is a Leader, not an admin').toBeDisabled();
         expect(hide).toHaveAttribute('aria-checked', 'false');
-        expect(within(sheet).getByText(/Hiding a hub isn’t available yet/)).toBeInTheDocument();
+        expect(within(sheet).getByText(/Only a Raid Ledger admin can hide or show this hub/)).toBeInTheDocument();
     });
 
     it('swaps the sheet for the channel picker when the Leader changes the channel', async () => {

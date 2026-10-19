@@ -22,6 +22,7 @@ function build() {
     isActiveUser: jest.fn().mockResolvedValue(true),
     setOwner: jest.fn().mockResolvedValue(undefined),
     listEvents: jest.fn().mockResolvedValue([]),
+    findUsers: jest.fn().mockResolvedValue([]),
     insertEvents: jest.fn((_t: unknown, rows: Record<string, unknown>[]) =>
       Promise.resolve(rows.map((r) => ({ id: 1, createdAt: at, ...r }))),
     ),
@@ -108,5 +109,29 @@ describe('ValheimArmoryClaimsService.events', () => {
     const { repo, svc } = build();
     repo.profileExists.mockResolvedValue(false);
     await expect(svc.events(7)).rejects.toBeInstanceOf(NotFoundException);
+  });
+  it('resolves from/to/actor with the Discord id beside the avatar hash', async () => {
+    const { repo, svc } = build();
+    repo.listEvents.mockResolvedValue([
+      {
+        id: 1,
+        profileId: 7,
+        action: 'claim',
+        fromUserId: null,
+        toUserId: 3,
+        actorUserId: 3,
+        createdAt: at,
+      },
+    ]);
+    repo.findUsers.mockResolvedValue([
+      { id: 3, username: 'bjorn', avatar: 'abc', discordId: '123' },
+    ]);
+    const [event] = await svc.events(7);
+    const bjorn = { id: 3, username: 'bjorn', avatar: 'abc', discordId: '123' };
+    expect(event).toMatchObject({
+      fromUser: null,
+      toUser: bjorn,
+      actor: bjorn,
+    });
   });
 });

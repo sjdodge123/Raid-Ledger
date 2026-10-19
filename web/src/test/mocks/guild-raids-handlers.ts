@@ -6,7 +6,7 @@
 import { http, HttpResponse } from 'msw';
 import type { GuildRaidsDto } from '@raid-ledger/contract';
 
-export const GUILD_RAIDS_URL = 'http://localhost:3000/plugins/wow/guilds/:id/raids';
+export const GUILD_RAIDS_URL = 'http://localhost:3000/guilds/:id/raids';
 
 export const emptyGuildRaids: GuildRaidsDto = {
     upcoming: [],

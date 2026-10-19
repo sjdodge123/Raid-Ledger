@@ -14,7 +14,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { GuildPage } from './hub-page';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = 'http://localhost:3000/guilds/7';
 
 function row(memberId: number, name: string, cls: string, rankIndex: number, rankName: string): GuildMemberRow {
     return { memberId, name, class: cls, level: 60, rankIndex, rankName, effectiveRole: null, characterId: null, isMain: false };

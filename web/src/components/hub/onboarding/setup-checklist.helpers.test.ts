@@ -98,3 +98,21 @@ describe('setupProgress', () => {
         expect(progress).toEqual({ done: 6, total: 6, pct: 100, complete: true, label: '6 of 6' });
     });
 });
+
+describe('setupSteps — game_server hubs (ROK-1831)', () => {
+    it('drops the WoW-only roster and publish steps and keeps the core ones', () => {
+        expect(ids({ kind: 'game_server', hasModSources: false })).toEqual(['leader', 'leader-post', 'rules', 'links', 'discord', 'next-raid']);
+    });
+
+    it('uses server copy for rules, links and the first event', () => {
+        const steps = setupSteps(input({ kind: 'game_server', hasModSources: false }));
+        const byId = (id: string): string => steps.find((s) => s.id === id)?.label ?? '';
+        expect(byId('rules')).toBe('Add your server rules');
+        expect(byId('next-raid')).toBe('Schedule your first event');
+    });
+
+    it('a WoW hub keeps the full list', () => {
+        expect(ids({ kind: 'wow_guild' })).toContain('publish');
+        expect(ids({ kind: 'wow_guild' })).toContain('roster');
+    });
+});

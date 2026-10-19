@@ -4,10 +4,11 @@
  * only and dropped by `toSummary` everywhere else.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
+import type { ArmoryCatalogReadRow } from './valheim-armory-catalog.helpers';
 import type {
   ArmoryDetailReadRow,
   ArmoryMapReadRow,
@@ -23,6 +24,8 @@ const {
   users: u,
 } = schema;
 const blobs = schema.valheimLinkBlobs;
+const hubs = schema.guilds;
+const cat = schema.valheimItemCatalogs;
 
 /** List filters + page window. */
 export interface ArmoryListFilter {
@@ -45,6 +48,7 @@ const summaryCols = {
   ownerId: u.id,
   ownerUsername: u.username,
   ownerAvatar: u.avatar,
+  ownerDiscordId: u.discordId,
 };
 
 const sheetCols = {
@@ -59,6 +63,25 @@ const baseMapReady = sql<boolean>`EXISTS (
   SELECT 1 FROM ${blobs} b
   WHERE b.pelican_server_id = ${m.pelicanServerId}
     AND b.sha256 = ${m.baseMapSha256})`;
+
+/** ROK-1836: the atlas is ready once its blob row exists for the server. */
+const atlasReady = sql<boolean>`EXISTS (
+  SELECT 1 FROM ${blobs} b
+  WHERE b.pelican_server_id = ${cat.pelicanServerId}
+    AND b.sha256 = ${cat.atlasSha256})`;
+
+/** Only the referenced prefabs leave the database — never the whole jsonb. */
+function itemsSubset(prefabs: readonly string[]) {
+  if (prefabs.length === 0) return sql`'{}'::jsonb`.mapWith(cat.items);
+  const list = sql.join(
+    prefabs.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  return sql`COALESCE((SELECT jsonb_object_agg(e.key, e.value)
+    FROM jsonb_each(${cat.items}) e WHERE e.key IN (${list})), '{}'::jsonb)`.mapWith(
+    cat.items,
+  );
+}
 
 function listWhere(f: ArmoryListFilter): SQL | undefined {
   const parts: SQL[] = [];
@@ -82,6 +105,30 @@ export class ValheimArmoryReadRepository {
       .orderBy(asc(p.name), asc(p.id))
       .limit(f.limit)
       .offset(f.offset);
+  }
+
+  /** Rows matching the list filters (the `total` beside a page). */
+  async countProfiles(f: ArmoryListFilter): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(p)
+      .where(listWhere(f));
+    return row?.n ?? 0;
+  }
+
+  /** The ROK-1831 community hub keyed to a Pelican server, or null. */
+  async findServerHub(
+    serverId: number,
+  ): Promise<{ id: number; hidden: boolean } | null> {
+    const [row] = await this.db
+      .select({
+        id: hubs.id,
+        hidden: sql<boolean>`${hubs.hiddenAt} IS NOT NULL`,
+      })
+      .from(hubs)
+      .where(eq(hubs.pelicanServerId, serverId))
+      .limit(1);
+    return row ?? null;
   }
 
   /** One profile with its sheet, or null. */
@@ -128,5 +175,46 @@ export class ValheimArmoryReadRepository {
       .where(and(eq(m.id, mapId), eq(m.profileId, profileId)))
       .limit(1);
     return row ?? null;
+  }
+
+  /** The catalogue subset for `(server, game version)`, or null (D4). */
+  async findCatalog(
+    serverId: number,
+    gameVersion: string,
+    prefabs: readonly string[],
+  ): Promise<ArmoryCatalogReadRow | null> {
+    const [row] = await this.db
+      .select({
+        items: itemsSubset(prefabs),
+        atlasSha256: cat.atlasSha256,
+        atlasWidth: cat.atlasWidth,
+        atlasHeight: cat.atlasHeight,
+        atlasReady,
+      })
+      .from(cat)
+      .where(
+        and(
+          eq(cat.pelicanServerId, serverId),
+          eq(cat.gameVersion, gameVersion),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6). */
+  async findBlobPath(serverId: number, sha256: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ storagePath: blobs.storagePath })
+      .from(blobs)
+      .where(
+        and(
+          eq(blobs.pelicanServerId, serverId),
+          eq(blobs.sha256, sha256),
+          eq(blobs.contentType, 'image/png'),
+        ),
+      )
+      .limit(1);
+    return row?.storagePath ?? null;
   }
 }

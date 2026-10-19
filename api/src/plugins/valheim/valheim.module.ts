@@ -15,6 +15,9 @@ import { ValheimLinkRemapListener } from './link/valheim-link-remap.listener';
 import { ValheimLinkTokensAdminController } from './link/valheim-link-tokens-admin.controller';
 import { ValheimLinkTokensRepository } from './link/valheim-link-tokens.repository';
 import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
+import { ValheimArmoryBlobController } from './armory/read/valheim-armory-blob.controller';
+import { ValheimArmoryMapBytesController } from './armory/read/valheim-armory-map-bytes.controller';
+import { ValheimArmoryMapBytesService } from './armory/read/valheim-armory-map-bytes.service';
 import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module';
 import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
 import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
@@ -44,6 +47,8 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
     ValheimLinkBlobController,
     ValheimArmoryClaimsController,
     ValheimArmoryReadController,
+    ValheimArmoryBlobController,
+    ValheimArmoryMapBytesController,
   ],
   providers: [
     ValheimAdapterRegistration,
@@ -69,6 +74,7 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
     // ROK-1835 L4 member/admin reads.
     ValheimArmoryReadRepository,
     ValheimArmoryReadService,
+    ValheimArmoryMapBytesService,
     {
       provide: VALHEIM_PROFILE_UPSERTED_HOOK,
       useExisting: ValheimIdentityService,

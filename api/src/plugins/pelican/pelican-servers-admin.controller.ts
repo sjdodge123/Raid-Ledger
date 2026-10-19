@@ -37,6 +37,7 @@ import {
 import {
   PelicanServersAdminRepository,
   type PelicanAdminServerRow,
+  type PelicanMappingUpdateResult,
 } from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
 
@@ -79,17 +80,7 @@ export class PelicanServersAdminController {
     const result = await this.servers.updateMapping(id, patch, (slug) =>
       this.presenceSupported(slug),
     );
-    if (result.kind === 'not_found') {
-      throw new NotFoundException('Server not found');
-    }
-    if (result.kind === 'unknown_game') {
-      throw new BadRequestException('Unknown game');
-    }
-    if (result.kind === 'presence_unsupported') {
-      throw new BadRequestException(
-        "Quick Play detection isn't supported for this server's game",
-      );
-    }
+    if (result.kind !== 'ok') throwForResult(result.kind);
     await this.notifyMappingChanged(id, patch);
     return PelicanServerRowSchema.parse(this.toDto(result.row, new Date()));
   }
@@ -145,4 +136,25 @@ export class PelicanServersAdminController {
       gameSlug,
     );
   }
+}
+
+/** Map a refused mapping edit to its HTTP error. */
+function throwForResult(
+  kind: Exclude<PelicanMappingUpdateResult['kind'], 'ok'>,
+): never {
+  if (kind === 'not_found') {
+    throw new NotFoundException('Server not found');
+  }
+  if (kind === 'unknown_game') {
+    throw new BadRequestException('Unknown game');
+  }
+  if (kind === 'hub_unmapped') {
+    throw new BadRequestException('Map a game first');
+  }
+  if (kind === 'presence_unsupported') {
+    throw new BadRequestException(
+      "Quick Play detection isn't supported for this server's game",
+    );
+  }
+  throw new BadRequestException('Unknown game');
 }

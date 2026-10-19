@@ -1,3 +1,4 @@
+import type { ServerHubMembershipService } from './hub/server-hub-membership.service';
 import {
   GameServerStatusSchema,
   type GameServerStatusDto,
@@ -82,6 +83,22 @@ describe('PelicanCronRegistrar', () => {
     for (const job of jobs) await job.handler();
     expect(sync.syncServers).toHaveBeenCalledTimes(1);
     expect(status.pollStatuses).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PelicanCronRegistrar — ROK-1831 hub touch', () => {
+  it('adds hub-touch every 10 min when the membership service is bound', async () => {
+    const touchOnline = jest.fn(() => Promise.resolve(0));
+    const cron = new PelicanCronRegistrar(
+      { syncServers: jest.fn() } as unknown as PelicanSyncService,
+      { pollStatuses: jest.fn() } as unknown as PelicanStatusService,
+      null,
+      { touchOnline } as unknown as ServerHubMembershipService,
+    );
+    const job = cron.getCronJobs().find((j) => j.name === 'hub-touch');
+    expect(job?.cronExpression).toBe('0 */10 * * * *');
+    await job?.handler();
+    expect(touchOnline).toHaveBeenCalledTimes(1);
   });
 });
 

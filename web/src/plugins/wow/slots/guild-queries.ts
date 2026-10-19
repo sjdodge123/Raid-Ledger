@@ -23,6 +23,7 @@ export function guildHref(guildId: number): string {
 }
 
 /**
+ * Core `GET /guilds/mine` (ROK-1831) — every hub kind the viewer belongs to.
  * The viewer's guilds WITH the query state. A caller that treats "no guilds"
  * as a fact (the Players "get your guild" prompt) has to tell an empty answer
  * apart from an unsettled or failed one — `useMyGuilds` cannot.
@@ -32,7 +33,7 @@ export function useMyGuildsQuery(): UseQueryResult<{ guilds: MyGuild[] }, Error>
     const viewer = useViewerCacheScope();
     return useQuery({
         queryKey: ['plugins', 'wow', 'guilds', 'mine', viewer],
-        queryFn: () => fetchApi(`${BASE}/mine`, {}, MyGuildsSchema),
+        queryFn: () => fetchApi('/guilds/mine', {}, MyGuildsSchema),
         enabled: isAuthenticated,
         staleTime: STALE_MS,
         retry: false,

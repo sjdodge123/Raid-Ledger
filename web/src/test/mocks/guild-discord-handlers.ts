@@ -8,7 +8,7 @@ import type {
     GuildDiscordChannelListDto, GuildDiscordChannelOptionDto, GuildDiscordMessageDto, GuildDiscordMirrorDto,
 } from '@raid-ledger/contract';
 
-const GUILDS = 'http://localhost:3000/plugins/wow/guilds';
+const GUILDS = 'http://localhost:3000/guilds';
 
 export const PUBLIC_CHANNEL: GuildDiscordChannelOptionDto = { id: '111111111111111111', name: 'announcements', visibility: 'public' };
 export const PRIVATE_CHANNEL: GuildDiscordChannelOptionDto = { id: '222222222222222222', name: 'officers', visibility: 'private' };
