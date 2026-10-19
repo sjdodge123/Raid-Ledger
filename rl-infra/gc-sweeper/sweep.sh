@@ -312,6 +312,39 @@ slot_running_task_ids() {
 # below skip borrowed_for rows entirely, for the same reason: their env
 # destruction would hit B's envs. Like §1, queued waiters are not promoted
 # here (claim-wait picks the slot up on its next wake).
+# borrow_live_children <parent> — space-separated ids of P's still-running
+# children: P's children[] plus any task JSON whose parent_task_id is P (a
+# child dispatched just before P died may not be in children[] yet).
+borrow_live_children() {
+    local parent="$1" ids="" cid tjson found=""
+    if [[ -f "$TASKS_DIR/$parent.json" ]]; then
+        ids=$(jq -r '(.children // [])[] | .task_id // empty' "$TASKS_DIR/$parent.json" 2>/dev/null || true)
+    fi
+    for tjson in "$TASKS_DIR"/*.json; do
+        [[ -f "$tjson" ]] || continue
+        [[ "$(jq -r '.parent_task_id // empty' "$tjson" 2>/dev/null)" == "$parent" ]] && ids+=" $(basename "$tjson" .json)"
+    done
+    for cid in $(printf '%s\n' $ids | sort -u); do
+        [[ "$cid" =~ ^[a-z0-9]{8,32}$ && -f "$TASKS_DIR/$cid.json" ]] || continue
+        [[ "$(jq -r '.status // "unknown"' "$TASKS_DIR/$cid.json" 2>/dev/null)" == "running" ]] && found+="${found:+ }$cid"
+    done
+    echo "$found"
+}
+
+# borrow_cancel_children <parent> <ids> — ask task-cancel (cascading, idempotent)
+# to stop an orphan's live children. TASK_CANCEL_BIN is the host's
+# orchestrator/bin/task-cancel; it is unset inside the sweeper container, which
+# cannot signal host process groups — there the child's own watchdog ends it
+# and the row is released on the first sweep after that.
+borrow_cancel_children() {
+    local parent="$1" cid
+    [[ -n "${TASK_CANCEL_BIN:-}" && -x "$TASK_CANCEL_BIN" ]] || return 0
+    for cid in $2; do
+        log "  cancelling orphaned child $cid of $parent"
+        "$TASK_CANCEL_BIN" "$cid" "borrow_orphan: parent $parent gone" >/dev/null 2>&1 || true
+    done
+}
+
 BORROW_ROWS=$(jq -r '.[] | select(.claimed == true and (.borrowed_for // null) != null)
     | "\(.slot) \(.borrowed_for)"' "$CLAIMS" 2>/dev/null || true)
 while read -r bslot bparent; do
@@ -321,6 +354,18 @@ while read -r bslot bparent; do
         BSTATUS=$(jq -r '.status // "unknown"' "$TASKS_DIR/$bparent.json" 2>/dev/null || echo unknown)
     fi
     [[ "$BSTATUS" == "running" ]] && continue
+    # Codex r1 P1: the children run under their own supervisors and can outlive
+    # P. Releasing B while child B still tests on it lets the next claimant
+    # overwrite B's workspace mid-run, so the row is kept until every child is
+    # terminal (each child's own watchdog bounds the wait).
+    LIVE_CHILDREN=$(borrow_live_children "$bparent")
+    if [[ -n "$LIVE_CHILDREN" ]]; then
+        log "keeping orphaned borrow on slot $bslot (parent $bparent is $BSTATUS) — child task(s) still running: $LIVE_CHILDREN"
+        borrow_cancel_children "$bparent" "$LIVE_CHILDREN"
+        audit borrow_orphan_kept_child_running "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" --arg c "$LIVE_CHILDREN" \
+            '{slot:$slot, parent_task_id:$p, running_child_ids:($c | split(" "))}')"
+        continue
+    fi
     log "releasing orphaned borrow on slot $bslot (parent $bparent is $BSTATUS)"
     mutate "$CLAIMS" --argjson s "$bslot" --arg p "$bparent" \
         'map(if .slot == $s and (.borrowed_for // null) == $p

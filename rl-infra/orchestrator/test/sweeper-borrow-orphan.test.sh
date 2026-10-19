@@ -70,7 +70,7 @@ SH
 
 _sweep() {
     local sd="$RL_STATE_DIR" td="$RL_TASKS_DIR"
-    PATH="$SHIM_DIR:$PATH" STATE_DIR="$sd" TASKS_DIR="$td" CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 \
+    PATH="$SHIM_DIR:$PATH" STATE_DIR="$sd" TASKS_DIR="$td" TASK_CANCEL_BIN="${TASK_CANCEL_BIN:-}" CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 \
         bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
     rm -rf "$SHIM_DIR"
 }
@@ -100,6 +100,58 @@ test_orphan_missing_parent_released() {
     assert_eq "$(jq -r '.[] | select(.slot == 1) | .agent_id' "$RL_STATE_DIR/claims.json")" "owner" "owner row untouched"
 }
 
+# Child task on borrowed slot 2. $1 = status, $2 = "listed" (in P's children[])
+# or "linked" (only parent_task_id points at P). Running gets a fresh pidfile.
+_seed_child() {
+    local cid="${PARENT}b"
+    jq -n --arg id "$cid" --arg st "$1" --arg p "$PARENT" --arg t "$(date -u +%FT%TZ)" \
+        '{task_id:$id, tool:"rl_validate_ci", slot:2, agent_id:("borrow-" + $p), status:$st, pid:4343,
+          parent_task_id:$p, started_at:$t, finished_at:(if $st == "running" then null else $t end), steps:[]}' \
+        > "$RL_TASKS_DIR/$cid.json"
+    [[ "$1" == "running" ]] && echo 4343 > "$RL_TASKS_DIR/$cid.pid"
+    if [[ "${2:-listed}" == "listed" && -f "$RL_TASKS_DIR/$PARENT.json" ]]; then
+        jq --arg id "$cid" '.children = [{task_id:$id, role:"b", slot:2, borrowed:true}]' \
+            "$RL_TASKS_DIR/$PARENT.json" > "$RL_TASKS_DIR/p.tmp" && mv "$RL_TASKS_DIR/p.tmp" "$RL_TASKS_DIR/$PARENT.json"
+    fi
+    return 0
+}
+
+# task-cancel shim: records each call so the case can assert the cascade ask.
+_cancel_shim() {
+    CANCEL_LOG="$RL_STATE_DIR/cancel.log"; : > "$CANCEL_LOG"
+    printf '#!/usr/bin/env bash\necho "$1" >> %q\n' "$CANCEL_LOG" > "$RL_STATE_DIR/task-cancel"
+    chmod +x "$RL_STATE_DIR/task-cancel"
+    export TASK_CANCEL_BIN="$RL_STATE_DIR/task-cancel"
+}
+
+test_orphan_with_running_child_kept_and_child_cancelled() {
+    CURRENT_TEST_NAME="orphan borrow (parent failed) whose child still runs on B -> row kept, child cancelled"
+    _seed; _seed_parent failed; _seed_child running listed; _cancel_shim; _shim; _sweep
+    assert_eq "$(_row2)" "{\"claimed\":true,\"agent_id\":\"borrow-$PARENT\",\"borrowed_for\":\"$PARENT\"}" \
+        "a running child keeps slot B borrowed"
+    assert_eq "$(cat "$CANCEL_LOG")" "${PARENT}b" "the running child is cancelled through task-cancel"
+    unset TASK_CANCEL_BIN
+}
+
+test_orphan_missing_parent_linked_child_running_kept() {
+    CURRENT_TEST_NAME="orphan borrow (parent JSON missing) with a parent_task_id-linked running child -> row kept"
+    _seed; _seed_child running linked; _cancel_shim; _shim; _sweep
+    assert_eq "$(_row2 | jq -r .claimed)" "true" "a child found by parent_task_id keeps slot B borrowed"
+    assert_eq "$(cat "$CANCEL_LOG")" "${PARENT}b" "the linked child is cancelled"
+    unset TASK_CANCEL_BIN
+}
+
+test_orphan_all_children_terminal_released() {
+    CURRENT_TEST_NAME="orphan borrow (parent failed) whose children are all terminal -> row freed, nothing cancelled"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _cancel_shim; _shim; _sweep
+    assert_eq "$(_row2)" '{"claimed":false,"agent_id":null,"borrowed_for":null}' "all children terminal -> released"
+    assert_eq "$(wc -c < "$CANCEL_LOG" | tr -d ' ')" "0" "no cancel for terminal children"
+    unset TASK_CANCEL_BIN
+}
+
+run_test "orphan-running-child-kept" test_orphan_with_running_child_kept_and_child_cancelled
+run_test "orphan-linked-child-kept" test_orphan_missing_parent_linked_child_running_kept
+run_test "orphan-children-terminal-released" test_orphan_all_children_terminal_released
 run_test "live-borrow-left-alone" test_live_borrow_left_alone
 run_test "orphan-terminal-parent-released" test_orphan_terminal_parent_released
 run_test "orphan-missing-parent-released" test_orphan_missing_parent_released
