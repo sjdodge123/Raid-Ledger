@@ -23,7 +23,7 @@ export const FogCanvas = memo(function FogCanvas({
     shared,
 }: FogCanvasProps) {
     const ref = useRef<HTMLCanvasElement | null>(null);
-    const rgb = useThemeFogRgb();
+    const rgb = useThemeFogRgb(ref);
     useEffect(() => {
         const ctx = ref.current?.getContext('2d');
         if (!ctx) return;

@@ -1,9 +1,12 @@
 /**
  * ROK-1837 D7 — the fog colour comes from the theme, never a literal: the
- * computed `--color-backdrop` (fallback: the body background), re-read when
- * `<html>`'s class / data-theme / style changes (theme switch).
+ * computed `--color-backdrop` (fallback: the body background), read from the
+ * canvas element itself so a scoped theme (the `/dev/design-system` light
+ * column) paints its own fog, and re-read when `<html>`'s theme attributes
+ * change (`applyTheme` writes `data-scheme` + `data-variant`).
  */
 import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import type { FogRgb } from './fog-bitmap';
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -25,10 +28,20 @@ export function parseCssRgb(value: string): FogRgb | null {
     return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]) };
 }
 
-function readThemeRgb(): FogRgb {
-    const root = getComputedStyle(document.documentElement);
+/** Attributes the theme store writes on `<html>` (stores/theme-helpers.ts). */
+export const THEME_ATTRIBUTES = [
+    'class',
+    'data-theme',
+    'data-scheme',
+    'data-variant',
+    'style',
+];
+
+/** The fog colour as `el` (default `<html>`) resolves `--color-backdrop`. */
+export function readThemeRgb(el?: Element | null): FogRgb {
+    const scope = getComputedStyle(el ?? document.documentElement);
     return (
-        parseCssRgb(root.getPropertyValue('--color-backdrop')) ??
+        parseCssRgb(scope.getPropertyValue('--color-backdrop')) ??
         parseCssRgb(getComputedStyle(document.body).backgroundColor) ?? {
             r: 0,
             g: 0,
@@ -40,22 +53,24 @@ function readThemeRgb(): FogRgb {
 const sameRgb = (a: FogRgb, b: FogRgb) =>
     a.r === b.r && a.g === b.g && a.b === b.b;
 
-/** The fog colour, re-read whenever `<html>`'s class / data-theme / style changes. */
-export function useThemeFogRgb(): FogRgb {
-    const [rgb, setRgb] = useState(readThemeRgb);
+/** The fog colour in `ref`'s theme scope, re-read whenever the theme changes. */
+export function useThemeFogRgb(ref: RefObject<Element | null>): FogRgb {
+    const [rgb, setRgb] = useState(() => readThemeRgb());
     const current = useRef(rgb);
     useEffect(() => {
-        const observer = new MutationObserver(() => {
-            const next = readThemeRgb();
+        const refresh = () => {
+            const next = readThemeRgb(ref.current);
             if (sameRgb(current.current, next)) return;
             current.current = next;
             setRgb(next);
-        });
+        };
+        refresh();
+        const observer = new MutationObserver(refresh);
         observer.observe(document.documentElement, {
             attributes: true,
-            attributeFilter: ['class', 'data-theme', 'style'],
+            attributeFilter: THEME_ATTRIBUTES,
         });
         return () => observer.disconnect();
-    }, []);
+    }, [ref]);
     return rgb;
 }

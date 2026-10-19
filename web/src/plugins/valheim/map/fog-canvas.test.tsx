@@ -58,6 +58,8 @@ afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     document.documentElement.className = '';
+    document.documentElement.removeAttribute('data-scheme');
+    document.documentElement.removeAttribute('data-variant');
 });
 
 describe('parseCssRgb', () => {
@@ -117,6 +119,38 @@ describe('FogCanvas (ROK-1837 D7)', () => {
             await Promise.resolve();
         });
         expect(put).toHaveBeenCalledTimes(2);
+        expect(Array.from(painted.at(-1)?.data.slice(0, 3) ?? [])).toEqual([
+            248, 250, 252,
+        ]);
+    });
+
+    it('repaints when the theme store flips data-scheme / data-variant', async () => {
+        render(<FogCanvas size={SIZE} personal={personal} shared={null} />);
+        backdrop = '#f8fafc';
+        await act(async () => {
+            document.documentElement.setAttribute('data-scheme', 'light');
+            await Promise.resolve();
+        });
+        expect(put).toHaveBeenCalledTimes(2);
+        backdrop = '#202020';
+        await act(async () => {
+            document.documentElement.setAttribute('data-variant', 'quest-log');
+            await Promise.resolve();
+        });
+        expect(put).toHaveBeenCalledTimes(3);
+        expect(Array.from(painted.at(-1)?.data.slice(0, 3) ?? [])).toEqual([
+            32, 32, 32,
+        ]);
+    });
+
+    it("paints the canvas's scoped theme colour, not <html>'s (light column)", () => {
+        vi.spyOn(window, 'getComputedStyle').mockImplementation((el) => {
+            const decl = document.createElement('div').style;
+            const scoped = el instanceof HTMLCanvasElement;
+            decl.setProperty('--color-backdrop', scoped ? '#f8fafc' : '#102030');
+            return decl;
+        });
+        render(<FogCanvas size={SIZE} personal={personal} shared={null} />);
         expect(Array.from(painted.at(-1)?.data.slice(0, 3) ?? [])).toEqual([
             248, 250, 252,
         ]);
