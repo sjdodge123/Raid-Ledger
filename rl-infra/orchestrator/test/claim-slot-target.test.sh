@@ -214,6 +214,18 @@ run_test "slot-zero-padded-enqueues-canonical" test_slot_zero_padded_enqueues_ca
 run_test "claim-wait-forwards-slot-grant" test_claim_wait_forwards_slot_grant
 run_test "claim-wait-bad-slot-bails" test_claim_wait_bad_slot_bails
 
+test_claim_clears_stale_borrow_fields() {
+    CURRENT_TEST_NAME="claim of a free row carrying stale borrowed_for/borrowed_by drops them"
+    _seed_claims busy free
+    jq '(.[] | select(.slot == 2)) |= (.borrowed_for = "parentold1" | .borrowed_by = "holder-1")' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+    export RL_AGENT_ID="fresh-agent"
+    bash "$BIN_DIR/claim" --branch feat-x --slot 2 >/dev/null 2>&1 || true
+    assert_eq "$(jq -c '.[] | select(.slot == 2) | {agent_id, borrowed_for, borrowed_by}' "$RL_STATE_DIR/claims.json")" \
+        '{"agent_id":"fresh-agent","borrowed_for":null,"borrowed_by":null}' "granted row carries no borrow fields"
+}
+
+run_test "claim-clears-stale-borrow-fields" test_claim_clears_stale_borrow_fields
 run_test "borrowed-slot-not-claimable" test_borrowed_slot_not_claimable
 
 print_test_summary

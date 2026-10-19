@@ -345,7 +345,11 @@ borrow_cancel_children() {
     done
 }
 
-BORROW_ROWS=$(jq -r '.[] | select(.claimed == true and (.borrowed_for // null) != null)
+# Codex r3 P2: a row only counts as a borrow while its agent is still the
+# synthetic `borrow-<parent>` — a stale borrowed_for on a row someone else has
+# since claimed (release/claim now drop it, this is the backstop) is not ours.
+BORROW_ROWS=$(jq -r '.[] | select(.claimed == true and (.borrowed_for // null) != null
+        and .agent_id == ("borrow-" + .borrowed_for))
     | "\(.slot) \(.borrowed_for)"' "$CLAIMS" 2>/dev/null || true)
 while read -r bslot bparent; do
     [[ -z "${bslot:-}" ]] && continue
@@ -368,7 +372,7 @@ while read -r bslot bparent; do
     fi
     log "releasing orphaned borrow on slot $bslot (parent $bparent is $BSTATUS)"
     mutate "$CLAIMS" --argjson s "$bslot" --arg p "$bparent" \
-        'map(if .slot == $s and (.borrowed_for // null) == $p
+        'map(if .slot == $s and (.borrowed_for // null) == $p and .agent_id == ("borrow-" + $p)
              then .claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null
                   | .expires_at=null | .extends_count=0 | del(.borrowed_for, .borrowed_by)
              else . end)'

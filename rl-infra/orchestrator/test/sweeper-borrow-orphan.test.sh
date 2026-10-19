@@ -149,6 +149,17 @@ test_orphan_all_children_terminal_released() {
     unset TASK_CANCEL_BIN
 }
 
+test_stale_borrowed_for_on_new_owner_left_alone() {
+    CURRENT_TEST_NAME="row re-claimed by a real agent with a stale borrowed_for -> orphan rule never frees it"
+    _seed; _seed_parent succeeded
+    jq '(.[] | select(.slot == 2)) |= (.agent_id = "new-owner" | .started_at = (now | todate) | .last_heartbeat = (now | todate))' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+    _shim; _sweep
+    assert_eq "$(_row2 | jq -c '{claimed, agent_id}')" '{"claimed":true,"agent_id":"new-owner"}' "a non-borrow-<parent> agent's claim is never released by the orphan rule"
+    assert_eq "$(grep -c borrow_orphan_released "$RL_STATE_DIR/audit.log" 2>/dev/null || true)" "0" "no orphan release audited"
+}
+
+run_test "stale-borrowed-for-new-owner" test_stale_borrowed_for_on_new_owner_left_alone
 run_test "orphan-running-child-kept" test_orphan_with_running_child_kept_and_child_cancelled
 run_test "orphan-linked-child-kept" test_orphan_missing_parent_linked_child_running_kept
 run_test "orphan-children-terminal-released" test_orphan_all_children_terminal_released
