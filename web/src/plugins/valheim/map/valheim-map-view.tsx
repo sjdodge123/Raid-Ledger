@@ -17,7 +17,7 @@ import {
 import { MapViewport, type MapViewportCommands } from './map-viewport';
 import { FogCanvas } from './fog-canvas';
 import { PinLayer } from './pin-layer';
-import { MapControls } from './map-controls';
+import { MapControls, type MapLayerState } from './map-controls';
 
 export interface ValheimMapViewProps {
     characterId: number;
@@ -104,26 +104,29 @@ interface LayerProps {
     pinLabels: boolean;
 }
 
+function BaseImage({ url, size }: { url: string; size: number }) {
+    return (
+        <img
+            src={url}
+            alt=""
+            draggable={false}
+            className="absolute left-0 top-0"
+            style={{ width: size, height: size }}
+        />
+    );
+}
+
 /** The texture-space stack inside the viewport: base image, fog, pins. */
 function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
     const { meta, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
     const size = meta.grid.textureSize;
-    const box = { width: size, height: size };
     return (
         <div
             className="absolute left-0 top-0"
-            style={box}
+            style={{ width: size, height: size }}
             data-zoom={scale.toFixed(2)}
         >
-            {baseUrl && (
-                <img
-                    src={baseUrl}
-                    alt=""
-                    draggable={false}
-                    className="absolute left-0 top-0"
-                    style={box}
-                />
-            )}
+            {baseUrl && <BaseImage url={baseUrl} size={size} />}
             {personal && (
                 <FogCanvas
                     size={size}
@@ -142,23 +145,15 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
     );
 }
 
-function MapReady(props: ReadyProps & { className?: string | undefined }) {
+/** Switch state + fetched layers for a loaded meta. */
+function useMapReadyState(props: ReadyProps) {
     const [showShared, setShowShared] = useState(false);
     const [pinLabels, setPinLabels] = useState(false);
-    const [commands, setCommands] = useState<MapViewportCommands | null>(null);
     const { base, personal, shared, sharedAvailable } = useMapLayers(
         props,
         showShared,
     );
     const sharedOn = showShared && sharedAvailable;
-    if (personal.error) {
-        return (
-            <MapError
-                text="The explored area could not be loaded."
-                onRetry={() => void personal.refetch()}
-            />
-        );
-    }
     const layers: LayerProps = {
         meta: props.meta,
         baseUrl: base.url,
@@ -167,12 +162,30 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
         sharedOn,
         pinLabels,
     };
+    const controls: MapLayerState = {
+        showShared: sharedOn,
+        onShowShared: setShowShared,
+        sharedAvailable,
+        pinLabels,
+        onPinLabels: setPinLabels,
+    };
+    return { layers, controls, personal, baseFailed: base.error !== null };
+}
+
+interface MapFrameProps {
+    className?: string | undefined;
+    layers: LayerProps;
+    controls: MapLayerState;
+    baseFailed: boolean;
+}
+
+/** Viewport + status chip + overlay controls in the sized frame (D10). */
+function MapFrame({ className, layers, controls, baseFailed }: MapFrameProps) {
+    const [commands, setCommands] = useState<MapViewportCommands | null>(null);
     return (
-        <div
-            className={props.className ? `${FRAME} ${props.className}` : FRAME}
-        >
+        <div className={className ? `${FRAME} ${className}` : FRAME}>
             <MapViewport
-                contentSize={props.meta.grid.textureSize}
+                contentSize={layers.meta.grid.textureSize}
                 label="Valheim map"
                 onCommands={setCommands}
                 className="absolute inset-0"
@@ -180,24 +193,47 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
                 {(vp) => <MapLayers layers={layers} scale={vp.scale} />}
             </MapViewport>
             <BaseMapStatus
-                ready={props.meta.baseMap?.ready === true}
-                failed={base.error !== null}
+                ready={layers.meta.baseMap?.ready === true}
+                failed={baseFailed}
             />
             <div className="absolute right-2 top-2 z-10">
-                <MapControls
-                    commands={commands}
-                    showShared={sharedOn}
-                    onShowShared={setShowShared}
-                    sharedAvailable={sharedAvailable}
-                    pinLabels={pinLabels}
-                    onPinLabels={setPinLabels}
-                />
+                <MapControls commands={commands} {...controls} />
             </div>
         </div>
     );
 }
 
+function MapReady(props: ReadyProps & { className?: string | undefined }) {
+    const { layers, controls, personal, baseFailed } = useMapReadyState(props);
+    if (personal.error) {
+        return (
+            <MapError
+                text="The explored area could not be loaded."
+                onRetry={() => void personal.refetch()}
+            />
+        );
+    }
+    return (
+        <MapFrame
+            className={props.className}
+            layers={layers}
+            controls={controls}
+            baseFailed={baseFailed}
+        />
+    );
+}
+
 const LOADING_CLASS = `${FRAME} rounded-lg border border-edge bg-panel`;
+
+function MapLoading() {
+    return (
+        <div
+            aria-busy="true"
+            aria-label="Loading map"
+            className={LOADING_CLASS}
+        />
+    );
+}
 
 /** One character's map with its controls; loading / error states included. */
 export function ValheimMapView({
@@ -206,14 +242,7 @@ export function ValheimMapView({
     className,
 }: ValheimMapViewProps) {
     const meta = useValheimMapMeta(characterId, mapId);
-    if (meta.isPending)
-        return (
-            <div
-                aria-busy="true"
-                aria-label="Loading map"
-                className={LOADING_CLASS}
-            />
-        );
+    if (meta.isPending) return <MapLoading />;
     if (meta.error)
         return (
             <MapError
@@ -221,10 +250,9 @@ export function ValheimMapView({
                 onRetry={() => void meta.refetch()}
             />
         );
-    const key = `${characterId}:${mapId}`;
     return (
         <MapReady
-            key={key}
+            key={`${characterId}:${mapId}`}
             characterId={characterId}
             mapId={mapId}
             meta={meta.data}

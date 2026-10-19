@@ -99,6 +99,30 @@ function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
     );
 }
 
+/** Below 1024px: a Layers button opening a BottomSheet with the switches. */
+function LayersSheet({ layers }: { layers: MapLayerState }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-11"
+                onClick={() => setOpen(true)}
+            >
+                Layers
+            </Button>
+            <BottomSheet
+                isOpen={open}
+                onClose={() => setOpen(false)}
+                title="Layers"
+            >
+                <LayerSwitches {...layers} />
+            </BottomSheet>
+        </>
+    );
+}
+
 /** ≥1024px: the switches inline; below it a Layers button + BottomSheet. */
 function LayersPanel({
     wide,
@@ -107,32 +131,11 @@ function LayersPanel({
     wide: boolean;
     layers: MapLayerState;
 }) {
-    const [sheetOpen, setSheetOpen] = useState(false);
-    if (wide) {
-        return (
-            <div className="w-64 rounded-lg border border-edge bg-surface px-3 py-1">
-                <LayerSwitches {...layers} />
-            </div>
-        );
-    }
+    if (!wide) return <LayersSheet layers={layers} />;
     return (
-        <>
-            <Button
-                variant="secondary"
-                size="sm"
-                className="min-h-11"
-                onClick={() => setSheetOpen(true)}
-            >
-                Layers
-            </Button>
-            <BottomSheet
-                isOpen={sheetOpen}
-                onClose={() => setSheetOpen(false)}
-                title="Layers"
-            >
-                <LayerSwitches {...layers} />
-            </BottomSheet>
-        </>
+        <div className="w-64 rounded-lg border border-edge bg-surface px-3 py-1">
+            <LayerSwitches {...layers} />
+        </div>
     );
 }
 

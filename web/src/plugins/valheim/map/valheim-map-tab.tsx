@@ -149,9 +149,36 @@ function CharacterMap({
     );
 }
 
+/** The character list is in: pick the selected character (query, own, first). */
+function ServerCharacters({
+    rows,
+    params,
+}: {
+    rows: ValheimCharacterSummary[];
+    params: URLSearchParams;
+}) {
+    const viewerId = useAuth().user?.id ?? null;
+    const characterId = pickCharacterId(
+        rows,
+        params.get(CHARACTER_PARAM),
+        viewerId,
+    );
+    if (characterId === null) {
+        return (
+            <Empty text="No characters on this server yet. Join with the Valheim Link mod to upload one." />
+        );
+    }
+    return (
+        <CharacterMap
+            rows={rows}
+            characterId={characterId}
+            param={params.get(MAP_PARAM)}
+        />
+    );
+}
+
 export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
     const params = new URLSearchParams(useLocation().search);
-    const viewerId = useAuth().user?.id ?? null;
     const characters = useValheimServerCharacters(serverId);
     if (characters.isPending)
         return (
@@ -165,23 +192,7 @@ export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
         return (
             <Empty text="Characters could not be loaded. Try again later." />
         );
-    const characterId = pickCharacterId(
-        characters.data,
-        params.get(CHARACTER_PARAM),
-        viewerId,
-    );
-    if (characterId === null) {
-        return (
-            <Empty text="No characters on this server yet. Join with the Valheim Link mod to upload one." />
-        );
-    }
-    return (
-        <CharacterMap
-            rows={characters.data}
-            characterId={characterId}
-            param={params.get(MAP_PARAM)}
-        />
-    );
+    return <ServerCharacters rows={characters.data} params={params} />;
 }
 
 export default ValheimMapTab;
