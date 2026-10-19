@@ -3,7 +3,9 @@
  * detail additions). Not in the default handler list: specs `server.use()` them.
  */
 import { http, HttpResponse } from 'msw';
-import type { ValheimCharacterDetail, ValheimCharacterSummary, ValheimItemStack } from '@raid-ledger/contract';
+import type {
+    ValheimCharacterDetail, ValheimCharacterSummary, ValheimClaimEvent, ValheimItemStack,
+} from '@raid-ledger/contract';
 
 const API_BASE = 'http://localhost:3000';
 export const VALHEIM_CHARACTERS_URL = `${API_BASE}/plugins/valheim/armory/characters`;
@@ -91,4 +93,46 @@ export function valheimBlobHandler(missing: string[] = []) {
         (missing.includes(String(params.sha))
             ? new HttpResponse(null, { status: 404 })
             : new HttpResponse(new Uint8Array([137, 80, 78, 71]), { headers: { 'Content-Type': 'image/png' } })));
+}
+
+/* ROK-1836 L4a — claim, admin owner and claim-history routes + the member search. */
+export const VALHEIM_CLAIM_URL = `${VALHEIM_CHARACTER_URL}/claim`;
+export const VALHEIM_OWNER_URL = `${API_BASE}/admin/plugins/valheim/armory/characters/:id/owner`;
+export const VALHEIM_CLAIM_EVENTS_URL = `${API_BASE}/admin/plugins/valheim/armory/characters/:id/claim-events`;
+
+/** 201 by default; pass 409 for "someone claimed first". Records the hit ids. */
+export function valheimClaimHandler(status = 201, hits: string[] = []) {
+    return http.post(VALHEIM_CLAIM_URL, ({ params }) => {
+        hits.push(String(params.id));
+        return status === 409
+            ? HttpResponse.json({ statusCode: 409, message: 'Character already claimed' }, { status: 409 })
+            : HttpResponse.json({ ok: true }, { status });
+    });
+}
+
+/** Captures each PUT body into `bodies`. */
+export function valheimOwnerHandler(bodies: unknown[]) {
+    return http.put(VALHEIM_OWNER_URL, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true });
+    });
+}
+
+export const valheimClaimEvents: ValheimClaimEvent[] = [
+    { id: 1, profileId: 12, action: 'claim', fromUserId: null, toUserId: 3, actorUserId: 3, createdAt: '2026-10-01T10:00:00.000Z' },
+    { id: 2, profileId: 12, action: 'admin_unassign', fromUserId: 3, toUserId: null, actorUserId: 1, createdAt: '2026-10-10T10:00:00.000Z' },
+    { id: 3, profileId: 12, action: 'admin_assign', fromUserId: null, toUserId: 3, actorUserId: 1, createdAt: '2026-10-05T10:00:00.000Z' },
+];
+
+export function valheimClaimEventsHandler(events: ValheimClaimEvent[] = valheimClaimEvents) {
+    return http.get(VALHEIM_CLAIM_EVENTS_URL, () => HttpResponse.json({ data: events }));
+}
+
+export function valheimMemberSearchHandler() {
+    const data = [
+        { id: 3, username: 'member1', avatar: null, steamLinked: false },
+        { id: 4, username: 'member2', avatar: null, steamLinked: false },
+    ];
+    return http.get(`${API_BASE}/users`, () =>
+        HttpResponse.json({ data, meta: { total: 2, page: 1, limit: 20, hasMore: false } }));
 }
