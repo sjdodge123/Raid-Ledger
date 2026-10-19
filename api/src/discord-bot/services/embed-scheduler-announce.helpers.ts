@@ -65,3 +65,39 @@ export async function announceDeferredGroupEvent(
     discordMessage,
   });
 }
+
+/** The event row {@link announceGroupForEvent} announces from. */
+async function findAnnounceEvent(
+  db: Pick<PostgresJsDatabase<typeof schema>, 'select'>,
+  eventId: number,
+): Promise<DeferredAnnounceEvent | null> {
+  const e = schema.events;
+  const [row] = await db
+    .select({
+      id: e.id,
+      title: e.title,
+      duration: e.duration,
+      gameId: e.gameId,
+      guildId: e.guildId,
+      creatorId: e.creatorId,
+    })
+    .from(e)
+    .where(eq(e.id, eventId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * ROK-1832 (Codex r3): an already group-tagged event rescheduled INTO its
+ * lead-time window gets its first embed from the update path, which the
+ * scheduler then never revisits. Announce its group there, from the event
+ * row; the per-(user, event) claims keep a repeat a no-op.
+ */
+export async function announceGroupForEvent(
+  deps: DeferredAnnounceDeps,
+  eventId: number,
+): Promise<void> {
+  if (!deps.affinity) return;
+  const event = await findAnnounceEvent(deps.db, eventId);
+  if (event) await announceDeferredGroupEvent(deps, event);
+}
