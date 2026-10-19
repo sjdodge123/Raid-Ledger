@@ -146,15 +146,8 @@ async function insertCatalog(db: Db, serverId: number): Promise<void> {
   });
 }
 
-/**
- * Reset the server's armory rows to one fixture character (+ catalogue
- * and atlas when `withCatalog`); returns the profile id.
- */
-export async function seedArmoryCharacter(
-  db: Db,
-  serverId: number,
-  req: ArmoryCharacterFixtureRequest,
-): Promise<number> {
+/** Drop the server's fixture profile + catalogue (idempotent re-run). */
+async function resetArmoryRows(db: Db, serverId: number): Promise<void> {
   const P = schema.valheimProfiles;
   const C = schema.valheimItemCatalogs;
   await db.delete(P).where(eq(P.pelicanServerId, serverId));
@@ -166,26 +159,46 @@ export async function seedArmoryCharacter(
         eq(C.gameVersion, ARMORY_FIXTURE_GAME_VERSION),
       ),
     );
+}
+
+function profileValues(
+  serverId: number,
+  claimedBy: number | null,
+): NewValheimProfile {
+  return {
+    pelicanServerId: serverId,
+    steamId: '76561198000000001',
+    playerId: '1000000000000001',
+    worldUid: '1234567890123',
+    worldName: 'Fixtureheim',
+    name: 'Testviking',
+    claimedBy,
+    claimSource: claimedBy === null ? null : 'admin',
+    claimedAt: claimedBy === null ? null : new Date(),
+    gameVersion: ARMORY_FIXTURE_GAME_VERSION,
+    modVersion: '1.0.0',
+    capturedAt: new Date(),
+    ...fixtureSheet(),
+    knownItems: [],
+    knownRecipes: [],
+  };
+}
+
+/**
+ * Reset the server's armory rows to one fixture character (+ catalogue
+ * and atlas when `withCatalog`); returns the profile id.
+ */
+export async function seedArmoryCharacter(
+  db: Db,
+  serverId: number,
+  req: ArmoryCharacterFixtureRequest,
+): Promise<number> {
+  await resetArmoryRows(db, serverId);
   if (req.withCatalog) await insertCatalog(db, serverId);
+  const P = schema.valheimProfiles;
   const [row] = await db
     .insert(P)
-    .values({
-      pelicanServerId: serverId,
-      steamId: '76561198000000001',
-      playerId: '1000000000000001',
-      worldUid: '1234567890123',
-      worldName: 'Fixtureheim',
-      name: 'Testviking',
-      claimedBy: req.claimedBy,
-      claimSource: req.claimedBy === null ? null : 'admin',
-      claimedAt: req.claimedBy === null ? null : new Date(),
-      gameVersion: ARMORY_FIXTURE_GAME_VERSION,
-      modVersion: '1.0.0',
-      capturedAt: new Date(),
-      ...fixtureSheet(),
-      knownItems: [],
-      knownRecipes: [],
-    })
+    .values(profileValues(serverId, req.claimedBy))
     .returning({ id: P.id });
   if (!row) throw new Error('Armory fixture insert returned no row');
   return row.id;
