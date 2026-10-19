@@ -108,15 +108,37 @@ borrow::release() {
 # borrow::copy_tree <A> <B> — host-side copy of slot A's /workspace tree
 # (including the runner-scaffolded .git) onto slot B's. node_modules and build
 # output stay B's own; B's node_modules is a separate named volume.
+#
+# Two phases so a failed copy never leaves B half-copied: (1) rsync A into a
+# staging dir under slot B (kept between runs, so the next copy is
+# incremental) — a failure there removes the staging dir and B's tree is
+# untouched; (2) only then move staging onto B's tree with --delay-updates, so
+# changed files land in one rename pass at the end. The worktree dir itself is
+# never renamed: the runner container bind-mounts it.
 borrow::copy_tree() {
-    local a="$1" b="$2" src dst t0 files
+    local a="$1" b="$2" src dst stage t0 files
     src="$RL_RUNNERS_DIR/slot-$a/worktree"
     dst="$RL_RUNNERS_DIR/slot-$b/worktree"
+    stage="$RL_RUNNERS_DIR/slot-$b/.worktree-staging"
     [[ -d "$src" && -d "$dst" ]] || { echo "[parallel] copy failed: missing worktree dir" >&2; return 1; }
     t0=$(date +%s)
-    rsync -a --delete --exclude=node_modules --exclude=dist --exclude=coverage \
+    mkdir -p "$stage" || return 1
+    if ! rsync -a --delete --exclude=node_modules --exclude=dist --exclude=coverage \
         --exclude=test-results --exclude=playwright-report --exclude=/scripts/.auth \
-        "$src/" "$dst/" || return 1
+        "$src/" "$stage/"; then
+        # rsync -a copies a source dir's mode, so an unreadable dir lands as 000.
+        chmod -R u+rwX "$stage" 2>/dev/null || true
+        rm -rf "$stage"
+        echo "[parallel] copy failed: staging rsync (slot $b tree untouched)" >&2
+        return 1
+    fi
+    if ! rsync -a --delete --delay-updates --exclude=node_modules --exclude=dist \
+        --exclude=coverage --exclude=test-results --exclude=playwright-report \
+        --exclude=/scripts/.auth "$stage/" "$dst/"; then
+        find "$dst" -name '.~tmp~' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+        echo "[parallel] copy failed: swap onto slot $b" >&2
+        return 1
+    fi
     files=$(find "$dst" -type f -not -path '*/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
     echo "[parallel] copy slot ${a}→${b}: ${files} files, $(( $(date +%s) - t0 ))s"
 }

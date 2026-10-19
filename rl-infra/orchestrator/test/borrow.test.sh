@@ -112,6 +112,24 @@ test_release_advances_queue() {
     assert_eq "$(_row 4 | jq -r .agent_id)" "waiter-4" "release is idempotent and never frees someone else's row"
 }
 
+test_failed_copy_leaves_b_untouched() {
+    CURRENT_TEST_NAME="a failed copy never leaves slot B half-copied"
+    _seed free free free; _lib
+    export RL_RUNNERS_DIR="$RL_STATE_DIR/runners"
+    local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree" rc=0
+    mkdir -p "$s1/a" "$s1/z" "$s2"
+    echo new > "$s1/a/one.txt"; echo new > "$s1/z/two.txt"; echo old > "$s2/keep.txt"
+    chmod 000 "$s1/z"
+    borrow::copy_tree 1 2 2>/dev/null || rc=$?
+    chmod 755 "$s1/z"
+    assert_exit_code "$rc" "1" "unreadable source dir -> copy fails"
+    assert_eq "$(find "$s2" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "keep.txt " "B keeps exactly its old tree (nothing half-copied, nothing deleted)"
+    assert_eq "$([[ -e "$RL_RUNNERS_DIR/slot-2/.worktree-staging" ]] && echo left || echo gone)" "gone" "staging dir removed"
+    borrow::copy_tree 1 2 >/dev/null 2>&1
+    assert_eq "$(find "$s2" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "a z " "a good copy mirrors A onto B"
+}
+
+run_test "failed-copy-leaves-b-untouched" test_failed_copy_leaves_b_untouched
 run_test "free-slot-borrowed" test_free_slot_is_borrowed
 run_test "queued-slot-skipped" test_queued_slot_is_skipped
 run_test "excluded-slot-skipped" test_excluded_slot_is_skipped
