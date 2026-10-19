@@ -29,6 +29,10 @@ import {
 } from '../../plugins/pelican/presence/server-presence.sink';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { createAdHocEventRow } from '../services/ad-hoc-event.helpers';
+import {
+  findLinkedEvents,
+  recapEvents,
+} from '../services/channel-presence-room.helpers';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
@@ -309,5 +313,40 @@ describe('ROK-1851 — cross-channel separation and the shared end path', () => 
     expect(row.status).toBe('ended');
     expect(adHoc.getActiveState(lobbyId, valheim)).toBeUndefined();
     expect(adHoc.getActiveState(monitorId, valheim)).toBeUndefined();
+  });
+});
+
+describe('ROK-1851 — the lobby card shows the shared same-channel Quick Play', () => {
+  const opened = new Date(Date.now() - 60_000);
+
+  it("links the reused monitor-born event and lists it in the lobby's recap", async () => {
+    const serverEvent = await serverBornQuickPlay();
+    await lobbyVoiceSpawn();
+
+    const linked = await findLinkedEvents(testApp.db, lobbyId);
+    expect(linked.map((e) => e.id)).toEqual([serverEvent]);
+    const recap = await recapEvents(testApp.db, lobbyId, opened);
+    expect(recap.map((e) => e.id)).toEqual([serverEvent]);
+  });
+
+  it('does not link a same-game Quick Play born on ANOTHER channel', async () => {
+    const otherBinding = await seedBinding(
+      'game-voice-monitor',
+      valheim,
+      OTHER_CHANNEL_ID,
+    );
+    const otherEvent = await createAdHocEventRow(
+      testApp.db,
+      otherBinding,
+      { gameId: valheim },
+      testApp.seed.adminUser.id,
+      VALHEIM,
+    );
+
+    const linked = await findLinkedEvents(testApp.db, lobbyId);
+    expect(linked.map((e) => e.id)).toEqual([]);
+    const recap = await recapEvents(testApp.db, lobbyId, opened);
+    expect(recap.map((e) => e.id)).toEqual([]);
+    expect(otherEvent).toBeGreaterThan(0);
   });
 });

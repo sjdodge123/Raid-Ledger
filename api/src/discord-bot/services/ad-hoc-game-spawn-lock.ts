@@ -12,11 +12,12 @@
  * whole transaction (see CLAUDE.md, games-table INSERT paths).
  */
 import { Logger } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LiveGameEvent } from './ad-hoc-server-presence.helpers';
 import { createAdHocEventRow, findAdminFallback } from './ad-hoc-event.helpers';
+import { bornOnSpawningChannel } from './ad-hoc-event-channel-scope.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -37,23 +38,6 @@ export async function withGameSpawnLock<T>(
     );
     return fn(tx);
   });
-}
-
-/**
- * Event rows reusable by a spawn from `bindingId`: no creating binding
- * (server-born) or a creating binding on the SAME Discord channel.
- * ROK-1851: a lobby + a game monitor on one channel share one Quick Play.
- * A Quick Play born on another channel stays separate (ROK-1800 rule).
- */
-function bornOnSpawningChannel(bindingId: string): SQL | undefined {
-  const e = schema.events;
-  return or(
-    isNull(e.channelBindingId),
-    sql`${e.channelBindingId} IN (
-      SELECT cb.id FROM channel_bindings cb
-      JOIN channel_bindings me ON me.channel_id = cb.channel_id
-      WHERE me.id = ${bindingId})`,
-  );
 }
 
 /**
