@@ -18,6 +18,7 @@ import { FogCanvas } from './fog-canvas';
 import { PinLayer } from './pin-layer';
 import { MapControls, type MapLayerState } from './map-controls';
 import { MapError } from './map-error';
+import { MapLegend, MapSnapshotFooter } from './map-legend';
 
 export interface ValheimMapViewProps {
     characterId: number;
@@ -228,6 +229,7 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
                 {(vp) => <MapLayers layers={layers} scale={vp.scale} />}
             </MapViewport>
             <MapStatus {...status} />
+            <MapLegend />
             <div className="absolute right-2 top-2 z-10">
                 <MapControls commands={commands} {...controls} />
             </div>
@@ -246,12 +248,15 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
         );
     }
     return (
-        <MapFrame
-            className={props.className}
-            layers={layers}
-            controls={controls}
-            status={status}
-        />
+        <>
+            <MapFrame
+                className={props.className}
+                layers={layers}
+                controls={controls}
+                status={status}
+            />
+            <MapSnapshotFooter capturedAt={props.meta.capturedAt} />
+        </>
     );
 }
 
