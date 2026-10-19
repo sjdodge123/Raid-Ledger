@@ -26,6 +26,7 @@ import { ShareService } from './share.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
+  UpdateEventReportLinkSchema,
   EventListQuerySchema,
   RescheduleEventSchema,
   CancelEventSchema,
@@ -155,6 +156,27 @@ export class EventsController {
       const dto = UpdateEventSchema.parse(body);
       await this.guildTag.assertUpdate(req.user, id, dto);
       return await this.eventsService.update(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /** ROK-1725: set (`null` clears) the report link; emits no event update. */
+  @Patch(':id/report-link')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  async updateReportLink(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<EventResponseDto> {
+    try {
+      const dto = UpdateEventReportLinkSchema.parse(body);
+      return await this.eventsService.updateReportLink(
         id,
         req.user.id,
         isOperatorOrAdmin(req.user.role),
