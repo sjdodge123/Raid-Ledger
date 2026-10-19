@@ -25,6 +25,7 @@ import {
   checkE2eSpecs,
   envForSlug,
   resolveInnerEnv,
+  resolveSecretEnv,
   sanitizeBaseUrl,
   slugFromBaseUrl,
   type E2eScope,
@@ -43,6 +44,7 @@ export {
   MAX_E2E_SPECS,
   envForSlug,
   resolveInnerEnv,
+  resolveSecretEnv,
   sanitizeBaseUrl,
   slugFromBaseUrl,
 } from './validate-ci-target.js';
@@ -208,7 +210,6 @@ export async function execute(
     (seedSlug ? await seedEnvAdminPassword(sshUser, sshHost, seedSlug) : null);
   const innerEnv = resolveInnerEnv({
     baseUrl,
-    adminPassword: adminPw,
     e2eScope: params.e2e_scope,
     e2eSpecs: params.e2e_specs,
   });
@@ -232,6 +233,7 @@ export async function execute(
   // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.
   const weight = resolveValidateCiWeight(resolveArgs(params), params.weight);
   const remote =
+    resolveSecretEnv(adminPw) +
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
     `--tool rl_validate_ci ${slotFlag}${weightFlag(weight)}${timeoutFlag}` +

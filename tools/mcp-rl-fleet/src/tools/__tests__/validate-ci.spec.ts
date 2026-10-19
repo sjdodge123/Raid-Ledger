@@ -219,7 +219,7 @@ describe('Bug D (Session 4 dogfood) — targetCmd routes through run-on-runner',
 });
 
 describe('ROK-1368 — against_env_slug threads the re-seeded ADMIN_PASSWORD', () => {
-  it('exports ADMIN_PASSWORD matching the env-reseed output inside bash -c', async () => {
+  it('exports ADMIN_PASSWORD matching the env-reseed output OUTSIDE bash -c (ROK-1846 c6)', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
       if (argv.includes('rl status')) {
@@ -243,9 +243,14 @@ describe('ROK-1368 — against_env_slug threads the re-seeded ADMIN_PASSWORD', (
     const argvStr = JSON.stringify(sshCall![1]);
     expect(argvStr).toContain('ADMIN_PASSWORD=');
     expect(argvStr).toContain('rl-ci-deadbeef');
-    const bashCIdx = argvStr.indexOf('bash -c');
-    const pwIdx = argvStr.indexOf('ADMIN_PASSWORD=');
-    expect(pwIdx).toBeGreaterThan(bashCIdx);
+    // The bash -c argument becomes the runner exec's Cmd, which Docker exec
+    // events carry verbatim: the secret rides task-start's env instead and
+    // run-on-runner-with-heartbeat forwards it with `docker exec -e`.
+    const remote = (sshCall![1] as string[]).find((s) => s.includes('task-start')) ?? '';
+    const innerCmd = remote.slice(remote.indexOf('bash -c'));
+    expect(remote.indexOf('ADMIN_PASSWORD=')).toBeLessThan(remote.indexOf('task-start'));
+    expect(innerCmd).not.toMatch(/(PASSWORD|TOKEN|SECRET)=/);
+    expect(innerCmd).not.toContain('rl-ci-deadbeef');
   });
 
   it('omits ADMIN_PASSWORD on the laptop-local path (no against_env_slug)', async () => {

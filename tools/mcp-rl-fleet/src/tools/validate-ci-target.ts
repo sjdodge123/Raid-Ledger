@@ -149,7 +149,8 @@ export function checkE2eSpecs(
  * base_url can still pin the Playwright scope, so it is emitted on its own.
  *
  * @param opts.baseUrl - Sanitised target; omit for the default (local) gate.
- * @param opts.adminPassword - Seeded env admin password, if one was obtained.
+ * @param opts.adminPassword - Ignored since ROK-1846 c6: the password never
+ *   rides the inner `bash -c` command (see resolveSecretEnv).
  * @param opts.e2eScope - Playwright scope for validate-ci.sh; omit for its default.
  * @param opts.e2eSpecs - ROK-1792 explicit spec list (pre-validated by
  *   checkE2eSpecs); emitted as one space-separated, shell-quoted E2E_SPECS.
@@ -168,11 +169,22 @@ export function resolveInnerEnv(opts: {
       `BASE_URL=${shellQuote(base)} ` +
       `API_URL=${shellQuote(`${base}/api`)} ` +
       `HEALTH_URL=${shellQuote(`${base}/api/health`)} `;
-    if (opts.adminPassword) {
-      env += `ADMIN_PASSWORD=${shellQuote(opts.adminPassword)} `;
-    }
   }
   if (opts.e2eScope) env += `E2E_SCOPE=${shellQuote(opts.e2eScope)} `;
   if (opts.e2eSpecs?.length) env += `E2E_SPECS=${shellQuote(opts.e2eSpecs.join(' '))} `;
   return env;
+}
+
+/**
+ * ROK-1846 c6 — the env admin password as an env prefix for the VM-side
+ * `task-start` invocation, OUTSIDE the inner `bash -c`. The inner command
+ * becomes the runner exec's Cmd, which Docker's exec_create / exec_start
+ * events carry verbatim (any slot reading /events saw it);
+ * run-on-runner-with-heartbeat forwards ADMIN_PASSWORD into the exec's Env
+ * with `docker exec -e ADMIN_PASSWORD` instead.
+ *
+ * @returns A trailing-space-terminated `ADMIN_PASSWORD='…' ` prefix, or ''.
+ */
+export function resolveSecretEnv(adminPassword: string | null | undefined): string {
+  return adminPassword ? `ADMIN_PASSWORD=${shellQuote(adminPassword)} ` : '';
 }

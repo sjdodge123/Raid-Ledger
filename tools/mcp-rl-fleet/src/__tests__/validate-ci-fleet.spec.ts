@@ -15,6 +15,7 @@ import {
   envForSlug,
   resolveArgs,
   resolveInnerEnv,
+  resolveSecretEnv,
   sanitizeBaseUrl,
   slugFromBaseUrl,
 } from '../tools/validate-ci.js';
@@ -97,17 +98,24 @@ describe('resolveInnerEnv', () => {
     expect(env.endsWith(' ')).toBe(true);
   });
 
-  it('appends ADMIN_PASSWORD only when one was seeded', () => {
-    expect(resolveInnerEnv({ baseUrl: BASE })).not.toContain('ADMIN_PASSWORD');
-    expect(resolveInnerEnv({ baseUrl: BASE, adminPassword: 'pw' })).toContain(
-      "ADMIN_PASSWORD='pw'",
-    );
+  // ROK-1846 c6: the inner command becomes the runner exec's Cmd, which Docker
+  // exec events carry verbatim — no secret assignment may ever appear in it.
+  it('never puts a PASSWORD/TOKEN/SECRET assignment in the inner command', () => {
+    const env = resolveInnerEnv({ baseUrl: BASE, adminPassword: 'pw-secret', e2eScope: 'all' });
+    expect(env).not.toMatch(/(PASSWORD|TOKEN|SECRET)=/);
+    expect(env).not.toContain('pw-secret');
+  });
+});
+
+describe('resolveSecretEnv (ROK-1846 c6)', () => {
+  it('is empty without a seeded password', () => {
+    expect(resolveSecretEnv(null)).toBe('');
+    expect(resolveSecretEnv(undefined)).toBe('');
   });
 
   it('shell-quotes a password containing metacharacters', () => {
-    const env = resolveInnerEnv({ baseUrl: BASE, adminPassword: "a'b;c" });
-    expect(env).not.toMatch(/ADMIN_PASSWORD=a'b;c /);
-    expect(env).toContain('ADMIN_PASSWORD=');
+    expect(resolveSecretEnv('pw')).toBe("ADMIN_PASSWORD='pw' ");
+    expect(resolveSecretEnv("a'b;c")).not.toMatch(/ADMIN_PASSWORD=a'b;c /);
   });
 });
 
