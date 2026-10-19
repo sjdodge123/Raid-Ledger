@@ -76,7 +76,9 @@ describe('FogCanvas (ROK-1837 D7)', () => {
         render(<FogCanvas size={SIZE} personal={personal} shared={shared} />);
         const img = painted.at(-1);
         expect(alphaAt(img, 0, 0)).toBe(0);
-        expect(alphaAt(img, 1, 0)).toBe(Math.round(FOG_ALPHA_SHARED_ONLY * 255));
+        expect(alphaAt(img, 1, 0)).toBe(
+            Math.round(FOG_ALPHA_SHARED_ONLY * 255),
+        );
         expect(alphaAt(img, 2, 0)).toBe(Math.round(FOG_ALPHA_UNEXPLORED * 255));
         expect(Array.from(img?.data.slice(0, 3) ?? [])).toEqual([16, 32, 48]);
     });
@@ -98,7 +100,10 @@ describe('FogCanvas (ROK-1837 D7)', () => {
 
     it('repaints in the new colour when the theme class changes', async () => {
         render(<FogCanvas size={SIZE} personal={personal} shared={null} />);
-        document.documentElement.style.setProperty('--color-backdrop', '#f8fafc');
+        document.documentElement.style.setProperty(
+            '--color-backdrop',
+            '#f8fafc',
+        );
         await act(async () => {
             document.documentElement.className = 'theme-light';
             await Promise.resolve();

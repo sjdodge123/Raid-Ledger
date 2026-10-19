@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MapViewport, type MapViewportCommands } from './map-viewport';
 
 const VIEW = { width: 400, height: 300 };
@@ -58,9 +58,9 @@ describe('MapViewport (ROK-1837 D5/D10)', () => {
         const before = layer.style.transform;
         fireEvent.wheel(app, { deltaY: -200, clientX: 10, clientY: 10 });
         expect(layer.style.transform).not.toBe(before);
-        expect(Number(screen.getByTestId('child-scale').textContent)).toBeGreaterThan(
-            300 / 256,
-        );
+        expect(
+            Number(screen.getByTestId('child-scale').textContent),
+        ).toBeGreaterThan(300 / 256);
     });
 
     it('keyboard + zooms and an arrow pans after zooming', () => {
@@ -78,24 +78,27 @@ describe('MapViewport (ROK-1837 D5/D10)', () => {
         fireEvent.keyDown(app, { key: '+' });
         fireEvent.keyDown(app, { key: '+' });
         const before = layer.style.transform;
-        fireEvent.pointerDown(app, { pointerId: 1, clientX: 100, clientY: 100 });
+        fireEvent.pointerDown(app, {
+            pointerId: 1,
+            clientX: 100,
+            clientY: 100,
+        });
         fireEvent.pointerMove(app, { pointerId: 1, clientX: 60, clientY: 70 });
         fireEvent.pointerUp(app, { pointerId: 1 });
         expect(layer.style.transform).not.toBe(before);
     });
 
     it('hands zoomIn/zoomOut/fit to the parent', () => {
-        let commands: MapViewportCommands | null = null;
+        const got: { c: MapViewportCommands | null } = { c: null };
         const { layer } = renderViewport((c) => {
-            commands = c;
+            got.c = c;
         });
         const fitT = layer.style.transform;
-        const c: MapViewportCommands | null = commands;
+        const c = got.c;
         if (!c) throw new Error('onCommands was not called');
-        fireEvent.click(document.body);
-        c.zoomIn();
-        expect(screen.getByTestId('map-texture-layer').style.transform).not.toBe(
-            fitT,
-        );
+        act(() => c.zoomIn());
+        expect(layer.style.transform).not.toBe(fitT);
+        act(() => c.fit());
+        expect(layer.style.transform).toBe(fitT);
     });
 });

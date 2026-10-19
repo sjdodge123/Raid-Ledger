@@ -26,7 +26,12 @@ const PINS: ValheimMapPin[] = [
 
 function renderLayer(scale = 1, showShared = false) {
     return render(
-        <PinLayer grid={GRID} pins={PINS} scale={scale} showShared={showShared} />,
+        <PinLayer
+            grid={GRID}
+            pins={PINS}
+            scale={scale}
+            showShared={showShared}
+        />,
     );
 }
 
@@ -34,8 +39,12 @@ describe('PinLayer (ROK-1837 D8)', () => {
     it('names each pin "<label or type> (<type>)"', () => {
         renderLayer();
         expect(screen.getByRole('button', { name: 'Home (Bed)' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Death (Death)' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Portal (Icon2)' })).toBeTruthy();
+        expect(
+            screen.getByRole('button', { name: 'Death (Death)' }),
+        ).toBeTruthy();
+        expect(
+            screen.getByRole('button', { name: 'Portal (Icon2)' }),
+        ).toBeTruthy();
     });
 
     it('positions a pin at worldToScreen in texture px', () => {
@@ -53,9 +62,13 @@ describe('PinLayer (ROK-1837 D8)', () => {
 
     it('hides cartography-table pins until the shared layer is on', () => {
         const { rerender } = renderLayer(1, false);
-        expect(screen.queryByRole('button', { name: 'Eikthyr (Boss)' })).toBeNull();
+        expect(
+            screen.queryByRole('button', { name: 'Eikthyr (Boss)' }),
+        ).toBeNull();
         rerender(<PinLayer grid={GRID} pins={PINS} scale={1} showShared />);
-        expect(screen.getByRole('button', { name: 'Eikthyr (Boss)' })).toBeTruthy();
+        expect(
+            screen.getByRole('button', { name: 'Eikthyr (Boss)' }),
+        ).toBeTruthy();
     });
 
     it('strikes through a checked pin', () => {
