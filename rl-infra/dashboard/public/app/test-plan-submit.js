@@ -98,6 +98,29 @@
     return draft;
   };
 
+  // ROK-1847 — tester writes carry the plan's tester token from the shared
+  // link (`?k=`). It is remembered per plan so a reload that drops the query
+  // keeps working. The LAN host (fleet.rl.lan) needs no token.
+  const testerKeyStore = (slug, planId) => `rl-tester-key:${slug}:${planId}`;
+  const TESTER_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
+  const testerHeaders = (slug, planId) => {
+    let key = null;
+    try {
+      const url = new URL(window.location.href);
+      const k = url.searchParams.get('k');
+      if (k && TESTER_KEY_RE.test(k) && url.searchParams.get('plan') === planId) {
+        key = k;
+        try { localStorage.setItem(testerKeyStore(slug, planId), k); } catch { /* private mode */ }
+      }
+    } catch { /* malformed location */ }
+    if (!key) {
+      try { key = localStorage.getItem(testerKeyStore(slug, planId)); } catch { key = null; }
+    }
+    const headers = { 'content-type': 'application/json' };
+    if (key && TESTER_KEY_RE.test(key)) headers['x-tester-token'] = key;
+    return headers;
+  };
+
   // ----- POST helpers -----
   const submitDraft = async (slug, plan) => {
     const tester = await ensureTesterName();
@@ -109,7 +132,7 @@
     if (verdicts.length === 0) return { ok: false, empty: true };
     const r = await fetch(`/api/test-plans/${encodeURIComponent(slug)}/${plan.plan_id}/submit`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: testerHeaders(slug, plan.plan_id),
       body: JSON.stringify({ tester, verdicts }),
     });
     if (!r.ok) {
@@ -127,7 +150,7 @@
       `/api/test-plans/${encodeURIComponent(slug)}/${plan.plan_id}/step/${stepId}/comment`,
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: testerHeaders(slug, plan.plan_id),
         body: JSON.stringify({ tester, body, attachment_url: attachmentUrl || null }),
       },
     );
@@ -145,7 +168,7 @@
       `/api/test-plans/${encodeURIComponent(slug)}/${plan.plan_id}/step/${stepId}/reset-request`,
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: testerHeaders(slug, plan.plan_id),
         body: JSON.stringify({ tester }),
       },
     );
@@ -171,7 +194,7 @@
       `/api/test-plans/${encodeURIComponent(slug)}/${plan.plan_id}/attachment`,
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: testerHeaders(slug, plan.plan_id),
         body: JSON.stringify({ mime: file.type, data: dataUrl }),
       },
     );
@@ -183,6 +206,6 @@
   Object.assign(NS, {
     sanitizeTester, getStoredTesterName, askTesterNameModal, ensureTesterName,
     loadDraft, saveDraft, clearDraft, bufferVerdict,
-    submitDraft, postComment, requestReset, uploadAttachment,
+    submitDraft, postComment, requestReset, uploadAttachment, testerHeaders,
   });
 })();

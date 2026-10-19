@@ -153,7 +153,7 @@ const goodPlanBody = (overrides = {}) => ({
 const put = (base, slug, planId, body) =>
   fetch(`${base}/api/test-plans/${slug}/${planId}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify(body),
   });
 
@@ -322,7 +322,7 @@ test('AC22: submit on plan A leaves plan B untouched', async () => {
     `${srv.base}/api/test-plans/foo/${PLAN_ID_A}/submit`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
       body: JSON.stringify({
         tester: 'jake',
         verdicts: [{ step_id: 1, verdict: 'pass' }],
@@ -349,6 +349,7 @@ test('AC23: DELETE {slug}/{plan_id} removes only that file', async () => {
 
   const r = await fetch(`${srv.base}/api/test-plans/foo/${PLAN_ID_A}`, {
     method: 'DELETE',
+    headers: { 'x-agent-token': 'test-token-not-used' }, // ROK-1847
   });
   assert.equal(r.status, 200);
 
@@ -390,7 +391,7 @@ test('AC24: DELETE {slug} removes the whole {slug}/ directory', async () => {
   const seeded = await readdir(join(srv.plansDir, 'foo'));
   assert.equal(seeded.length, 2, `seed must have placed 2 files; saw ${seeded.length}`);
 
-  const r = await fetch(`${srv.base}/api/test-plans/foo`, { method: 'DELETE' });
+  const r = await fetch(`${srv.base}/api/test-plans/foo`, { method: 'DELETE', headers: { 'x-agent-token': 'test-token-not-used' } });
   assert.equal(r.status, 200, `DELETE should be 200; got ${r.status}`);
 
   // {slug}/ directory should be gone (not just emptied). Today's v1
@@ -507,7 +508,7 @@ test('codex-P2a: DELETE single plan also wipes its attachment directory', async 
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const up = await fetch(`${srv.base}/api/test-plans/foo/${PLAN_ID_A}/attachment`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({ mime: 'image/png', data: png }),
   });
   const upBody = await up.text();
@@ -519,7 +520,7 @@ test('codex-P2a: DELETE single plan also wipes its attachment directory', async 
   assert.equal(before.status, 200, 'attachment should be reachable before plan delete');
 
   // Delete the single plan.
-  const del = await fetch(`${srv.base}/api/test-plans/foo/${PLAN_ID_A}`, { method: 'DELETE' });
+  const del = await fetch(`${srv.base}/api/test-plans/foo/${PLAN_ID_A}`, { method: 'DELETE', headers: { 'x-agent-token': 'test-token-not-used' } });
   assert.equal(del.status, 200);
 
   // The attachment must now 404 (its directory was wiped).
@@ -550,7 +551,7 @@ test('codex-P2b: list endpoint preserves sanitized attachment_url on stripped co
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const up = await fetch(`${srv.base}/api/test-plans/foo/${PLAN_ID_A}/attachment`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({ mime: 'image/png', data: png }),
   });
   assert.equal(up.status, 200);
@@ -558,7 +559,7 @@ test('codex-P2b: list endpoint preserves sanitized attachment_url on stripped co
 
   const com = await fetch(`${srv.base}/api/test-plans/foo/${PLAN_ID_A}/step/1/comment`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({ tester: 'qa1', body: 'see screenshot', attachment_url: attUrl }),
   });
   assert.equal(com.status, 200, `comment POST should succeed: ${com.status}: ${await com.text()}`);
