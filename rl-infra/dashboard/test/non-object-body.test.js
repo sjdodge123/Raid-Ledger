@@ -21,6 +21,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = resolve(__dirname, '..', 'server.js');
 const PUBLIC_DIR = resolve(__dirname, '..', 'public');
 const PLAN_ID = '2026-10-18-1200-abcd';
+// ROK-1847 gates every mutating route behind the agent token (which the
+// tester gate also accepts), so each request carries it: the body check is
+// what these cases prove, not the auth gate.
+const AGENT_TOKEN = 'rok-1848-null-body-agent-token';
 const NON_OBJECT_BODIES = ['null', '[]', '"x"', '1'];
 
 const waitForPort = (child, out) =>
@@ -46,7 +50,7 @@ const startServer = async (t, nodeArgs = []) => {
       STATE_DIR: stateDir,
       TEST_PLANS_DIR: plansDir,
       PUBLIC_DIR,
-      RL_AGENT_TOKEN: 'test-token-not-used',
+      RL_AGENT_TOKEN: AGENT_TOKEN,
       // Loopback is a trusted proxy so each request can carry its own
       // X-Forwarded-For and stay under the 30 POST/min per-IP limiter.
       RL_TRUSTED_PROXY_CIDRS: '127.0.0.1,::ffff:127.0.0.1,::1',
@@ -77,6 +81,7 @@ const send = async (base, method, path, rawBody) => {
       method,
       headers: {
         'content-type': 'application/json',
+        'x-agent-token': AGENT_TOKEN,
         'x-forwarded-for': `10.18.${Math.floor(ipSeq / 250)}.${ipSeq % 250}`,
       },
       body: rawBody,
