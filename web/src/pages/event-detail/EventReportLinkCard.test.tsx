@@ -89,7 +89,7 @@ describe('EventReportLinkCard', () => {
     it('W3: shows a manager the empty state with "Add report link"', () => {
         renderCard(null, { canManage: true });
         expect(screen.getByRole('heading', { name: 'Logs' })).toBeInTheDocument();
-        expect(screen.getByText(/No logs linked yet/)).toBeInTheDocument();
+        expect(screen.getByText('No logs linked yet. Paste a Warcraft Logs or foreverlogs.gg report after the raid.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Add report link' })).toBeInTheDocument();
     });
 

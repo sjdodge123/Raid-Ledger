@@ -12,6 +12,7 @@ import {
     eventReportUrlProblem,
     normalizeEventReportUrl,
     reportLinkSiteName,
+    EVENT_REPORT_HOSTS,
     EVENT_REPORT_URL_MAX,
     type EventResponseDto,
 } from '@raid-ledger/contract';
@@ -23,6 +24,13 @@ import { toast } from '../../lib/toast';
 import { useUpdateEventReportLink } from '../../hooks/use-event-report-link';
 
 const ACTION_ROW = 'flex flex-col gap-2 sm:flex-row';
+
+/**
+ * "Warcraft Logs or foreverlogs.gg", named from the contract's allow-list so
+ * the copy follows it — and so this core file carries no WoW: Forever literal
+ * (wow-forever-core-boundary guard; the log site is not the ruleset).
+ */
+const SITE_NAMES = EVENT_REPORT_HOSTS.map((host) => reportLinkSiteName(`https://${host}/`) ?? host).join(' or ');
 
 /** Parsed URL, or null when the stored value does not parse. */
 function parseUrl(url: string): URL | null {
@@ -78,7 +86,7 @@ function ReportLinkEmpty({ onAdd }: { onAdd: () => void }): JSX.Element {
     return (
         <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-muted">
-                No logs linked yet. Paste a Warcraft Logs or foreverlogs.gg report after the raid.
+                No logs linked yet. Paste a {SITE_NAMES} report after the raid.
             </p>
             <Button variant="secondary" size="sm" onClick={onAdd}>Add report link</Button>
         </div>
@@ -104,7 +112,7 @@ function ReportLinkEditor({ initial, pending, onSave, onCancel }: {
     };
     return (
         <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
-            <Field label="Report link" hint="Warcraft Logs or foreverlogs.gg report URL" {...(error ? { error } : {})}>
+            <Field label="Report link" hint={`${SITE_NAMES} report URL`} {...(error ? { error } : {})}>
                 <Input type="url" inputMode="url" fieldSize="md" maxLength={EVENT_REPORT_URL_MAX} value={value}
                     placeholder="https://www.warcraftlogs.com/reports/…" onChange={(e) => setValue(e.target.value)} />
             </Field>
