@@ -76,3 +76,29 @@ describe('MapControls (ROK-1837 D9)', () => {
         ).toBeInTheDocument();
     });
 });
+
+describe('MapControls 44px targets at every width (Codex r5 P3)', () => {
+    it('zoom + Layers targets stay 44px at ≥1024px — no lg:min-h-9 shrink (Codex r5 P3)', () => {
+        render(<MapControls {...props()} />);
+        for (const name of ['Zoom in', 'Zoom out', 'Fit map']) {
+            const cls = screen
+                .getByRole('button', { name })
+                .className.split(' ');
+            expect({ name, cls }).toEqual({
+                name,
+                cls: expect.not.arrayContaining(['lg:min-h-9']),
+            });
+            expect(cls).toContain('min-h-[44px]');
+        }
+    });
+
+    it('<1024px: the Layers button stays 44px too (Codex r5 P3)', () => {
+        wide = false;
+        render(<MapControls {...props()} />);
+        const cls = screen
+            .getByRole('button', { name: 'Layers' })
+            .className.split(' ');
+        expect(cls).not.toContain('lg:min-h-9');
+        expect(cls).toContain('min-h-[44px]');
+    });
+});

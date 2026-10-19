@@ -2,7 +2,8 @@
  * ROK-1837 D9 — the map's overlay controls: zoom in / out / fit (wired to the
  * viewport's commands) and the two layer switches. ≥1024px the switches sit
  * inline under the buttons; below it a "Layers" button opens a BottomSheet
- * holding them (§4.4, §4.18). Every target is 44px (§4.20).
+ * holding them (§4.4, §4.18). Every target is 44px (§4.20) — `size="md"`, since
+ * `sm` drops to 36px (`lg:min-h-9`) at ≥1024px.
  */
 import { useId, useState } from 'react';
 import {
@@ -85,10 +86,9 @@ function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
                 <Button
                     key={label}
                     variant="ghost"
-                    size="sm"
+                    size="md"
                     iconOnly
                     aria-label={label}
-                    className="min-h-11"
                     disabled={!run}
                     onClick={run}
                 >
@@ -104,12 +104,7 @@ function LayersSheet({ layers }: { layers: MapLayerState }) {
     const [open, setOpen] = useState(false);
     return (
         <>
-            <Button
-                variant="secondary"
-                size="sm"
-                className="min-h-11"
-                onClick={() => setOpen(true)}
-            >
+            <Button variant="secondary" size="md" onClick={() => setOpen(true)}>
                 Layers
             </Button>
             <BottomSheet
