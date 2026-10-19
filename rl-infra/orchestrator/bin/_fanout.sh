@@ -130,6 +130,37 @@ fanout::record_outcome() {
         '.children = [(.children // [])[] | if .task_id == $id then .status = $st | .exit = $ex else . end]' || true
 }
 
+# fanout::run_bounded <seconds> <cmd...> — run cmd under the watchdog task-start
+# gives every child (--timeout-seconds): SIGTERM at the deadline, SIGKILL after
+# RL_FANOUT_KILL_GRACE_SECONDS (default 10, as task-start). 0 = unbounded, as
+# task-start. Codex r6 P2: the serial fallback ran with no child timeout, so
+# only P's 2×child+3300 s budget capped it. Returns cmd's exit code, or 124
+# (timeout(1)'s code) when the deadline fired.
+fanout::run_bounded() {
+    local secs="$1" pid wd rc=0 fired="$RL_TASKS_DIR/$P.serial-timeout"; shift
+    if (( secs == 0 )); then "$@"; return $?; fi
+    rm -f "$fired"
+    "$@" &
+    pid=$!
+    (
+        s=""; trap '[[ -n "$s" ]] && kill "$s" 2>/dev/null; exit 0' TERM
+        sleep "$secs" & s=$!; wait "$s"
+        kill -0 "$pid" 2>/dev/null || exit 0
+        : > "$fired"
+        echo "[parallel] serial fallback timeout (${secs}s) reached — sending SIGTERM"
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep "${RL_FANOUT_KILL_GRACE_SECONDS:-10}" & s=$!; wait "$s"
+        if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid" 2>/dev/null || true; fi
+        exit 0
+    ) &
+    wd=$!
+    wait "$pid" || rc=$?
+    kill -TERM "$wd" 2>/dev/null || true
+    wait "$wd" 2>/dev/null || true
+    if [[ -f "$fired" ]]; then rm -f "$fired"; rc=124; fi
+    return "$rc"
+}
+
 # fanout::cleanup — EXIT trap: cancel live children, release the borrow.
 fanout::cleanup() {
     local id

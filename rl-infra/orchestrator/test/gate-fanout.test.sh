@@ -62,7 +62,9 @@ exit 0
 SH
     cat > "$SHIM_DIR/run-on-runner-with-heartbeat" <<'SH'
 #!/usr/bin/env bash
-echo "serial agent=${RL_AGENT_ID:-} $*" >> "$CALLS"; echo "Build: PASS"; exit "${SHIM_SERIAL_RC:-0}"
+echo "serial agent=${RL_AGENT_ID:-} $*" >> "$CALLS"; echo "Build: PASS"
+[[ "${SHIM_SERIAL_HANG:-0}" == 1 ]] && exec sleep 20
+exit "${SHIM_SERIAL_RC:-0}"
 SH
     # docker: success; the runner-drain scan reports no marked process.
     printf '#!/usr/bin/env bash\n[[ " $* " == *" rl-drain "* ]] && echo drained=0\nexit 0\n' > "$SHIM_DIR/docker"
@@ -107,6 +109,20 @@ test_fallback_memory() {
     local out; out=$(_fanout) || true
     assert_contains "$out" "[parallel] fallback: serial (memory)" "memory fallback line"
     assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 never borrowed"
+}
+
+# Codex r6 P2: the serial fallback must honour --child-timeout like a child
+# does — a hung serial run is TERMed at the deadline (exit 124), not left to
+# P's 2×child+3300 s budget.
+test_serial_fallback_bounded_by_child_timeout() {
+    CURRENT_TEST_NAME="serial fallback (no free slot) is killed at --child-timeout"
+    _seed busy; export SHIM_SERIAL_HANG=1 RL_FANOUT_KILL_GRACE_SECONDS=1
+    local out rc=0 t0=$SECONDS; out=$(_fanout --child-timeout 1) || rc=$?
+    local took=$((SECONDS - t0))
+    assert_contains "$out" "[parallel] serial fallback timeout (1s) reached" "watchdog line printed"
+    assert_exit_code "$rc" "124" "timed-out serial run exits 124"
+    assert_eq "$(( took < 10 ))" "1" "serial run bounded by --child-timeout 1 (took ${took}s, hang is 20s)"
+    unset SHIM_SERIAL_HANG RL_FANOUT_KILL_GRACE_SECONDS
 }
 
 test_parallel_two_children() {
@@ -316,6 +332,7 @@ run_test "specs-env-only-e2e-children" test_specs_env_only_reaches_e2e_children
 run_test "children-record-outcome" test_children_record_outcome
 run_test "fallback-no-free-slot" test_fallback_no_free_slot
 run_test "fallback-memory" test_fallback_memory
+run_test "serial-fallback-bounded-by-child-timeout" test_serial_fallback_bounded_by_child_timeout
 run_test "parallel-two-children" test_parallel_two_children
 run_test "phase2-child-c" test_phase2_child_c
 run_test "copy-failure-falls-back" test_copy_failure_falls_back

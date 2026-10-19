@@ -71,12 +71,13 @@ trap 'exit 143' TERM
 trap 'exit 130' INT
 
 # serial_run <reason> — today's single-slot gate on A; exits with its code.
+# Bounded by CHILD_TIMEOUT exactly as a child is (Codex r6 P2; exit 124 on timeout).
 serial_run() {
     local rc=0
     echo "[parallel] fallback: serial ($1)"
     state::mutate "$RL_TASKS_DIR/$P.json" '.parallel = {mode: "serial_fallback", borrowed_slot: null}' || true
-    RL_AGENT_ID="$OWNER_AGENT" run-on-runner-with-heartbeat --weight heavy \
-        -- bash -c "$(fanout::inner "" "$SERIAL_ARGS")" || rc=$?
+    fanout::run_bounded "$CHILD_TIMEOUT" env RL_AGENT_ID="$OWNER_AGENT" run-on-runner-with-heartbeat \
+        --weight heavy -- bash -c "$(fanout::inner "" "$SERIAL_ARGS")" || rc=$?
     exit "$rc"
 }
 
