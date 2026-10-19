@@ -16,6 +16,11 @@ import {
   toSummary,
   type ValheimAdminCharacterSummary,
 } from './valheim-armory-read.mappers';
+import { blobAbsolutePath } from '../../link/blobs/valheim-link-blob.store';
+import {
+  projectCatalog,
+  referencedPrefabs,
+} from './valheim-armory-catalog.helpers';
 import type { ArmoryListQuery } from './valheim-armory-read.query';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 
@@ -49,11 +54,26 @@ export class ValheimArmoryReadService {
     return toSummary(row);
   }
 
-  /** Character sheet + map refs; 404 when unknown. */
+  /**
+   * Character sheet + map refs + the catalogue subset the sheet references
+   * (ROK-1836 D4, by `(server, game version)`); 404 when unknown.
+   */
   async detail(id: number): Promise<ValheimCharacterDetail> {
     const row = await this.repo.findProfile(id);
     if (!row) throw new NotFoundException('Character not found');
-    return toDetail(row, await this.repo.listMapRefs(id));
+    const prefabs = referencedPrefabs(row);
+    const [maps, catalog] = await Promise.all([
+      this.repo.listMapRefs(id),
+      this.repo.findCatalog(row.pelicanServerId, row.gameVersion, prefabs),
+    ]);
+    return { ...toDetail(row, maps), ...projectCatalog(prefabs, catalog) };
+  }
+
+  /** Absolute path of a server's stored PNG (D5); 404 when unknown. */
+  async blobPath(serverId: number, sha256: string): Promise<string> {
+    const rel = await this.repo.findBlobPath(serverId, sha256);
+    if (rel === null) throw new NotFoundException('Blob not found');
+    return blobAbsolutePath(rel);
   }
 
   /** Map metadata; 404 unless the map belongs to the character. */
