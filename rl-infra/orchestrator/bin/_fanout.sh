@@ -56,6 +56,16 @@ fanout::failed() {
     grep -Eq ': FAIL(\x1b\[[0-9;]*m)?$' "$RL_TASKS_DIR/$1.log" 2>/dev/null
 }
 
+# fanout::release_borrow_if_done — free the borrowed slot once the child running
+# on it ($FANOUT_BORROW_CHILD) is terminal; a no-op otherwise or when already freed.
+fanout::release_borrow_if_done() {
+    [[ -n "${BORROWED:-}" && -n "${FANOUT_BORROW_CHILD:-}" ]] || return 0
+    case "$(fanout::status "$FANOUT_BORROW_CHILD")" in running|queued|pending|unknown|missing|"") return 0 ;; esac
+    echo "[parallel] released borrowed slot $BORROWED (child ${FANOUT_BORROW_CHILD: -1} done)"
+    borrow::release "$BORROWED" "$P" || true
+    BORROWED=""
+}
+
 # fanout::wait_all <fail_fast> <ids...> — relay until every id is terminal.
 # With fail_fast=1 the first FAILing child cancels its still-running siblings.
 # The borrow row's heartbeat is refreshed every 30 s while waiting.
@@ -67,6 +77,7 @@ fanout::wait_all() {
             fanout::relay "$id"
             [[ "$(fanout::status "$id")" == "running" ]] && live=1
         done
+        fanout::release_borrow_if_done
         (( live )) || return 0
         if [[ "$ff" == "1" ]]; then fanout::fail_fast "$@"; fi
         if [[ -n "${BORROWED:-}" ]] && (( $(date +%s) - last_hb >= 30 )); then
