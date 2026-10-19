@@ -4,6 +4,8 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { isStaff } from '../guilds/guild-access.service';
+import { findHiddenAt } from '../guilds/hub-hidden.helpers';
 import { notHubMutedSql } from './hub-notification-mute.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -33,7 +35,12 @@ export async function findGuildName(
   return row?.name ?? null;
 }
 
-/** D3: keep only active users who have not muted the group. */
+/**
+ * D3: keep only active users who have not muted the group. Every group
+ * fan-out (leader post, tagged event, deferred and late announce) resolves
+ * through here, so it also applies `HubVisibleGuard`'s rule (ROK-1831 L-5,
+ * Codex r5): while the hub is hidden only staff are told about it.
+ */
 export async function filterGroupRecipients(
   db: Db,
   userIds: readonly number[],
@@ -41,17 +48,21 @@ export async function filterGroupRecipients(
 ): Promise<number[]> {
   if (userIds.length === 0) return [];
   const u = schema.users;
-  const rows = await db
-    .select({ id: u.id })
-    .from(u)
-    .where(
-      and(
-        inArray(u.id, [...userIds]),
-        isNull(u.deactivatedAt),
-        notHubMutedSql(guildId, sql`${u.id}`),
+  const [rows, hiddenAt] = await Promise.all([
+    db
+      .select({ id: u.id, role: u.role })
+      .from(u)
+      .where(
+        and(
+          inArray(u.id, [...userIds]),
+          isNull(u.deactivatedAt),
+          notHubMutedSql(guildId, sql`${u.id}`),
+        ),
       ),
-    );
-  return rows.map((r) => r.id);
+    findHiddenAt(db, guildId),
+  ]);
+  const hidden = hiddenAt !== null && hiddenAt !== undefined;
+  return rows.filter((r) => !hidden || isStaff(r)).map((r) => r.id);
 }
 
 /** D5: users who switched both `hub_event_tagged` channels off. */
