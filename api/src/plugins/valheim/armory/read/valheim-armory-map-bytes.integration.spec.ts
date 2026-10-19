@@ -213,9 +213,19 @@ describe('GET …/maps/:mapId/base-map — scoping (ROK-1837 D3)', () => {
   it("404s a map that is not the character's", async () => {
     const a = await seed(1, 'map-shared-layer');
     const b = await seed(2, 'map-personal');
-    expect((await getBytes(`${mapUrl(a.id, b.mapId)}/base-map`)).status).toBe(
-      404,
+    await storeBlob(
+      b.serverId,
+      blobRelativePath(b.serverId, SHA),
+      fakePng(8, 8),
     );
+    expect((await getBytes(`${mapUrl(b.id, b.mapId)}/base-map`)).status).toBe(
+      200,
+    ); // b's own map serves, so the 404s below are the ownership check
+    for (const route of ['base-map', 'fog']) {
+      const res = await getBytes(`${mapUrl(a.id, b.mapId)}/${route}`);
+      expect({ route, status: res.status }).toEqual({ route, status: 404 });
+      expect((res.body as Buffer).toString()).toContain('Map not found');
+    }
   });
 });
 
