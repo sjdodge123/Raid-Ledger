@@ -212,7 +212,7 @@ describe('GET …/maps/:mapId/base-map — scoping (ROK-1837 D3)', () => {
 
   it("404s a map that is not the character's", async () => {
     const a = await seed(1, 'map-shared-layer');
-    const b = await seed(2, 'map-personal');
+    const b = await seed(2, 'map-shared-layer');
     await storeBlob(
       b.serverId,
       blobRelativePath(b.serverId, SHA),
