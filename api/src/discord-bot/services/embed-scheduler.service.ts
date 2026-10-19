@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { eq, sql, and, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -17,6 +17,8 @@ import {
   toEmbedGame,
   type EmbedGame,
 } from './embed-game.helpers';
+import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
+import { announceDeferredGroupEvent } from './embed-scheduler-announce.helpers';
 
 const STANDALONE_LEAD_TIME_MS = 6 * 24 * 60 * 60 * 1000; // 6 days
 
@@ -39,6 +41,9 @@ export class EmbedSchedulerService {
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
     private readonly embedPosterService: EmbedPosterService,
+    @Optional()
+    @Inject(GameAffinityNotificationService)
+    private readonly affinity: GameAffinityNotificationService | null = null,
   ) {}
 
   @Cron('15 */15 * * * *', {
@@ -84,6 +89,8 @@ export class EmbedSchedulerService {
         notificationChannelOverride: schema.events.notificationChannelOverride,
         maxAttendees: schema.events.maxAttendees,
         slotConfig: schema.events.slotConfig,
+        guildId: schema.events.guildId,
+        creatorId: schema.events.creatorId,
       })
       .from(schema.events)
       .leftJoin(
@@ -131,8 +138,26 @@ export class EmbedSchedulerService {
       this.logger.log(
         `Scheduler posted deferred embed for event ${event.id} ("${event.title}")`,
       );
+      await this.announceGroup(event, gameData);
     }
     return success;
+  }
+
+  /** ROK-1832 D6a: the deferred announce of a group-tagged event (D10: never throws). */
+  private async announceGroup(
+    event: DeferredEvent,
+    game: EmbedGame | null,
+  ): Promise<void> {
+    const deps = {
+      db: this.db,
+      affinity: this.affinity,
+      clientUrl: () => this.settingsService.getClientUrl(),
+    };
+    await announceDeferredGroupEvent(deps, event, game).catch((err: unknown) =>
+      this.logger.warn(
+        `Deferred group announce failed for event ${event.id}: ${String(err)}`,
+      ),
+    );
   }
 
   /** Fetch game id/name/cover data for an event (ROK-1460: id for the link). */
@@ -162,6 +187,8 @@ interface DeferredEvent {
   notificationChannelOverride: string | null;
   maxAttendees: number | null;
   slotConfig: unknown;
+  guildId: number | null;
+  creatorId: number;
 }
 
 /** Build embed event data from a deferred event row. */
