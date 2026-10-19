@@ -108,9 +108,12 @@ export async function resolveClaimBranch(params: ClaimParams): Promise<BranchRes
     },
   });
   try {
-    const { stdout } = await execFileP('git', ['-C', wt, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 10_000 });
+    // `branch --show-current` matches the rl CLI's own derivation; rev-parse
+    // --abbrev-ref returns `heads/foo` when a tag shares the name. It prints
+    // "" on a detached HEAD or mid-rebase.
+    const { stdout } = await execFileP('git', ['-C', wt, 'branch', '--show-current'], { timeout: 10_000 });
     const branch = stdout.trim();
-    if (!branch || branch === 'HEAD') return refuse('HEAD is detached');
+    if (!branch) return refuse('HEAD is detached (or a rebase is in progress)');
     return { branch };
   } catch (err) {
     return refuse(err instanceof Error ? err.message : String(err));

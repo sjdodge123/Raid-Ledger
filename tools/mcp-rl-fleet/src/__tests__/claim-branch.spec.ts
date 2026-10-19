@@ -33,7 +33,7 @@ describe('rl_claim branch derivation', () => {
   it('derives --branch from the worktree HEAD when branch is omitted', async () => {
     execFileP.mockResolvedValue({ stdout: 'fix/my-branch\n', stderr: '' });
     const res = await execute({ worktree_path: WT, wait: false });
-    expect(execFileP).toHaveBeenCalledWith('git', ['-C', WT, 'rev-parse', '--abbrev-ref', 'HEAD'], expect.anything());
+    expect(execFileP).toHaveBeenCalledWith('git', ['-C', WT, 'branch', '--show-current'], expect.anything());
     expect(claimArgs()).toEqual(['claim', '--branch', 'fix/my-branch']);
     expect(res.branch).toBe('fix/my-branch');
   });
@@ -45,8 +45,17 @@ describe('rl_claim branch derivation', () => {
     expect(res.branch).toBe('explicit');
   });
 
-  it('refuses a detached HEAD without sending a claim', async () => {
-    execFileP.mockResolvedValue({ stdout: 'HEAD\n', stderr: '' });
+  it('never reads the ref via rev-parse — an ambiguous name would come back heads/-prefixed', async () => {
+    execFileP.mockResolvedValue({ stdout: 'feat/x\n', stderr: '' });
+    const res = await execute({ worktree_path: WT, wait: false });
+    const gitArgs = execFileP.mock.calls[0]?.[1];
+    expect(gitArgs).not.toContain('rev-parse');
+    expect(claimArgs()).toEqual(['claim', '--branch', 'feat/x']);
+    expect(res.branch).not.toMatch(/^heads\//);
+  });
+
+  it('refuses a detached HEAD (empty --show-current) without sending a claim', async () => {
+    execFileP.mockResolvedValue({ stdout: '\n', stderr: '' });
     const res = await execute({ worktree_path: WT, wait: false });
     expect(res.ok).toBe(false);
     expect(res.error).toBe('claim_branch_unresolved');
