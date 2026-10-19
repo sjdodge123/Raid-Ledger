@@ -16,7 +16,6 @@ import {
   toSummary,
   type ValheimAdminCharacterSummary,
 } from './valheim-armory-read.mappers';
-import { blobAbsolutePath } from '../../link/blobs/valheim-link-blob.store';
 import {
   projectCatalog,
   referencedPrefabs,
@@ -26,6 +25,7 @@ import {
   isStaff,
   type GuildActor,
 } from '../../../../guilds/guild-access.service';
+import { containedBlobPath } from './valheim-armory-map-bytes.service';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 
 /** `GET /admin/plugins/valheim/armory/characters` — includes `steamId64`. */
@@ -95,11 +95,15 @@ export class ValheimArmoryReadService {
     return { ...sheet, ...projectCatalog(prefabs, catalog), hubId };
   }
 
-  /** Absolute path of a server's stored PNG (D5); 404 when unknown. */
+  /**
+   * Absolute path of a server's stored PNG (D5); 404 when unknown or when
+   * its `storage_path` would escape the blob root (a tampered row).
+   */
   async blobPath(serverId: number, sha256: string): Promise<string> {
     const rel = await this.repo.findBlobPath(serverId, sha256);
-    if (rel === null) throw new NotFoundException('Blob not found');
-    return blobAbsolutePath(rel);
+    const abs = rel === null ? null : containedBlobPath(rel);
+    if (abs === null) throw new NotFoundException('Blob not found');
+    return abs;
   }
 
   /** Map metadata; 404 unless the map belongs to the character. */
