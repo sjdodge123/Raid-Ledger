@@ -31,7 +31,7 @@ import {
 } from '../link/valheim-link-demo-seed.helpers';
 import {
   ensureArmoryCatalog,
-  seedArmoryProfile,
+  upsertArmoryProfile,
 } from './valheim-armory-demo-seed.helpers';
 import { ARMORY_MAP_FIXTURE_KEY } from './valheim-armory-demo-sheet';
 import { ensureFixtureHubId } from './valheim-armory-map-hub.helpers';
@@ -70,7 +70,8 @@ function parseRequest(body: unknown): { worker: number; withBaseMap: boolean } {
  * resets the other's character or nulls the map's `profile_id` — and its
  * map (personal + shared fog, 4 pins) with a generated base-map PNG unless
  * `withBaseMap: false`. The server catalogue is inserted only when absent
- * (never reset). Re-running resets the `map` character and its map.
+ * (never reset). Re-running resets the `map` character and its map in
+ * place — same `characterId` / `mapId` per worker (T8), so deep links hold.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
@@ -113,13 +114,13 @@ export class ValheimArmoryMapDemoSeedController {
     };
   }
 
-  /** The fixture's claimed character (no catalogue, no extra rows). */
+  /** The fixture's claimed character, reset in place (no catalogue, no extra rows). */
   private seedCharacter(
     serverId: number,
     worker: number,
     userId: number,
   ): Promise<number> {
-    return seedArmoryProfile(this.db, serverId, {
+    return upsertArmoryProfile(this.db, serverId, {
       slot: worker,
       key: ARMORY_MAP_FIXTURE_KEY,
       claimedBy: userId,

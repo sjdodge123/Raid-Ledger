@@ -160,6 +160,9 @@ describe('map-fixture idempotence + guards (ROK-1837 T8)', () => {
     const again = await seed();
     expect(again.pelicanServerId).toBe(first.pelicanServerId);
     expect(again.guildId).toBe(first.guildId);
+    // Reset in place: fleet-plan deep links (?vc=&vm=) survive a re-seed.
+    expect(again.characterId).toBe(first.characterId);
+    expect(again.mapId).toBe(first.mapId);
     const G = schema.guilds;
     const hubs = await testApp.db
       .select({ id: G.id })
@@ -248,6 +251,27 @@ const profileIds = async () => {
   const P = schema.valheimProfiles;
   return (await testApp.db.select({ id: P.id }).from(P)).map((r) => r.id);
 };
+
+describe('map-fixture resets in place (ROK-1837 T8)', () => {
+  it('withBaseMap:false resets the same character + map in place', async () => {
+    const first = await seed();
+    const bare = await seed({ withBaseMap: false });
+    expect([bare.characterId, bare.mapId]).toEqual([
+      first.characterId,
+      first.mapId,
+    ]);
+    const res = await testApp.request
+      .get(`${mapUrl(bare)}/base-map`)
+      .set(bearer(adminToken));
+    expect((res.body as { message?: unknown }).message).toBe(
+      'base_map_not_ready',
+    );
+    const back = await seed();
+    expect(back.mapId).toBe(first.mapId);
+    const again = await getBytes(`${mapUrl(back)}/base-map`, adminToken);
+    expect(again.res.status).toBe(200);
+  });
+});
 
 describe('map fixture vs the ROK-1836 c1 fixture (separate identities)', () => {
   it('c1 → map → c1: the map keeps its character and base map', async () => {

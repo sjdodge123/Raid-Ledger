@@ -253,3 +253,27 @@ export async function seedArmoryProfile(
   if (!row) throw new Error('Armory fixture insert returned no row');
   return row.id;
 }
+
+/**
+ * ROK-1837 T8 — reset `req.key`'s character IN PLACE (upsert on
+ * `valheim_profiles_identity_uq`), so its id — and every deep link built on
+ * it — survives a re-seed; inserts only when absent. Returns the profile id.
+ */
+export async function upsertArmoryProfile(
+  db: Db,
+  serverId: number,
+  req: ArmoryCharacterFixtureRequest,
+): Promise<number> {
+  const P = schema.valheimProfiles;
+  const values = profileValues(serverId, req);
+  const [row] = await db
+    .insert(P)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [P.pelicanServerId, P.steamId, P.playerId],
+      set: values,
+    })
+    .returning({ id: P.id });
+  if (!row) throw new Error('Armory fixture upsert returned no row');
+  return row.id;
+}
