@@ -37,7 +37,10 @@ const FOG_CACHE = 'private, no-cache';
 const MAP = 'plugins/valheim/armory/characters/:id/maps/:mapId';
 
 /** `?layer=personal|shared` (default `personal`; 400 otherwise). */
-export class FogLayerPipe implements PipeTransform<unknown, ValheimMapFogLayer> {
+export class FogLayerPipe implements PipeTransform<
+  unknown,
+  ValheimMapFogLayer
+> {
   transform(value: unknown): ValheimMapFogLayer {
     if (value === undefined) return 'personal';
     const parsed = ValheimMapFogLayerSchema.safeParse(value);
