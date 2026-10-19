@@ -4,26 +4,15 @@ import type { ValheimCharacterDetail } from '@raid-ledger/contract';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { isCatalogueMissing } from './item-icon.helpers';
 
-export function MissingCatalogueBanner({
-    character,
-}: {
-    character: ValheimCharacterDetail;
-}): JSX.Element | null {
+export function MissingCatalogueBanner({ character }: { character: ValheimCharacterDetail }): JSX.Element | null {
     if (!isCatalogueMissing(character)) return null;
     return (
-        <div
-            role="status"
-            data-testid="valheim-missing-catalogue"
-            className="mb-4 flex gap-2 rounded-lg border border-edge bg-panel p-3 text-sm text-muted"
-        >
-            <InformationCircleIcon
-                className="h-5 w-5 shrink-0"
-                aria-hidden="true"
-            />
+        <div role="status" data-testid="valheim-missing-catalogue"
+            className="mb-4 flex gap-2 rounded-lg border border-edge bg-panel p-3 text-sm text-muted">
+            <InformationCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
             <span>
-                Item names aren&apos;t available for game version{' '}
-                {character.gameVersion} yet, so items show their game ids. They
-                update after the server sends its item list.
+                Item names aren&apos;t available for game version {character.gameVersion} yet, so items show their game ids.
+                They update after the server sends its item list.
             </span>
         </div>
     );
