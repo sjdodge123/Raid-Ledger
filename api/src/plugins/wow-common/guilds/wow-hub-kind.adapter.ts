@@ -17,6 +17,7 @@ import { isStaff, type GuildActor } from '../../../guilds/guild-access.service';
 import { WOW_COMMON_MANIFEST } from '../manifest';
 import {
   findLinkedMemberRows,
+  findLinkedMemberUserIds,
   isLiveMemberOf,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
@@ -91,6 +92,11 @@ export class WowHubKindAdapter implements HubKindAdapter {
     if (GM_RANK_IMPLIES_EDIT && rows.some(isGuildMaster)) return 'officer';
     const delegated = await this.hasDelegation(guildId, rows);
     return delegated ? 'officer' : 'member';
+  }
+
+  /** ROK-1832 D8: distinct owners of the guild's live linked member rows. */
+  memberUserIds(guildId: number): Promise<number[]> {
+    return findLinkedMemberUserIds(this.db, guildId);
   }
 
   async memberGroupIds(userId: number): Promise<number[]> {

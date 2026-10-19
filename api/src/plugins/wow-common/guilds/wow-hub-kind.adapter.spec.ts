@@ -132,3 +132,17 @@ describe('GM_RANK_IMPLIES_EDIT', () => {
     expect(GM_RANK_IMPLIES_EDIT).toBe(false);
   });
 });
+
+describe('ROK-1832 WowHubKindAdapter.memberUserIds', () => {
+  it('returns each live linked owner once (set form of isMember)', async () => {
+    db.where.mockResolvedValueOnce([{ userId: 3 }, { userId: 9 }]);
+    await expect(adapter.memberUserIds(GUILD)).resolves.toEqual([3, 9]);
+    expect(db.selectDistinct).toHaveBeenCalled();
+  });
+
+  it('omits a non-member — no linked row, no id', async () => {
+    db.where.mockResolvedValueOnce([{ userId: 3 }]);
+    const ids = await adapter.memberUserIds(GUILD);
+    expect(ids).not.toContain(42);
+  });
+});
