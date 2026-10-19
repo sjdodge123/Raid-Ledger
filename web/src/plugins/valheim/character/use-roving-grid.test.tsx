@@ -3,13 +3,15 @@ import { describe, it, expect } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { nextGridCell, useRovingGrid } from './use-roving-grid';
 
-function Harness() {
-    const { tabIndexFor, gridProps } = useRovingGrid(2, 3);
+const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+function Harness({ rows = 2, cols = 3 }: { rows?: number; cols?: number }) {
+    const { tabIndexFor, gridProps } = useRovingGrid(rows, cols);
     return (
         <div role="grid" aria-label="g" {...gridProps}>
-            {[0, 1].map((r) => (
+            {range(rows).map((r) => (
                 <div role="row" key={r}>
-                    {[0, 1, 2].map((c) => (
+                    {range(cols).map((c) => (
                         <button
                             key={c}
                             type="button"
@@ -63,5 +65,15 @@ describe('useRovingGrid', () => {
         fireEvent.keyDown(btn('1-2'), { key: 'Home' });
         expect(document.activeElement).toBe(btn('1-0'));
         expect(stops()).toEqual(['1-0']);
+    });
+    it('keeps exactly one tab stop when the grid shrinks under the active cell', () => {
+        const { rerender } = render(<Harness rows={3} cols={3} />);
+        btn('2-2').focus();
+        rerender(<Harness rows={2} cols={2} />);
+        const stops = screen
+            .getAllByRole('button')
+            .filter((b) => b.getAttribute('tabindex') === '0')
+            .map((b) => b.textContent);
+        expect(stops).toEqual(['1-1']);
     });
 });
