@@ -54,7 +54,7 @@ echo "{\"ok\":true,\"task_id\":\"$id\"}"
 SH
     cat > "$SHIM_DIR/task-cancel" <<'SH'
 #!/usr/bin/env bash
-echo "cancel $1" >> "$CALLS"
+echo "cancel $1 reason=${2:-}" >> "$CALLS"
 f="$RL_TASKS_DIR/$1.json"; [[ -f "$f" ]] && jq '.status = "cancelled"' "$f" > "$f.t" && mv "$f.t" "$f"
 exit 0
 SH
@@ -72,6 +72,16 @@ _fanout() {
     PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" \
         --inner-env "BASE_URL='https://slot-1.x' " --a-args "--fleet --no-e2e" --b-args "--only-e2e" \
         --serial-args "--fleet" "$@" 2>&1
+}
+# Like _fanout but bounded: a run still alive after ~10 s is TERMed (a broken
+# fail-fast would otherwise wait on a hanging child forever).
+_fanout_bounded() {
+    PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" --inner-env "" \
+        --a-args "--fleet --no-e2e" --b-args "--only-e2e" --serial-args "--fleet" "$@" >/dev/null 2>&1 &
+    local pid=$! i
+    for i in $(seq 1 100); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    return 0
 }
 _slot2() { jq -c '.[] | select(.slot == 2) | {claimed, agent_id}' "$RL_STATE_DIR/claims.json"; }
 _children() { jq -c '[(.children // [])[] | {role, slot, borrowed}]' "$RL_TASKS_DIR/$P.json"; }
@@ -139,8 +149,8 @@ test_copy_failure_falls_back() {
 test_fail_fast_cancels_sibling() {
     CURRENT_TEST_NAME="--fail-fast: A FAILs -> B cancelled, borrow released"
     _seed free; export SHIM_A=fail SHIM_B=hang
-    _fanout --fail-fast >/dev/null || true
-    assert_contains "$(cat "$CALLS")" "cancel ${P}b" "sibling B cancelled"
+    _fanout_bounded --fail-fast
+    assert_contains "$(cat "$CALLS")" "cancel ${P}b reason=fail_fast" "sibling B cancelled by fail-fast (not by a kill)"
     assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "borrow released"
     unset SHIM_A SHIM_B
 }
