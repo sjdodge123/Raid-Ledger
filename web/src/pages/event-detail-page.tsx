@@ -16,6 +16,7 @@ import { PluginSlot } from '../plugins';
 import { useVoiceRoster } from '../hooks/use-voice-roster';
 import { EventDetailSkeleton } from './event-detail/EventDetailSkeleton';
 import { EventDetailRoster } from './event-detail/EventDetailRoster';
+import { EventReportLinkCard } from './event-detail/EventReportLinkCard';
 import { alphabetical } from './event-detail/event-detail-helpers';
 import {
     ConfirmModalSection,
@@ -182,6 +183,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
     return (
         <>
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
+            <EventReportLinkCard event={page.event} canManage={derived.canManageRoster} isCancelled={derived.isCancelled} />
             <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
             {page.event.myConflicts && page.event.myConflicts.length > 0 && (
                 <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4">
