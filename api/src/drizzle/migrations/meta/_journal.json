@@ -1618,6 +1618,13 @@
       "when": 1792438150834,
       "tag": "0231_faulty_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1792440465108,
+      "tag": "0232_brainy_guardsmen",
+      "breakpoints": true
     }
   ]
 }
