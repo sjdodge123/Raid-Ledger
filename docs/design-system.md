@@ -693,6 +693,16 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `disabled` locks a *different* row and is not `disabled={saving}` on the saving one. Validation-disabled
   may still coincide with a row's own `loading`. Reference: `components/admin/ChannelBindingList.tsx`
   (`isSaving` / `saveLocked` per row, TDB:1970).
+- **Key → value row list editor** (whole-list edit, one Save — ROK-1739): one row per entry composed of
+  §3.1 primitives only — each control in a `Field hideLabel` named per row ("Realm name, row 2"), the
+  row's inline error on its key field, and a 44px ghost `iconOnly` remove `Button` named "Remove <key>"
+  (`XMarkIcon aria-hidden`). From `lg` the rows are one grid row each under an `aria-hidden` `text-xs
+  text-muted` column header sharing the rows' grid template; below `lg` (§4.18) the short selects + remove
+  share a line and the text field goes full-width under them — no `<table>`. Under the list: "Add <thing>"
+  `secondary` and `Save` `primary` (`disabled` while unchanged, `loading` while pending); an empty list shows
+  the §4.5 quiet sentence. Validate the whole list with the contract schema on Save and keep re-validating
+  live after the first attempt. Reference: `plugins/wow/components/forever-realm-rulesets-form.tsx` +
+  `forever-realm-ruleset-row.tsx`.
 - **A floating `Button` is positioned by a wrapper `<div>`**, never through its `className`: there is no
   tailwind-merge, so `hidden`/`md:flex`/`rounded-full` on the button fight its own `inline-flex`/`rounded-lg`.
   The wrapper owns `fixed`, the breakpoint display and the shape (`[&>button]:rounded-full [&>button]:p-0`,
