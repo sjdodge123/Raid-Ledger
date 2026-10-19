@@ -4,7 +4,7 @@
  * `BottomSheet` below, and the Switch inside reports the new mute.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { NotifyBell, type NotifyBellProps } from './notify-bell';
@@ -30,7 +30,21 @@ function renderBell(overrides: Partial<NotifyBellProps> = {}) {
 }
 
 beforeEach(() => onToggle.mockClear());
-afterEach(() => { window.matchMedia = originalMatchMedia; });
+afterEach(() => { window.matchMedia = originalMatchMedia; vi.restoreAllMocks(); });
+
+/**
+ * Lay the page out: the bell's anchor spans x 1160–1200 and the popover is 320px
+ * wide, sitting (untransformed) wherever its inline `left` puts it.
+ */
+function stubRects(): void {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const isPopover = this.getAttribute('data-testid') === 'hub-notify-popover';
+        const left = isPopover && this instanceof HTMLElement ? parseFloat(this.style.left) || 0 : 1160;
+        const width = isPopover ? 320 : 40;
+        const height = isPopover ? 200 : 40;
+        return { x: left, y: 100, left, top: 100, width, height, right: left + width, bottom: 100 + height, toJSON: () => ({}) };
+    });
+}
 
 describe('NotifyBell', () => {
     it('labels the trigger with the subject and its state', () => {
@@ -68,9 +82,12 @@ describe('NotifyBell', () => {
     it('align="end" right-aligns the popover to the bell so it stays in the viewport', async () => {
         setDesktop(true);
         const user = userEvent.setup();
+        stubRects();
         renderBell({ align: 'end' });
         await user.click(screen.getByTestId('hub-notify-bell'));
-        expect(await screen.findByTestId('hub-notify-popover')).toHaveClass('-translate-x-full');
+        const popover = await screen.findByTestId('hub-notify-popover');
+        await waitFor(() => expect(popover.style.left).toBe('880px'));
+        expect(popover.className).not.toMatch(/translate/);
     });
 
     it('<1024px opens a BottomSheet instead of the popover', async () => {

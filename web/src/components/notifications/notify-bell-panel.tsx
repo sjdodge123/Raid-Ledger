@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, type JSX, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Switch } from '../ui/switch';
-import { useAnchoredPopup, type PopupPosition } from '../ui/use-anchored-popup';
+import { useAnchoredPopup, type PopupAlign } from '../ui/use-anchored-popup';
 
 export interface NotifyPanelState {
     /** What the bell is for — "Valheim", "Iron Vanguard". */
@@ -80,18 +80,12 @@ function usePopoverFocusExit(open: boolean, onClose: () => void, popupRef: RefOb
     }, [open, onClose, popupRef, returnFocusTo]);
 }
 
-/** The popover's `left`: the bell's left edge, or its right edge for `end` (the class shifts it back). */
-function popoverLeft(pos: PopupPosition | null, align: PopoverAlign): number {
-    if (!pos) return 0;
-    return align === 'end' ? pos.left + pos.width : pos.left;
-}
-
 /** Which popover edge lines up with the bell's matching edge. */
-export type PopoverAlign = 'start' | 'end';
+export type PopoverAlign = PopupAlign;
 
 /**
  * ≥1024px: a portalled `role="dialog"` popover anchored under the bell. `end`
- * pins its right edge to the bell's right edge (a CSS shift, no width maths),
+ * pins its right edge to the bell's right edge (the hook measures the panel),
  * so a bell at the right of its row keeps the panel inside the viewport.
  */
 export function NotifyPopover({ open, onClose, anchorRef, bellRef, container, panel, align }: {
@@ -101,14 +95,14 @@ export function NotifyPopover({ open, onClose, anchorRef, bellRef, container, pa
 }): JSX.Element | null {
     const popupRef = useRef<HTMLDivElement | null>(null);
     const titleId = useId();
-    const pos = useAnchoredPopup(anchorRef, popupRef, open, onClose);
+    const pos = useAnchoredPopup(anchorRef, popupRef, open, onClose, align);
     usePopoverFocusExit(open, onClose, popupRef, bellRef);
     useEffect(() => { if (open) popupRef.current?.focus(); }, [open]);
     if (!open) return null;
     return createPortal(
         <div ref={popupRef} role="dialog" aria-labelledby={titleId} tabIndex={-1} data-testid={`${panel.testIdPrefix}-popover`}
-            className={`fixed z-50 w-80 bg-panel border border-edge rounded-lg shadow-lg p-3 focus:outline-none${align === 'end' ? ' -translate-x-full' : ''}`}
-            style={{ top: pos?.top ?? 0, left: popoverLeft(pos, align), visibility: pos ? 'visible' : 'hidden' }}>
+            className="fixed z-50 w-80 bg-panel border border-edge rounded-lg shadow-lg p-3 focus:outline-none"
+            style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}>
             <h2 id={titleId} className="text-sm font-semibold text-foreground mb-3">Notifications for {panel.subjectName}</h2>
             <NotifyPanelBody {...panel} />
         </div>,
