@@ -198,8 +198,9 @@ test.describe("Valheim character page (ROK-1836)", () => {
     await claim(page, h1);
     const sheet = await openChangeOwner(page, h1);
     const history = sheet.getByRole("list", { name: "Claim history" });
+    // The claimer is the signed-in smoke admin; its row names that user, never the "a member" fallback.
     await expect(
-      history.getByText("Claimed by a member").first(),
+      history.getByText(/^Claimed by (?!a member$).+$/).first(),
     ).toBeVisible();
     await sheet
       .getByRole("button", {
