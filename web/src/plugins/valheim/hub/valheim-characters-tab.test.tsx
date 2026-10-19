@@ -150,3 +150,20 @@ describe('ValheimCharactersTab (cont.)', () => {
         ).toBeNull();
     });
 });
+
+describe('ValheimCharactersTab (count)', () => {
+    it('prefers the response total over the loaded row count', async () => {
+        server.use(
+            http.get(VALHEIM_CHARACTERS_URL, () =>
+                HttpResponse.json({
+                    data: [valheimCharacterUnclaimed, valheimCharacterClaimed],
+                    total: 120,
+                }),
+            ),
+        );
+        renderTab();
+        expect(
+            await screen.findByRole('heading', { name: 'Characters 120' }),
+        ).toBeInTheDocument();
+    });
+});

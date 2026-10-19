@@ -54,11 +54,11 @@ describe('valheim armory paths', () => {
 });
 
 describe('valheim armory fetchers', () => {
-    it('returns the list rows', async () => {
+    it('returns the list response (rows + optional total)', async () => {
         server.use(valheimCharactersHandler([valheimCharacterClaimed]));
-        await expect(fetchValheimCharacters(7, 1)).resolves.toEqual([
-            valheimCharacterClaimed,
-        ]);
+        await expect(fetchValheimCharacters(7, 1)).resolves.toEqual({
+            data: [valheimCharacterClaimed],
+        });
     });
     it('rejects a detail that breaks the contract (shape lock)', async () => {
         server.use(

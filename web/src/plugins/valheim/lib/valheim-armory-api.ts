@@ -7,7 +7,7 @@ import {
     ValheimCharacterDetailSchema,
     ValheimCharacterListResponseSchema,
     type ValheimCharacterDetail,
-    type ValheimCharacterSummary,
+    type ValheimCharacterListResponse,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { encodePathSegment } from '../../../lib/api/path-segment';
@@ -59,16 +59,15 @@ export function valheimBlobPath(serverId: number, sha256: string): string {
     return `${VALHEIM_ARMORY_PATH}/servers/${serverId}/blobs/${sha256}`;
 }
 
-export async function fetchValheimCharacters(
+export function fetchValheimCharacters(
     serverId: number,
     page: number,
-): Promise<ValheimCharacterSummary[]> {
-    const res = await fetchApi(
+): Promise<ValheimCharacterListResponse> {
+    return fetchApi(
         valheimCharactersPath(serverId, page),
         {},
         ValheimCharacterListResponseSchema,
     );
-    return res.data;
 }
 
 export function fetchValheimCharacter(

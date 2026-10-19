@@ -87,7 +87,10 @@ export function ValheimCharactersTab({ serverId }: { serverId: number }) {
     const { pathname, search } = useLocation();
     const query = useValheimCharacterPages(serverId);
     const { rows } = query;
-    const count = `${rows.length}${query.hasMore ? '+' : ''}`;
+    const count =
+        query.total !== null
+            ? String(query.total)
+            : `${rows.length}${query.hasMore ? '+' : ''}`;
     return (
         <section
             aria-labelledby="valheim-characters-h"

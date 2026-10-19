@@ -103,10 +103,9 @@ function fallbackHubPath(c: ValheimCharacterDetail | undefined): string | null {
 
 export function ValheimCharacterPage() {
     const id = parseCharacterId(useParams<{ id: string }>().id);
-    const fromState = hubPathFrom(useLocation().state);
     const query = useValheimCharacter(id);
     const c = query.data;
-    const hubPath = fromState ?? fallbackHubPath(c);
+    const hubPath = hubPathFrom(useLocation().state) ?? fallbackHubPath(c);
     const state = characterPageState({
         hasId: id !== null,
         isPending: query.isPending,

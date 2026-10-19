@@ -32,12 +32,13 @@ export function useValheimCharacters(
         queryFn: () => fetchValheimCharacters(serverId ?? 0, page),
         enabled: serverId !== null && serverId > 0,
         staleTime: 30_000,
+        select: (res) => res.data,
     });
 }
 
 /**
  * Every loaded page of a server's characters, accumulated ("Load more"). The
- * list response carries no total, so `hasMore` = the last loaded page was full.
+ * list response's `total` is optional, so `hasMore` = the last loaded page was full.
  * A failed further page keeps the loaded rows; `loadMore` then retries it.
  */
 export function useValheimCharacterPages(serverId: number) {
@@ -52,10 +53,12 @@ export function useValheimCharacterPages(serverId: number) {
     });
     const first = results[0];
     const last = results[results.length - 1];
-    const lastLoaded = [...results].reverse().find((r) => r.data)?.data;
+    const lastLoaded = [...results].reverse().find((r) => r.data)?.data?.data;
     const moreFailed = pageCount > 1 && last?.isError === true;
     return {
-        rows: results.flatMap((r) => r.data ?? []),
+        rows: results.flatMap((r) => r.data?.data ?? []),
+        /** The server's row total when the API sends one (newer API only). */
+        total: first?.data?.total ?? null,
         isPending: first?.isPending ?? true,
         isError: first?.isError ?? false,
         isSuccess: first?.isSuccess ?? false,
