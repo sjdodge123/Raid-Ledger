@@ -1,7 +1,8 @@
 /**
  * ROK-1837 D8 — pins as buttons in texture px. Each is counter-scaled
  * (`scale(1/zoom)`) so it keeps its on-screen size; a tap/Enter toggles its
- * label, hover/focus shows it, and from 2× zoom every label shows. Pins from
+ * label, hover/focus shows it (Escape hides it until focus/hover leaves), and
+ * from 2× zoom every label shows. Pins from
  * a cartography table (`shared`) render only while that layer is on.
  */
 import { useState } from 'react';
@@ -42,12 +43,18 @@ interface PinLabelProps {
     shown: boolean;
     /** Crossed out — on the label itself: a decoration on the button never reaches this out-of-flow span. */
     checked: boolean;
+    /** Escape-dismissed: hover/focus no longer reveal it until they leave the pin. */
+    dismissed: boolean;
 }
 
-function PinLabel({ text, shown, checked }: PinLabelProps) {
-    const visibility = shown
-        ? 'block'
-        : 'hidden group-hover:block group-focus-visible:block';
+function labelVisibility(shown: boolean, dismissed: boolean): string {
+    if (shown) return 'block';
+    if (dismissed) return 'hidden';
+    return 'hidden group-hover:block group-focus-visible:block';
+}
+
+function PinLabel({ text, shown, checked, dismissed }: PinLabelProps) {
+    const visibility = labelVisibility(shown, dismissed);
     const strike = checked ? ' line-through' : '';
     return (
         <span
@@ -60,8 +67,16 @@ function PinLabel({ text, shown, checked }: PinLabelProps) {
     );
 }
 
-/** Keep pin gestures off the viewport (no pan/zoom from a pin tap); Esc closes the label. */
-function pinHandlers(onToggle: () => void, onClose: () => void) {
+interface PinCallbacks {
+    onToggle: () => void;
+    /** Escape: close the label, incl. a hover/focus one. */
+    onClose: () => void;
+    /** Focus or pointer left the pin: hover/focus may show its label again. */
+    onLeave: () => void;
+}
+
+/** Keep pin gestures off the viewport (no pan/zoom from a pin tap). */
+function pinHandlers({ onToggle, onClose, onLeave }: PinCallbacks) {
     return {
         onPointerDown: (e: PointerEvent) => e.stopPropagation(),
         onDoubleClick: (e: MouseEvent) => e.stopPropagation(),
@@ -69,6 +84,8 @@ function pinHandlers(onToggle: () => void, onClose: () => void) {
         onKeyDown: (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         },
+        onBlur: onLeave,
+        onPointerLeave: onLeave,
     };
 }
 
@@ -92,20 +109,13 @@ interface PinButtonProps {
     grid: ValheimMapGrid;
     scale: number;
     open: boolean;
+    dismissed: boolean;
     labels: boolean;
-    onToggle: () => void;
-    onClose: () => void;
+    callbacks: PinCallbacks;
 }
 
-function PinButton({
-    pin,
-    grid,
-    scale,
-    open,
-    labels,
-    onToggle,
-    onClose,
-}: PinButtonProps) {
+function PinButton(props: PinButtonProps) {
+    const { pin, grid, scale, open, dismissed, labels, callbacks } = props;
     const text = pinDisplayLabel(pin.label, pin.type);
     return (
         <button
@@ -114,16 +124,34 @@ function PinButton({
             aria-expanded={open}
             data-checked={pin.checked}
             {...pinPlacement(pin, grid, scale)}
-            {...pinHandlers(onToggle, onClose)}
+            {...pinHandlers(callbacks)}
         >
             <PinDisc pin={pin} />
             <PinLabel
                 text={text}
                 checked={pin.checked}
+                dismissed={dismissed}
                 shown={open || labels || scale >= PIN_LABELS_ALWAYS_SCALE}
             />
         </button>
     );
+}
+
+/** Which pin's label is tapped open, and which one Escape dismissed until focus/hover leaves it. */
+function usePinLabelState() {
+    const [openKey, setOpenKey] = useState<string | null>(null);
+    const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+    const callbacksFor = (key: string): PinCallbacks => ({
+        onToggle: () => setOpenKey(openKey === key ? null : key),
+        onClose: () => {
+            setOpenKey(null);
+            setDismissedKey(key);
+        },
+        onLeave: () => {
+            if (dismissedKey === key) setDismissedKey(null);
+        },
+    });
+    return { openKey, dismissedKey, callbacksFor };
 }
 
 export interface PinLayerProps {
@@ -139,7 +167,7 @@ export interface PinLayerProps {
 
 export function PinLayer(props: PinLayerProps) {
     const { grid, pins, scale, showShared, labels = false } = props;
-    const [openKey, setOpenKey] = useState<string | null>(null);
+    const { openKey, dismissedKey, callbacksFor } = usePinLabelState();
     const size = grid.textureSize;
     return (
         <div
@@ -156,11 +184,9 @@ export function PinLayer(props: PinLayerProps) {
                         grid={grid}
                         scale={scale}
                         open={openKey === key}
+                        dismissed={dismissedKey === key}
                         labels={labels}
-                        onToggle={() =>
-                            setOpenKey(openKey === key ? null : key)
-                        }
-                        onClose={() => setOpenKey(null)}
+                        callbacks={callbacksFor(key)}
                     />
                 );
             })}
