@@ -162,6 +162,16 @@ invoke sometimes "" --only-e2e
 assert_rc 2 "unknown RL_GATE_DISCORD value"
 assert_out_matches 'RL_GATE_DISCORD must be' "names the accepted values"
 
+# ===== F1: --fleet-e2e (children B/C force e2e on, as serial --fleet does) =====
+
+CURRENT_TEST_NAME="F1: --fleet-e2e runs Playwright under --only-e2e and is refused without it"
+invoke defer "" --only-e2e --fleet-e2e
+assert_rc 0 "defer --only-e2e --fleet-e2e"
+assert_file_matches 'playwright' "$npx_argv_file" "child B runs Playwright with e2e forced on"
+invoke "" "" --fleet-e2e
+assert_rc 2 "--fleet-e2e without --only-e2e"
+assert_out_matches 'is only valid together with --only-e2e' "names the missing flag"
+
 # ===== A1/A2: child A (--fleet --no-e2e) =====
 
 CURRENT_TEST_NAME="A1: RL_GATE_E2E=deferred stamps both e2e rows phase 1"

@@ -236,7 +236,8 @@ export async function execute(
   const slotFlag = slot !== null ? `--slot ${slot} ` : '';
   // Pass timeout_seconds through to task-start so the watchdog kills a hung run;
   // a parallel parent outlives its children (review P2).
-  const timeoutS = fanout ? parallelParentTimeout(childS) : childS;
+  // Discord relevance is diff-derived on the runner, so phase-2 child C may always run.
+  const timeoutS = fanout ? parallelParentTimeout(childS, true) : childS;
   const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   // ROK-1470: heavy runs wait on host MemAvailable inside task-start before the
   // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.

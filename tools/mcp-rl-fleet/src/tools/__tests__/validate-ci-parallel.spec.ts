@@ -2,6 +2,7 @@
 // gate-fanout command shape and --exclude-slots from `mutagen sync list`.
 import { describe, it, expect } from 'vitest';
 import {
+  E2E_CHILD_ARGS,
   GATE_FANOUT,
   buildFanoutCommand,
   busySlotsFromMutagen,
@@ -64,7 +65,7 @@ describe('buildFanoutCommand', () => {
   });
   it('splits the gate: A = --fleet --no-e2e, B = --only-e2e, serial = the whole argv', () => {
     expect(cmd).toContain(`--a-args ''\\''--fleet'\\'' '\\''--no-e2e'\\'''`);
-    expect(cmd).toContain("--b-args '--only-e2e'");
+    expect(cmd).toContain(`--b-args ''\\''--only-e2e'\\'' '\\''--fleet-e2e'\\'''`);
     expect(cmd).toContain(`--serial-args ''\\''--fleet'\\'''`);
   });
   it('passes the inner env once, quoted', () => {
@@ -89,6 +90,19 @@ describe('buildFanoutCommand', () => {
   });
 });
 
+describe('e2e forcing (Codex r1 P2)', () => {
+  it('B and C carry --fleet-e2e so they never diff-skip what serial --fleet runs', () => {
+    expect(E2E_CHILD_ARGS).toEqual(['--only-e2e', '--fleet-e2e']);
+  });
+  it('strips --with-e2e / --fleet-e2e from child A (always --no-e2e) but keeps them on serial', () => {
+    const c = buildFanoutCommand({}, ENV, [], { ...TARGET, args: ['--fleet', '--with-e2e', '--no-coverage'] });
+    const aArgs = c.split('--a-args ')[1]?.split(' --b-args')[0] ?? '';
+    expect(aArgs).not.toContain('--with-e2e');
+    expect(aArgs).toContain('--no-coverage');
+    expect(c.split('--serial-args ')[1]).toContain('--with-e2e');
+  });
+});
+
 describe('parallelTarget', () => {
   it('refuses an ineligible request and an unclaimed caller', async () => {
     expect(await parallelTarget({ parallel: true }, 'abcdef123456', 1, ENV, [], 5400)).toMatchObject({
@@ -105,8 +119,14 @@ describe('parallelTarget', () => {
 });
 
 describe('parallelParentTimeout', () => {
-  it('is child + phase-2 allowance (1800) + margin (600)', () => {
-    expect(parallelParentTimeout(5400)).toBe(7800);
-    expect(parallelParentTimeout(1800)).toBe(4200);
+  it('with Discord possible: phase 1 + C (full child budget + 2700s lock wait) + 600 margin', () => {
+    expect(parallelParentTimeout(5400, true)).toBe(5400 + 5400 + 2700 + 600);
+    expect(parallelParentTimeout(1800, true)).toBe(1800 + 1800 + 2700 + 600);
+  });
+  it('without Discord: phase 1 + 600 margin', () => {
+    expect(parallelParentTimeout(5400, false)).toBe(6000);
+  });
+  it("never exceeds task-start's 86400s ceiling", () => {
+    expect(parallelParentTimeout(50_000, true)).toBe(86_400);
   });
 });

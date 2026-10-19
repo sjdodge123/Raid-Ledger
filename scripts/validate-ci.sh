@@ -242,6 +242,8 @@ unset RL_GATE_DISCORD RL_GATE_E2E
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
+# fleet_e2e (--fleet-e2e): set only on the e2e children of a parallel gate.
+fleet_e2e=false
 # e2e_explicit: true ONLY when --with-e2e was passed. --fleet also sets
 # e2e_mode=on, but that is implied, so it must not override E2E_SCOPE=none.
 e2e_explicit=false
@@ -2641,6 +2643,11 @@ main() {
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
       --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
+      # ROK-1793 S2 (Codex r1): the e2e half of a parallel --fleet gate. e2e is
+      # ON exactly as --fleet implies it (an unreachable target FAILs, the diff
+      # gate does not SKIP) but NOT explicit, so a NONE diff still skips
+      # Playwright as serial --fleet does. Only valid with --only-e2e.
+      --fleet-e2e) e2e_mode="on"; e2e_explicit=false; fleet_e2e=true; shift ;;
       --only-e2e) _set_only_mode e2e; shift ;;
       --contrast-audit) contrast_audit=true; shift ;;
       --only-integration) _set_only_mode integration; shift ;;
@@ -2706,6 +2713,11 @@ main() {
 
   if $contrast_audit && ! $only_e2e; then
     echo -e "${RED}--contrast-audit is only valid together with --only-e2e.${NC}" >&2
+    exit 2
+  fi
+
+  if $fleet_e2e && ! $only_e2e; then
+    echo -e "${RED}--fleet-e2e is only valid together with --only-e2e (the e2e children of a parallel fleet gate).${NC}" >&2
     exit 2
   fi
 

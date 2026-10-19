@@ -36,20 +36,33 @@ export interface FanoutTarget {
   childTimeout: number;
 }
 
-/** P's extra budget beyond one child: phase-2 child C plus admission/copy margin. */
-const PHASE2_ALLOWANCE_S = 1800;
+/** Longest a phase-2 child C may wait for the fleet Discord lock before it runs. */
+const DISCORD_LOCK_WAIT_S = 2700;
+/** Admission waits and the tree copy, on P's clock. */
 const PARENT_MARGIN_S = 600;
+/** task-start's --timeout-seconds ceiling. */
+const TASK_START_MAX_S = 86_400;
 
 /**
  * P's watchdog budget. P outlives each child (admission waits, the tree copy,
  * and phase-2 child C run on its clock), so it must never be killed first.
+ * Phase 1 (A next to B) is one child budget; when Discord smoke may run, C
+ * then gets its own full budget plus the Discord-lock wait (Codex r1 P2).
  *
  * @param childTimeout - Each child's budget in seconds.
- * @returns child + C's allowance + margin.
+ * @param discordMayRun - Whether the inner env lets the Discord smoke run (C may be dispatched).
+ * @returns The parent budget in seconds, capped at task-start's maximum.
  */
-export function parallelParentTimeout(childTimeout: number): number {
-  return childTimeout + PHASE2_ALLOWANCE_S + PARENT_MARGIN_S;
+export function parallelParentTimeout(childTimeout: number, discordMayRun: boolean): number {
+  const phase2 = discordMayRun ? childTimeout + DISCORD_LOCK_WAIT_S : 0;
+  return Math.min(childTimeout + phase2 + PARENT_MARGIN_S, TASK_START_MAX_S);
 }
+
+/** Args that turn e2e on; child A is always --no-e2e, so they never reach it. */
+const E2E_FORCING_FLAGS = ['--with-e2e', '--fleet-e2e'];
+
+/** Child B / C argv: the e2e half, forced on as serial --fleet forces it. */
+export const E2E_CHILD_ARGS = ['--only-e2e', '--fleet-e2e'];
 
 /**
  * Why a `parallel:true` request cannot be honoured, or null when it can.
@@ -114,7 +127,7 @@ export function buildFanoutCommand(
   busySlots: number[],
   target: FanoutTarget,
 ): string {
-  const rest = target.args.filter((a) => a !== '--fleet');
+  const rest = target.args.filter((a) => a !== '--fleet' && !E2E_FORCING_FLAGS.includes(a));
   const join = (argv: string[]): string => argv.map((a) => shellQuote(a)).join(' ');
   const parts = [
     GATE_FANOUT,
@@ -123,7 +136,7 @@ export function buildFanoutCommand(
     `--exclude-slots ${shellQuote(busySlots.join(','))}`,
     `--inner-env ${shellQuote(innerEnv)}`,
     `--a-args ${shellQuote(join(['--fleet', '--no-e2e', ...rest]))}`,
-    `--b-args ${shellQuote('--only-e2e')}`,
+    `--b-args ${shellQuote(join(E2E_CHILD_ARGS))}`,
     `--serial-args ${shellQuote(join(target.args))}`,
     `--child-timeout ${target.childTimeout}`,
   ];
