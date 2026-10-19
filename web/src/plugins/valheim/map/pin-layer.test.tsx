@@ -115,3 +115,37 @@ describe('PinLayer labels prop (ROK-1837 D9 Pin labels switch)', () => {
         expect(screen.getByText('Home').getAttribute('data-open')).toBe('true');
     });
 });
+
+describe('PinLayer Escape dismisses hover/focus labels (ROK-1837 Codex r6)', () => {
+    const HOVER_FOCUS = ['group-hover:block', 'group-focus-visible:block'];
+
+    function labelClasses(button: HTMLElement): string[] {
+        const label = button.querySelector('span[data-open]');
+        if (!label) throw new Error('pin label span missing');
+        return label.className.split(' ');
+    }
+
+    it('Escape on a focused pin suppresses its hover/focus label until focus leaves', () => {
+        renderLayer();
+        const home = screen.getByRole('button', { name: 'Home (Bed)' });
+        fireEvent.focus(home);
+        fireEvent.keyDown(home, { key: 'Escape' });
+        const afterEscape = labelClasses(home);
+        expect(afterEscape).toContain('hidden');
+        expect(afterEscape.filter((c) => HOVER_FOCUS.includes(c))).toEqual([]);
+        fireEvent.blur(home);
+        expect(labelClasses(home)).toEqual(expect.arrayContaining(HOVER_FOCUS));
+    });
+
+    it('Escape on a hovered pin suppresses its label until the pointer leaves', () => {
+        renderLayer();
+        const home = screen.getByRole('button', { name: 'Home (Bed)' });
+        fireEvent.pointerEnter(home);
+        fireEvent.keyDown(home, { key: 'Escape' });
+        expect(
+            labelClasses(home).filter((c) => HOVER_FOCUS.includes(c)),
+        ).toEqual([]);
+        fireEvent.pointerLeave(home);
+        expect(labelClasses(home)).toEqual(expect.arrayContaining(HOVER_FOCUS));
+    });
+});
