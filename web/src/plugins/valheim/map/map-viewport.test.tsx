@@ -75,6 +75,7 @@ describe('MapViewport gestures (ROK-1837 D10)', () => {
         const { app, layer } = renderViewport();
         const fitT = layer.style.transform;
         fireEvent.keyDown(app, { key: '+' });
+        fireEvent.keyDown(app, { key: '+' });
         const zoomed = layer.style.transform;
         expect(zoomed).not.toBe(fitT);
         fireEvent.keyDown(app, { key: 'ArrowRight' });

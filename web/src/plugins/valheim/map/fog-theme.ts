@@ -3,7 +3,7 @@
  * computed `--color-backdrop` (fallback: the body background), re-read when
  * `<html>`'s class / data-theme / style changes (theme switch).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FogRgb } from './fog-bitmap';
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -43,10 +43,13 @@ const sameRgb = (a: FogRgb, b: FogRgb) =>
 /** The fog colour, re-read whenever `<html>`'s class / data-theme / style changes. */
 export function useThemeFogRgb(): FogRgb {
     const [rgb, setRgb] = useState(readThemeRgb);
+    const current = useRef(rgb);
     useEffect(() => {
         const observer = new MutationObserver(() => {
             const next = readThemeRgb();
-            setRgb((prev) => (sameRgb(prev, next) ? prev : next));
+            if (sameRgb(current.current, next)) return;
+            current.current = next;
+            setRgb(next);
         });
         observer.observe(document.documentElement, {
             attributes: true,
