@@ -144,9 +144,30 @@ function popoverStyle(
 }
 
 /**
- * Clamp the anchored position inside the viewport (flip above, shift left).
- * `pos` is in the popup's containing-block frame, so the anchor's viewport
- * rect gives the offset back. Written to the node before paint.
+ * Write the clamped position onto the popup node. `pos` is in the popup's
+ * containing-block frame, so the anchor's viewport rect gives the offset back.
+ */
+function applyClamp(
+    el: HTMLElement,
+    a: DOMRect,
+    pos: { top: number; left: number },
+): void {
+    const at = clampPopover({
+        anchor: { left: a.left, top: a.top, bottom: a.bottom },
+        size: {
+            width: el.offsetWidth || FALLBACK.width,
+            height: el.offsetHeight || FALLBACK.height,
+        },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+    });
+    el.style.left = `${at.left - (a.left - pos.left)}px`;
+    el.style.top = `${at.top - (a.bottom + 4 - pos.top)}px`;
+}
+
+/**
+ * Clamp the anchored position inside the viewport (flip above, shift left),
+ * before paint and again on every window resize — a resize that moves only the
+ * viewport edge leaves `pos` unchanged, so the effect alone would not re-run.
  */
 function useClampedPopover(
     pos: { top: number; left: number } | null,
@@ -154,19 +175,15 @@ function useClampedPopover(
     popupRef: RefObject<HTMLElement | null>,
 ): void {
     useLayoutEffect(() => {
-        const el = popupRef.current;
-        const a = anchorRef.current?.getBoundingClientRect();
-        if (!el || !a || !pos) return;
-        const at = clampPopover({
-            anchor: { left: a.left, top: a.top, bottom: a.bottom },
-            size: {
-                width: el.offsetWidth || FALLBACK.width,
-                height: el.offsetHeight || FALLBACK.height,
-            },
-            viewport: { width: window.innerWidth, height: window.innerHeight },
-        });
-        el.style.left = `${at.left - (a.left - pos.left)}px`;
-        el.style.top = `${at.top - (a.bottom + 4 - pos.top)}px`;
+        if (!pos) return;
+        const apply = (): void => {
+            const el = popupRef.current;
+            const a = anchorRef.current?.getBoundingClientRect();
+            if (el && a) applyClamp(el, a, pos);
+        };
+        apply();
+        window.addEventListener('resize', apply);
+        return () => window.removeEventListener('resize', apply);
     }, [pos, anchorRef, popupRef]);
 }
 
