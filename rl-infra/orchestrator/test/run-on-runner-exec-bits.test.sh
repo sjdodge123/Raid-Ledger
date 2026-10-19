@@ -31,8 +31,9 @@
 #   X4 — an UNREPAIRABLE tree aborts with the reserved 97 and a named reason, and
 #        the caller's command is never dispatched. Spending a run on a tree whose
 #        scripts exit 126 is the wasted round-trip this whole fix exists to stop.
-#   X5 — a workspace with NO restore script still dispatches (warn, not fatal):
-#        older branches predate the script and must stay runnable.
+#   X5 — ROK-1849: the orchestrator's own purge then repair are streamed
+#        (`bash -s`) before the command; /workspace copies never execute.
+#   X7 — a failed purge aborts with 96 before anything else runs.
 #   X6 — the repair's chatter never reaches run-on-runner's STDOUT. Callers parse
 #        that stdout (jq, sentinel probes); a stray "ok — N scripts" corrupts it.
 #
@@ -112,15 +113,28 @@ _make_workspace() {
             ;;
         missing) : ;;
     esac
+    # ROK-1849 Codex r2: run-on-runner streams the ORCHESTRATOR's own copies
+    # (RL_INFRA_RUNNER_DIR), never /workspace's. The chosen variant becomes the
+    # trusted copy; the branch copy is replaced by a hostile one that leaves a
+    # marker if anything ever executes it.
+    OPS_DIR="$TMP_STATE/ops-runner"
+    mkdir -p "$OPS_DIR"
+    cp "$WORKTREE_ROOT/rl-infra/runner/purge-synced-secrets.sh" "$OPS_DIR/"
+    rm -f "$OPS_DIR/restore-exec-bits.sh"
     [[ -f "$WS/rl-infra/runner/restore-exec-bits.sh" ]] && \
-        chmod 0644 "$WS/rl-infra/runner/restore-exec-bits.sh"
+        cp "$WS/rl-infra/runner/restore-exec-bits.sh" "$OPS_DIR/restore-exec-bits.sh"
+    export RL_INFRA_RUNNER_DIR="$OPS_DIR"
+    printf '#!/usr/bin/env bash\ntouch "%s/.branch-script-ran"\nexit 0\n' "$WS" \
+        > "$WS/rl-infra/runner/restore-exec-bits.sh"
+    cp "$WS/rl-infra/runner/restore-exec-bits.sh" "$WS/rl-infra/runner/purge-synced-secrets.sh"
+    chmod 0644 "$WS/rl-infra/runner/restore-exec-bits.sh"
     return 0
 }
 
 # Simulate the 2026-09-03 sequence: a restore already ran and passed, then a
 # later Mutagen delivery re-wrote one file at 0644 and re-dropped its bit.
 _resync_canary_at_0644() {
-    bash "$WS/rl-infra/runner/restore-exec-bits.sh" "$WS" >/dev/null 2>&1
+    bash "$OPS_DIR/restore-exec-bits.sh" "$WS" >/dev/null 2>&1
     chmod 0644 "$WS/$CANARY_REL"
 }
 
@@ -214,15 +228,17 @@ test_x2_repair_is_dispatched_before_the_command() {
 
     PATH="$FAKE_BIN:$PATH" bash "$RUN_ON_RUNNER" -- "${_probe_cmd[@]}" \
         >/dev/null 2>&1
-    local first_line second_line
-    first_line=$(sed -n '1p' "$DOCKER_LOG")
+    # ROK-1849 Codex r2: exec 1 is the streamed purge, exec 2 the streamed
+    # repair (both `bash -s`, never a /workspace path), exec 3 the command.
+    local second_line third_line
     second_line=$(sed -n '2p' "$DOCKER_LOG")
+    third_line=$(sed -n '3p' "$DOCKER_LOG")
     _remove_fake_docker
 
-    assert_contains "$first_line" "restore-exec-bits.sh" \
-        "the FIRST docker exec must be the exec-bit repair; a repair that runs after the command cannot help the command"
-    assert_contains "$second_line" "stat" \
-        "the caller's own command must be the SECOND exec, dispatched only once the tree is executable"
+    assert_contains "$second_line" "bash -s -- /workspace" \
+        "the repair must be streamed (bash -s) right before the command; a repair that runs after the command cannot help the command"
+    assert_contains "$third_line" "stat" \
+        "the caller's own command must be the THIRD exec, dispatched only once the tree is executable"
 }
 
 # X3 — the heartbeat wrapper is the path task-start uses for heavy runs.
@@ -271,22 +287,47 @@ test_x4_unrepairable_tree_aborts_without_dispatch() {
     fi
 }
 
-# X5 — don't brick branches that predate the restore script.
-test_x5_missing_restore_script_is_a_warning_not_a_block() {
-    CURRENT_TEST_NAME="X5: a workspace with no restore script still dispatches (warn, not fatal)"
-    _make_workspace missing
+# X5 — ROK-1849 Codex r2: the branch's /workspace copies never execute; the
+# trusted purge runs first, then the trusted repair, then the command.
+test_x5_branch_scripts_never_execute_purge_runs_first() {
+    CURRENT_TEST_NAME="X5: trusted purge, then trusted repair, then the command; branch copies never run"
+    _make_workspace real
     _seed_claim 2
     _install_fake_docker
+    echo SECRET > "$WS/.env"
 
     local out rc=0
     out=$(PATH="$FAKE_BIN:$PATH" bash "$RUN_ON_RUNNER" -- \
-        bash -c 'echo dispatched' 2>/dev/null) || rc=$?
+        bash -c '[[ -e /workspace/.env ]] && echo env-present || echo env-gone' 2>/dev/null) || rc=$?
+    local log
+    log=$(cat "$DOCKER_LOG")
     _remove_fake_docker
 
-    assert_exit_code "$rc" "0" \
-        "a worktree that predates restore-exec-bits.sh must still run; hard-failing on layout drift would make every claim on an older branch brittle"
-    assert_eq "$out" "dispatched" \
-        "the caller's command must still reach the runner when there is no repair script to run"
+    assert_exit_code "$rc" "0" "a healthy dispatch must succeed"
+    assert_eq "$out" "env-gone" "a synced .env must be purged before the caller's command runs"
+    assert_file_not_exists "$WS/.branch-script-ran" "no branch-controlled /workspace script may execute before (or instead of) the trusted ones"
+    local order
+    order=$(grep -n '' <<<"$log" | awk -F: '/bash -s -- \/workspace/{n++; print n":"$1} /env-gone|env-present/{print "cmd:"$1}' | tr '\n' ' ')
+    assert_eq "$(wc -l <<<"$log" | tr -d ' ')" "3" "exactly three docker execs: purge, repair, command (got: $log)"
+    assert_contains "$(sed -n 1p <<<"$log")" "bash -s -- /workspace" "the first remote command must be the streamed purge"
+    assert_contains "$(sed -n 2p <<<"$log")" "bash -s -- /workspace" "the second remote command must be the streamed repair"
+    assert_contains "$(sed -n 3p <<<"$log")" "env-" "the caller's command runs last ($order)"
+}
+
+# X7 — a failed purge blocks dispatch outright.
+test_x7_failed_purge_blocks_dispatch() {
+    CURRENT_TEST_NAME="X7: a failed purge aborts with 96 and never dispatches"
+    _make_workspace real
+    _seed_claim 2
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$OPS_DIR/purge-synced-secrets.sh"
+    _install_fake_docker
+    local rc=0
+    PATH="$FAKE_BIN:$PATH" bash "$RUN_ON_RUNNER" -- bash -c 'echo dispatched' >/dev/null 2>&1 || rc=$?
+    local log
+    log=$(cat "$DOCKER_LOG")
+    _remove_fake_docker
+    assert_exit_code "$rc" "96" "a failed purge must abort with the reserved 96"
+    assert_eq "$(wc -l <<<"$log" | tr -d ' ')" "1" "nothing may run after a failed purge (got: $log)"
 }
 
 # X6 — stdout is the caller's, not the repair's.
@@ -309,7 +350,8 @@ run_test "X1 resynced file executable at dispatch" test_x1_resynced_file_is_exec
 run_test "X2 repair before command"                test_x2_repair_is_dispatched_before_the_command
 run_test "X3 heartbeat wrapper repairs"            test_x3_heartbeat_wrapper_repairs_too
 run_test "X4 unrepairable aborts"                  test_x4_unrepairable_tree_aborts_without_dispatch
-run_test "X5 missing restore warns"                test_x5_missing_restore_script_is_a_warning_not_a_block
+run_test "X5 trusted purge+repair, branch never runs" test_x5_branch_scripts_never_execute_purge_runs_first
+run_test "X7 failed purge blocks dispatch"         test_x7_failed_purge_blocks_dispatch
 run_test "X6 stdout stays clean"                   test_x6_repair_output_never_pollutes_stdout
 
 print_test_summary

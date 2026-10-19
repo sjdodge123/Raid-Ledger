@@ -88,8 +88,8 @@ async function addVote(
     .values({ slotId, userId, stance });
 }
 
-/** The event the lock-in signs the winning slot's voters up to. */
-async function createEvent(start: Date): Promise<number> {
+/** The event created from poll `matchId` that the lock-in signs voters up to. */
+async function createEvent(start: Date, matchId: number): Promise<number> {
   const [event] = nonEmpty(
     await testApp.db
       .insert(schema.events)
@@ -99,6 +99,7 @@ async function createEvent(start: Date): Promise<number> {
         duration: [start, new Date(start.getTime() + TWO_HOURS_MS)],
         maxAttendees: 10,
         creatorId: testApp.seed.adminUser.id,
+        createdFromPollId: matchId,
       })
       .returning(),
     'event',
@@ -158,7 +159,7 @@ async function runSingleSlotPoll(
   const slotTime = new Date(Date.now() + 86_400_000);
   const slotId = await addSlot(matchId, slotTime);
   for (const v of votes) await addVote(slotId, v.userId, v.stance);
-  const eventId = await createEvent(slotTime);
+  const eventId = await createEvent(slotTime, matchId);
   await completePoll(matchId, eventId, slotTime);
 }
 
@@ -186,7 +187,7 @@ describe('ROK-1617 item E — standalone poll auto-heart is yes-voters only', ()
     const rejected = new Date(Date.now() + 172_800_000);
     await addVote(await addSlot(matchId, winning), mixedVoter, 'no');
     await addVote(await addSlot(matchId, rejected), mixedVoter, 'yes');
-    const eventId = await createEvent(winning);
+    const eventId = await createEvent(winning, matchId);
 
     await completePoll(matchId, eventId, winning);
 

@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -76,7 +77,8 @@ export class NotificationController {
   @UseGuards(AuthGuard('jwt'))
   async markRead(
     @Request() req: AuthenticatedRequest,
-    @Param('id') id: string,
+    // ROK-1845: ids are uuids; a malformed one is a 400, not a no-op.
+    @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<{ success: boolean }> {
     await this.notificationService.markRead(req.user.id, id);
     return { success: true };

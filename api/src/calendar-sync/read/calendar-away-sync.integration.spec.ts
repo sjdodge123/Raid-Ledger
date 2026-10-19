@@ -611,17 +611,19 @@ function deriveNow(userId: number) {
 }
 
 describe('review fixes', () => {
-  it('a manual absence ending 9999-12-31 derives normally and hides synced days', async () => {
+  it('a stored manual absence ending 9999-12-31 derives normally and hides synced days', async () => {
     const m = await member();
+    // ROK-1842: POST now rejects the range (366-day cap, 2000-2100 window)…
     const created = await api(m.token).createAbsence(TOMORROW(), '9999-12-31');
-    expect(created.status).toBe(201);
-    // POST wraps the row: `{ data: { id, startDate, endDate, reason, source } }`.
-    expect(created.body).toEqual({
-      data: expect.objectContaining({
-        endDate: '9999-12-31',
-        source: 'manual',
-      }),
+    expect(created.status).toBe(400);
+    // …but a row stored before the cap must still derive without throwing.
+    await testApp.db.insert(schema.gameTimeAbsences).values({
+      userId: m.userId,
+      startDate: TOMORROW(),
+      endDate: '9999-12-31',
     });
+    // The direct insert skips the POST hook that queues the derive.
+    await enqueueCalendarDerive(readQueue, m.userId);
     expect(await processDerive(m.userId)).toBe('derived');
     fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, [allDay(TOMORROW(), DAY_AFTER())]);
 

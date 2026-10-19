@@ -8,6 +8,11 @@ import type { ItadGame } from '../itad/itad.constants';
 import type { IgdbApiGame } from '../igdb/igdb.constants';
 import { withMockTransaction } from '../common/testing/drizzle-mock';
 
+// ROK-1843: the moderation lookup has its own integration coverage
+// (discovery-moderation.integration.spec.ts); here no row is moderated —
+// automocked, so the lock resolves and findModeratedMatch returns undefined.
+jest.mock('../igdb/games-moderation-match.helpers');
+
 // Mock the enrichment helper — we test it separately
 jest.mock('./steam-igdb-enrichment.helpers', () => ({
   enrichFromIgdb: jest.fn(),
