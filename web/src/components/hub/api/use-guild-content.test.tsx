@@ -16,7 +16,7 @@ const PROFILE: GuildProfile = { guildId: 7, gmPost: null, rules: [], links: [] }
 
 describe('useUpdateGuildProfile', () => {
     it('invalidates the profile and every viewer scope of the `mine` guild list', async () => {
-        server.use(http.patch('http://localhost:3000/plugins/wow/guilds/7/profile', () => HttpResponse.json(PROFILE)));
+        server.use(http.patch('http://localhost:3000/guilds/7/profile', () => HttpResponse.json(PROFILE)));
         const client = createTestQueryClient();
         const mineA = ['plugins', 'wow', 'guilds', 'mine', 'user:1'];
         const mineB = ['plugins', 'wow', 'guilds', 'mine', 'anon'];

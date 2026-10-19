@@ -165,7 +165,7 @@ async function upsertGuild(
     })
     .onConflictDoUpdate({
       target: [guilds.gameId, guilds.region, guilds.nameKey],
-      targetWhere: sql`${guilds.realmSlug} IS NULL`,
+      targetWhere: sql`${guilds.realmSlug} IS NULL AND ${guilds.kind} = 'wow_guild'`,
       set,
       // Compare against `excluded`, never a bound JS Date: drizzle's
       // postgres.js driver does not serialize a Date inside raw `sql`

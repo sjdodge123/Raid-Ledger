@@ -1,6 +1,7 @@
 /** ROK-1787 — weekly raid schedule (prototype `proposed/RaidSchedule.tsx`): one row per recurring series. */
 import type { JSX } from 'react';
-import type { GuildScheduleNightDto } from '@raid-ledger/contract';
+import type { GuildKind, GuildScheduleNightDto } from '@raid-ledger/contract';
+import { hubCopy } from '../hub-copy';
 import { Pill, WidgetCard } from '../hub-bits';
 import { timeRange, weekdayShort } from './guild-raids.helpers';
 import { CardFootnote, QuietEmpty } from '../card-bits';
@@ -25,11 +26,12 @@ function NightRow({ night }: { night: GuildScheduleNightDto }): JSX.Element {
     );
 }
 
-export function GuildRaidSchedule({ schedule }: { schedule: GuildScheduleNightDto[] }): JSX.Element {
+export function GuildRaidSchedule({ schedule, kind }: { schedule: GuildScheduleNightDto[]; kind?: GuildKind | undefined }): JSX.Element {
+    const copy = hubCopy(kind);
     return (
-        <WidgetCard id="guild-raid-schedule" title="Weekly raid schedule">
+        <WidgetCard id="guild-raid-schedule" title={copy.scheduleTitle}>
             {schedule.length === 0
-                ? <QuietEmpty>No recurring raids yet. A guild editor can pick this guild when creating a repeating event.</QuietEmpty>
+                ? <QuietEmpty>{copy.scheduleEmpty}</QuietEmpty>
                 : <ul className="flex flex-col gap-2">{schedule.map((n) => <NightRow key={n.recurrenceGroupId} night={n} />)}</ul>}
             <CardFootnote>Shown in your local time</CardFootnote>
         </WidgetCard>

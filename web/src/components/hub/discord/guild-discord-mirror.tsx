@@ -20,6 +20,7 @@ import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle } from '../hub-bits';
 import { latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
+import { httpStatusOf } from '../../../lib/api/api-error';
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
@@ -134,6 +135,8 @@ export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }:
     // Gated on the affordance, not on `canEdit`: an Officer may edit content
     // but not pick a channel (D5-A), so an unset card would be a dead end.
     if (query.isPending || (mirror?.state === 'unset' && onChangeChannel === null)) return null;
+    // ROK-1831: a 403 (a visitor on a members-first hub) hides the card — never a red error.
+    if (httpStatusOf(query.error) === 403) return null;
     const open = onChangeChannel;
     const action = headerAction({ mirror, onChange: open });
     return (

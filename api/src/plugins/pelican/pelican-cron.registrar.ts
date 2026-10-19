@@ -1,10 +1,15 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
-import { PELICAN_STATUS_CRON, PELICAN_SYNC_CRON } from './pelican.constants';
+import {
+  PELICAN_HUB_TOUCH_CRON,
+  PELICAN_STATUS_CRON,
+  PELICAN_SYNC_CRON,
+} from './pelican.constants';
 import { PelicanStatusService } from './pelican-status.service';
 import { PelicanSyncService } from './pelican-sync.service';
 import { PelicanPresenceSupervisor } from './presence/pelican-presence.supervisor';
+import { ServerHubMembershipService } from './hub/server-hub-membership.service';
 
 /**
  * Pelican cron jobs (ROK-1772): `pelican:server-sync` every 15 min and
@@ -23,10 +28,13 @@ export class PelicanCronRegistrar implements CronRegistrar {
     @Optional()
     @Inject(PelicanPresenceSupervisor)
     private readonly presence: PelicanPresenceSupervisor | null = null,
+    @Optional()
+    @Inject(ServerHubMembershipService)
+    private readonly hubs: ServerHubMembershipService | null = null,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
-    return [
+    const jobs: CronJobDefinition[] = [
       {
         name: 'server-sync',
         cronExpression: PELICAN_SYNC_CRON,
@@ -44,5 +52,17 @@ export class PelicanCronRegistrar implements CronRegistrar {
         },
       },
     ];
+    // ROK-1831 L-3: the 10-minute "still online" touch for server hubs.
+    const hubs = this.hubs;
+    if (hubs) {
+      jobs.push({
+        name: 'hub-touch',
+        cronExpression: PELICAN_HUB_TOUCH_CRON,
+        handler: async () => {
+          await hubs.touchOnline();
+        },
+      });
+    }
+    return jobs;
   }
 }

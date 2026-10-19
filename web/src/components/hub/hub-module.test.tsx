@@ -21,7 +21,7 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { GuildPage } from './hub-page';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = 'http://localhost:3000/guilds/7';
 const SLUG = 'testgame';
 
 const PAGE: GuildPageDto = {

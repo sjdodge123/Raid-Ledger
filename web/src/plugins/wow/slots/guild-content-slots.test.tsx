@@ -38,13 +38,13 @@ function serveCharacter(data: CharacterGuild['data']): { addonCalls: () => numbe
 
 describe('PlayersGuildCard — GM post headline', () => {
     it('shows the headline under the guild name', async () => {
-        server.use(http.get(`${API}/mine`, () => HttpResponse.json({ guilds: [mine('Raid Thursday 8pm')] })));
+        server.use(http.get(`http://localhost:3000/guilds/mine`, () => HttpResponse.json({ guilds: [mine('Raid Thursday 8pm')] })));
         renderWithProviders(<PlayersGuildCard />);
         expect(await screen.findByTestId('players-guild-headline')).toHaveTextContent('Raid Thursday 8pm');
     });
 
     it('shows no headline line when there is no post', async () => {
-        server.use(http.get(`${API}/mine`, () => HttpResponse.json({ guilds: [mine(null)] })));
+        server.use(http.get(`http://localhost:3000/guilds/mine`, () => HttpResponse.json({ guilds: [mine(null)] })));
         renderWithProviders(<PlayersGuildCard />);
         await screen.findByTestId('players-guild-card');
         expect(screen.queryByTestId('players-guild-headline')).toBeNull();

@@ -5,7 +5,6 @@ import { BlizzardService } from './blizzard.service';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
-import { GuildEventTagger } from './guilds/guild-event-tagger';
 import { GuildContentController } from './guilds/guild-content.controller';
 import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
@@ -31,10 +30,7 @@ import { QuestProgressReadService } from './quest-progress-read.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import {
-  EVENT_GUILD_TAGGER_KEY,
-  EXTENSION_POINTS,
-} from '../plugin-host/extension-points';
+import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import { AddonImportController } from './addon-import/addon-import.controller';
@@ -97,7 +93,6 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     CharacterQuestsService,
     GuildPageService,
     GuildRaidsService,
-    GuildEventTagger,
     GuildAddonsService,
     WowHubKindAdapter,
   ],
@@ -126,7 +121,6 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly dungeonQuestsService: DungeonQuestsService,
     private readonly bossEncountersService: BossEncountersService,
     private readonly identityProvider: WowForeverIdentityProvider,
-    private readonly guildEventTagger: GuildEventTagger,
     private readonly hubKindAdapter: WowHubKindAdapter,
   ) {}
 
@@ -265,17 +259,11 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       WOW_COMMON_MANIFEST.id,
       this.cronRegistrar,
     );
-    this.registerGuildTagger();
+    this.registerHubKind();
   }
 
-  /** ROK-1787 tagger + ROK-1830 hub kind: core resolves both, never imports WoW. */
-  private registerGuildTagger(): void {
-    this.pluginRegistry.registerAdapter(
-      EXTENSION_POINTS.EVENT_GUILD_TAGGER,
-      EVENT_GUILD_TAGGER_KEY,
-      this.guildEventTagger,
-      { ownerPluginId: WOW_COMMON_MANIFEST.id },
-    );
+  /** ROK-1830 hub kind (core resolves it; event tagging is core since ROK-1831). */
+  private registerHubKind(): void {
     // ROK-1830: WoW owns the `wow_guild` hub kind (core resolves it by kind).
     this.pluginRegistry.registerAdapter(
       EXTENSION_POINTS.HUB_KIND,

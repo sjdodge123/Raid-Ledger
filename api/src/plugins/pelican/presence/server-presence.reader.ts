@@ -18,8 +18,17 @@ export const SERVER_PRESENCE_EVENTS = {
   CHANGED: 'server-presence.changed',
 } as const;
 
-/** Payload of `SERVER_PRESENCE_EVENTS.CHANGED`: which server, which game. */
-export type ServerPresenceChangedPayload = ServerPresenceSource;
+/**
+ * Payload of `SERVER_PRESENCE_EVENTS.CHANGED`: which server, which game.
+ * `rehydrated` marks the boot roster restored from the sink (ROK-1831 Codex
+ * r2) and changes reconstructed from replayed console history — the first
+ * replay after start, or one re-admitted after a watermark reset (Codex r3):
+ * players already present, not arriving. Every unmarked event is a live
+ * transition.
+ */
+export type ServerPresenceChangedPayload = ServerPresenceSource & {
+  rehydrated?: true;
+};
 
 /** One player on one tracked server. */
 export interface ServerRosterPlayer extends ServerPresenceSource {

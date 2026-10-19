@@ -104,7 +104,7 @@ test('admin: the settings sheet holds the editors, with the rank-1 grant and the
         await expect(panel.getByTestId('guild-editors-gm-hint')).toHaveText('Add your Guild Master as an editor.');
         await expect(panel.getByTestId('guild-editor-chip')).toHaveCount(1);
         const hide = page.getByTestId('guild-settings-hide-hub');
-        await expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831)').toBeDisabled();
+        await expect(hide, 'an admin can hide the hub (ROK-1831 PATCH /guilds/:id/hidden)').toBeEnabled();
         await expect(hide).toHaveAttribute('aria-checked', 'false');
     });
 });
