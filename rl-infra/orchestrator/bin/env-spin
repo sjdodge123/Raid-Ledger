@@ -229,10 +229,11 @@ SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 # unclaimed-slot reclaim below, which already drops the stale stamp.
 #
 # Codex fleet-claim r3: the guard only DECIDES. A --takeover is recorded here
-# and committed by env_spin::commit_takeover once every preflight refusal
-# (env cap, slug owned by a still-claimed slot) has passed — re-stamping first
-# left a refused takeover's row stamped to the caller, so its real owner was
-# then refused a re-spin and release stopped marking it claimable.
+# and committed by env_spin::commit_takeover once every refusal that touches
+# nothing (env cap, slug owned by a still-claimed slot, image_not_found,
+# bot_identity_in_use) has passed — re-stamping first left a refused
+# takeover's row stamped to the caller, so its real owner was then refused a
+# re-spin and release stopped marking it claimable.
 TAKEOVER_OWNER=""
 TAKEOVER_ACTING=""
 TAKEOVER_DETAIL=""
@@ -260,32 +261,55 @@ env_spin::guard_foreign_env() {
 }
 env_spin::guard_foreign_env
 
-# Commit a pending --takeover. Runs after every preflight refusal, before any
-# container is touched (same reason the reclaim takes registry ownership
-# first). The re-stamp is a compare-and-swap under state::mutate's lock: it
-# only fires while the row is still owned by the branch the guard saw (or
-# unowned — the unclaimed-slot reclaim deletes the stamp), so a row re-stamped
-# to a third branch in between is refused, never silently stolen.
+# Commit a pending --takeover. Called immediately before the FIRST container
+# mutation on every path — the reclaim and image-mismatch recreates (docker
+# rm -f), the idempotent path, and the fresh path after image validation and
+# the bot-identity claim — so every refusal that touches nothing (env cap,
+# slug owned by a claimed slot, image_not_found, bot_identity_in_use) runs
+# first and leaves the row byte-identical. The only failures after it are ones
+# that already touched a container (e.g. bot_identity_in_use after a recreate
+# removed the old one). Runs once; later calls are no-ops.
+#
+# The re-stamp is a compare-and-swap with the read-back inside the SAME
+# state::mutate-style lock (state::cas_then_read): it fires only while the row
+# still exists and is owned by the branch the guard saw (or unowned — the
+# unclaimed-slot reclaim deletes the stamp), and the spin proceeds only when
+# the row now reads as the acting branch. A row re-stamped to a third branch,
+# or destroyed, in between is refused as env_spin_takeover_raced and left
+# untouched — never silently stolen, never spun unstamped.
+TAKEOVER_COMMITTED=0
+env_spin::takeover_refused() {
+    # Handled exits skip the EXIT trap's rollback, so hand back a bot identity
+    # this run claimed for a spin that is now refused (same as the trap does).
+    if (( ${BOT_IDENTITY_CLAIMED_THIS_RUN:-0} == 1 )); then
+        bot_identity::release "$SLOT" "$SLUG" 2>/dev/null || true
+        BOT_IDENTITY_CLAIMED_THIS_RUN=0
+    fi
+    ENV_SPIN_HANDLED=1
+    exit 1
+}
 env_spin::commit_takeover() {
-    [[ -n "$TAKEOVER_OWNER" ]] || return 0
-    local now_owner
-    if ! state::mutate "$RL_ENVS_FILE" --arg g "$SLUG" --arg o "$TAKEOVER_OWNER" \
-            --arg b "$TAKEOVER_ACTING" --arg a "$RL_AGENT_ID" \
-            'map(if .slug == $g and ((.created_for_branch // "") as $c | $c == $o or $c == "" or $c == $b)
-                 then .created_for_branch = $b | .created_by_agent = $a | .claimable_by_next = false
-                 else . end)'; then
+    [[ -n "$TAKEOVER_OWNER" && "$TAKEOVER_COMMITTED" == "0" ]] || return 0
+    local match now_owner
+    match='.slug == $g and ((.created_for_branch // "") as $c | $c == $o or $c == "" or $c == $b)'
+    if ! now_owner=$(state::cas_then_read "$RL_ENVS_FILE" \
+            "any(.[]; $match)" \
+            "map(if $match then .created_for_branch = \$b | .created_by_agent = \$a | .claimable_by_next = false else . end)" \
+            '[.[] | select(.slug == $g)] | first | .created_for_branch // ""' \
+            --arg g "$SLUG" --arg o "$TAKEOVER_OWNER" --arg b "$TAKEOVER_ACTING" --arg a "$RL_AGENT_ID"); then
         jq -c '{ok:false, error:"env_registry_mutate_failed", phase:"takeover_restamp"} + .' <<<"$TAKEOVER_DETAIL"
-        ENV_SPIN_HANDLED=1
-        exit 1
+        env_spin::takeover_refused
     fi
-    now_owner=$(state::query "$RL_ENVS_FILE" -r --arg g "$SLUG" \
-        '[.[] | select(.slug == $g)] | first | .created_for_branch // ""' 2>/dev/null || echo "")
-    if [[ -n "$now_owner" && "$now_owner" != "$TAKEOVER_ACTING" ]]; then
-        audit::log env-spin env_spin_takeover_raced "$TAKEOVER_DETAIL"
-        jq -c --arg now "$now_owner" '{ok:false, error:"env_spin_takeover_raced", now_owned_by_branch:$now} + .' <<<"$TAKEOVER_DETAIL"
-        ENV_SPIN_HANDLED=1
-        exit 1
+    if [[ "$now_owner" != "$TAKEOVER_ACTING" ]]; then
+        audit::log env-spin env_spin_takeover_raced \
+            "$(jq -c --arg now "$now_owner" '. + {now_owned_by_branch:$now}' <<<"$TAKEOVER_DETAIL")"
+        jq -c --arg now "$now_owner" '{ok:false, error:"env_spin_takeover_raced", now_owned_by_branch:$now} + .
+            + {message:("Env \"" + .slug + "\" changed hands while this --takeover was running ("
+                + (if $now == "" then "it was destroyed" else "now owned by branch \"" + $now + "\"" end)
+                + "). Nothing was changed; re-run env-spin to see its current owner.")}' <<<"$TAKEOVER_DETAIL"
+        env_spin::takeover_refused
     fi
+    TAKEOVER_COMMITTED=1
     audit::log env-spin env_spin_takeover_foreign_env "$TAKEOVER_DETAIL"
 }
 
@@ -387,8 +411,6 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     fi
 fi
 
-env_spin::commit_takeover
-
 LAST_PHASE="preflight_done"
 
 # ROK-1357 fold-in #1: track whether the idempotent block recreated the
@@ -422,6 +444,7 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && (( RECLAIMED_FROM_UNCLAIME
     # ID so the reclaim preserves the env's exact content instead of
     # re-running the default :latest ref (which may not exist locally, or
     # may be entirely different content).
+    env_spin::commit_takeover
     if [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
         RECLAIM_IMAGE=$(docker inspect "$APP_CONTAINER" --format '{{.Image}}' 2>/dev/null || echo "")
         if [[ -n "$RECLAIM_IMAGE" ]]; then
@@ -457,6 +480,7 @@ elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
         # Mismatch — the tag now resolves to a DIFFERENT image than the running
         # container. Recreate. Fail-loud guard the rm so a stuck container
         # surfaces a clear error instead of a silent set -e abort.
+        env_spin::commit_takeover
         audit::log env-spin image-id-mismatch-recreate \
             "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg running "$RUNNING_IMAGE_ID" --arg current "$CURRENT_IMAGE_ID" '{slug:$slug, slot:$slot, running_image_id:$running, current_image_id:$current}')"
         if ! docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; then
@@ -480,6 +504,7 @@ fi
 # containers). Re-write the Traefik conf file too so the route survives state
 # divergence.
 if (( TAKE_IDEMPOTENT_PATH == 1 )); then
+    env_spin::commit_takeover
     LAST_PHASE="idempotent_path_entered"
     # UPSERT: if registry already has this slug, bump last_touched.
     # If not (e.g. registry was clobbered while the container kept
@@ -732,6 +757,11 @@ if bot_identity::configured "$SLOT"; then
     fi
     BOT_IDENTITY_CLAIMED_THIS_RUN=1
 fi
+
+# A pending --takeover commits here on the fresh path: after image validation
+# and the bot-identity claim (the last refusals that touch nothing), before
+# the PG docker run. No-op when a recreate above already committed it.
+env_spin::commit_takeover
 
 
 # 1. Postgres (per-env, NAS-like). The recreate flow REUSES an existing PG

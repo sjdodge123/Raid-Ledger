@@ -357,6 +357,39 @@ state::mutate_with_precondition() {
     ) 200>"$RL_LOCK_DIR/$lockname"
 }
 
+# Compare-and-swap plus read-back, all inside ONE flock window:
+#   state::cas_then_read <file> <guard> <filter> <read> [jq-args...]
+# <filter> is written only when <guard> is truthy (`jq -e`) against the file
+# as it stands under the lock; a false guard writes nothing. <read> then runs
+# under the same lock — against the swapped file, or the untouched one — and
+# its raw output is printed, so the caller checks the outcome with no window
+# for another writer between the swap and the read. The jq args are shared by
+# all three filters. Returns 1 only on an invalid file or a failed write.
+state::cas_then_read() {
+    local file="$1" guard="$2" filter="$3" read="$4"
+    shift 4
+    local lockname
+    lockname=$(basename "$file").lock
+    (
+        flock -x 200
+        if ! jq empty "$file" 2>/dev/null; then
+            echo "state::cas_then_read: $file is not valid JSON — refusing to mutate" >&2
+            exit 1
+        fi
+        if jq -e "$@" "$guard" "$file" >/dev/null 2>&1; then
+            local tmp
+            tmp=$(mktemp "${file}.XXXXXX") || exit 1
+            if ! jq "$@" "$filter" "$file" > "$tmp"; then
+                rm -f "$tmp"
+                exit 1
+            fi
+            mv "$tmp" "$file" || exit 1
+            chmod 664 "$file" 2>/dev/null || true
+        fi
+        jq -r "$@" "$read" "$file"
+    ) 200>"$RL_LOCK_DIR/$lockname"
+}
+
 # Read-only query: state::query <file> <jq-filter>
 state::query() {
     local file="$1"
