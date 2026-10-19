@@ -200,6 +200,16 @@ describe('GET …/maps/:mapId/base-map (ROK-1837 D3)', () => {
     expect(res.status).toBe(304);
   });
 
+  it('404s (no-store, no ETag) when the blob row exists but the file is missing', async () => {
+    const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
+    await storeBlob(serverId, blobRelativePath(serverId, SHA)); // row, no file
+    const res = await getBytes(`${mapUrl(id, mapId)}/base-map`);
+    expect(res.status).toBe(404);
+    expect((res.body as Buffer).toString()).toContain('base_map_not_ready');
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers.etag).toBeUndefined();
+  });
+
   it('404s base_map_not_ready (no-store) before the blob is stored', async () => {
     const { id, mapId } = await seed(1, 'map-shared-layer');
     const res = await getBytes(`${mapUrl(id, mapId)}/base-map`);
