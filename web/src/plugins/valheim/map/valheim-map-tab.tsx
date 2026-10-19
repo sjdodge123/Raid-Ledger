@@ -4,6 +4,10 @@
  * (D2: `?vc=<characterId>&vm=<mapId>`), the tab in the hash (`useHashTab`).
  */
 import { useLocation, useNavigate } from 'react-router-dom';
+import type {
+    ValheimCharacterMapRef,
+    ValheimCharacterSummary,
+} from '@raid-ledger/contract';
 import { Select } from '../../../components/ui/select';
 import { useAuth } from '../../../hooks/use-auth';
 import {
@@ -76,20 +80,79 @@ function Picker({ id, label, value, options, onPick }: PickerProps) {
     );
 }
 
+interface PickersProps {
+    rows: ValheimCharacterSummary[];
+    characterId: number;
+    maps: ValheimCharacterMapRef[];
+    mapId: number | null;
+}
+
+function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
+    const write = useSelectionWriter();
+    const characters = sortByName(rows).map((r) => ({
+        id: r.id,
+        label: r.name,
+    }));
+    return (
+        <div className="flex flex-wrap gap-3">
+            <Picker
+                id="valheim-map-character"
+                label="Character"
+                value={characterId}
+                options={characters}
+                onPick={(id) => write(id, null)}
+            />
+            {maps.length > 1 && mapId !== null && (
+                <Picker
+                    id="valheim-map-world"
+                    label="World"
+                    value={mapId}
+                    options={maps.map((m) => ({
+                        id: m.id,
+                        label: worldLabel(m),
+                    }))}
+                    onPick={(id) => write(characterId, id)}
+                />
+            )}
+        </div>
+    );
+}
+
+/** The selected character's world picker + map, once the character list is in. */
+function CharacterMap({
+    rows,
+    characterId,
+    param,
+}: {
+    rows: ValheimCharacterSummary[];
+    characterId: number;
+    param: string | null;
+}) {
+    const detail = useValheimCharacterMaps(characterId);
+    const maps = detail.data?.id === characterId ? detail.data.maps : [];
+    const mapId = pickMapId(maps, param);
+    return (
+        <div className="grid gap-3">
+            <Pickers
+                rows={rows}
+                characterId={characterId}
+                maps={maps}
+                mapId={mapId}
+            />
+            {mapId !== null && (
+                <ValheimMapView characterId={characterId} mapId={mapId} />
+            )}
+            {mapId === null && !detail.isPending && (
+                <Empty text="This character has no map uploaded yet." />
+            )}
+        </div>
+    );
+}
+
 export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
     const params = new URLSearchParams(useLocation().search);
     const viewerId = useAuth().user?.id ?? null;
     const characters = useValheimServerCharacters(serverId);
-    const rows = characters.data ?? [];
-    const characterId = pickCharacterId(
-        rows,
-        params.get(CHARACTER_PARAM),
-        viewerId,
-    );
-    const detail = useValheimCharacterMaps(characterId);
-    const maps = detail.data?.id === characterId ? detail.data.maps : [];
-    const mapId = pickMapId(maps, params.get(MAP_PARAM));
-    const write = useSelectionWriter();
     if (characters.isPending)
         return (
             <div
@@ -102,43 +165,22 @@ export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
         return (
             <Empty text="Characters could not be loaded. Try again later." />
         );
-    if (characterId === null)
+    const characterId = pickCharacterId(
+        characters.data,
+        params.get(CHARACTER_PARAM),
+        viewerId,
+    );
+    if (characterId === null) {
         return (
             <Empty text="No characters on this server yet. Join with the Valheim Link mod to upload one." />
         );
+    }
     return (
-        <div className="grid gap-3">
-            <div className="flex flex-wrap gap-3">
-                <Picker
-                    id="valheim-map-character"
-                    label="Character"
-                    value={characterId}
-                    options={sortByName(rows).map((r) => ({
-                        id: r.id,
-                        label: r.name,
-                    }))}
-                    onPick={(id) => write(id, null)}
-                />
-                {maps.length > 1 && mapId !== null && (
-                    <Picker
-                        id="valheim-map-world"
-                        label="World"
-                        value={mapId}
-                        options={maps.map((m) => ({
-                            id: m.id,
-                            label: worldLabel(m),
-                        }))}
-                        onPick={(id) => write(characterId, id)}
-                    />
-                )}
-            </div>
-            {mapId !== null && (
-                <ValheimMapView characterId={characterId} mapId={mapId} />
-            )}
-            {mapId === null && !detail.isPending && (
-                <Empty text="This character has no map uploaded yet." />
-            )}
-        </div>
+        <CharacterMap
+            rows={characters.data}
+            characterId={characterId}
+            param={params.get(MAP_PARAM)}
+        />
     );
 }
 

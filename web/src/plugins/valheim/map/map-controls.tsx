@@ -99,35 +99,49 @@ function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
     );
 }
 
+/** ≥1024px: the switches inline; below it a Layers button + BottomSheet. */
+function LayersPanel({
+    wide,
+    layers,
+}: {
+    wide: boolean;
+    layers: MapLayerState;
+}) {
+    const [sheetOpen, setSheetOpen] = useState(false);
+    if (wide) {
+        return (
+            <div className="w-64 rounded-lg border border-edge bg-surface px-3 py-1">
+                <LayerSwitches {...layers} />
+            </div>
+        );
+    }
+    return (
+        <>
+            <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-11"
+                onClick={() => setSheetOpen(true)}
+            >
+                Layers
+            </Button>
+            <BottomSheet
+                isOpen={sheetOpen}
+                onClose={() => setSheetOpen(false)}
+                title="Layers"
+            >
+                <LayerSwitches {...layers} />
+            </BottomSheet>
+        </>
+    );
+}
+
 export function MapControls({ commands, ...layers }: MapControlsProps) {
     const wide = useMediaQuery('(min-width: 1024px)');
-    const [sheetOpen, setSheetOpen] = useState(false);
     return (
         <div className="flex flex-col items-end gap-2">
             <ZoomButtons commands={commands} />
-            {wide ? (
-                <div className="w-64 rounded-lg border border-edge bg-surface px-3 py-1">
-                    <LayerSwitches {...layers} />
-                </div>
-            ) : (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    className="min-h-11"
-                    onClick={() => setSheetOpen(true)}
-                >
-                    Layers
-                </Button>
-            )}
-            {!wide && (
-                <BottomSheet
-                    isOpen={sheetOpen}
-                    onClose={() => setSheetOpen(false)}
-                    title="Layers"
-                >
-                    <LayerSwitches {...layers} />
-                </BottomSheet>
-            )}
+            <LayersPanel wide={wide} layers={layers} />
         </div>
     );
 }

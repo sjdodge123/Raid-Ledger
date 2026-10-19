@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MapControls, type MapControlsProps } from './map-controls';
 
 let wide = true;
@@ -66,11 +66,13 @@ describe('MapControls (ROK-1837 D9)', () => {
     it('<1024px: the switches live in a Layers bottom sheet', () => {
         wide = false;
         render(<MapControls {...props()} />);
-        expect(screen.queryByRole('switch', { name: 'Pin labels' })).toBeNull();
+        expect(screen.queryByRole('dialog')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Layers' }));
         expect(screen.getByRole('dialog')).toHaveTextContent('Layers');
         expect(
-            screen.getByRole('switch', { name: 'Pin labels' }),
+            within(screen.getByRole('dialog')).getByRole('switch', {
+                name: 'Pin labels',
+            }),
         ).toBeInTheDocument();
     });
 });

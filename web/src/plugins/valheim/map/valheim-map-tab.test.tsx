@@ -10,7 +10,8 @@ import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { ValheimMapTab } from './valheim-map-tab';
 
-vi.mock('../../../hooks/use-auth', () => ({
+vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
     useAuth: () => ({ user: { id: 7 } }),
 }));
 vi.mock('./valheim-map-view', () => ({

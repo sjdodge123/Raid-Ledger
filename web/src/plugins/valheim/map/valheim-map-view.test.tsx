@@ -18,7 +18,7 @@ vi.mock('../../../hooks/use-media-query', () => ({
 
 const MAP_URL =
     'http://localhost:3000/plugins/valheim/armory/characters/5/maps/9';
-const SIZE = 16;
+const SIZE = 64;
 const pin = (label: string, shared: boolean) => ({
     type: 'Bed',
     label,
@@ -156,7 +156,9 @@ describe('ValheimMapView (ROK-1837 T6)', () => {
         fireEvent.click(screen.getByRole('switch', { name: 'Pin labels' }));
         expect(screen.getByText('Home')).toHaveAttribute('data-open', 'true');
     });
+});
 
+describe('ValheimMapView states (ROK-1837 T6)', () => {
     it('base map not ready: warning chip, no image request', async () => {
         serve(
             meta({

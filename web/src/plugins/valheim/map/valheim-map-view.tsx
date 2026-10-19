@@ -95,8 +95,54 @@ function BaseMapStatus({ ready, failed }: { ready: boolean; failed: boolean }) {
     );
 }
 
+interface LayerProps {
+    meta: ValheimMapMeta;
+    baseUrl: string | null;
+    personal: Uint8Array | undefined;
+    shared: Uint8Array | null;
+    sharedOn: boolean;
+    pinLabels: boolean;
+}
+
+/** The texture-space stack inside the viewport: base image, fog, pins. */
+function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
+    const { meta, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
+    const size = meta.grid.textureSize;
+    const box = { width: size, height: size };
+    return (
+        <div
+            className="absolute left-0 top-0"
+            style={box}
+            data-zoom={scale.toFixed(2)}
+        >
+            {baseUrl && (
+                <img
+                    src={baseUrl}
+                    alt=""
+                    draggable={false}
+                    className="absolute left-0 top-0"
+                    style={box}
+                />
+            )}
+            {personal && (
+                <FogCanvas
+                    size={size}
+                    personal={personal}
+                    shared={sharedOn ? shared : null}
+                />
+            )}
+            <PinLayer
+                grid={meta.grid}
+                pins={meta.pins}
+                scale={scale}
+                showShared={sharedOn}
+                labels={pinLabels}
+            />
+        </div>
+    );
+}
+
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { meta } = props;
     const [showShared, setShowShared] = useState(false);
     const [pinLabels, setPinLabels] = useState(false);
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
@@ -105,7 +151,6 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
         showShared,
     );
     const sharedOn = showShared && sharedAvailable;
-    const size = meta.grid.textureSize;
     if (personal.error) {
         return (
             <MapError
@@ -114,50 +159,28 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
             />
         );
     }
+    const layers: LayerProps = {
+        meta: props.meta,
+        baseUrl: base.url,
+        personal: personal.data,
+        shared: shared.data ?? null,
+        sharedOn,
+        pinLabels,
+    };
     return (
         <div
             className={props.className ? `${FRAME} ${props.className}` : FRAME}
         >
             <MapViewport
-                contentSize={size}
+                contentSize={props.meta.grid.textureSize}
                 label="Valheim map"
                 onCommands={setCommands}
                 className="absolute inset-0"
             >
-                {(vp) => (
-                    <div
-                        className="absolute left-0 top-0"
-                        style={{ width: size, height: size }}
-                        data-zoom={vp.scale.toFixed(2)}
-                    >
-                        {base.url && (
-                            <img
-                                src={base.url}
-                                alt=""
-                                draggable={false}
-                                className="absolute left-0 top-0"
-                                style={{ width: size, height: size }}
-                            />
-                        )}
-                        {personal.data && (
-                            <FogCanvas
-                                size={size}
-                                personal={personal.data}
-                                shared={sharedOn ? (shared.data ?? null) : null}
-                            />
-                        )}
-                        <PinLayer
-                            grid={meta.grid}
-                            pins={meta.pins}
-                            scale={vp.scale}
-                            showShared={sharedOn}
-                            labels={pinLabels}
-                        />
-                    </div>
-                )}
+                {(vp) => <MapLayers layers={layers} scale={vp.scale} />}
             </MapViewport>
             <BaseMapStatus
-                ready={meta.baseMap?.ready === true}
+                ready={props.meta.baseMap?.ready === true}
                 failed={base.error !== null}
             />
             <div className="absolute right-2 top-2 z-10">
@@ -174,6 +197,8 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
     );
 }
 
+const LOADING_CLASS = `${FRAME} rounded-lg border border-edge bg-panel`;
+
 /** One character's map with its controls; loading / error states included. */
 export function ValheimMapView({
     characterId,
@@ -181,15 +206,14 @@ export function ValheimMapView({
     className,
 }: ValheimMapViewProps) {
     const meta = useValheimMapMeta(characterId, mapId);
-    if (meta.isPending) {
+    if (meta.isPending)
         return (
             <div
                 aria-busy="true"
                 aria-label="Loading map"
-                className={`${FRAME} rounded-lg border border-edge bg-panel`}
+                className={LOADING_CLASS}
             />
         );
-    }
     if (meta.error)
         return (
             <MapError
@@ -197,9 +221,10 @@ export function ValheimMapView({
                 onRetry={() => void meta.refetch()}
             />
         );
+    const key = `${characterId}:${mapId}`;
     return (
         <MapReady
-            key={`${characterId}:${mapId}`}
+            key={key}
             characterId={characterId}
             mapId={mapId}
             meta={meta.data}
