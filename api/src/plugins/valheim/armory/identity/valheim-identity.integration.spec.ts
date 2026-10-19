@@ -447,16 +447,25 @@ describe('Valheim armory route guards (ROK-1835 T17, ids)', () => {
   });
 });
 
-/** Poll pg_locks until some session waits on an advisory lock (bounded). */
-async function waitForAdvisoryWaiter(): Promise<void> {
+type Exec = Pick<typeof testApp.db, 'execute'>;
+
+/**
+ * Poll (bounded) until another session is blocked behind `tx`'s backend.
+ * The unlink parks on the `users` row lock BEFORE the advisory lock: the
+ * attach's FK check holds `FOR KEY SHARE` on the user, and clearing the
+ * UNIQUE `users.steam_id` needs `FOR UPDATE`. Any lock type counts — what
+ * matters is that the unlink cannot finish until the attach commits.
+ */
+async function waitForSessionBlockedBy(tx: Exec): Promise<void> {
   for (let i = 0; i < 100; i++) {
-    const rows = (await testApp.db.execute(
-      sql`SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`,
+    const rows = (await tx.execute(
+      sql`SELECT 1 FROM pg_stat_activity
+           WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))`,
     )) as unknown as unknown[];
     if (rows.length > 0) return;
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error('no session waited on the valheim-identity lock');
+  throw new Error('no session blocked behind the in-flight import attach');
 }
 
 /** A linked member + an unclaimed imported profile row for STEAM. */
@@ -494,7 +503,7 @@ describe('Valheim armory attach vs unlink race (ROK-1835 Codex r1)', () => {
     await testApp.db.transaction(async (tx) => {
       await identity().onProfileUpserted(tx, row);
       pending = unlink(token).then((r) => r.status);
-      await waitForAdvisoryWaiter();
+      await waitForSessionBlockedBy(tx);
     });
     expect(await pending).toBe(204);
     expect(await profile(id)).toEqual({ claimedBy: null, claimSource: null });
