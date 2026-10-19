@@ -109,10 +109,10 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     page,
   }, testInfo) => {
     const fixture = await seedMap(testInfo.parallelIndex);
-    test.skip(
-      fixture.guildId === null,
-      "map-fixture returned guildId null: the ROK-1831 game-server hub seam is not on this base, so there is no hub to open",
-    );
+    expect(
+      fixture.guildId,
+      "map-fixture must return the fixture server's hub id",
+    ).not.toBeNull();
     const wide = isDesktop(testInfo);
 
     await page.goto(
