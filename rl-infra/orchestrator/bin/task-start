@@ -144,6 +144,7 @@ INITIAL_JSON=$(jq -nc \
     --arg weight "$WEIGHT" \
     --arg cwd "$CWD" \
     --argjson env "$ENV_JSON" \
+    --arg parent "${RL_PARENT_TASK_ID:-}" \
     '{
         task_id: $task_id,
         tool: $tool,
@@ -163,6 +164,7 @@ INITIAL_JSON=$(jq -nc \
         cancel_reason: null,
         failure_reason: null,
         admission_state: null,
+        parent_task_id: (if ($parent | test("^[a-z0-9]{8,32}$")) then $parent else null end),
         steps: []
     }')
 
