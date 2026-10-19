@@ -119,10 +119,12 @@ test_failed_copy_leaves_b_untouched() {
     local s1="$RL_RUNNERS_DIR/slot-1/worktree" s2="$RL_RUNNERS_DIR/slot-2/worktree" rc=0
     mkdir -p "$s1/a" "$s1/z" "$s2"
     echo new > "$s1/a/one.txt"; echo new > "$s1/z/two.txt"; echo old > "$s2/keep.txt"
-    chmod 000 "$s1/z"
-    borrow::copy_tree 1 2 2>/dev/null || rc=$?
-    chmod 755 "$s1/z"
-    assert_exit_code "$rc" "1" "unreadable source dir -> copy fails"
+    # A failing rsync (a PATH shim, so the case also holds when the runner user is root
+    # and a chmod-000 source would still be readable).
+    local shim="$RL_STATE_DIR/shim-bin"; mkdir -p "$shim"
+    printf '#!/usr/bin/env bash\necho "rsync: simulated failure" >&2; exit 23\n' > "$shim/rsync"; chmod +x "$shim/rsync"
+    PATH="$shim:$PATH" borrow::copy_tree 1 2 2>/dev/null || rc=$?
+    assert_exit_code "$rc" "1" "a failing rsync -> copy fails"
     assert_eq "$(find "$s2" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "keep.txt " "B keeps exactly its old tree (nothing half-copied, nothing deleted)"
     assert_eq "$([[ -e "$RL_RUNNERS_DIR/slot-2/.worktree-staging" ]] && echo left || echo gone)" "gone" "staging dir removed"
     borrow::copy_tree 1 2 >/dev/null 2>&1
