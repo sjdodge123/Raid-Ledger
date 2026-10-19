@@ -77,7 +77,9 @@ describe('Valheim character sections', () => {
         // Fixture accumulator is 0: a fractional level is not XP progress.
         expect(swords).toHaveAttribute('aria-valuenow', '0');
     });
+});
 
+describe('Valheim skill progress', () => {
     it('Skills: progress comes from the accumulator over the next-level XP requirement', () => {
         // Valheim Skill.GetNextLevelRequirement: (floor(level)+1)^1.5 * 0.5 + 0.5
         const need = Math.pow(26, 1.5) * 0.5 + 0.5;
