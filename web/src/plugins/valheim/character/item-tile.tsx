@@ -14,6 +14,7 @@ import {
     type Ref,
 } from 'react';
 import type { ValheimItemStack } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
 import { usePortalTarget } from '../../../components/ui/use-anchored-popup';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import {
@@ -120,7 +121,7 @@ function TileBadges({
             {item.stack > 1 ? (
                 <span
                     aria-hidden="true"
-                    className="absolute bottom-0.5 right-[3px] text-[11px] font-bold text-foreground [text-shadow:0_0_2px_var(--color-backdrop)]"
+                    className="absolute bottom-0.5 right-[3px] text-[11px] font-bold text-foreground drop-shadow-[0_0_2px_var(--color-backdrop)]"
                 >
                     {item.stack}
                 </span>
@@ -165,9 +166,10 @@ function TileButton({
     focusProps,
 }: TileButtonProps): JSX.Element {
     return (
-        <button
+        <Button
             {...focusProps}
             ref={ref}
+            variant="bare"
             type="button"
             title={resolved.label}
             data-kind={resolved.kind}
@@ -179,7 +181,7 @@ function TileButton({
         >
             <ItemIcon resolved={resolved} prefab={item.prefab} ctx={ctx} />
             <TileBadges item={item} equipped={equipped} />
-        </button>
+        </Button>
     );
 }
 
