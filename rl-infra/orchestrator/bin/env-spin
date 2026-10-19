@@ -11,6 +11,7 @@ source "$(dirname "$0")/_state.sh"
 # ROK-1469 — per-slot Discord identity helpers (public_json / payload / value).
 # shellcheck disable=SC1091
 source "$(dirname "$0")/_bot_identity.sh"
+source "$(dirname "$0")/_env_volume.sh"
 
 # ROK-1338 PR-1 fold-in (2026-05-21): emit a structured JSON error if the
 # script aborts via `set -e` before reaching the final happy-path jq emit.
@@ -673,6 +674,13 @@ if docker inspect "$PG_CONTAINER" >/dev/null 2>&1; then
     # Reuse it — never tear it down in the rollback trap.
     ENV_SPIN_PG_REUSED=1
 else
+    # ROK-1846 c6: never mount a runner-created rl-data-<slug> (_env_volume.sh).
+    if ! VOL_ERR=$(env_volume::ensure "$VOL_PG" "$SLUG" 2>&1); then
+        jq -nc --arg slug "$SLUG" --arg vol "$VOL_PG" --arg msg "$VOL_ERR" \
+            '{ok:false, error:"env_volume_preclaimed", slug:$slug, volume:$vol, message:$msg}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
     docker run -d \
         --name "$PG_CONTAINER" \
         --network "$NET" \

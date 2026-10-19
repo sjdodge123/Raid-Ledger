@@ -11,6 +11,7 @@
 
 import path from 'node:path';
 import { foldEach, foldReason } from './key-fold.mjs';
+import { reservedVolumeReason } from './volume-reserve.mjs';
 import { HC_MAY_SET, hostConfigAllowReason, networkingConfigReason } from './host-config-allow.mjs';
 
 export const OWNER_LABEL = 'rl.guard.owner';
@@ -165,6 +166,8 @@ export function checkVolumeCreate(body, { owner }) {
   if (fold) return deny(fold);
   if (typeof body.Driver === 'string' && body.Driver !== '' && body.Driver !== 'local') return deny(`volume driver ${body.Driver} is not allowed`);
   if (nonEmpty(body.DriverOpts)) return deny('volume DriverOpts are not allowed (a local bind in disguise)');
+  const reserved = reservedVolumeReason(body.Name);
+  if (reserved) return deny(reserved);
   const reason = checkLabels(body.Labels);
   if (reason) return deny(reason);
   return { ok: true, body: { ...body, Labels: withOwner(body.Labels, owner) } };

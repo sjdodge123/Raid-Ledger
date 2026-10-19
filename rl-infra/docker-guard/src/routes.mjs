@@ -21,7 +21,10 @@ const ALLOW = {};
 const ownedContainer = { owned: { kind: 'container', group: 1 } };
 
 const ROUTES = [
-  R('GET', '/(_ping|version|info|events)', ALLOW),
+  R('GET', '/(_ping|version|info)', ALLOW),
+  // c6: exec events carry the exec's command line — scoped to the caller's
+  // own objects by a server-side label filter (events-scope.mjs).
+  R('GET', '/events', { events: true }),
   R('HEAD', '/_ping', ALLOW),
   R('GET', '/containers/json', ALLOW),
   // Inspect / logs of another slot's or an env's container would hand a runner
@@ -154,6 +157,7 @@ export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
     const out = { ok: true };
     if (plan.body) out.body = plan.body;
     if (plan.hijack) out.hijack = true;
+    if (plan.events) out.events = true;
     if (plan.context) Object.assign(out, buildFacts(parsed.query));
     if (plan.owned) out.owned = { kind: plan.owned.kind, id: m[plan.owned.group] ?? '' };
     return out;

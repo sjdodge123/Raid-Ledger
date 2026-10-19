@@ -21,15 +21,16 @@ export function wantsUpgrade(headers) {
 /**
  * Pipe req → daemon → res. `body` replaces the request body:
  * { buf: Buffer } (a rewritten JSON body) or { stream, length } (a spooled build context).
+ * `path` replaces the request-target (c6: /events gets a rebuilt query).
  */
-export function forward(socketPath, req, res, body, onError) {
+export function forward(socketPath, req, res, body, onError, path = req.url) {
   const headers = { ...stripHop(req.headers), connection: 'close' };
   const length = body?.buf ? body.buf.length : body?.length;
   if (length !== undefined) {
     delete headers['transfer-encoding'];
     headers['content-length'] = String(length);
   }
-  const up = http.request({ socketPath, method: req.method, path: req.url, headers, agent: false }, (upRes) => {
+  const up = http.request({ socketPath, method: req.method, path, headers, agent: false }, (upRes) => {
     res.writeHead(upRes.statusCode ?? 502, stripHop(upRes.headers));
     upRes.pipe(res);
   });

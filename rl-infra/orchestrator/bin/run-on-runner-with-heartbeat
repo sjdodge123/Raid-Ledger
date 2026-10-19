@@ -202,9 +202,17 @@ fi
 
 # Launch the child in the background so we can fork the heartbeat loop
 # with its PID. Set +e because we capture the child's RC manually.
+# ROK-1846 c6: secrets reach the runner through the exec's Env, never its
+# Cmd — Docker's exec_create / exec_start events carry the Cmd verbatim.
+# `-e NAME` (no value) makes the CLI copy NAME from this process's env.
+PASS_ENV_FLAGS=()
+for _secret in ADMIN_PASSWORD; do
+    [[ -n "${!_secret:-}" ]] && PASS_ENV_FLAGS+=(-e "$_secret")
+done
 set +e
 docker exec $EXEC_FLAGS \
     -w /workspace \
+    ${PASS_ENV_FLAGS[@]+"${PASS_ENV_FLAGS[@]}"} \
     -e RL_SLOT="$SLOT" \
     -e RL_TARGET=runner \
     ${TASK_MARKER_FLAGS[@]+"${TASK_MARKER_FLAGS[@]}"} \

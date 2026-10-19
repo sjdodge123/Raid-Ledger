@@ -18,6 +18,8 @@ import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
 import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
 import { namedVolumeRefs } from './volume-refs.mjs';
+import { reservedVolumeReason } from './volume-reserve.mjs';
+import { scopedEventsUrl } from './events-scope.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 415: 'Unsupported Media Type' };
@@ -79,6 +81,8 @@ async function authorize(req, plan) {
   if (target !== null && !(await owns('container', target, owner))) return { reason: `container ${target} is not owned by ${owner.owner}` };
   if (plan.body === 'container-create') {
     for (const name of namedVolumeRefs(verdict.body)) {
+      const reserved = reservedVolumeReason(name);
+      if (reserved) return { reason: reserved };
       if (!(await ensureOwnedVolume(SOCKET, name, owner, OWNER_LABEL))) return { reason: `volume ${name} is not owned by ${owner.owner}` };
     }
   }
@@ -94,7 +98,21 @@ async function onRequest(req, res) {
   const auth = await authorize(req, plan);
   if (auth.reason) return refuse(res, auth.reason);
   if (plan.context) return forwardBuild(req, res, plan);
+  if (plan.events) return forwardEvents(req, res);
   forward(SOCKET, req, res, auth.body ? { buf: auth.body } : undefined, (r) => refuse(res, r, 502));
+}
+
+/** /events: only the caller's own objects (events-scope.mjs). */
+async function forwardEvents(req, res) {
+  const owner = await runnerForAddress(SOCKET, req.socket.remoteAddress);
+  if (!owner) return refuse(res, `caller ${req.socket.remoteAddress} is not a known runner`);
+  let url;
+  try {
+    url = scopedEventsUrl(req.url ?? '/events', owner);
+  } catch (e) {
+    return refuse(res, `bad_request_target: ${e.message}`, 400);
+  }
+  forward(SOCKET, req, res, undefined, (r) => refuse(res, r, 502), url);
 }
 
 /** /build: spool + inspect the context, then stream the spooled copy upstream. */
