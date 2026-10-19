@@ -21,8 +21,8 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 }));
 
 const ONBOARDING = 'http://localhost:3000/guilds/onboarding';
-const PROFILE = 'http://localhost:3000/plugins/wow/guilds/7/profile';
-const DISCORD = 'http://localhost:3000/plugins/wow/guilds/7/discord';
+const PROFILE = 'http://localhost:3000/guilds/7/profile';
+const DISCORD = 'http://localhost:3000/guilds/7/discord';
 const EMPTY_PROFILE: GuildProfile = { guildId: 7, gmPost: null, rules: [], links: [] };
 const UNSET: GuildDiscordMirrorDto = { state: 'unset' };
 

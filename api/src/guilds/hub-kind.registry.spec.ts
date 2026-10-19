@@ -27,6 +27,8 @@ function testHubKind(role: LadderRole): HubKindAdapter {
     memberGroupIds: () => Promise.resolve([1]),
     rankNames: () => Promise.resolve(new Map<number, string | null>()),
     isLiveMember: () => Promise.resolve(true),
+    page: () => Promise.reject(new Error('unused')),
+    raids: () => Promise.reject(new Error('unused')),
   };
 }
 

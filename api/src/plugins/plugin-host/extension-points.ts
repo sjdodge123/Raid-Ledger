@@ -24,6 +24,8 @@ import type {
   GameServerStatusDto,
   UpdateCharacterDto,
   GuildKind,
+  GuildPage,
+  GuildRaidsDto,
   LadderRole,
   UserRole,
 } from '@raid-ledger/contract';
@@ -249,8 +251,11 @@ export interface GameLogParser {
  * Core never imports the guild plugin; it resolves this adapter instead.
  */
 export interface EventGuildTagger {
-  /** Owning plugin id — core treats tagging as unavailable while inactive. */
-  readonly pluginSlug: string;
+  /**
+   * Owning plugin id — core treats tagging as unavailable while inactive.
+   * `null` = core-owned (ROK-1831: the kind-agnostic hub tagger), always on.
+   */
+  readonly pluginSlug: string | null;
   /** Throws (400 unknown guild / wrong game, 403 not an editor) to refuse. */
   assertCanTag(
     actor: { id: number; role: UserRole },
@@ -283,6 +288,30 @@ export interface HubKindAdapter {
   rankNames(groupId: number): Promise<Map<number, string | null>>;
   /** Is this member-row id a live member of the group (member grants)? */
   isLiveMember(groupId: number, memberId: number): Promise<boolean>;
+  /** ROK-1831: the hub page for this kind (403 non-viewer, 404 missing). */
+  page(
+    actor: { id: number; role: UserRole },
+    groupId: number,
+  ): Promise<GuildPage>;
+  /** ROK-1831: the Raids tab + Overview widgets for this kind. */
+  raids(
+    actor: { id: number; role: UserRole },
+    groupId: number,
+  ): Promise<GuildRaidsDto>;
+  /**
+   * ROK-1831: the viewer's best rank per group for `GET guilds/mine`, keyed by
+   * group id. Optional — a kind without ranks omits it (both fields null).
+   */
+  mineRanks?(
+    userId: number,
+    groupIds: number[],
+  ): Promise<Map<number, HubMineRank>>;
+}
+
+/** ROK-1831: one row of `HubKindAdapter.mineRanks`. */
+export interface HubMineRank {
+  rankIndex: number | null;
+  rankName: string | null;
 }
 
 /** Well-known extension point identifiers */

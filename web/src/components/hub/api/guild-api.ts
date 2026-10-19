@@ -1,12 +1,13 @@
 /**
- * ROK-1785 (S1 of ROK-1781): guild page API calls — `/plugins/wow/guilds`.
+ * ROK-1785 (S1 of ROK-1781): guild page API calls — core `/guilds/:id` (ROK-1831).
  * WoW-plugin owned (spec D1); every response is parsed by its contract schema.
  */
 import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { GuildEditorListSchema, GuildEditorSchema, GuildPageSchema, GuildRaidsSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 
-const BASE = '/plugins/wow/guilds';
+/** Core hub routes (ROK-1831) — every hub kind; WoW's `/plugins/wow/guilds` alias still answers. */
+const BASE = '/guilds';
 
 /** Hero + roster by rank + the viewer's access. 403 when the viewer isn't a member. */
 export function fetchGuildPage(guildId: number): Promise<GuildPage> {

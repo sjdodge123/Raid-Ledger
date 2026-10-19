@@ -11,7 +11,7 @@ import { usePluginStore } from '../../../stores/plugin-store';
 import { getSlotRegistrations } from '../../plugin-registry';
 import { PelicanServerCard, PelicanServerRow, type ServerUpdateHandler } from './pelican-server-row';
 
-const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Detect Quick Play', 'Last synced'] as const;
+const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Detect Quick Play', 'Community hub', 'Last synced'] as const;
 /** Only shown while an active plugin fills `pelican-server:row-extras` (ROK-1833). */
 const EXTRAS_HEADER = 'Mod link';
 

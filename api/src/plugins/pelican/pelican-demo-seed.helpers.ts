@@ -1,5 +1,6 @@
 import { and, asc, eq, notInArray } from 'drizzle-orm';
 import { QUICK_PLAY_FIXTURE_UUIDS } from './pelican-demo-quick-play-seed.helpers';
+import { SERVER_HUB_FIXTURE_UUIDS } from './pelican-demo-seed-hub.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -105,11 +106,16 @@ function schedulesFor(
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-/** Delete every server row (schedules cascade) but the Quick Play fixture. */
+/** Delete every server row (schedules cascade) but the smoke fixture rows. */
 function wipeDemoRows(tx: Tx) {
   return tx
     .delete(pelicanServers)
-    .where(notInArray(pelicanServers.panelUuid, QUICK_PLAY_FIXTURE_UUIDS));
+    .where(
+      notInArray(pelicanServers.panelUuid, [
+        ...QUICK_PLAY_FIXTURE_UUIDS,
+        ...SERVER_HUB_FIXTURE_UUIDS,
+      ]),
+    );
 }
 
 /**

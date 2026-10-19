@@ -36,7 +36,7 @@ const BLOB_CACHE = 'private, max-age=31536000, immutable';
  * replaces it with the immutable policy.
  */
 @Injectable()
-class NoStoreByDefault implements NestInterceptor {
+export class NoStoreByDefault implements NestInterceptor {
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
     ctx.switchToHttp().getResponse<Response>().set('Cache-Control', 'no-store');
     return next.handle();
@@ -52,12 +52,16 @@ class Sha256Pipe implements PipeTransform<unknown, string> {
   }
 }
 
-async function openBlob(absPath: string): Promise<FileHandle> {
+/** Open a stored blob read-only; ENOENT → 404 with `notFound`. */
+export async function openBlob(
+  absPath: string,
+  notFound = 'Blob not found',
+): Promise<FileHandle> {
   try {
     return await open(absPath, 'r');
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException | null)?.code;
-    if (code === 'ENOENT') throw new NotFoundException('Blob not found');
+    if (code === 'ENOENT') throw new NotFoundException(notFound);
     throw err;
   }
 }

@@ -1,10 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { GuildKind, LadderRole } from '@raid-ledger/contract';
+import type {
+  GuildKind,
+  GuildPage,
+  GuildRaidsDto,
+  LadderRole,
+} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
-import type { HubKindAdapter } from '../../plugin-host/extension-points';
+import type {
+  HubKindAdapter,
+  HubMineRank,
+} from '../../plugin-host/extension-points';
 import { isStaff, type GuildActor } from '../../../guilds/guild-access.service';
 import { WOW_COMMON_MANIFEST } from '../manifest';
 import {
@@ -13,6 +21,8 @@ import {
   type LinkedMemberRow,
 } from './guild-membership.helpers';
 import { rankNamesInSnapshot } from './guild-queries.helpers';
+import { GuildPageService } from './guild-page.service';
+import { GuildRaidsService } from './guild-raids.service';
 
 /** The guild master is rank 0 — the only built-in rank meaning (spec §3). */
 export const GM_RANK_INDEX = 0;
@@ -42,7 +52,27 @@ export class WowHubKindAdapter implements HubKindAdapter {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly pages: GuildPageService,
+    private readonly raidsSvc: GuildRaidsService,
   ) {}
+
+  /** ROK-1831: core `GET guilds/:id` — WoW's page, unchanged. */
+  page(actor: GuildActor, guildId: number): Promise<GuildPage> {
+    return this.pages.page(actor, guildId);
+  }
+
+  /** ROK-1831: core `GET guilds/:id/raids` — WoW's raids, unchanged. */
+  raids(actor: GuildActor, guildId: number): Promise<GuildRaidsDto> {
+    return this.raidsSvc.raids(actor, guildId);
+  }
+
+  /** ROK-1831: core `GET guilds/mine` rank columns. */
+  mineRanks(
+    userId: number,
+    guildIds: number[],
+  ): Promise<Map<number, HubMineRank>> {
+    return this.pages.mineRanks(userId, guildIds);
+  }
 
   async isMember(userId: number, guildId: number): Promise<boolean> {
     const rows = await findLinkedMemberRows(this.db, userId, guildId);
