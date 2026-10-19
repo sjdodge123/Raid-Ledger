@@ -54,6 +54,15 @@ export class NotificationDedupService {
   }
 
   /**
+   * ROK-1832 D6b: read-only — has `dedupKey` been claimed (and not expired)?
+   * Never marks; use `checkAndMarkSent` to claim.
+   */
+  async isMarked(dedupKey: string): Promise<boolean> {
+    if (await this.redis.get(dedupKey)) return true;
+    return this.findValidDbRecord(dedupKey);
+  }
+
+  /**
    * Give back a claim made by `checkAndMarkSent`.
    *
    * Used when the send the claim was made for failed: leaving the key in place
