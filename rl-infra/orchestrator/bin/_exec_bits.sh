@@ -36,39 +36,44 @@
 # environment failure is tellable apart in a log from the shell's own
 # "found but not executable" that it replaces.
 EXEC_BITS_FATAL_CODE=97
-EXEC_BITS_SCRIPT="/workspace/rl-infra/runner/restore-exec-bits.sh"
+EXEC_BITS_PURGE_FATAL_CODE=96
+# ROK-1849 Codex r2 — the scripts run before dispatch come from the
+# orchestrator's OWN rl-infra checkout (this file's ../../runner), streamed into
+# the container over stdin (`bash -s`). The /workspace copies are branch content:
+# executing them while previously-synced secrets may still be readable would let
+# a hostile branch exfiltrate them or skip the purge. Nothing under /workspace
+# executes until the trusted purge has succeeded for this dispatch.
+EXEC_BITS_RUNNER_DIR="${RL_INFRA_RUNNER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../runner" 2>/dev/null && pwd)}"
 
-# Re-assert /workspace's exec bits inside $1 (a runner container) before the
-# caller's command is dispatched.
-#
-# Returns 0 when the tree is executable (or when there is no repair script to
-# run — see below), 97 when the tree exists but could not be repaired.
-#
-# Three deliberate details:
-#   * Invoked with an EXPLICIT `bash`. The repair script is synced through the
-#     same permission-stripping path as everything it repairs, so it cannot rely
-#     on its own exec bit — that is precisely how it would fail.
-#   * A MISSING repair script is a warning, not a failure. A worktree may
-#     legitimately predate it (older branch, mid-bisect); hard-failing would make
-#     every claim on such a branch unrunnable for a problem it doesn't have.
-#   * stdin is closed and stdout is captured onto stderr. Callers parse
-#     run-on-runner's stdout (jq envelopes, the MCP sync-guard's sentinel probe)
-#     and pipe scripts into its stdin (`bash -s <<<"$script"`); the repair must
-#     consume neither.
+# Stream one trusted runner/ script into $1 as `bash -s -- /workspace`.
+# stdout is captured (callers parse run-on-runner's stdout), stdin is the
+# script file, never the caller's stdin.
+exec_bits::_stream() {
+    local container="$1" script="$EXEC_BITS_RUNNER_DIR/$2"
+    if [[ ! -f "$script" ]]; then
+        echo "rl-exec-bits: operator script missing: $script" >&2
+        return 2
+    fi
+    docker exec -i -w /workspace "$container" bash -s -- /workspace < "$script" 2>&1
+}
+
+# Pre-dispatch: (1) purge synced .env secrets, (2) repair exec bits — both from
+# the orchestrator's own checkout. Returns 0 when ready, 96 when the purge failed
+# (nothing is dispatched), 97 when the tree could not be made executable.
 exec_bits::ensure_before_dispatch() {
     local container="$1"
-    [[ "${RL_SKIP_EXEC_BITS:-0}" == "1" ]] && return 0
     [[ -z "$container" ]] && return 0
-
     local out rc=0
-    out=$(docker exec -w /workspace "$container" bash -c '
-        if [[ ! -f "$1" ]]; then
-            echo "rl-exec-bits: WARN no repair script at $1 — skipping the pre-dispatch repair" >&2
-            exit 0
-        fi
-        exec bash "$1" /workspace
-    ' _ "$EXEC_BITS_SCRIPT" 2>&1 </dev/null) || rc=$?
-
+    out=$(exec_bits::_stream "$container" purge-synced-secrets.sh) || rc=$?
+    if (( rc != 0 )); then
+        [[ -n "$out" ]] && printf '%s\n' "$out" >&2
+        echo "[rl] FATAL pre-dispatch secret purge failed on $container (rc=$rc) — refusing to dispatch." >&2
+        return "$EXEC_BITS_PURGE_FATAL_CODE"
+    fi
+    [[ -n "$out" ]] && printf '%s\n' "$out" >&2
+    [[ "${RL_SKIP_EXEC_BITS:-0}" == "1" ]] && return 0
+    rc=0
+    out=$(exec_bits::_stream "$container" restore-exec-bits.sh) || rc=$?
     if (( rc != 0 )); then
         {
             [[ -n "$out" ]] && printf '%s\n' "$out"
