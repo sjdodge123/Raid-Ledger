@@ -71,7 +71,7 @@ function serve(m: ValheimMapMeta, opts: ServeOpts = {}) {
         http.get(
             `${MAP_URL}/base-map`,
             () =>
-                new HttpResponse(new Blob(['png']), {
+                new HttpResponse(new TextEncoder().encode('png'), {
                     headers: { 'Content-Type': 'image/png' },
                 }),
         ),

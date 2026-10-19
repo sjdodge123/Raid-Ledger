@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import type { ValheimMapGrid, ValheimMapPin } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
 import { worldToScreen } from './valheim-grid';
 import {
     PIN_CHECKED_CLASS,
@@ -119,7 +120,8 @@ function PinButton(props: PinButtonProps) {
     const { pin, grid, scale, open, dismissed, labels, callbacks } = props;
     const text = pinDisplayLabel(pin.label, pin.type);
     return (
-        <button
+        <Button
+            variant="bare"
             type="button"
             aria-label={pinAccessibleName(pin)}
             aria-expanded={open}
@@ -134,7 +136,7 @@ function PinButton(props: PinButtonProps) {
                 dismissed={dismissed}
                 shown={open || labels || scale >= PIN_LABELS_ALWAYS_SCALE}
             />
-        </button>
+        </Button>
     );
 }
 
