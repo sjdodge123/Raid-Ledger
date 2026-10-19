@@ -5,9 +5,10 @@
  * bare one with `withCatalog: false`; `claimedBy` claims it. 403 without
  * DEMO_MODE.
  */
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import type { Response } from 'superagent';
 import { ValheimCharacterDetailSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -32,6 +33,7 @@ const PNG_SIGNATURE = Buffer.from([
 ]);
 
 let testApp: TestApp;
+let blobDir: string;
 let adminToken: string;
 
 const registry = () => testApp.app.get(PluginRegistryService);
@@ -66,9 +68,8 @@ async function readDetail(id: number, token: string) {
 }
 
 beforeAll(async () => {
-  process.env.VALHEIM_LINK_BLOB_DIR = await mkdtemp(
-    join(tmpdir(), 'vh-armory-seed-'),
-  );
+  blobDir = await mkdtemp(join(tmpdir(), 'vh-armory-seed-'));
+  process.env.VALHEIM_LINK_BLOB_DIR = blobDir;
   testApp = await getTestApp();
 });
 
@@ -161,6 +162,18 @@ describe('POST /admin/test/valheim/armory-character (ROK-1836 D8)', () => {
   });
 });
 
+describe('armory-character atlas write (ROK-1836 follow-up)', () => {
+  it('re-seeding replaces the atlas PNG atomically (a new file, never truncated in place)', async () => {
+    const first = await seed();
+    const before = await stat(await atlasPath(first.serverId));
+    const again = await seed();
+    const after = await stat(await atlasPath(again.serverId));
+    expect({ replacedInode: after.ino !== before.ino }).toEqual({
+      replacedInode: true,
+    });
+  });
+});
+
 describe('armory-character keys + claimant check (ROK-1836 M2, m2)', () => {
   it('seeds c1 + c2 + c3 on one hub; c3 carries EAQS rows + a modded prefab; re-running c1 keeps all three', async () => {
     const c1 = await seed({ key: 'c1' });
@@ -239,3 +252,15 @@ describe('armory-character guildId (ROK-1836 follow-up)', () => {
     expect((await seed()).guildId).toBe(hub.id);
   });
 });
+async function atlasPath(serverId: number): Promise<string> {
+  const B = schema.valheimLinkBlobs;
+  const rows = await testApp.db
+    .select({ rel: B.storagePath, w: B.width })
+    .from(B)
+    .where(eq(B.pelicanServerId, serverId));
+  const [row] = nonEmpty(
+    rows.filter((r) => r.w === 256),
+    'atlas blob row',
+  );
+  return join(blobDir, row.rel);
+}
