@@ -74,7 +74,33 @@ describe('Valheim character sections', () => {
         const swords = within(section('Skills')).getByRole('meter', {
             name: 'Swords progress to level 35',
         });
-        expect(swords).toHaveAttribute('aria-valuenow', '25');
+        // Fixture accumulator is 0: a fractional level is not XP progress.
+        expect(swords).toHaveAttribute('aria-valuenow', '0');
+    });
+
+    it('Skills: progress comes from the accumulator over the next-level XP requirement', () => {
+        // Valheim Skill.GetNextLevelRequirement: (floor(level)+1)^1.5 * 0.5 + 0.5
+        const need = Math.pow(26, 1.5) * 0.5 + 0.5;
+        renderWithProviders(
+            <ValheimCharacterSections
+                character={valheimSheetFixture({
+                    skills: [
+                        { id: 'Swords', level: 25, accumulator: need / 2 },
+                        { id: 'Run', level: 100, accumulator: 0 },
+                    ],
+                })}
+            />,
+        );
+        const meter = (name: string) =>
+            within(section('Skills')).getByRole('meter', { name });
+        expect(meter('Swords progress to level 26')).toHaveAttribute(
+            'aria-valuenow',
+            '50',
+        );
+        expect(meter('Run progress to level 100')).toHaveAttribute(
+            'aria-valuenow',
+            '100',
+        );
     });
 });
 

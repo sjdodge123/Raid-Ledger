@@ -168,6 +168,32 @@ describe('claim flow (cont.)', () => {
     });
 });
 
+describe('owner dialogs — closed on a phone', () => {
+    it('a closed claim confirm or owner sheet leaves no control in the accessibility tree', () => {
+        media.desktop = false;
+        renderActions(valheimCharacterUnclaimed, admin);
+        expect(claimButton()).toBeInTheDocument();
+        expect(ownerButton()).toBeInTheDocument();
+        for (const name of [
+            'Close',
+            'Cancel',
+            'Claim',
+            'Assign',
+            'Remove owner',
+        ]) {
+            expect(
+                screen.queryAllByRole('button', { name, hidden: true }),
+            ).toEqual([]);
+        }
+        expect(screen.queryAllByRole('dialog', { hidden: true })).toEqual([]);
+        expect(screen.queryAllByRole('combobox', { hidden: true })).toEqual([]);
+        expect(screen.queryAllByRole('searchbox', { hidden: true })).toEqual(
+            [],
+        );
+        expect(screen.queryAllByRole('textbox', { hidden: true })).toEqual([]);
+    });
+});
+
 async function openSheet() {
     const bodies: unknown[] = [];
     server.use(
