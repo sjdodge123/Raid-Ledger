@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "created_from_poll_id" integer;

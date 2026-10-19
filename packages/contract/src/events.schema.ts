@@ -71,6 +71,11 @@ export const CreateEventSchema = z
      *  Only an editor of that guild (or an admin) may set it; the guild must
      *  belong to the event's game, so a gameId is required. */
     guildId: z.number().int().positive().optional(),
+    /** ROK-1844: the standalone scheduling poll (match id) this event is
+     *  created from (`/events/new?matchId=`). Persisted as
+     *  `events.created_from_poll_id`; completing that poll may sign its
+     *  yes-voters up to this event and to no other unlinked event. */
+    schedulingMatchId: z.number().int().positive().optional(),
   })
   .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
     message: "Start time must be before end time",

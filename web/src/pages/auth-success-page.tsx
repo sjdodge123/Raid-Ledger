@@ -11,6 +11,7 @@ import { consumePendingPollShare } from '../lib/poll-share-redirect';
 import { joinIntentPath, type StoredJoinIntent } from './join-intent-path';
 import { setCapturedQueryToken } from '../lib/query-token-capture';
 import { nativeFetch } from '../lib/api/native-fetch';
+import { tryEncodePathSegment } from '../lib/api/path-segment';
 
 /**
  * Handles OAuth callback - exchanges one-time auth code for JWT token.
@@ -106,11 +107,22 @@ async function exchangeAuthCode(code: string) {
     return TokenResponseSchema.parse(await response.json());
 }
 
+/**
+ * ROK-1845: the invite code is echoed back by the callback URL or parked in
+ * sessionStorage — encode it so it cannot step out of `/i/:code`. Null when
+ * the value cannot be a path segment (the redirect is skipped).
+ */
+function invitePath(code: string): string | null {
+    const segment = tryEncodePathSegment(code);
+    return segment === null ? null : `/i/${segment}?claim=1`;
+}
+
 function resolveNewUserRedirect(searchParams: URLSearchParams, navigate: ReturnType<typeof useNavigate>) {
     const pendingInvite = searchParams.get('invite') || sessionStorage.getItem('invite_code');
-    if (pendingInvite) {
-        sessionStorage.removeItem('invite_code');
-        navigate(`/i/${pendingInvite}?claim=1`, { replace: true });
+    if (pendingInvite) sessionStorage.removeItem('invite_code');
+    const pendingPath = pendingInvite ? invitePath(pendingInvite) : null;
+    if (pendingPath) {
+        navigate(pendingPath, { replace: true });
         return true;
     }
     // ROK-1750 (D5): a private poll's share link — its page parks the token
@@ -143,9 +155,10 @@ function resolveExistingUserRedirect(searchParams: URLSearchParams, navigate: Re
         } catch { /* fall through */ }
     }
     const inviteCode = searchParams.get('invite') || sessionStorage.getItem('invite_code');
-    if (inviteCode) {
-        sessionStorage.removeItem('invite_code');
-        navigate(`/i/${inviteCode}?claim=1`, { replace: true });
+    if (inviteCode) sessionStorage.removeItem('invite_code');
+    const invite = inviteCode ? invitePath(inviteCode) : null;
+    if (invite) {
+        navigate(invite, { replace: true });
         return true;
     }
     return false;

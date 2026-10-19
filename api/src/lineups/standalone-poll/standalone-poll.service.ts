@@ -132,12 +132,24 @@ export class StandalonePollService {
   ): Promise<boolean> {
     // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
     // SE recreated) — restrict it to the poll/event owner or an admin.
-    await assertCanCompletePoll(this.db, matchId, creatorId ?? -1, isAdmin);
+    // ROK-1844: every completion is owner/staff-only, and `eventId` must be
+    // the caller's and come from this poll — checked before anything changes.
+    await assertCanCompletePoll(
+      this.db,
+      matchId,
+      { id: creatorId ?? -1, isAdmin },
+      { eventId, startTime },
+    );
     const result = await completeStandalonePoll(this.db, matchId);
+    if (result.conflict) {
+      throw new ConflictException('This poll has already been completed');
+    }
     // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
     // embed so its author line and colour follow.
     if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
-    if (result.ok && eventId) {
+    // The contract requires `startTime` with `eventId`; only that slot's
+    // yes-voters are signed up (ROK-1844), never every yes-voter.
+    if (result.ok && eventId && startTime) {
       this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
         (err) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -145,35 +157,38 @@ export class StandalonePollService {
         },
       );
     }
-    // ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
-    // embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
-    // at the (already-moved) winning time. Skip for an event cancelled
-    // mid-poll: the re-emit would recreate a Discord SE for a dead event.
     if (result.ok && result.linkedEventId && !result.linkedEventCancelled) {
-      this.eventsService
-        .emitLifecycleEvent(result.linkedEventId, APP_EVENT_EVENTS.UPDATED)
-        .catch(noop);
-      // ROK-1392: the UPDATED re-emit recreates the Scheduled Event, but its
-      // embed re-render is fire-and-forget — on a quiet server nothing else
-      // enqueues an embed sync, so the card can stay stuck on RESCHEDULING
-      // until unrelated traffic heals it. completeStandalonePoll has already
-      // cleared reschedulingPollId, so enqueue an explicit level-triggered
-      // sync now: the processor reads the (cleared) flag and restores the live
-      // embed deterministically. Symmetric to the poll-start RESCHEDULING
-      // teardown's updateEmbedState.
-      await this.embedSyncQueue.enqueue(
-        result.linkedEventId,
-        'reschedule-poll-lockin',
-      );
+      await this.reemitLinkedEvent(result.linkedEventId);
     }
     return result.ok;
+  }
+
+  /**
+   * ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
+   * embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
+   * at the (already-moved) winning time. The caller skips an event cancelled
+   * mid-poll: the re-emit would recreate a Discord SE for a dead event.
+   */
+  private async reemitLinkedEvent(linkedEventId: number): Promise<void> {
+    this.eventsService
+      .emitLifecycleEvent(linkedEventId, APP_EVENT_EVENTS.UPDATED)
+      .catch(noop);
+    // ROK-1392: the UPDATED re-emit recreates the Scheduled Event, but its
+    // embed re-render is fire-and-forget — on a quiet server nothing else
+    // enqueues an embed sync, so the card can stay stuck on RESCHEDULING
+    // until unrelated traffic heals it. completeStandalonePoll has already
+    // cleared reschedulingPollId, so enqueue an explicit level-triggered
+    // sync now: the processor reads the (cleared) flag and restores the live
+    // embed deterministically. Symmetric to the poll-start RESCHEDULING
+    // teardown's updateEmbedState.
+    await this.embedSyncQueue.enqueue(linkedEventId, 'reschedule-poll-lockin');
   }
 
   /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
   private async fireAutoSignup(
     matchId: number,
     eventId: number,
-    startTime?: string,
+    startTime: string,
     creatorId?: number,
   ): Promise<void> {
     const slots = await findScheduleSlots(this.db, matchId);
@@ -197,20 +212,18 @@ export class StandalonePollService {
     // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
     // name the DMs below announce.
     const gameName = await heartPollGameForVoters(this.db, matchId, allVoters);
-    if (startTime) {
-      await notifyPollVoters(
-        {
-          db: this.db,
-          settingsService: this.settingsService,
-          notifications: this.notifications,
-        },
-        selectedVoters,
-        otherVoters,
-        startTime,
-        eventId,
-        gameName ?? 'Game Night',
-      );
-    }
+    await notifyPollVoters(
+      {
+        db: this.db,
+        settingsService: this.settingsService,
+        notifications: this.notifications,
+      },
+      selectedVoters,
+      otherVoters,
+      startTime,
+      eventId,
+      gameName ?? 'Game Night',
+    );
   }
 
   /**

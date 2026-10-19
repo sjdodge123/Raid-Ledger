@@ -50,6 +50,7 @@ const startServer = async (stateDir) => {
       ...process.env,
       PORT: '0',
       STATE_DIR: stateDir,
+      RL_AGENT_TOKEN: 'test-token-not-used', // ROK-1847 — plan PUT needs it
       TEST_PLANS_DIR: plansDir,
       PUBLIC_DIR,
       NODE_ENV: 'test',
@@ -96,7 +97,7 @@ const startServer = async (stateDir) => {
 const putPlan = (base, slug, planId) =>
   fetch(`${base}/api/test-plans/${slug}/${planId}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({
       goal: 'validate the participants flow',
       story_id: 'ROK-1346',

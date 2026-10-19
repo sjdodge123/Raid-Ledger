@@ -267,6 +267,10 @@ services:
       # host path may not exist yet.
       - ./dashboard/public:/app/public:ro
       - ./dashboard/server.js:/app/server.js:ro
+      # ROK-1847: server.js imports ./plan-auth.js, so the two must mount
+      # together — a server.js-only mount loads new code against the image's
+      # (missing or stale) plan-auth.js and crash-loops on ERR_MODULE_NOT_FOUND.
+      - ./dashboard/plan-auth.js:/app/plan-auth.js:ro
     labels:
       rl.role: infra
 

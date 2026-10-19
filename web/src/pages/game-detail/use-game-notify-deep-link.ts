@@ -8,10 +8,12 @@
  * `searchParams` captured at render, so two hooks each stripping their own
  * param in the same tick would each re-add the other's — the reason this
  * replaces `useNotifReadSync` on this page instead of running beside it.
+ * ROK-1845: only a UUID `?notif=` is marked read; any value is stripped.
  */
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNotifications } from '../../hooks/use-notifications';
+import { isUuid } from '../../lib/is-uuid';
 
 export const NOTIFY_ACTION = 'notifications';
 
@@ -23,7 +25,7 @@ export function useGameNotifyDeepLink(ready: boolean, openPanel: () => void): vo
         const notifId = searchParams.get('notif');
         const opens = ready && searchParams.get('action') === NOTIFY_ACTION;
         if (!notifId && !opens) return;
-        if (notifId) markRead(notifId);
+        if (notifId && isUuid(notifId)) markRead(notifId);
         if (opens) openPanel();
         const next = new URLSearchParams(searchParams);
         if (notifId) next.delete('notif');
