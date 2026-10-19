@@ -10,6 +10,8 @@ CURRENT_TEST_FILE="gate-fanout.test.sh"
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$TEST_DIR/test_helpers.sh"
+# shellcheck disable=SC1091
+source "$TEST_DIR/drain_shim.sh"
 
 P="fanoutpar01"
 
@@ -62,8 +64,8 @@ SH
 #!/usr/bin/env bash
 echo "serial agent=${RL_AGENT_ID:-} $*" >> "$CALLS"; echo "Build: PASS"; exit "${SHIM_SERIAL_RC:-0}"
 SH
-    # docker: success, except `pgrep` (runner drain) reports no lingering process.
-    printf '#!/usr/bin/env bash\n[[ " $* " == *" pgrep "* ]] && exit 1\nexit 0\n' > "$SHIM_DIR/docker"
+    # docker: success; the runner-drain scan reports no marked process.
+    printf '#!/usr/bin/env bash\n[[ " $* " == *" rl-drain "* ]] && echo drained=0\nexit 0\n' > "$SHIM_DIR/docker"
     printf '#!/usr/bin/env bash\necho "MERGED $1"; exit 0\n' > "$SHIM_DIR/merge"
     chmod +x "$SHIM_DIR"/*
     export RL_GATE_MERGE="$SHIM_DIR/merge"
@@ -229,25 +231,14 @@ test_b_released_when_b_finishes() {
     unset SHIM_A SHIM_B
 }
 
-# A docker shim for runner-side drain: `exec rl-runner-2 pgrep` reports a
-# lingering child-B process for the first $SHIM_LINGER calls (exit 0 + pid),
-# then none (exit 1). Every pgrep/pkill call logs slot 2's claimed flag AT THAT
-# MOMENT, so the order "drained, then released" is observable.
+# Runner-side drain: `exec rl-runner-2 sh -c <scan> rl-drain …` goes to the
+# shared drain fake (drain_shim.sh), which logs slot 2's claimed flag AT EACH
+# call, so the order "drained, then released" is observable in $CALLS.
 _drain_docker_shim() {
-    cat > "$SHIM_DIR/docker" <<'SH'
-#!/usr/bin/env bash
-c=$(jq -r '.[] | select(.slot == 2) | .claimed' "$RL_STATE_DIR/claims.json")
-case " $* " in
-  *" rl-runner-2 pgrep "*)
-    n=$(( $(cat "$RL_STATE_DIR/pgrep.n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$RL_STATE_DIR/pgrep.n"
-    echo "docker pgrep claimed=$c" >> "$CALLS"
-    (( n <= ${SHIM_LINGER:-0} )) && { echo 4242; exit 0; }
-    exit 1 ;;
-  *" rl-runner-2 pkill "*) echo "docker pkill claimed=$c $*" >> "$CALLS"; exit 0 ;;
-esac
-exit 0
-SH
+    write_drain_shim "$SHIM_DIR/drain-shim" "$CALLS"
+    printf '#!/usr/bin/env bash\n[[ " $* " == *" rl-drain "* ]] && exec %q "$@"\nexit 0\n' "$SHIM_DIR/drain-shim" > "$SHIM_DIR/docker"
     chmod +x "$SHIM_DIR/docker"
+    echo "${P}b" > "$RL_STATE_DIR/procs"
 }
 
 _run_b_done_a_ok() {
@@ -259,8 +250,8 @@ test_b_drained_before_release() {
     CURRENT_TEST_NAME="B's runner-side processes are drained before the borrowed slot is released"
     _seed free; _drain_docker_shim; export SHIM_LINGER=1 RL_FANOUT_DRAIN_POLL_SECONDS=0.1
     _run_b_done_a_ok
-    assert_eq "$(grep '^docker pgrep' "$CALLS" | head -2 | tr '\n' '|')" "docker pgrep claimed=true|docker pgrep claimed=true|" "slot 2 still borrowed while a B process lingers and at the all-clear poll"
-    assert_eq "$(grep -c '^docker pkill' "$CALLS")" "0" "no kill when the process exits on its own"
+    assert_eq "$(grep '^scan' "$CALLS" | head -2 | tr '\n' '|')" "scan claimed=true|scan claimed=true|" "slot 2 still borrowed while a B process lingers and at the all-clear poll"
+    assert_eq "$(grep -c '^kill' "$CALLS")" "0" "no kill when the process exits on its own"
     assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 released after the drain"
     unset SHIM_LINGER RL_FANOUT_DRAIN_POLL_SECONDS
 }
@@ -268,9 +259,10 @@ test_b_drained_before_release() {
 test_b_lingering_killed_before_release() {
     CURRENT_TEST_NAME="B's processes that outlive the drain window are killed, then the slot is released"
     _seed free; _drain_docker_shim; export SHIM_LINGER=999 RL_FANOUT_DRAIN_SECONDS=0.3 RL_FANOUT_DRAIN_POLL_SECONDS=0.1
+    echo "otherproc01" >> "$RL_STATE_DIR/procs"
     _run_b_done_a_ok
-    assert_contains "$(grep '^docker pkill' "$CALLS" | head -1)" "docker pkill claimed=true" "lingering B processes killed while slot 2 is still borrowed"
-    assert_contains "$(grep '^docker pkill' "$CALLS" | head -1)" "-KILL -f" "SIGKILL by command-line pattern"
+    assert_eq "$(grep '^kill' "$CALLS" | head -1)" "kill claimed=true tids=${P}b" "lingering B processes killed by B's RL_TASK_ID marker while slot 2 is still borrowed"
+    assert_eq "$(cat "$RL_STATE_DIR/procs")" "otherproc01" "an unmarked process on runner B is left alone"
     assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 released after the kill"
     unset SHIM_LINGER RL_FANOUT_DRAIN_SECONDS RL_FANOUT_DRAIN_POLL_SECONDS
 }
@@ -292,6 +284,29 @@ test_owner_slot_not_callers_refused() {
     assert_eq "$(wc -c < "$CALLS" | tr -d ' ')" "0" "still nothing dispatched"
 }
 
+# Codex r5 P2: a drain that fails (exec error mid-scan, or marked survivors
+# after SIGKILL) keeps the borrow reserved for the sweeper — never released.
+test_b_drain_exec_error_keeps_borrow() {
+    CURRENT_TEST_NAME="drain scan exec error -> borrow kept, failure printed"
+    _seed free; _drain_docker_shim; export SHIM_SCAN_ERR=1
+    local out; out=$(PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" --inner-env "" \
+        --a-args "--fleet --no-e2e" --b-args "--only-e2e" --serial-args "--fleet" 2>&1)
+    assert_eq "$(_slot2)" "{\"claimed\":true,\"agent_id\":\"borrow-$P\"}" "borrow stays reserved"
+    assert_contains "$out" "[parallel] drain failed — borrow kept for the sweeper" "failure is reported"
+    unset SHIM_SCAN_ERR
+}
+
+test_b_survivors_after_kill_keep_borrow() {
+    CURRENT_TEST_NAME="marked B processes survive SIGKILL -> borrow kept"
+    _seed free; _drain_docker_shim; export SHIM_LINGER=999 SHIM_SURVIVE=1 RL_FANOUT_DRAIN_SECONDS=0.3 RL_FANOUT_DRAIN_POLL_SECONDS=0.1
+    _run_b_done_a_ok
+    assert_eq "$(grep -c '^kill' "$CALLS")" "1" "the kill was attempted once"
+    assert_eq "$(_slot2)" "{\"claimed\":true,\"agent_id\":\"borrow-$P\"}" "survivors keep the borrow reserved"
+    unset SHIM_LINGER SHIM_SURVIVE RL_FANOUT_DRAIN_SECONDS RL_FANOUT_DRAIN_POLL_SECONDS
+}
+
+run_test "b-drain-exec-error-keeps-borrow" test_b_drain_exec_error_keeps_borrow
+run_test "b-survivors-after-kill-keep-borrow" test_b_survivors_after_kill_keep_borrow
 run_test "owner-slot-not-callers-refused" test_owner_slot_not_callers_refused
 run_test "b-drained-before-release" test_b_drained_before_release
 run_test "b-lingering-killed-before-release" test_b_lingering_killed_before_release

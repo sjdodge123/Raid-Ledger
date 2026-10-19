@@ -59,16 +59,20 @@ fanout::failed() {
 # shellcheck disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/_runner_drain.sh"
 
-# fanout::drain_runner <slot> — drain child B on the borrowed runner (see
-# runner_drain::drain). An unreachable runner does not block the parent's
-# release: its own children are terminal and the trap must finish.
-fanout::drain_runner() { runner_drain::drain "$1" || true; }
+# fanout::drain_runner <slot> — drain child B on the borrowed runner, scoped to
+# B's RL_TASK_ID marker (see runner_drain::drain). Non-zero = not drained.
+fanout::drain_runner() { runner_drain::drain "$1" "$(fanout::child_id "$P" b)"; }
 
 # fanout::release_borrow — drain the borrowed runner, then release the borrow.
+# Codex r5 P2: a failed drain keeps the borrow reserved (no release); P is
+# terminal by then, so the gc-sweeper's orphan rule retries the drain later.
 fanout::release_borrow() {
     [[ -n "${BORROWED:-}" ]] || return 0
-    fanout::drain_runner "$BORROWED"
-    borrow::release "$BORROWED" "$P" || true
+    if fanout::drain_runner "$BORROWED"; then
+        borrow::release "$BORROWED" "$P" || true
+    else
+        echo "[parallel] drain failed — borrow kept for the sweeper"
+    fi
     BORROWED=""
 }
 
