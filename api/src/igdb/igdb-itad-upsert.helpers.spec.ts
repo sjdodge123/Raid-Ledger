@@ -13,6 +13,12 @@
 import { upsertItadGame } from './igdb-itad-upsert.helpers';
 import { defined } from '../common/testing/narrow';
 
+// ROK-1843: the moderation lookup has its own integration coverage
+// (discovery-moderation.integration.spec.ts); here no row is moderated.
+jest.mock('./games-moderation-match.helpers', () => ({
+  findModeratedMatch: jest.fn().mockResolvedValue(null),
+}));
+
 // ─── Test data builders ───────────────────────────────────────────────────
 
 /** Build a minimal GameDetailDto-like object with defaults. */
