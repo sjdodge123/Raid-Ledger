@@ -104,7 +104,7 @@ test('AC-M6b-15: non-ENOENT registry error returns 500, NOT a hung socket', asyn
     // path (not the early shape guards that return 400 before the read).
     response = await fetch(`${srv.base}/api/test-plans/anyslug/2026-05-21-1530-7f3a`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
       body: JSON.stringify({
         goal: 'validate registry error path',
         story_id: 'ROK-1337',
@@ -152,7 +152,7 @@ test('AC-M6b-16: server survives the 500 — subsequent requests still succeed',
   // executes.
   const r1 = await fetch(`${srv.base}/api/test-plans/foo/2026-05-21-1530-7f3a`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({
       goal: 'validate registry parse error',
       story_id: 'ROK-1337',

@@ -18,6 +18,7 @@ import { saveAuthRedirect } from '../lib/auth-redirect';
 import { savePendingPollShare, pollSharePath, POLL_SHARE_TOKEN_KEY } from '../lib/poll-share-redirect';
 import { AUTH_DISCORD_URL } from '../constants/api';
 import { toast } from '../lib/toast';
+import { tryEncodePathSegment } from '../lib/api/path-segment';
 import {
     PollSharePreviewCard, PollShareMessageCard, PollShareLoadingCard,
     INVALID_LINK_COPY, CANT_JOIN_COPY,
@@ -73,6 +74,8 @@ function PollShareContent({ token }: { token: string }): JSX.Element {
 
 export function PollSharePage(): JSX.Element {
     const { token } = useParams<{ token: string }>();
-    if (!token) return <PollShareMessageCard message={INVALID_LINK_COPY} />;
+    // ROK-1845: a token that cannot be one path segment (`/`, `\`, `..`) is never
+    // previewed, parked or auto-redeemed — it is not a real share link.
+    if (!token || tryEncodePathSegment(token) === null) return <PollShareMessageCard message={INVALID_LINK_COPY} />;
     return <PollShareContent token={token} />;
 }

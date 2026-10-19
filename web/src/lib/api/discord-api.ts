@@ -9,6 +9,7 @@ import type {
     PugRole,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
+import { encodePathSegment } from './path-segment';
 
 // -- PUG Slots (ROK-262) --
 
@@ -104,7 +105,7 @@ export async function searchDiscordMembers(
 export async function resolveInviteCode(
     code: string,
 ): Promise<InviteCodeResolveResponseDto> {
-    return fetchApi(`/invite/${code}`);
+    return fetchApi(`/invite/${encodePathSegment(code)}`);
 }
 
 /** Claim an invite code (requires auth, ROK-394) */
@@ -120,7 +121,7 @@ export async function claimInviteCode(
     const body: Record<string, unknown> = {};
     if (role) body.role = role;
     if (characterId) body.characterId = characterId;
-    return fetchApi(`/invite/${code}/claim`, {
+    return fetchApi(`/invite/${encodePathSegment(code)}/claim`, {
         method: 'POST',
         body: JSON.stringify(body),
     });

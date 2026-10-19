@@ -10,6 +10,10 @@ import * as schema from '../drizzle/schema';
 import { mapDbRowToDetail } from './igdb.mappers';
 import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
 import { withGameNameLock } from './games-name-lock.helpers';
+import {
+  findModeratedMatch,
+  type ModerationKeys,
+} from './games-moderation-match.helpers';
 import { keepSeedOwned } from '../games-lookup/seed-owned-games.helpers';
 import { defined } from '../common/defined.helpers';
 
@@ -33,11 +37,32 @@ export async function upsertItadGame(
   );
 }
 
-/** Find-then-insert body. MUST run inside the name lock. */
+/**
+ * The keys an ITAD search hit can collide with an existing row on (ROK-1843).
+ * Shared with the search pipeline's failed-upsert fallback.
+ */
+export function itadModerationKeys(game: GameDetailDto): ModerationKeys {
+  const steamId = (game as Record<string, unknown>).steamAppId;
+  return {
+    slug: game.slug,
+    itadGameId: game.itadGameId,
+    steamAppId: typeof steamId === 'number' ? steamId : null,
+    igdbId: game.igdbId,
+    name: game.name,
+  };
+}
+
+/**
+ * Find-then-insert body. MUST run inside the name lock. ROK-1843: a hidden or
+ * banned match on ANY key is read-only to discovery — it is returned as
+ * stored (the search pipeline's by-id filter then drops it), never written.
+ */
 async function upsertItadGameLocked(
   tx: PostgresJsDatabase<typeof schema>,
   game: GameDetailDto,
 ): Promise<GameDetailDto> {
+  const moderated = await findModeratedMatch(tx, itadModerationKeys(game));
+  if (moderated) return fetchById(tx, moderated.id);
   const existing = await findExistingByAltKey(tx, game);
   if (existing) return updateExistingRow(tx, existing, game);
 
@@ -48,6 +73,8 @@ async function upsertItadGameLocked(
     .onConflictDoUpdate({
       target: schema.games.slug,
       set: buildItadUpdateSet(game),
+      // ROK-1843: a banned row is never rewritten by a search hit.
+      setWhere: eq(schema.games.banned, false),
     });
 
   return fetchBySlug(tx, game.slug);
@@ -111,7 +138,10 @@ async function findExistingByName(
   return rows[0] ?? null;
 }
 
-/** Update an existing row (found by alt key) with ITAD data. */
+/**
+ * Update an existing row (found by alt key) with ITAD data. Moderated rows
+ * never reach here (ROK-1843: `findModeratedMatch` short-circuits them).
+ */
 async function updateExistingRow(
   db: PostgresJsDatabase<typeof schema>,
   existing: typeof schema.games.$inferSelect,
@@ -209,4 +239,17 @@ async function fetchBySlug(
     .where(eq(schema.games.slug, slug))
     .limit(1);
   return mapDbRowToDetail(defined(rows[0], 'game row by slug'));
+}
+
+/** Fetch a game by id and return as GameDetailDto. */
+async function fetchById(
+  db: PostgresJsDatabase<typeof schema>,
+  id: number,
+): Promise<GameDetailDto> {
+  const rows = await db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, id))
+    .limit(1);
+  return mapDbRowToDetail(defined(rows[0], 'game row by id'));
 }

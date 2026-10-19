@@ -176,14 +176,16 @@ describe('GameNotifyBell — phone sheet', () => {
     });
 });
 
+const NOTIF_ID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+
 describe('GameNotifyBell — deep link', () => {
     beforeEach(() => setDesktop(true));
 
     it('?action=notifications&notif= opens the panel, marks the DM read and strips both params', async () => {
         seed(false);
-        renderBell(`/games/${GAME_ID}?action=notifications&notif=99&tab=x`);
+        renderBell(`/games/${GAME_ID}?action=notifications&notif=${NOTIF_ID}&tab=x`);
         expect(await screen.findByRole('dialog', { name: 'Notifications for Valheim' })).toBeInTheDocument();
-        expect(markRead).toHaveBeenCalledWith('99');
+        expect(markRead).toHaveBeenCalledWith(NOTIF_ID);
         await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^\?tab=x$/));
     });
 
