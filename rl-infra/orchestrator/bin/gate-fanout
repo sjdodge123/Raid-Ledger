@@ -54,9 +54,15 @@ done
 [[ "$CHILD_TIMEOUT" =~ ^[0-9]+$ ]] || CHILD_TIMEOUT=5400
 # P is light: children must run their own admission gate.
 unset RL_ADMISSION_HELD
+# Codex r4 P2: the owner slot must be the DISPATCHING agent's own claim — no
+# fallback to whoever holds it, or an unclaimed caller would borrow B and copy
+# another agent's workspace onto it. Refused before any borrow/copy/dispatch.
 OWNER_AGENT="${RL_AGENT_ID:-}"
-if [[ -z "$OWNER_AGENT" || "$OWNER_AGENT" == "unknown" ]]; then
-    OWNER_AGENT=$(jq -r --argjson s "$OWNER_SLOT" '.[] | select(.slot == $s) | .agent_id // ""' "$RL_CLAIMS_FILE")
+SLOT_AGENT=$(jq -r --argjson s "$OWNER_SLOT" '.[] | select(.slot == $s and .claimed == true) | .agent_id // ""' "$RL_CLAIMS_FILE" 2>/dev/null || true)
+if [[ -z "$OWNER_AGENT" || "$OWNER_AGENT" == "unknown" || "$OWNER_AGENT" != "$SLOT_AGENT" ]]; then
+    echo "[parallel] refused: slot $OWNER_SLOT is not claimed by the dispatching agent"
+    echo '{"ok":false,"error":"parallel_requires_claim"}' >&2
+    exit 2
 fi
 MERGE="${RL_GATE_MERGE:-$BIN_DIR_SELF/_gate_merge.sh}"
 BORROWED="" FANOUT_CHILDREN=""

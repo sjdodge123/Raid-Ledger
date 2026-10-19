@@ -275,6 +275,24 @@ test_b_lingering_killed_before_release() {
     unset SHIM_LINGER RL_FANOUT_DRAIN_SECONDS RL_FANOUT_DRAIN_POLL_SECONDS
 }
 
+# Codex r4 P2: the owner slot must be the DISPATCHING agent's claim — else an
+# unclaimed agent would borrow B and copy another agent's workspace onto it.
+test_owner_slot_not_callers_refused() {
+    CURRENT_TEST_NAME="owner slot claimed by another agent (or no RL_AGENT_ID) -> refused before borrow/copy"
+    local rc=0 rc2=0
+    _seed free
+    RL_AGENT_ID="intruder" PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" \
+        --inner-env "" --a-args "--fleet" --b-args "--only-e2e" --serial-args "--fleet" >/dev/null 2>&1 || rc=$?
+    assert_eq "$rc" "2" "foreign owner slot -> exit 2"
+    assert_eq "$(_slot2)" '{"claimed":false,"agent_id":null}' "slot 2 never borrowed"
+    assert_eq "$(wc -c < "$CALLS" | tr -d ' ')" "0" "no child, no serial run dispatched"
+    RL_AGENT_ID="" PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" \
+        --inner-env "" --a-args "--fleet" --b-args "--only-e2e" --serial-args "--fleet" >/dev/null 2>&1 || rc2=$?
+    assert_eq "$rc2" "2" "no dispatching agent id -> exit 2 (no fallback to the slot's owner)"
+    assert_eq "$(wc -c < "$CALLS" | tr -d ' ')" "0" "still nothing dispatched"
+}
+
+run_test "owner-slot-not-callers-refused" test_owner_slot_not_callers_refused
 run_test "b-drained-before-release" test_b_drained_before_release
 run_test "b-lingering-killed-before-release" test_b_lingering_killed_before_release
 run_test "force-serial" test_force_serial
