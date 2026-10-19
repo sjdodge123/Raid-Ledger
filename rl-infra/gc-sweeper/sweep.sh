@@ -413,11 +413,16 @@ for slot in $EXPIRED_SLOTS; do
         continue
     fi
     log "releasing expired slot $slot (past expires_at, queue depth=$QLEN)"
-    # Preserve envs so the queue head can inherit them on branch-match.
+    # Preserve envs so the queue head can inherit them on branch-match. A pinned
+    # env of ANOTHER branch this claim preserved keeps its own stamp (mirrors
+    # env_registry::mark_claimable_by_next — Codex fleet-claim r1).
     SLOT_BRANCH=$(jq -r --argjson s "$slot" '.[] | select(.slot == $s) | .branch // ""' "$CLAIMS" 2>/dev/null || echo "")
     if [[ -n "$SLOT_BRANCH" ]]; then
         mutate "$ENVS" --argjson s "$slot" --arg b "$SLOT_BRANCH" \
-            'map(if .slot == $s then .claimable_by_next = true | .created_for_branch = $b else . end)'
+            'map(if .slot == $s
+                    and (((.claimable_by_next // false) == true and (.pinned // false) == true
+                          and (.created_for_branch // "") != "" and .created_for_branch != $b) | not)
+                 then .claimable_by_next = true | .created_for_branch = $b else . end)'
     fi
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'

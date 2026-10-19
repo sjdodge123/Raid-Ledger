@@ -218,13 +218,21 @@ env_registry::set_pinned() {
         'map(if .slug == $slug then .pinned = ($p == true) else . end)'
 }
 
+# A pinned env still claimable_by_next with ANOTHER branch's non-empty stamp is
+# one a branch-mismatch claim PRESERVED (claim clears every other row's flag).
+# The releasing claim never owned it, so it is never re-stamped — else the next
+# claimant of the releasing branch inherits the other branch's deployment
+# (Codex fleet-claim r1). gc-sweeper/sweep.sh's expiry reaper mirrors this.
+ENV_REGISTRY_FOREIGN_PIN_JQ='((.claimable_by_next // false) == true and (.pinned // false) == true
+    and (.created_for_branch // "") != "" and .created_for_branch != $b)'
+
 env_registry::mark_claimable_by_next() {
     local slot="$1" branch="$2"
     state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
-        'map(if .slot == $s
+        "map(if .slot == \$s and ($ENV_REGISTRY_FOREIGN_PIN_JQ | not)
              then .claimable_by_next = true
-                | .created_for_branch = $b
-             else . end)'
+                | .created_for_branch = \$b
+             else . end)"
 }
 
 # Optional 2nd arg: JSON array of slugs that KEEP claimable_by_next (the

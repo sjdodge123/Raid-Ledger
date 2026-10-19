@@ -69,7 +69,9 @@ EXPIRES_AT=$(date -u -d "+${RL_CLAIM_DURATION_SECONDS} seconds" +%FT%TZ 2>/dev/n
     || python3 -W ignore -c "import datetime; print((datetime.datetime.utcnow() + datetime.timedelta(seconds=${RL_CLAIM_DURATION_SECONDS})).strftime('%Y-%m-%dT%H:%M:%SZ'))" 2>/dev/null)
 
 # Inherited-env lookup helper. Reads env-registry for envs on $1 (slot) with
-# claimable_by_next=true and emits a `[{slug, url}]` JSON array.
+# claimable_by_next=true whose created_for_branch matches $2 (the claim's
+# branch — a wrong-branch preserved pin is never "inherited", Codex r1) and
+# emits a `[{slug, url}]` JSON array.
 # ROK-1336 #6 — env-registry stores .public_domain as the bare RL_PUBLIC_DOMAIN,
 # so the old "https://" + public_domain emitted bare https://gamernight.net.
 # Use the per-slug form ({slug}test.<domain>, matches env-spin's PUBLIC_HOST)
@@ -77,15 +79,26 @@ EXPIRES_AT=$(date -u -d "+${RL_CLAIM_DURATION_SECONDS} seconds" +%FT%TZ 2>/dev/n
 # which owns Traefik's slot-N rule, so slot-N URLs route to the wrong env
 # for non-owner inherited envs.
 _inherited_for_slot() {
-    local slot="$1"
-    state::query "$RL_ENVS_FILE" --argjson s "$slot" \
-        '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)
+    local slot="$1" branch="$2"
+    state::query "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
+        '[.[] | select(.slot == $s and (.claimable_by_next // false) == true
+                       and (.created_for_branch // "") == $b)
               | {slug, url: (
                   if (.public_domain // "") != ""
                   then ("https://" + .slug + "test." + .public_domain)
                   else ("https://" + .slug + ".rl.lan")
                   end
               )}]'
+}
+
+# Pinned claimable envs of ANOTHER branch on $1 — the ones a mismatch claim
+# preserved. The idempotent path reports them here, never as inherited.
+_preserved_pinned_for_slot() {
+    local slot="$1" branch="$2"
+    state::query "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
+        '[.[] | select(.slot == $s and (.claimable_by_next // false) == true
+                       and (.pinned // false) == true
+                       and (.created_for_branch // "") != $b) | .slug]'
 }
 
 emit_slot_result() {
@@ -144,9 +157,10 @@ if [[ -n "$EXISTING" ]]; then
     PERSISTED_EXPIRES=$(state::query "$RL_CLAIMS_FILE" -r --arg a "$RL_AGENT_ID" \
         '[.[] | select(.agent_id == $a and .claimed == true) | .expires_at] | first // ""')
     [[ -z "$PERSISTED_EXPIRES" ]] && PERSISTED_EXPIRES="$EXPIRES_AT"
-    INH=$(_inherited_for_slot "$EXISTING")
+    INH=$(_inherited_for_slot "$EXISTING" "$BRANCH")
+    PP=$(_preserved_pinned_for_slot "$EXISTING" "$BRANCH")
     audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" --arg branch "$BRANCH" '{slot:$slot, branch:$branch}')"
-    emit_slot_result "$EXISTING" "$INH" "[]" "$PERSISTED_EXPIRES"
+    emit_slot_result "$EXISTING" "$INH" "[]" "$PERSISTED_EXPIRES" "$PP"
     exit 0
 fi
 

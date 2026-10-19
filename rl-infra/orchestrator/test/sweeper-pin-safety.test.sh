@@ -293,4 +293,35 @@ run_test "ac5-skips-active-heartbeat-env" test_sweeper_skips_env_with_active_cla
 run_test "strict-legacy-reaper-gated-by-expires-at" test_sweeper_legacy_age_reaper_gated_by_expires_at
 run_test "legacy-reaper-still-works-when-null" test_sweeper_legacy_reaper_still_works_when_expires_at_null
 
+# Codex r1 P2 — the expiry reaper's preserve-stamp must not overwrite a
+# preserved pinned env of ANOTHER branch with the expiring claim's branch.
+test_sweeper_expiry_keeps_preserved_pin_provenance() {
+    CURRENT_TEST_NAME="expiry reaper: pinned A env keeps created_for_branch when B's claim expires"
+    local now; now=$(date -u +%FT%TZ)
+    jq -n --arg t "$now" '
+        [{slot:1, claimed:true, agent_id:"agent-b", branch:"feat-b", started_at:$t, last_heartbeat:$t,
+          keep_alive:false, expires_at:"2020-01-01T00:00:00Z", extends_count:0},
+         {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null, keep_alive:false}]
+    ' > "$RL_STATE_DIR/claims.json"
+    jq -n --arg t "$now" '
+        [{slug:"pinned-a", slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:true, claimable_by_next:true, created_for_branch:"feat-a"},
+         {slug:"env-b", slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:false, claimable_by_next:false}]
+    ' > "$RL_STATE_DIR/env-registry.json"
+    mkdir -p "$RL_STATE_DIR/lease-queue"
+    jq -n --arg t "$now" '[{agent_id:"waiter", branch:"feat-b", requested_at:$t, last_heartbeat:$t}]' \
+        > "$RL_STATE_DIR/lease-queue/1.json"
+    local shim_dir; shim_dir=$(mktemp -d -t rl-sweeper-shim.XXXXXX)
+    # Every container "exists" so the orphan-env reaper leaves both rows alone.
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$shim_dir/docker"
+    chmod +x "$shim_dir/docker"
+    PATH="$shim_dir:$PATH" STATE_DIR="$RL_STATE_DIR" bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
+    assert_eq "$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json")" "false" "expired claim released"
+    assert_eq "$(jq -r '.[] | select(.slug=="pinned-a") | .created_for_branch' "$RL_STATE_DIR/env-registry.json")" "feat-a" "pinned A keeps its branch"
+    assert_eq "$(jq -r '.[] | select(.slug=="env-b") | .created_for_branch' "$RL_STATE_DIR/env-registry.json")" "feat-b" "B's env stamped B"
+    rm -rf "$shim_dir"
+}
+
+run_test "sweeper-expiry-keeps-pin-provenance" test_sweeper_expiry_keeps_preserved_pin_provenance
 print_test_summary
