@@ -19,6 +19,8 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { EmbedPosterService } from '../discord-bot/services/embed-poster.service';
+import { EmbedSchedulerService } from '../discord-bot/services/embed-scheduler.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { GameAffinityNotificationService } from './game-affinity-notification.service';
 import { HubNotificationService } from './hub-notification.service';
@@ -392,5 +394,90 @@ describe('AC4 — hub_event_tagged channel preferences', () => {
     await announce(await insertEvent(g.id));
     expect(await rowsFor(dmOnly)).toHaveLength(0);
     expect(dispatchedTo(dmOnly)).toBe(0);
+  });
+});
+
+describe('Codex r5 — a hidden hub tells staff only (HubVisibleGuard parity)', () => {
+  /** A hidden hub with the admin author, an ordinary member and an operator member. */
+  async function hiddenScenario() {
+    const g = await insertHub();
+    await link(g.id, adminId);
+    const fan = await member(g.id, 'fan');
+    const op = await member(g.id, 'op');
+    await testApp.db
+      .update(schema.users)
+      .set({ role: 'operator' })
+      .where(eq(schema.users.id, op));
+    await testApp.db
+      .update(schema.guilds)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.guilds.id, g.id));
+    return { g, fan, op };
+  }
+
+  it('leader post: the ordinary member gets nothing, the operator still gets it', async () => {
+    const { g, fan, op } = await hiddenScenario();
+    const res = await patchProfile(g.id, { gmPost: 'Hidden raid plans' });
+    expect(res.status).toBe(200);
+    await settle(leaderSpy);
+    expect(await rowsFor(fan)).toHaveLength(0);
+    expect(await rowsFor(op, 'hub_leader_post')).toHaveLength(1);
+  });
+
+  it('tagged event: the ordinary member gets nothing, the operator still gets it', async () => {
+    const { g, fan, op } = await hiddenScenario();
+    await announce(await insertEvent(g.id));
+    expect(await rowsFor(fan)).toHaveLength(0);
+    expect(await rowsFor(op, 'hub_event_tagged')).toHaveLength(1);
+  });
+
+  it('late tag: the ordinary member gets nothing, the operator still gets it', async () => {
+    const { g, fan, op } = await hiddenScenario();
+    const event = await insertEvent(null);
+    await announce(event);
+    await testApp.db
+      .update(schema.events)
+      .set({ guildId: g.id })
+      .where(eq(schema.events.id, event.id));
+    await hub.notifyLateTag(event.id);
+    expect(await rowsFor(fan)).toHaveLength(0);
+    expect(await rowsFor(op, 'hub_event_tagged')).toHaveLength(1);
+  });
+});
+
+describe('Codex r5 — deferred announce on an install with no connected bot', () => {
+  it('a due group-tagged event is announced in-app when the post fails; a later successful post adds nothing', async () => {
+    const g = await insertHub();
+    const fan = await member(g.id, 'fan');
+    const event = await insertEvent(g.id);
+    const post = jest
+      .spyOn(testApp.app.get(EmbedPosterService), 'postEmbed')
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const scheduler = testApp.app.get(EmbedSchedulerService);
+    const tick = () =>
+      scheduler['tryPostDeferredEmbed'](
+        {
+          id: event.id,
+          duration: [event.start, event.end],
+          title: event.title,
+          description: null,
+          gameId: testApp.seed.game.id,
+          recurrenceRule: null,
+          recurrenceGroupId: null,
+          notificationChannelOverride: null,
+          maxAttendees: null,
+          slotConfig: null,
+          guildId: g.id,
+          creatorId: adminId,
+        },
+        'UTC',
+        new Date(),
+      );
+    expect(await tick()).toBe(false);
+    expect(await rowsFor(fan, 'hub_event_tagged')).toHaveLength(1);
+    expect(await tick()).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(await rowsFor(fan)).toHaveLength(1);
   });
 });
