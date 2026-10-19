@@ -50,7 +50,7 @@ export function ValheimLinkTokenDialog({ issued, serverName, onClose }: DialogPr
                 <Button variant="secondary" size="sm" onClick={onCopy} data-testid="valheim-link-token-copy">
                     {copied ? 'Copied' : 'Copy token'}
                 </Button>
-                <ValheimModInstructions serverId={issued.serverId} />
+                <ValheimModInstructions serverId={issued.serverId} token={issued.token} onCopied={() => setCopied(true)} />
             </div>
         </ValheimOverlay>
     );
