@@ -53,7 +53,7 @@ export interface EventNoticeCopy {
   eventId: number;
   title: string;
   gameName: string;
-  /** The game copy's payload; the group copy adds `guildId`/`guildName`. */
+  /** The game copy's payload; the group copy adds `guildId`/`guildName`/`url`. */
   payload: Record<string, unknown>;
 }
 
@@ -100,6 +100,7 @@ function buildNotice(
         ...copy.payload,
         guildId: group.guildId,
         guildName: group.guildName,
+        url: `/events/${copy.eventId}`,
       },
     };
   }

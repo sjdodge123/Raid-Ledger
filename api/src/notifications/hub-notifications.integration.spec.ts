@@ -89,7 +89,9 @@ async function link(guildId: number, userId: number): Promise<void> {
     name,
     addonGuid: guid,
     role: 'dps',
-    isMain: true,
+    // Not a main: a user (the admin) is linked to several hubs across tests,
+    // and idx_one_main_per_game allows one main per (user, game).
+    isMain: false,
   });
   await testApp.db.insert(schema.guildMembers).values({
     guildId,

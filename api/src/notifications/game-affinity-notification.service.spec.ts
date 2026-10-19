@@ -114,7 +114,13 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     expect(h.create.mock.calls[0]?.[0]).toMatchObject({
       title: 'Molten Core',
       message: 'Tagged to Raiders',
-      payload: { eventId: 1, gameId: 5, guildId: 7, guildName: 'Raiders' },
+      payload: {
+        eventId: 1,
+        gameId: 5,
+        guildId: 7,
+        guildName: 'Raiders',
+        url: '/events/1',
+      },
     });
   });
 
