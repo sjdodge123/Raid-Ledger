@@ -354,6 +354,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `CharacterQuestsSection` (`components/character-quests-section.tsx`) + `character-quest-log.tsx`, `character-completed-quests.tsx`, `hooks/use-character-quests.ts` | `plugins/wow/` (ROK-1745) | WoW: Forever quest tracking on the character page, rendered by `CharacterDetailSections` after Talents and before Professions. Same card chrome as Talents (`bg-panel border border-edge rounded-lg p-6`, `h2` "Quests") with a `text-xs text-muted` summary "N completed · M known · via addon · <date> · T quests total" (`lib/addon-source-line.ts::formatAddonSourceLine`, shared with the Equipment source line). **In progress (k):** the objective checklist pattern: each quest title + Wowhead link (`quest-card__name` / `quest-card__wowhead-icon` classes from `slots/quest-prep-panel.css`, not the quest-card components), an `<ul>` of objectives where done = `text-success` + `aria-hidden` ✓ + sr-only "done" and open = `text-warning`, with `have/need` appended in `font-mono`; rows `flex-wrap`. **Completed dungeon quests:** one `ScrollCollapsible defaultOpen={false}` per instance titled "<Instance> · c/k"; rows name + `(LvN)` + Wowhead link, and when the chain has >1 step a `quest-prereq` line with `quest-prereq__step` + `text-success`/`text-warning`. No overlap → "0 of M known dungeon quests". Renders nothing while loading, on error or on `{ quests: null }` (no skeleton), and requests only for the `wow_forever` variant. |
 | `CharacterLockoutsSection` (`components/character-lockouts-section.tsx`) + `lib/lockout-reset.ts` | `plugins/wow/` (ROK-1743) | WoW: Forever saved instances from the addon snapshot (`CharacterDto.lockouts`), rendered by `CharacterDetailSections` after Quests and before Professions. Same card chrome as Quests/Talents (`bg-panel border border-edge rounded-lg p-6`, `h2` "Saved instances") with a `text-xs text-muted` source line from `formatAddonSourceLine`. `<ul className="space-y-2">` of `data-lockout-row` `flex-wrap` rows: name (`text-sm text-foreground break-words`) · difficulty (`text-xs text-muted`, omitted when null) · `killed/total` in `font-mono` (`text-success` when cleared, else `text-muted`; sr-only "bosses killed") · "Resets in 3d 4h / 5h 12m / 12m / <1m" (`text-xs text-muted ml-auto`, `formatResetIn` reusing `lib/format-duration.ts` under a day). One `useNowTick` clock drops rows whose reset passes while the page is open. Renders nothing when `lockouts` is absent or every lockout has expired (no empty state). |
 | `ThreadMessageRow` (`ThreadMessageRow.tsx`) + `DiscordText`, `discord-markdown.helpers.ts` | `components/discord/` (ROK-1483; reused outside threads by ROK-1788) | Rendering ANY mirrored Discord message read-only: avatar/initials, author, relative time, `(edited)`, safe Discord-markdown body, attachment links, reaction counts. An `<li>` chip (`bg-overlay`) — put it in a `<ul>`. Surface-specific extras (the guild channel mirror's embed block, `guild-discord-mirror.tsx`) go in its optional `children` slot, rendered under the body — never fork the row. The folder is under `read-only.guard.test.ts`: no write affordance, no hardcoded colour. |
+| `MapViewport` (`map-viewport.tsx` + `use-map-viewport.ts`, `map-viewport.math.ts`), `FogCanvas` (`fog-canvas.tsx`, `fog-theme.ts`), `PinLayer` (`pin-layer.tsx`, `pin-types.ts`), `MapControls` / `LayerSwitches` (`map-controls.tsx`), composed by `ValheimMapView` (`valheim-map-view.tsx`) | `plugins/valheim/map/` (ROK-1837) | **New pattern: a pannable/zoomable layered image viewport** — nothing else in the inventory pans or zooms (`SocialGraphCanvas` is a force graph, `ScreenshotGallery` a lightbox). `MapViewport({ contentSize, label, onCommands, children: (viewport) => … })` is a `role="application"` surface (`aria-roledescription="map"`, focusable) that pans on pointer drag, pinch- and wheel-zooms about the pointer, and takes arrow / `+` / `-` keys; its children sit in ONE `contentSize`² texture-space layer under a single `translate() scale()`, so the base `<img>` (absolute 0,0, `contentSize` square), the `FogCanvas` mask and the `PinLayer` stay aligned at every zoom. Hand-rolled — no gesture/map dependency. `onCommands` hands `{ zoomIn, zoomOut, fit }` to `MapControls` (icon-only 44px buttons + the layer `Switch`es inline ≥1024px, a "Layers" `BottomSheet` below). Pins are `<button>`s named "<label or type> (<type>)", counter-scaled to a constant screen size. The frame's height is the caller's. Rules: §4.25. Demo: `/dev/design-system#map-viewport`. |
 | `GuildMeter` (`guild-meter.tsx`) | `components/hub/events/` (ROK-1787; second adopter ROK-1840) | A thin quantity/progress bar: `role="meter"` with `aria-label`/`aria-valuenow`, `h-1.5 rounded-full bg-overlay` track, `bg-success` (or `bg-warning`) fill, `pct` clamped 0–100. Use it for ANY proportion bar (raid roster fill, the §4.24 setup-checklist progress) instead of hand-rolling a track + fill. |
 
 ### 3.3 Shared hooks
@@ -1354,3 +1355,33 @@ checklist can never finish.
 **DON'T** derive "done" from stored progress. Each step reads the live page data (`useGuildProfile`,
 `useGuildDiscord`, the module's mod sources), so undoing the edit puts the step back; the whole card removes
 itself once every actionable step is done.
+
+### 4.25 Map viewport (pannable/zoomable layered image, ROK-1837)
+
+The Valheim Map tab is the first surface that pans and zooms an image. Build any later one (another game's
+map, a floor plan, a large screenshot) from the same `plugins/valheim/map/` pieces (§3.2) — or lift them into
+`components/` when a second consumer appears — rather than adding a gesture library or a second viewport.
+
+**DO — scope `touch-action` to the map.** `touch-action: none` sits on the `MapViewport` element only (the
+hook's `style`), so one-finger drags and pinches on the map are ours and the rest of the page scrolls and
+zooms natively. Never set it on `body`, the tab panel or a wrapper.
+
+**DO — one transform for every layer.** Base image, fog and pins live in texture-pixel space inside the one
+transformed layer; position pins with `worldToScreen` and counter-scale them (`scale(1/zoom)`) so they keep
+their size. Never compute per-layer screen positions — they drift apart at high zoom.
+
+**DO — fog from the theme.** The fog mask is painted in the computed `--color-backdrop` (`useThemeFogRgb`,
+re-read on scheme change): unexplored ≈ opaque, the shared/cartography-only area at partial alpha, explored
+clear. No literal colour, no `bg-black/…` overlay — fifteen themes remap the backdrop.
+
+**DO — 44px controls on the map, labelled.** Zoom in / Zoom out / Fit map are `Button iconOnly size="sm"
+className="min-h-11"` with `aria-label`s; layer toggles are inventory `Switch`es in `SwitchRow`s
+(`min-h-11`), inline at ≥1024px and in a `BottomSheet` titled "Layers" below (§4.4). Pins are real buttons
+with accessible names; a tap opens the label, Escape closes it.
+
+**DO — let the caller size the frame.** The viewport fills its parent (`absolute inset-0`); the parent sets
+the height (`h-[calc(100dvh-12rem)]` on phones, `lg:h-[min(70dvh,720px)]`) and `overflow-hidden`.
+
+**DON'T** read pixel positions in tests — assert the texture stack's `data-zoom` (scale, 2dp) before/after
+a command, and count pins by role (T9).
+
