@@ -29,7 +29,11 @@ import {
   findValheimGameId,
   seedValheimLinkFixtureRows,
 } from '../link/valheim-link-demo-seed.helpers';
-import { seedArmoryCharacter } from './valheim-armory-demo-seed.helpers';
+import {
+  ensureArmoryCatalog,
+  seedArmoryProfile,
+} from './valheim-armory-demo-seed.helpers';
+import { ARMORY_MAP_FIXTURE_KEY } from './valheim-armory-demo-sheet';
 import {
   storeDemoBaseMap,
   upsertDemoMap,
@@ -60,10 +64,12 @@ function parseRequest(body: unknown): { worker: number; withBaseMap: boolean } {
 
 /**
  * ROK-1837 L3 — DEMO_MODE map fixture: on the worker's Valheim Pelican
- * server (the link/armory seed's), the CALLER's claimed character (the
- * armory fixture's `c1`, whose identity is the map fixture's) and its map
- * (personal + shared fog, 4 pins) with a generated base-map PNG unless
- * `withBaseMap: false`. Re-running resets both rows.
+ * server (the link/armory seed's), the CALLER's claimed character — its
+ * OWN `map` identity, never the ROK-1836 `c1`…`c3`, so neither fixture
+ * resets the other's character or nulls the map's `profile_id` — and its
+ * map (personal + shared fog, 4 pins) with a generated base-map PNG unless
+ * `withBaseMap: false`. The server catalogue is inserted only when absent
+ * (never reset). Re-running resets the `map` character and its map.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
@@ -94,11 +100,12 @@ export class ValheimArmoryMapDemoSeedController {
       { valheimGameId, otherGameId: await findOtherGameId(this.db) },
       new Date(),
     );
-    const characterId = await seedArmoryCharacter(this.db, serverId, {
+    await ensureArmoryCatalog(this.db, serverId);
+    const characterId = await seedArmoryProfile(this.db, serverId, {
       slot: worker,
-      key: 'c1',
+      key: ARMORY_MAP_FIXTURE_KEY,
       claimedBy: req.user.id,
-      withCatalog: true,
+      withCatalog: false,
       extraRows: false,
     });
     const sha = withBaseMap ? await storeDemoBaseMap(this.db, serverId) : null;

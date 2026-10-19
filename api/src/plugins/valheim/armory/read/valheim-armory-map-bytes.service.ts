@@ -85,7 +85,7 @@ export class ValheimArmoryMapBytesService {
       .limit(1);
     if (!row) throw new NotFoundException('Map not found');
     const bitmap = layer === 'shared' ? row.shared : row.explored;
-    if (!bitmap) throw new NotFoundException('no_shared_layer');
+    if (!bitmap) throw new NotFoundException(`no_${layer}_layer`);
     return {
       bytes: Buffer.from(bitmap.data, 'base64'),
       etag: fogEtag(layer, row.capturedAt),

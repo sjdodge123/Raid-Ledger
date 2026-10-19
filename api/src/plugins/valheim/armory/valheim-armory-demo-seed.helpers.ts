@@ -195,9 +195,40 @@ export async function seedArmoryCharacter(
   serverId: number,
   req: ArmoryCharacterFixtureRequest,
 ): Promise<number> {
-  await resetProfile(db, serverId, req.key);
   await resetCatalog(db, serverId);
   if (req.withCatalog) await insertCatalog(db, serverId);
+  return seedArmoryProfile(db, serverId, req);
+}
+
+/** Insert the fixture catalogue only when the server has none (no reset). */
+export async function ensureArmoryCatalog(
+  db: Db,
+  serverId: number,
+): Promise<void> {
+  const C = schema.valheimItemCatalogs;
+  const [found] = await db
+    .select({ id: C.id })
+    .from(C)
+    .where(
+      and(
+        eq(C.pelicanServerId, serverId),
+        eq(C.gameVersion, ARMORY_FIXTURE_GAME_VERSION),
+      ),
+    )
+    .limit(1);
+  if (!found) await insertCatalog(db, serverId);
+}
+
+/**
+ * Reset ONLY `req.key`'s character (the catalogue is untouched; `req`'s
+ * `withCatalog` is ignored here) and return its new profile id.
+ */
+export async function seedArmoryProfile(
+  db: Db,
+  serverId: number,
+  req: ArmoryCharacterFixtureRequest,
+): Promise<number> {
+  await resetProfile(db, serverId, req.key);
   const P = schema.valheimProfiles;
   const [row] = await db
     .insert(P)

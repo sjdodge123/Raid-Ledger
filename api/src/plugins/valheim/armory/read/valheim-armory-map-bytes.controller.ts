@@ -30,8 +30,12 @@ import {
 } from './valheim-armory-blob.controller';
 import { ValheimArmoryMapBytesService } from './valheim-armory-map-bytes.service';
 
-/** Content-addressed base map: never changes under its sha256 (D3). */
-const BASE_MAP_CACHE = 'private, max-age=31536000, immutable';
+/**
+ * The base-map URL is keyed by map id and a re-import can change its PNG
+ * (`upsertMap` keeps the id), so it revalidates via the sha ETag (D3).
+ * The sha-keyed ROK-1836 blob route is the `immutable` one.
+ */
+const BASE_MAP_CACHE = 'private, no-cache';
 /** Fog changes with every snapshot: revalidate via the ETag (D4). */
 const FOG_CACHE = 'private, no-cache';
 const MAP = 'plugins/valheim/armory/characters/:id/maps/:mapId';
@@ -70,25 +74,22 @@ export class ValheimArmoryMapBytesController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile | undefined> {
     const { sha256, absPath } = await this.bytes.baseMap(id, mapId);
-    const file = await openBlob(absPath, 'base_map_not_ready');
-    const size = await sizeOf(file);
     res.set({
       'Content-Type': 'image/png',
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': BASE_MAP_CACHE,
       ETag: `"${sha256}"`,
     });
-    if (req.fresh) {
-      await file.close();
-      return undefined;
-    }
+    if (req.fresh) return undefined; // 304 before the file is opened
+    const file = await openBlob(absPath, 'base_map_not_ready');
+    const size = await sizeOf(file);
     return new StreamableFile(file.createReadStream(), {
       type: 'image/png',
       length: size,
     });
   }
 
-  /** GET — one fog layer's stored gzip bytes; 404 `no_shared_layer`. */
+  /** GET — one fog layer's stored gzip bytes; 404 `no_<layer>_layer`. */
   @Get(`${MAP}/fog`)
   async fog(
     @Param('id', armoryIdPipe) id: number,

@@ -12,7 +12,7 @@ import type { Response } from 'superagent';
 import { ValheimLinkMessageSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { truncateAllTables } from '../../../../common/testing/integration-helpers';
-import { defined, nonEmpty } from '../../../../common/testing/narrow';
+import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { SettingsService } from '../../../../settings/settings.service';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
@@ -76,6 +76,14 @@ async function makeServer(n: number): Promise<number> {
   return row.id;
 }
 
+/** `value`, or a loud failure when it is null/undefined. */
+function must<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`Expected ${label}, got ${String(value)}`);
+  }
+  return value;
+}
+
 /** Import character + map fixtures on a fresh server. */
 async function seed(n: number, mapFixture: string) {
   const serverId = await makeServer(n);
@@ -93,7 +101,7 @@ async function seed(n: number, mapFixture: string) {
       .where(eq(M.pelicanServerId, serverId)),
     'map',
   );
-  return { serverId, id: defined(m.profileId, 'map profile id'), mapId: m.id };
+  return { serverId, id: must(m.profileId, 'map profile id'), mapId: m.id };
 }
 
 /** Register a blob row for `serverId`; writes `bytes` when given. */
