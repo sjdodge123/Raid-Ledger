@@ -198,6 +198,20 @@ test_claim_wait_repoll_error_surfaces() {
     assert_eq "$(jq -r '.wait_timed_out // empty' <<<"$out" 2>/dev/null)" "" "not reported as a timeout"
 }
 
+# Codex r1 P2 — a branch_required refusal carries .slot; claim-wait must not
+# read that as a grant (exit 0 with nothing acquired).
+test_claim_wait_branch_required_not_a_grant() {
+    CURRENT_TEST_NAME="claim-wait without --branch on a slot holding claimable envs → exit 2 branch_required"
+    _seed_claims free free
+    export RL_AGENT_ID="cw-nobranch"
+    echo '[{"slug":"e1","slot":1,"claimable_by_next":true,"created_for_branch":"feat-x"}]' > "$RL_STATE_DIR/env-registry.json"
+    local out exit_code=0
+    out=$(bash "$BIN_DIR/claim-wait" --slot 1 --timeout 5 2>/dev/null) || exit_code=$?
+    assert_exit_code "$exit_code" "2" "refusal is not a grant"
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "branch_required" "refusal surfaced"
+    assert_eq "$(_slot_claimed 1)" "false" "slot not acquired"
+}
+
 run_test "slot-targets-requested-free" test_slot_targets_requested_free_slot
 run_test "slot-enqueues-on-requested-busy" test_slot_enqueues_on_requested_when_busy_not_other_free
 run_test "slot-out-of-range-errors" test_slot_out_of_range_errors
@@ -209,4 +223,5 @@ run_test "claim-wait-forwards-slot-grant" test_claim_wait_forwards_slot_grant
 run_test "claim-wait-bad-slot-bails" test_claim_wait_bad_slot_bails
 
 run_test "claim-wait-repoll-error-surfaces" test_claim_wait_repoll_error_surfaces
+run_test "claim-wait-branch-required-not-grant" test_claim_wait_branch_required_not_a_grant
 print_test_summary
