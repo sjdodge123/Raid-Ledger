@@ -40,6 +40,7 @@ function row(over: Partial<ArmoryDetailReadRow> = {}): ArmoryDetailReadRow {
     ownerId: 11,
     ownerUsername: 'viking',
     ownerAvatar: null,
+    ownerDiscordId: null,
     equipment: SHEET.equipment,
     inventory: SHEET.inventory,
     skills: SHEET.skills,
@@ -68,7 +69,12 @@ describe('valheim armory read mappers (ROK-1835 L4)', () => {
     const out = toSummary(row());
     expect(JSON.stringify(out)).not.toContain(STEAM);
     expect(out).not.toHaveProperty('steamId');
-    expect(out.claimedBy).toEqual({ id: 11, username: 'viking', avatar: null });
+    expect(out.claimedBy).toEqual({
+      id: 11,
+      username: 'viking',
+      avatar: null,
+      discordId: null,
+    });
     expect(out.capturedAt).toBe(AT.toISOString());
     expect(ValheimCharacterSummarySchema.parse(out)).toEqual(out);
   });
