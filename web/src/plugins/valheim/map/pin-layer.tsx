@@ -99,6 +99,9 @@ function pinPlacement(pin: ValheimMapPin, grid: ValheimMapGrid, scale: number) {
             ? `${BUTTON_CLASS} ${PIN_CHECKED_CLASS}`
             : BUTTON_CLASS,
         style: {
+            // Inline: the shared Button's base class carries `relative`, which the
+            // compiled stylesheet orders after `absolute` (Codex r10, #1695).
+            position: 'absolute' as const,
             left,
             top,
             transform: `translate(-50%, -50%) scale(${1 / scale})`,
