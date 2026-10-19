@@ -10,6 +10,8 @@ import { isNotFoundError } from '../lib/valheim-armory-api';
 import { ValheimCharacterHeader } from '../character/character-header';
 import { ValheimCharacterSections } from '../character/character-sections';
 import { hubPathFrom, parseCharacterId } from '../lib/valheim-routes';
+import { useAuth } from '../../../hooks/use-auth';
+import { ValheimCharacterOwnerActions } from '../character/character-owner-actions';
 
 function Crumb({ to, label }: { to: string; label: string }) {
     return (
@@ -28,6 +30,7 @@ export function ValheimCharacterPage() {
     const hubPath = hubPathFrom(useLocation().state);
     const query = useValheimCharacter(id);
     const c = query.data;
+    const viewer = useAuth().user ?? null;
     const notFound = id === null || (query.isError && isNotFoundError(query.error));
     return (
         <div className="mx-auto max-w-6xl px-4 py-6" aria-busy={query.isPending && id !== null}>
@@ -36,7 +39,7 @@ export function ValheimCharacterPage() {
             {!notFound && query.isError && <Quiet role="alert">Couldn't load this character. Try again in a moment.</Quiet>}
             {c !== undefined && (
                 <>
-                    <ValheimCharacterHeader character={c} />
+                    <ValheimCharacterHeader character={c} actions={<ValheimCharacterOwnerActions character={c} viewer={viewer} />} />
                     <ValheimCharacterSections character={c} />
                 </>
             )}
