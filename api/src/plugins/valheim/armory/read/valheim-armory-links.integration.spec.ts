@@ -199,8 +199,12 @@ describe('armory claim events resolve users (ROK-1836 follow-up)', () => {
       ).data;
     const [latest, first] = await events();
     expect(latest).toMatchObject({
-      fromUser: { id: idOf('alice'), username: 'alice' },
-      toUser: { id: idOf('bob'), username: 'bob' },
+      fromUser: {
+        id: idOf('alice'),
+        username: 'alice',
+        discordId: 'local:alice',
+      },
+      toUser: { id: idOf('bob'), username: 'bob', discordId: 'local:bob' },
       actor: { id: adminUser.id, username: adminUser.username },
     });
     expect(first).toMatchObject({
