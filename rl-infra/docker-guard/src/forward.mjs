@@ -3,6 +3,7 @@
 // reached Docker on `GET /_ping` turned the connection into a raw tunnel whose
 // later requests the guard never saw. Upstream is one request per connection.
 import http from 'node:http';
+import { pipeline } from 'node:stream';
 
 const HOP = ['connection', 'upgrade', 'keep-alive', 'proxy-connection', 'te', 'trailer', 'http2-settings'];
 
@@ -22,6 +23,9 @@ export function wantsUpgrade(headers) {
  * Pipe req → daemon → res. `body` replaces the request body:
  * { buf: Buffer } (a rewritten JSON body) or { stream, length } (a spooled build context).
  * `path` replaces the request-target (c6: /events gets a rebuilt query).
+ * c7: `pipe()` never propagates closure, so a runner that goes away (cancelled
+ * build, dropped /events or /logs follow) explicitly tears the upstream request
+ * and response down — the daemon stops the build / subscription with it.
  */
 export function forward(socketPath, req, res, body, onError, path = req.url) {
   const headers = { ...stripHop(req.headers), connection: 'close' };
@@ -30,12 +34,26 @@ export function forward(socketPath, req, res, body, onError, path = req.url) {
     delete headers['transfer-encoding'];
     headers['content-length'] = String(length);
   }
-  const up = http.request({ socketPath, method: req.method, path, headers, agent: false }, (upRes) => {
-    res.writeHead(upRes.statusCode ?? 502, stripHop(upRes.headers));
-    upRes.pipe(res);
+  let upRes = null;
+  const up = http.request({ socketPath, method: req.method, path, headers, agent: false }, (r) => {
+    upRes = r;
+    if (res.destroyed) return r.destroy();
+    res.writeHead(r.statusCode ?? 502, stripHop(r.headers));
+    pipeline(r, res, () => {});
   });
-  up.on('error', (e) => onError(`upstream error ${e.message}`));
+  const teardown = () => {
+    up.destroy();
+    upRes?.destroy();
+    body?.stream?.destroy();
+  };
+  res.once('close', () => { if (!res.writableFinished) teardown(); });
+  req.once('error', teardown);
+  up.on('error', (e) => {
+    if (res.destroyed) return;
+    if (res.headersSent) res.destroy();
+    else onError(`upstream error ${e.message}`);
+  });
   if (body?.buf) up.end(body.buf);
-  else if (body?.stream) body.stream.pipe(up);
+  else if (body?.stream) body.stream.on('error', (e) => up.destroy(e)).pipe(up);
   else req.pipe(up);
 }
