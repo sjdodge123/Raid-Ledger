@@ -9,7 +9,10 @@ import type {
   ValheimClaimEvent,
 } from '@raid-ledger/contract';
 import type { ValheimProfileClaimEventRow } from '../../../../drizzle/schema';
-import { ValheimIdentityRepository } from './valheim-identity.repository';
+import {
+  ValheimIdentityRepository,
+  type ArmoryUserRow,
+} from './valheim-identity.repository';
 
 /** Audit row → contract shape (ids + ISO time; never a SteamID). */
 export function toClaimEvent(
@@ -26,12 +29,13 @@ export function toClaimEvent(
   };
 }
 
-function toOwner(u: {
-  id: number;
-  username: string;
-  avatar: string | null;
-}): ValheimCharacterOwner {
-  return { id: u.id, username: u.username, avatar: u.avatar };
+function toOwner(u: ArmoryUserRow): ValheimCharacterOwner {
+  return {
+    id: u.id,
+    username: u.username,
+    avatar: u.avatar,
+    discordId: u.discordId,
+  };
 }
 
 function firstEvent(rows: ValheimProfileClaimEventRow[]): ValheimClaimEvent {

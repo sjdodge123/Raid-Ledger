@@ -74,6 +74,10 @@ export const SchedulingPollPage = lazyWithRetry(() =>
 export const CharacterDetailPage = lazyWithRetry(() =>
     import('./pages/character-detail-page').then((m) => ({ default: m.CharacterDetailPage })),
 );
+/** ROK-1836: Valheim character page — a plugin page on a core lazy route (no plugin route seam exists). */
+export const ValheimCharacterPage = lazyWithRetry(() =>
+    import('./plugins/valheim/pages/valheim-character-page').then((m) => ({ default: m.ValheimCharacterPage })),
+);
 /** ROK-1785: WoW-plugin-owned guild page (no plugin route host exists, so it mounts here). */
 export const GuildPage = lazyWithRetry(() =>
     import('./components/hub/hub-page').then((m) => ({ default: m.GuildPage })),

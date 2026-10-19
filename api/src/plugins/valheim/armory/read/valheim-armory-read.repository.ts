@@ -48,6 +48,7 @@ const summaryCols = {
   ownerId: u.id,
   ownerUsername: u.username,
   ownerAvatar: u.avatar,
+  ownerDiscordId: u.discordId,
 };
 
 const sheetCols = {

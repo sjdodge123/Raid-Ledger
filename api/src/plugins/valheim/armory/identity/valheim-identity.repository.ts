@@ -13,6 +13,14 @@ type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
 const { valheimProfiles: profiles, valheimProfileClaimEvents: events } = schema;
 
+/** A user as resolved for an owner/claim-event chip (the hash needs the Discord id for a CDN URL). */
+export interface ArmoryUserRow {
+  id: number;
+  username: string;
+  avatar: string | null;
+  discordId: string | null;
+}
+
 /** Rows from a `RETURNING` raw statement (postgres.js RowList is an array). */
 function rowsOf<T>(result: unknown): T[] {
   return Array.isArray(result) ? (result as T[]) : [];
@@ -176,13 +184,16 @@ export class ValheimIdentityRepository {
   }
 
   /** `{ id, username, avatar }` for each id that still names a user. */
-  async findUsers(
-    ids: readonly number[],
-  ): Promise<{ id: number; username: string; avatar: string | null }[]> {
+  async findUsers(ids: readonly number[]): Promise<ArmoryUserRow[]> {
     if (ids.length === 0) return [];
     const u = schema.users;
     return this.db
-      .select({ id: u.id, username: u.username, avatar: u.avatar })
+      .select({
+        id: u.id,
+        username: u.username,
+        avatar: u.avatar,
+        discordId: u.discordId,
+      })
       .from(u)
       .where(inArray(u.id, [...ids]));
   }
