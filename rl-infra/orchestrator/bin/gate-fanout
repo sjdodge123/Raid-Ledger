@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# ROK-1793 S2 — parallel fleet gate parent (spec planning-artifacts/specs/ROK-1793-S2.md).
+#
+# Usage: gate-fanout <P> --owner-slot A --exclude-slots csv --inner-env str
+#            --a-args str --b-args str --serial-args str [--fail-fast]
+#            [--child-timeout N]
+#
+# Runs as task P (weight light, holds no admission). Borrows a FREE second slot
+# B, copies slot A's tree onto it, dispatches child A (A: `RL_GATE_E2E=deferred`
+# + a-args, heavy) and child B (B: `RL_GATE_DISCORD=defer` + b-args, medium,
+# agent borrow-P), relays both children's raw `[step-time]` + `Name: STATUS`
+# lines, and — only when B printed `[parallel] discord-deferred` — runs phase-2
+# child C on A (`RL_GATE_DISCORD=only` + b-args, light). Then exec's
+# _gate_merge.sh P (exit code = merge's). No free slot / low memory / a failed
+# copy run the serial args on A exactly as a non-parallel gate (exit passthrough).
+# The EXIT trap cancels live children and releases the borrow on EVERY path.
+set -euo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# Child tools resolve by name so a test PATH shim wins; the real bin dir is the
+# fallback on the host.
+PATH="$PATH:$BIN_DIR_SELF"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_parser.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_admission.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_borrow.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_fanout.sh"
+
+P="${1:-}"; shift || true
+[[ "$P" =~ ^[a-z0-9]{8,32}$ ]] || { echo '{"ok":false,"error":"invalid_parent_task_id"}' >&2; exit 2; }
+OWNER_SLOT="" EXCLUDE="" INNER_ENV="" A_ARGS="" B_ARGS="" SERIAL_ARGS="" FAIL_FAST=0 CHILD_TIMEOUT=5400
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --owner-slot) OWNER_SLOT="$2"; shift 2 ;;
+        --exclude-slots) EXCLUDE="$2"; shift 2 ;;
+        --inner-env) INNER_ENV="$2"; shift 2 ;;
+        --a-args) A_ARGS="$2"; shift 2 ;;
+        --b-args) B_ARGS="$2"; shift 2 ;;
+        --serial-args) SERIAL_ARGS="$2"; shift 2 ;;
+        --fail-fast) FAIL_FAST=1; shift ;;
+        --child-timeout) CHILD_TIMEOUT="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\"}" >&2; exit 2 ;;
+    esac
+done
+[[ "$OWNER_SLOT" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_owner_slot"}' >&2; exit 2; }
+[[ "$CHILD_TIMEOUT" =~ ^[0-9]+$ ]] || CHILD_TIMEOUT=5400
+# P is light: children must run their own admission gate.
+unset RL_ADMISSION_HELD
+OWNER_AGENT="${RL_AGENT_ID:-}"
+if [[ -z "$OWNER_AGENT" || "$OWNER_AGENT" == "unknown" ]]; then
+    OWNER_AGENT=$(jq -r --argjson s "$OWNER_SLOT" '.[] | select(.slot == $s) | .agent_id // ""' "$RL_CLAIMS_FILE")
+fi
+MERGE="${RL_GATE_MERGE:-$BIN_DIR_SELF/_gate_merge.sh}"
+BORROWED="" FANOUT_CHILDREN=""
+trap fanout::cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+# serial_run <reason> — today's single-slot gate on A; exits with its code.
+serial_run() {
+    local rc=0
+    echo "[parallel] fallback: serial ($1)"
+    RL_AGENT_ID="$OWNER_AGENT" run-on-runner-with-heartbeat --weight heavy \
+        -- bash -c "$(fanout::inner "" "$SERIAL_ARGS")" || rc=$?
+    exit "$rc"
+}
+
+B=""; RC=0
+B=$(borrow::try "$OWNER_SLOT" "$P" "$EXCLUDE") || RC=$?
+case "$RC" in
+    0) ;;
+    3) serial_run "memory" ;;
+    *) serial_run "no free slot" ;;
+esac
+BORROWED="$B"
+echo "[parallel] borrowed slot $B"
+if ! borrow::copy_tree "$OWNER_SLOT" "$B"; then
+    borrow::release "$B" "$P" || true
+    BORROWED=""
+    serial_run "copy failed"
+fi
+
+CA=$(fanout::child_id "$P" a); CB=$(fanout::child_id "$P" b)
+fanout::dispatch a "$OWNER_SLOT" heavy "$OWNER_AGENT" false "RL_GATE_E2E=deferred " "$A_ARGS"
+fanout::dispatch b "$B" medium "$(borrow::agent_id "$P")" true "RL_GATE_DISCORD=defer " "$B_ARGS"
+fanout::wait_all "$FAIL_FAST" "$CA" "$CB"
+
+# B is idle from here on — free it before phase 2 so its queue moves sooner.
+borrow::release "$BORROWED" "$P" || true
+BORROWED=""
+
+if grep -q '^\[parallel\] discord-deferred' "$RL_TASKS_DIR/$CB.log" 2>/dev/null \
+    && ! { [[ "$FAIL_FAST" == "1" ]] && { fanout::failed "$CA" || fanout::failed "$CB"; }; }; then
+    fanout::dispatch c "$OWNER_SLOT" light "$OWNER_AGENT" false "RL_GATE_DISCORD=only " "$B_ARGS"
+    fanout::wait_all 0 "$(fanout::child_id "$P" c)"
+fi
+
+fanout::cleanup
+trap - EXIT TERM INT
+if [[ -f "$MERGE" ]]; then
+    exec bash "$MERGE" "$P"
+fi
+echo "[parallel] merge: not available"
+exit 1
