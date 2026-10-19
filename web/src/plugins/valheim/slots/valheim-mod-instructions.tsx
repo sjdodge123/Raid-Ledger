@@ -15,10 +15,12 @@ interface InstructionsProps {
     serverId: string;
     /** The raw token, only where the dialog already holds it. It is copied, never drawn in the block. */
     token?: string;
+    /** Copying the config block counts as copying the token. */
+    onCopied?: (() => void) | undefined;
 }
 
 /** The §4.7 neutral instruction callout — set-up steps carry no status hue. */
-export function ValheimModInstructions({ serverId, token }: InstructionsProps): JSX.Element {
+export function ValheimModInstructions({ serverId, token, onCopied }: InstructionsProps): JSX.Element {
     const origin = window.location.origin;
     const copied = modConfigLines(origin, serverId, token);
     const shown = token === undefined ? copied.config : [...copied.config.slice(0, -1), HIDDEN_TOKEN_LINE];
@@ -27,7 +29,7 @@ export function ValheimModInstructions({ serverId, token }: InstructionsProps): 
             <p className="text-sm font-medium text-foreground">Set up the mod</p>
             <div className="flex items-start justify-between gap-2">
                 <pre className={PRE} data-testid="valheim-link-config-block">{shown.join('\n')}</pre>
-                <CopyButton text={copied.config.join('\n')} />
+                <CopyButton text={copied.config.join('\n')} onCopied={onCopied} />
             </div>
             <SetupSteps />
             <p className="text-sm font-medium text-foreground">The mod uploads to</p>

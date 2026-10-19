@@ -31,6 +31,14 @@ describe('ValheimModInstructions', () => {
         await waitFor(async () => expect(await navigator.clipboard.readText()).toContain('ServerToken = vl_secret_abc'));
     });
 
+    it('reports a successful block copy to the caller (the dialog counts it as the token copied)', async () => {
+        const user = userEvent.setup();
+        const onCopied = vi.fn();
+        render(<ValheimModInstructions serverId="7" token="vl_secret_abc" onCopied={onCopied} />);
+        await user.click(screen.getByRole('button', { name: 'Copy to clipboard' }));
+        await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
+    });
+
     it('lists the restart, rotation, rebuild, catalogue and opt-out notes', () => {
         render(<ValheimModInstructions serverId="7" />);
         const notes = screen.getByTestId('valheim-link-token-instructions');
