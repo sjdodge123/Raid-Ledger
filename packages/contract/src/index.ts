@@ -212,6 +212,7 @@ export * from './game-identity/index.js';
 // through this barrel.
 export * from './wow-addon-export.schema.js';
 export * from './wow-addon-import.schema.js';
+export * from './wow-forever-realm-rulesets.schema.js';
 export * from './ledgerlink-json-schema.js';
 
 // RL Valheim Link mod push messages — wire contract v1 (ROK-1829).

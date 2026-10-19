@@ -183,6 +183,18 @@ export const AddonImportSectionResultSchema = z.discriminatedUnion('section', [
 ]);
 export type AddonImportSectionResultDto = z.infer<typeof AddonImportSectionResultSchema>;
 
+/**
+ * ROK-1739 — a ruleset inferred from the export's realm. `'blizzard'` is
+ * declared now so the Blizzard realm-type lookup (slice 2) is not a contract
+ * change.
+ */
+export const AddonImportRulesetInferenceSchema = z.object({
+    ruleset: WowForeverRulesetSchema,
+    realmName: z.string(),
+    source: z.enum(['realm-map', 'blizzard']),
+});
+export type AddonImportRulesetInferenceDto = z.infer<typeof AddonImportRulesetInferenceSchema>;
+
 const resultBase = {
     ...sectionBase,
     warnings: z.array(AddonImportWarningSchema),
@@ -195,6 +207,11 @@ const resultBase = {
      * single-section paste omits it (body unchanged since ROK-1724).
      */
     sections: z.array(AddonImportSectionResultSchema).min(2).max(3).optional(),
+    /**
+     * ROK-1739 — present only when the export's `who.ruleset` was null and the
+     * realm resolved; `realmName` is the export's raw `GetRealmName()` text.
+     */
+    rulesetInference: AddonImportRulesetInferenceSchema.optional(),
 };
 
 /** Discriminated by `section`; `summary` carries that section's counts. */
@@ -222,7 +239,8 @@ export const AddonImportTargetSchema = z.object({
     /**
      * Null ONLY on a `create` target whose export has no ruleset — the web's
      * "show the ruleset picker" signal. An `update` target always carries the
-     * stored ruleset.
+     * stored ruleset. Still null when `rulesetInference` is present (ROK-1739);
+     * the web pre-selects the picker from the inference.
      */
     ruleset: WowForeverRulesetSchema.nullable(),
     /** Title-cased display class, e.g. `Paladin`. */
