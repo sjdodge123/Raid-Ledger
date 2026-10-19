@@ -170,14 +170,20 @@ function useClampedPopover(
     }, [pos, anchorRef, popupRef]);
 }
 
-/** Focus the popover on open; Escape closes it and returns focus to the tile. */
+/**
+ * Focus the popover once it is positioned (a `visibility: hidden` node refuses
+ * focus); Escape closes it and returns focus to the tile.
+ */
 function useFocusAndEscape(
     popupRef: RefObject<HTMLElement | null>,
+    visible: boolean,
     onClose: () => void,
     returnRef: RefObject<HTMLElement | null>,
 ): void {
     useEffect(() => {
-        popupRef.current?.focus();
+        if (visible) popupRef.current?.focus();
+    }, [popupRef, visible]);
+    useEffect(() => {
         const onKey = (e: KeyboardEvent): void => {
             if (e.key === 'Escape') {
                 onClose();
@@ -202,7 +208,7 @@ function ItemPopover({
     const titleId = useId();
     const pos = useAnchoredPopup(anchorRef, popupRef, true, onClose);
     useClampedPopover(pos, anchorRef, popupRef);
-    useFocusAndEscape(popupRef, onClose, returnRef);
+    useFocusAndEscape(popupRef, pos !== null, onClose, returnRef);
     return createPortal(
         <div
             ref={popupRef}
@@ -227,7 +233,10 @@ export function ItemDetail({
     ...props
 }: PopoverProps & { open: boolean }): JSX.Element | null {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
-    if (isDesktop) return open ? <ItemPopover {...props} /> : null;
+    if (!open) return null;
+    if (isDesktop) return <ItemPopover {...props} />;
+    // Unmounted while closed: a closed sheet's Close button and wiki link would
+    // otherwise stay keyboard-focusable and in the accessibility tree.
     const { resolved, item, equipped, onClose } = props;
     return (
         <BottomSheet isOpen={open} onClose={onClose} title={resolved.label}>

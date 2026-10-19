@@ -37,7 +37,11 @@ export function resolveItem(
     items: ValheimItemCatalogue | undefined,
     atlas: ValheimMapBaseMap | null | undefined,
 ): ResolvedItem {
-    const entry = items?.[prefab];
+    // Own keys only: a prefab named `constructor` / `__proto__` must not read an inherited member.
+    const entry =
+        items !== undefined && Object.hasOwn(items, prefab)
+            ? items[prefab]
+            : undefined;
     if (entry === undefined)
         return { label: prefab, category: null, kind: 'unknown', icon: null };
     const drawable = iconDrawable(entry.icon, atlas ?? null);
