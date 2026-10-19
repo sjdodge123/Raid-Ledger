@@ -119,7 +119,9 @@ export type ValheimCatalogEntry = z.infer<typeof ValheimCatalogEntrySchema>;
  * `GET /plugins/valheim/armory/characters/:id` — summary plus the full sheet.
  * ROK-1836 (additive): `items` carries the catalogue subset for ONLY the
  * prefabs this sheet references (equipment + inventory + trophies) and
- * `atlas` the icon atlas blob; both absent when no catalogue row exists.
+ * `atlas` the icon atlas blob. With no catalogue row for the server + game
+ * version the API answers `items: {}` and `atlas: null` (the keys are
+ * optional only so older readers of the shape keep parsing).
  */
 export const ValheimCharacterDetailSchema =
   ValheimCharacterSummarySchema.extend({
