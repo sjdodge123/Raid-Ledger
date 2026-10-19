@@ -6,16 +6,21 @@
  * with `passive: false` (React's `onWheel` is passive and cannot stop the page
  * scrolling). 1 pointer pans, 2 pointers pinch about their midpoint, wheel
  * (and ctrl+wheel trackpad pinch) zooms about the cursor, double-click zooms
- * 2× about the point, `+`/`-`/`0`/arrows via `keyToAction`.
+ * 2× about the point, `+`/`-`/`0`/arrows via `keyToAction`. Focus never
+ * scrolls the `overflow: hidden` surface natively: any native scroll is reset to
+ * 0 and a focused offscreen descendant (a tabbed-to pin) is panned into view
+ * through the reducer, so the DOM never drifts from the managed transform.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type {
     CSSProperties,
     Dispatch,
+    FocusEvent,
     KeyboardEvent,
     MouseEvent,
     PointerEvent,
     RefObject,
+    UIEvent,
 } from 'react';
 import {
     initViewport,
@@ -103,6 +108,44 @@ function doubleClickHandler(dispatch: Dispatch<ViewportAction>) {
         });
 }
 
+/** Gap kept between a keyboard-focused descendant and the surface edge. */
+export const FOCUS_PAN_MARGIN = 8;
+
+/** Shift (px) that brings `[lo, hi]` inside `[0, size]` with a margin; 0 when visible. */
+export function revealShift(lo: number, hi: number, size: number): number {
+    if (lo < FOCUS_PAN_MARGIN) return FOCUS_PAN_MARGIN - lo;
+    if (hi > size - FOCUS_PAN_MARGIN) return size - FOCUS_PAN_MARGIN - hi;
+    return 0;
+}
+
+/** Undo any native scroll of the surface — the transform is the only offset. */
+function resetScroll(el: HTMLElement): void {
+    if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    if (el.scrollTop !== 0) el.scrollTop = 0;
+}
+
+/** Focus of a descendant: reset native scroll, then pan it into view via the reducer. */
+function focusHandler(dispatch: Dispatch<ViewportAction>) {
+    return (e: FocusEvent<HTMLElement>) => {
+        const el = e.currentTarget;
+        resetScroll(el);
+        if (e.target === el) return;
+        const box = el.getBoundingClientRect();
+        const r = e.target.getBoundingClientRect();
+        const dx = revealShift(
+            r.left - box.left,
+            r.right - box.left,
+            el.clientWidth,
+        );
+        const dy = revealShift(
+            r.top - box.top,
+            r.bottom - box.top,
+            el.clientHeight,
+        );
+        if (dx !== 0 || dy !== 0) dispatch({ type: 'pan', dx, dy });
+    };
+}
+
 function usePointerHandlers(dispatch: Dispatch<ViewportAction>) {
     const pointers = useRef<Pointers>(new Map());
     return useMemo(
@@ -127,6 +170,8 @@ function usePointerHandlers(dispatch: Dispatch<ViewportAction>) {
                 void pointers.current.delete(e.pointerId),
             onDoubleClick: doubleClickHandler(dispatch),
             onKeyDown: keyDownHandler(dispatch),
+            onFocus: focusHandler(dispatch),
+            onScroll: (e: UIEvent<HTMLElement>) => resetScroll(e.currentTarget),
         }),
         [dispatch],
     );
