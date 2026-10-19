@@ -154,4 +154,15 @@ describe('viewportReducer resize + pinch (ROK-1837 review)', () => {
         expect(under.x).toBeCloseTo(held.x, 6);
         expect(under.y).toBeCloseTo(held.y, 6);
     });
+
+    it('a pinch near an edge composes zoom + pan and clamps once (Codex r3 P2)', () => {
+        let state = viewportReducer(start, { type: 'resize', view: desktop });
+        state = { ...state, vp: { scale: 1, x: 0, y: 0 } };
+        const before = { mid: { x: 100, y: 100 }, dist: 100 };
+        const after = { mid: { x: 50, y: 100 }, dist: 80 };
+        for (const a of pinchActions(before, after))
+            state = viewportReducer(state, a);
+        expect(state.vp.scale).toBeCloseTo(0.8, 10);
+        expect(state.vp.x).toBeCloseTo(-30, 10);
+    });
 });

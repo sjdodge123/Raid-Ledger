@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import {
+    act,
+    cleanup,
+    fireEvent,
+    render,
+    screen,
+} from '@testing-library/react';
 import { MapViewport, type MapViewportCommands } from './map-viewport';
 import { VIEWPORT_STYLE, surfaceClass } from './use-map-viewport';
 
@@ -148,5 +154,33 @@ describe('MapViewport keeps browser zoom and page scroll (ROK-1837 D10)', () => 
     it('wheel outside the map surface is never prevented (page scroll stays native)', () => {
         renderViewport();
         expect(fireEvent.wheel(document.body, { deltaY: 100 })).toBe(true);
+    });
+});
+
+function scaleAfterWheel(init: { deltaY: number; deltaMode: number }): number {
+    const { app } = renderViewport();
+    fireEvent.wheel(app, { ...init, clientX: 10, clientY: 10 });
+    const scale = Number(screen.getByTestId('child-scale').textContent);
+    cleanup();
+    return scale;
+}
+
+describe('MapViewport wheel deltaMode normalisation (Codex r3 P2)', () => {
+    let restore: () => void = () => undefined;
+    beforeEach(() => {
+        restore = stubSize();
+    });
+    afterEach(() => restore());
+
+    it('DOM_DELTA_LINE zooms like 16px per line', () => {
+        const px = scaleAfterWheel({ deltaY: -48, deltaMode: 0 });
+        const lines = scaleAfterWheel({ deltaY: -3, deltaMode: 1 });
+        expect(lines).toBeCloseTo(px, 10);
+    });
+
+    it('DOM_DELTA_PAGE zooms like one surface height per page', () => {
+        const px = scaleAfterWheel({ deltaY: -VIEW.height, deltaMode: 0 });
+        const pages = scaleAfterWheel({ deltaY: -1, deltaMode: 2 });
+        expect(pages).toBeCloseTo(px, 10);
     });
 });
