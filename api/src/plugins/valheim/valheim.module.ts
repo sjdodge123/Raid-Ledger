@@ -15,6 +15,7 @@ import { ValheimLinkRemapListener } from './link/valheim-link-remap.listener';
 import { ValheimLinkTokensAdminController } from './link/valheim-link-tokens-admin.controller';
 import { ValheimLinkTokensRepository } from './link/valheim-link-tokens.repository';
 import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
+import { ValheimArmoryBlobController } from './armory/read/valheim-armory-blob.controller';
 import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module';
 import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
 import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
@@ -44,6 +45,7 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
     ValheimLinkBlobController,
     ValheimArmoryClaimsController,
     ValheimArmoryReadController,
+    ValheimArmoryBlobController,
   ],
   providers: [
     ValheimAdapterRegistration,
