@@ -316,19 +316,32 @@ slot_running_task_ids() {
 # children: P's children[] plus any task JSON whose parent_task_id is P (a
 # child dispatched just before P died may not be in children[] yet).
 borrow_live_children() {
-    local parent="$1" ids="" cid tjson found=""
+    local cid found=""
+    for cid in $(borrow_child_ids "$1"); do
+        [[ -f "$TASKS_DIR/$cid.json" ]] || continue
+        [[ "$(jq -r '.status // "unknown"' "$TASKS_DIR/$cid.json" 2>/dev/null)" == "running" ]] && found+="${found:+ }$cid"
+    done
+    echo "$found"
+}
+
+# borrow_child_ids <parent> — every known child id of P (any status), validated,
+# plus gate-fanout's deterministic borrowed-runner child id (`<P:0:31>b`, see
+# fanout::child_id) so a child dispatched just before P died is still covered.
+# These are the RL_TASK_ID markers the runner drain is scoped to.
+borrow_child_ids() {
+    local parent="$1" ids="${1:0:31}b" cid tjson out=""
     if [[ -f "$TASKS_DIR/$parent.json" ]]; then
-        ids=$(jq -r '(.children // [])[] | .task_id // empty' "$TASKS_DIR/$parent.json" 2>/dev/null || true)
+        ids+=" $(jq -r '(.children // [])[] | .task_id // empty' "$TASKS_DIR/$parent.json" 2>/dev/null || true)"
     fi
     for tjson in "$TASKS_DIR"/*.json; do
         [[ -f "$tjson" ]] || continue
         [[ "$(jq -r '.parent_task_id // empty' "$tjson" 2>/dev/null)" == "$parent" ]] && ids+=" $(basename "$tjson" .json)"
     done
+    # shellcheck disable=SC2086
     for cid in $(printf '%s\n' $ids | sort -u); do
-        [[ "$cid" =~ ^[a-z0-9]{8,32}$ && -f "$TASKS_DIR/$cid.json" ]] || continue
-        [[ "$(jq -r '.status // "unknown"' "$TASKS_DIR/$cid.json" 2>/dev/null)" == "running" ]] && found+="${found:+ }$cid"
+        [[ "$cid" =~ ^[a-z0-9]{8,32}$ ]] && out+="${out:+ }$cid"
     done
-    echo "$found"
+    echo "$out"
 }
 
 # borrow_cancel_children <parent> <ids> — ask task-cancel (cascading, idempotent)
@@ -357,10 +370,25 @@ if [[ -r "${RUNNER_DRAIN_LIB_DIR}/_runner_drain.sh" ]]; then
     source "${RUNNER_DRAIN_LIB_DIR}/_runner_drain.sh"
 fi
 
-# borrow_drain_runner <slot> — 0 once runner <slot> is drained, 1 when it cannot be.
+# borrow_drain_runner <slot> <child ids> — 0 once runner <slot> holds no process
+# marked with one of P's child ids; 2 when it cannot be drained at all (no
+# helper, no exec, no marker), 3 when the drain failed (see runner_drain::drain).
 borrow_drain_runner() {
-    declare -F runner_drain::drain >/dev/null || return 1
-    runner_drain::drain "$1" >/dev/null 2>&1
+    declare -F runner_drain::drain >/dev/null || return 2
+    # shellcheck disable=SC2086
+    runner_drain::drain "$1" $2 >/dev/null 2>&1
+}
+
+# borrow_row_still_ours <slot> <parent> — re-read the row under the claims lock:
+# 0 only while it is still claimed by `borrow-<parent>` (Codex r5 P1: P's own
+# cleanup may have released it and a queued claimant taken it since capture).
+borrow_row_still_ours() {
+    local agent
+    agent=$( (
+        flock -s 200
+        jq -r --argjson s "$1" '.[] | select(.slot == $s and .claimed == true) | .agent_id // empty' "$CLAIMS"
+    ) 200>"$LOCK_DIR/$(basename "$CLAIMS").lock" 2>/dev/null)
+    [[ "$agent" == "borrow-$2" ]]
 }
 
 # Codex r3 P2: a row only counts as a borrow while its agent is still the
@@ -388,10 +416,19 @@ while read -r bslot bparent; do
             '{slot:$slot, parent_task_id:$p, running_child_ids:($c | split(" "))}')"
         continue
     fi
-    if ! borrow_drain_runner "$bslot"; then
-        log "deferring orphaned borrow release on slot $bslot (parent $bparent is $BSTATUS) — runner drain unavailable"
-        audit orphan_release_deferred_drain_unavailable "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" \
+    if ! borrow_row_still_ours "$bslot" "$bparent"; then
+        log "skipping orphan drain on slot $bslot — row no longer held by borrow-$bparent"
+        audit orphan_drain_skipped_reassigned "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" \
             '{slot:$slot, parent_task_id:$p}')"
+        continue
+    fi
+    DRAIN_RC=0
+    borrow_drain_runner "$bslot" "$(borrow_child_ids "$bparent")" || DRAIN_RC=$?
+    if (( DRAIN_RC != 0 )); then
+        DRAIN_OUTCOME=orphan_release_deferred_drain_unavailable
+        (( DRAIN_RC == 3 )) && DRAIN_OUTCOME=orphan_release_deferred_drain_failed
+        log "deferring orphaned borrow release on slot $bslot (parent $bparent is $BSTATUS) — $DRAIN_OUTCOME"
+        audit "$DRAIN_OUTCOME" "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" '{slot:$slot, parent_task_id:$p}')"
         continue
     fi
     log "releasing orphaned borrow on slot $bslot (parent $bparent is $BSTATUS)"

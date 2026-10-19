@@ -16,6 +16,8 @@ CURRENT_TEST_FILE="sweeper-borrow-orphan.test.sh"
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$TEST_DIR/test_helpers.sh"
+# shellcheck disable=SC1091
+source "$TEST_DIR/drain_shim.sh"
 
 SWEEP_SCRIPT="$(cd "$TEST_DIR/../../gc-sweeper" && pwd)/sweep.sh"
 PARENT="parentbrw01"
@@ -40,7 +42,7 @@ _seed() {
     ]' > "$RL_STATE_DIR/claims.json"
     echo '[]' > "$RL_STATE_DIR/queue.json"
     echo '[]' > "$RL_STATE_DIR/env-registry.json"
-    mkdir -p "$RL_TASKS_DIR"
+    mkdir -p "$RL_TASKS_DIR"; rm -f "$RL_STATE_DIR/procs"
 }
 
 # Parent task JSON on slot 1 (NOT slot 2, so the §1 running-task guard cannot
@@ -64,26 +66,21 @@ case "\$1" in
     inspect) case "\$*" in *Health.Status*) echo healthy ;; *StartedAt*) date -u +%FT%TZ ;; *Config.Labels*) echo '{}' ;; esac ;;
     rm|volume|image|container) echo "docker \$*" >> "$REAP_LOG" ;;
     exec)
-        c=\$(jq -r '.[] | select(.slot == 2) | .claimed' "$RL_STATE_DIR/claims.json")
         case " \$* " in
             *" rl-runner-2 true "*) [[ "\${SHIM_EXEC_DOWN:-0}" == 1 ]] && exit 1; exit 0 ;;
-            *" rl-runner-2 pgrep "*)
-                n=\$(( \$(cat "$RL_STATE_DIR/pgrep.n" 2>/dev/null || echo 0) + 1 )); echo "\$n" > "$RL_STATE_DIR/pgrep.n"
-                echo "pgrep claimed=\$c" >> "$RL_STATE_DIR/drain.log"
-                (( n <= \${SHIM_LINGER:-0} )) && { echo 4242; exit 0; }
-                exit 1 ;;
-            *" pkill "*) echo "pkill claimed=\$c" >> "$RL_STATE_DIR/drain.log"; exit 0 ;;
+            *" rl-runner-2 sh "*) exec "$SHIM_DIR/drain-shim" "\$@" ;;
         esac
         exit 1 ;;
 esac
 exit 0
 SH
     chmod +x "$SHIM_DIR/docker"
+    write_drain_shim "$SHIM_DIR/drain-shim" "$RL_STATE_DIR/drain.log"
 }
 
 _sweep() {
     local sd="$RL_STATE_DIR" td="$RL_TASKS_DIR"
-    rm -f "$RL_STATE_DIR/pgrep.n"; : > "$RL_STATE_DIR/drain.log"
+    rm -f "$RL_STATE_DIR/scan.n"; : > "$RL_STATE_DIR/drain.log"
     PATH="$SHIM_DIR:$PATH" STATE_DIR="$sd" TASKS_DIR="$td" TASK_CANCEL_BIN="${TASK_CANCEL_BIN:-}" CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 \
         RUNNER_DRAIN_LIB_DIR="${RUNNER_DRAIN_LIB_DIR-$BIN_LIB}" RL_FANOUT_DRAIN_POLL_SECONDS=0.1 \
         bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
@@ -179,8 +176,9 @@ test_stale_borrowed_for_on_new_owner_left_alone() {
 # drains runner B before freeing the row — and keeps the row if it cannot.
 test_orphan_lingering_drained_then_released() {
     CURRENT_TEST_NAME="orphan borrow with a lingering B process -> drained on runner B, THEN released"
-    _seed; _seed_parent failed; _seed_child succeeded listed; _shim; export SHIM_LINGER=1; _sweep
-    assert_eq "$(head -2 "$RL_STATE_DIR/drain.log" | tr '\n' '|')" "pgrep claimed=true|pgrep claimed=true|" "row still borrowed while B lingers and at the all-clear poll"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _shim; echo "${PARENT}b" > "$RL_STATE_DIR/procs"
+    export SHIM_LINGER=1; _sweep
+    assert_eq "$(head -2 "$RL_STATE_DIR/drain.log" | tr '\n' '|')" "scan claimed=true|scan claimed=true|" "row still borrowed while B lingers and at the all-clear poll"
     assert_eq "$(_row2 | jq -r .claimed)" "false" "released once runner B is drained"
     unset SHIM_LINGER
 }
@@ -200,6 +198,67 @@ test_orphan_drain_lib_missing_kept() {
     assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "orphan_release_deferred_drain_unavailable" "deferral audited"
 }
 
+# Codex r5 P1: P's cleanup can release the borrow after BORROW_ROWS is captured
+# and a queued claimant take slot B. A `flock` shim plays that race at the
+# moment the sweeper takes the claims lock to re-read the row.
+_race_flock_shim() {
+    cat > "$SHIM_DIR/flock" <<SH
+#!/usr/bin/env bash
+if [[ "\$1" == "-s" ]]; then
+    jq '(.[] | select(.slot == 2)) |= (.agent_id = "new-claimant" | .started_at = (now | todate) | .last_heartbeat = (now | todate) | del(.borrowed_for, .borrowed_by))' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+fi
+exit 0
+SH
+    chmod +x "$SHIM_DIR/flock"
+}
+
+test_orphan_row_reassigned_before_drain_no_kill() {
+    CURRENT_TEST_NAME="row re-assigned between capture and drain -> no drain, no kill, skip audited"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _shim; _race_flock_shim
+    printf '%s\n' "${PARENT}b" "new-claimant-proc" > "$RL_STATE_DIR/procs"
+    export SHIM_LINGER=999 RL_FANOUT_DRAIN_SECONDS=0; _sweep
+    assert_eq "$(wc -c < "$RL_STATE_DIR/drain.log" | tr -d ' ')" "0" "no scan or kill on a slot someone else now holds"
+    assert_eq "$(_row2 | jq -c '{claimed, agent_id}')" '{"claimed":true,"agent_id":"new-claimant"}' "the new claimant keeps the slot"
+    assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "orphan_drain_skipped_reassigned" "skip audited"
+    unset SHIM_LINGER RL_FANOUT_DRAIN_SECONDS
+}
+
+test_orphan_kill_is_marker_scoped() {
+    CURRENT_TEST_NAME="lingering child processes are killed by RL_TASK_ID marker; other processes are left alone"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _shim
+    printf '%s\n' "${PARENT}b" "otherproc01" > "$RL_STATE_DIR/procs"
+    export SHIM_LINGER=999 RL_FANOUT_DRAIN_SECONDS=0; _sweep
+    assert_eq "$(grep '^kill' "$RL_STATE_DIR/drain.log")" "kill claimed=true tids=${PARENT}b" "kill targets only the orphan child's marker"
+    assert_eq "$(cat "$RL_STATE_DIR/procs")" "otherproc01" "an unmarked process survives the drain"
+    assert_eq "$(_row2 | jq -r .claimed)" "false" "released once the kill is verified"
+    unset SHIM_LINGER RL_FANOUT_DRAIN_SECONDS
+}
+
+# Codex r5 P2: an exec error mid-drain, or marked survivors after SIGKILL, are
+# drain FAILURES — never "empty runner" — so the row is kept.
+test_orphan_scan_exec_error_kept() {
+    CURRENT_TEST_NAME="scan exec error mid-drain -> row kept, drain_failed audited"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _shim; export SHIM_SCAN_ERR=1; _sweep
+    assert_eq "$(_row2 | jq -r .claimed)" "true" "an exec error is not an empty runner"
+    assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "orphan_release_deferred_drain_failed" "failure audited"
+    unset SHIM_SCAN_ERR
+}
+
+test_orphan_survivors_after_kill_kept() {
+    CURRENT_TEST_NAME="marked processes survive SIGKILL -> row kept, drain_failed audited"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _shim; echo "${PARENT}b" > "$RL_STATE_DIR/procs"
+    export SHIM_LINGER=999 SHIM_SURVIVE=1 RL_FANOUT_DRAIN_SECONDS=0; _sweep
+    assert_eq "$(grep -c '^kill' "$RL_STATE_DIR/drain.log")" "1" "the kill was attempted"
+    assert_eq "$(_row2 | jq -r .claimed)" "true" "survivors keep the row"
+    assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "orphan_release_deferred_drain_failed" "failure audited"
+    unset SHIM_LINGER SHIM_SURVIVE RL_FANOUT_DRAIN_SECONDS
+}
+
+run_test "orphan-row-reassigned-no-kill" test_orphan_row_reassigned_before_drain_no_kill
+run_test "orphan-kill-marker-scoped" test_orphan_kill_is_marker_scoped
+run_test "orphan-scan-exec-error-kept" test_orphan_scan_exec_error_kept
+run_test "orphan-survivors-after-kill-kept" test_orphan_survivors_after_kill_kept
 run_test "orphan-lingering-drained-released" test_orphan_lingering_drained_then_released
 run_test "orphan-drain-unreachable-kept" test_orphan_drain_unreachable_kept
 run_test "orphan-drain-lib-missing-kept" test_orphan_drain_lib_missing_kept
