@@ -1,7 +1,7 @@
 /**
  * ROK-1837 D9 — the map's overlay controls: zoom in / out / fit (wired to the
  * viewport's commands) and the two layer switches. ≥1024px the switches sit
- * inline under the buttons; below it a "Layers" button opens a BottomSheet
+ * inline under the vertical zoom group; below it a "Layers" button opens a BottomSheet
  * holding them (§4.4, §4.18). Every target is 44px (§4.20) — `size="md"`, since
  * `sm` drops to 36px (`lg:min-h-9`) at ≥1024px.
  */
@@ -74,6 +74,10 @@ export function LayerSwitches(props: MapLayerState) {
     );
 }
 
+const ZOOM_BUTTON_CLASS =
+    'h-11 w-11 text-foreground hover:bg-overlay disabled:text-dim';
+
+/** The prototype's `.ctlgroup`: a vertical stack of 44px zoom buttons. */
 function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
     const items = [
         { label: 'Zoom in', Icon: PlusIcon, run: commands?.zoomIn },
@@ -81,13 +85,16 @@ function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
         { label: 'Fit map', Icon: ArrowsPointingInIcon, run: commands?.fit },
     ];
     return (
-        <div className="flex gap-1 rounded-lg border border-edge bg-surface p-1">
+        <div
+            role="group"
+            aria-label="Map zoom"
+            className="flex flex-col divide-y divide-edge overflow-hidden rounded-lg border border-edge bg-surface shadow-md"
+        >
             {items.map(({ label, Icon, run }) => (
                 <Button
                     key={label}
-                    variant="ghost"
-                    size="md"
-                    iconOnly
+                    variant="bare"
+                    className={ZOOM_BUTTON_CLASS}
                     aria-label={label}
                     disabled={!run}
                     onClick={run}

@@ -24,6 +24,16 @@ beforeEach(() => {
 });
 
 describe('MapControls (ROK-1837 D9)', () => {
+    it('stacks zoom in / out / fit in one vertical group (prototype .ctlgroup)', () => {
+        render(<MapControls {...props()} />);
+        const group = screen.getByRole('group', { name: 'Map zoom' });
+        expect(
+            within(group)
+                .getAllByRole('button')
+                .map((b) => b.getAttribute('aria-label')),
+        ).toEqual(['Zoom in', 'Zoom out', 'Fit map']);
+    });
+
     it('zoom in / zoom out / fit call the viewport commands', () => {
         const p = props();
         render(<MapControls {...p} />);
@@ -88,7 +98,8 @@ describe('MapControls 44px targets at every width (Codex r5 P3)', () => {
                 name,
                 cls: expect.not.arrayContaining(['lg:min-h-9']),
             });
-            expect(cls).toContain('min-h-[44px]');
+            // The prototype's 44×44 .ctlbtn (no padding-widened 52px).
+            expect(cls).toEqual(expect.arrayContaining(['h-11', 'w-11']));
         }
     });
 
