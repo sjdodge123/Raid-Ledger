@@ -130,9 +130,9 @@ async function rowsFor(userId: number, type?: string) {
 }
 
 /** Awaits every promise the spied fire-and-forget method returned. */
-async function settle(
-  spy: jest.SpiedFunction<(...args: never[]) => Promise<void>>,
-): Promise<void> {
+async function settle(spy: {
+  mock: { results: ReadonlyArray<{ value: unknown }> };
+}): Promise<void> {
   await Promise.allSettled(spy.mock.results.map((r) => r.value));
 }
 
