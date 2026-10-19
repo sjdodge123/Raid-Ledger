@@ -75,6 +75,23 @@ export type ValheimCharacterMapRef = z.infer<
   typeof ValheimCharacterMapRefSchema
 >;
 
+/** ROK-1837 — which fog-of-war layer a map byte route returns. */
+export const ValheimMapFogLayerSchema = z.enum(["personal", "shared"]);
+export type ValheimMapFogLayer = z.infer<typeof ValheimMapFogLayerSchema>;
+
+/** ROK-1837 — `POST /admin/test/valheim/map-fixture` (DEMO_MODE) response. */
+export const ValheimMapFixtureResponseSchema = z
+  .object({
+    characterId: Id,
+    mapId: Id,
+    pelicanServerId: Id,
+    guildId: Id.nullable(),
+  })
+  .strict();
+export type ValheimMapFixtureResponse = z.infer<
+  typeof ValheimMapFixtureResponseSchema
+>;
+
 /** Base-map blob reference; `ready` = the bytes have been uploaded. */
 export const ValheimMapBaseMapSchema = z
   .object({
