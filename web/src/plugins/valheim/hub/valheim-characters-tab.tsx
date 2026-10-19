@@ -5,7 +5,8 @@
  */
 import { useLocation } from 'react-router-dom';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
-import { useValheimCharacters } from '../hooks/use-valheim-characters';
+import { Button } from '../../../components/ui/button';
+import { useValheimCharacterPages } from '../hooks/use-valheim-characters';
 import { ValheimCharacterRow } from './valheim-character-row';
 
 function Quiet({ children, role }: { children: string; role?: 'alert' }) {
@@ -16,7 +17,7 @@ function Quiet({ children, role }: { children: string; role?: 'alert' }) {
     );
 }
 
-function TabHeading({ count }: { count: number | null }) {
+function TabHeading({ count }: { count: string | null }) {
     return (
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-edge pb-2">
             <h2
@@ -58,16 +59,41 @@ function RowList({
     );
 }
 
+function LoadMore({
+    pages,
+}: {
+    pages: ReturnType<typeof useValheimCharacterPages>;
+}) {
+    if (!pages.hasMore && !pages.moreFailed) return null;
+    return (
+        <div className="mt-3 flex flex-col items-center gap-2">
+            {pages.moreFailed && (
+                <p role="alert" className="text-sm text-muted">
+                    Couldn't load more characters.
+                </p>
+            )}
+            <Button
+                variant="secondary"
+                loading={pages.loadingMore}
+                onClick={pages.loadMore}
+            >
+                Load more characters
+            </Button>
+        </div>
+    );
+}
+
 export function ValheimCharactersTab({ serverId }: { serverId: number }) {
     const { pathname, search } = useLocation();
-    const query = useValheimCharacters(serverId);
-    const rows = query.data ?? [];
+    const query = useValheimCharacterPages(serverId);
+    const { rows } = query;
+    const count = `${rows.length}${query.hasMore ? '+' : ''}`;
     return (
         <section
             aria-labelledby="valheim-characters-h"
             aria-busy={query.isPending}
         >
-            <TabHeading count={query.isSuccess ? rows.length : null} />
+            <TabHeading count={query.isSuccess ? count : null} />
             {query.isError && (
                 <Quiet role="alert">
                     Couldn't load characters. Try again in a moment.
@@ -80,6 +106,7 @@ export function ValheimCharactersTab({ serverId }: { serverId: number }) {
                 </Quiet>
             )}
             <RowList rows={rows} hubPath={`${pathname}${search}#characters`} />
+            <LoadMore pages={query} />
         </section>
     );
 }

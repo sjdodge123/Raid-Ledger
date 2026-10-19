@@ -22,9 +22,7 @@ describe('characterPageState', () => {
             'loading',
         ));
     it('a bad id or a 404 is not-found', () => {
-        expect(characterPageState({ ...base, hasId: false })).toBe(
-            'not-found',
-        );
+        expect(characterPageState({ ...base, hasId: false })).toBe('not-found');
         expect(
             characterPageState({ ...base, isError: true, notFound: true }),
         ).toBe('not-found');

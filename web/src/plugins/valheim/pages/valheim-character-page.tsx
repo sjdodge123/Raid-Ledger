@@ -12,6 +12,10 @@ import { ValheimCharacterHeader } from '../character/character-header';
 import { ValheimCharacterSections } from '../character/character-sections';
 import { hubPathFrom, parseCharacterId } from '../lib/valheim-routes';
 import { useAuth } from '../../../hooks/use-auth';
+import {
+    characterPageState,
+    type CharacterPageState,
+} from './valheim-character-page.helpers';
 import { ValheimCharacterOwnerActions } from '../character/character-owner-actions';
 
 function Crumb({ to, label }: { to: string; label: string }) {
@@ -34,22 +38,33 @@ function Quiet({ children, role }: { children: string; role?: 'alert' }) {
     );
 }
 
-function ErrorState({
-    notFound,
-    failed,
-}: {
-    notFound: boolean;
-    failed: boolean;
-}) {
+/** Initial-load placeholder in the sheet's own card geometry (token surfaces only). */
+function SheetSkeleton() {
+    return (
+        <div
+            data-testid="valheim-character-skeleton"
+            aria-hidden="true"
+            className="flex animate-pulse flex-col gap-4"
+        >
+            <div className="h-8 w-56 rounded bg-overlay" />
+            <div className="h-4 w-40 rounded bg-overlay" />
+            <div className="h-48 rounded-lg border border-edge bg-panel" />
+        </div>
+    );
+}
+
+function ErrorState({ state }: { state: CharacterPageState }) {
+    const notFound = state === 'not-found';
     return (
         <>
+            {state === 'loading' && <SheetSkeleton />}
             {notFound && (
                 <Quiet>
                     This character doesn't exist or was removed. Open one from a
                     server's Characters tab.
                 </Quiet>
             )}
-            {!notFound && failed && (
+            {state === 'failed' && (
                 <Quiet role="alert">
                     Couldn't load this character. Try again in a moment.
                 </Quiet>
@@ -81,8 +96,13 @@ export function ValheimCharacterPage() {
     const hubPath = hubPathFrom(useLocation().state);
     const query = useValheimCharacter(id);
     const c = query.data;
-    const notFound =
-        id === null || (query.isError && isNotFoundError(query.error));
+    const state = characterPageState({
+        hasId: id !== null,
+        isPending: query.isPending,
+        isError: query.isError,
+        notFound: query.isError && isNotFoundError(query.error),
+        hasData: c !== undefined,
+    });
     return (
         <div
             className="mx-auto max-w-6xl px-4 py-6"
@@ -94,8 +114,10 @@ export function ValheimCharacterPage() {
                     label={c ? `${c.serverName} · Characters` : 'Characters'}
                 />
             )}
-            <ErrorState notFound={notFound} failed={query.isError} />
-            {c !== undefined && <CharacterBody character={c} />}
+            <ErrorState state={state} />
+            {state === 'ready' && c !== undefined && (
+                <CharacterBody character={c} />
+            )}
         </div>
     );
 }

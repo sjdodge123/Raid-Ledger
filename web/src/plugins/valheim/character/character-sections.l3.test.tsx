@@ -49,7 +49,7 @@ describe('Valheim character sections', () => {
         expect(eq.querySelectorAll('li[data-slot]')).toHaveLength(9);
         expect(
             within(eq).getByRole('button', {
-                name: 'Iron sword, quality 3, equipped',
+                name: 'Iron sword, quality 3, durability 20%, equipped',
             }),
         ).toBeInTheDocument();
         expect(within(eq).getByText('Legs (empty)')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('Valheim character sections (cont.) (cont.)', () => {
         ).toHaveTextContent('game version 0.220.5');
         expect(
             within(section('Equipment')).getByRole('button', {
-                name: 'SwordIron, quality 3, equipped',
+                name: 'SwordIron, quality 3, durability 20%, equipped',
             }),
         ).toBeInTheDocument();
         expect(

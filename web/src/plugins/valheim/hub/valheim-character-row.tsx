@@ -1,7 +1,7 @@
 /** ROK-1836 — one character in the hub Characters tab: a §4.2 stretched-action card row. */
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
-import { StretchedAction } from '../../../components/ui/stretched-action';
+import { STRETCHED_ACTION_CLASS } from '../../../components/ui/stretched-action';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { AvatarWithFallback } from '../../../components/shared/AvatarWithFallback';
 import { ownerChip, updatedAgo } from '../lib/valheim-owner.helpers';
@@ -47,7 +47,11 @@ function RowBody({ character }: { character: ValheimCharacterSummary }) {
     );
 }
 
-/** `hubPath` rides in router state so the character page's crumb can return to this hub tab. */
+/**
+ * `hubPath` rides in router state so the character page's crumb can return to
+ * this hub tab. The stretched action is a real `<Link>` (§4.2 geometry) so
+ * open-in-new-tab and copy-link work on the D2 deep link.
+ */
 export function ValheimCharacterRow({
     character,
     hubPath,
@@ -55,16 +59,13 @@ export function ValheimCharacterRow({
     character: ValheimCharacterSummary;
     hubPath: string;
 }) {
-    const navigate = useNavigate();
     return (
         <li className="relative flex min-h-[44px] items-center gap-3 rounded-lg border border-edge bg-surface px-4 py-3 transition-colors hover:bg-overlay">
-            <StretchedAction
-                label={`Open ${character.name}`}
-                onClick={() =>
-                    navigate(valheimCharacterHref(character.id), {
-                        state: { hubPath },
-                    })
-                }
+            <Link
+                to={valheimCharacterHref(character.id)}
+                state={{ hubPath }}
+                aria-label={`Open ${character.name}`}
+                className={STRETCHED_ACTION_CLASS}
             />
             <RowBody character={character} />
             <span className="text-faint" aria-hidden="true">

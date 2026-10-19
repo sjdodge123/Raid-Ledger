@@ -125,7 +125,10 @@ describe('ValheimCharactersTab (cont.)', () => {
                     data:
                         page === '1'
                             ? many
-                            : [valheimCharacterClaimed, valheimCharacterAssigned],
+                            : [
+                                  valheimCharacterClaimed,
+                                  valheimCharacterAssigned,
+                              ],
                 });
             }),
         );

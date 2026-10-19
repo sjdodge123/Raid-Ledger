@@ -46,7 +46,7 @@ export function useAssignOwner(id: number) {
     return useMutation({
         mutationFn: (userId: number | null) =>
             assignValheimOwner(id, { userId }),
-        onSuccess: () => invalidateOwnership(qc, id),
+        onSettled: () => invalidateOwnership(qc, id),
     });
 }
 

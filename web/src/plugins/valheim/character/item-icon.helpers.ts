@@ -101,7 +101,7 @@ export function durabilityPct(item: ValheimItemStack): number | null {
     );
 }
 
-/** The tile's accessible name: "Iron sword, 3, quality 2, equipped". */
+/** The tile's accessible name: "Iron sword, 3, quality 2, durability 80%, equipped". */
 export function itemAriaLabel(
     label: string,
     item: ValheimItemStack,
@@ -110,6 +110,8 @@ export function itemAriaLabel(
     const parts = [label];
     if (item.stack > 1) parts.push(String(item.stack));
     if (item.quality > 1) parts.push(`quality ${item.quality}`);
+    const pct = durabilityPct(item);
+    if (pct !== null) parts.push(`durability ${pct}%`);
     if (equipped) parts.push('equipped');
     return parts.join(', ');
 }

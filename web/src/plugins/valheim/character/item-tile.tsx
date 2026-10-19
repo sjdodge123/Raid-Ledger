@@ -37,17 +37,26 @@ const FACE_SKIN: Record<ResolvedItem['kind'], string> = {
     unknown: 'border-edge bg-surface',
 };
 
+/** Five pips fit the 44px tile; above that one pip + "×q" (contract allows quality 10). */
+const MAX_PIPS = 5;
+
 function QualityPips({ quality }: { quality: number }): JSX.Element | null {
     if (quality <= 1) return null;
+    const pips = quality > MAX_PIPS ? 1 : quality;
     return (
         <span
             aria-hidden="true"
             data-testid="valheim-quality-pips"
             className="absolute left-[3px] top-[3px] flex gap-0.5"
         >
-            {Array.from({ length: quality }, (_, i) => (
+            {Array.from({ length: pips }, (_, i) => (
                 <i key={i} className="h-1 w-1 rounded-full bg-warning" />
             ))}
+            {quality > MAX_PIPS ? (
+                <b className="-mt-px text-[9px] font-bold leading-none text-warning">
+                    ×{quality}
+                </b>
+            ) : null}
         </span>
     );
 }
@@ -111,6 +120,13 @@ interface TileButtonProps {
     equipped: boolean;
     open: boolean;
     onToggle: () => void;
+    focusProps?: GridFocusProps | undefined;
+}
+
+/** Roving-tabindex props from a grid (`useRovingGrid`); absent outside a grid. */
+export interface GridFocusProps {
+    tabIndex: number;
+    'data-rc': string;
 }
 
 function TileButton({
@@ -121,9 +137,11 @@ function TileButton({
     equipped,
     open,
     onToggle,
+    focusProps,
 }: TileButtonProps): JSX.Element {
     return (
         <button
+            {...focusProps}
             ref={ref}
             type="button"
             title={resolved.label}
@@ -155,12 +173,14 @@ interface ItemTileProps {
     item: ValheimItemStack;
     ctx: ItemIconContext;
     equipped?: boolean;
+    focusProps?: GridFocusProps | undefined;
 }
 
 export function ItemTile({
     item,
     ctx,
     equipped = false,
+    focusProps,
 }: ItemTileProps): JSX.Element {
     const { open, toggle, close } = useDisclosure();
     const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -173,6 +193,7 @@ export function ItemTile({
                 ref={buttonRef}
                 open={open}
                 onToggle={toggle}
+                focusProps={focusProps}
                 ctx={ctx}
                 {...data}
             />

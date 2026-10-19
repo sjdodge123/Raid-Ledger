@@ -61,7 +61,13 @@ export function inventoryUsage(inventory: ValheimInventory): {
     total: number;
 } {
     return {
-        used: inventory.items.length,
+        used: inventory.items.filter(
+            ({ x, y }) =>
+                x >= 0 &&
+                y >= 0 &&
+                x < inventory.grid.width &&
+                y < inventory.grid.height,
+        ).length,
         total: inventory.grid.width * inventory.grid.height,
     };
 }

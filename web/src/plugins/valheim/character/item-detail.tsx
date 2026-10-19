@@ -6,6 +6,7 @@
 import {
     useEffect,
     useId,
+    useLayoutEffect,
     useRef,
     type CSSProperties,
     type JSX,
@@ -20,6 +21,7 @@ import { useAnchoredPopup } from '../../../components/ui/use-anchored-popup';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
+import { clampPopover } from './popover-clamp';
 import {
     durabilityPct,
     valheimWikiUrl,
@@ -96,7 +98,7 @@ function ItemLinkOut({ resolved }: { resolved: ResolvedItem }): JSX.Element {
             href={valheimWikiUrl(resolved.label)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-success hover:underline"
+            className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-2 hover:text-secondary"
         >
             Open on the Valheim wiki
             <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
@@ -127,14 +129,40 @@ interface PopoverProps extends ItemDetailData {
     container: HTMLElement;
 }
 
+/** Used until the popover has laid out (jsdom never lays out). */
+const FALLBACK = { width: 288, height: 240 };
+
 function popoverStyle(
     pos: { top: number; left: number } | null,
 ): CSSProperties {
-    return {
-        top: pos?.top ?? 0,
-        left: pos?.left ?? 0,
-        visibility: pos ? 'visible' : 'hidden',
-    };
+    return { visibility: pos ? 'visible' : 'hidden' };
+}
+
+/**
+ * Clamp the anchored position inside the viewport (flip above, shift left).
+ * `pos` is in the popup's containing-block frame, so the anchor's viewport
+ * rect gives the offset back. Written to the node before paint.
+ */
+function useClampedPopover(
+    pos: { top: number; left: number } | null,
+    anchorRef: RefObject<HTMLElement | null>,
+    popupRef: RefObject<HTMLElement | null>,
+): void {
+    useLayoutEffect(() => {
+        const el = popupRef.current;
+        const a = anchorRef.current?.getBoundingClientRect();
+        if (!el || !a || !pos) return;
+        const at = clampPopover({
+            anchor: { left: a.left, top: a.top, bottom: a.bottom },
+            size: {
+                width: el.offsetWidth || FALLBACK.width,
+                height: el.offsetHeight || FALLBACK.height,
+            },
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+        });
+        el.style.left = `${at.left - (a.left - pos.left)}px`;
+        el.style.top = `${at.top - (a.bottom + 4 - pos.top)}px`;
+    }, [pos, anchorRef, popupRef]);
 }
 
 /** Focus the popover on open; Escape closes it and returns focus to the tile. */
@@ -168,6 +196,7 @@ function ItemPopover({
     const popupRef = useRef<HTMLDivElement | null>(null);
     const titleId = useId();
     const pos = useAnchoredPopup(anchorRef, popupRef, true, onClose);
+    useClampedPopover(pos, anchorRef, popupRef);
     useFocusAndEscape(popupRef, onClose, returnRef);
     return createPortal(
         <div
