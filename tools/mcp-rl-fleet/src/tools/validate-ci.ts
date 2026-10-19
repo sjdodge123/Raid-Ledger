@@ -34,6 +34,7 @@ import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
 import { resolveWorktreeShortSha, resolveWorktreeSurfaceHash } from './worktree-sha.js';
 import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
 import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
+import { parallelTarget } from './validate-ci-parallel.js';
 
 // Re-exported so `rl_validate_ci`'s target helpers stay importable from this
 // module (and its spec) after the ROK-1466 W1 split kept it under 300 lines.
@@ -103,6 +104,10 @@ export interface ValidateCiParams {
    * E2E_SPECS. Mutually exclusive with e2e_scope other than `auto`.
    */
   e2e_specs?: string[];
+  /** ROK-1793 S2: split a fleet:true gate across a borrowed second runner. */
+  parallel?: boolean;
+  /** ROK-1793 S2: with parallel, cancel the sibling child on the first FAIL. */
+  fail_fast?: boolean;
 }
 
 /**
@@ -217,11 +222,14 @@ export async function execute(
   // run-on-runner-with-heartbeat (docker exec + M5b progress lines).
   const innerCmd =
     `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
-  const targetCmd =
+  const taskId = newTaskId();
+  // ROK-1793 S2: parallel → P runs gate-fanout (light; the children gate themselves).
+  const fanout = params.parallel || params.fail_fast
+    ? await parallelTarget(params, taskId, slot, innerEnv, resolveArgs(params)) : null;
+  if (fanout && 'error' in fanout) return { ok: false, ...fanout };
+  const targetCmd = fanout?.cmd ??
     `/srv/rl-infra/orchestrator/bin/run-on-runner-with-heartbeat ` +
     `-- bash -c ${shellQuote(innerCmd)}`;
-
-  const taskId = newTaskId();
   const slotFlag = slot !== null ? `--slot ${slot} ` : '';
   // Pass timeout_seconds through to task-start so the watchdog kills a hung run.
   // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
@@ -230,7 +238,7 @@ export async function execute(
   const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   // ROK-1470: heavy runs wait on host MemAvailable inside task-start before the
   // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.
-  const weight = resolveValidateCiWeight(resolveArgs(params), params.weight);
+  const weight = fanout ? 'light' : resolveValidateCiWeight(resolveArgs(params), params.weight);
   const remote =
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +

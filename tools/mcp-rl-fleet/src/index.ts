@@ -25,6 +25,7 @@ import * as envDestroy from './tools/env-destroy.js';
 import * as envList from './tools/env-list.js';
 import * as runOnRunner from './tools/run-on-runner.js';
 import * as validateCi from './tools/validate-ci.js';
+import { TASK_WEIGHTS } from './tools/task-weight.js';
 import * as dbUrl from './tools/db-url.js';
 import * as logsUrl from './tools/logs-url.js';
 import * as envSync from './tools/env-sync.js';
@@ -164,7 +165,7 @@ registerTool(envList.TOOL_NAME, envList.TOOL_DESCRIPTION, {} as Shape, async () 
 // ROK-1470 — admission weight. Heavy tasks wait until the VM has
 // RL_HEAVY_TASK_MIN_FREE_MB free before launching; light tasks never wait.
 // Omitted → derived per tool (see src/tools/task-weight.ts).
-const weightSchema = z.enum(['heavy', 'light']).optional();
+const weightSchema = z.enum(TASK_WEIGHTS).optional();
 
 const runOnRunnerSchema: Shape = {
   command: z.string().min(1),
@@ -202,6 +203,10 @@ const validateCiSchema: Shape = {
     .array(z.string().regex(validateCi.E2E_SPEC_PATTERN))
     .max(validateCi.MAX_E2E_SPECS)
     .optional(),
+  // ROK-1793 S2 — opt-in parallel fleet gate (Playwright on a borrowed second
+  // runner). Refused in execute without fleet:true (a Shape cannot cross-refine).
+  parallel: z.boolean().optional(),
+  fail_fast: z.boolean().optional(),
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>
