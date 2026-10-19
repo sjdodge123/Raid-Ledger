@@ -69,6 +69,10 @@ export function useValheimBlobUrl(
             return undefined;
         }
         const objectUrl = URL.createObjectURL(blob);
+        // The object URL is an external resource whose lifetime must match this
+        // effect (StrictMode-safe revoke) — a render-time useMemo would hand out
+        // a revoked URL after StrictMode's cleanup/re-run.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setUrl(objectUrl);
         return () => {
             URL.revokeObjectURL(objectUrl);
