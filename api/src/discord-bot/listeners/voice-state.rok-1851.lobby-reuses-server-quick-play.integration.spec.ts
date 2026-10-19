@@ -256,7 +256,9 @@ describe('ROK-1851 — lobby voice spawn reuses the same-channel Quick Play', ()
       serverEvent,
     ]);
   });
+});
 
+describe('ROK-1851 — cross-channel separation and the shared end path', () => {
   it('a Quick Play of the game born on ANOTHER channel is not reused', async () => {
     const otherBinding = await seedBinding(
       'game-voice-monitor',
