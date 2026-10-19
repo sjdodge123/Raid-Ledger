@@ -128,7 +128,9 @@ async function assertSections(page: Page): Promise<void> {
   await expect(grid.getByRole("button", { name: /^Wood, 50$/ })).toBeAttached();
 
   await expect(
-    page.getByRole("region", { name: "Trophies" }).getByLabel("Trophies"),
+    page
+      .getByRole("region", { name: "Trophies" })
+      .getByLabel("Trophies", { exact: true }),
   ).toBeVisible();
 }
 
