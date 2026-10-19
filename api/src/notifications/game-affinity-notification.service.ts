@@ -11,7 +11,10 @@ import {
   type GroupNoticeContext,
 } from './event-notice-dispatch.helpers';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
-import { findEventGuildId } from './hub-notification.queries';
+import {
+  findEventGuildId,
+  findPriorEventNoticeUserIds,
+} from './hub-notification.queries';
 import {
   EVENT_NOTICE_TTL_SECONDS,
   eventNoticeKey,
@@ -47,6 +50,12 @@ export interface GameAffinityNotificationInput {
    * DM, so they are subtracted from this affinity broadcast to avoid a double DM.
    */
   followupForEventId?: number | null;
+  /**
+   * ROK-1832 (Codex r4): skip users who already hold a game, group or
+   * follow-up notice row for this event (and claim their per-user key). Set
+   * by the deferred announce, which can run long after the follow-up DMs.
+   */
+  excludePriorNoticeHolders?: boolean;
 }
 
 /**
@@ -149,7 +158,27 @@ export class GameAffinityNotificationService {
   ): Promise<number[]> {
     if (recipientIds.length === 0) return [];
     const present = await this.excludeAbsentUsers(recipientIds, input);
-    return present.filter((id) => !followupIds.has(id));
+    const fresh = present.filter((id) => !followupIds.has(id));
+    return input.excludePriorNoticeHolders
+      ? this.withoutPriorNotice(input.eventId, fresh)
+      : fresh;
+  }
+
+  /** Drop prior notice holders and claim their per-user key (Codex r4). */
+  private async withoutPriorNotice(
+    eventId: number,
+    ids: number[],
+  ): Promise<number[]> {
+    const prior = await findPriorEventNoticeUserIds(this.db, eventId, ids);
+    await Promise.allSettled(
+      [...prior].map((id) =>
+        this.dedupService.checkAndMarkSent(
+          eventNoticeKey(eventId, id),
+          EVENT_NOTICE_TTL_SECONDS,
+        ),
+      ),
+    );
+    return ids.filter((id) => !prior.has(id));
   }
 
   /**

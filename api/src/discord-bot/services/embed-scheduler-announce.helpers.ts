@@ -63,6 +63,10 @@ export async function announceDeferredGroupEvent(
     clientUrl: await deps.clientUrl(),
     gameCoverUrl: null,
     discordMessage,
+    // Codex r4: attendees already holding a notice row (e.g. a follow-up
+    // quick-sign-up sent before the per-user claims, or whose claim expired)
+    // are skipped — the deferred announce carries no `followupForEventId`.
+    excludePriorNoticeHolders: true,
   });
 }
 
@@ -70,7 +74,7 @@ export async function announceDeferredGroupEvent(
 async function findAnnounceEvent(
   db: Pick<PostgresJsDatabase<typeof schema>, 'select'>,
   eventId: number,
-): Promise<DeferredAnnounceEvent | null> {
+): Promise<(DeferredAnnounceEvent & { cancelledAt: Date | null }) | null> {
   const e = schema.events;
   const [row] = await db
     .select({
@@ -80,6 +84,7 @@ async function findAnnounceEvent(
       gameId: e.gameId,
       guildId: e.guildId,
       creatorId: e.creatorId,
+      cancelledAt: e.cancelledAt,
     })
     .from(e)
     .where(eq(e.id, eventId))
@@ -99,5 +104,9 @@ export async function announceGroupForEvent(
 ): Promise<void> {
   if (!deps.affinity) return;
   const event = await findAnnounceEvent(deps.db, eventId);
-  if (event) await announceDeferredGroupEvent(deps, event);
+  // Codex r4: a cancelled occurrence is never announced (same predicate as
+  // the scheduler and `notifyLateTag`).
+  if (event && event.cancelledAt === null) {
+    await announceDeferredGroupEvent(deps, event);
+  }
 }

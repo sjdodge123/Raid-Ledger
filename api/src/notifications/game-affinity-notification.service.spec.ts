@@ -9,7 +9,11 @@ import type { NotificationService } from './notification.service';
 import type { NotificationDedupService } from './notification-dedup.service';
 import type { HubNotificationService } from './hub-notification.service';
 import { findGameAffinityRecipients } from './game-affinity-recipients.helpers';
-import { findEventGuildId, findGroupTypeOff } from './hub-notification.queries';
+import {
+  findEventGuildId,
+  findGroupTypeOff,
+  findPriorEventNoticeUserIds,
+} from './hub-notification.queries';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 
 jest.mock('./game-affinity-recipients.helpers', () => ({
@@ -23,12 +27,14 @@ jest.mock('./hub-notification.queries', () => ({
   findEventGuildId: jest.fn(),
   findGuildName: jest.fn().mockResolvedValue('Raiders'),
   findGroupTypeOff: jest.fn().mockResolvedValue(new Set()),
+  findPriorEventNoticeUserIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
 const affinity = jest.mocked(findGameAffinityRecipients);
 const guildOf = jest.mocked(findEventGuildId);
 const typeOff = jest.mocked(findGroupTypeOff);
 const followups = jest.mocked(resolvePostEventFollowupRecipients);
+const priorHolders = jest.mocked(findPriorEventNoticeUserIds);
 
 const input = {
   eventId: 1,
@@ -221,5 +227,37 @@ describe('GameAffinityNotificationService — follow-up attendees (ROK-1371)', (
     expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
     expect(h.claimed.has('event-notice:1:user:11')).toBe(true);
     expect(h.claimed.has('event-notice:1:user:12')).toBe(true);
+  });
+});
+
+describe('GameAffinityNotificationService — durable prior notices (Codex r4)', () => {
+  beforeEach(() => {
+    affinity.mockReset();
+    guildOf.mockReset();
+    priorHolders.mockReset();
+  });
+
+  it('a user holding a prior follow-up notice gets nothing from the deferred announce', async () => {
+    affinity.mockResolvedValue([]);
+    guildOf.mockResolvedValue(7);
+    priorHolders.mockResolvedValue(new Set([20]));
+    const h = build([20, 21]);
+    await h.service.notifyGameAffinity({
+      ...input,
+      gameId: null,
+      gameName: null,
+      excludePriorNoticeHolders: true,
+    });
+    expect(sentTypes(h.create)).toEqual([[21, 'hub_event_tagged']]);
+    expect(h.claimed.has('event-notice:1:user:20')).toBe(true);
+  });
+
+  it('skips the prior-notice lookup when the flag is unset', async () => {
+    affinity.mockResolvedValue([10]);
+    guildOf.mockResolvedValue(null);
+    const h = build([]);
+    await h.service.notifyGameAffinity(input);
+    expect(priorHolders).not.toHaveBeenCalled();
+    expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
   });
 });

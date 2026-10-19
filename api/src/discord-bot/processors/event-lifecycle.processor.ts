@@ -66,7 +66,10 @@ export class EventLifecycleProcessor
     this.logger.log(`Processing event lifecycle for event ${eventId}`);
 
     if (!this.clientService.isConnected()) {
-      this.logger.warn(`Bot not connected, skipping event ${eventId}`);
+      this.logger.warn(
+        `Bot not connected, skipping Discord work for ${eventId}`,
+      );
+      await this.announceGroupWithoutBot(payload);
       return;
     }
 
@@ -87,6 +90,24 @@ export class EventLifecycleProcessor
         eventId,
       });
     }
+  }
+
+  /**
+   * ROK-1832 (Codex r4): the in-app group notice does not need Discord, so a
+   * bot-less install still announces a group-tagged event inside its lead
+   * time. Group-only (null game) keeps untagged events on their pre-ROK-1832
+   * behaviour; the notice path's claims keep it idempotent.
+   */
+  private async announceGroupWithoutBot(
+    payload: EventLifecycleJobData['payload'],
+  ): Promise<void> {
+    if (!this.isWithinLeadTime(payload)) return;
+    const groupOnly: EventLifecycleJobData['payload'] = {
+      ...payload,
+      gameId: null,
+      event: { ...payload.event, game: null },
+    };
+    await this.sendGameAffinityNotifications(groupOnly, false);
   }
 
   /** Check if the event is within the lead-time window for embed posting. */

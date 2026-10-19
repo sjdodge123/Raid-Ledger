@@ -229,14 +229,35 @@ describe('EventLifecycleProcessor — skip conditions', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  it('skips all work when bot is not connected', async () => {
+  it('skips Discord work but still runs the group-only in-app announce when the bot is not connected (ROK-1832)', async () => {
     clientService.isConnected.mockReturnValue(false);
-    const payload = makePayload();
+    const payload = makePayload({ followupForEventId: 7 });
 
     await processor.process(makeJob(payload));
 
     expect(scheduledEventService.createScheduledEvent).not.toHaveBeenCalled();
     expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(gameAffinityService.notifyGameAffinity).toHaveBeenCalledTimes(1);
+    expect(gameAffinityService.notifyGameAffinity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 42,
+        gameId: null,
+        gameName: null,
+        discordMessage: null,
+        followupForEventId: 7,
+      }),
+    );
+  });
+
+  it('sends nothing when the bot is not connected and the event is outside its lead time', async () => {
+    clientService.isConnected.mockReturnValue(false);
+    const far = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const payload = makePayload();
+    payload.event.startTime = far.toISOString();
+    payload.event.endTime = new Date(far.getTime() + 3600000).toISOString();
+
+    await processor.process(makeJob(payload));
+
     expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
   });
 

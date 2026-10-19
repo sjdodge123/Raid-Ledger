@@ -9,8 +9,12 @@ import { announceGroupForEvent } from './embed-scheduler-announce.helpers';
 const start = new Date('2026-11-01T20:00:00Z');
 const end = new Date('2026-11-01T23:00:00Z');
 
-function eventRow(guildId: number | null): Record<string, unknown> {
+function eventRow(
+  guildId: number | null,
+  cancelledAt: Date | null = null,
+): Record<string, unknown> {
   return {
+    cancelledAt,
     id: 42,
     title: 'Raid',
     duration: [start, end],
@@ -48,8 +52,19 @@ describe('announceGroupForEvent', () => {
     await d.run();
     expect(d.notify).toHaveBeenCalledTimes(1);
     expect(d.notify).toHaveBeenCalledWith(
-      expect.objectContaining({ eventId: 42, gameId: null, gameName: null }),
+      expect.objectContaining({
+        eventId: 42,
+        gameId: null,
+        gameName: null,
+        excludePriorNoticeHolders: true,
+      }),
     );
+  });
+
+  it('does nothing for a cancelled event (Codex r4)', async () => {
+    const d = deps([[eventRow(3, new Date('2026-10-01T00:00:00Z'))]]);
+    await d.run();
+    expect(d.notify).not.toHaveBeenCalled();
   });
 
   it('does nothing for an untagged event', async () => {
