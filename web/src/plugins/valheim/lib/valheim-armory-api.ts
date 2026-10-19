@@ -17,14 +17,25 @@ export const VALHEIM_CHARACTERS_PAGE_SIZE = 50;
 
 export const valheimArmoryKeys = {
     all: ['plugins', 'valheim', 'armory'] as const,
-    list: (serverId: number, page: number) => [...valheimArmoryKeys.all, 'characters', serverId, page] as const,
-    detail: (id: number) => [...valheimArmoryKeys.all, 'character', id] as const,
-    blob: (serverId: number, sha256: string) => [...valheimArmoryKeys.all, 'blob', serverId, sha256] as const,
+    list: (serverId: number, page: number) =>
+        [...valheimArmoryKeys.all, 'characters', serverId, page] as const,
+    detail: (id: number) =>
+        [...valheimArmoryKeys.all, 'character', id] as const,
+    blob: (serverId: number, sha256: string) =>
+        [...valheimArmoryKeys.all, 'blob', serverId, sha256] as const,
 };
 
 /** `GET …/characters?serverId&page&pageSize` — one page of a server's characters. */
-export function valheimCharactersPath(serverId: number, page: number, pageSize = VALHEIM_CHARACTERS_PAGE_SIZE): string {
-    const q = new URLSearchParams({ serverId: String(serverId), page: String(page), pageSize: String(pageSize) });
+export function valheimCharactersPath(
+    serverId: number,
+    page: number,
+    pageSize = VALHEIM_CHARACTERS_PAGE_SIZE,
+): string {
+    const q = new URLSearchParams({
+        serverId: String(serverId),
+        page: String(page),
+        pageSize: String(pageSize),
+    });
     return `${VALHEIM_ARMORY_PATH}/characters?${q.toString()}`;
 }
 
@@ -39,24 +50,39 @@ const SHA256 = /^[0-9a-f]{64}$/;
  * `GET …/servers/:serverId/blobs/:sha256` (D5). Content-addressed, so only a
  * lowercase hex sha256 is accepted — anything else throws rather than
  * becoming a path. The route is bearer-JWT only: an `<img src>` / CSS `url()`
- * cannot carry the header, so render through `useValheimBlobUrl`.
+ * cannot carry the header, so render through `useValheimBlobUrl` (hooks/use-valheim-characters).
  */
 export function valheimBlobPath(serverId: number, sha256: string): string {
-    if (!Number.isInteger(serverId) || serverId <= 0) throw new Error('Invalid server id');
+    if (!Number.isInteger(serverId) || serverId <= 0)
+        throw new Error('Invalid server id');
     if (!SHA256.test(sha256)) throw new Error('Invalid blob hash');
     return `${VALHEIM_ARMORY_PATH}/servers/${serverId}/blobs/${sha256}`;
 }
 
-export async function fetchValheimCharacters(serverId: number, page: number): Promise<ValheimCharacterSummary[]> {
-    const res = await fetchApi(valheimCharactersPath(serverId, page), {}, ValheimCharacterListResponseSchema);
+export async function fetchValheimCharacters(
+    serverId: number,
+    page: number,
+): Promise<ValheimCharacterSummary[]> {
+    const res = await fetchApi(
+        valheimCharactersPath(serverId, page),
+        {},
+        ValheimCharacterListResponseSchema,
+    );
     return res.data;
 }
 
-export function fetchValheimCharacter(id: number): Promise<ValheimCharacterDetail> {
+export function fetchValheimCharacter(
+    id: number,
+): Promise<ValheimCharacterDetail> {
     return fetchApi(valheimCharacterPath(id), {}, ValheimCharacterDetailSchema);
 }
 
 /** True when a query error is the API's 404 (unknown / foreign character). */
 export function isNotFoundError(error: unknown): boolean {
-    return typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
+    return (
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        error.status === 404
+    );
 }
