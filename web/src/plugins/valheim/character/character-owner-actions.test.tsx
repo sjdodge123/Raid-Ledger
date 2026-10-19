@@ -208,6 +208,25 @@ describe('admin change owner', () => {
         });
     });
 
+    it('editing the search after a pick clears it: Assign disabled, no stale id sent', async () => {
+        const { bodies, dialog } = await openSheet();
+        const input = within(dialog).getByRole('combobox', {
+            name: 'Find a member',
+        });
+        await userEvent.type(input, 'member2');
+        await userEvent.click(
+            await screen.findByRole('option', { name: 'member2' }),
+        );
+        const assign = within(dialog).getByRole('button', { name: 'Assign' });
+        expect(assign).toBeEnabled();
+        await userEvent.type(input, 'x');
+        expect(assign).toBeDisabled();
+        await userEvent.clear(input);
+        expect(assign).toBeDisabled();
+        await userEvent.click(assign);
+        expect(bodies).toEqual([]);
+    });
+
     it('Assign is disabled until a member is picked', async () => {
         const { dialog } = await openSheet();
         expect(

@@ -236,4 +236,38 @@ describe('ItemTile — review fixes', () => {
         await waitFor(() => expect(pop.style.left).toBe('984px'));
         expect(parseFloat(pop.style.top)).toBeLessThan(700);
     });
+
+    it('first desktop position is the clamped anchor position, not offset by the unpositioned static spot', async () => {
+        media.desktop = true;
+        Object.assign(window, { innerWidth: 1280, innerHeight: 800 });
+        vi.spyOn(
+            HTMLElement.prototype,
+            'getBoundingClientRect',
+        ).mockImplementation(function (this: HTMLElement) {
+            if (this.dataset['testid'] !== 'valheim-item-popover')
+                return DOMRect.fromRect({
+                    x: 1250,
+                    y: 700,
+                    width: 44,
+                    height: 44,
+                });
+            // An unpositioned `fixed` box sits at its static spot (after the app root).
+            const top =
+                this.style.top === '' ? 900 : parseFloat(this.style.top);
+            const left =
+                this.style.left === '' ? 0 : parseFloat(this.style.left);
+            return DOMRect.fromRect({
+                x: left,
+                y: top,
+                width: 288,
+                height: 240,
+            });
+        });
+        renderWithProviders(<ItemTile item={stack('SwordIron')} ctx={ctx()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Iron sword' }));
+        const pop = await screen.findByTestId('valheim-item-popover');
+        // clampPopover: shift left to 1280 - 8 - 288, flip above to 700 - 4 - 240.
+        expect(pop.style.left).toBe('984px');
+        expect(pop.style.top).toBe('456px');
+    });
 });
