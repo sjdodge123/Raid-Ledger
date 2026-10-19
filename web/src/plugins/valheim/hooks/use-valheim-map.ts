@@ -1,8 +1,9 @@
 /**
  * ROK-1837 — data hooks for one character map: the meta (shape-locked with
  * `ValheimMapMetaSchema`), the base-map PNG as an object URL (Bearer-only
- * auth rules out `<img src>`, D3; the immutable `Cache-Control` + ETag let the
- * browser cache serve repeats), and a decoded fog layer (D4). Byte-route
+ * auth rules out `<img src>`, D3; its immutable `Cache-Control` + ETag let the
+ * browser cache serve repeats), and a decoded fog layer (D4; the fog routes
+ * are `private, no-cache` + ETag — revalidated, never assumed fresh). Byte-route
  * failures throw {@link MapBytesError} carrying the status and the API's code
  * (`base_map_not_ready`, `no_shared_layer`) so the view can branch on them.
  */

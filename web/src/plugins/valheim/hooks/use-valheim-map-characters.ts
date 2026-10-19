@@ -15,20 +15,35 @@ import { encodePathSegment } from '../../../lib/api/path-segment';
 
 const CHARACTERS_PATH = '/plugins/valheim/armory/characters';
 
-/** Every character on one Pelican server (first 100 — the page cap). */
+/** The list route's page cap (`pageSize` ≤ 100, `page` from 1). */
+export const CHARACTER_PAGE_SIZE = 100;
+/** Safety stop: 50 pages = 5,000 characters on one server. */
+const MAX_CHARACTER_PAGES = 50;
+
+/** Walk the list route page by page until a short page (no `total` in the contract). */
+export async function fetchAllServerCharacters(
+    serverId: number,
+): Promise<ValheimCharacterSummary[]> {
+    const rows: ValheimCharacterSummary[] = [];
+    for (let page = 1; page <= MAX_CHARACTER_PAGES; page++) {
+        const { data } = await fetchApi(
+            `${CHARACTERS_PATH}?serverId=${serverId}&page=${page}&pageSize=${CHARACTER_PAGE_SIZE}`,
+            {},
+            ValheimCharacterListResponseSchema,
+        );
+        rows.push(...data);
+        if (data.length < CHARACTER_PAGE_SIZE) break;
+    }
+    return rows;
+}
+
+/** Every character on one Pelican server (all pages). */
 export function useValheimServerCharacters(
     serverId: number,
 ): UseQueryResult<ValheimCharacterSummary[]> {
     return useQuery<ValheimCharacterSummary[]>({
         queryKey: ['valheim', 'armory', 'characters', serverId],
-        queryFn: async () =>
-            (
-                await fetchApi(
-                    `${CHARACTERS_PATH}?serverId=${serverId}&pageSize=100`,
-                    {},
-                    ValheimCharacterListResponseSchema,
-                )
-            ).data,
+        queryFn: () => fetchAllServerCharacters(serverId),
         retry: false,
     });
 }

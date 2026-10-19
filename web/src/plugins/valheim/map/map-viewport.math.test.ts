@@ -114,7 +114,10 @@ describe('viewportReducer', () => {
     it('still re-fits on resize while at fit scale', () => {
         const sized = viewportReducer(start, { type: 'resize', view: phone });
         const taller = { width: 375, height: 660 };
-        const resized = viewportReducer(sized, { type: 'resize', view: taller });
+        const resized = viewportReducer(sized, {
+            type: 'resize',
+            view: taller,
+        });
         expect(resized.vp).toEqual(fitViewport(taller, 2048));
     });
 

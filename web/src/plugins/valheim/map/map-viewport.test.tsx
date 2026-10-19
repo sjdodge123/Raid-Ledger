@@ -103,7 +103,10 @@ describe('MapViewport gestures (ROK-1837 D10)', () => {
         const { app, layer } = renderViewport();
         const fitT = layer.style.transform;
         for (const mod of ['ctrlKey', 'metaKey', 'altKey']) {
-            const notPrevented = fireEvent.keyDown(app, { key: '+', [mod]: true });
+            const notPrevented = fireEvent.keyDown(app, {
+                key: '+',
+                [mod]: true,
+            });
             expect(notPrevented).toBe(true);
         }
         expect(layer.style.transform).toBe(fitT);

@@ -151,7 +151,11 @@ export function pinchActions(
 ): ViewportAction[] {
     if (before.dist === 0) return [];
     return [
-        { type: 'zoomBy', factor: after.dist / before.dist, anchor: before.mid },
+        {
+            type: 'zoomBy',
+            factor: after.dist / before.dist,
+            anchor: before.mid,
+        },
         {
             type: 'pan',
             dx: after.mid.x - before.mid.x,
@@ -167,7 +171,11 @@ export function viewportReducer(
     const { view, content } = state;
     switch (action.type) {
         case 'resize':
-            return { ...state, view: action.view, vp: resizeVp(state, action.view) };
+            return {
+                ...state,
+                view: action.view,
+                vp: resizeVp(state, action.view),
+            };
         case 'fit':
             return { ...state, vp: fitViewport(view, content) };
         case 'pan':

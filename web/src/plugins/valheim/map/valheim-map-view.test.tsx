@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ValheimMapMeta } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -58,7 +58,13 @@ async function gzipped(): Promise<ArrayBuffer> {
     ).arrayBuffer();
 }
 
-function serve(m: ValheimMapMeta, opts: { shared?: 'ok' | 'none' } = {}) {
+interface ServeOpts {
+    shared?: 'ok' | 'none' | 'fail';
+    /** Hold the personal fog response until this resolves. */
+    fogGate?: Promise<void>;
+}
+
+function serve(m: ValheimMapMeta, opts: ServeOpts = {}) {
     const sharedHits: string[] = [];
     server.use(
         http.get(MAP_URL, () => HttpResponse.json(m)),
@@ -78,7 +84,12 @@ function serve(m: ValheimMapMeta, opts: { shared?: 'ok' | 'none' } = {}) {
                         { code: 'no_shared_layer' },
                         { status: 404 },
                     );
-            }
+                if (opts.shared === 'fail')
+                    return HttpResponse.json(
+                        { message: 'boom' },
+                        { status: 500 },
+                    );
+            } else if (opts.fogGate) await opts.fogGate;
             return new HttpResponse(await gzipped());
         }),
     );
@@ -159,6 +170,48 @@ describe('ValheimMapView (ROK-1837 T6)', () => {
 });
 
 describe('ValheimMapView states (ROK-1837 T6)', () => {
+    it('keeps the base map covered until the personal fog has decoded (AC1)', async () => {
+        let release: () => void = () => undefined;
+        const fogGate = new Promise<void>((r) => {
+            release = r;
+        });
+        serve(meta(), { fogGate });
+        view();
+        await screen.findByRole('application', { name: 'Valheim map' });
+        await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 0));
+        });
+        expect(document.querySelector('img')).toBeNull();
+        expect(screen.getByTestId('map-fog-pending')).toHaveClass(
+            'bg-backdrop',
+        );
+        release();
+        await screen.findByTestId('fog');
+        await waitFor(() =>
+            expect(document.querySelector('img')).not.toBeNull(),
+        );
+        expect(screen.queryByTestId('map-fog-pending')).toBeNull();
+    });
+
+    it('a shared-layer failure (not no_shared_layer) shows an inline error and turns the switch off', async () => {
+        serve(meta(), { shared: 'fail' });
+        view();
+        await screen.findByTestId('fog');
+        fireEvent.click(
+            screen.getByRole('switch', { name: 'Show cartography table' }),
+        );
+        expect(
+            await screen.findByText('Cartography layer could not be loaded'),
+        ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(
+                screen.getByRole('switch', { name: 'Show cartography table' }),
+            ).toHaveAttribute('aria-checked', 'false'),
+        );
+        expect(screen.getByTestId('fog')).toHaveAttribute('data-shared', 'off');
+    });
+
     it('base map not ready: warning chip, no image request', async () => {
         serve(
             meta({

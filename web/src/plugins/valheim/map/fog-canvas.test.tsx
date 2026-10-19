@@ -147,7 +147,10 @@ describe('FogCanvas (ROK-1837 D7)', () => {
         vi.spyOn(window, 'getComputedStyle').mockImplementation((el) => {
             const decl = document.createElement('div').style;
             const scoped = el instanceof HTMLCanvasElement;
-            decl.setProperty('--color-backdrop', scoped ? '#f8fafc' : '#102030');
+            decl.setProperty(
+                '--color-backdrop',
+                scoped ? '#f8fafc' : '#102030',
+            );
             return decl;
         });
         render(<FogCanvas size={SIZE} personal={personal} shared={null} />);

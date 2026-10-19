@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
 import type {
@@ -146,5 +146,53 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
             await screen.findByText('This character has no map uploaded yet.'),
         ).toBeInTheDocument();
         expect(screen.queryByTestId('map-view')).toBeNull();
+    });
+
+    it('a character-detail failure shows an error with Retry, not "no map"', async () => {
+        serve(ROWS, { 1: [10] });
+        let fail = true;
+        server.use(
+            http.get(`${API}/:id`, ({ params }) => {
+                if (fail) return new HttpResponse(null, { status: 500 });
+                const r = ROWS.find((x) => String(x.id) === params.id);
+                return r
+                    ? HttpResponse.json(detail(r, [10]))
+                    : new HttpResponse(null, { status: 404 });
+            }),
+        );
+        tab();
+        expect(
+            await screen.findByText(
+                "This character's maps could not be loaded.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText('This character has no map uploaded yet.'),
+        ).toBeNull();
+        fail = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByTestId('map-view')).toHaveTextContent('1:10');
+    });
+
+    it('lists every character across pages, not just the first 100', async () => {
+        const many = Array.from({ length: 101 }, (_, i) =>
+            row(100 + i, `C${String(i).padStart(3, '0')}`),
+        );
+        serve(many, {});
+        server.use(
+            http.get(API, ({ request }) => {
+                const page = Number(
+                    new URL(request.url).searchParams.get('page') ?? '1',
+                );
+                return HttpResponse.json({
+                    data: many.slice((page - 1) * 100, page * 100),
+                });
+            }),
+        );
+        tab();
+        const picker = await screen.findByLabelText('Character');
+        await waitFor(() =>
+            expect(picker.querySelectorAll('option')).toHaveLength(101),
+        );
     });
 });

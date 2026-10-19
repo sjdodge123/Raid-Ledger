@@ -4,9 +4,8 @@
  * composes MapViewport → base <img> + FogCanvas + PinLayer, and owns the layer
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ValheimMapMeta } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
 import { StatusChip } from '../../../components/ui/status-chip';
 import {
     MapBytesError,
@@ -18,6 +17,7 @@ import { MapViewport, type MapViewportCommands } from './map-viewport';
 import { FogCanvas } from './fog-canvas';
 import { PinLayer } from './pin-layer';
 import { MapControls, type MapLayerState } from './map-controls';
+import { MapError } from './map-error';
 
 export interface ValheimMapViewProps {
     characterId: number;
@@ -28,32 +28,17 @@ export interface ValheimMapViewProps {
 const FRAME =
     'relative h-[calc(100dvh-12rem)] w-full overflow-hidden lg:h-[min(70dvh,720px)]';
 
-function MapError({ text, onRetry }: { text: string; onRetry: () => void }) {
-    return (
-        <div
-            role="alert"
-            className="flex flex-col items-center gap-3 py-12 text-center"
-        >
-            <p className="text-sm text-muted">{text}</p>
-            <Button
-                variant="secondary"
-                size="sm"
-                className="min-h-11"
-                onClick={onRetry}
-            >
-                Retry
-            </Button>
-        </div>
-    );
-}
-
 interface ReadyProps {
     characterId: number;
     mapId: number;
     meta: ValheimMapMeta;
 }
 
-/** Fog + base-map fetches for a loaded meta; `no_shared_layer` turns the shared switch off. */
+/**
+ * Fog + base-map fetches for a loaded meta. `no_shared_layer` disables the
+ * shared switch; any other shared failure is `sharedFailed` (switch off +
+ * an inline chip) — never a silent ON switch that shows nothing.
+ */
 function useMapLayers(
     { characterId, mapId, meta }: ReadyProps,
     showShared: boolean,
@@ -74,23 +59,45 @@ function useMapLayers(
     const noShared =
         shared.error instanceof MapBytesError &&
         shared.error.code === 'no_shared_layer';
+    const sharedFailed =
+        shared.error !== null && !noShared && !shared.isFetching;
     return {
         base,
         personal,
         shared,
         sharedAvailable: meta.hasSharedExplored && !noShared,
+        sharedFailed,
     };
 }
 
-function BaseMapStatus({ ready, failed }: { ready: boolean; failed: boolean }) {
-    if (ready && !failed) return null;
+interface MapStatusProps {
+    ready: boolean;
+    failed: boolean;
+    sharedFailed: boolean;
+}
+
+function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
+    if (ready && !failed && !sharedFailed) return null;
     return (
-        <div className="pointer-events-none absolute left-2 top-2 z-10">
-            <StatusChip tone={failed ? 'danger' : 'warning'} title="Base map">
-                {failed
-                    ? 'Base map failed to load'
-                    : 'Base map not uploaded yet'}
-            </StatusChip>
+        <div
+            role="status"
+            className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-1"
+        >
+            {(!ready || failed) && (
+                <StatusChip
+                    tone={failed ? 'danger' : 'warning'}
+                    title="Base map"
+                >
+                    {failed
+                        ? 'Base map failed to load'
+                        : 'Base map not uploaded yet'}
+                </StatusChip>
+            )}
+            {sharedFailed && (
+                <StatusChip tone="danger" title="Cartography table">
+                    Cartography layer could not be loaded
+                </StatusChip>
+            )}
         </div>
     );
 }
@@ -116,7 +123,23 @@ function BaseImage({ url, size }: { url: string; size: number }) {
     );
 }
 
-/** The texture-space stack inside the viewport: base image, fog, pins. */
+/** Opaque backdrop-token cover while the personal fog is still decoding (AC1). */
+function FogPending({ size }: { size: number }) {
+    return (
+        <div
+            data-testid="map-fog-pending"
+            aria-hidden="true"
+            className="absolute left-0 top-0 bg-backdrop"
+            style={{ width: size, height: size }}
+        />
+    );
+}
+
+/**
+ * The texture-space stack inside the viewport: base image, fog, pins. The
+ * base image renders only once the personal fog can paint over it — before
+ * that an opaque cover, so unexplored terrain never flashes (AC1).
+ */
 function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
     const { meta, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
     const size = meta.grid.textureSize;
@@ -126,7 +149,8 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
             style={{ width: size, height: size }}
             data-zoom={scale.toFixed(2)}
         >
-            {baseUrl && <BaseImage url={baseUrl} size={size} />}
+            {!personal && <FogPending size={size} />}
+            {personal && baseUrl && <BaseImage url={baseUrl} size={size} />}
             {personal && (
                 <FogCanvas
                     size={size}
@@ -149,11 +173,12 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
 function useMapReadyState(props: ReadyProps) {
     const [showShared, setShowShared] = useState(false);
     const [pinLabels, setPinLabels] = useState(false);
-    const { base, personal, shared, sharedAvailable } = useMapLayers(
-        props,
-        showShared,
-    );
-    const sharedOn = showShared && sharedAvailable;
+    const { base, personal, shared, sharedAvailable, sharedFailed } =
+        useMapLayers(props, showShared);
+    useEffect(() => {
+        if (sharedFailed) setShowShared(false);
+    }, [sharedFailed]);
+    const sharedOn = showShared && sharedAvailable && !sharedFailed;
     const layers: LayerProps = {
         meta: props.meta,
         baseUrl: base.url,
@@ -169,18 +194,23 @@ function useMapReadyState(props: ReadyProps) {
         pinLabels,
         onPinLabels: setPinLabels,
     };
-    return { layers, controls, personal, baseFailed: base.error !== null };
+    const status = {
+        ready: props.meta.baseMap?.ready === true,
+        failed: base.error !== null,
+        sharedFailed,
+    };
+    return { layers, controls, personal, status };
 }
 
 interface MapFrameProps {
     className?: string | undefined;
     layers: LayerProps;
     controls: MapLayerState;
-    baseFailed: boolean;
+    status: MapStatusProps;
 }
 
 /** Viewport + status chip + overlay controls in the sized frame (D10). */
-function MapFrame({ className, layers, controls, baseFailed }: MapFrameProps) {
+function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
     return (
         <div className={className ? `${FRAME} ${className}` : FRAME}>
@@ -192,10 +222,7 @@ function MapFrame({ className, layers, controls, baseFailed }: MapFrameProps) {
             >
                 {(vp) => <MapLayers layers={layers} scale={vp.scale} />}
             </MapViewport>
-            <BaseMapStatus
-                ready={layers.meta.baseMap?.ready === true}
-                failed={baseFailed}
-            />
+            <MapStatus {...status} />
             <div className="absolute right-2 top-2 z-10">
                 <MapControls commands={commands} {...controls} />
             </div>
@@ -204,7 +231,7 @@ function MapFrame({ className, layers, controls, baseFailed }: MapFrameProps) {
 }
 
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { layers, controls, personal, baseFailed } = useMapReadyState(props);
+    const { layers, controls, personal, status } = useMapReadyState(props);
     if (personal.error) {
         return (
             <MapError
@@ -218,7 +245,7 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
             className={props.className}
             layers={layers}
             controls={controls}
-            baseFailed={baseFailed}
+            status={status}
         />
     );
 }

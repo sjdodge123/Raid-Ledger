@@ -3,6 +3,7 @@
  * world pickers above the map; the selection lives in the query string
  * (D2: `?vc=<characterId>&vm=<mapId>`), the tab in the hash (`useHashTab`).
  */
+import { useId } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
     ValheimCharacterMapRef,
@@ -23,6 +24,7 @@ import {
     worldLabel,
 } from './map-selection';
 import { ValheimMapView } from './valheim-map-view';
+import { MapError } from './map-error';
 
 export interface ValheimMapTabProps {
     /** The hub's Pelican server id. */
@@ -89,6 +91,7 @@ interface PickersProps {
 
 function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
     const write = useSelectionWriter();
+    const idBase = useId();
     const characters = sortByName(rows).map((r) => ({
         id: r.id,
         label: r.name,
@@ -96,7 +99,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
     return (
         <div className="flex flex-wrap gap-3">
             <Picker
-                id="valheim-map-character"
+                id={`${idBase}-character`}
                 label="Character"
                 value={characterId}
                 options={characters}
@@ -104,7 +107,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
             />
             {maps.length > 1 && mapId !== null && (
                 <Picker
-                    id="valheim-map-world"
+                    id={`${idBase}-world`}
                     label="World"
                     value={mapId}
                     options={maps.map((m) => ({
@@ -142,7 +145,13 @@ function CharacterMap({
             {mapId !== null && (
                 <ValheimMapView characterId={characterId} mapId={mapId} />
             )}
-            {mapId === null && !detail.isPending && (
+            {detail.error && (
+                <MapError
+                    text="This character's maps could not be loaded."
+                    onRetry={() => void detail.refetch()}
+                />
+            )}
+            {mapId === null && detail.isSuccess && (
                 <Empty text="This character has no map uploaded yet." />
             )}
         </div>
