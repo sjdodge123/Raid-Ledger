@@ -113,7 +113,7 @@ afterAll(async () => {
 describe('POST /admin/test/valheim/map-fixture (ROK-1837 T8)', () => {
   it('seeds a map whose generated 2048² base map + both fog layers a member reads', async () => {
     const f = await seed({ worker: 1 });
-    expect(f.guildId).toBeNull();
+    expect(typeof f.guildId).toBe('number');
     const member = await memberToken(testApp, 'bob');
     const { res, body } = await getBytes(`${mapUrl(f)}/base-map`, member);
     expect(res.status).toBe(200);
@@ -159,6 +159,13 @@ describe('map-fixture idempotence + guards (ROK-1837 T8)', () => {
     const first = await seed();
     const again = await seed();
     expect(again.pelicanServerId).toBe(first.pelicanServerId);
+    expect(again.guildId).toBe(first.guildId);
+    const G = schema.guilds;
+    const hubs = await testApp.db
+      .select({ id: G.id })
+      .from(G)
+      .where(eq(G.pelicanServerId, first.pelicanServerId));
+    expect(hubs).toEqual([{ id: first.guildId }]);
     const M = schema.valheimMaps;
     const B = schema.valheimLinkBlobs;
     const maps = await testApp.db.select({ id: M.id }).from(M);
