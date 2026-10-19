@@ -132,10 +132,15 @@ interface PopoverProps extends ItemDetailData {
 /** Used until the popover has laid out (jsdom never lays out). */
 const FALLBACK = { width: 288, height: 240 };
 
+/**
+ * `top`/`left` start at 0 (as the shared Combobox popup does) so the first
+ * `useAnchoredPopup` measurement reads the true containing-block origin, not
+ * the unpositioned static spot. The clamp then owns both coordinates.
+ */
 function popoverStyle(
     pos: { top: number; left: number } | null,
 ): CSSProperties {
-    return { visibility: pos ? 'visible' : 'hidden' };
+    return { top: 0, left: 0, visibility: pos ? 'visible' : 'hidden' };
 }
 
 /**

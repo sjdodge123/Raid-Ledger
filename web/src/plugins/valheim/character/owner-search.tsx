@@ -1,5 +1,5 @@
 /** ROK-1836 L4 (D10) — member search for the admin owner picker (`GET /users?search`). */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Combobox } from '../../../components/ui/combobox';
 import { getPlayers } from '../../../lib/api/users-api';
@@ -28,8 +28,32 @@ interface OwnerSearchProps {
     onChange: (option: OwnerOption | null) => void;
 }
 
-export function OwnerSearch({ value, onChange }: OwnerSearchProps) {
+/**
+ * Text edits that no longer match the picked member clear the pick, so Assign
+ * can't submit a stale owner. The Combobox reports a pick as `onChange(o)`
+ * then `onInputChange(label)`; the ref recognises that label as no edit.
+ */
+function useOwnerText(
+    value: OwnerOption | null,
+    onChange: (option: OwnerOption | null) => void,
+) {
     const [text, setText] = useState('');
+    const picked = useRef<OwnerOption | null>(null);
+    const pick = (o: OwnerOption | null): void => {
+        picked.current = o;
+        onChange(o);
+    };
+    const edit = (s: string): void => {
+        setText(s);
+        if (s === picked.current?.username) return;
+        picked.current = null;
+        if (value !== null) onChange(null);
+    };
+    return { text, pick, edit };
+}
+
+export function OwnerSearch({ value, onChange }: OwnerSearchProps) {
+    const { text, pick, edit } = useOwnerText(value, onChange);
     const search = useMemberSearch(text.trim());
     return (
         <Combobox<OwnerOption>
@@ -39,9 +63,9 @@ export function OwnerSearch({ value, onChange }: OwnerSearchProps) {
             getKey={(o) => String(o.id)}
             getLabel={(o) => o.username}
             value={value}
-            onChange={onChange}
+            onChange={pick}
             inputValue={text}
-            onInputChange={setText}
+            onInputChange={edit}
             loading={search.isFetching}
             loadingText="Searching…"
             emptyText="No members found"
