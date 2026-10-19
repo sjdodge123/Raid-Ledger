@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
-import type { EmbedGame } from './embed-game.helpers';
 
 /** The deferred-event fields the group announce needs. */
 export interface DeferredAnnounceEvent {
@@ -16,14 +15,15 @@ export interface DeferredAnnounceEvent {
 
 /** Collaborators for {@link announceDeferredGroupEvent}. */
 export interface DeferredAnnounceDeps {
-  db: PostgresJsDatabase<typeof schema>;
-  affinity: GameAffinityNotificationService | null;
+  /** Only `select` is used (the posted-embed lookup), so a drizzle mock satisfies it. */
+  db: Pick<PostgresJsDatabase<typeof schema>, 'select'>;
+  affinity: Pick<GameAffinityNotificationService, 'notifyGameAffinity'> | null;
   clientUrl: () => Promise<string | null>;
 }
 
 /** The posted embed's Discord message, for the notice's "View in Discord" link. */
 async function findPostedMessage(
-  db: PostgresJsDatabase<typeof schema>,
+  db: Pick<PostgresJsDatabase<typeof schema>, 'select'>,
   eventId: number,
 ): Promise<{ guildId: string; channelId: string; messageId: string } | null> {
   const [row] = await db
@@ -47,20 +47,21 @@ async function findPostedMessage(
 export async function announceDeferredGroupEvent(
   deps: DeferredAnnounceDeps,
   event: DeferredAnnounceEvent,
-  game: EmbedGame | null,
 ): Promise<void> {
   if (!deps.affinity || typeof event.guildId !== 'number') return;
   const discordMessage = await findPostedMessage(deps.db, event.id);
+  // Group-only: deferred events never sent game-interest notices before this
+  // story, so the game fields stay null and only the group path fans out.
   await deps.affinity.notifyGameAffinity({
     eventId: event.id,
     eventTitle: event.title,
-    gameName: game?.name ?? null,
-    gameId: event.gameId,
+    gameName: null,
+    gameId: null,
     startTime: event.duration[0].toISOString(),
     endTime: event.duration[1].toISOString(),
     creatorId: event.creatorId,
     clientUrl: await deps.clientUrl(),
-    gameCoverUrl: game?.coverUrl ?? null,
+    gameCoverUrl: null,
     discordMessage,
   });
 }

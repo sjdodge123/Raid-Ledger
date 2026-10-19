@@ -2,6 +2,8 @@
  * ROK-1832 D6a: a deferred (outside the lead-time window) group-tagged event
  * announces its group when the scheduler finally posts its embed.
  */
+import { createDrizzleMock } from '../../common/testing/drizzle-mock';
+import { announceDeferredGroupEvent } from './embed-scheduler-announce.helpers';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmbedSchedulerService } from './embed-scheduler.service';
 import { EmbedPosterService } from './embed-poster.service';
@@ -25,13 +27,16 @@ function selectChain(rows: unknown[]): Record<string, unknown> {
   return chain;
 }
 
-function deferredEvent(guildId: number | null): Record<string, unknown> {
+function deferredEvent(
+  guildId: number | null,
+  gameId: number | null = null,
+): Record<string, unknown> {
   return {
     id: 77,
     title: 'Group Raid',
     description: null,
     duration: [start, end],
-    gameId: null,
+    gameId,
     recurrenceRule: null,
     recurrenceGroupId: null,
     notificationChannelOverride: null,
@@ -98,6 +103,36 @@ describe('EmbedSchedulerService — deferred group announce (ROK-1832 D6a)', () 
         endTime: end.toISOString(),
         clientUrl: 'https://rl.test',
         discordMessage: MESSAGE,
+      }),
+    );
+  });
+
+  it('stays group-only even when the event has a game (no game-interest fan-out)', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([]);
+    const notify = jest.fn().mockResolvedValue(undefined);
+    await announceDeferredGroupEvent(
+      {
+        db: mockDb,
+        affinity: { notifyGameAffinity: notify },
+        clientUrl: () => Promise.resolve('https://rl.test'),
+      },
+      {
+        id: 77,
+        title: 'Group Raid',
+        duration: [start, end],
+        gameId: 42,
+        guildId: 5,
+        creatorId: 9,
+      },
+    );
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 77,
+        gameId: null,
+        gameName: null,
+        gameCoverUrl: null,
       }),
     );
   });

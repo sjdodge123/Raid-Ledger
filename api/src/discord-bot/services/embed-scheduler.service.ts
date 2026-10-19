@@ -138,22 +138,19 @@ export class EmbedSchedulerService {
       this.logger.log(
         `Scheduler posted deferred embed for event ${event.id} ("${event.title}")`,
       );
-      await this.announceGroup(event, gameData);
+      await this.announceGroup(event);
     }
     return success;
   }
 
   /** ROK-1832 D6a: the deferred announce of a group-tagged event (D10: never throws). */
-  private async announceGroup(
-    event: DeferredEvent,
-    game: EmbedGame | null,
-  ): Promise<void> {
+  private async announceGroup(event: DeferredEvent): Promise<void> {
     const deps = {
       db: this.db,
       affinity: this.affinity,
       clientUrl: () => this.settingsService.getClientUrl(),
     };
-    await announceDeferredGroupEvent(deps, event, game).catch((err: unknown) =>
+    await announceDeferredGroupEvent(deps, event).catch((err: unknown) =>
       this.logger.warn(
         `Deferred group announce failed for event ${event.id}: ${String(err)}`,
       ),
