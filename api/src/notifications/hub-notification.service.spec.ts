@@ -112,6 +112,25 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
     expect(dedup.checkAndMarkSent).toHaveBeenCalledWith('hub-post:7', 3600);
     expect(dedup.releaseKey).toHaveBeenCalledWith('hub-post:7');
   });
+
+  it('gives the cooldown back when the only "success" is an opted-out recipient', async () => {
+    const { svc, notifications, dedup } = setup();
+    notifications.create
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('boom'));
+    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    expect(notifications.create).toHaveBeenCalledTimes(2);
+    expect(dedup.releaseKey).toHaveBeenCalledWith('hub-post:7');
+  });
+
+  it('keeps the cooldown once one notice is actually stored', async () => {
+    const { svc, notifications, dedup } = setup();
+    notifications.create
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 50 });
+    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    expect(dedup.releaseKey).not.toHaveBeenCalled();
+  });
 });
 
 describe('HubNotificationService.notifyLateTag (D6b)', () => {

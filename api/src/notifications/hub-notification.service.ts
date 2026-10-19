@@ -85,7 +85,7 @@ export class HubNotificationService {
     }
   }
 
-  /** Send the leader-post notice to each id; resolves to the delivered count. */
+  /** Send the leader-post notice to each id; resolves to the count actually stored. */
   private async sendLeaderPost(
     ids: number[],
     group: { guildId: number; guildName: string },
@@ -103,7 +103,9 @@ export class HubNotificationService {
         }),
       ),
     );
-    return results.filter((r) => r.status === 'fulfilled').length;
+    // `create` resolves null for an opted-out recipient: not a delivery.
+    return results.filter((r) => r.status === 'fulfilled' && r.value !== null)
+      .length;
   }
 
   /** D3: the group's recipients for an event (creator excluded). */
