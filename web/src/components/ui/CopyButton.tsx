@@ -4,6 +4,8 @@ import { copyWithToast } from '../../lib/clipboard';
 interface CopyButtonProps {
     text: string;
     className?: string;
+    /** Fires after a successful copy (not on failure). */
+    onCopied?: (() => void) | undefined;
 }
 
 /**
@@ -11,13 +13,14 @@ interface CopyButtonProps {
  * Shows checkmark briefly after successful copy; surfaces an error toast
  * (via {@link copyWithToast}) if the copy fails in an insecure context.
  */
-export function CopyButton({ text, className = '' }: CopyButtonProps) {
+export function CopyButton({ text, className = '', onCopied }: CopyButtonProps) {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async (): Promise<void> => {
         const ok = await copyWithToast(text);
         if (!ok) return;
         setCopied(true);
+        onCopied?.();
         setTimeout(() => setCopied(false), 2000);
     };
 
