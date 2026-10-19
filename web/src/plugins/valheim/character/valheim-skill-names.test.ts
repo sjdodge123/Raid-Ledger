@@ -8,7 +8,9 @@ describe('valheimSkillName — D12', () => {
         expect(valheimSkillName('Swords')).toBe('Swords');
     });
     it('a numeric (modded) id reads "Modded skill <id>"', () => {
-        expect(valheimSkillName('-1287461328')).toBe('Modded skill -1287461328');
+        expect(valheimSkillName('-1287461328')).toBe(
+            'Modded skill -1287461328',
+        );
     });
     it('an unknown text id is humanised', () => {
         expect(valheimSkillName('BeastTaming')).toBe('Beast taming');
@@ -19,10 +21,17 @@ describe('valheimSkillName — D12', () => {
 describe('sortSkillsByLevel', () => {
     it('orders by level desc, ties by name, without mutating the input', () => {
         const input = [
-            { id: 'Run', level: 41, accumulator: 0 }, { id: 'Swords', level: 34.25, accumulator: 0 },
-            { id: 'Axes', level: 41, accumulator: 0 }, { id: 'Jump', level: 12.1, accumulator: 0 },
+            { id: 'Run', level: 41, accumulator: 0 },
+            { id: 'Swords', level: 34.25, accumulator: 0 },
+            { id: 'Axes', level: 41, accumulator: 0 },
+            { id: 'Jump', level: 12.1, accumulator: 0 },
         ];
-        expect(sortSkillsByLevel(input).map((s) => s.id)).toEqual(['Axes', 'Run', 'Swords', 'Jump']);
+        expect(sortSkillsByLevel(input).map((s) => s.id)).toEqual([
+            'Axes',
+            'Run',
+            'Swords',
+            'Jump',
+        ]);
         expect(input[0]?.id).toBe('Run');
     });
 });

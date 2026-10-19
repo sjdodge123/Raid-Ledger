@@ -6,7 +6,10 @@
  */
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { ValheimCharacterDetail, ValheimMapBaseMap } from '@raid-ledger/contract';
+import type {
+    ValheimCharacterDetail,
+    ValheimMapBaseMap,
+} from '@raid-ledger/contract';
 import { fetchWithAuth } from '../../../lib/api/fetch-api';
 import { valheimBlobPath } from '../lib/valheim-armory-api';
 import type { ValheimItemCatalogue } from './item-icon.helpers';
@@ -26,7 +29,10 @@ async function fetchBlob(serverId: number, sha256: string): Promise<Blob> {
 }
 
 /** An object URL for a member blob; null on loading / failure / no hash. Revoked on change. */
-export function useValheimBlobObjectUrl(serverId: number, sha256: string | null): string | null {
+export function useValheimBlobObjectUrl(
+    serverId: number,
+    sha256: string | null,
+): string | null {
     const query = useQuery({
         queryKey: ['valheim', 'armory', 'blob', serverId, sha256 ?? ''],
         queryFn: () => fetchBlob(serverId, sha256 ?? ''),
@@ -35,14 +41,34 @@ export function useValheimBlobObjectUrl(serverId: number, sha256: string | null)
         retry: false,
     });
     const blob = query.data ?? null;
-    const url = useMemo(() => (blob !== null && typeof URL.createObjectURL === 'function'
-        ? URL.createObjectURL(blob) : null), [blob]);
-    useEffect(() => () => { if (url !== null) URL.revokeObjectURL(url); }, [url]);
+    const url = useMemo(
+        () =>
+            blob !== null && typeof URL.createObjectURL === 'function'
+                ? URL.createObjectURL(blob)
+                : null,
+        [blob],
+    );
+    useEffect(
+        () => () => {
+            if (url !== null) URL.revokeObjectURL(url);
+        },
+        [url],
+    );
     return url;
 }
 
-export function useItemIcons(character: ValheimCharacterDetail): ItemIconContext {
+export function useItemIcons(
+    character: ValheimCharacterDetail,
+): ItemIconContext {
     const atlas = character.atlas ?? null;
-    const atlasUrl = useValheimBlobObjectUrl(character.pelicanServerId, atlas?.ready ? atlas.sha256 : null);
-    return { serverId: character.pelicanServerId, items: character.items ?? {}, atlas, atlasUrl };
+    const atlasUrl = useValheimBlobObjectUrl(
+        character.pelicanServerId,
+        atlas?.ready ? atlas.sha256 : null,
+    );
+    return {
+        serverId: character.pelicanServerId,
+        items: character.items ?? {},
+        atlas,
+        atlasUrl,
+    };
 }
