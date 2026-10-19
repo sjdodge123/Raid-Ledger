@@ -359,10 +359,8 @@ export class AdHocEventService implements OnModuleInit {
 
   private removeActiveEvent(eventId: number): void {
     for (const [key, s] of this.activeEvents) {
-      if (s.eventId === eventId) {
-        this.activeEvents.delete(key);
-        break;
-      }
+      // ROK-1851: one event can sit under several keys (monitor + lobby).
+      if (s.eventId === eventId) this.activeEvents.delete(key);
     }
   }
 }

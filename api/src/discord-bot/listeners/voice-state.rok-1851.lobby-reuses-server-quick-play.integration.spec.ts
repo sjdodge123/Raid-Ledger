@@ -1,6 +1,7 @@
 /**
- * ROK-1851 — a voice spawn reuses the game's live Quick Play whichever
- * binding created it. Prod 2026-10-17: a channel with a general-lobby AND a
+ * ROK-1851 — a voice spawn reuses the game's live Quick Play when it is
+ * server-born or was created by a binding on the SAME Discord channel; a
+ * Quick Play born on another channel stays separate (ROK-1800 rule). Prod 2026-10-17: a channel with a general-lobby AND a
  * game-voice-monitor binding; the server path spawned Quick Play 279 on the
  * monitor binding, then the lobby's voice spawn skipped it (binding-scoped
  * dedup) and created 280. 279 sat orphaned until the reaper.
@@ -27,6 +28,8 @@ import {
   type ServerPresenceSink,
 } from '../../plugins/pelican/presence/server-presence.sink';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import { createAdHocEventRow } from '../services/ad-hoc-event.helpers';
+import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { AdHocNotificationService } from '../services/ad-hoc-notification.service';
@@ -36,10 +39,12 @@ import { VoiceStateListener } from './voice-state.listener';
 import { handleChannelJoin } from './voice-state-join-dispatch.handlers';
 import { buildDiscordMember } from './voice-state.helpers';
 import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
+import { handleChannelLeave } from './voice-state-leave.handlers';
 import { __resetTraceState } from './voice-gate-trace';
 
 const GUILD_ID = 'guild-1851';
 const CHANNEL_ID = '1851000000000000001';
+const OTHER_CHANNEL_ID = '1851000000000000002';
 const VALHEIM = 'Valheim';
 const VOICE_A = '1851000000000000101';
 const VOICE_B = '1851000000000000102';
@@ -83,6 +88,8 @@ afterEach(async () => {
   listener['channelMembers'].clear();
   listener['userChannelMap'].clear();
   listener['voiceGameTracker'].clear();
+  // Stops the flush timer writing sessions for truncated events.
+  testApp.app.get(VoiceAttendanceService)['sessions'].clear();
   jest.restoreAllMocks();
   testApp.seed = await truncateAllTables(testApp.db);
 });
@@ -124,13 +131,14 @@ async function seedGame(): Promise<number> {
 async function seedBinding(
   purpose: 'general-lobby' | 'game-voice-monitor',
   gameId: number | null,
+  channelId = CHANNEL_ID,
 ): Promise<string> {
   const [row] = nonEmpty(
     await testApp.db
       .insert(schema.channelBindings)
       .values({
         guildId: GUILD_ID,
-        channelId: CHANNEL_ID,
+        channelId,
         channelType: 'voice',
         bindingPurpose: purpose,
         gameId,
@@ -193,7 +201,23 @@ async function lobbyVoiceSpawn(): Promise<void> {
   await handleGeneralLobbyGroupDetection(ctx.deps, CHANNEL_ID, lobby, valheim);
 }
 
-describe('ROK-1851 — lobby voice spawn reuses the server-born Quick Play', () => {
+/** Every voice member leaves the channel through the real leave dispatch. */
+async function everyoneLeavesVoice(): Promise<void> {
+  const ctx = listener['joinCtx'];
+  for (const id of [...voiceMembers.keys()]) {
+    voiceMembers.delete(id);
+    await handleChannelLeave(
+      ctx.deps,
+      CHANNEL_ID,
+      id,
+      ctx.timers,
+      testApp.app.get(AdHocEventService),
+      ctx.resolveAllBindings,
+    );
+  }
+}
+
+describe('ROK-1851 — lobby voice spawn reuses the same-channel Quick Play', () => {
   it('leaves exactly one live Quick Play, tracked under the lobby key', async () => {
     const serverEvent = await serverBornQuickPlay();
     await lobbyVoiceSpawn();
@@ -231,5 +255,57 @@ describe('ROK-1851 — lobby voice spawn reuses the server-born Quick Play', () 
     expect((await liveValheimQuickPlays()).map((r) => r.id)).toEqual([
       serverEvent,
     ]);
+  });
+
+  it('a Quick Play of the game born on ANOTHER channel is not reused', async () => {
+    const otherBinding = await seedBinding(
+      'game-voice-monitor',
+      valheim,
+      OTHER_CHANNEL_ID,
+    );
+    const otherEvent = await createAdHocEventRow(
+      testApp.db,
+      otherBinding,
+      { gameId: valheim },
+      testApp.seed.adminUser.id,
+      VALHEIM,
+    );
+    await lobbyVoiceSpawn();
+
+    const live = (await liveValheimQuickPlays()).map((r) => r.id);
+    expect(live).toHaveLength(2);
+    expect(live).toContain(otherEvent);
+    const state = testApp.app
+      .get(AdHocEventService)
+      .getActiveState(lobbyId, valheim);
+    expect(state?.eventId).not.toBe(otherEvent);
+    expect(live).toContain(state?.eventId);
+  });
+
+  it('AC2: when voice and server both empty, the shared event ends and no key stays registered', async () => {
+    const adHoc = testApp.app.get(AdHocEventService);
+    const queue = testApp.app.get(AdHocGracePeriodQueueService);
+    const serverEvent = await serverBornQuickPlay();
+    await lobbyVoiceSpawn();
+    expect(adHoc.getActiveState(lobbyId, valheim)?.eventId).toBe(serverEvent);
+
+    await everyoneLeavesVoice();
+    const sink = testApp.app.get<ServerPresenceSink>(SERVER_PRESENCE_SINK);
+    const src = { pelicanServerId: SERVER_ID, gameId: valheim };
+    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, STEAM_B);
+    expect(queue.enqueue).toHaveBeenCalledWith(serverEvent, expect.any(Number));
+
+    await adHoc.finalizeEvent(serverEvent);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.events.adHocStatus })
+        .from(schema.events)
+        .where(eq(schema.events.id, serverEvent)),
+      'server event row',
+    );
+    expect(row.status).toBe('ended');
+    expect(adHoc.getActiveState(lobbyId, valheim)).toBeUndefined();
+    expect(adHoc.getActiveState(monitorId, valheim)).toBeUndefined();
   });
 });
