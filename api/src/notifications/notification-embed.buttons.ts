@@ -113,6 +113,7 @@ const EVENT_BUTTON_TYPES = new Set<NotificationType>([
   'event_reminder',
   'new_event',
   'subscribed_game',
+  'hub_event_tagged',
   'event_rescheduled',
   'event_cancelled',
   'recruitment_reminder',
@@ -148,6 +149,8 @@ export function buildPrimaryButton(
   if (type === 'post_event_followup') {
     return buildLineupButton(payload, clientUrl);
   }
+  // ROK-1832: a leader post carries a guildId, not an eventId.
+  if (type === 'hub_leader_post') return buildGroupButton(payload, clientUrl);
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
   if (
@@ -310,4 +313,17 @@ export function buildInlineButtons(
     return [viewLineupButton(clientUrl, lineupId)];
   }
   return [];
+}
+
+/** ROK-1832: "View group" link for a leader post; null without a guildId. */
+function buildGroupButton(
+  payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder | null {
+  const guildId = payload?.guildId;
+  if (typeof guildId !== 'number') return null;
+  return new ButtonBuilder()
+    .setLabel('View group')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/guilds/${guildId}`);
 }

@@ -29,6 +29,8 @@ export const NOTIFICATION_TYPES = [
   'post_event_followup',
   'lfg_invite',
   'lfg_player_invite',
+  'hub_leader_post',
+  'hub_event_tagged',
   'system',
 ] as const;
 
@@ -73,6 +75,9 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   lfg_invite: { inApp: true, push: false, discord: true },
   /** ROK-1455 D2 — opt-OUT: a player-sent invite; the restraints are the consent. */
   lfg_player_invite: { inApp: true, push: false, discord: true },
+  // ROK-1832 D1: group notices follow the lfg_invite precedent.
+  hub_leader_post: { inApp: true, push: false, discord: true },
+  hub_event_tagged: { inApp: true, push: false, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 
