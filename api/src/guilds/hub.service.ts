@@ -13,6 +13,7 @@ import {
   type MyGuilds,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { isHubMuted } from '../notifications/hub-notification-mute.helpers';
 import * as schema from '../drizzle/schema';
 import type {
   HubKindAdapter,
@@ -43,9 +44,16 @@ export class HubService {
     private readonly access: GuildAccessService,
   ) {}
 
-  /** The hub page, built by the guild kind's adapter. */
+  /**
+   * The hub page, built by the guild kind's adapter. ROK-1832: core adds the
+   * viewer's per-group mute flag for anyone above `visitor` (a visitor cannot
+   * mute, so the key is omitted rather than reported false).
+   */
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
-    return (await this.adapterFor(guildId)).page(actor, guildId);
+    const page = await (await this.adapterFor(guildId)).page(actor, guildId);
+    if (page.viewer.role === 'visitor') return page;
+    const notificationsMuted = await isHubMuted(this.db, actor.id, guildId);
+    return { ...page, viewer: { ...page.viewer, notificationsMuted } };
   }
 
   /** The Raids tab + Overview widgets, built by the guild kind's adapter. */
