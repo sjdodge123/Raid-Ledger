@@ -10,12 +10,14 @@
  */
 import type { JSX } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { GuildRaidsDto } from '@raid-ledger/contract';
+import type { GuildKind, GuildRaidsDto } from '@raid-ledger/contract';
 import { GuildAttendance } from './guild-attendance';
 import { GuildEvents } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
 
-export function HubEventsTab({ query }: { query: UseQueryResult<GuildRaidsDto, Error> }): JSX.Element {
+interface EventsTabProps { query: UseQueryResult<GuildRaidsDto, Error>; kind?: GuildKind | undefined }
+
+export function HubEventsTab({ query, kind }: EventsTabProps): JSX.Element {
     if (query.error) {
         return (
             <div className="py-12 text-center" data-testid="guild-events-error">
@@ -28,8 +30,8 @@ export function HubEventsTab({ query }: { query: UseQueryResult<GuildRaidsDto, E
     return (
         <div className="flex flex-col gap-8" data-testid="guild-events-tab">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <GuildRaidSchedule schedule={raids.schedule} />
-                <GuildAttendance attendance={raids.attendance} />
+                <GuildRaidSchedule schedule={raids.schedule} kind={kind} />
+                <GuildAttendance attendance={raids.attendance} kind={kind} />
             </div>
             <GuildEvents raids={raids} />
         </div>

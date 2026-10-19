@@ -23,7 +23,7 @@ import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { PRIVATE_CHANNEL, PUBLIC_CHANNEL, okMirror } from '../../../test/mocks/guild-discord-handlers';
 import { GuildPage } from '../hub-page';
 
-const GUILD = 'http://localhost:3000/plugins/wow/guilds/7';
+const GUILD = 'http://localhost:3000/guilds/7';
 const BASE = `${GUILD}/discord`;
 const LIST: GuildDiscordChannelListDto = { connected: true, channels: [PUBLIC_CHANNEL, PRIVATE_CHANNEL] };
 

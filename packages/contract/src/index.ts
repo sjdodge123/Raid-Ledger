@@ -237,6 +237,8 @@ export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
 export * from './hub-onboarding.schema.js';
+// Game-server community hub — join, Quick Play list, hide (ROK-1831).
+export * from './hub-server.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';

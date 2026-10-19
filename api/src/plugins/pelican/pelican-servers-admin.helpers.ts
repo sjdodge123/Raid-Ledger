@@ -32,5 +32,15 @@ export function toAdminServerRowDto(
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
     statusCheckedAt: row.statusCheckedAt?.toISOString() ?? null,
     missing: row.missingSince !== null,
+    communityHub: toCommunityHub(row),
   };
+}
+
+/** ROK-1831: null = never enabled. */
+function toCommunityHub(
+  row: PelicanAdminServerRow,
+): PelicanServerRowDto['communityHub'] {
+  const guildId = row.hubGuildId ?? null;
+  if (guildId === null) return null;
+  return { guildId, hidden: (row.hubHiddenAt ?? null) !== null };
 }

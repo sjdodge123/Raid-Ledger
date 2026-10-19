@@ -1,6 +1,7 @@
 import { registerPlugin } from '../plugin-registry';
 import { PelicanPluginSlot } from './slots/pelican-plugin-slot';
 import { usePelicanCalendarItems } from './calendar/use-pelican-calendar-items';
+import { pelicanHubModule } from './hub/register-hub';
 
 /** Pelican game-server panel plugin (ROK-121). Neutral registry colour — no brand mark (spec Q7). */
 const pelican = registerPlugin('pelican', {
@@ -23,3 +24,6 @@ pelican.registerCalendarLayer({
 
 // Feeds the generic GET /game-servers/status — the event page's status chip (ROK-1776).
 pelican.registerGameServerProvider();
+
+// The game-server community hub at /guilds/:id for kind game_server (ROK-1831).
+pelican.registerHubModule(pelicanHubModule);

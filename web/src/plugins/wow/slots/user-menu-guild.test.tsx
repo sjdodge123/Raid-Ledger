@@ -18,7 +18,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useAuth: () => ({ user: { id: 1, role: 'member' }, isAuthenticated: true }),
 }));
 
-const MINE = 'http://localhost:3000/plugins/wow/guilds/mine';
+const MINE = 'http://localhost:3000/guilds/mine';
 
 function guild(id: number, name: string): MyGuild {
     return {

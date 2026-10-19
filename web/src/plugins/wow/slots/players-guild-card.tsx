@@ -55,7 +55,8 @@ export function PlayersGuildCard(): JSX.Element | null {
     // nothing. On an error we stay silent rather than claim they have none.
     const query = useMyGuildsQuery();
     if (query.isPending || query.isError || query.data === undefined) return null;
-    const guilds = query.data.guilds;
+    // Core `mine` lists every hub kind (ROK-1831); this card stays WoW-only.
+    const guilds = query.data.guilds.filter((g) => g.kind === 'wow_guild');
     if (guilds.length === 0) return <GetYourGuildCard how={WOW_HOW} />;
     return (
         <div className="space-y-3" data-testid="players-guild-cards">

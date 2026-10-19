@@ -164,6 +164,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.hubOnboardingDismissals,
     column: schema.hubOnboardingDismissals.userId,
   },
+  // ROK-1831: game-server hub presence membership (CASCADE) — personal
+  // presence history (last seen, character name); it goes with the user.
+  {
+    table: schema.hubServerMembers,
+    column: schema.hubServerMembers.userId,
+  },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {
