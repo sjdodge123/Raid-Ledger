@@ -107,9 +107,63 @@ test_ac9_state_branch_for_agent_helper_exists() {
     fi
 }
 
+# 2026-10-19 incident — the DIRECT claim path (free slot, no queue) also runs
+# branch-match-or-destroy. Seed free slot 1 holding one claimable env.
+seed_free_slot_with_env() {
+    local env_branch="$1" pinned="$2"
+    jq -n '[{slot:1, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null},
+            {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null}]' \
+        > "$RL_STATE_DIR/claims.json"
+    echo "[]" > "$RL_STATE_DIR/queue.json"
+    jq -n --arg b "$env_branch" --argjson p "$pinned" '
+        [{slug:"pinned-env", slot:1, image:"test", ttl:"24h", created_at:"2026-10-19T00:00:00Z",
+          last_touched:"2026-10-19T00:00:00Z", public_domain:"x.lan", pinned:$p,
+          claimable_by_next:true, created_for_branch:$b}]' > "$RL_STATE_DIR/env-registry.json"
+}
+
+test_direct_claim_preserves_pinned_mismatch() {
+    CURRENT_TEST_NAME="direct claim: pinned + branch mismatch → preserved, not destroyed"
+    test_setup
+    seed_free_slot_with_env "feat-pinned" true
+    local out
+    out=$(bash "$BIN_DIR/claim" --branch feat-other --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.slot // empty' <<<"$out" 2>/dev/null)" "1" "claim still granted"
+    assert_eq "$(jq -c '.preserved_pinned' <<<"$out" 2>/dev/null)" '["pinned-env"]' "preserved_pinned lists the env"
+    assert_eq "$(jq -c '.destroyed_envs' <<<"$out" 2>/dev/null)" '[]' "pinned env not reported destroyed"
+    assert_eq "$(jq -c '[.[] | {slug, claimable_by_next}]' "$RL_STATE_DIR/env-registry.json")" \
+        '[{"slug":"pinned-env","claimable_by_next":true}]' "env row intact and still claimable"
+    test_teardown
+}
+
+test_direct_claim_destroys_unpinned_mismatch() {
+    CURRENT_TEST_NAME="direct claim: unpinned + branch mismatch → destroyed as today"
+    test_setup
+    seed_free_slot_with_env "feat-old" false
+    local out
+    out=$(bash "$BIN_DIR/claim" --branch feat-other --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -c '.destroyed_envs' <<<"$out" 2>/dev/null)" '["pinned-env"]' "unpinned mismatch destroyed"
+    assert_eq "$(jq 'length' "$RL_STATE_DIR/env-registry.json")" "0" "registry row removed"
+    test_teardown
+}
+
+test_direct_claim_empty_branch_refused_with_envs() {
+    CURRENT_TEST_NAME="direct claim: no --branch on a slot with claimable envs → branch_required"
+    test_setup
+    seed_free_slot_with_env "feat-old" false
+    local out
+    out=$(bash "$BIN_DIR/claim" --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "branch_required" "refuse with branch_required"
+    assert_eq "$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json")" "false" "slot not claimed"
+    assert_eq "$(jq 'length' "$RL_STATE_DIR/env-registry.json")" "1" "env not destroyed"
+    test_teardown
+}
+
 run_test "ac9-unknown-returns-persisted" test_ac9_unknown_returns_persisted
 run_test "ac9-empty-returns-persisted" test_ac9_empty_returns_persisted
 run_test "ac9-explicit-override" test_ac9_explicit_real_branch_overrides
 run_test "ac9-state-helper-exists" test_ac9_state_branch_for_agent_helper_exists
+run_test "direct-claim-pinned-preserved" test_direct_claim_preserves_pinned_mismatch
+run_test "direct-claim-unpinned-destroyed" test_direct_claim_destroys_unpinned_mismatch
+run_test "direct-claim-empty-branch-refused" test_direct_claim_empty_branch_refused_with_envs
 
 print_test_summary

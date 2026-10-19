@@ -93,6 +93,7 @@ emit_slot_result() {
     local inherited="$2"      # JSON array literal
     local destroyed="$3"      # JSON array literal
     local expires_at="$4"
+    local preserved="${5:-[]}"  # JSON array of pinned slugs kept on a mismatch
     jq -nc \
         --argjson slot "$slot" \
         --arg branch "$BRANCH" \
@@ -101,6 +102,7 @@ emit_slot_result() {
         --arg expires "$expires_at" \
         --argjson inh "$inherited" \
         --argjson des "$destroyed" \
+        --argjson pp "$preserved" \
         '{
             ok: true,
             slot: $slot,
@@ -116,7 +118,8 @@ emit_slot_result() {
             started_at: $started,
             expires_at: $expires,
             inherited_envs: $inh,
-            destroyed_envs: $des
+            destroyed_envs: $des,
+            preserved_pinned: $pp
         }'
 }
 
@@ -185,6 +188,19 @@ for slot in $FREE_SLOTS; do
     fi
 done
 
+# 2026-10-19 incident — an empty branch must never match-or-destroy. Refuse
+# (before the claim flips) when the target slot holds claimable envs.
+if [[ -n "$TARGET_SLOT" && -z "$BRANCH" ]]; then
+    SLOT_CLAIMABLE=$(state::query "$RL_ENVS_FILE" --argjson s "$TARGET_SLOT" \
+        '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)] | length')
+    if [[ "${SLOT_CLAIMABLE:-0}" != "0" ]]; then
+        audit::log claim refused_branch_required "$(jq -nc --argjson slot "$TARGET_SLOT" '{slot:$slot}')"
+        jq -nc --argjson slot "$TARGET_SLOT" \
+            '{ok:false, error:"branch_required", slot:$slot, message:"--branch is required: this slot holds claimable envs and an empty branch would branch-mismatch-destroy them"}'
+        exit 2
+    fi
+fi
+
 if [[ -n "$TARGET_SLOT" ]]; then
     # H-VM-2: Atomic select+flip inside one flock window. The mutate filter
     # rechecks `claimed == false` so concurrent callers can't both win.
@@ -222,11 +238,21 @@ if [[ -n "$TARGET_SLOT" ]]; then
             '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)]')
         INHERITED="[]"
         DESTROYED="[]"
+        PRESERVED="[]"
         if [[ "$(jq 'length' <<<"$CLAIMABLE")" -gt 0 ]]; then
             MATCHING=$(jq -c --arg b "$BRANCH" \
                 '[.[] | select((.created_for_branch // "") == $b)]' <<<"$CLAIMABLE")
             MISMATCHING=$(jq -c --arg b "$BRANCH" \
-                '[.[] | select((.created_for_branch // "") != $b)]' <<<"$CLAIMABLE")
+                '[.[] | select((.created_for_branch // "") != $b and (.pinned // false) != true)]' <<<"$CLAIMABLE")
+            # Pinned envs are NEVER destroyed by a branch mismatch — they stay
+            # on the slot and keep claimable_by_next (2026-10-19 incident).
+            PRESERVED=$(jq -c --arg b "$BRANCH" \
+                '[.[] | select((.created_for_branch // "") != $b and (.pinned // false) == true) | .slug]' <<<"$CLAIMABLE")
+            while read -r pslug; do
+                [[ -z "$pslug" ]] && continue
+                audit::log claim destroy_skipped_pinned \
+                    "$(jq -nc --argjson slot "$TARGET_SLOT" --arg slug "$pslug" --arg b "$BRANCH" '{slot:$slot, slug:$slug, new_branch:$b}')"
+            done < <(jq -r '.[]' <<<"$PRESERVED")
             if [[ "$(jq 'length' <<<"$MISMATCHING")" -gt 0 ]]; then
                 while read -r mslug; do
                     [[ -z "$mslug" ]] && continue
@@ -248,7 +274,7 @@ if [[ -n "$TARGET_SLOT" ]]; then
                     )}]' <<<"$MATCHING")
             fi
             # Clear claimable_by_next on the slot AFTER destroy decisions resolve.
-            env_registry::clear_claimable_for_slot "$TARGET_SLOT"
+            env_registry::clear_claimable_for_slot "$TARGET_SLOT" "$PRESERVED"
         fi
 
         # Remove caller from both queues (per-slot + legacy).
@@ -262,7 +288,7 @@ if [[ -n "$TARGET_SLOT" ]]; then
         # downstream below.
         RL_BRANCH="$BRANCH" perf::emit "claim.acquired" \
             "$(jq -nc --argjson slot "$TARGET_SLOT" --argjson dc "$(jq 'length' <<<"$DESTROYED")" --argjson ic "$(jq 'length' <<<"$INHERITED")" '{slot:$slot, queue_wait_ms:0, position_on_arrival:0, inherited_count:$ic, destroyed_count:$dc}')"
-        emit_slot_result "$TARGET_SLOT" "$INHERITED" "$DESTROYED" "$EXPIRES_AT"
+        emit_slot_result "$TARGET_SLOT" "$INHERITED" "$DESTROYED" "$EXPIRES_AT" "$PRESERVED"
         exit 0
     fi
 fi
