@@ -64,7 +64,7 @@ export interface ValheimLinkBlobRefRow {
  * ROK-1833: latest-wins handoff table read by the ROK-1835 importer. One row
  * per (server, kind, snapshot_key) — CONTRACT §1 snapshot key. `payload` is
  * the full validated message verbatim. ROK-1835 owns `status` after
- * 'pending'.
+ * 'pending' (imported / failed / skipped_stale / waiting_blob).
  */
 export const valheimLinkSnapshots = pgTable(
   'valheim_link_snapshots',
@@ -110,7 +110,9 @@ export const valheimLinkSnapshots = pgTable(
     ),
     check(
       'valheim_link_snapshots_status_chk',
-      sql`${t.status} IN ('pending','imported','failed')`,
+      // ROK-1835 importer adds skipped_stale (older than the armory row) and
+      // waiting_blob (map imported, base-map PNG not uploaded yet).
+      sql`${t.status} IN ('pending','imported','failed','skipped_stale','waiting_blob')`,
     ),
   ],
 );

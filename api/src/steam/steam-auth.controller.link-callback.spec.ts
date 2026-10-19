@@ -19,7 +19,12 @@ jest.mock('./steam-http.util', () => ({
   verifySteamOpenId: (...a: unknown[]) => verifyOpenIdMock(...a),
 }));
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SteamAuthController } from './steam-auth.controller';
+import {
+  STEAM_ACCOUNT_LINKED,
+  STEAM_ACCOUNT_UNLINKED,
+} from './steam.constants';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SteamService } from './steam.service';
@@ -48,6 +53,7 @@ interface Mocks {
   getSteamApiKey: jest.Mock;
   linkSteam: jest.Mock;
   claim: jest.Mock;
+  emitAsync: jest.Mock;
 }
 
 /** In-memory stand-in for the Redis SET NX store: true once per nonce. */
@@ -65,8 +71,9 @@ async function build(): Promise<{ ctrl: SteamAuthController; m: Mocks }> {
     consume: jest.fn().mockResolvedValue({ userId: 42, returnTo: '/profile' }),
     isSteamConfigured: jest.fn().mockResolvedValue(true),
     getSteamApiKey: jest.fn().mockResolvedValue(null),
-    linkSteam: jest.fn().mockResolvedValue(undefined),
+    linkSteam: jest.fn().mockResolvedValue(null),
     claim: fakeClaim(),
+    emitAsync: jest.fn().mockResolvedValue([]),
   };
   const config = {
     get: (k: string) => ({ JWT_SECRET: SECRET, CLIENT_URL })[k],
@@ -81,6 +88,7 @@ async function build(): Promise<{ ctrl: SteamAuthController; m: Mocks }> {
       { provide: SteamService, useValue: {} },
       { provide: SteamWishlistService, useValue: {} },
       { provide: SteamOpenIdNonceStore, useValue: { claim: m.claim } },
+      { provide: EventEmitter2, useValue: { emitAsync: m.emitAsync } },
     ],
   }).compile();
   return { ctrl: moduleRef.get(SteamAuthController), m };
@@ -209,6 +217,11 @@ describe('SteamAuthController — link callback is bound to the hop browser (ROK
 
     expect(m.claim).toHaveBeenCalledWith(NONCE);
     expect(m.linkSteam).toHaveBeenCalledWith(42, '76561190000000001');
+    // ROK-1835: the verified link is announced for the armory auto-match.
+    expect(m.emitAsync).toHaveBeenCalledWith(STEAM_ACCOUNT_LINKED, {
+      userId: 42,
+      steamId64: '76561190000000001',
+    });
     expect(onlyRedirect(res)).toEqual([
       `${CLIENT_URL}/profile?steam=success&steam_private=true`,
     ]);
@@ -216,6 +229,32 @@ describe('SteamAuthController — link callback is bound to the hop browser (ROK
       STATE_COOKIE,
       expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
     );
+  });
+});
+
+describe('SteamAuthController — relink announces unlinked then linked (ROK-1835)', () => {
+  let ctrl: SteamAuthController;
+  let m: Mocks;
+  beforeEach(async () => {
+    ({ ctrl, m } = await build());
+    verifyOpenIdMock.mockReset().mockResolvedValue('76561190000000001');
+  });
+
+  it('emits unlinked for the replaced SteamID BEFORE linked for the new one', async () => {
+    m.linkSteam.mockResolvedValue('76561190000000999');
+    await callback(ctrl);
+    expect(m.emitAsync.mock.calls).toEqual([
+      [STEAM_ACCOUNT_UNLINKED, { userId: 42, steamId64: '76561190000000999' }],
+      [STEAM_ACCOUNT_LINKED, { userId: 42, steamId64: '76561190000000001' }],
+    ]);
+  });
+
+  it('re-linking the same SteamID emits only linked', async () => {
+    m.linkSteam.mockResolvedValue('76561190000000001');
+    await callback(ctrl);
+    expect(m.emitAsync.mock.calls.map((c) => c[0])).toEqual([
+      STEAM_ACCOUNT_LINKED,
+    ]);
   });
 });
 

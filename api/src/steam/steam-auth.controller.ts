@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
@@ -37,6 +38,7 @@ import {
 } from './steam-http.util';
 import { assertFreshSteamAssertion } from './steam-openid-guard.helpers';
 import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
+import { announceSteamLinkChange } from './steam-link-events.helpers';
 import {
   signSteamLinkState,
   verifySteamLinkState,
@@ -63,6 +65,7 @@ export class SteamAuthController {
     private readonly steamService: SteamService,
     private readonly steamWishlistService: SteamWishlistService,
     private readonly nonceStore: SteamOpenIdNonceStore,
+    private readonly events: EventEmitter2,
   ) {}
 
   private verifyState(state: string): Record<string, unknown> | null {
@@ -232,8 +235,10 @@ export class SteamAuthController {
     const userId = stateData.userId as number;
     const steamId = await verifySteamOpenId(query);
     if (!steamId) throw new Error('Steam verification failed');
-    await this.usersService.linkSteam(userId, steamId);
+    const previous = await this.usersService.linkSteam(userId, steamId);
     this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
+    // ROK-1835: detach the replaced SteamID, then attach the verified one.
+    await announceSteamLinkChange(this.events, userId, previous, steamId);
     return { userId, steamId };
   }
 
@@ -338,7 +343,9 @@ export class SteamAuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
   async unlinkSteam(@Req() req: AuthenticatedExpressRequest) {
-    await this.usersService.unlinkSteam(req.user.id);
+    // ROK-1835: the SteamID is read and cleared in one statement.
+    const previous = await this.usersService.unlinkSteam(req.user.id);
     this.logger.log(`Steam account unlinked for user ${req.user.id}`);
+    await announceSteamLinkChange(this.events, req.user.id, previous, null);
   }
 }
