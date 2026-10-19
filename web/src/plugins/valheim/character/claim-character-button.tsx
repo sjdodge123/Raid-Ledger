@@ -9,28 +9,88 @@ import { OwnerDialog } from './owner-dialog';
 
 function claimErrorText(error: unknown): string {
     if (isConflictError(error)) return 'Someone claimed this first';
-    return error instanceof Error && error.message ? error.message : "Couldn't claim this character";
+    return error instanceof Error && error.message
+        ? error.message
+        : "Couldn't claim this character";
 }
 
-export function ClaimCharacterButton({ character }: { character: ValheimCharacterSummary }) {
+function useClaimFlow(character: ValheimCharacterSummary) {
     const [open, setOpen] = useState(false);
     const claim = useClaimCharacter(character.id);
     const close = () => setOpen(false);
-    const confirm = () => claim.mutate(undefined, {
-        onSuccess: () => { close(); toast.success(`${character.name} is now yours.`); },
-        onError: (error) => { close(); toast.error(claimErrorText(error)); },
-    });
-    const footer = (
+    const confirm = () =>
+        claim.mutate(undefined, {
+            onSuccess: () => {
+                close();
+                toast.success(`${character.name} is now yours.`);
+            },
+            onError: (error) => {
+                close();
+                toast.error(claimErrorText(error));
+            },
+        });
+    return {
+        open,
+        show: () => setOpen(true),
+        close,
+        confirm,
+        pending: claim.isPending,
+    };
+}
+
+function ConfirmFooter({
+    onCancel,
+    onConfirm,
+    pending,
+}: {
+    onCancel: () => void;
+    onConfirm: () => void;
+    pending: boolean;
+}) {
+    return (
         <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={close}>Cancel</Button>
-            <Button variant="primary" onClick={confirm} loading={claim.isPending} loadingLabel="Claiming…">Claim</Button>
+            <Button variant="secondary" onClick={onCancel}>
+                Cancel
+            </Button>
+            <Button
+                variant="primary"
+                onClick={onConfirm}
+                loading={pending}
+                loadingLabel="Claiming…"
+            >
+                Claim
+            </Button>
         </div>
+    );
+}
+
+interface ClaimCharacterButtonProps {
+    character: ValheimCharacterSummary;
+}
+
+export function ClaimCharacterButton({ character }: ClaimCharacterButtonProps) {
+    const flow = useClaimFlow(character);
+    const footer = (
+        <ConfirmFooter
+            onCancel={flow.close}
+            onConfirm={flow.confirm}
+            pending={flow.pending}
+        />
     );
     return (
         <>
-            <Button variant="primary" onClick={() => setOpen(true)}>Claim this character</Button>
-            <OwnerDialog isOpen={open} onClose={close} title="Claim character" footer={footer}>
-                <p className="text-sm text-foreground">Claim {character.name} as yours? An admin can change this.</p>
+            <Button variant="primary" onClick={flow.show}>
+                Claim this character
+            </Button>
+            <OwnerDialog
+                isOpen={flow.open}
+                onClose={flow.close}
+                title="Claim character"
+                footer={footer}
+            >
+                <p className="text-sm text-foreground">
+                    Claim {character.name} as yours? An admin can change this.
+                </p>
             </OwnerDialog>
         </>
     );

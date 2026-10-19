@@ -12,8 +12,14 @@ export interface OwnerOption {
 function useMemberSearch(search: string) {
     return useQuery({
         queryKey: ['players', 'valheim-owner-picker', search],
-        queryFn: () => getPlayers({ ...(search ? { search } : {}), page: 1, pageSize: 20 }),
-        select: (res): OwnerOption[] => res.data.map((u) => ({ id: u.id, username: u.username })),
+        queryFn: () =>
+            getPlayers({
+                ...(search ? { search } : {}),
+                page: 1,
+                pageSize: 20,
+            }),
+        select: (res): OwnerOption[] =>
+            res.data.map((u) => ({ id: u.id, username: u.username })),
     });
 }
 
@@ -40,7 +46,9 @@ export function OwnerSearch({ value, onChange }: OwnerSearchProps) {
             loadingText="Searching…"
             emptyText="No members found"
             openOnFocus
-            {...(search.isError ? { errorText: "Couldn't search members" } : {})}
+            {...(search.isError
+                ? { errorText: "Couldn't search members" }
+                : {})}
         />
     );
 }

@@ -1,5 +1,8 @@
 /** ROK-1836 L4 (D10) — the admin's owner-change history, newest first. */
-import type { ValheimClaimAction, ValheimClaimEvent } from '@raid-ledger/contract';
+import type {
+    ValheimClaimAction,
+    ValheimClaimEvent,
+} from '@raid-ledger/contract';
 
 const ACTION_LABEL: Record<ValheimClaimAction, string> = {
     claim: 'Claimed by a member',
@@ -14,7 +17,22 @@ function userText(id: number | null): string {
 }
 
 function newestFirst(events: ValheimClaimEvent[]): ValheimClaimEvent[] {
-    return [...events].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return [...events].sort(
+        (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+    );
+}
+
+function HistoryRow({ event }: { event: ValheimClaimEvent }) {
+    return (
+        <li className="flex flex-wrap justify-between gap-2 py-2 text-sm">
+            <span className="text-foreground">
+                {ACTION_LABEL[event.action] + userText(event.toUserId)}
+            </span>
+            <time dateTime={event.createdAt} className="text-xs text-dim">
+                {new Date(event.createdAt).toLocaleString()}
+            </time>
+        </li>
+    );
 }
 
 interface ClaimHistoryProps {
@@ -22,25 +40,39 @@ interface ClaimHistoryProps {
     isError: boolean;
 }
 
-export function ClaimHistory({ events, isError }: ClaimHistoryProps) {
-    let body;
-    if (isError) body = <p className="text-sm text-danger" role="alert">Couldn't load the claim history.</p>;
-    else if (events === undefined) body = <p className="text-sm text-muted">Loading history…</p>;
-    else if (events.length === 0) body = <p className="text-sm text-muted">No owner changes yet.</p>;
-    else body = (
-        <ul className="flex flex-col divide-y divide-edge" aria-label="Claim history">
+function HistoryBody({ events, isError }: ClaimHistoryProps) {
+    if (isError)
+        return (
+            <p className="text-sm text-danger" role="alert">
+                Couldn't load the claim history.
+            </p>
+        );
+    if (events === undefined)
+        return <p className="text-sm text-muted">Loading history…</p>;
+    if (events.length === 0)
+        return <p className="text-sm text-muted">No owner changes yet.</p>;
+    return (
+        <ul
+            className="flex flex-col divide-y divide-edge"
+            aria-label="Claim history"
+        >
             {newestFirst(events).map((e) => (
-                <li key={e.id} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
-                    <span className="text-foreground">{ACTION_LABEL[e.action]}{userText(e.toUserId)}</span>
-                    <time dateTime={e.createdAt} className="text-xs text-dim">{new Date(e.createdAt).toLocaleString()}</time>
-                </li>
+                <HistoryRow key={e.id} event={e} />
             ))}
         </ul>
     );
+}
+
+export function ClaimHistory(props: ClaimHistoryProps) {
     return (
         <section className="mt-6" aria-labelledby="valheim-claim-history">
-            <h3 id="valheim-claim-history" className="mb-2 text-sm font-semibold text-foreground">Claim history</h3>
-            {body}
+            <h3
+                id="valheim-claim-history"
+                className="mb-2 text-sm font-semibold text-foreground"
+            >
+                Claim history
+            </h3>
+            <HistoryBody {...props} />
         </section>
     );
 }

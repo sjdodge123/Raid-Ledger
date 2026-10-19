@@ -13,10 +13,7 @@ interface OwnerDialogProps {
     children: ReactNode;
 }
 
-export function OwnerDialog({ isOpen, onClose, title, footer, children }: OwnerDialogProps) {
-    const isDesktop = useMediaQuery(DESKTOP_MQ);
-    if (isDesktop) {
-        return <Modal isOpen={isOpen} onClose={onClose} title={title} footer={footer}>{children}</Modal>;
-    }
-    return <BottomSheet isOpen={isOpen} onClose={onClose} title={title} footer={footer}>{children}</BottomSheet>;
+export function OwnerDialog(props: OwnerDialogProps) {
+    const Shell = useMediaQuery(DESKTOP_MQ) ? Modal : BottomSheet;
+    return <Shell {...props} />;
 }

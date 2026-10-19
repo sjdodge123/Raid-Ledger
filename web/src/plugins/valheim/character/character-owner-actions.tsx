@@ -17,7 +17,9 @@ export function ValheimCharacterOwnerActions({ character, viewer }: Props) {
     if (viewer === null) return null;
     return (
         <>
-            {character.claimedBy === null && <ClaimCharacterButton character={character} />}
+            {character.claimedBy === null && (
+                <ClaimCharacterButton character={character} />
+            )}
             {isAdmin(viewer) && <ChangeOwnerSheet character={character} />}
         </>
     );
