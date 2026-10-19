@@ -78,30 +78,43 @@ export class GameAffinityNotificationService {
       );
       return;
     }
-    const affinityIds = await this.findRecipients(
-      input.gameId,
-      input.creatorId,
+    const plan = await this.collectRecipients(input);
+    if (!plan) return;
+    await this.dispatchAffinityNotifications(
+      input,
+      plan.affinityIds,
+      plan.group,
     );
+  }
+
+  /**
+   * ROK-1832 D6a: game-affinity ∪ group recipients (guild read at send time),
+   * minus absences and follow-up attendees. Null when nobody is left.
+   */
+  private async collectRecipients(
+    input: GameAffinityNotificationInput,
+  ): Promise<{
+    affinityIds: number[];
+    group: GroupNoticeContext | null;
+  } | null> {
+    const affinity = await this.findRecipients(input.gameId, input.creatorId);
     const group = await loadGroupNoticeContext(
       this.db,
       this.hubNotifications,
       input.eventId,
       input.creatorId,
     );
-    const all = [...new Set([...affinityIds, ...(group?.groupIds ?? [])])];
-    if (all.length === 0) {
-      this.logger.debug(`No event-notice recipients for event ${input.eventId}`);
-      return;
-    }
+    const all = [...new Set([...affinity, ...(group?.groupIds ?? [])])];
     const kept = new Set(await this.excludeRecipients(all, input));
-    if (kept.size === 0) return;
+    if (kept.size === 0) {
+      this.logger.debug(
+        `No event-notice recipients for event ${input.eventId}`,
+      );
+      return null;
+    }
     const keep = (ids: number[]): number[] => ids.filter((id) => kept.has(id));
-    const scopedGroup = group && { ...group, groupIds: keep(group.groupIds) };
-    await this.dispatchAffinityNotifications(
-      input,
-      keep(affinityIds),
-      scopedGroup,
-    );
+    const scoped = group && { ...group, groupIds: keep(group.groupIds) };
+    return { affinityIds: keep(affinity), group: scoped };
   }
 
   /** ROK-503 absences + ROK-1371 follow-up attendees, for both sources. */
@@ -109,6 +122,7 @@ export class GameAffinityNotificationService {
     recipientIds: number[],
     input: GameAffinityNotificationInput,
   ): Promise<number[]> {
+    if (recipientIds.length === 0) return [];
     const present = await this.excludeAbsentUsers(recipientIds, input);
     return this.excludeFollowupRecipients(present, input);
   }

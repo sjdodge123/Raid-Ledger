@@ -9,10 +9,7 @@ import type { NotificationService } from './notification.service';
 import type { NotificationDedupService } from './notification-dedup.service';
 import type { HubNotificationService } from './hub-notification.service';
 import { findGameAffinityRecipients } from './game-affinity-recipients.helpers';
-import {
-  findEventGuildId,
-  findGroupTypeOff,
-} from './hub-notification.queries';
+import { findEventGuildId, findGroupTypeOff } from './hub-notification.queries';
 
 jest.mock('./game-affinity-recipients.helpers', () => ({
   findGameAffinityRecipients: jest.fn(),
@@ -139,6 +136,13 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     const h = build([50]);
     await h.service.notifyGameAffinity(input);
     expect(sentTypes(h.create)).toEqual([[50, 'subscribed_game']]);
+  });
+});
+
+describe('GameAffinityNotificationService — per-user claim (D4)', () => {
+  beforeEach(() => {
+    affinity.mockReset();
+    guildOf.mockReset();
   });
 
   it('skips a user already noticed about this event (D4)', async () => {
