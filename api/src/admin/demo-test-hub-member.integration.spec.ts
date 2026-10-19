@@ -80,9 +80,11 @@ beforeAll(async () => {
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });
 
-afterAll(async () => {
-  process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
-  await testApp.app.get(SettingsService).setDemoMode(false);
+// No DB write here: integration-setup.ts's global afterAll (closeTestApp)
+// runs first and ends the DB client; its beforeAll truncates every file.
+afterAll(() => {
+  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
 
 describe('POST /admin/test/hub-member', () => {
