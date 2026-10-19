@@ -477,8 +477,36 @@ test_own_branch_env_spin_allowed() {
     es_teardown
 }
 
+# Codex r3 P2 — a --takeover that a later preflight check refuses (here: the
+# pinned env lives on another STILL-CLAIMED slot → slug_owned_by_other_slot)
+# must leave the registry row byte-identical. Re-stamping before that check
+# handed the row to the caller even though the spin was refused.
+test_refused_takeover_leaves_row_untouched() {
+    CURRENT_TEST_NAME="refused --takeover (other slot still claimed) leaves the registry row byte-identical"
+    es_setup
+    cat > "$RL_CLAIMS_FILE" <<JSON
+[
+  {"slot": 1, "claimed": true, "agent_id": "es-agent",    "branch": "fix/rok-1357"},
+  {"slot": 2, "claimed": true, "agent_id": "other-agent", "branch": "feat/other"}
+]
+JSON
+    jq -n '[{slug:"pinned-other", slot:2, image:"x", ttl:"24h", created_at:"2026-06-07T00:00:00Z",
+             last_touched:"2026-06-07T00:00:00Z", public_domain:"", pinned:true, claimable_by_next:true,
+             created_for_branch:"feat/other", created_by_agent:"other-agent"}]' > "$RL_ENVS_FILE"
+    export ES_APP_EXISTS="true" ES_PG_EXISTS="true" ES_APP_SLOT="2"
+    local before
+    before=$(cat "$RL_ENVS_FILE")
+    run_env_spin pinned-other --takeover
+    assert_exit_code "$ES_RC" "1" "takeover onto a still-claimed slot's env must refuse"
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "slug_owned_by_other_slot" "refused by the slug-ownership check"
+    assert_eq "$(cat "$RL_ENVS_FILE")" "$before" "refused takeover must leave the registry row byte-identical"
+    assert_eq "$(grep -c env_spin_takeover_foreign_env "$RL_AUDIT_LOG" 2>/dev/null || true)" "0" "no takeover audited on refusal"
+    es_teardown
+}
+
 run_test "foreign-env-spin-refused"            test_foreign_env_spin_refused
 run_test "foreign-unpinned-env-spin-refused"   test_foreign_unpinned_env_spin_refused
 run_test "foreign-env-spin-takeover-restamps"  test_foreign_env_spin_takeover_restamps
 run_test "own-branch-env-spin-allowed"         test_own_branch_env_spin_allowed
+run_test "refused-takeover-row-untouched"      test_refused_takeover_leaves_row_untouched
 print_test_summary

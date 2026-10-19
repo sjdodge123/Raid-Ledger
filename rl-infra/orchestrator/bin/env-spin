@@ -227,6 +227,15 @@ SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 # our image under its own stamp. Refuse unless --takeover, which re-stamps the
 # row to the acting branch + agent. A cross-slot unpinned row is left to the
 # unclaimed-slot reclaim below, which already drops the stale stamp.
+#
+# Codex fleet-claim r3: the guard only DECIDES. A --takeover is recorded here
+# and committed by env_spin::commit_takeover once every preflight refusal
+# (env cap, slug owned by a still-claimed slot) has passed — re-stamping first
+# left a refused takeover's row stamped to the caller, so its real owner was
+# then refused a re-spin and release stopped marking it claimable.
+TAKEOVER_OWNER=""
+TAKEOVER_ACTING=""
+TAKEOVER_DETAIL=""
 env_spin::guard_foreign_env() {
     local acting row owner row_slot pinned
     acting=$(state::branch_for_agent "$RL_AGENT_ID")
@@ -241,10 +250,7 @@ env_spin::guard_foreign_env() {
     detail=$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg owner "$owner" --arg acting "$acting" \
         '{slug:$slug, slot:$slot, owned_by_branch:$owner, acting_branch:$acting}')
     if [[ "$TAKEOVER" == "1" ]]; then
-        state::mutate "$RL_ENVS_FILE" --arg g "$SLUG" --arg b "$acting" --arg a "$RL_AGENT_ID" \
-            'map(if .slug == $g then .created_for_branch = $b | .created_by_agent = $a
-                 | .claimable_by_next = false else . end)'
-        audit::log env-spin env_spin_takeover_foreign_env "$detail"
+        TAKEOVER_OWNER="$owner" TAKEOVER_ACTING="$acting" TAKEOVER_DETAIL="$detail"
         return 0
     fi
     audit::log env-spin env_spin_refused_foreign_env "$detail"
@@ -253,6 +259,35 @@ env_spin::guard_foreign_env() {
     exit 1
 }
 env_spin::guard_foreign_env
+
+# Commit a pending --takeover. Runs after every preflight refusal, before any
+# container is touched (same reason the reclaim takes registry ownership
+# first). The re-stamp is a compare-and-swap under state::mutate's lock: it
+# only fires while the row is still owned by the branch the guard saw (or
+# unowned — the unclaimed-slot reclaim deletes the stamp), so a row re-stamped
+# to a third branch in between is refused, never silently stolen.
+env_spin::commit_takeover() {
+    [[ -n "$TAKEOVER_OWNER" ]] || return 0
+    local now_owner
+    if ! state::mutate "$RL_ENVS_FILE" --arg g "$SLUG" --arg o "$TAKEOVER_OWNER" \
+            --arg b "$TAKEOVER_ACTING" --arg a "$RL_AGENT_ID" \
+            'map(if .slug == $g and ((.created_for_branch // "") as $c | $c == $o or $c == "" or $c == $b)
+                 then .created_for_branch = $b | .created_by_agent = $a | .claimable_by_next = false
+                 else . end)'; then
+        jq -c '{ok:false, error:"env_registry_mutate_failed", phase:"takeover_restamp"} + .' <<<"$TAKEOVER_DETAIL"
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    now_owner=$(state::query "$RL_ENVS_FILE" -r --arg g "$SLUG" \
+        '[.[] | select(.slug == $g)] | first | .created_for_branch // ""' 2>/dev/null || echo "")
+    if [[ -n "$now_owner" && "$now_owner" != "$TAKEOVER_ACTING" ]]; then
+        audit::log env-spin env_spin_takeover_raced "$TAKEOVER_DETAIL"
+        jq -c --arg now "$now_owner" '{ok:false, error:"env_spin_takeover_raced", now_owned_by_branch:$now} + .' <<<"$TAKEOVER_DETAIL"
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    audit::log env-spin env_spin_takeover_foreign_env "$TAKEOVER_DETAIL"
+}
 
 # Per-slot env-count cap. Prevents one agent from accidentally spinning N
 # envs and OOMing the VM. Tunable via MAX_ENVS_PER_SLOT env var. Counts
@@ -351,6 +386,8 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
         RECLAIMED_FROM_UNCLAIMED=1
     fi
 fi
+
+env_spin::commit_takeover
 
 LAST_PHASE="preflight_done"
 
