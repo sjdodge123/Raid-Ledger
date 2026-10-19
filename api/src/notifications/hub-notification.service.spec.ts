@@ -157,6 +157,24 @@ describe('HubNotificationService.notifyLateTag (D6b)', () => {
     expect(notifications.create).not.toHaveBeenCalled();
   });
 
+  it('does nothing once the event has started', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent({ startTime: new Date(0) }));
+    const { svc, notifications } = setup();
+    await svc.notifyLateTag(9);
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for an untagged event', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent({ guildId: null }));
+    const { svc, notifications } = setup();
+    await svc.notifyLateTag(9);
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('HubNotificationService.notifyLateTag announce + prior-notice dedup (Codex r1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('treats an event whose embed the scheduler posted as announced', async () => {
     q.findLateTagEvent.mockResolvedValue(lateEvent());
     const { svc, notifications } = setup({ marked: false });
@@ -180,19 +198,5 @@ describe('HubNotificationService.notifyLateTag (D6b)', () => {
       'event-notice:9:user:2',
       expect.any(Number),
     );
-  });
-
-  it('does nothing once the event has started', async () => {
-    q.findLateTagEvent.mockResolvedValue(lateEvent({ startTime: new Date(0) }));
-    const { svc, notifications } = setup();
-    await svc.notifyLateTag(9);
-    expect(notifications.create).not.toHaveBeenCalled();
-  });
-
-  it('does nothing for an untagged event', async () => {
-    q.findLateTagEvent.mockResolvedValue(lateEvent({ guildId: null }));
-    const { svc, notifications } = setup();
-    await svc.notifyLateTag(9);
-    expect(notifications.create).not.toHaveBeenCalled();
   });
 });

@@ -113,7 +113,10 @@ export async function findEventGuildId(
  * D6b: an event the scheduler announced (`EmbedSchedulerService` posts the
  * deferred embed without the `game-alert:event:<id>` marker) has an embed row.
  */
-export async function hasPostedEmbed(db: Db, eventId: number): Promise<boolean> {
+export async function hasPostedEmbed(
+  db: Db,
+  eventId: number,
+): Promise<boolean> {
   const m = schema.discordEventMessages;
   const [row] = await db
     .select({ id: m.id })
