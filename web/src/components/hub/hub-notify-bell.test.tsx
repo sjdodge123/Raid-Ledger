@@ -66,7 +66,7 @@ afterEach(() => { window.matchMedia = originalMatchMedia; });
 
 async function openSwitch(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
     await user.click(await screen.findByTestId('hub-notify-bell'));
-    return screen.getByTestId('hub-notify-switch');
+    return screen.findByTestId('hub-notify-switch');
 }
 
 describe('HubNotifyBell', () => {

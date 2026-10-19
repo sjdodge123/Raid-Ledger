@@ -5,17 +5,23 @@
  * The bell OPENS a panel — the `Switch` inside it toggles the mute — so it
  * carries `aria-haspopup="dialog"` + `aria-expanded`, not `aria-pressed`. The
  * icon still shows the state. ≥1024px the panel is an anchored popover, below
- * it a `BottomSheet`. The open state is internal unless the adapter controls it
+ * it a `BottomSheet` (both in the lazy `notify-bell-shell`). The open state is internal unless the adapter controls it
  * (`open` + `onOpenChange`, e.g. a deep link that opens the panel).
  */
-import { useCallback, useRef, useState, type JSX } from 'react';
+import { lazy, Suspense, useCallback, useRef, useState, type JSX } from 'react';
 import { BellIcon, BellSlashIcon } from '@heroicons/react/24/outline';
 import { Button } from '../ui/button';
-import { BottomSheet } from '../ui/bottom-sheet';
 import { usePortalTarget } from '../ui/use-anchored-popup';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
-import { NotifyPanelBody, NotifyPopover, type NotifyPanelState } from './notify-bell-panel';
+import type { NotifyPanelState } from './notify-bell-panel';
+
+/**
+ * Lazy so the panel stays out of the host page's chunk (hub-page budget). It
+ * mounts with the bell and renders nothing while closed, so the chunk is
+ * fetched up front and the first click opens without a wait.
+ */
+const NotifyBellShell = lazy(() => import('./notify-bell-shell'));
 
 export interface NotifyBellProps {
     subjectName: string;
@@ -64,14 +70,10 @@ export function NotifyBell(props: NotifyBellProps): JSX.Element {
                 aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setOpen(!isOpen)}>
                 <Icon className="w-5 h-5" aria-hidden="true" />
             </Button>
-            {isDesktop ? (
-                <NotifyPopover open={isOpen} onClose={close} anchorRef={anchorRef} bellRef={bellRef}
-                    container={container} panel={panel} />
-            ) : (
-                <BottomSheet isOpen={isOpen} onClose={close} title={`Notifications for ${subjectName}`}>
-                    <NotifyPanelBody {...panel} />
-                </BottomSheet>
-            )}
+            <Suspense fallback={null}>
+                <NotifyBellShell isDesktop={isDesktop} open={isOpen} onClose={close} anchorRef={anchorRef}
+                    bellRef={bellRef} container={container} panel={panel} />
+            </Suspense>
         </div>
     );
 }

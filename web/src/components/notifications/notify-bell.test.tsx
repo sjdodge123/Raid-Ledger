@@ -47,7 +47,7 @@ describe('NotifyBell', () => {
         const user = userEvent.setup();
         renderBell();
         await user.click(screen.getByTestId('hub-notify-bell'));
-        const dialog = screen.getByRole('dialog', { name: 'Notifications for Iron Vanguard' });
+        const dialog = await screen.findByRole('dialog', { name: 'Notifications for Iron Vanguard' });
         expect(dialog).toHaveAttribute('data-testid', 'hub-notify-popover');
         expect(within(dialog).getByText('Leader posts and events tagged to this group. Muting keeps you in the group.')).toBeInTheDocument();
         expect(within(dialog).getByRole('link', { name: 'All notification settings →' }))
@@ -63,7 +63,7 @@ describe('NotifyBell', () => {
         renderBell({ muted: true });
         await user.click(screen.getByTestId('hub-notify-bell'));
         expect(screen.queryByTestId('hub-notify-popover')).not.toBeInTheDocument();
-        await user.click(screen.getByTestId('hub-notify-switch'));
+        await user.click(await screen.findByTestId('hub-notify-switch'));
         expect(onToggle).toHaveBeenCalledWith(false);
     });
 
@@ -72,6 +72,6 @@ describe('NotifyBell', () => {
         const user = userEvent.setup();
         renderBell({ isPending: true });
         await user.click(screen.getByTestId('hub-notify-bell'));
-        expect(screen.getByTestId('hub-notify-switch')).toBeDisabled();
+        expect(await screen.findByTestId('hub-notify-switch')).toBeDisabled();
     });
 });
