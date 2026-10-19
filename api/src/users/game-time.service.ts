@@ -16,6 +16,7 @@ import {
   fetchAbsencesEndingOnOrAfter,
 } from './game-time-absence.helpers';
 import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
+import { assertAbsenceWritable } from './game-time-absence-limit.helpers';
 import { defined } from '../common/defined.helpers';
 import {
   calendarBusyWeekStart,
@@ -224,6 +225,7 @@ export class GameTimeService {
     userId: number,
     input: { startDate: string; endDate: string; reason?: string },
   ): Promise<AbsenceRecord> {
+    await assertAbsenceWritable(this.db, userId, input); // 409: dup / cap
     const now = new Date();
     const [row] = await this.db
       .insert(schema.gameTimeAbsences)

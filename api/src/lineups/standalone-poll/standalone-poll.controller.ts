@@ -19,6 +19,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import {
+  CompleteSchedulingPollSchema,
   CreateSchedulingPollSchema,
   type CreateSchedulingPollDto,
   type SchedulingPollResponseDto,
@@ -87,19 +88,26 @@ export class StandalonePollController {
     });
   }
 
-  /** Mark a standalone poll as completed (after reschedule or event creation). */
+  /** Mark a standalone poll as completed (after reschedule or event creation).
+   *  ROK-1844: creator / linked-event creator / staff only; 409 once done. */
   @Post(':matchId/complete')
   @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async complete(
     @Param('matchId', ParseIntPipe) matchId: number,
-    @Body() body: { eventId?: number; startTime?: string },
+    @Body() body: unknown,
     @Req() req: AuthenticatedRequest,
   ) {
+    // ROK-1844: strict runtime validation — the body names the event every
+    // yes-voter is signed up to, so a malformed one is a 400, never a guess.
+    const parsed = CompleteSchedulingPollSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
     const ok = await this.service.complete(
       matchId,
-      body?.eventId,
-      body?.startTime,
+      parsed.data.eventId,
+      parsed.data.startTime,
       req.user.id,
       isOperatorOrAdmin(req.user.role),
     );

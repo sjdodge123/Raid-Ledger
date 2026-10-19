@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { IgdbGameDto, GameDetailDto } from '@raid-ledger/contract';
@@ -102,9 +102,33 @@ export interface SteamLookupDeps {
 }
 
 /**
+ * True when a row with this Steam App ID exists but an admin hid or banned it
+ * (ROK-1843). Deliberately unfiltered: the visible-only fast path misses a
+ * moderated row, and that miss used to trigger a rediscovery that un-hid it.
+ */
+async function isSteamAppIdModerated(
+  db: PostgresJsDatabase<typeof schema>,
+  steamAppId: number,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(
+      and(
+        eq(schema.games.steamAppId, steamAppId),
+        or(eq(schema.games.hidden, true), eq(schema.games.banned, true)),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
  * Resolve a Steam App ID to a game DTO (ROK-945 rework).
  * 1. Local DB lookup (fast path).
- * 2. If missing, discover via ITAD and insert into DB.
+ * 2. A hidden/banned row with this id → null (404); never rediscovered.
+ * 3. If missing, discover via ITAD and insert into DB. A discovery that lands
+ *    on (or creates) a hidden row → null, so the route never serves it.
  * Returns { game, newGameId } — newGameId is set when ITAD created a row.
  */
 export async function resolveGameBySteamAppId(
@@ -113,6 +137,7 @@ export async function resolveGameBySteamAppId(
 ): Promise<{ game: IgdbGameDto; newGameId: number | null } | null> {
   const existing = await lookupGameBySteamAppId(deps.db, steamAppId);
   if (existing) return { game: existing, newGameId: null };
+  if (await isSteamAppIdModerated(deps.db, steamAppId)) return null;
 
   const result = await discoverGameViaItad(
     steamAppId,
@@ -122,7 +147,7 @@ export async function resolveGameBySteamAppId(
     },
     'itad',
   );
-  if (!result) return null;
+  if (!result || result.hidden) return null;
 
   const created = await lookupGameById(deps.db, result.gameId);
   if (!created) return null;

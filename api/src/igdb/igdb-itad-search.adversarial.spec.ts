@@ -19,6 +19,8 @@ function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
     enrichFromIgdb: jest.fn().mockResolvedValue(null),
     getAdultFilter: jest.fn().mockResolvedValue(false),
     findBannedOrHiddenSlugs: jest.fn().mockResolvedValue(new Set()),
+    findBannedOrHiddenIds: jest.fn().mockResolvedValue(new Set()),
+    hasModeratedMatch: jest.fn().mockResolvedValue(false),
     upsertGame: jest
       .fn()
       .mockImplementation((g) => Promise.resolve({ ...g, id: 1 })),

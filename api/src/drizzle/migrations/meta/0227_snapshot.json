@@ -1,5 +1,5 @@
 {
-  "id": "65a105e3-84b5-4bdf-bb0a-880321d153dd",
+  "id": "e17c4c11-b343-47bb-a53c-b0332ea3e471",
   "prevId": "f7bbe2f2-7c73-4f05-a28e-d1ede6205260",
   "version": "7",
   "dialect": "postgresql",
@@ -376,6 +376,12 @@
         },
         "rescheduling_poll_id": {
           "name": "rescheduling_poll_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_from_poll_id": {
+          "name": "created_from_poll_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -10905,18 +10911,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "pelican_server_id": {
-          "name": "pelican_server_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "hidden_at": {
-          "name": "hidden_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -10956,23 +10950,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"guilds\".\"realm_slug\" IS NULL AND \"guilds\".\"kind\" = 'wow_guild'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_guilds_pelican_server": {
-          "name": "idx_guilds_pelican_server",
-          "columns": [
-            {
-              "expression": "pelican_server_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"guilds\".\"pelican_server_id\" IS NOT NULL",
+          "where": "\"guilds\".\"realm_slug\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -10982,21 +10960,6 @@
           "columns": [
             {
               "expression": "game_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_guilds_pelican_server_id": {
-          "name": "idx_guilds_pelican_server_id",
-          "columns": [
-            {
-              "expression": "pelican_server_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -11021,19 +10984,6 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "guilds_pelican_server_id_pelican_servers_id_fk": {
-          "name": "guilds_pelican_server_id_pelican_servers_id_fk",
-          "tableFrom": "guilds",
-          "tableTo": "pelican_servers",
-          "columnsFrom": [
-            "pelican_server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -11043,10 +10993,6 @@
         "guilds_kind_check": {
           "name": "guilds_kind_check",
           "value": "\"guilds\".\"kind\" IN ('wow_guild', 'game_server')"
-        },
-        "guilds_server_kind_check": {
-          "name": "guilds_server_kind_check",
-          "value": "\"guilds\".\"pelican_server_id\" IS NULL OR \"guilds\".\"kind\" = 'game_server'"
         }
       },
       "isRLSEnabled": false
@@ -11810,177 +11756,6 @@
         "guild_recommended_addons_requirement": {
           "name": "guild_recommended_addons_requirement",
           "value": "\"guild_recommended_addons\".\"requirement\" IN ('required', 'optional')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.hub_server_members": {
-      "name": "hub_server_members",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "varchar(10)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "joined_at": {
-          "name": "joined_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "left_at": {
-          "name": "left_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "character_name": {
-          "name": "character_name",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_hub_server_members_guild_user": {
-          "name": "idx_hub_server_members_guild_user",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_server_members_user_id": {
-          "name": "idx_hub_server_members_user_id",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_server_members_guild_last_seen": {
-          "name": "idx_hub_server_members_guild_last_seen",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_seen_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_server_members_guild_id_guilds_id_fk": {
-          "name": "hub_server_members_guild_id_guilds_id_fk",
-          "tableFrom": "hub_server_members",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_server_members_user_id_users_id_fk": {
-          "name": "hub_server_members_user_id_users_id_fk",
-          "tableFrom": "hub_server_members",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "hub_server_members_source_check": {
-          "name": "hub_server_members_source_check",
-          "value": "\"hub_server_members\".\"source\" IN ('presence', 'manual')"
         }
       },
       "isRLSEnabled": false

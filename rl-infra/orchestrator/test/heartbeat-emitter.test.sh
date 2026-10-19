@@ -53,6 +53,8 @@ if [[ "${1:-}" == "exec" ]]; then
                 ;;
         esac
     done
+    # ROK-1849: the pre-dispatch purge/exec-bit streams (`bash -s -- /workspace`).
+    [[ "$*" == "bash -s -- /workspace" ]] && { cat >/dev/null; exit 0; }
     exec "$@"
 fi
 # Other docker subcommands not used by the wrapper — pass through to a no-op.

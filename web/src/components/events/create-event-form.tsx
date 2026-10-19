@@ -29,14 +29,19 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
     return useMutation({
         mutationFn: (dto: CreateEventDto | UpdateEventDto) => {
             if (isSeriesEdit) return updateSeries(editEventId!, seriesScope!, dto as UpdateEventDto).then(() => undefined);
-            return isEditMode ? updateEvent(editEventId!, dto as UpdateEventDto) : createEvent(dto as CreateEventDto);
+            if (isEditMode) return updateEvent(editEventId!, dto as UpdateEventDto);
+            // ROK-1844: stamp the poll this event is created from — completing the
+            // poll may sign its voters up to this event and no other.
+            return createEvent({ ...(dto as CreateEventDto), ...(schedulingMatchId ? { schedulingMatchId } : {}) });
         },
         onSuccess: (event) => {
             toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
             if (schedulingMatchId) {
-                completeStandalonePoll(schedulingMatchId, event?.id, schedulingStartTime ?? undefined).catch(() => {
+                // ROK-1844: signups need the winning slot — without one just close the poll.
+                const signupEventId = schedulingStartTime ? event?.id : undefined;
+                completeStandalonePoll(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined).catch(() => {
                     toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
                 });
             }

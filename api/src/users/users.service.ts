@@ -27,6 +27,10 @@ import {
 import { linkDiscordFields } from './users-link-discord.helpers';
 import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
+import {
+  clearSteamIdReturningPrevious,
+  setSteamIdReturningPrevious,
+} from './users-steam-link.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { reactivateUserById } from './users-reactivate.helpers';
@@ -185,29 +189,25 @@ export class UsersService {
     return result ?? null;
   }
 
-  /** Link a Steam account to an existing user (ROK-417). */
-  async linkSteam(userId: number, steamId: string) {
+  /**
+   * Link a Steam account to an existing user (ROK-417). Returns the SteamID
+   * it replaced (null if none), read in the same statement (ROK-1835).
+   */
+  async linkSteam(userId: number, steamId: string): Promise<string | null> {
     const existing = await this.findBySteamId(steamId);
     if (existing && existing.id !== userId)
       throw new ConflictException(
         'This Steam account is already linked to another user',
       );
-    const [updated] = await this.db
-      .update(schema.users)
-      .set({ steamId, updatedAt: new Date() })
-      .where(eq(schema.users.id, userId))
-      .returning();
-    return updated;
+    return setSteamIdReturningPrevious(this.db, userId, steamId);
   }
 
-  /** Unlink Steam from a user account (ROK-417). */
-  async unlinkSteam(userId: number) {
-    const [updated] = await this.db
-      .update(schema.users)
-      .set({ steamId: null, updatedAt: new Date() })
-      .where(eq(schema.users.id, userId))
-      .returning();
-    return updated;
+  /**
+   * Unlink Steam from a user account (ROK-417). Returns the SteamID that was
+   * cleared — read and cleared in one statement (ROK-1835) — or null.
+   */
+  unlinkSteam(userId: number): Promise<string | null> {
+    return clearSteamIdReturningPrevious(this.db, userId);
   }
 
   /** Count total users with 5-minute cache (ROK-175 AC-4, ROK-662). */

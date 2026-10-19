@@ -209,3 +209,51 @@ describe('GameTimeAbsenceSchema.source/provider (ROK-1593 PR-B)', () => {
         ]);
     });
 });
+
+/**
+ * ROK-1842: an unbounded span (0001-01-01..9999-12-31) made every composite
+ * read walk 3.64M days. The span is capped at 366 days inclusive and both
+ * dates must fall in 2000-01-01..2100-12-31.
+ */
+describe('GameTimeAbsenceInputSchema — span cap (ROK-1842)', () => {
+    it('accepts a 366-day span (a full leap year)', () => {
+        const input = { startDate: '2028-01-01', endDate: '2028-12-31' };
+        expect(issuesOf(input)).toEqual([]);
+    });
+
+    it('rejects a 367-day span on the endDate path', () => {
+        const input = { startDate: '2026-01-01', endDate: '2027-01-02' };
+        expect(pathsOf(input)).toEqual([['endDate']]);
+    });
+
+    it('rejects the year-1 to year-9999 attack range', () => {
+        const input = { startDate: '0001-01-01', endDate: '9999-12-31' };
+        expect(outcomeOf(input).success).toBe(false);
+    });
+});
+
+describe('GameTimeAbsenceInputSchema — year window (ROK-1842)', () => {
+    it('accepts both window edges', () => {
+        expect(
+            pathsOf({ startDate: '2000-01-01', endDate: '2000-01-02' }),
+        ).toEqual([]);
+        expect(
+            pathsOf({ startDate: '2100-12-30', endDate: '2100-12-31' }),
+        ).toEqual([]);
+    });
+
+    it('rejects a start date before 2000-01-01 on the startDate path', () => {
+        const input = { startDate: '1999-12-31', endDate: '2000-01-01' };
+        expect(pathsOf(input)).toEqual([['startDate']]);
+    });
+
+    it('rejects an end date after 2100-12-31 on the endDate path', () => {
+        const input = { startDate: '2100-12-31', endDate: '2101-01-01' };
+        expect(pathsOf(input)).toEqual([['endDate']]);
+    });
+
+    it('rejects a short range far in the future', () => {
+        const input = { startDate: '9999-12-30', endDate: '9999-12-31' };
+        expect(pathsOf(input)).toEqual([['startDate']]);
+    });
+});

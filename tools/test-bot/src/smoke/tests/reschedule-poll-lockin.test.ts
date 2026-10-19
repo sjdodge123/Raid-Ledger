@@ -105,7 +105,9 @@ async function lockIn(
 ): Promise<void> {
   await rescheduleEvent(ctx.api, eventId, minutesFromNow);
   await awaitProcessing(ctx.api);
-  await ctx.api.post(`/scheduling-polls/${matchId}/complete`, { eventId });
+  // ROK-1844: an `eventId` now needs the winning slot's `startTime`; this
+  // test asserts the embed refresh, which the linked poll re-emits anyway.
+  await ctx.api.post(`/scheduling-polls/${matchId}/complete`, {});
   await awaitProcessing(ctx.api);
   await flushEmbedQueue(ctx.api);
 }
@@ -314,8 +316,7 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
         (e.description ?? "").includes(voteHref);
       const msg = await pollForEmbed(
         channelId,
-        (m: SimpleMessage) =>
-          !ghostIds.has(m.id) && m.embeds.some(isThisPoll),
+        (m: SimpleMessage) => !ghostIds.has(m.id) && m.embeds.some(isThisPoll),
         ctx.config.timeoutMs,
       );
       const embed = msg.embeds.find(isThisPoll);
