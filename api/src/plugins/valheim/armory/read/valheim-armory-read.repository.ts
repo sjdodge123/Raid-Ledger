@@ -4,7 +4,7 @@
  * only and dropped by `toSummary` everywhere else.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -24,6 +24,7 @@ const {
   users: u,
 } = schema;
 const blobs = schema.valheimLinkBlobs;
+const hubs = schema.guilds;
 const cat = schema.valheimItemCatalogs;
 
 /** List filters + page window. */
@@ -103,6 +104,30 @@ export class ValheimArmoryReadRepository {
       .orderBy(asc(p.name), asc(p.id))
       .limit(f.limit)
       .offset(f.offset);
+  }
+
+  /** Rows matching the list filters (the `total` beside a page). */
+  async countProfiles(f: ArmoryListFilter): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(p)
+      .where(listWhere(f));
+    return row?.n ?? 0;
+  }
+
+  /** The ROK-1831 community hub keyed to a Pelican server, or null. */
+  async findServerHub(
+    serverId: number,
+  ): Promise<{ id: number; hidden: boolean } | null> {
+    const [row] = await this.db
+      .select({
+        id: hubs.id,
+        hidden: sql<boolean>`${hubs.hiddenAt} IS NOT NULL`,
+      })
+      .from(hubs)
+      .where(eq(hubs.pelicanServerId, serverId))
+      .limit(1);
+    return row ?? null;
   }
 
   /** One profile with its sheet, or null. */
