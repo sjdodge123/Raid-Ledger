@@ -19,7 +19,7 @@ const SAVED = { entries: [{ region: 'us', realmName: 'Bloodmoon', ruleset: 'pvp'
 
 let puts: unknown[] = [];
 
-function serve(saved: unknown = SAVED): void {
+function serve(saved: { entries: Record<string, string>[] } = SAVED): void {
     server.use(
         http.get(URL, () => HttpResponse.json(saved)),
         http.put(URL, async ({ request }) => {
@@ -68,6 +68,9 @@ describe('ForeverRealmRulesetsSection (ROK-1739)', () => {
         expect(screen.getByRole('textbox', { name: 'Realm name, row 1' })).toHaveValue('');
     });
 
+});
+
+describe('ForeverRealmRulesetsSection — validation (ROK-1739)', () => {
     it('flags a case/whitespace-insensitive duplicate in the same region inline and sends nothing', async () => {
         const user = userEvent.setup();
         serve();
