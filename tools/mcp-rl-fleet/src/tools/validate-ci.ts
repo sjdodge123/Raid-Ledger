@@ -168,7 +168,8 @@ export async function execute(
     },
   );
 
-  const slot = await resolveSlot(sshUser, sshHost, agentId);
+  // ROK-1793 S2: a parallel gate copies this slot's tree, so it must be OURS.
+  const slot = await resolveSlot(sshUser, sshHost, agentId, { exact: !!(params.parallel || params.fail_fast) });
 
   // Build the inner command. Bug C: bash <script> instead of bare path.
   const extraArgs = resolveArgs(params).map((a) => shellQuote(a)).join(' ');
