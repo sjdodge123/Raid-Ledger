@@ -174,7 +174,9 @@ function PaintProbe({
     onLayout: () => void;
     children: ReactNode;
 }) {
-    useLayoutEffect(onLayout);
+    useLayoutEffect(() => {
+        onLayout();
+    });
     return <>{children}</>;
 }
 
