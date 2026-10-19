@@ -223,6 +223,8 @@ export const valheimClaimEvents: ValheimClaimEvent[] = [
         toUserId: 3,
         actorUserId: 3,
         createdAt: '2026-10-01T10:00:00.000Z',
+        toUser: { id: 3, username: 'member1', avatar: null },
+        actor: { id: 3, username: 'member1', avatar: null },
     },
     {
         id: 2,
@@ -232,6 +234,8 @@ export const valheimClaimEvents: ValheimClaimEvent[] = [
         toUserId: null,
         actorUserId: 1,
         createdAt: '2026-10-10T10:00:00.000Z',
+        fromUser: { id: 3, username: 'member1', avatar: null },
+        actor: { id: 1, username: 'admin', avatar: null },
     },
     {
         id: 3,
@@ -241,6 +245,8 @@ export const valheimClaimEvents: ValheimClaimEvent[] = [
         toUserId: 3,
         actorUserId: 1,
         createdAt: '2026-10-05T10:00:00.000Z',
+        toUser: { id: 3, username: 'member1', avatar: null },
+        actor: { id: 1, username: 'admin', avatar: null },
     },
 ];
 

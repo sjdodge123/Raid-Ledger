@@ -1,20 +1,6 @@
 /** ROK-1836 L4 (D10) — the admin's owner-change history, newest first. */
-import type {
-    ValheimClaimAction,
-    ValheimClaimEvent,
-} from '@raid-ledger/contract';
-
-const ACTION_LABEL: Record<ValheimClaimAction, string> = {
-    claim: 'Claimed by a member',
-    admin_assign: 'Assigned by an admin',
-    admin_unassign: 'Owner removed by an admin',
-    auto_attach: 'Matched by Steam ID',
-    auto_detach: 'Steam match removed',
-};
-
-function userText(id: number | null): string {
-    return id === null ? '' : ` · user #${id}`;
-}
+import type { ValheimClaimEvent } from '@raid-ledger/contract';
+import { claimEventAgo, claimEventLabel } from '../lib/valheim-owner.helpers';
 
 function newestFirst(events: ValheimClaimEvent[]): ValheimClaimEvent[] {
     return [...events].sort(
@@ -26,10 +12,14 @@ function HistoryRow({ event }: { event: ValheimClaimEvent }) {
     return (
         <li className="flex flex-wrap justify-between gap-2 py-2 text-sm">
             <span className="text-foreground">
-                {ACTION_LABEL[event.action] + userText(event.toUserId)}
+                {claimEventLabel(event)}
             </span>
-            <time dateTime={event.createdAt} className="text-xs text-dim">
-                {new Date(event.createdAt).toLocaleString()}
+            <time
+                dateTime={event.createdAt}
+                title={new Date(event.createdAt).toLocaleString()}
+                className="text-xs text-dim"
+            >
+                {claimEventAgo(event.createdAt)}
             </time>
         </li>
     );

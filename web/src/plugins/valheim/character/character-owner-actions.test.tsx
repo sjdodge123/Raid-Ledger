@@ -281,10 +281,10 @@ describe('admin change owner (cont.)', () => {
         const rows = within(list)
             .getAllByRole('listitem')
             .map((li) => li.firstElementChild?.textContent ?? '');
-        expect(rows.map((r) => r.split(' · ')[0])).toEqual([
-            'Owner removed by an admin',
-            'Assigned by an admin',
-            'Claimed by a member',
+        expect(rows).toEqual([
+            'Owner removed from member1 by admin',
+            'Assigned to member1 by admin',
+            'Claimed by member1',
         ]);
     });
 });
