@@ -88,7 +88,23 @@ state::mutate "$QUEUE_FILE" --argjson cutoff "$CUTOFF" '
     ))
 '
 
-# Step 2 — read head. Empty queue → no-op.
+# Step 2 — read head, DROPPING branchless heads first. An empty (or the CLI's
+# `unknown` fallback) branch must never match-or-destroy claimable envs, and
+# refusing the grant would leave it blocking every waiter behind it (claim
+# only lets the head take a slot). Drop it (audited) and read the next head.
+SLOT_HAS_CLAIMABLE=$(jq --argjson s "$SLOT" \
+    '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)] | length' \
+    "$RL_ENVS_FILE" 2>/dev/null || echo "0")
+while [[ "${SLOT_HAS_CLAIMABLE:-0}" != "0" ]]; do
+    DROP_AGENT=$(jq -r '.[0] | select(. != null and ((.branch // "") == "" or .branch == "unknown")) | .agent_id' \
+        "$QUEUE_FILE" 2>/dev/null || true)
+    [[ -z "$DROP_AGENT" ]] && break
+    audit::log lease-advance head_dropped_branch_required \
+        "$(jq -nc --argjson slot "$SLOT" --arg agent "$DROP_AGENT" '{slot:$slot, agent:$agent}')"
+    state::mutate "$QUEUE_FILE" --arg a "$DROP_AGENT" 'map(select(.agent_id != $a))' || break
+    queue::remove "$DROP_AGENT"
+done
+
 HEAD_JSON=$(jq -c '.[0] // empty' "$QUEUE_FILE" 2>/dev/null || true)
 if [[ -z "$HEAD_JSON" ]]; then
     _perf_lease_end "false" '{"reason":"empty_queue"}'
@@ -135,17 +151,6 @@ CLAIMABLE_ENVS=$(jq -c --argjson s "$SLOT" \
 INHERITED_ENVS="[]"
 DESTROYED_ENVS="[]"
 PRESERVED_PINNED="[]"
-
-# Belt and braces — an empty branch must never match-or-destroy. The queue
-# head stays put; it is evicted as stale if its agent never re-claims.
-if [[ -z "$HEAD_BRANCH" && "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
-    audit::log lease-advance grant_refused_branch_required \
-        "$(jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" '{slot:$slot, agent:$agent}')"
-    _perf_lease_end "false" '{"reason":"branch_required"}'
-    jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" \
-        '{ok:false, error:"branch_required", granted:false, slot:$slot, head_agent:$agent, message:"queue head has no branch and the slot holds claimable envs — refusing to match-or-destroy"}'
-    exit 1
-fi
 
 if [[ "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
     # Partition: matching vs mismatching (unpinned) vs pinned-mismatch (kept).
