@@ -6,9 +6,10 @@
  * worker; 400 on a bad body; 403 without DEMO_MODE or for a non-admin.
  */
 import { createHash } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import type { Response } from 'superagent';
 import { ValheimMapFixtureResponseSchema } from '@raid-ledger/contract';
 import type { ValheimMapFixtureResponse } from '@raid-ledger/contract';
@@ -17,7 +18,7 @@ import {
   loginAsAdmin,
   truncateAllTables,
 } from '../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../common/testing/narrow';
+import { defined, nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
@@ -31,6 +32,8 @@ import {
 } from './valheim-armory-map-demo-fixture';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
+const ORIGINAL_BLOB_DIR = process.env.VALHEIM_LINK_BLOB_DIR;
+let blobDir: string;
 const ROUTE = '/admin/test/valheim/map-fixture';
 const PLUGINS = [VALHEIM_PLUGIN_ID, PELICAN_PLUGIN_ID];
 
@@ -74,9 +77,8 @@ async function seed(body: object = {}): Promise<ValheimMapFixtureResponse> {
 const sha256 = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
 beforeAll(async () => {
-  process.env.VALHEIM_LINK_BLOB_DIR = await mkdtemp(
-    join(tmpdir(), 'vh-map-seed-'),
-  );
+  blobDir = await mkdtemp(join(tmpdir(), 'vh-map-seed-'));
+  process.env.VALHEIM_LINK_BLOB_DIR = blobDir;
   testApp = await getTestApp();
 });
 
@@ -100,8 +102,10 @@ afterEach(async () => {
   }
 });
 
-afterAll(() => {
-  delete process.env.VALHEIM_LINK_BLOB_DIR;
+afterAll(async () => {
+  if (ORIGINAL_BLOB_DIR === undefined) delete process.env.VALHEIM_LINK_BLOB_DIR;
+  else process.env.VALHEIM_LINK_BLOB_DIR = ORIGINAL_BLOB_DIR;
+  await rm(blobDir, { recursive: true, force: true });
   if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
@@ -167,6 +171,21 @@ describe('map-fixture idempotence + guards (ROK-1837 T8)', () => {
     expect(res.status).toBe(200);
   });
 
+  it('replaces the base-map PNG atomically (a new file, never truncated in place)', async () => {
+    const first = await seed();
+    const pngPath = await baseMapPath(first.pelicanServerId);
+    const before = await stat(pngPath);
+    await seed();
+    const after = await stat(pngPath);
+    expect({ replacedInode: after.ino !== before.ino }).toEqual({
+      replacedInode: true,
+    });
+  });
+
+  it('401s when signed out', async () => {
+    expect((await testApp.request.post(ROUTE).send({})).status).toBe(401);
+  });
+
   it('400s on a bad body', async () => {
     for (const body of [
       { worker: 99 },
@@ -189,5 +208,62 @@ describe('map-fixture idempotence + guards (ROK-1837 T8)', () => {
   it('403s for a non-admin', async () => {
     const member = await memberToken(testApp, 'bob');
     expect((await post({}, member)).status).toBe(403);
+  });
+});
+
+/** The stored base-map file of `serverId` (the 2048² PNG's blob row). */
+async function baseMapPath(serverId: number): Promise<string> {
+  const B = schema.valheimLinkBlobs;
+  const rows = await testApp.db
+    .select({ rel: B.storagePath, w: B.width })
+    .from(B)
+    .where(eq(B.pelicanServerId, serverId));
+  const [row] = nonEmpty(
+    rows.filter((r) => r.w === 2048),
+    'base-map blob row',
+  );
+  return join(blobDir, row.rel);
+}
+
+const ARMORY_ROUTE = '/admin/test/valheim/armory-character';
+const seedC1 = async (): Promise<number> => {
+  const res = await testApp.request
+    .post(ARMORY_ROUTE)
+    .set(bearer(adminToken))
+    .send({ key: 'c1' });
+  expect(res.status).toBe(200);
+  return defined(
+    (res.body as { characterId?: number }).characterId,
+    'c1 character id',
+  );
+};
+const profileIds = async () => {
+  const P = schema.valheimProfiles;
+  return (await testApp.db.select({ id: P.id }).from(P)).map((r) => r.id);
+};
+
+describe('map fixture vs the ROK-1836 c1 fixture (separate identities)', () => {
+  it('c1 → map → c1: the map keeps its character and base map', async () => {
+    await seedC1();
+    const f = await seed();
+    await seedC1();
+    const M = schema.valheimMaps;
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ profileId: M.profileId })
+        .from(M)
+        .where(eq(M.id, f.mapId)),
+      'map row',
+    );
+    expect(row.profileId).toBe(f.characterId);
+    const { res } = await getBytes(`${mapUrl(f)}/base-map`, adminToken);
+    expect(res.status).toBe(200);
+  });
+
+  it('map → c1 → map: the c1 character survives the map re-seed', async () => {
+    await seed();
+    const c1 = await seedC1();
+    await seed();
+    expect(await profileIds()).toContain(c1);
   });
 });

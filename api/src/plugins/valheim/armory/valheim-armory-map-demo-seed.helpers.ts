@@ -50,19 +50,27 @@ export function mapPixel(x: number, y: number): Rgb {
   return QUADRANTS[(y < c ? 0 : 2) + (x < c ? 0 : 1)] ?? CROSS;
 }
 
+/** Encodes `MAP_PNG_SIZE`² raw RGB to PNG (injectable for the cache spec). */
+export type MapPngEncoder = (raw: Buffer, size: number) => Promise<Buffer>;
+
+const sharpEncode: MapPngEncoder = (raw, n) =>
+  sharp(raw, { raw: { width: n, height: n, channels: 3 } })
+    .png()
+    .toBuffer();
+
 let rendered: Promise<Buffer> | null = null;
 
 /** The base-map PNG via `sharp` (deterministic → the same sha each run). */
-export function renderDemoBaseMap(): Promise<Buffer> {
+export function renderDemoBaseMap(
+  encode: MapPngEncoder = sharpEncode,
+): Promise<Buffer> {
   if (rendered) return rendered;
   const n = MAP_PNG_SIZE;
   const raw = Buffer.alloc(n * n * 3);
   for (let y = 0; y < n; y++) {
     for (let x = 0; x < n; x++) raw.set(mapPixel(x, y), (y * n + x) * 3);
   }
-  rendered = sharp(raw, { raw: { width: n, height: n, channels: 3 } })
-    .png()
-    .toBuffer();
+  rendered = encode(raw, n);
   return rendered;
 }
 

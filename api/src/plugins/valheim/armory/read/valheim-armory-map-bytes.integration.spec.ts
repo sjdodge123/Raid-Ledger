@@ -4,14 +4,15 @@
  * `storage_path` only and never leaves the blob root; fog layers are the
  * stored gzip bytes verbatim (base64-decoded jsonb).
  */
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Response } from 'superagent';
+import { ValheimLinkMessageSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { truncateAllTables } from '../../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../../common/testing/narrow';
+import { defined, nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { SettingsService } from '../../../../settings/settings.service';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
@@ -32,6 +33,8 @@ let testApp: TestApp;
 let gameId: number;
 let blobDir: string;
 let token: string;
+const ORIGINAL_BLOB_DIR = process.env.VALHEIM_LINK_BLOB_DIR;
+const tempDirs: string[] = [];
 
 type Bitmap = { data: string };
 const fixtureBytes = (name: string, key: 'explored' | 'sharedExplored') =>
@@ -77,7 +80,8 @@ async function makeServer(n: number): Promise<number> {
 async function seed(n: number, mapFixture: string) {
   const serverId = await makeServer(n);
   for (const name of ['character-vanilla', mapFixture]) {
-    const row = valheimSnapshotRow(serverId, loadValheimFixture(name) as never);
+    const msg = ValheimLinkMessageSchema.parse(loadValheimFixture(name));
+    const row = valheimSnapshotRow(serverId, msg);
     await testApp.db.insert(schema.valheimLinkSnapshots).values(row);
   }
   await testApp.app.get(ValheimArmoryImportService).drainOnce();
@@ -89,7 +93,7 @@ async function seed(n: number, mapFixture: string) {
       .where(eq(M.pelicanServerId, serverId)),
     'map',
   );
-  return { serverId, id: m.profileId ?? -1, mapId: m.id };
+  return { serverId, id: defined(m.profileId, 'map profile id'), mapId: m.id };
 }
 
 /** Register a blob row for `serverId`; writes `bytes` when given. */
@@ -115,12 +119,15 @@ async function storeBlob(
 
 beforeAll(async () => {
   blobDir = await mkdtemp(join(tmpdir(), 'vh-map-bytes-'));
+  tempDirs.push(blobDir);
   process.env.VALHEIM_LINK_BLOB_DIR = blobDir;
   testApp = await getTestApp();
 });
 
-afterAll(() => {
-  delete process.env.VALHEIM_LINK_BLOB_DIR;
+afterAll(async () => {
+  if (ORIGINAL_BLOB_DIR === undefined) delete process.env.VALHEIM_LINK_BLOB_DIR;
+  else process.env.VALHEIM_LINK_BLOB_DIR = ORIGINAL_BLOB_DIR;
+  for (const dir of tempDirs) await rm(dir, { recursive: true, force: true });
 });
 
 beforeEach(async () => {
@@ -148,7 +155,7 @@ afterEach(async () => {
 });
 
 describe('GET …/maps/:mapId/base-map (ROK-1837 D3)', () => {
-  it('streams the stored PNG with the immutable cache + sha ETag', async () => {
+  it('streams the stored PNG, revalidate-only, with the sha ETag', async () => {
     const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
     const png = fakePng(2048, 2048);
     await storeBlob(serverId, blobRelativePath(serverId, SHA), png);
@@ -157,9 +164,9 @@ describe('GET …/maps/:mapId/base-map (ROK-1837 D3)', () => {
     expect(Buffer.compare(res.body as Buffer, png)).toBe(0);
     expect(res.headers['content-type']).toBe('image/png');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
-    expect(res.headers['cache-control']).toBe(
-      'private, max-age=31536000, immutable',
-    );
+    // The URL is keyed by map id and a re-import can change its PNG, so
+    // the browser must revalidate (the sha-keyed blob route is immutable).
+    expect(res.headers['cache-control']).toBe('private, no-cache');
     expect(res.headers.etag).toBe(`"${SHA}"`);
   });
 
@@ -174,6 +181,15 @@ describe('GET …/maps/:mapId/base-map (ROK-1837 D3)', () => {
       'If-None-Match': `"${'f'.repeat(64)}"`,
     });
     expect(miss.status).toBe(200);
+  });
+
+  it('answers a matching If-None-Match with 304 before opening the file', async () => {
+    const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
+    await storeBlob(serverId, blobRelativePath(serverId, SHA)); // row, no file
+    const res = await getBytes(`${mapUrl(id, mapId)}/base-map`, {
+      'If-None-Match': `"${SHA}"`,
+    });
+    expect(res.status).toBe(304);
   });
 
   it('404s base_map_not_ready (no-store) before the blob is stored', async () => {
@@ -202,6 +218,7 @@ describe('GET …/maps/:mapId/base-map — scoping (ROK-1837 D3)', () => {
   it('refuses a storage_path that escapes the blob root (404, no read)', async () => {
     const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
     const outside = await mkdtemp(join(tmpdir(), 'vh-outside-'));
+    tempDirs.push(outside);
     await writeFile(join(outside, 'secret.png'), 'SECRET');
     const rel = join('..', outside.split('/').pop() ?? 'x', 'secret.png');
     await storeBlob(serverId, rel);
@@ -261,6 +278,18 @@ describe('GET …/maps/:mapId/fog (ROK-1837 D4)', () => {
     expect(res.status).toBe(404);
     expect((res.body as Buffer).toString()).toContain('no_shared_layer');
     expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('404s no_personal_layer (not no_shared_layer) when the personal layer is missing', async () => {
+    const { id, mapId } = await seed(1, 'map-shared-layer');
+    const M = schema.valheimMaps;
+    await testApp.db
+      .update(M)
+      .set({ explored: sql`'null'::jsonb` })
+      .where(eq(M.id, mapId));
+    const res = await getBytes(`${mapUrl(id, mapId)}/fog?layer=personal`);
+    expect(res.status).toBe(404);
+    expect((res.body as Buffer).toString()).toContain('no_personal_layer');
   });
 
   it('400s an unknown layer (no-store)', async () => {
