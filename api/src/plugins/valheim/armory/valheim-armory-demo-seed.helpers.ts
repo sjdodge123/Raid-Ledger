@@ -195,6 +195,7 @@ function profileValues(
     gameVersion: ARMORY_FIXTURE_GAME_VERSION,
     modVersion: '1.0.0',
     capturedAt: new Date(),
+    sourceSnapshotId: null,
     ...fixtureSheet(req.extraRows),
     knownItems: [],
     knownRecipes: [],
@@ -275,5 +276,8 @@ export async function upsertArmoryProfile(
     })
     .returning({ id: P.id });
   if (!row) throw new Error('Armory fixture upsert returned no row');
+  // A reset wipes the claim history too (the old delete-and-reinsert cascaded it).
+  const E = schema.valheimProfileClaimEvents;
+  await db.delete(E).where(eq(E.profileId, row.id));
   return row.id;
 }

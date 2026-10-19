@@ -75,7 +75,7 @@ export function LayerSwitches(props: MapLayerState) {
 }
 
 const ZOOM_BUTTON_CLASS =
-    'h-11 w-11 text-foreground hover:bg-overlay disabled:text-dim';
+    'h-11 w-11 ring-inset text-foreground hover:bg-overlay disabled:text-dim';
 
 /** The prototype's `.ctlgroup`: a vertical stack of 44px zoom buttons. */
 function ZoomButtons({ commands }: { commands: MapViewportCommands | null }) {
