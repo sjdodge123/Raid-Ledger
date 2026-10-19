@@ -53,17 +53,25 @@ export async function resolveQuickPlayAnnounceChannel(
  * to: the QP channel for the event's game, plus — for a monitor, never a
  * lobby (D7) — its notification channel. Anything else holding a LIVE row for
  * the event (a link unfurl, a share) was not posted by us.
+ *
+ * ROK-1851: the card was posted under the event's CREATING binding (the
+ * stored `channelBindingId`, never rewritten on reuse), so the lookup keys on
+ * it — not on `bindingId`, the binding that happened to enqueue the update. A
+ * lobby that reuses a monitor-born event must still find the card in the
+ * monitor's fallback channel after a restart. A server-born event (null
+ * binding) falls back to `bindingId`.
  */
 async function spawnChannelsFor(
   deps: AdHocNotificationDeps,
   eventId: number,
-  bindingId: string,
+  enqueuingBindingId: string,
 ): Promise<string[]> {
   const event = await deps.db.query.events.findFirst({
-    columns: { gameId: true },
+    columns: { gameId: true, channelBindingId: true },
     where: eq(schema.events.id, eventId),
   });
   const gameId = event ? event.gameId : undefined;
+  const bindingId = event?.channelBindingId ?? enqueuingBindingId;
   const qp = await resolveQuickPlayAnnounceChannel(deps, bindingId, gameId);
   const channels = qp ? [qp] : [];
   if (await isGeneralLobbyBinding(deps, bindingId)) return channels;
