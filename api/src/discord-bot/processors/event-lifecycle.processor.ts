@@ -166,9 +166,7 @@ export class EventLifecycleProcessor
   private canSendAffinityNotification(
     payload: EventLifecycleJobData['payload'],
   ): boolean {
-    return !!(
-      this.gameAffinityService && payload.creatorId
-    );
+    return !!(this.gameAffinityService && payload.creatorId);
   }
 
   /** Look up the Discord message record for the event. */

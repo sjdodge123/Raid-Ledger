@@ -280,9 +280,7 @@ export class DiscordEventListener {
   }
 
   private canSendAffinityNotification(payload: EventPayload): boolean {
-    return !!(
-      this.gameAffinityNotificationService && payload.creatorId
-    );
+    return !!(this.gameAffinityNotificationService && payload.creatorId);
   }
 
   private fireScheduledEventUpdate(payload: EventPayload): void {
