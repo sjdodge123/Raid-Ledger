@@ -1604,6 +1604,13 @@
       "when": 1792391633788,
       "tag": "0229_mysterious_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1792421891210,
+      "tag": "0230_friendly_deathstrike",
+      "breakpoints": true
     }
   ]
 }
