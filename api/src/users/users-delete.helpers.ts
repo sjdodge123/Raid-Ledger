@@ -72,6 +72,11 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.gameNotificationMutes,
     column: schema.gameNotificationMutes.userId,
   },
+  // ROK-1832: a per-group mute is a personal preference — wipe, never reassign.
+  {
+    table: schema.hubNotificationMutes,
+    column: schema.hubNotificationMutes.userId,
+  },
   { table: schema.feedback, column: schema.feedback.userId },
   {
     table: schema.wowClassicQuestProgress,
