@@ -89,6 +89,9 @@ interface PickersProps {
     mapId: number | null;
 }
 
+const worldOptions = (maps: ValheimCharacterMapRef[]) =>
+    maps.map((m) => ({ id: m.id, label: worldLabel(m) }));
+
 function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
     const write = useSelectionWriter();
     const idBase = useId();
@@ -110,15 +113,36 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
                     id={`${idBase}-world`}
                     label="World"
                     value={mapId}
-                    options={maps.map((m) => ({
-                        id: m.id,
-                        label: worldLabel(m),
-                    }))}
+                    options={worldOptions(maps)}
                     onPick={(id) => write(characterId, id)}
                 />
             )}
         </div>
     );
+}
+
+/** The map, a detail-fetch error with Retry, or the no-map empty state. */
+function CharacterMapBody({
+    characterId,
+    mapId,
+    detail,
+}: {
+    characterId: number;
+    mapId: number | null;
+    detail: ReturnType<typeof useValheimCharacterMaps>;
+}) {
+    if (mapId !== null)
+        return <ValheimMapView characterId={characterId} mapId={mapId} />;
+    if (detail.error)
+        return (
+            <MapError
+                text="This character's maps could not be loaded."
+                onRetry={() => void detail.refetch()}
+            />
+        );
+    if (detail.isSuccess)
+        return <Empty text="This character has no map uploaded yet." />;
+    return null;
 }
 
 /** The selected character's world picker + map, once the character list is in. */
@@ -142,18 +166,11 @@ function CharacterMap({
                 maps={maps}
                 mapId={mapId}
             />
-            {mapId !== null && (
-                <ValheimMapView characterId={characterId} mapId={mapId} />
-            )}
-            {detail.error && (
-                <MapError
-                    text="This character's maps could not be loaded."
-                    onRetry={() => void detail.refetch()}
-                />
-            )}
-            {mapId === null && detail.isSuccess && (
-                <Empty text="This character has no map uploaded yet." />
-            )}
+            <CharacterMapBody
+                characterId={characterId}
+                mapId={mapId}
+                detail={detail}
+            />
         </div>
     );
 }

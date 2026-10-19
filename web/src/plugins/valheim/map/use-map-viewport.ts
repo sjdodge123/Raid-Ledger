@@ -179,6 +179,18 @@ function useViewportCommands(dispatch: Dispatch<ViewportAction>) {
  * collapse the surface). `MapViewport` adds `relative` when the caller's
  * class names no position of its own.
  */
+export const SURFACE_CLASS =
+    'rounded-lg bg-panel border border-edge cursor-grab active:cursor-grabbing select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success';
+
+const POSITIONED = /(^|\s)(absolute|fixed|relative|sticky)(\s|$)/;
+
+/** The surface class: the caller's layout wins; `relative` only as a default. */
+export function surfaceClass(className?: string): string {
+    if (!className) return `relative ${SURFACE_CLASS}`;
+    const position = POSITIONED.test(className) ? '' : 'relative ';
+    return `${position}${SURFACE_CLASS} ${className}`;
+}
+
 export const VIEWPORT_STYLE: CSSProperties = {
     touchAction: 'none',
     overflow: 'hidden',

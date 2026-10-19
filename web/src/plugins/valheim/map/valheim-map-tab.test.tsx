@@ -147,7 +147,9 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
         ).toBeInTheDocument();
         expect(screen.queryByTestId('map-view')).toBeNull();
     });
+});
 
+describe('ValheimMapTab failures + paging (ROK-1837 review)', () => {
     it('a character-detail failure shows an error with Retry, not "no map"', async () => {
         serve(ROWS, { 1: [10] });
         let fail = true;

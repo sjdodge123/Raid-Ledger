@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import {
-    MapViewport,
-    surfaceClass,
-    type MapViewportCommands,
-} from './map-viewport';
-import { VIEWPORT_STYLE } from './use-map-viewport';
+import { MapViewport, type MapViewportCommands } from './map-viewport';
+import { VIEWPORT_STYLE, surfaceClass } from './use-map-viewport';
 
 const VIEW = { width: 400, height: 300 };
 
@@ -99,24 +95,6 @@ describe('MapViewport gestures (ROK-1837 D10)', () => {
         expect(layer.style.transform).not.toBe(zoomed);
     });
 
-    it('Ctrl/Cmd/Alt + +/-/0 stay the browser zoom (not prevented, no map zoom)', () => {
-        const { app, layer } = renderViewport();
-        const fitT = layer.style.transform;
-        for (const mod of ['ctrlKey', 'metaKey', 'altKey']) {
-            const notPrevented = fireEvent.keyDown(app, {
-                key: '+',
-                [mod]: true,
-            });
-            expect(notPrevented).toBe(true);
-        }
-        expect(layer.style.transform).toBe(fitT);
-    });
-
-    it('wheel outside the map surface is never prevented (page scroll stays native)', () => {
-        renderViewport();
-        expect(fireEvent.wheel(document.body, { deltaY: 100 })).toBe(true);
-    });
-
     it('a one-pointer drag pans once zoomed in', () => {
         const { app, layer } = renderViewport();
         fireEvent.keyDown(app, { key: '+' });
@@ -144,5 +122,31 @@ describe('MapViewport gestures (ROK-1837 D10)', () => {
         expect(layer.style.transform).not.toBe(fitT);
         act(() => c.fit());
         expect(layer.style.transform).toBe(fitT);
+    });
+});
+
+describe('MapViewport keeps browser zoom and page scroll (ROK-1837 D10)', () => {
+    let restore: () => void = () => undefined;
+    beforeEach(() => {
+        restore = stubSize();
+    });
+    afterEach(() => restore());
+
+    it('Ctrl/Cmd/Alt + +/-/0 stay the browser zoom (not prevented, no map zoom)', () => {
+        const { app, layer } = renderViewport();
+        const fitT = layer.style.transform;
+        for (const mod of ['ctrlKey', 'metaKey', 'altKey']) {
+            const notPrevented = fireEvent.keyDown(app, {
+                key: '+',
+                [mod]: true,
+            });
+            expect(notPrevented).toBe(true);
+        }
+        expect(layer.style.transform).toBe(fitT);
+    });
+
+    it('wheel outside the map surface is never prevented (page scroll stays native)', () => {
+        renderViewport();
+        expect(fireEvent.wheel(document.body, { deltaY: 100 })).toBe(true);
     });
 });

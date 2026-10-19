@@ -6,7 +6,7 @@
  */
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { useMapViewport } from './use-map-viewport';
+import { surfaceClass, useMapViewport } from './use-map-viewport';
 import type { Viewport } from './map-viewport.math';
 
 /** Imperative zoom commands handed to the parent's controls (L5b). */
@@ -27,9 +27,6 @@ export interface MapViewportProps {
     /** Rendered inside the transformed layer; gets the live viewport (scale for counter-scaling). */
     children: (viewport: Viewport) => ReactNode;
 }
-
-const SURFACE_CLASS =
-    'rounded-lg bg-panel border border-edge cursor-grab active:cursor-grabbing select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success';
 
 interface TextureLayerProps {
     size: number;
@@ -55,15 +52,6 @@ function TextureLayer({ size, transform, children }: TextureLayerProps) {
             {children}
         </div>
     );
-}
-
-const POSITIONED = /(^|\s)(absolute|fixed|relative|sticky)(\s|$)/;
-
-/** The surface class: the caller's layout wins; `relative` only as a default. */
-export function surfaceClass(className?: string): string {
-    if (!className) return `relative ${SURFACE_CLASS}`;
-    const position = POSITIONED.test(className) ? '' : 'relative ';
-    return `${position}${SURFACE_CLASS} ${className}`;
 }
 
 function MapViewportSurface(props: MapViewportProps) {

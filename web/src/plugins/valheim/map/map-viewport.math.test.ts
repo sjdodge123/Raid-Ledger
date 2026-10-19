@@ -95,6 +95,27 @@ describe('viewportReducer', () => {
         expect(viewportReducer(panned, { type: 'fit' }).vp).toEqual(start.vp);
     });
 
+    it('re-fits on resize', () => {
+        const resized = viewportReducer(start, { type: 'resize', view: phone });
+        expect(resized.view).toEqual(phone);
+        expect(resized.vp).toEqual(fitViewport(phone, 2048));
+    });
+
+    it('maps keys to actions', () => {
+        expect(keyToAction('+')).toEqual({ type: 'zoomBy', factor: 1.25 });
+        expect(keyToAction('0')).toEqual({ type: 'fit' });
+        expect(keyToAction('ArrowLeft')).toEqual({
+            type: 'pan',
+            dx: 64,
+            dy: 0,
+        });
+        expect(keyToAction('a')).toBeNull();
+    });
+});
+
+describe('viewportReducer resize + pinch (ROK-1837 review)', () => {
+    const start = initViewport(2048);
+
     it('keeps a zoomed-in scale on resize and re-clamps (phone URL bar, MAJOR 2)', () => {
         const sized = viewportReducer(start, { type: 'resize', view: phone });
         const zoomed = viewportReducer(sized, { type: 'zoomBy', factor: 4 });
@@ -121,12 +142,6 @@ describe('viewportReducer', () => {
         expect(resized.vp).toEqual(fitViewport(taller, 2048));
     });
 
-    it('re-fits on resize', () => {
-        const resized = viewportReducer(start, { type: 'resize', view: phone });
-        expect(resized.view).toEqual(phone);
-        expect(resized.vp).toEqual(fitViewport(phone, 2048));
-    });
-
     it('a pinch keeps the texture point under the fingers fixed as the midpoint moves', () => {
         let state = viewportReducer(start, { type: 'resize', view: desktop });
         state = viewportReducer(state, { type: 'zoomBy', factor: 3 });
@@ -138,16 +153,5 @@ describe('viewportReducer', () => {
         const under = toTexture(state.vp, after.mid);
         expect(under.x).toBeCloseTo(held.x, 6);
         expect(under.y).toBeCloseTo(held.y, 6);
-    });
-
-    it('maps keys to actions', () => {
-        expect(keyToAction('+')).toEqual({ type: 'zoomBy', factor: 1.25 });
-        expect(keyToAction('0')).toEqual({ type: 'fit' });
-        expect(keyToAction('ArrowLeft')).toEqual({
-            type: 'pan',
-            dx: 64,
-            dy: 0,
-        });
-        expect(keyToAction('a')).toBeNull();
     });
 });

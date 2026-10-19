@@ -123,6 +123,10 @@ describe('FogCanvas (ROK-1837 D7)', () => {
             248, 250, 252,
         ]);
     });
+});
+
+describe('FogCanvas theme scope (ROK-1837 review)', () => {
+    const personal = bits([0]);
 
     it('repaints when the theme store flips data-scheme / data-variant', async () => {
         render(<FogCanvas size={SIZE} personal={personal} shared={null} />);

@@ -4,7 +4,7 @@
  * composes MapViewport → base <img> + FogCanvas + PinLayer, and owns the layer
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ValheimMapMeta } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import {
@@ -169,15 +169,20 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
     );
 }
 
+function layerStatus(
+    meta: ValheimMapMeta,
+    failed: boolean,
+    sharedFailed: boolean,
+): MapStatusProps {
+    return { ready: meta.baseMap?.ready === true, failed, sharedFailed };
+}
+
 /** Switch state + fetched layers for a loaded meta. */
 function useMapReadyState(props: ReadyProps) {
     const [showShared, setShowShared] = useState(false);
     const [pinLabels, setPinLabels] = useState(false);
     const { base, personal, shared, sharedAvailable, sharedFailed } =
         useMapLayers(props, showShared);
-    useEffect(() => {
-        if (sharedFailed) setShowShared(false);
-    }, [sharedFailed]);
     const sharedOn = showShared && sharedAvailable && !sharedFailed;
     const layers: LayerProps = {
         meta: props.meta,
@@ -189,16 +194,16 @@ function useMapReadyState(props: ReadyProps) {
     };
     const controls: MapLayerState = {
         showShared: sharedOn,
-        onShowShared: setShowShared,
+        // A failed shared fetch reads as OFF; switching it on again retries.
+        onShowShared: (on: boolean) => {
+            setShowShared(on);
+            if (on && sharedFailed) void shared.refetch();
+        },
         sharedAvailable,
         pinLabels,
         onPinLabels: setPinLabels,
     };
-    const status = {
-        ready: props.meta.baseMap?.ready === true,
-        failed: base.error !== null,
-        sharedFailed,
-    };
+    const status = layerStatus(props.meta, base.error !== null, sharedFailed);
     return { layers, controls, personal, status };
 }
 
