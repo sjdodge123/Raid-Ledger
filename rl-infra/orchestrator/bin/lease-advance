@@ -13,8 +13,14 @@
 # is recorded — `lease-advance` must not return a clean claim while envs
 # are mid-destruction.
 #
+# Pinned envs are NEVER destroyed (2026-10-19: a branch-less claim destroyed
+# the pinned valheim-mod env). A pinned mismatch stays on the slot, keeps
+# claimable_by_next, and is reported in `preserved_pinned`. An EMPTY head
+# branch never match-or-destroys: with claimable envs on the slot the grant
+# is refused (`branch_required`); on an env-less slot it is granted.
+#
 # Args: --slot <N>
-# Stdout JSON: {ok, granted, granted_to_agent?, branch?, inherited_envs?, destroyed_envs?}
+# Stdout JSON: {ok, granted, granted_to_agent?, branch?, inherited_envs?, destroyed_envs?, preserved_pinned?}
 # Idempotent: empty queue / still-claimed slot → ok:true, granted:false.
 set -uo pipefail
 source "$(dirname "$0")/_state.sh"
@@ -128,13 +134,32 @@ CLAIMABLE_ENVS=$(jq -c --argjson s "$SLOT" \
 
 INHERITED_ENVS="[]"
 DESTROYED_ENVS="[]"
+PRESERVED_PINNED="[]"
+
+# Belt and braces — an empty branch must never match-or-destroy. The queue
+# head stays put; it is evicted as stale if its agent never re-claims.
+if [[ -z "$HEAD_BRANCH" && "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
+    audit::log lease-advance grant_refused_branch_required \
+        "$(jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" '{slot:$slot, agent:$agent}')"
+    _perf_lease_end "false" '{"reason":"branch_required"}'
+    jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" \
+        '{ok:false, error:"branch_required", granted:false, slot:$slot, head_agent:$agent, message:"queue head has no branch and the slot holds claimable envs — refusing to match-or-destroy"}'
+    exit 1
+fi
 
 if [[ "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
-    # Partition: matching vs mismatching.
+    # Partition: matching vs mismatching (unpinned) vs pinned-mismatch (kept).
     MATCHING=$(jq -c --arg b "$HEAD_BRANCH" \
         '[.[] | select((.created_for_branch // "") == $b)]' <<<"$CLAIMABLE_ENVS")
     MISMATCHING=$(jq -c --arg b "$HEAD_BRANCH" \
-        '[.[] | select((.created_for_branch // "") != $b)]' <<<"$CLAIMABLE_ENVS")
+        '[.[] | select((.created_for_branch // "") != $b and (.pinned // false) != true)]' <<<"$CLAIMABLE_ENVS")
+    PRESERVED_PINNED=$(jq -c --arg b "$HEAD_BRANCH" \
+        '[.[] | select((.created_for_branch // "") != $b and (.pinned // false) == true) | .slug]' <<<"$CLAIMABLE_ENVS")
+    while read -r pslug; do
+        [[ -z "$pslug" ]] && continue
+        audit::log lease-advance destroy_skipped_pinned \
+            "$(jq -nc --argjson slot "$SLOT" --arg slug "$pslug" --arg new "$HEAD_BRANCH" '{slot:$slot, slug:$slug, new_branch:$new}')"
+    done < <(jq -r '.[]' <<<"$PRESERVED_PINNED")
 
     # AC8 STRICT — synchronous destroy BEFORE recording the grant.
     # env-destroy --force is called inline (foreground). If any destroy
@@ -238,7 +263,7 @@ fi
 
 # Step 6 — clear claimable_by_next on remaining envs for this slot AND
 # drop the head from the queue.
-env_registry::clear_claimable_for_slot "$SLOT"
+env_registry::clear_claimable_for_slot "$SLOT" "$PRESERVED_PINNED"
 lease::remove "$SLOT" "$HEAD_AGENT"
 
 audit::log lease-advance granted \
@@ -258,4 +283,5 @@ jq -nc \
     --arg exp "$EXPIRES_AT" \
     --argjson inh "$INHERITED_ENVS" \
     --argjson des "$DESTROYED_ENVS" \
-    '{ok:true, granted:"true", slot:$slot, granted_to_agent:$agent, branch:$branch, expires_at:$exp, inherited_envs:$inh, destroyed_envs:$des}'
+    --argjson pp "$PRESERVED_PINNED" \
+    '{ok:true, granted:"true", slot:$slot, granted_to_agent:$agent, branch:$branch, expires_at:$exp, inherited_envs:$inh, destroyed_envs:$des, preserved_pinned:$pp}'

@@ -227,10 +227,13 @@ env_registry::mark_claimable_by_next() {
              else . end)'
 }
 
+# Optional 2nd arg: JSON array of slugs that KEEP claimable_by_next (the
+# pinned envs a branch-mismatch claim preserved — 2026-10-19 incident).
 env_registry::clear_claimable_for_slot() {
-    local slot="$1"
-    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" \
-        'map(if .slot == $s then .claimable_by_next = false else . end)'
+    local slot="$1" keep="${2:-[]}"
+    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --argjson keep "$keep" \
+        'map(if .slot == $s and ((.slug as $g | $keep | index($g)) == null)
+             then .claimable_by_next = false else . end)'
 }
 
 # ROK-1331 M1: thin audit wrapper for task-* commands. Folds the task_id into
