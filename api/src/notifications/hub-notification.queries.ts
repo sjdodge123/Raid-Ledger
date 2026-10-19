@@ -95,3 +95,16 @@ export async function findLateTagEvent(
   const { duration, ...rest } = row;
   return { ...rest, startTime: duration[0], endTime: duration[1] };
 }
+
+/** D6a: the event's group, read at send time (the payload can be stale). */
+export async function findEventGuildId(
+  db: Db,
+  eventId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ guildId: schema.events.guildId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return row?.guildId ?? null;
+}

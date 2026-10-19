@@ -4,6 +4,12 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
+import { HubNotificationService } from './hub-notification.service';
+import {
+  loadGroupNoticeContext,
+  sendEventNotices,
+  type GroupNoticeContext,
+} from './event-notice-dispatch.helpers';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 import {
   findAbsentUserIds,
@@ -51,6 +57,7 @@ export class GameAffinityNotificationService {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
+    private readonly hubNotifications: HubNotificationService,
   ) {}
 
   /**
@@ -71,17 +78,39 @@ export class GameAffinityNotificationService {
       );
       return;
     }
-    let recipientIds = await this.findRecipients(input.gameId, input.creatorId);
-    if (recipientIds.length === 0) {
-      this.logger.debug(
-        `No game affinity recipients for event ${input.eventId} (game ${input.gameId})`,
-      );
+    const affinityIds = await this.findRecipients(
+      input.gameId,
+      input.creatorId,
+    );
+    const group = await loadGroupNoticeContext(
+      this.db,
+      this.hubNotifications,
+      input.eventId,
+      input.creatorId,
+    );
+    const all = [...new Set([...affinityIds, ...(group?.groupIds ?? [])])];
+    if (all.length === 0) {
+      this.logger.debug(`No event-notice recipients for event ${input.eventId}`);
       return;
     }
-    recipientIds = await this.excludeAbsentUsers(recipientIds, input);
-    recipientIds = await this.excludeFollowupRecipients(recipientIds, input);
-    if (recipientIds.length === 0) return;
-    await this.dispatchAffinityNotifications(input, recipientIds);
+    const kept = new Set(await this.excludeRecipients(all, input));
+    if (kept.size === 0) return;
+    const keep = (ids: number[]): number[] => ids.filter((id) => kept.has(id));
+    const scopedGroup = group && { ...group, groupIds: keep(group.groupIds) };
+    await this.dispatchAffinityNotifications(
+      input,
+      keep(affinityIds),
+      scopedGroup,
+    );
+  }
+
+  /** ROK-503 absences + ROK-1371 follow-up attendees, for both sources. */
+  private async excludeRecipients(
+    recipientIds: number[],
+    input: GameAffinityNotificationInput,
+  ): Promise<number[]> {
+    const present = await this.excludeAbsentUsers(recipientIds, input);
+    return this.excludeFollowupRecipients(present, input);
   }
 
   /**
@@ -126,27 +155,30 @@ export class GameAffinityNotificationService {
     return recipientIds;
   }
 
-  /** Build and dispatch notifications to all recipients. */
+  /**
+   * ROK-1832 D4/D5: one notice per (user, event) — the group copy for group
+   * members, the game copy for the rest — each behind its per-user claim.
+   */
   private async dispatchAffinityNotifications(
     input: GameAffinityNotificationInput,
-    recipientIds: number[],
+    affinityIds: number[],
+    group: GroupNoticeContext | null,
   ): Promise<void> {
     const payload = await this.buildAffinityPayload(input);
-    const results = await Promise.allSettled(
-      recipientIds.map((userId) =>
-        this.notificationService.create({
-          userId,
-          type: 'subscribed_game',
-          title: input.eventTitle,
-          message: `Based on your interest in ${input.gameName}`,
-          payload,
-        }),
-      ),
+    const results = await sendEventNotices(
+      { notifications: this.notificationService, dedup: this.dedupService },
+      {
+        eventId: input.eventId,
+        title: input.eventTitle,
+        gameName: input.gameName,
+        payload,
+      },
+      affinityIds,
+      group,
     );
-    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.filter((r) => r.status === 'rejected').length;
     this.logger.log(
-      `Game affinity notifications for event ${input.eventId}: ${succeeded} sent, ${failed} failed (${recipientIds.length} recipients)`,
+      `Event notices for event ${input.eventId}: ${results.length - failed} settled, ${failed} failed`,
     );
   }
 
