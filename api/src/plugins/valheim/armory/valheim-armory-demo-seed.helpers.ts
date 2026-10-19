@@ -7,8 +7,7 @@
  * something to show.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import * as path from 'node:path';
+import { writeFile } from 'node:fs/promises';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
@@ -17,8 +16,10 @@ import type {
   ValheimItemCatalogEntryRow,
 } from '../../../drizzle/schema';
 import {
-  blobAbsolutePath,
   blobRelativePath,
+  blobTempPath,
+  commitBlob,
+  discardBlob,
 } from '../link/blobs/valheim-link-blob.store';
 import { encodeDemoPng, type PixelFn } from './valheim-armory-demo-png';
 import {
@@ -84,6 +85,22 @@ function fixtureItems(
 const atlasPixel: PixelFn = (x) => COLOURS[Math.floor(x / 64)] ?? [0, 0, 0];
 const modIconPixel: PixelFn = () => [148, 0, 211];
 
+/** Temp file + rename — a concurrent blob read never sees a short file. */
+async function writeBlobAtomically(
+  serverId: number,
+  rel: string,
+  bytes: Buffer,
+): Promise<void> {
+  const tmp = await blobTempPath(serverId);
+  try {
+    await writeFile(tmp, bytes); // never truncate the served file in place
+    await commitBlob(tmp, rel);
+  } catch (err) {
+    await discardBlob(tmp);
+    throw err;
+  }
+}
+
 /** Write a PNG + its blob row (idempotent); returns its sha256. */
 async function storePng(
   db: Db,
@@ -94,8 +111,7 @@ async function storePng(
   const bytes = encodeDemoPng(w, h, pixel);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   const rel = blobRelativePath(serverId, sha256);
-  await mkdir(path.dirname(blobAbsolutePath(rel)), { recursive: true });
-  await writeFile(blobAbsolutePath(rel), bytes);
+  await writeBlobAtomically(serverId, rel, bytes);
   await db
     .insert(schema.valheimLinkBlobs)
     .values({
