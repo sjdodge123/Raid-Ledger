@@ -2,7 +2,8 @@
  * ROK-1832 — per-group (hub) notification mute routes against a real DB:
  *
  *   POST   /guilds/:id/notification-mute   members only (403 otherwise, staff too)
- *   DELETE /guilds/:id/notification-mute   any caller, no 404 without a row
+ *   DELETE /guilds/:id/notification-mute   any caller, no 404 without a row,
+ *                                          and still served with the kind off
  *   GET    /notifications/hub-mutes        the viewer's muted groups
  *   GET    /guilds/:id                     viewer.notificationsMuted
  *
@@ -163,6 +164,20 @@ describe('DELETE guilds/:id/notification-mute', () => {
     await mute('member');
     expect((await unmute('member')).body).toEqual({ guildId, muted: false });
     expect(await memberRows()).toHaveLength(0);
+  });
+  it('still unmutes once the kind plugin is inactive (POST refuses)', async () => {
+    await mute('member');
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.deactivate('blizzard');
+    try {
+      expect((await mute('member')).status).toBe(403);
+      const res = await unmute('member');
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ guildId, muted: false });
+      expect(await memberRows()).toHaveLength(0);
+    } finally {
+      await registry.activate('blizzard');
+    }
   });
 });
 

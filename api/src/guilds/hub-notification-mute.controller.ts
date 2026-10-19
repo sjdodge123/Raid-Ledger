@@ -31,9 +31,10 @@ export const MUTE_MEMBERS_ONLY = 'Only members can mute this group';
  * ROK-1832 — the per-group (hub) notification bell at `guilds/:id`. Kept out
  * of `HubController` (near the size cap), mirroring the ROK-1797 per-game
  * mute routes. Muting is a member's choice: staff rights do not confer it.
+ * `HubKindActiveGuard` sits on the POST only: an unmute must still work once
+ * the kind's plugin is off, because `/notifications/hub-mutes` keeps listing it.
  */
 @Controller('guilds/:id')
-@UseGuards(HubKindActiveGuard)
 export class HubNotificationMuteController {
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -43,7 +44,7 @@ export class HubNotificationMuteController {
 
   /** POST /guilds/:id/notification-mute -- Mute (members only, idempotent). */
   @Post('notification-mute')
-  @UseGuards(jwt, HubVisibleGuard)
+  @UseGuards(HubKindActiveGuard, jwt, HubVisibleGuard)
   @HttpCode(HttpStatus.OK)
   async mute(
     @Param('id', ParseIntPipe) id: number,
