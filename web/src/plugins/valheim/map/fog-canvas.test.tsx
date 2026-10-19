@@ -15,6 +15,8 @@ interface FakeImage {
 
 let put: ReturnType<typeof vi.fn>;
 let painted: FakeImage[] = [];
+/** The theme's `--color-backdrop` as getComputedStyle reports it. */
+let backdrop = '#102030';
 
 function bits(set: number[]): Uint8Array {
     const out = new Uint8Array(BYTES);
@@ -42,11 +44,16 @@ beforeEach(() => {
                 putImageData: put,
             }) as unknown as CanvasRenderingContext2D,
     );
-    document.documentElement.style.setProperty('--color-backdrop', '#102030');
+    backdrop = '#102030';
+    // Only a class / data-theme change may trigger the re-read (not a style write).
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+        const decl = document.createElement('div').style;
+        decl.setProperty('--color-backdrop', backdrop);
+        return decl;
+    });
 });
 afterEach(() => {
     vi.restoreAllMocks();
-    document.documentElement.style.removeProperty('--color-backdrop');
     document.documentElement.className = '';
 });
 
@@ -101,10 +108,7 @@ describe('FogCanvas (ROK-1837 D7)', () => {
 
     it('repaints in the new colour when the theme class changes', async () => {
         render(<FogCanvas size={SIZE} personal={personal} shared={null} />);
-        document.documentElement.style.setProperty(
-            '--color-backdrop',
-            '#f8fafc',
-        );
+        backdrop = '#f8fafc';
         await act(async () => {
             document.documentElement.className = 'theme-light';
             await Promise.resolve();
