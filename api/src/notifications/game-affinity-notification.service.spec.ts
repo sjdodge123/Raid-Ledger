@@ -10,10 +10,14 @@ import type { NotificationDedupService } from './notification-dedup.service';
 import type { HubNotificationService } from './hub-notification.service';
 import { findGameAffinityRecipients } from './game-affinity-recipients.helpers';
 import { findEventGuildId, findGroupTypeOff } from './hub-notification.queries';
+import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 
 jest.mock('./game-affinity-recipients.helpers', () => ({
   findGameAffinityRecipients: jest.fn(),
   findAbsentUserIds: jest.fn().mockResolvedValue(new Set()),
+}));
+jest.mock('./post-event-followup.helpers', () => ({
+  resolvePostEventFollowupRecipients: jest.fn().mockResolvedValue([]),
 }));
 jest.mock('./hub-notification.queries', () => ({
   findEventGuildId: jest.fn(),
@@ -24,6 +28,7 @@ jest.mock('./hub-notification.queries', () => ({
 const affinity = jest.mocked(findGameAffinityRecipients);
 const guildOf = jest.mocked(findEventGuildId);
 const typeOff = jest.mocked(findGroupTypeOff);
+const followups = jest.mocked(resolvePostEventFollowupRecipients);
 
 const input = {
   eventId: 1,
@@ -184,11 +189,31 @@ describe('GameAffinityNotificationService — game-less events (ROK-1832 B2)', (
     ]);
   });
 
-  it('an event with neither a game nor a group sends nothing and claims nothing', async () => {
+  it('an event with neither a game nor a group sends nothing but is marked announced', async () => {
     guildOf.mockResolvedValue(null);
     const h = build([20]);
     await h.service.notifyGameAffinity(gameless);
     expect(h.create).not.toHaveBeenCalled();
-    expect(h.claimed.size).toBe(0);
+    // The late-tag path (D6b) keys on this mark, so a later group tag notifies.
+    expect([...h.claimed]).toEqual(['game-alert:event:1']);
+  });
+});
+
+describe('GameAffinityNotificationService — follow-up attendees (ROK-1371)', () => {
+  beforeEach(() => {
+    affinity.mockReset();
+    guildOf.mockReset();
+    followups.mockReset();
+  });
+
+  it('excludes them and claims their per-user notice so a late tag skips them', async () => {
+    affinity.mockResolvedValue([10, 11]);
+    guildOf.mockResolvedValue(null);
+    followups.mockResolvedValue([11, 12]);
+    const h = build([]);
+    await h.service.notifyGameAffinity({ ...input, followupForEventId: 50 });
+    expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
+    expect(h.claimed.has('event-notice:1:user:11')).toBe(true);
+    expect(h.claimed.has('event-notice:1:user:12')).toBe(true);
   });
 });

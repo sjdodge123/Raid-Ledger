@@ -13,6 +13,10 @@ import {
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 import { findEventGuildId } from './hub-notification.queries';
 import {
+  EVENT_NOTICE_TTL_SECONDS,
+  eventNoticeKey,
+} from './event-notice-plan.helpers';
+import {
   findAbsentUserIds,
   findGameAffinityRecipients,
 } from './game-affinity-recipients.helpers';
@@ -69,8 +73,15 @@ export class GameAffinityNotificationService {
   async notifyGameAffinity(
     input: GameAffinityNotificationInput,
   ): Promise<void> {
-    if (await this.hasNoAudienceSource(input)) return;
     const dedupKey = `game-alert:event:${input.eventId}`;
+    if (await this.hasNoAudienceSource(input)) {
+      // Mark it announced anyway: a later group tag (D6b) keys on this mark.
+      await this.dedupService.checkAndMarkSent(
+        dedupKey,
+        GAME_ALERT_TTL_SECONDS,
+      );
+      return;
+    }
     const alreadySent = await this.dedupService.checkAndMarkSent(
       dedupKey,
       GAME_ALERT_TTL_SECONDS,
@@ -81,7 +92,8 @@ export class GameAffinityNotificationService {
       );
       return;
     }
-    const plan = await this.collectRecipients(input);
+    const followupIds = await this.claimFollowupNotices(input);
+    const plan = await this.collectRecipients(input, followupIds);
     if (!plan) return;
     await this.dispatchAffinityNotifications(
       input,
@@ -90,7 +102,7 @@ export class GameAffinityNotificationService {
     );
   }
 
-  /** A game-less event with no group tag has nobody to notify (no claim). */
+  /** A game-less event with no group tag has nobody to notify now. */
   private async hasNoAudienceSource(
     input: GameAffinityNotificationInput,
   ): Promise<boolean> {
@@ -104,6 +116,7 @@ export class GameAffinityNotificationService {
    */
   private async collectRecipients(
     input: GameAffinityNotificationInput,
+    followupIds: ReadonlySet<number>,
   ): Promise<{
     affinityIds: number[];
     group: GroupNoticeContext | null;
@@ -116,7 +129,7 @@ export class GameAffinityNotificationService {
       input.creatorId,
     );
     const all = [...new Set([...affinity, ...(group?.groupIds ?? [])])];
-    const kept = new Set(await this.excludeRecipients(all, input));
+    const kept = new Set(await this.excludeRecipients(all, input, followupIds));
     if (kept.size === 0) {
       this.logger.debug(
         `No event-notice recipients for event ${input.eventId}`,
@@ -132,34 +145,38 @@ export class GameAffinityNotificationService {
   private async excludeRecipients(
     recipientIds: number[],
     input: GameAffinityNotificationInput,
+    followupIds: ReadonlySet<number>,
   ): Promise<number[]> {
     if (recipientIds.length === 0) return [];
     const present = await this.excludeAbsentUsers(recipientIds, input);
-    return this.excludeFollowupRecipients(present, input);
+    return present.filter((id) => !followupIds.has(id));
   }
 
   /**
-   * ROK-1371: exclude the ended event's attendees when this event is a
-   * post-event follow-up — they already receive the targeted quick-sign-up DM,
-   * so the affinity broadcast would be a duplicate. No-op for normal events
-   * (`followupForEventId` unset).
+   * ROK-1371: the ended event's attendees when this event is a post-event
+   * follow-up — they already receive the targeted quick-sign-up DM, so a
+   * broadcast would be a duplicate. Their per-(user, event) notice key is
+   * claimed too, so a later group tag (D6b) skips them as well. Empty for a
+   * normal event (`followupForEventId` unset).
    */
-  private async excludeFollowupRecipients(
-    recipientIds: number[],
+  private async claimFollowupNotices(
     input: GameAffinityNotificationInput,
-  ): Promise<number[]> {
-    if (input.followupForEventId == null || recipientIds.length === 0) {
-      return recipientIds;
-    }
-    const followupIds = new Set(
-      await resolvePostEventFollowupRecipients(
-        this.db,
-        input.followupForEventId,
-        input.creatorId,
+  ): Promise<Set<number>> {
+    if (input.followupForEventId == null) return new Set();
+    const ids = await resolvePostEventFollowupRecipients(
+      this.db,
+      input.followupForEventId,
+      input.creatorId,
+    );
+    await Promise.all(
+      ids.map((id) =>
+        this.dedupService.checkAndMarkSent(
+          eventNoticeKey(input.eventId, id),
+          EVENT_NOTICE_TTL_SECONDS,
+        ),
       ),
     );
-    if (followupIds.size === 0) return recipientIds;
-    return recipientIds.filter((id) => !followupIds.has(id));
+    return new Set(ids);
   }
 
   /** Exclude users with active absences covering the event date. */
