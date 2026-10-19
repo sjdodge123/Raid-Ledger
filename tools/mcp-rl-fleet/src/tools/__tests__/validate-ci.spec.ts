@@ -354,6 +354,24 @@ describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', ()
     );
   });
 
+  // ROK-1793 S2 review P2: P outlives its children (admission waits, the copy,
+  // phase-2 child C), so it gets child + C allowance + margin, and the child
+  // budget goes to gate-fanout explicitly.
+  it('gives a parallel parent child+2400s and passes --child-timeout', async () => {
+    await validateCi.execute({
+      fleet: true,
+      parallel: true,
+      base_url: 'https://slot-1.gamernight.net',
+      admin_password: 'x',
+      wait: false,
+    });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 7800');
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) =>
+      JSON.stringify(call[1] ?? []).includes('gate-fanout'),
+    );
+    expect(JSON.stringify(sshCall?.[1] ?? [])).toContain('--child-timeout 5400');
+  });
+
   it('passes --timeout-seconds 5400 for a bare run (the script default is the full pipeline)', async () => {
     await validateCi.execute({ wait: false });
     expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 5400');

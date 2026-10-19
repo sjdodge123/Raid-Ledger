@@ -32,6 +32,23 @@ export interface FanoutTarget {
   ownerSlot: number;
   /** validate-ci.sh argv after resolveArgs (contains --fleet). */
   args: string[];
+  /** Watchdog budget for each child, in seconds (gate-fanout --child-timeout). */
+  childTimeout: number;
+}
+
+/** P's extra budget beyond one child: phase-2 child C plus admission/copy margin. */
+const PHASE2_ALLOWANCE_S = 1800;
+const PARENT_MARGIN_S = 600;
+
+/**
+ * P's watchdog budget. P outlives each child (admission waits, the tree copy,
+ * and phase-2 child C run on its clock), so it must never be killed first.
+ *
+ * @param childTimeout - Each child's budget in seconds.
+ * @returns child + C's allowance + margin.
+ */
+export function parallelParentTimeout(childTimeout: number): number {
+  return childTimeout + PHASE2_ALLOWANCE_S + PARENT_MARGIN_S;
 }
 
 /**
@@ -108,6 +125,7 @@ export function buildFanoutCommand(
     `--a-args ${shellQuote(join(['--fleet', '--no-e2e', ...rest]))}`,
     `--b-args ${shellQuote('--only-e2e')}`,
     `--serial-args ${shellQuote(join(target.args))}`,
+    `--child-timeout ${target.childTimeout}`,
   ];
   if (params.fail_fast === true) parts.push('--fail-fast');
   return parts.join(' ');
@@ -124,6 +142,7 @@ export async function parallelTarget(
   ownerSlot: number | null,
   innerEnv: string,
   args: string[],
+  childTimeout: number,
   lister?: MutagenLister,
 ): Promise<{ cmd: string } | { error: string; message: string }> {
   const refusal = parallelError(params);
@@ -132,5 +151,5 @@ export async function parallelTarget(
     return { error: 'parallel_requires_claim', message: 'parallel:true needs a claimed slot (rl_claim first).' };
   }
   const busy = await busySlotsFromMutagen(lister);
-  return { cmd: buildFanoutCommand(params, innerEnv, busy, { taskId, ownerSlot, args }) };
+  return { cmd: buildFanoutCommand(params, innerEnv, busy, { taskId, ownerSlot, args, childTimeout }) };
 }

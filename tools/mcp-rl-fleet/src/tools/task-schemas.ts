@@ -44,6 +44,10 @@ export const TaskChildSchema = z.object({
   role: z.enum(['a', 'b', 'c']),
   slot: z.number().int(),
   borrowed: z.boolean(),
+  /** The child's terminal status, recorded by gate-fanout when P ends. */
+  status: z.string().optional(),
+  /** The child's script_exit_code (null when it never exited). */
+  exit: z.number().int().nullable().optional(),
 });
 export const ParallelInfoSchema = z.object({
   mode: z.enum(['parallel', 'serial_fallback']),

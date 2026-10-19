@@ -34,7 +34,7 @@ import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
 import { resolveWorktreeShortSha, resolveWorktreeSurfaceHash } from './worktree-sha.js';
 import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
 import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
-import { parallelTarget } from './validate-ci-parallel.js';
+import { parallelParentTimeout, parallelTarget } from './validate-ci-parallel.js';
 
 // Re-exported so `rl_validate_ci`'s target helpers stay importable from this
 // module (and its spec) after the ROK-1466 W1 split kept it under 300 lines.
@@ -223,18 +223,20 @@ export async function execute(
   const innerCmd =
     `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
   const taskId = newTaskId();
+  // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
+  // --static / --only-unit / --only-integration runs to 1800s.
+  const childS = resolveValidateCiTimeout(resolveArgs(params), params.timeout_seconds);
   // ROK-1793 S2: parallel → P runs gate-fanout (light; the children gate themselves).
   const fanout = params.parallel || params.fail_fast
-    ? await parallelTarget(params, taskId, slot, innerEnv, resolveArgs(params)) : null;
+    ? await parallelTarget(params, taskId, slot, innerEnv, resolveArgs(params), childS) : null;
   if (fanout && 'error' in fanout) return { ok: false, ...fanout };
   const targetCmd = fanout?.cmd ??
     `/srv/rl-infra/orchestrator/bin/run-on-runner-with-heartbeat ` +
     `-- bash -c ${shellQuote(innerCmd)}`;
   const slotFlag = slot !== null ? `--slot ${slot} ` : '';
-  // Pass timeout_seconds through to task-start so the watchdog kills a hung run.
-  // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
-  // --static / --only-unit / --only-integration runs to 1800s.
-  const timeoutS = resolveValidateCiTimeout(resolveArgs(params), params.timeout_seconds);
+  // Pass timeout_seconds through to task-start so the watchdog kills a hung run;
+  // a parallel parent outlives its children (review P2).
+  const timeoutS = fanout ? parallelParentTimeout(childS) : childS;
   const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   // ROK-1470: heavy runs wait on host MemAvailable inside task-start before the
   // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.

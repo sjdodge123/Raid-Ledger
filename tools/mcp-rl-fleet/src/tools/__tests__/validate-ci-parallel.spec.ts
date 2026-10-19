@@ -6,6 +6,7 @@ import {
   buildFanoutCommand,
   busySlotsFromMutagen,
   parallelError,
+  parallelParentTimeout,
   parallelTarget,
   parseBusySlots,
 } from '../validate-ci-parallel.js';
@@ -23,7 +24,7 @@ const LISTING = [
   'Name: rl-slot-3',
 ].join('\n');
 const ENV = "BASE_URL='https://slot-1.gamernight.net' E2E_SCOPE='auto' ";
-const TARGET = { taskId: 'abcdef123456', ownerSlot: 1, args: ['--fleet'] };
+const TARGET = { taskId: 'abcdef123456', ownerSlot: 1, args: ['--fleet'], childTimeout: 5400 };
 
 describe('parallelError', () => {
   it('accepts fleet:true + parallel:true', () => {
@@ -69,6 +70,13 @@ describe('buildFanoutCommand', () => {
   it('passes the inner env once, quoted', () => {
     expect(cmd).toContain(`--inner-env 'BASE_URL='\\''https://slot-1.gamernight.net'\\''`);
   });
+  it('passes the child watchdog budget explicitly', () => {
+    expect(cmd).toContain('--child-timeout 5400');
+  });
+  it('forwards E2E_SPECS in the shared inner env (gate-fanout strips it for child A only)', () => {
+    const c = buildFanoutCommand({}, "E2E_SPECS='scripts/smoke/a.smoke.spec.ts' ", [], TARGET);
+    expect(c).toContain(`--inner-env 'E2E_SPECS='\\''scripts/smoke/a.smoke.spec.ts'\\'' '`);
+  });
   it('adds --fail-fast only when asked', () => {
     expect(cmd).not.toContain('--fail-fast');
     const ff = buildFanoutCommand({ fleet: true, parallel: true, fail_fast: true }, ENV, [], TARGET);
@@ -83,15 +91,22 @@ describe('buildFanoutCommand', () => {
 
 describe('parallelTarget', () => {
   it('refuses an ineligible request and an unclaimed caller', async () => {
-    expect(await parallelTarget({ parallel: true }, 'abcdef123456', 1, ENV, [])).toMatchObject({
+    expect(await parallelTarget({ parallel: true }, 'abcdef123456', 1, ENV, [], 5400)).toMatchObject({
       error: 'invalid_parallel',
     });
     expect(
-      await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', null, ENV, ['--fleet']),
+      await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', null, ENV, ['--fleet'], 5400),
     ).toMatchObject({ error: 'parallel_requires_claim' });
   });
   it('builds the command with the listed busy slots', async () => {
-    const r = await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', 1, ENV, ['--fleet'], async () => LISTING);
+    const r = await parallelTarget({ fleet: true, parallel: true }, 'abcdef123456', 1, ENV, ['--fleet'], 5400, async () => LISTING);
     expect('cmd' in r && r.cmd).toContain("--exclude-slots '1,3'");
+  });
+});
+
+describe('parallelParentTimeout', () => {
+  it('is child + phase-2 allowance (1800) + margin (600)', () => {
+    expect(parallelParentTimeout(5400)).toBe(7800);
+    expect(parallelParentTimeout(1800)).toBe(4200);
   });
 });
