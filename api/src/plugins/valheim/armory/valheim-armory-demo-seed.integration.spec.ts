@@ -211,3 +211,31 @@ describe('armory-character keys + claimant check (ROK-1836 M2, m2)', () => {
     }
   });
 });
+
+describe('armory-character guildId (ROK-1836 follow-up)', () => {
+  it('returns the server hub id once a hub is keyed to the fixture server', async () => {
+    const first = await seed();
+    expect(first.guildId).toBeNull();
+    const G = schema.games;
+    const [game] = nonEmpty(
+      await testApp.db.select({ id: G.id }).from(G),
+      'game',
+    );
+    const [hub] = nonEmpty(
+      await testApp.db
+        .insert(schema.guilds)
+        .values({
+          gameId: game.id,
+          kind: 'game_server',
+          region: 'us',
+          name: 'Fixture hub',
+          nameKey: 'fixture hub',
+          source: 'pelican',
+          pelicanServerId: first.serverId,
+        })
+        .returning({ id: schema.guilds.id }),
+      'hub',
+    );
+    expect((await seed()).guildId).toBe(hub.id);
+  });
+});

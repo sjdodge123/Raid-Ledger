@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -173,6 +173,18 @@ export class ValheimIdentityRepository {
   ): Promise<ValheimProfileClaimEventRow[]> {
     if (rows.length === 0) return [];
     return exec.insert(events).values(rows).returning();
+  }
+
+  /** `{ id, username, avatar }` for each id that still names a user. */
+  async findUsers(
+    ids: readonly number[],
+  ): Promise<{ id: number; username: string; avatar: string | null }[]> {
+    if (ids.length === 0) return [];
+    const u = schema.users;
+    return this.db
+      .select({ id: u.id, username: u.username, avatar: u.avatar })
+      .from(u)
+      .where(inArray(u.id, [...ids]));
   }
 
   /** A profile's audit trail, newest first. */
