@@ -195,6 +195,7 @@ function profileValues(
     gameVersion: ARMORY_FIXTURE_GAME_VERSION,
     modVersion: '1.0.0',
     capturedAt: new Date(),
+    sourceSnapshotId: null,
     ...fixtureSheet(req.extraRows),
     knownItems: [],
     knownRecipes: [],
@@ -251,5 +252,32 @@ export async function seedArmoryProfile(
     .values(profileValues(serverId, req))
     .returning({ id: P.id });
   if (!row) throw new Error('Armory fixture insert returned no row');
+  return row.id;
+}
+
+/**
+ * ROK-1837 T8 — reset `req.key`'s character IN PLACE (upsert on
+ * `valheim_profiles_identity_uq`), so its id — and every deep link built on
+ * it — survives a re-seed; inserts only when absent. Returns the profile id.
+ */
+export async function upsertArmoryProfile(
+  db: Db,
+  serverId: number,
+  req: ArmoryCharacterFixtureRequest,
+): Promise<number> {
+  const P = schema.valheimProfiles;
+  const values = profileValues(serverId, req);
+  const [row] = await db
+    .insert(P)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [P.pelicanServerId, P.steamId, P.playerId],
+      set: values,
+    })
+    .returning({ id: P.id });
+  if (!row) throw new Error('Armory fixture upsert returned no row');
+  // A reset wipes the claim history too (the old delete-and-reinsert cascaded it).
+  const E = schema.valheimProfileClaimEvents;
+  await db.delete(E).where(eq(E.profileId, row.id));
   return row.id;
 }

@@ -31,9 +31,10 @@ import {
 } from '../link/valheim-link-demo-seed.helpers';
 import {
   ensureArmoryCatalog,
-  seedArmoryProfile,
+  upsertArmoryProfile,
 } from './valheim-armory-demo-seed.helpers';
 import { ARMORY_MAP_FIXTURE_KEY } from './valheim-armory-demo-sheet';
+import { ensureFixtureHubId } from './valheim-armory-map-hub.helpers';
 import {
   storeDemoBaseMap,
   upsertDemoMap,
@@ -69,7 +70,8 @@ function parseRequest(body: unknown): { worker: number; withBaseMap: boolean } {
  * resets the other's character or nulls the map's `profile_id` — and its
  * map (personal + shared fog, 4 pins) with a generated base-map PNG unless
  * `withBaseMap: false`. The server catalogue is inserted only when absent
- * (never reset). Re-running resets the `map` character and its map.
+ * (never reset). Re-running resets the `map` character and its map in
+ * place — same `characterId` / `mapId` per worker (T8), so deep links hold.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
@@ -101,16 +103,29 @@ export class ValheimArmoryMapDemoSeedController {
       new Date(),
     );
     await ensureArmoryCatalog(this.db, serverId);
-    const characterId = await seedArmoryProfile(this.db, serverId, {
+    const characterId = await this.seedCharacter(serverId, worker, req.user.id);
+    const sha = withBaseMap ? await storeDemoBaseMap(this.db, serverId) : null;
+    const mapId = await upsertDemoMap(this.db, serverId, characterId, sha);
+    return {
+      characterId,
+      mapId,
+      pelicanServerId: serverId,
+      guildId: await ensureFixtureHubId(this.db, serverId, valheimGameId),
+    };
+  }
+
+  /** The fixture's claimed character, reset in place (no catalogue, no extra rows). */
+  private seedCharacter(
+    serverId: number,
+    worker: number,
+    userId: number,
+  ): Promise<number> {
+    return upsertArmoryProfile(this.db, serverId, {
       slot: worker,
       key: ARMORY_MAP_FIXTURE_KEY,
-      claimedBy: req.user.id,
+      claimedBy: userId,
       withCatalog: false,
       extraRows: false,
     });
-    const sha = withBaseMap ? await storeDemoBaseMap(this.db, serverId) : null;
-    const mapId = await upsertDemoMap(this.db, serverId, characterId, sha);
-    // guildId stays null until the ROK-1831 server hub links a guild.
-    return { characterId, mapId, pelicanServerId: serverId, guildId: null };
   }
 }

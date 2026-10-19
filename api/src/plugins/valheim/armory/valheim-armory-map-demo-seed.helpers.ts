@@ -8,7 +8,6 @@
  */
 import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
-import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import sharp from 'sharp';
 import * as schema from '../../../drizzle/schema';
@@ -144,9 +143,11 @@ function mapValues(
 }
 
 /**
- * Replace the fixture identity's map on `serverId` (idempotent; delete +
- * insert in one transaction) and link it to `profileId`. `baseMapSha256` null keeps the fixture's placeholder
- * hash with no blob behind it → the byte route answers `base_map_not_ready`.
+ * Reset the fixture identity's map on `serverId` IN PLACE (upsert on
+ * `valheim_maps_identity_uq`, so its id survives a re-seed — ROK-1837 T8)
+ * and link it to `profileId`. `baseMapSha256` null keeps the fixture's
+ * placeholder hash with no blob behind it → the byte route answers
+ * `base_map_not_ready`.
  */
 export async function upsertDemoMap(
   db: Db,
@@ -155,23 +156,15 @@ export async function upsertDemoMap(
   baseMapSha256: string | null,
 ): Promise<number> {
   const M = schema.valheimMaps;
-  const { steamId, playerId, worldUid } = MAP_ROW_IDENTITY;
-  return db.transaction(async (tx) => {
-    await tx
-      .delete(M)
-      .where(
-        and(
-          eq(M.pelicanServerId, serverId),
-          eq(M.steamId, steamId),
-          eq(M.playerId, playerId),
-          eq(M.worldUid, worldUid),
-        ),
-      );
-    const [row] = await tx
-      .insert(M)
-      .values(mapValues(serverId, profileId, baseMapSha256))
-      .returning({ id: M.id });
-    if (!row) throw new Error('Map fixture insert returned no row');
-    return row.id;
-  });
+  const values = mapValues(serverId, profileId, baseMapSha256);
+  const [row] = await db
+    .insert(M)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [M.pelicanServerId, M.steamId, M.playerId, M.worldUid],
+      set: values,
+    })
+    .returning({ id: M.id });
+  if (!row) throw new Error('Map fixture upsert returned no row');
+  return row.id;
 }
