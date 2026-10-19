@@ -9,6 +9,7 @@ import {
     CharacterSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
+import { encodePathSegment } from './path-segment';
 
 /** Fetch current user's characters, optionally filtered by game */
 export async function getMyCharacters(
@@ -84,5 +85,5 @@ export async function getUserCharacters(
 export async function getCharacterDetail(
     characterId: string,
 ): Promise<CharacterDto> {
-    return fetchApi(`/characters/${characterId}`, {}, CharacterSchema);
+    return fetchApi(`/characters/${encodePathSegment(characterId)}`, {}, CharacterSchema);
 }
