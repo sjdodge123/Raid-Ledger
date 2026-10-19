@@ -17,6 +17,7 @@ import { JoinLeavePill, ServerStatusPill } from './server-hero';
 import { QuickPlayTab } from './quick-play-tab';
 import { lastSeenLabel } from './server-member.helpers';
 import { registerServerHubGameTab } from './server-hub-game-tabs';
+import { usePluginStore } from '../../../stores/plugin-store';
 
 const HUB = 'http://localhost:3000/plugins/pelican/hubs/9';
 
@@ -132,9 +133,30 @@ describe('pelicanHubModule (ROK-1831)', () => {
     });
 
     it('a per-game tab shows only on hubs of its game', () => {
+        usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
         registerServerHubGameTab('valheim', { id: 'map', label: 'Map', order: 20, component: () => null });
         const tab = pelicanHubModule.tabs.find((t) => t.id === 'map');
         expect(tab?.visible?.(ctx())).toBe(true);
         expect(tab?.visible?.(ctx(false, 'minecraft'))).toBe(false);
+    });
+});
+
+describe('server hub game tabs — plugin activation gate (ROK-1836 r8)', () => {
+    it('a per-game tab hides while its registering plugin is inactive (ROK-1836 r8)', () => {
+        registerServerHubGameTab('valheim', { id: 'gated', label: 'Gated', order: 30, component: () => null });
+        const tab = pelicanHubModule.tabs.find((t) => t.id === 'gated');
+        usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
+        expect(tab?.visible?.(ctx())).toBe(true);
+        usePluginStore.getState().setActiveSlugs(['pelican']);
+        expect(tab?.visible?.(ctx())).toBe(false);
+    });
+
+    it('a per-game tab can be owned by a plugin other than the game slug', () => {
+        registerServerHubGameTab('valheim', { id: 'owned', label: 'Owned', order: 40, component: () => null }, 'valheim-extras');
+        const tab = pelicanHubModule.tabs.find((t) => t.id === 'owned');
+        usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
+        expect(tab?.visible?.(ctx())).toBe(false);
+        usePluginStore.getState().setActiveSlugs(['pelican', 'valheim-extras']);
+        expect(tab?.visible?.(ctx())).toBe(true);
     });
 });
