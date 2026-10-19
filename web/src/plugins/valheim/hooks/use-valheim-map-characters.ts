@@ -3,6 +3,7 @@
  * one character's maps (detail route). A small local client so the lazy tab
  * chunk does not wait on ROK-1836's armory hooks (sibling branch).
  */
+import { valheimArmoryKeys } from '../lib/valheim-armory-api';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
     ValheimCharacterDetailSchema,
@@ -42,7 +43,7 @@ export function useValheimServerCharacters(
     serverId: number,
 ): UseQueryResult<ValheimCharacterSummary[]> {
     return useQuery<ValheimCharacterSummary[]>({
-        queryKey: ['valheim', 'armory', 'characters', serverId],
+        queryKey: [...valheimArmoryKeys.all, 'characters', serverId],
         queryFn: () => fetchAllServerCharacters(serverId),
         retry: false,
     });
@@ -53,7 +54,7 @@ export function useValheimCharacterMaps(
     characterId: number | null,
 ): UseQueryResult<ValheimCharacterDetail> {
     return useQuery<ValheimCharacterDetail>({
-        queryKey: ['valheim', 'armory', 'character', characterId],
+        queryKey: valheimArmoryKeys.detail(characterId ?? 0),
         queryFn: () =>
             fetchApi(
                 `${CHARACTERS_PATH}/${encodePathSegment(String(characterId ?? 0))}`,
