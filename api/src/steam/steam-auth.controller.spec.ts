@@ -17,6 +17,7 @@ jest.mock('./steam-http.util', () => ({
   getPlayerSummary: (...args: unknown[]) => mockGetPlayerSummary(...args),
 }));
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SteamAuthController } from './steam-auth.controller';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
@@ -133,6 +134,7 @@ async function createTestController(): Promise<{
       { provide: SteamService, useValue: mocks.steam },
       { provide: SteamWishlistService, useValue: mocks.wishlist },
       { provide: SteamOpenIdNonceStore, useValue: { claim: jest.fn() } },
+      { provide: EventEmitter2, useValue: { emitAsync: jest.fn() } },
     ],
   }).compile();
 
