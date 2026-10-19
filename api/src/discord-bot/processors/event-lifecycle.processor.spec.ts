@@ -240,12 +240,14 @@ describe('EventLifecycleProcessor — skip conditions', () => {
     expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
   });
 
-  it('skips game affinity when gameId is missing', async () => {
+  it('passes a null game when gameId is missing (ROK-1832: the group path decides)', async () => {
     const payload = makePayload({ gameId: null });
     await processor.process(makeJob(payload));
 
     expect(embedPoster.postEmbed).toHaveBeenCalled();
-    expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
+    expect(gameAffinityService.notifyGameAffinity).toHaveBeenCalledWith(
+      expect.objectContaining({ gameId: null }),
+    );
   });
 
   it('skips game affinity when creatorId is missing', async () => {
@@ -256,12 +258,14 @@ describe('EventLifecycleProcessor — skip conditions', () => {
     expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
   });
 
-  it('skips game affinity when game name is missing', async () => {
+  it('passes a null game name when the game is missing (ROK-1832)', async () => {
     const payload = makePayload();
     delete payload.event.game;
     await processor.process(makeJob(payload));
 
-    expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
+    expect(gameAffinityService.notifyGameAffinity).toHaveBeenCalledWith(
+      expect.objectContaining({ gameName: null, gameCoverUrl: null }),
+    );
   });
 });
 

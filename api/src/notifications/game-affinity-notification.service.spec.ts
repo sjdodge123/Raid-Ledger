@@ -163,3 +163,32 @@ describe('GameAffinityNotificationService — per-user claim (D4)', () => {
     expect(h.releaseKey).toHaveBeenCalledWith('event-notice:1:user:70');
   });
 });
+
+describe('GameAffinityNotificationService — game-less events (ROK-1832 B2)', () => {
+  const gameless = { ...input, gameId: null, gameName: null };
+
+  beforeEach(() => {
+    affinity.mockReset();
+    guildOf.mockReset();
+    typeOff.mockResolvedValue(new Set());
+  });
+
+  it('a group-tagged event with no game sends the group copy only', async () => {
+    guildOf.mockResolvedValue(7);
+    const h = build([20, 21]);
+    await h.service.notifyGameAffinity(gameless);
+    expect(affinity).not.toHaveBeenCalled();
+    expect(sentTypes(h.create)).toEqual([
+      [20, 'hub_event_tagged'],
+      [21, 'hub_event_tagged'],
+    ]);
+  });
+
+  it('an event with neither a game nor a group sends nothing and claims nothing', async () => {
+    guildOf.mockResolvedValue(null);
+    const h = build([20]);
+    await h.service.notifyGameAffinity(gameless);
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.claimed.size).toBe(0);
+  });
+});

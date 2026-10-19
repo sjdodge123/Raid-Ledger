@@ -263,13 +263,13 @@ export class DiscordEventListener {
     this.gameAffinityNotificationService!.notifyGameAffinity({
       eventId: payload.eventId,
       eventTitle: payload.event.title,
-      gameName: payload.event.game!.name,
-      gameId: payload.gameId!,
+      gameName: payload.event.game?.name ?? null,
+      gameId: payload.gameId ?? null,
       startTime: payload.event.startTime,
       endTime: payload.event.endTime,
       creatorId: payload.creatorId!,
       clientUrl: context.clientUrl ?? null,
-      gameCoverUrl: payload.event.game!.coverUrl ?? null,
+      gameCoverUrl: payload.event.game?.coverUrl ?? null,
       discordMessage,
       followupForEventId: payload.followupForEventId ?? null,
     }).catch((err: unknown) => {
@@ -281,10 +281,7 @@ export class DiscordEventListener {
 
   private canSendAffinityNotification(payload: EventPayload): boolean {
     return !!(
-      this.gameAffinityNotificationService &&
-      payload.gameId &&
-      payload.event.game?.name &&
-      payload.creatorId
+      this.gameAffinityNotificationService && payload.creatorId
     );
   }
 

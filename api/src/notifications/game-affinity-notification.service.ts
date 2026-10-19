@@ -11,6 +11,7 @@ import {
   type GroupNoticeContext,
 } from './event-notice-dispatch.helpers';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
+import { findEventGuildId } from './hub-notification.queries';
 import {
   findAbsentUserIds,
   findGameAffinityRecipients,
@@ -22,8 +23,9 @@ const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
 export interface GameAffinityNotificationInput {
   eventId: number;
   eventTitle: string;
-  gameName: string;
-  gameId: number;
+  /** Null for a game-less event; only the group path (D6a) can then send. */
+  gameName: string | null;
+  gameId: number | null;
   startTime: string;
   endTime: string;
   creatorId: number;
@@ -67,6 +69,7 @@ export class GameAffinityNotificationService {
   async notifyGameAffinity(
     input: GameAffinityNotificationInput,
   ): Promise<void> {
+    if (await this.hasNoAudienceSource(input)) return;
     const dedupKey = `game-alert:event:${input.eventId}`;
     const alreadySent = await this.dedupService.checkAndMarkSent(
       dedupKey,
@@ -85,6 +88,14 @@ export class GameAffinityNotificationService {
       plan.affinityIds,
       plan.group,
     );
+  }
+
+  /** A game-less event with no group tag has nobody to notify (no claim). */
+  private async hasNoAudienceSource(
+    input: GameAffinityNotificationInput,
+  ): Promise<boolean> {
+    if (input.gameId !== null) return false;
+    return (await findEventGuildId(this.db, input.eventId)) === null;
   }
 
   /**
@@ -184,7 +195,7 @@ export class GameAffinityNotificationService {
       {
         eventId: input.eventId,
         title: input.eventTitle,
-        gameName: input.gameName,
+        gameName: input.gameName ?? 'this game',
         payload,
       },
       affinityIds,
@@ -222,13 +233,15 @@ export class GameAffinityNotificationService {
   }
 
   /**
-   * Find users with affinity for a game, excluding the event creator.
+   * Find users with affinity for a game, excluding the event creator
+   * (none for a game-less event).
    * Union of: users who hearted the game + users who signed up for past events of that game.
    */
   private async findRecipients(
-    gameId: number,
+    gameId: number | null,
     creatorId: number,
   ): Promise<number[]> {
+    if (gameId === null) return [];
     return findGameAffinityRecipients(this.db, gameId, {
       excludeUserId: creatorId,
     });

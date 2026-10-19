@@ -145,13 +145,13 @@ export class EventLifecycleProcessor
       await this.gameAffinityService!.notifyGameAffinity({
         eventId: payload.eventId,
         eventTitle: payload.event.title,
-        gameName: payload.event.game!.name,
-        gameId: payload.gameId!,
+        gameName: payload.event.game?.name ?? null,
+        gameId: payload.gameId ?? null,
         startTime: payload.event.startTime,
         endTime: payload.event.endTime,
         creatorId: payload.creatorId!,
         clientUrl,
-        gameCoverUrl: payload.event.game!.coverUrl ?? null,
+        gameCoverUrl: payload.event.game?.coverUrl ?? null,
         discordMessage,
         followupForEventId: payload.followupForEventId ?? null,
       });
@@ -167,10 +167,7 @@ export class EventLifecycleProcessor
     payload: EventLifecycleJobData['payload'],
   ): boolean {
     return !!(
-      this.gameAffinityService &&
-      payload.gameId &&
-      payload.event.game?.name &&
-      payload.creatorId
+      this.gameAffinityService && payload.creatorId
     );
   }
 
