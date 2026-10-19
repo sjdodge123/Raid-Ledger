@@ -14,11 +14,16 @@ import {
 
 const phone = { width: 375, height: 600 };
 const desktop = { width: 1440, height: 720 };
-const toTexture = (vp: Viewport, p: { x: number; y: number }) => ({ x: (p.x - vp.x) / vp.scale, y: (p.y - vp.y) / vp.scale });
+const toTexture = (vp: Viewport, p: { x: number; y: number }) => ({
+    x: (p.x - vp.x) / vp.scale,
+    y: (p.y - vp.y) / vp.scale,
+});
 
 describe('clamp / fitScale', () => {
     it('clamps into the range', () => {
-        expect([clamp(-1, 0, 5), clamp(3, 0, 5), clamp(9, 0, 5)]).toEqual([0, 3, 5]);
+        expect([clamp(-1, 0, 5), clamp(3, 0, 5), clamp(9, 0, 5)]).toEqual([
+            0, 3, 5,
+        ]);
     });
 
     it('fits a 2048 map on a 375×600 phone by its width and centres it vertically', () => {
@@ -41,8 +46,14 @@ describe('zoomAbout', () => {
         const vp = { scale: 0.5, x: 30, y: -40 };
         const anchor = { x: 200, y: 150 };
         const next = zoomAbout(vp, anchor, 2);
-        expect(toTexture(next, anchor).x).toBeCloseTo(toTexture(vp, anchor).x, 9);
-        expect(toTexture(next, anchor).y).toBeCloseTo(toTexture(vp, anchor).y, 9);
+        expect(toTexture(next, anchor).x).toBeCloseTo(
+            toTexture(vp, anchor).x,
+            9,
+        );
+        expect(toTexture(next, anchor).y).toBeCloseTo(
+            toTexture(vp, anchor).y,
+            9,
+        );
         expect(next.scale).toBe(2);
     });
 });
@@ -54,8 +65,12 @@ describe('clampViewport', () => {
     });
 
     it('never zooms below fit or above 8× native', () => {
-        expect(clampViewport({ scale: 0.01, x: 0, y: 0 }, desktop, 2048).scale).toBeCloseTo(720 / 2048, 10);
-        expect(clampViewport({ scale: 50, x: 0, y: 0 }, desktop, 2048).scale).toBe(MAX_NATIVE_SCALE);
+        expect(
+            clampViewport({ scale: 0.01, x: 0, y: 0 }, desktop, 2048).scale,
+        ).toBeCloseTo(720 / 2048, 10);
+        expect(
+            clampViewport({ scale: 50, x: 0, y: 0 }, desktop, 2048).scale,
+        ).toBe(MAX_NATIVE_SCALE);
     });
 });
 
@@ -88,7 +103,11 @@ describe('viewportReducer', () => {
     it('maps keys to actions', () => {
         expect(keyToAction('+')).toEqual({ type: 'zoomBy', factor: 1.25 });
         expect(keyToAction('0')).toEqual({ type: 'fit' });
-        expect(keyToAction('ArrowLeft')).toEqual({ type: 'pan', dx: 64, dy: 0 });
+        expect(keyToAction('ArrowLeft')).toEqual({
+            type: 'pan',
+            dx: 64,
+            dy: 0,
+        });
         expect(keyToAction('a')).toBeNull();
     });
 });

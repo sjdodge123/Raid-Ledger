@@ -15,9 +15,16 @@ export interface TexturePoint {
 }
 
 /** World metres (x east, z north) → continuous texture pixels (py = 0 south). */
-export function worldToTexture(grid: ValheimMapGrid, x: number, z: number): TexturePoint {
+export function worldToTexture(
+    grid: ValheimMapGrid,
+    x: number,
+    z: number,
+): TexturePoint {
     const half = grid.textureSize / 2;
-    return { px: x / grid.pixelSizeMetres + half, py: z / grid.pixelSizeMetres + half };
+    return {
+        px: x / grid.pixelSizeMetres + half,
+        py: z / grid.pixelSizeMetres + half,
+    };
 }
 
 /** Integer texture row `py` → the screen/canvas row it paints on (row 0 = north). */
@@ -26,7 +33,11 @@ export function textureRowFor(textureSize: number, py: number): number {
 }
 
 /** World metres → continuous screen-space texture pixels (left, top) for a pin. */
-export function worldToScreen(grid: ValheimMapGrid, x: number, z: number): { left: number; top: number } {
+export function worldToScreen(
+    grid: ValheimMapGrid,
+    x: number,
+    z: number,
+): { left: number; top: number } {
     const { px, py } = worldToTexture(grid, x, z);
     return { left: px, top: grid.textureSize - py };
 }

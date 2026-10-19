@@ -9,8 +9,22 @@
  * 2× about the point, `+`/`-`/`0`/arrows via `keyToAction`.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import type { CSSProperties, Dispatch, KeyboardEvent, MouseEvent, PointerEvent, RefObject } from 'react';
-import { initViewport, keyToAction, viewportReducer, type Point, type ViewportAction, type Viewport } from './map-viewport.math';
+import type {
+    CSSProperties,
+    Dispatch,
+    KeyboardEvent,
+    MouseEvent,
+    PointerEvent,
+    RefObject,
+} from 'react';
+import {
+    initViewport,
+    keyToAction,
+    viewportReducer,
+    type Point,
+    type ViewportAction,
+    type Viewport,
+} from './map-viewport.math';
 
 /** Wheel delta → zoom factor sensitivity (≈ 1.22× per 100px notch). */
 export const WHEEL_ZOOM_SENSITIVITY = 0.002;
@@ -23,66 +37,120 @@ function localPoint(el: Element, clientX: number, clientY: number): Point {
     return { x: clientX - r.left, y: clientY - r.top };
 }
 
-function pinchGeometry(pointers: Pointers): { mid: Point; dist: number } | null {
+function pinchGeometry(
+    pointers: Pointers,
+): { mid: Point; dist: number } | null {
     const [a, b] = [...pointers.values()];
     if (!a || !b) return null;
-    return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) };
+    return {
+        mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+        dist: Math.hypot(a.x - b.x, a.y - b.y),
+    };
 }
 
 /** Apply one pointer move: pan with one pointer, pinch-zoom + pan with two. */
-function movePointer(pointers: Pointers, id: number, next: Point, dispatch: Dispatch<ViewportAction>): void {
+function movePointer(
+    pointers: Pointers,
+    id: number,
+    next: Point,
+    dispatch: Dispatch<ViewportAction>,
+): void {
     const prev = pointers.get(id);
     if (!prev) return;
     const before = pinchGeometry(pointers);
     pointers.set(id, next);
-    if (pointers.size === 1) return dispatch({ type: 'pan', dx: next.x - prev.x, dy: next.y - prev.y });
+    if (pointers.size === 1)
+        return dispatch({
+            type: 'pan',
+            dx: next.x - prev.x,
+            dy: next.y - prev.y,
+        });
     const after = pinchGeometry(pointers);
     if (!before || !after || before.dist === 0) return;
-    dispatch({ type: 'zoomBy', factor: after.dist / before.dist, anchor: after.mid });
-    dispatch({ type: 'pan', dx: after.mid.x - before.mid.x, dy: after.mid.y - before.mid.y });
+    dispatch({
+        type: 'zoomBy',
+        factor: after.dist / before.dist,
+        anchor: after.mid,
+    });
+    dispatch({
+        type: 'pan',
+        dx: after.mid.x - before.mid.x,
+        dy: after.mid.y - before.mid.y,
+    });
 }
 
 function usePointerHandlers(dispatch: Dispatch<ViewportAction>) {
     const pointers = useRef<Pointers>(new Map());
-    return useMemo(() => ({
-        onPointerDown: (e: PointerEvent<HTMLElement>) => {
-            e.currentTarget.setPointerCapture?.(e.pointerId);
-            pointers.current.set(e.pointerId, localPoint(e.currentTarget, e.clientX, e.clientY));
-        },
-        onPointerMove: (e: PointerEvent<HTMLElement>) =>
-            movePointer(pointers.current, e.pointerId, localPoint(e.currentTarget, e.clientX, e.clientY), dispatch),
-        onPointerUp: (e: PointerEvent<HTMLElement>) => void pointers.current.delete(e.pointerId),
-        onPointerCancel: (e: PointerEvent<HTMLElement>) => void pointers.current.delete(e.pointerId),
-        onDoubleClick: (e: MouseEvent<HTMLElement>) =>
-            dispatch({ type: 'zoomBy', factor: 2, anchor: localPoint(e.currentTarget, e.clientX, e.clientY) }),
-        onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
-            const action = keyToAction(e.key);
-            if (!action) return;
-            e.preventDefault();
-            dispatch(action);
-        },
-    }), [dispatch]);
+    return useMemo(
+        () => ({
+            onPointerDown: (e: PointerEvent<HTMLElement>) => {
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                pointers.current.set(
+                    e.pointerId,
+                    localPoint(e.currentTarget, e.clientX, e.clientY),
+                );
+            },
+            onPointerMove: (e: PointerEvent<HTMLElement>) =>
+                movePointer(
+                    pointers.current,
+                    e.pointerId,
+                    localPoint(e.currentTarget, e.clientX, e.clientY),
+                    dispatch,
+                ),
+            onPointerUp: (e: PointerEvent<HTMLElement>) =>
+                void pointers.current.delete(e.pointerId),
+            onPointerCancel: (e: PointerEvent<HTMLElement>) =>
+                void pointers.current.delete(e.pointerId),
+            onDoubleClick: (e: MouseEvent<HTMLElement>) =>
+                dispatch({
+                    type: 'zoomBy',
+                    factor: 2,
+                    anchor: localPoint(e.currentTarget, e.clientX, e.clientY),
+                }),
+            onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+                const action = keyToAction(e.key);
+                if (!action) return;
+                e.preventDefault();
+                dispatch(action);
+            },
+        }),
+        [dispatch],
+    );
 }
 
-function useWheelZoom(ref: RefObject<HTMLElement | null>, dispatch: Dispatch<ViewportAction>): void {
+function useWheelZoom(
+    ref: RefObject<HTMLElement | null>,
+    dispatch: Dispatch<ViewportAction>,
+): void {
     useEffect(() => {
         const el = ref.current;
         if (!el) return;
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
             const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_SENSITIVITY);
-            dispatch({ type: 'zoomBy', factor, anchor: localPoint(el, e.clientX, e.clientY) });
+            dispatch({
+                type: 'zoomBy',
+                factor,
+                anchor: localPoint(el, e.clientX, e.clientY),
+            });
         };
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
     }, [ref, dispatch]);
 }
 
-function useViewportSize(ref: RefObject<HTMLElement | null>, dispatch: Dispatch<ViewportAction>): void {
+function useViewportSize(
+    ref: RefObject<HTMLElement | null>,
+    dispatch: Dispatch<ViewportAction>,
+): void {
     useEffect(() => {
         const el = ref.current;
         if (!el) return;
-        const measure = () => dispatch({ type: 'resize', view: { width: el.clientWidth, height: el.clientHeight } });
+        const measure = () =>
+            dispatch({
+                type: 'resize',
+                view: { width: el.clientWidth, height: el.clientHeight },
+            });
         measure();
         if (typeof ResizeObserver === 'undefined') return;
         const observer = new ResizeObserver(measure);
@@ -91,7 +159,11 @@ function useViewportSize(ref: RefObject<HTMLElement | null>, dispatch: Dispatch<
     }, [ref, dispatch]);
 }
 
-export const VIEWPORT_STYLE: CSSProperties = { touchAction: 'none', overflow: 'hidden', position: 'relative' };
+export const VIEWPORT_STYLE: CSSProperties = {
+    touchAction: 'none',
+    overflow: 'hidden',
+    position: 'relative',
+};
 
 export interface MapViewportApi {
     ref: RefObject<HTMLDivElement | null>;
@@ -108,14 +180,33 @@ export interface MapViewportApi {
 /** Viewport state for a `contentSize`² texture (the grid's `textureSize`); key the caller on it — a new size needs a remount. */
 export function useMapViewport(contentSize: number): MapViewportApi {
     const ref = useRef<HTMLDivElement | null>(null);
-    const [state, dispatch] = useReducer(viewportReducer, contentSize, (c: number) => initViewport(c));
+    const [state, dispatch] = useReducer(
+        viewportReducer,
+        contentSize,
+        (c: number) => initViewport(c),
+    );
     useViewportSize(ref, dispatch);
     useWheelZoom(ref, dispatch);
     const handlers = usePointerHandlers(dispatch);
-    const zoomIn = useCallback(() => dispatch({ type: 'zoomBy', factor: BUTTON_ZOOM_FACTOR }), []);
-    const zoomOut = useCallback(() => dispatch({ type: 'zoomBy', factor: 1 / BUTTON_ZOOM_FACTOR }), []);
+    const zoomIn = useCallback(
+        () => dispatch({ type: 'zoomBy', factor: BUTTON_ZOOM_FACTOR }),
+        [],
+    );
+    const zoomOut = useCallback(
+        () => dispatch({ type: 'zoomBy', factor: 1 / BUTTON_ZOOM_FACTOR }),
+        [],
+    );
     const fit = useCallback(() => dispatch({ type: 'fit' }), []);
     const { scale, x, y } = state.vp;
     const transform = `translate(${x}px, ${y}px) scale(${scale})`;
-    return { ref, viewport: state.vp, transform, handlers, style: VIEWPORT_STYLE, zoomIn, zoomOut, fit };
+    return {
+        ref,
+        viewport: state.vp,
+        transform,
+        handlers,
+        style: VIEWPORT_STYLE,
+        zoomIn,
+        zoomOut,
+        fit,
+    };
 }

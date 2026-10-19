@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { bitIndex, isBitSet, textureRowFor, worldToScreen, worldToTexture } from './valheim-grid';
+import {
+    bitIndex,
+    isBitSet,
+    textureRowFor,
+    worldToScreen,
+    worldToTexture,
+} from './valheim-grid';
 
 const vanilla = { textureSize: 2048, pixelSizeMetres: 12 };
 const small = { textureSize: 1024, pixelSizeMetres: 6 };

@@ -5,9 +5,16 @@
  * unknown type falls back to the generic map pin.
  */
 import type { ComponentType, SVGProps } from 'react';
-import { FireIcon, HomeIcon, MapPinIcon, MegaphoneIcon, XCircleIcon } from '@heroicons/react/24/solid';
+import {
+    FireIcon,
+    HomeIcon,
+    MapPinIcon,
+    MegaphoneIcon,
+    XCircleIcon,
+} from '@heroicons/react/24/solid';
 
-export type PinIconName = 'home' | 'x-circle' | 'fire' | 'megaphone' | 'map-pin';
+export type PinIconName =
+    'home' | 'x-circle' | 'fire' | 'megaphone' | 'map-pin';
 
 export interface PinStyle {
     Icon: ComponentType<SVGProps<SVGSVGElement>>;
@@ -25,13 +32,38 @@ export const PIN_CHECKED_CLASS = 'line-through opacity-60';
 
 const NEUTRAL_TONE = 'text-foreground';
 
-const GENERIC: PinStyle = { Icon: MapPinIcon, iconName: 'map-pin', toneClass: NEUTRAL_TONE, typeLabel: 'Pin' };
+const GENERIC: PinStyle = {
+    Icon: MapPinIcon,
+    iconName: 'map-pin',
+    toneClass: NEUTRAL_TONE,
+    typeLabel: 'Pin',
+};
 
 const KNOWN: Readonly<Record<string, PinStyle>> = {
-    Bed: { Icon: HomeIcon, iconName: 'home', toneClass: 'text-success', typeLabel: 'Bed' },
-    Death: { Icon: XCircleIcon, iconName: 'x-circle', toneClass: 'text-danger', typeLabel: 'Death' },
-    Boss: { Icon: FireIcon, iconName: 'fire', toneClass: 'text-warning', typeLabel: 'Boss' },
-    Shout: { Icon: MegaphoneIcon, iconName: 'megaphone', toneClass: NEUTRAL_TONE, typeLabel: 'Shout' },
+    Bed: {
+        Icon: HomeIcon,
+        iconName: 'home',
+        toneClass: 'text-success',
+        typeLabel: 'Bed',
+    },
+    Death: {
+        Icon: XCircleIcon,
+        iconName: 'x-circle',
+        toneClass: 'text-danger',
+        typeLabel: 'Death',
+    },
+    Boss: {
+        Icon: FireIcon,
+        iconName: 'fire',
+        toneClass: 'text-warning',
+        typeLabel: 'Boss',
+    },
+    Shout: {
+        Icon: MegaphoneIcon,
+        iconName: 'megaphone',
+        toneClass: NEUTRAL_TONE,
+        typeLabel: 'Shout',
+    },
 };
 
 /** Style for a pin type; `Icon0`…`Icon4` and anything unknown get the generic pin. */

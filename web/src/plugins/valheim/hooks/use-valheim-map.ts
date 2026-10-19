@@ -8,7 +8,12 @@
  */
 import { useEffect, useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { ValheimMapMetaSchema, type ValheimMapBaseMap, type ValheimMapFogLayer, type ValheimMapMeta } from '@raid-ledger/contract';
+import {
+    ValheimMapMetaSchema,
+    type ValheimMapBaseMap,
+    type ValheimMapFogLayer,
+    type ValheimMapMeta,
+} from '@raid-ledger/contract';
 import { fetchApi, fetchWithAuth } from '../../../lib/api/fetch-api';
 import { encodePathSegment } from '../../../lib/api/path-segment';
 import { decodeFogBitset } from '../map/fog-bitmap';
@@ -29,20 +34,37 @@ export function valheimMapPath(characterId: number, mapId: number): string {
     return `/plugins/valheim/armory/characters/${encodePathSegment(String(characterId))}/maps/${encodePathSegment(String(mapId))}`;
 }
 
-const mapKey = (characterId: number | null, mapId: number | null) => ['valheim', 'armory', 'map', characterId, mapId] as const;
+const mapKey = (characterId: number | null, mapId: number | null) =>
+    ['valheim', 'armory', 'map', characterId, mapId] as const;
 
 async function fetchBytes(path: string): Promise<Response> {
     const res = await fetchWithAuth(path);
     if (res.ok) return res;
-    const body = (await res.json().catch(() => null)) as { code?: unknown; message?: unknown } | null;
-    const code = typeof body?.code === 'string' ? body.code : typeof body?.message === 'string' ? body.message : null;
+    const body = (await res.json().catch(() => null)) as {
+        code?: unknown;
+        message?: unknown;
+    } | null;
+    const code =
+        typeof body?.code === 'string'
+            ? body.code
+            : typeof body?.message === 'string'
+              ? body.message
+              : null;
     throw new MapBytesError(res.status, code);
 }
 
-export function useValheimMapMeta(characterId: number | null, mapId: number | null): UseQueryResult<ValheimMapMeta> {
+export function useValheimMapMeta(
+    characterId: number | null,
+    mapId: number | null,
+): UseQueryResult<ValheimMapMeta> {
     return useQuery<ValheimMapMeta>({
         queryKey: [...mapKey(characterId, mapId), 'meta'],
-        queryFn: () => fetchApi(valheimMapPath(characterId ?? 0, mapId ?? 0), {}, ValheimMapMetaSchema),
+        queryFn: () =>
+            fetchApi(
+                valheimMapPath(characterId ?? 0, mapId ?? 0),
+                {},
+                ValheimMapMetaSchema,
+            ),
         enabled: characterId !== null && mapId !== null,
         retry: false,
     });
@@ -55,23 +77,43 @@ export interface MapBaseImage {
 }
 
 /** The base map as an object URL; null until `baseMap.ready`. Revoked on change/unmount. */
-export function useMapBaseImage(characterId: number, mapId: number, baseMap: ValheimMapBaseMap | null): MapBaseImage {
+export function useMapBaseImage(
+    characterId: number,
+    mapId: number,
+    baseMap: ValheimMapBaseMap | null,
+): MapBaseImage {
     const ready = baseMap?.ready === true;
     const query = useQuery<Blob>({
-        queryKey: [...mapKey(characterId, mapId), 'base-map', baseMap?.sha256 ?? null],
-        queryFn: async () => (await fetchBytes(`${valheimMapPath(characterId, mapId)}/base-map`)).blob(),
+        queryKey: [
+            ...mapKey(characterId, mapId),
+            'base-map',
+            baseMap?.sha256 ?? null,
+        ],
+        queryFn: async () =>
+            (
+                await fetchBytes(
+                    `${valheimMapPath(characterId, mapId)}/base-map`,
+                )
+            ).blob(),
         enabled: ready,
         retry: false,
         staleTime: Infinity,
     });
-    const [url, setUrl] = useState<string | null>(null);
+    const [entry, setEntry] = useState<{ blob: Blob; url: string } | null>(
+        null,
+    );
     useEffect(() => {
-        if (!query.data) return setUrl(null);
-        const next = URL.createObjectURL(query.data);
-        setUrl(next);
-        return () => URL.revokeObjectURL(next);
+        if (!query.data) return;
+        const blob = query.data;
+        const url = URL.createObjectURL(blob);
+        // The object URL is an external resource: create + revoke live in one
+        // effect so StrictMode's remount and a new blob each get a fresh URL.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEntry({ blob, url });
+        return () => URL.revokeObjectURL(url);
     }, [query.data]);
-    return { url: ready ? url : null, isLoading: ready && query.isPending, error: query.error };
+    const url = ready && entry && entry.blob === query.data ? entry.url : null;
+    return { url, isLoading: ready && query.isPending, error: query.error };
 }
 
 export interface FogLayerArgs {
@@ -87,12 +129,24 @@ export interface FogLayerArgs {
 
 /** One fog layer, inflated and length-checked (`Uint8Array` packed bitset). */
 export function useFogLayer(args: FogLayerArgs): UseQueryResult<Uint8Array> {
-    const { characterId, mapId, layer, textureSize, capturedAt, enabled = true } = args;
+    const {
+        characterId,
+        mapId,
+        layer,
+        textureSize,
+        capturedAt,
+        enabled = true,
+    } = args;
     return useQuery<Uint8Array>({
         queryKey: [...mapKey(characterId, mapId), 'fog', layer, capturedAt],
         queryFn: async () => {
-            const res = await fetchBytes(`${valheimMapPath(characterId, mapId)}/fog?layer=${layer}`);
-            return decodeFogBitset(new Uint8Array(await res.arrayBuffer()), textureSize);
+            const res = await fetchBytes(
+                `${valheimMapPath(characterId, mapId)}/fog?layer=${layer}`,
+            );
+            return decodeFogBitset(
+                new Uint8Array(await res.arrayBuffer()),
+                textureSize,
+            );
         },
         enabled,
         retry: false,

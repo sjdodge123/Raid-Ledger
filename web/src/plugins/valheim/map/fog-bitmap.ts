@@ -27,14 +27,19 @@ export class FogDecodeError extends Error {
     }
 }
 
-export type DecompressionCtor = new (format: 'gzip') => TransformStream<Uint8Array, Uint8Array>;
+export type DecompressionCtor = new (
+    format: 'gzip',
+) => TransformStream<Uint8Array, Uint8Array>;
 
 function defaultDecompression(): DecompressionCtor | null {
-    const ctor = (globalThis as { DecompressionStream?: unknown }).DecompressionStream;
+    const ctor = (globalThis as { DecompressionStream?: unknown })
+        .DecompressionStream;
     return typeof ctor === 'function' ? (ctor as DecompressionCtor) : null;
 }
 
-async function readAll(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+async function readAll(
+    stream: ReadableStream<Uint8Array>,
+): Promise<Uint8Array> {
     const reader = stream.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
@@ -58,7 +63,11 @@ export async function inflateGzip(
     bytes: Uint8Array,
     ctor: DecompressionCtor | null = defaultDecompression(),
 ): Promise<Uint8Array> {
-    if (!ctor) throw new FogDecodeError('unsupported', 'This browser cannot decompress the map fog.');
+    if (!ctor)
+        throw new FogDecodeError(
+            'unsupported',
+            'This browser cannot decompress the map fog.',
+        );
     const source = new ReadableStream<Uint8Array>({
         start(controller) {
             controller.enqueue(bytes);
@@ -81,7 +90,10 @@ export async function decodeFogBitset(
     const bits = await inflateGzip(gzip, ctor);
     const expected = valheimLinkBitmapBytes(textureSize, textureSize);
     if (bits.length !== expected) {
-        throw new FogDecodeError('length', `Fog layer is ${bits.length} bytes, expected ${expected}.`);
+        throw new FogDecodeError(
+            'length',
+            `Fog layer is ${bits.length} bytes, expected ${expected}.`,
+        );
     }
     return bits;
 }
@@ -116,7 +128,9 @@ export function buildFogPixels(
             out[o + 1] = rgb.g;
             out[o + 2] = rgb.b;
             if (isBitSet(personal, i)) out[o + 3] = 0;
-            else out[o + 3] = shared && isBitSet(shared, i) ? sharedOnly : unexplored;
+            else
+                out[o + 3] =
+                    shared && isBitSet(shared, i) ? sharedOnly : unexplored;
         }
     }
     return out;
