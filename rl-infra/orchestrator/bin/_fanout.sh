@@ -135,35 +135,59 @@ fanout::record_outcome() {
 # RL_FANOUT_KILL_GRACE_SECONDS (default 10, as task-start). 0 = unbounded, as
 # task-start. Codex r6 P2: the serial fallback ran with no child timeout, so
 # only P's 2×child+3300 s budget capped it. Returns cmd's exit code, or 124
-# (timeout(1)'s code) when the deadline fired.
+# (timeout(1)'s code) when the deadline fired. cmd always runs in the background
+# so P's TERM/INT trap fires during the wait; its pid and the watchdog's live in
+# FANOUT_SERIAL_PID / FANOUT_SERIAL_WD so fanout::cleanup can TERM both (a
+# background job in a non-job-control shell ignores SIGINT and would otherwise
+# outlive P — Opus review P3).
 fanout::run_bounded() {
-    local secs="$1" pid wd rc=0 fired="$RL_TASKS_DIR/$P.serial-timeout"; shift
-    if (( secs == 0 )); then "$@"; return $?; fi
+    local secs="$1" rc=0 fired="$RL_TASKS_DIR/$P.serial-timeout"; shift
     rm -f "$fired"
     "$@" &
-    pid=$!
-    (
-        s=""; trap '[[ -n "$s" ]] && kill "$s" 2>/dev/null; exit 0' TERM
-        sleep "$secs" & s=$!; wait "$s"
-        kill -0 "$pid" 2>/dev/null || exit 0
-        : > "$fired"
-        echo "[parallel] serial fallback timeout (${secs}s) reached — sending SIGTERM"
-        kill -TERM "$pid" 2>/dev/null || true
-        sleep "${RL_FANOUT_KILL_GRACE_SECONDS:-10}" & s=$!; wait "$s"
-        if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid" 2>/dev/null || true; fi
-        exit 0
-    ) &
-    wd=$!
-    wait "$pid" || rc=$?
-    kill -TERM "$wd" 2>/dev/null || true
-    wait "$wd" 2>/dev/null || true
+    FANOUT_SERIAL_PID=$!
+    if (( secs > 0 )); then
+        fanout::watchdog "$secs" "$FANOUT_SERIAL_PID" "$fired" &
+        FANOUT_SERIAL_WD=$!
+    fi
+    wait "$FANOUT_SERIAL_PID" || rc=$?
+    FANOUT_SERIAL_PID=""
+    if [[ -n "${FANOUT_SERIAL_WD:-}" ]]; then
+        kill -TERM "$FANOUT_SERIAL_WD" 2>/dev/null || true
+        wait "$FANOUT_SERIAL_WD" 2>/dev/null || true
+        FANOUT_SERIAL_WD=""
+    fi
     if [[ -f "$fired" ]]; then rm -f "$fired"; rc=124; fi
     return "$rc"
 }
 
-# fanout::cleanup — EXIT trap: cancel live children, release the borrow.
+# fanout::watchdog <secs> <pid> <fired_file> — run_bounded's background timer.
+# Its sleeps never hold P's stdout (a TERM landing between `sleep &` and `s=$!`
+# would orphan one and hang a `$(…)` caller — Opus review P3).
+fanout::watchdog() {
+    local s=""
+    trap '[[ -n "$s" ]] && kill "$s" 2>/dev/null; exit 0' TERM
+    sleep "$1" >/dev/null 2>&1 & s=$!; wait "$s"
+    kill -0 "$2" 2>/dev/null || exit 0
+    : > "$3"
+    echo "[parallel] serial fallback timeout (${1}s) reached — sending SIGTERM"
+    kill -TERM "$2" 2>/dev/null || true
+    sleep "${RL_FANOUT_KILL_GRACE_SECONDS:-10}" >/dev/null 2>&1 & s=$!; wait "$s"
+    if kill -0 "$2" 2>/dev/null; then kill -KILL "$2" 2>/dev/null || true; fi
+    exit 0
+}
+
+# fanout::kill_serial — TERM a still-running serial fallback and its watchdog.
+fanout::kill_serial() {
+    local p
+    for p in ${FANOUT_SERIAL_PID:-} ${FANOUT_SERIAL_WD:-}; do kill -TERM "$p" 2>/dev/null || true; done
+    FANOUT_SERIAL_PID="" FANOUT_SERIAL_WD=""
+}
+
+# fanout::cleanup — EXIT trap: stop a serial fallback, cancel live children,
+# release the borrow.
 fanout::cleanup() {
     local id
+    fanout::kill_serial
     for id in ${FANOUT_CHILDREN:-}; do
         if [[ "$(fanout::status "$id")" == "running" ]]; then
             task-cancel "$id" "parent_exit: $P" >/dev/null 2>&1 || true

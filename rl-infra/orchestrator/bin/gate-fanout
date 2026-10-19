@@ -65,7 +65,7 @@ if [[ -z "$OWNER_AGENT" || "$OWNER_AGENT" == "unknown" || "$OWNER_AGENT" != "$SL
     exit 2
 fi
 MERGE="${RL_GATE_MERGE:-$BIN_DIR_SELF/_gate_merge.sh}"
-BORROWED="" FANOUT_CHILDREN=""
+BORROWED="" FANOUT_CHILDREN="" FANOUT_SERIAL_PID="" FANOUT_SERIAL_WD=""
 trap fanout::cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT

@@ -63,7 +63,10 @@ SH
     cat > "$SHIM_DIR/run-on-runner-with-heartbeat" <<'SH'
 #!/usr/bin/env bash
 echo "serial agent=${RL_AGENT_ID:-} $*" >> "$CALLS"; echo "Build: PASS"
-[[ "${SHIM_SERIAL_HANG:-0}" == 1 ]] && exec sleep 20
+if [[ "${SHIM_SERIAL_HANG:-0}" == 1 ]]; then
+    [[ -n "${SHIM_SERIAL_PIDFILE:-}" ]] && echo "$$" > "$SHIM_SERIAL_PIDFILE"
+    exec sleep 20
+fi
 exit "${SHIM_SERIAL_RC:-0}"
 SH
     # docker: success; the runner-drain scan reports no marked process.
@@ -123,6 +126,36 @@ test_serial_fallback_bounded_by_child_timeout() {
     assert_exit_code "$rc" "124" "timed-out serial run exits 124"
     assert_eq "$(( took < 10 ))" "1" "serial run bounded by --child-timeout 1 (took ${took}s, hang is 20s)"
     unset SHIM_SERIAL_HANG RL_FANOUT_KILL_GRACE_SECONDS
+}
+
+# Opus review P3: the serial run is a background job (SIGINT-ignored in a
+# non-job-control shell), so P's EXIT trap must TERM it AND its watchdog — a
+# TERM/Ctrl+C to P otherwise left the wrapper running on A until the deadline,
+# and the orphaned watchdog still fired after P had exited.
+test_term_kills_serial_and_watchdog() {
+    CURRENT_TEST_NAME="TERM on P during the serial fallback kills the serial child and its watchdog"
+    _seed busy
+    export SHIM_SERIAL_HANG=1 SHIM_SERIAL_PIDFILE="$RL_STATE_DIR/serial.pid" RL_FANOUT_KILL_GRACE_SECONDS=1
+    local log="$RL_STATE_DIR/p.out" pid rc=0 spid="" i alive=alive fired="$RL_TASKS_DIR/$P.serial-timeout"
+    PATH="$SHIM_DIR:$PATH" bash "$BIN_DIR/gate-fanout" "$P" --owner-slot 1 --exclude-slots "" --inner-env "" \
+        --a-args "--fleet --no-e2e" --b-args "--only-e2e" --serial-args "--fleet" --child-timeout 3 > "$log" 2>&1 &
+    pid=$!
+    for i in $(seq 1 50); do [[ -s "$SHIM_SERIAL_PIDFILE" ]] && break; sleep 0.1; done
+    spid=$(cat "$SHIM_SERIAL_PIDFILE" 2>/dev/null || true)
+    assert_eq "$([[ -n "$spid" ]] && echo recorded || echo missing)" "recorded" "serial shim recorded its pid"
+    kill -TERM "$pid"; wait "$pid" 2>/dev/null || rc=$?
+    for i in $(seq 1 15); do
+        if [[ -n "$spid" ]] && ! kill -0 "$spid" 2>/dev/null; then alive=dead; break; fi
+        sleep 0.1
+    done
+    assert_exit_code "$rc" "143" "P exits 143 on TERM"
+    assert_eq "$alive" "dead" "serial child (pid ${spid:-none}) TERMed by P's cleanup within 1.5s, not left to the 3s deadline"
+    # Run past the 3 s deadline: a watchdog that outlived P fires here.
+    for i in $(seq 1 45); do [[ -e "$fired" ]] && break; sleep 0.1; done
+    assert_file_not_exists "$fired" "watchdog did not outlive P (no serial-timeout marker after the deadline)"
+    assert_eq "$(grep -c 'serial fallback timeout' "$log")" "0" "no watchdog timeout line after P exited"
+    [[ -n "$spid" ]] && kill -KILL "$spid" 2>/dev/null
+    unset SHIM_SERIAL_HANG SHIM_SERIAL_PIDFILE RL_FANOUT_KILL_GRACE_SECONDS
 }
 
 test_parallel_two_children() {
@@ -333,6 +366,7 @@ run_test "children-record-outcome" test_children_record_outcome
 run_test "fallback-no-free-slot" test_fallback_no_free_slot
 run_test "fallback-memory" test_fallback_memory
 run_test "serial-fallback-bounded-by-child-timeout" test_serial_fallback_bounded_by_child_timeout
+run_test "term-kills-serial-and-watchdog" test_term_kills_serial_and_watchdog
 run_test "parallel-two-children" test_parallel_two_children
 run_test "phase2-child-c" test_phase2_child_c
 run_test "copy-failure-falls-back" test_copy_failure_falls_back
