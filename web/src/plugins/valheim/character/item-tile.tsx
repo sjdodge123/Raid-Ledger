@@ -53,7 +53,7 @@ function TileBadges({ item, equipped }: { item: ValheimItemStack; equipped: bool
 export function ItemTile({ item, ctx, equipped = false }: { item: ValheimItemStack; ctx: ItemIconContext; equipped?: boolean }): JSX.Element {
     const resolved = resolveItem(item.prefab, ctx.items, ctx.atlas);
     const [open, setOpen] = useState(false);
-    const close = useCallback(() => setOpen(false), []);
+    const close = useCallback(() => setOpen(false), [setOpen]);
     const buttonRef = useRef<HTMLButtonElement | null>(null);
     const { anchorRef, setAnchorRef, container } = usePortalTarget();
     return (

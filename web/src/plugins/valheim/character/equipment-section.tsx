@@ -6,7 +6,7 @@ import { EmptyItemTile, ItemTile } from './item-tile';
 import { MissingCatalogueBanner } from './missing-catalogue-banner';
 import { useItemIcons } from './use-item-icons';
 
-export const EQUIP_SLOTS: readonly (readonly [ValheimEquipSlot, string])[] = [
+const EQUIP_SLOTS: readonly (readonly [ValheimEquipSlot, string])[] = [
     ['head', 'Head'], ['shoulder', 'Shoulder'], ['chest', 'Chest'], ['legs', 'Legs'],
     ['rightHand', 'Right hand'], ['leftHand', 'Left hand'], ['utility', 'Utility'], ['trinket', 'Trinket'], ['ammo', 'Ammo'],
 ];

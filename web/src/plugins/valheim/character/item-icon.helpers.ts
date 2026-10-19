@@ -3,7 +3,7 @@
  * the wiki link-out (D11). Pure: no React, never throws on any catalogue shape.
  */
 import type {
-    ValheimCatalogEntry, ValheimCatalogIcon, ValheimItemStack, ValheimMapBaseMap,
+    ValheimCatalogEntry, ValheimCatalogIcon, ValheimCharacterDetail, ValheimItemStack, ValheimMapBaseMap,
 } from '@raid-ledger/contract';
 
 export type ValheimItemCatalogue = Partial<Record<string, ValheimCatalogEntry>>;
@@ -84,4 +84,10 @@ export function itemAriaLabel(label: string, item: ValheimItemStack, equipped: b
     if (item.quality > 1) parts.push(`quality ${item.quality}`);
     if (equipped) parts.push('equipped');
     return parts.join(', ');
+}
+
+/** True when the sheet references items but no catalogue entry came with it. */
+export function isCatalogueMissing(character: ValheimCharacterDetail): boolean {
+    const hasItems = character.equipment.length > 0 || character.inventory.items.length > 0 || character.trophies.length > 0;
+    return hasItems && Object.keys(character.items ?? {}).length === 0;
 }

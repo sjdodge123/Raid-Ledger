@@ -2,12 +2,7 @@
 import type { JSX } from 'react';
 import type { ValheimCharacterDetail } from '@raid-ledger/contract';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
-
-/** True when the sheet references items but no catalogue entry came with it. */
-export function isCatalogueMissing(character: ValheimCharacterDetail): boolean {
-    const hasItems = character.equipment.length > 0 || character.inventory.items.length > 0 || character.trophies.length > 0;
-    return hasItems && Object.keys(character.items ?? {}).length === 0;
-}
+import { isCatalogueMissing } from './item-icon.helpers';
 
 export function MissingCatalogueBanner({ character }: { character: ValheimCharacterDetail }): JSX.Element | null {
     if (!isCatalogueMissing(character)) return null;
