@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type {
   ValheimCharacterDetail,
@@ -6,6 +6,7 @@ import type {
   ValheimMapMeta,
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../../../../auth/admin.guard';
+import type { AuthenticatedExpressRequest } from '../../../../auth/types';
 import { RateLimit } from '../../../../throttler/rate-limit.decorator';
 import {
   PluginActiveGuard,
@@ -39,10 +40,13 @@ export class ValheimArmoryReadController {
     return this.reads.list(parseArmoryListQuery(query));
   }
 
-  /** GET — one character's sheet and map refs. */
+  /** GET — one character's sheet, map refs and the server's hub id. */
   @Get('plugins/valheim/armory/characters/:id')
-  detail(@Param('id', idPipe) id: number): Promise<ValheimCharacterDetail> {
-    return this.reads.detail(id);
+  detail(
+    @Param('id', idPipe) id: number,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimCharacterDetail> {
+    return this.reads.detail(id, req.user);
   }
 
   /** GET — map metadata (no bytes, no fog — V7). */

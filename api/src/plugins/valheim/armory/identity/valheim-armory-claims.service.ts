@@ -4,7 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { ValheimClaimEvent } from '@raid-ledger/contract';
+import type {
+  ValheimCharacterOwner,
+  ValheimClaimEvent,
+} from '@raid-ledger/contract';
 import type { ValheimProfileClaimEventRow } from '../../../../drizzle/schema';
 import { ValheimIdentityRepository } from './valheim-identity.repository';
 
@@ -21,6 +24,14 @@ export function toClaimEvent(
     actorUserId: row.actorUserId,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+function toOwner(u: {
+  id: number;
+  username: string;
+  avatar: string | null;
+}): ValheimCharacterOwner {
+  return { id: u.id, username: u.username, avatar: u.avatar };
 }
 
 function firstEvent(rows: ValheimProfileClaimEventRow[]): ValheimClaimEvent {
@@ -84,9 +95,28 @@ export class ValheimArmoryClaimsService {
     });
   }
 
-  /** The character's audit trail, newest first (≤100). */
+  /**
+   * The character's audit trail, newest first (≤100), with from/to/actor
+   * resolved in one batched user lookup (null = no id or user gone).
+   */
   async events(profileId: number): Promise<ValheimClaimEvent[]> {
     if (!(await this.repo.profileExists(profileId))) throw notFound();
-    return (await this.repo.listEvents(profileId)).map(toClaimEvent);
+    const rows = (await this.repo.listEvents(profileId)).map(toClaimEvent);
+    const ids = new Set<number>();
+    for (const r of rows) {
+      for (const id of [r.fromUserId, r.toUserId, r.actorUserId]) {
+        if (id !== null) ids.add(id);
+      }
+    }
+    const users = await this.repo.findUsers([...ids]);
+    const byId = new Map(users.map((u) => [u.id, toOwner(u)]));
+    const pick = (id: number | null) =>
+      id === null ? null : (byId.get(id) ?? null);
+    return rows.map((r) => ({
+      ...r,
+      fromUser: pick(r.fromUserId),
+      toUser: pick(r.toUserId),
+      actor: pick(r.actorUserId),
+    }));
   }
 }
