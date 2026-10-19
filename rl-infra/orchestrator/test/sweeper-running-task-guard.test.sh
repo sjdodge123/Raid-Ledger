@@ -261,10 +261,30 @@ test_running_status_without_pidfile_does_not_protect() {
     _cleanup_shim
 }
 
+# --- ROK-1793 S2: a borrow row is outside §1 entirely ----------------------
+# Slot 1 carries borrowed_for = a task RUNNING ON ANOTHER SLOT (so the
+# running-task guard cannot be what saves it) and a lapsed heartbeat. §1 must
+# skip it: reaping a borrow row would destroy the borrowed slot's envs.
+test_borrow_row_skipped_by_dead_claim_reaper() {
+    CURRENT_TEST_NAME="ROK-1793: lapsed heartbeat on a borrow row -> §1 skips it, envs survive"
+    _prepare
+    _seed_task "borrowpar01" 2 "running" "fresh"
+    jq '(.[] | select(.slot == 1)) |= (.borrowed_for = "borrowpar01" | .borrowed_by = "x")' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+
+    _run_sweep "$SHIM_DIR" "$REAP_LOG"
+
+    assert_eq "$(_claimed_flag)" "true" "a borrow row must never be released by the dead-claim reaper"
+    assert_absent "$(cat "$REAP_LOG")" "rm -f fakecid001" "the borrowed slot's env must NOT be destroyed"
+    _cleanup_shim
+}
+
 run_test "AC1 running task protects slot+envs" test_running_task_protects_slot_and_envs
 run_test "AC2 no running task still reaped"    test_no_running_task_still_reaped
 run_test "AC3 stale pidfile does not protect"  test_stale_pidfile_does_not_protect_slot
 run_test "AC4 guard is slot-scoped"            test_running_task_on_other_slot_does_not_protect
 run_test "AC5 pid-less running task no leak"   test_running_status_without_pidfile_does_not_protect
+
+run_test "borrow-row-skipped" test_borrow_row_skipped_by_dead_claim_reaper
 
 print_test_summary

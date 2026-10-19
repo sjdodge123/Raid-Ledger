@@ -302,6 +302,36 @@ slot_running_task_ids() {
     echo "$found"
 }
 
+# 1a. ROK-1793 S2 — orphaned borrow rows. A parallel gate (gate-fanout) holds a
+# FREE second slot B through a claims row carrying `borrowed_for: <parent task
+# id>`; its trap releases it on every exit path. If the parent died before the
+# trap (OOM, VM reboot), free the row once the parent task JSON is terminal
+# (anything but "running" — §0 above already flipped a dead supervisor's task
+# to failed) or missing. Mirrors borrow::release: reset the row only, NEVER
+# destroy envs — a preserved env on B belongs to someone else. §1/§1b'/§1d
+# below skip borrowed_for rows entirely, for the same reason: their env
+# destruction would hit B's envs. Like §1, queued waiters are not promoted
+# here (claim-wait picks the slot up on its next wake).
+BORROW_ROWS=$(jq -r '.[] | select(.claimed == true and (.borrowed_for // null) != null)
+    | "\(.slot) \(.borrowed_for)"' "$CLAIMS" 2>/dev/null || true)
+while read -r bslot bparent; do
+    [[ -z "${bslot:-}" ]] && continue
+    BSTATUS="missing"
+    if [[ "$bparent" =~ ^[a-z0-9]{8,32}$ && -f "$TASKS_DIR/$bparent.json" ]]; then
+        BSTATUS=$(jq -r '.status // "unknown"' "$TASKS_DIR/$bparent.json" 2>/dev/null || echo unknown)
+    fi
+    [[ "$BSTATUS" == "running" ]] && continue
+    log "releasing orphaned borrow on slot $bslot (parent $bparent is $BSTATUS)"
+    mutate "$CLAIMS" --argjson s "$bslot" --arg p "$bparent" \
+        'map(if .slot == $s and (.borrowed_for // null) == $p
+             then .claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null
+                  | .expires_at=null | .extends_count=0 | del(.borrowed_for, .borrowed_by)
+             else . end)'
+    audit borrow_orphan_released "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" --arg st "$BSTATUS" \
+        '{slot:$slot, parent_task_id:$p, parent_status:$st}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
+done <<<"$BORROW_ROWS"
+
 # 1. Dead claims (heartbeat older than timeout).
 # ROK-1331 M5a — fix pre-existing missing-close-paren in the M1 jq (the
 # `((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | ... | tostring)`
@@ -310,7 +340,7 @@ slot_running_task_ids() {
 # that the `2>/dev/null || true` guard silently swallows — the dead-claim
 # reaper has been a no-op since M1 landed.
 DEAD_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$CLAIM_HEARTBEAT_TIMEOUT_SECONDS" \
-    '.[] | select(.claimed == true and .last_heartbeat != null
+    '.[] | select(.claimed == true and .last_heartbeat != null and (.borrowed_for // null) == null
         and ((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 
@@ -368,6 +398,7 @@ done
 # reaped despite still being within their 24h lease.
 HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AGE_SECONDS" \
     '.[] | select(.claimed == true and (.keep_alive // false) == false and .started_at != null
+        and (.borrowed_for // null) == null
         and (.expires_at == null)
         and ((($cutoff - ($tol|tonumber)) | tostring) > (.started_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
@@ -399,7 +430,7 @@ done
 # someone arrives.
 LEASE_QUEUE_DIR="${LEASE_QUEUE_DIR:-${STATE_DIR}/lease-queue}"
 EXPIRED_SLOTS=$(jq -r --argjson now "$NOW_EPOCH" \
-    '.[] | select(.claimed == true and .expires_at != null
+    '.[] | select(.claimed == true and .expires_at != null and (.borrowed_for // null) == null
         and (($now | tostring) > (.expires_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 for slot in $EXPIRED_SLOTS; do
