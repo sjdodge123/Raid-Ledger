@@ -147,6 +147,14 @@ describe('PollSharePage — signed in (ROK-1750)', () => {
         expect(sessionStorage.getItem('poll_share_token'), 'a failed join must clear the parked token').toBeNull();
     });
 
+    it('a token holding an encoded path separator is never redeemed (ROK-1845)', async () => {
+        auth.user = makeUser(true);
+        renderPage('..%2F..%2Flineups%2F5%2Fmatches%2F7');
+        expect(await screen.findByRole('alert')).toHaveTextContent(INVALID_LINK_COPY);
+        expect(joinCalls, 'a traversal token must never reach the join POST').toEqual([]);
+        expect(sessionStorage.getItem('poll_share_token')).toBeNull();
+    });
+
     it('a join refused for this account (403) shows the can\'t-join card', async () => {
         server.use(pollShareJoinHandler({ status: 403, message: 'Account is deactivated' }, joinCalls));
         auth.user = makeUser(true);

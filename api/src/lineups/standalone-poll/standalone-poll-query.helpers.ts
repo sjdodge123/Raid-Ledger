@@ -5,6 +5,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { selectCompletionTarget } from './standalone-poll-complete.helpers';
 import { defined } from '../../common/defined.helpers';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
@@ -202,52 +203,14 @@ export async function completeStandalonePoll(
   matchId: number,
 ): Promise<{
   ok: boolean;
+  /** ROK-1844: the poll was no longer `scheduling` — already completed. */
+  conflict?: true;
   linkedEventId?: number;
   linkedEventCancelled?: boolean;
 }> {
-  const [match] = await db
-    .select({
-      id: schema.communityLineupMatches.id,
-      lineupId: schema.communityLineupMatches.lineupId,
-      linkedEventId: schema.communityLineupMatches.linkedEventId,
-      // ROK-1370: the caller must not re-emit UPDATED (which recreates the
-      // Discord SE via the cleared-id create branch) for an event that was
-      // cancelled mid-poll.
-      linkedEventCancelled: sql<boolean>`${schema.events.cancelledAt} IS NOT NULL`,
-    })
-    .from(schema.communityLineupMatches)
-    .innerJoin(
-      schema.communityLineups,
-      eq(schema.communityLineups.id, schema.communityLineupMatches.lineupId),
-    )
-    .leftJoin(
-      schema.events,
-      eq(schema.events.id, schema.communityLineupMatches.linkedEventId),
-    )
-    .where(
-      and(
-        eq(schema.communityLineupMatches.id, matchId),
-        sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' = 'true'`,
-      ),
-    )
-    .limit(1);
+  const match = await selectCompletionTarget(db, matchId);
   if (!match) return { ok: false };
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(schema.communityLineupMatches)
-      .set({ status: 'scheduled' })
-      .where(eq(schema.communityLineupMatches.id, matchId));
-    await tx
-      .update(schema.communityLineups)
-      .set({ status: 'archived' })
-      .where(eq(schema.communityLineups.id, match.lineupId));
-    if (match.linkedEventId) {
-      // ROK-1370: release the lock only — the event was already moved to the
-      // winning time in place. Do NOT cancel it.
-      await clearReschedulingPollId(tx, match.linkedEventId);
-    }
-  });
+  if (!(await flipAndArchive(db, match))) return { ok: false, conflict: true };
   return {
     ok: true,
     ...(match.linkedEventId != null
@@ -255,6 +218,40 @@ export async function completeStandalonePoll(
       : {}),
     linkedEventCancelled: match.linkedEventCancelled,
   };
+}
+
+/**
+ * ROK-1844: compare-and-set the match `scheduling` → `scheduled`, then archive
+ * the lineup and release the linked event's lock. False when the poll was no
+ * longer `scheduling`, so a repeat call changes nothing (and the caller fires
+ * no second round of signups or DMs).
+ */
+function flipAndArchive(
+  db: Db,
+  match: { id: number; lineupId: number; linkedEventId: number | null },
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const flipped = await tx
+      .update(schema.communityLineupMatches)
+      .set({ status: 'scheduled' })
+      .where(
+        and(
+          eq(schema.communityLineupMatches.id, match.id),
+          eq(schema.communityLineupMatches.status, 'scheduling'),
+        ),
+      )
+      .returning({ id: schema.communityLineupMatches.id });
+    if (flipped.length === 0) return false;
+    await tx
+      .update(schema.communityLineups)
+      .set({ status: 'archived' })
+      .where(eq(schema.communityLineups.id, match.lineupId));
+    // ROK-1370: release the lock only — the event was already moved to the
+    // winning time in place. Do NOT cancel it.
+    if (match.linkedEventId)
+      await clearReschedulingPollId(tx, match.linkedEventId);
+    return true;
+  });
 }
 
 /**
