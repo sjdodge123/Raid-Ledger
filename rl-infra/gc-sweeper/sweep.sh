@@ -345,6 +345,24 @@ borrow_cancel_children() {
     done
 }
 
+# Codex r4 P1: a child's task JSON can be terminal while its container-side
+# Playwright still runs (the task watchdog kills only the host-side docker-exec
+# group), so runner B is drained — the same runner_drain::drain gate-fanout
+# uses, sourced function-only from the orchestrator bin mount — before the row
+# is freed. Runner exec goes through the docker proxy's rl-runner-N allowlist.
+# No helper or no exec into the runner → the row is KEPT (never release blind).
+RUNNER_DRAIN_LIB_DIR="${RUNNER_DRAIN_LIB_DIR-$DISCORD_SWEEP_LIB_DIR}"
+if [[ -r "${RUNNER_DRAIN_LIB_DIR}/_runner_drain.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${RUNNER_DRAIN_LIB_DIR}/_runner_drain.sh"
+fi
+
+# borrow_drain_runner <slot> — 0 once runner <slot> is drained, 1 when it cannot be.
+borrow_drain_runner() {
+    declare -F runner_drain::drain >/dev/null || return 1
+    runner_drain::drain "$1" >/dev/null 2>&1
+}
+
 # Codex r3 P2: a row only counts as a borrow while its agent is still the
 # synthetic `borrow-<parent>` — a stale borrowed_for on a row someone else has
 # since claimed (release/claim now drop it, this is the backstop) is not ours.
@@ -368,6 +386,12 @@ while read -r bslot bparent; do
         borrow_cancel_children "$bparent" "$LIVE_CHILDREN"
         audit borrow_orphan_kept_child_running "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" --arg c "$LIVE_CHILDREN" \
             '{slot:$slot, parent_task_id:$p, running_child_ids:($c | split(" "))}')"
+        continue
+    fi
+    if ! borrow_drain_runner "$bslot"; then
+        log "deferring orphaned borrow release on slot $bslot (parent $bparent is $BSTATUS) — runner drain unavailable"
+        audit orphan_release_deferred_drain_unavailable "$(jq -nc --argjson slot "$bslot" --arg p "$bparent" \
+            '{slot:$slot, parent_task_id:$p}')"
         continue
     fi
     log "releasing orphaned borrow on slot $bslot (parent $bparent is $BSTATUS)"

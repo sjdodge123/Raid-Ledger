@@ -19,6 +19,7 @@ source "$TEST_DIR/test_helpers.sh"
 
 SWEEP_SCRIPT="$(cd "$TEST_DIR/../../gc-sweeper" && pwd)/sweep.sh"
 PARENT="parentbrw01"
+BIN_LIB="$(cd "$TEST_DIR/../bin" && pwd)"
 
 _iso_ago() {
     local secs="$1"
@@ -62,6 +63,18 @@ case "\$1" in
     ps) [[ "\$*" == *"rl.slot="* ]] && echo "keepslug keepcid001" ;;
     inspect) case "\$*" in *Health.Status*) echo healthy ;; *StartedAt*) date -u +%FT%TZ ;; *Config.Labels*) echo '{}' ;; esac ;;
     rm|volume|image|container) echo "docker \$*" >> "$REAP_LOG" ;;
+    exec)
+        c=\$(jq -r '.[] | select(.slot == 2) | .claimed' "$RL_STATE_DIR/claims.json")
+        case " \$* " in
+            *" rl-runner-2 true "*) [[ "\${SHIM_EXEC_DOWN:-0}" == 1 ]] && exit 1; exit 0 ;;
+            *" rl-runner-2 pgrep "*)
+                n=\$(( \$(cat "$RL_STATE_DIR/pgrep.n" 2>/dev/null || echo 0) + 1 )); echo "\$n" > "$RL_STATE_DIR/pgrep.n"
+                echo "pgrep claimed=\$c" >> "$RL_STATE_DIR/drain.log"
+                (( n <= \${SHIM_LINGER:-0} )) && { echo 4242; exit 0; }
+                exit 1 ;;
+            *" pkill "*) echo "pkill claimed=\$c" >> "$RL_STATE_DIR/drain.log"; exit 0 ;;
+        esac
+        exit 1 ;;
 esac
 exit 0
 SH
@@ -70,7 +83,9 @@ SH
 
 _sweep() {
     local sd="$RL_STATE_DIR" td="$RL_TASKS_DIR"
+    rm -f "$RL_STATE_DIR/pgrep.n"; : > "$RL_STATE_DIR/drain.log"
     PATH="$SHIM_DIR:$PATH" STATE_DIR="$sd" TASKS_DIR="$td" TASK_CANCEL_BIN="${TASK_CANCEL_BIN:-}" CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 \
+        RUNNER_DRAIN_LIB_DIR="${RUNNER_DRAIN_LIB_DIR-$BIN_LIB}" RL_FANOUT_DRAIN_POLL_SECONDS=0.1 \
         bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
     rm -rf "$SHIM_DIR"
 }
@@ -159,6 +174,35 @@ test_stale_borrowed_for_on_new_owner_left_alone() {
     assert_eq "$(grep -c borrow_orphan_released "$RL_STATE_DIR/audit.log" 2>/dev/null || true)" "0" "no orphan release audited"
 }
 
+# Codex r4 P1: child B's container-side processes can outlive its task JSON
+# (the watchdog kills only the host-side docker-exec group), so the orphan rule
+# drains runner B before freeing the row — and keeps the row if it cannot.
+test_orphan_lingering_drained_then_released() {
+    CURRENT_TEST_NAME="orphan borrow with a lingering B process -> drained on runner B, THEN released"
+    _seed; _seed_parent failed; _seed_child succeeded listed; _shim; export SHIM_LINGER=1; _sweep
+    assert_eq "$(head -2 "$RL_STATE_DIR/drain.log" | tr '\n' '|')" "pgrep claimed=true|pgrep claimed=true|" "row still borrowed while B lingers and at the all-clear poll"
+    assert_eq "$(_row2 | jq -r .claimed)" "false" "released once runner B is drained"
+    unset SHIM_LINGER
+}
+
+test_orphan_drain_unreachable_kept() {
+    CURRENT_TEST_NAME="orphan borrow whose runner cannot be exec'd -> row kept, deferral audited"
+    _seed; _seed_parent failed; _shim; export SHIM_EXEC_DOWN=1; _sweep
+    assert_eq "$(_row2 | jq -r .claimed)" "true" "no release without a drain"
+    assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "orphan_release_deferred_drain_unavailable" "deferral audited"
+    unset SHIM_EXEC_DOWN
+}
+
+test_orphan_drain_lib_missing_kept() {
+    CURRENT_TEST_NAME="orphan borrow with no drain helper mounted -> row kept"
+    _seed; _seed_parent failed; _shim; RUNNER_DRAIN_LIB_DIR="/nonexistent" _sweep
+    assert_eq "$(_row2 | jq -r .claimed)" "true" "no release without the drain helper"
+    assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "orphan_release_deferred_drain_unavailable" "deferral audited"
+}
+
+run_test "orphan-lingering-drained-released" test_orphan_lingering_drained_then_released
+run_test "orphan-drain-unreachable-kept" test_orphan_drain_unreachable_kept
+run_test "orphan-drain-lib-missing-kept" test_orphan_drain_lib_missing_kept
 run_test "stale-borrowed-for-new-owner" test_stale_borrowed_for_on_new_owner_left_alone
 run_test "orphan-running-child-kept" test_orphan_with_running_child_kept_and_child_cancelled
 run_test "orphan-linked-child-kept" test_orphan_missing_parent_linked_child_running_kept

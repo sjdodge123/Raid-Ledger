@@ -56,30 +56,13 @@ fanout::failed() {
     grep -Eq ': FAIL(\x1b\[[0-9;]*m)?$' "$RL_TASKS_DIR/$1.log" 2>/dev/null
 }
 
-# Child-B process pattern on the borrowed runner: release's RUNNER_PROC_PATTERN
-# plus playwright. The borrowed runner runs nothing but child B, so every match
-# there is B's.
-FANOUT_RUNNER_PROC_PATTERN='validate-ci\.sh|jest|vitest|playwright|npm |node '
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/_runner_drain.sh"
 
-# fanout::drain_runner <slot> — wait (≤ RL_FANOUT_DRAIN_SECONDS, default 60)
-# until no child-B process remains in rl-runner-<slot>, then SIGKILL any that
-# outlived the window. Codex r3 P2: a timed-out/cancelled child's `docker exec`
-# client dies first, but its container-side Playwright can keep using the
-# workspace; releasing before this would hand a live workspace to a waiter.
-# pgrep runs directly (no `sh -c`) so it never matches its own command line;
-# exit 1 (none) or any docker error ends the wait.
-fanout::drain_runner() {
-    local r="rl-runner-$1" end
-    end=$(awk -v n="$(date +%s)" -v d="${RL_FANOUT_DRAIN_SECONDS:-60}" 'BEGIN { printf "%d", n + d + 0.999 }')
-    while docker exec "$r" pgrep -f "$FANOUT_RUNNER_PROC_PATTERN" >/dev/null 2>&1; do
-        if (( $(date +%s) >= end )); then
-            echo "[parallel] slot $1: child B processes outlived the drain window, killing them"
-            docker exec "$r" pkill -KILL -f "$FANOUT_RUNNER_PROC_PATTERN" >/dev/null 2>&1 || true
-            return 0
-        fi
-        sleep "${RL_FANOUT_DRAIN_POLL_SECONDS:-1}"
-    done
-}
+# fanout::drain_runner <slot> — drain child B on the borrowed runner (see
+# runner_drain::drain). An unreachable runner does not block the parent's
+# release: its own children are terminal and the trap must finish.
+fanout::drain_runner() { runner_drain::drain "$1" || true; }
 
 # fanout::release_borrow — drain the borrowed runner, then release the borrow.
 fanout::release_borrow() {
