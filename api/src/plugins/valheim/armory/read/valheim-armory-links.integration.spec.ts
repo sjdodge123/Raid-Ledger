@@ -174,7 +174,9 @@ describe('armory claim events resolve users (ROK-1836 follow-up)', () => {
     await memberToken(testApp, 'alice');
     await memberToken(testApp, 'bob');
     const U = schema.users;
-    const users = await testApp.db.select({ id: U.id, name: U.username }).from(U);
+    const users = await testApp.db
+      .select({ id: U.id, name: U.username })
+      .from(U);
     const idOf = (n: string) => users.find((u) => u.name === n)?.id ?? 0;
     const admin = await loginAsAdmin(testApp.request, testApp.seed);
     const adminUser = testApp.seed.adminUser;
@@ -195,7 +197,10 @@ describe('armory claim events resolve users (ROK-1836 follow-up)', () => {
       toUser: { id: idOf('bob'), username: 'bob' },
       actor: { id: adminUser.id, username: adminUser.username },
     });
-    expect(first).toMatchObject({ fromUser: null, toUser: { id: idOf('alice') } });
+    expect(first).toMatchObject({
+      fromUser: null,
+      toUser: { id: idOf('alice') },
+    });
     await testApp.db.delete(U).where(eq(U.id, idOf('alice')));
     const [after] = await events();
     expect(after).toMatchObject({ fromUserId: null, fromUser: null });

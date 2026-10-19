@@ -48,7 +48,7 @@ const RequestSchema = z
   .partial()
   .strict();
 
-/** Seed response; `guildId` is null until the 1831 server hub links one. */
+/** Seed response; `guildId` = the server's ROK-1831 hub, null when none. */
 export interface ArmoryCharacterFixture {
   characterId: number;
   serverId: number;
@@ -80,6 +80,20 @@ async function assertClaimant(
     .where(eq(U.id, userId))
     .limit(1);
   if (!hit) throw new BadRequestException(`claimedBy: no user ${userId}`);
+}
+
+/** The hub keyed to the server (hidden or not — staff-only route), or null. */
+async function findHubId(
+  db: PostgresJsDatabase<typeof schema>,
+  serverId: number,
+): Promise<number | null> {
+  const G = schema.guilds;
+  const [hub] = await db
+    .select({ id: G.id })
+    .from(G)
+    .where(eq(G.pelicanServerId, serverId))
+    .limit(1);
+  return hub?.id ?? null;
 }
 
 /**
@@ -118,6 +132,10 @@ export class ValheimArmoryDemoSeedController {
       new Date(),
     );
     const characterId = await seedArmoryCharacter(this.db, serverId, req);
-    return { characterId, serverId, guildId: null };
+    return {
+      characterId,
+      serverId,
+      guildId: await findHubId(this.db, serverId),
+    };
   }
 }

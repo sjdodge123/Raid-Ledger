@@ -217,7 +217,10 @@ describe('armory-character guildId (ROK-1836 follow-up)', () => {
     const first = await seed();
     expect(first.guildId).toBeNull();
     const G = schema.games;
-    const [game] = nonEmpty(await testApp.db.select({ id: G.id }).from(G), 'game');
+    const [game] = nonEmpty(
+      await testApp.db.select({ id: G.id }).from(G),
+      'game',
+    );
     const [hub] = nonEmpty(
       await testApp.db
         .insert(schema.guilds)
