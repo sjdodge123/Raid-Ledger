@@ -13,6 +13,7 @@ import {
     valheimCharactersHandler,
     valheimCharacterUnclaimed,
 } from '../../../test/mocks/valheim-armory-handlers';
+import { VALHEIM_CHARACTERS_PAGE_SIZE } from '../lib/valheim-armory-api';
 import { ValheimCharactersTab } from './valheim-characters-tab';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -75,9 +76,9 @@ describe('ValheimCharactersTab', () => {
     it('opens a character page and carries the hub path for the crumb', async () => {
         server.use(valheimCharactersHandler([valheimCharacterClaimed]));
         renderTab();
-        await userEvent.click(
-            await screen.findByRole('button', { name: 'Open Hrafn' }),
-        );
+        const link = await screen.findByRole('link', { name: 'Open Hrafn' });
+        expect(link).toHaveAttribute('href', '/valheim/characters/12');
+        await userEvent.click(link);
         expect(
             screen.getByText(
                 'landed /valheim/characters/12 from {"hubPath":"/guilds/4#characters"}',
@@ -106,5 +107,43 @@ describe('ValheimCharactersTab (cont.)', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "Couldn't load characters",
         );
+    });
+
+    it('loads further pages, keeps loaded rows and counts them all', async () => {
+        const many = Array.from(
+            { length: VALHEIM_CHARACTERS_PAGE_SIZE },
+            (_, i) => ({
+                ...valheimCharacterUnclaimed,
+                id: 100 + i,
+                name: `Viking ${i}`,
+            }),
+        );
+        server.use(
+            http.get(VALHEIM_CHARACTERS_URL, ({ request }) => {
+                const page = new URL(request.url).searchParams.get('page');
+                return HttpResponse.json({
+                    data:
+                        page === '1'
+                            ? many
+                            : [valheimCharacterClaimed, valheimCharacterAssigned],
+                });
+            }),
+        );
+        renderTab();
+        expect(
+            await screen.findByRole('heading', { name: 'Characters 50+' }),
+        ).toBeInTheDocument();
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Load more characters' }),
+        );
+        expect(
+            await screen.findByRole('heading', { name: 'Characters 52' }),
+        ).toBeInTheDocument();
+        expect(
+            within(screen.getByRole('list')).getAllByRole('listitem'),
+        ).toHaveLength(52);
+        expect(
+            screen.queryByRole('button', { name: 'Load more characters' }),
+        ).toBeNull();
     });
 });

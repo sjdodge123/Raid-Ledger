@@ -1,5 +1,5 @@
 /** ROK-1836 L3 — item tile faces (D6/D7) and the detail popover / sheet (D11). */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ValheimItemStack } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -40,6 +40,15 @@ const stack = (
     durability: null,
     maxDurability: null,
     ...over,
+});
+
+const realUrl = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+};
+afterEach(() => {
+    Object.assign(URL, realUrl);
+    vi.restoreAllMocks();
 });
 
 beforeEach(() => {
@@ -133,7 +142,7 @@ describe('ItemTile faces — D7 ladder (cont.)', () => {
             />,
         );
         const tile = screen.getByRole('button', {
-            name: 'Iron sword, quality 3, equipped',
+            name: 'Iron sword, quality 3, durability 20%, equipped',
         });
         expect(
             within(tile).getByTestId('valheim-quality-pips').children,
@@ -159,7 +168,9 @@ describe('ItemTile detail — D11', () => {
                 ctx={ctx()}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Iron sword' }));
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Iron sword, durability 20%' }),
+        );
         const link = await screen.findByRole('link', {
             name: /open on the valheim wiki/i,
         });
@@ -195,5 +206,34 @@ describe('ItemTile detail — D11', () => {
         expect(
             within(pop).getByText(/isn't in the server's item catalogue/),
         ).toBeInTheDocument();
+    });
+});
+
+describe('ItemTile — review fixes', () => {
+    it('caps the quality pips at five and shows the number above that', () => {
+        renderWithProviders(
+            <ItemTile item={stack('SwordIron', { quality: 10 })} ctx={ctx()} />,
+        );
+        const pips = screen.getByTestId('valheim-quality-pips');
+        expect(pips.querySelectorAll('i').length).toBeLessThanOrEqual(5);
+        expect(pips).toHaveTextContent('×10');
+    });
+    it('desktop popover near the right / bottom edge is clamped inside the viewport', async () => {
+        media.desktop = true;
+        Object.assign(window, { innerWidth: 1280, innerHeight: 800 });
+        vi.spyOn(
+            HTMLElement.prototype,
+            'getBoundingClientRect',
+        ).mockImplementation(function (this: HTMLElement) {
+            const pop = this.dataset['testid'] === 'valheim-item-popover';
+            const left = pop ? parseFloat(this.style.left) || 0 : 1250;
+            const top = pop ? parseFloat(this.style.top) || 0 : 700;
+            return DOMRect.fromRect({ x: left, y: top, width: 44, height: 44 });
+        });
+        renderWithProviders(<ItemTile item={stack('SwordIron')} ctx={ctx()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Iron sword' }));
+        const pop = await screen.findByTestId('valheim-item-popover');
+        await waitFor(() => expect(pop.style.left).toBe('984px'));
+        expect(parseFloat(pop.style.top)).toBeLessThan(700);
     });
 });

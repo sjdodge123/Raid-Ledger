@@ -129,4 +129,13 @@ describe('item helpers', () => {
             itemAriaLabel('Resin', stack({ stack: 30, quality: 3 }), true),
         ).toBe('Resin, 30, quality 3, equipped');
     });
+    it('itemAriaLabel includes durability when the item has it (design-system ItemTile row)', () => {
+        expect(
+            itemAriaLabel(
+                'Iron sword',
+                stack({ quality: 3, durability: 40, maxDurability: 200 }),
+                true,
+            ),
+        ).toBe('Iron sword, quality 3, durability 20%, equipped');
+    });
 });

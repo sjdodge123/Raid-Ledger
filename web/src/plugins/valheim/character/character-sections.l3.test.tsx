@@ -1,5 +1,5 @@
 /** ROK-1836 L3 — the four real section bodies, rendered through the slot list. */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -16,6 +16,12 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
     getAuthToken: vi.fn(() => 'test-token'),
 }));
+
+const realUrl = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+};
+afterEach(() => Object.assign(URL, realUrl));
 
 beforeEach(() => {
     Object.assign(URL, {
@@ -147,5 +153,19 @@ describe('Valheim character sections (cont.) (cont.)', () => {
         expect(
             within(section('Inventory')).getAllByRole('gridcell'),
         ).toHaveLength(56);
+    });
+});
+
+describe('Valheim inventory grid semantics', () => {
+    it('is one tab stop, and its bands are labels outside the grid rows', () => {
+        renderWithProviders(
+            <ValheimCharacterSections character={valheimSheetFixture()} />,
+        );
+        const grid = screen.getByRole('grid', { name: 'Inventory' });
+        expect(grid.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+        for (const band of screen.queryAllByTestId('valheim-row-band')) {
+            expect(band.closest('[role="row"]')).toBeNull();
+            expect(band.parentElement?.getAttribute('role')).not.toBe('grid');
+        }
     });
 });

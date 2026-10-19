@@ -16,6 +16,9 @@ describe('valheim routes', () => {
         ['abc', null],
         [undefined, null],
         ['01', null],
+        ['2147483647', 2147483647],
+        ['2147483648', null],
+        ['9999999999', null],
     ])('parses route id %s as %s', (raw, want) =>
         expect(parseCharacterId(raw)).toBe(want),
     );

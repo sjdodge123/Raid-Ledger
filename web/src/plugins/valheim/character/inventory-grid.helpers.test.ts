@@ -74,5 +74,14 @@ describe('inventoryRows', () => {
                 grid(4, [], [{ x: 0, y: 0, equipped: false, item }]),
             ),
         ).toEqual({ used: 1, total: 32 });
+        expect(
+            inventoryUsage(
+                grid(4, [], [
+                    { x: 0, y: 0, equipped: false, item },
+                    { x: 0, y: 9, equipped: false, item },
+                    { x: 8, y: 0, equipped: false, item },
+                ]),
+            ),
+        ).toEqual({ used: 1, total: 32 });
     });
 });
