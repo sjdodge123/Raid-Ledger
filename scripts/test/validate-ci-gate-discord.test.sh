@@ -17,6 +17,9 @@
 #   O1 RL_GATE_DISCORD=only (with --only-e2e): Playwright never runs, its row is
 #      `SKIPPED — phase 2`; the Discord smoke runs and reports PASS.
 #   O2 only without --only-e2e, or an unknown value, exits 2 (invocation error).
+#   F1 --fleet-e2e runs Playwright under --only-e2e; without --only-e2e it exits 2.
+#   F1b --fleet-e2e forces e2e on: a down env FAILs the Playwright row (auto
+#      mode SKIPs it), so the flag cannot silently degrade to auto.
 #   A1 RL_GATE_E2E=deferred with --fleet --no-e2e: the Playwright and Discord
 #      rows read `SKIPPED — phase 1, see child b`; every other row is present.
 #   A2 plain --fleet --no-e2e still prints both e2e rows SKIPPED (ROK-1565
@@ -79,7 +82,8 @@ make_stub_bin() {
     printf '#!/usr/bin/env bash\n[[ "$1" == exec && "$*" == *"redis-cli ping"* ]] && echo PONG\nexit 0\n' >"$d/docker"
     printf '#!/usr/bin/env bash\necho "$*" >>"$STUB_NPM_ARGV_FILE"\nexit 0\n' >"$d/npm"
     printf '#!/usr/bin/env bash\necho "$*" >>"$STUB_NPX_ARGV_FILE"\nexit 0\n' >"$d/npx"
-    printf '#!/usr/bin/env bash\n[[ "$*" == *"/health"* ]] && echo %s\nexit 0\n' "'{\"status\":\"ok\"}'" >"$d/curl"
+    # STUB_ENV_DOWN=1: the health probe fails (the env is not responding).
+    printf '#!/usr/bin/env bash\n[[ "${STUB_ENV_DOWN:-0}" == 1 ]] && exit 7\n[[ "$*" == *"/health"* ]] && echo %s\nexit 0\n' "'{\"status\":\"ok\"}'" >"$d/curl"
     printf '#!/usr/bin/env bash\n[[ "${1:-}" == fetch ]] && exit 0\nexec "$REAL_GIT" "$@"\n' >"$d/git"
     # The bundle checker reads a web/dist the stubbed build never produced.
     cat >"$d/node" <<EOF
@@ -168,6 +172,16 @@ CURRENT_TEST_NAME="F1: --fleet-e2e runs Playwright under --only-e2e and is refus
 invoke defer "" --only-e2e --fleet-e2e
 assert_rc 0 "defer --only-e2e --fleet-e2e"
 assert_file_matches 'playwright' "$npx_argv_file" "child B runs Playwright with e2e forced on"
+
+CURRENT_TEST_NAME="F1b: --fleet-e2e forces e2e on — a down env FAILs the Playwright row where auto would SKIP it"
+STUB_ENV_DOWN=1 invoke "" "" --only-e2e
+assert_out_matches "${PW_ROW}SKIPPED$" "control: auto mode skips Playwright on a down env"
+STUB_ENV_DOWN=1 invoke defer "" --only-e2e --fleet-e2e
+assert_out_matches "${PW_ROW}FAIL" "--fleet-e2e: the Playwright row is FAIL, never SKIPPED"
+assert_out_absent "${PW_ROW}SKIPPED" "--fleet-e2e never skips Playwright for a down env"
+if [ "$INVOKE_RC" -ne 0 ]; then pass; else fail "--fleet-e2e on a down env must exit non-zero"; fi
+
+CURRENT_TEST_NAME="F1: --fleet-e2e is refused without --only-e2e"
 invoke "" "" --fleet-e2e
 assert_rc 2 "--fleet-e2e without --only-e2e"
 assert_out_matches 'is only valid together with --only-e2e' "names the missing flag"
