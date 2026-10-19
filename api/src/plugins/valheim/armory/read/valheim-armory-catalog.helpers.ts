@@ -70,10 +70,14 @@ export function projectCatalog(
   catalog: ArmoryCatalogReadRow | null,
 ): ArmoryCatalogProjection {
   if (!catalog) return { items: {}, atlas: null };
-  const items: Record<string, ValheimCatalogEntry> = {};
+  // Own-property lookup: `constructor` / `toString` / `__proto__` are valid
+  // prefab ids and must read as "not in catalogue", never an inherited
+  // Object member. `fromEntries` defines own keys (no `__proto__` setter).
+  const pairs: [string, ValheimCatalogEntry][] = [];
   for (const prefab of prefabs) {
+    if (!Object.hasOwn(catalog.items, prefab)) continue;
     const entry = catalog.items[prefab];
-    if (entry) items[prefab] = toEntry(entry);
+    if (entry) pairs.push([prefab, toEntry(entry)]);
   }
-  return { items, atlas: toAtlas(catalog) };
+  return { items: Object.fromEntries(pairs), atlas: toAtlas(catalog) };
 }
