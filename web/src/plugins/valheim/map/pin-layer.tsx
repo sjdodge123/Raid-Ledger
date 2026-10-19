@@ -64,6 +64,21 @@ function pinHandlers(onToggle: () => void, onClose: () => void) {
     };
 }
 
+/** Position in texture px, counter-scaled to keep its screen size; checked = struck through. */
+function pinPlacement(pin: ValheimMapPin, grid: ValheimMapGrid, scale: number) {
+    const { left, top } = worldToScreen(grid, pin.x, pin.z);
+    return {
+        className: pin.checked
+            ? `${BUTTON_CLASS} ${PIN_CHECKED_CLASS}`
+            : BUTTON_CLASS,
+        style: {
+            left,
+            top,
+            transform: `translate(-50%, -50%) scale(${1 / scale})`,
+        },
+    };
+}
+
 interface PinButtonProps {
     pin: ValheimMapPin;
     grid: ValheimMapGrid;
@@ -82,20 +97,13 @@ function PinButton({
     onClose,
 }: PinButtonProps) {
     const text = pinDisplayLabel(pin.label, pin.type);
-    const { left, top } = worldToScreen(grid, pin.x, pin.z);
-    const transform = `translate(-50%, -50%) scale(${1 / scale})`;
     return (
         <button
             type="button"
             aria-label={`${text} (${pin.type})`}
             aria-expanded={open}
             data-checked={pin.checked}
-            className={
-                pin.checked
-                    ? `${BUTTON_CLASS} ${PIN_CHECKED_CLASS}`
-                    : BUTTON_CLASS
-            }
-            style={{ left, top, transform }}
+            {...pinPlacement(pin, grid, scale)}
             {...pinHandlers(onToggle, onClose)}
         >
             <PinDisc pin={pin} />
