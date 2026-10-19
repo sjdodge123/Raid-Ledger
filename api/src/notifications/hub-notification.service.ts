@@ -8,6 +8,7 @@ import { gmPostHeadline } from '../guilds/guild-profile.queries';
 import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { sendClaimedEventNotice } from './event-notice-plan.helpers';
+import { findAbsentUserIds } from './game-affinity-recipients.helpers';
 import {
   HUB_NOTIFICATION_EVENTS,
   HUB_POST_COOLDOWN_SECONDS,
@@ -50,33 +51,53 @@ export class HubNotificationService {
     );
   }
 
-  /** D3 + D7: notify the group's members that the leader posted. */
+  /**
+   * D3 + D7: notify the group's members that the leader posted. Recipients
+   * resolve first; the cooldown is claimed just before sending and given
+   * back when nothing was delivered, so a failure never mutes the next post.
+   */
   async notifyLeaderPost(input: LeaderPostInput): Promise<void> {
     const headline = gmPostHeadline(input.gmPost);
     if (!headline) return;
+    const guildName =
+      (await findGuildName(this.db, input.guildId)) ?? 'your group';
+    const ids = await this.resolveGroupRecipients(input.guildId, input.actorId);
     const key = `hub-post:${input.guildId}`;
     if (await this.dedup.checkAndMarkSent(key, HUB_POST_COOLDOWN_SECONDS)) {
       return;
     }
-    const guildName =
-      (await findGuildName(this.db, input.guildId)) ?? 'your group';
-    const ids = await this.resolveGroupRecipients(input.guildId, input.actorId);
-    const payload = {
-      guildId: input.guildId,
-      guildName,
-      url: `/guilds/${input.guildId}`,
-    };
-    await Promise.allSettled(
+    try {
+      const delivered = await this.sendLeaderPost(
+        ids,
+        { guildId: input.guildId, guildName },
+        headline,
+      );
+      if (ids.length > 0 && delivered === 0) await this.dedup.releaseKey(key);
+    } catch (err: unknown) {
+      await this.dedup.releaseKey(key);
+      throw err;
+    }
+  }
+
+  /** Send the leader-post notice to each id; resolves to the delivered count. */
+  private async sendLeaderPost(
+    ids: number[],
+    group: { guildId: number; guildName: string },
+    headline: string,
+  ): Promise<number> {
+    const payload = { ...group, url: `/guilds/${group.guildId}` };
+    const results = await Promise.allSettled(
       ids.map((userId) =>
         this.notificationService.create({
           userId,
           type: 'hub_leader_post',
-          title: `New post in ${guildName}`,
+          title: `New post in ${group.guildName}`,
           message: headline,
           payload,
         }),
       ),
     );
+    return results.filter((r) => r.status === 'fulfilled').length;
   }
 
   /** D3: the group's recipients for an event (creator excluded). */
@@ -90,7 +111,11 @@ export class HubNotificationService {
     return ids;
   }
 
-  /** D6b: group-only fan-out for an already-announced, not-started event. */
+  /**
+   * D6b: group-only fan-out for an already-announced, not-started event, with
+   * the announce path's exclusions: ROK-503 absences here, and ROK-1371
+   * follow-up attendees through the per-user notice keys the announce claimed.
+   */
   async notifyLateTag(eventId: number): Promise<void> {
     const event = await findLateTagEvent(this.db, eventId);
     if (!event || event.guildId === null || event.cancelledAt) return;
@@ -98,10 +123,9 @@ export class HubNotificationService {
     if (!(await this.dedup.isMarked(`game-alert:event:${eventId}`))) return;
     const guildId = event.guildId;
     const guildName = (await findGuildName(this.db, guildId)) ?? 'your group';
-    const ids = await this.resolveGroupEventRecipients(
-      eventId,
-      guildId,
-      event.creatorId,
+    const ids = await this.presentOn(
+      await this.resolveGroupEventRecipients(eventId, guildId, event.creatorId),
+      event.startTime,
     );
     const payload = buildTaggedPayload(event, guildId, guildName);
     await Promise.allSettled(
@@ -117,6 +141,13 @@ export class HubNotificationService {
         ),
       ),
     );
+  }
+
+  /** ROK-503: drop the users with an absence covering the event date. */
+  private async presentOn(ids: number[], start: Date): Promise<number[]> {
+    if (ids.length === 0) return ids;
+    const away = await findAbsentUserIds(this.db, ids, start.toISOString());
+    return ids.filter((id) => !away.has(id));
   }
 
   private async resolveGroupRecipients(

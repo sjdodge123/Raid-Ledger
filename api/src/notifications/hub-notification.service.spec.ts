@@ -1,5 +1,6 @@
 import { HubNotificationService } from './hub-notification.service';
 import * as queries from './hub-notification.queries';
+import { findAbsentUserIds } from './game-affinity-recipients.helpers';
 import type { HubKindRegistry } from '../guilds/hub-kind.registry';
 import type { NotificationService } from './notification.service';
 import type { NotificationDedupService } from './notification-dedup.service';
@@ -7,7 +8,11 @@ import type * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 jest.mock('./hub-notification.queries');
+jest.mock('./game-affinity-recipients.helpers', () => ({
+  findAbsentUserIds: jest.fn(),
+}));
 const q = jest.mocked(queries);
+const absent = jest.mocked(findAbsentUserIds);
 
 const FUTURE = new Date(Date.now() + 86_400_000);
 
@@ -21,6 +26,7 @@ function setup(opts: { claimed?: boolean; marked?: boolean } = {}) {
     isMarked: jest.fn().mockResolvedValue(opts.marked ?? true),
   };
   q.findGuildName.mockResolvedValue('Onyx');
+  absent.mockResolvedValue(new Set());
   q.filterGroupRecipients.mockImplementation((_db, ids) =>
     Promise.resolve([...ids]),
   );
@@ -87,6 +93,23 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
     await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
     expect(notifications.create).not.toHaveBeenCalled();
   });
+
+  it('claims no cooldown when resolving recipients throws', async () => {
+    const { svc, registry, dedup } = setup();
+    registry.forGuild.mockRejectedValue(new Error('db down'));
+    await expect(
+      svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' }),
+    ).rejects.toThrow('db down');
+    expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
+  });
+
+  it('gives the cooldown back when every send fails', async () => {
+    const { svc, notifications, dedup } = setup();
+    notifications.create.mockRejectedValue(new Error('boom'));
+    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    expect(dedup.checkAndMarkSent).toHaveBeenCalledWith('hub-post:7', 3600);
+    expect(dedup.releaseKey).toHaveBeenCalledWith('hub-post:7');
+  });
 });
 
 describe('HubNotificationService.notifyLateTag (D6b)', () => {
@@ -110,6 +133,18 @@ describe('HubNotificationService.notifyLateTag (D6b)', () => {
         message: 'Tagged to Onyx',
         payload: expect.objectContaining({ eventId: 9, guildId: 7, gameId: 4 }),
       }),
+    );
+  });
+
+  it('skips a member away on the event date (ROK-503)', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, notifications } = setup();
+    absent.mockResolvedValue(new Set([2]));
+    await svc.notifyLateTag(9);
+    expect(absent).toHaveBeenCalledWith({}, [2, 3], FUTURE.toISOString());
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 3 }),
     );
   });
 
