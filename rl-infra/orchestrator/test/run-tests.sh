@@ -89,6 +89,10 @@ else
         # mode lands every synced script 0644 → bare exit 126 on the runner).
         "$TEST_DIR/runner-exec-bits.test.sh"
         "$TEST_DIR/cli-rl-exec-bits-wiring.test.sh"
+        # ROK-1849 — the Mutagen session never syncs .env secrets to the VM:
+        # create-time ignores, cli/rl == sync-template drift guard, stale-
+        # session recreate, and the post-flush purge of already-synced copies.
+        "$TEST_DIR/cli-rl-mutagen-secret-ignores.test.sh"
         # A3-B — the flush-time repair does not survive a LATER sync. The
         # guarantee has to hold at the moment of execution, so run-on-runner
         # {,-with-heartbeat} re-assert it before dispatching anything.

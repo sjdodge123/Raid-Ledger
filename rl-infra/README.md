@@ -104,7 +104,9 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
    `proxmox-vm:/srv/rl-infra/runners/slot-N/worktree`. Excludes `node_modules`,
    `dist`, `coverage`, and the entire `.git` tree (the runner-side `.git` is
    scaffolded separately via `git init` + `git fetch origin`), plus
-   `*.tsbuildinfo` and Playwright output dirs.
+   `*.tsbuildinfo` and Playwright output dirs — and every `.env` / `.env.*`
+   file except the tracked `*.example` templates (ROK-1849: they hold real
+   secrets and the runner side lands everything at 0644).
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
@@ -1105,6 +1107,58 @@ Terminate + recreate — `rl release` then `rl claim`, or `rl resync` /
 Relevant for the ROK-1466 `scripts/.auth` ignore: a slot claimed before that
 change still reaps the runner-written auth dir (the `PLAYWRIGHT_AUTH_DIR`
 relocation covers that case independently).
+
+Since ROK-1849 `ensure_mutagen_sync` stamps the session with an
+`rl-sync-config=N` label and recreates any live session that lacks the current
+one, so a flag change no longer waits for a manual release: **bump `N` in
+`ensure_mutagen_sync` whenever you change the create flags**. Mutagen never
+deletes an ignored path on the beta, so every claim and every `rl resync` goes
+through one function, `sync_slot_and_purge`: it reads the session's own
+`rl-sync-config` label (`mutagen sync list <name> --template …`), terminates and
+recreates the session when the label is missing or older than the current `N`,
+flushes, and THEN removes the `.env` copies a pre-fix session left in
+`/workspace` — before any other script runs in the runner. The purge (and the
+exec-bit repair after it, chmod only) is the `rl` CLI's OWN copy of
+`rl-infra/runner/purge-synced-secrets.sh` / `restore-exec-bits.sh`, resolved from
+the CLI's checkout and streamed to `bash -s` over `run-on-runner`; nothing is
+executed from the synced `/workspace/rl-infra/**`, because that is branch
+content and could read the secrets or skip the clean-up. A failed purge warns on
+claim and fails `rl resync` (`resync_purge_failed`).
+
+#### ROK-1849 secret rotation — operator procedure (in order)
+
+**Deleting the synced files does NOT revoke anything.** Any value that sat in a
+runner's `/workspace` at 0644 may already have been copied by branch code or a
+VM account, so every one of them must be rotated, and rotation must come AFTER
+the purge (otherwise the new values sync straight back from a stale worktree).
+
+1. **Purge first.** Make sure every active worktree's `rl` CLI carries this fix
+   (rebase onto main), then purge every slot from the VM host:
+   `for d in /srv/rl-infra/runners/slot-*/worktree; do sudo bash <repo>/rl-infra/runner/purge-synced-secrets.sh "$d"; done`.
+   Confirm with `rl_run_on_runner 'ls -la /workspace/.env /workspace/api/.env /workspace/tools/test-bot/.env'`
+   → "No such file" on each slot. Optionally `docker builder prune` on the VM
+   (pre-fix image builds cached the synced `.env` in builder layers).
+2. **`SENTRY_AUTH_TOKEN` and `SENTRY_AUTH_TOKEN_WRITE`** — revoke both in Sentry
+   (User/Org auth tokens), issue new ones, update the laptop `.env` and the
+   GitHub Actions secrets.
+3. **`DISCORD_CLIENT_SECRET`** — Discord developer portal → OAuth2 → Reset
+   Secret; update `.env` and every deployment that uses it (prod, staging).
+4. **`JWT_SECRET`** — generate a new random value (`openssl rand -base64 48`)
+   and deploy it; every existing session token becomes invalid (users sign in
+   again).
+5. **`ADMIN_PASSWORD`** — set a new admin password in `.env` and on every env
+   that bootstraps from it.
+6. **`RL_INFRA_GRAFANA_ADMIN_PASSWORD`** — change the Grafana admin password
+   (Grafana UI or `grafana cli admin reset-admin-password`) and update
+   `/srv/rl-infra/.env` and the laptop `.env`.
+7. **`RL_SETTINGS_BUNDLE_KEY`** — generate a new key, **re-encrypt the settings
+   bundle with it** (decrypt with the old key, encrypt with the new one, commit /
+   deploy the re-encrypted bundle), then retire the old key everywhere it is set.
+8. Re-check step 1's `ls` on each slot after the next claim — the rotated values
+   must not appear in `/workspace`.
+Consequence: a runner has no `tools/test-bot/.env`, so a fleet Discord smoke
+tier SKIPs (FAILs under `--ci`) unless `TEST_BOT_TOKEN` + `TEST_GUILD_ID` are
+exported — GitHub CI runs Discord smoke from its own secrets.
 
 ### Stale-build sync guard + force-resync (TECH-DEBT 2026-06-02)
 

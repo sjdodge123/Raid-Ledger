@@ -245,6 +245,8 @@ if [[ "${1:-}" == "exec" ]]; then
             *) shift; break ;;
         esac
     done
+    # ROK-1849: the pre-dispatch purge/exec-bit streams (`bash -s -- /workspace`).
+    [[ "$*" == "bash -s -- /workspace" ]] && { cat >/dev/null; exit 0; }
     exec "$@"
 fi
 exit 0
