@@ -143,12 +143,19 @@ describe('EmbedSchedulerService — deferred group announce (ROK-1832 D6a)', () 
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('still announces in-app when the embed post fails (no connected bot — Codex r5)', async () => {
+});
+
+describe('EmbedSchedulerService — deferred group announce without a bot (Codex r5)', () => {
+  it('still announces in-app when the embed post fails (no connected bot)', async () => {
     const { run, notify } = await build([[deferredEvent(5)], []], false);
     await run();
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ eventId: 77, gameId: null, discordMessage: null }),
+      expect.objectContaining({
+        eventId: 77,
+        gameId: null,
+        discordMessage: null,
+      }),
     );
   });
 });
