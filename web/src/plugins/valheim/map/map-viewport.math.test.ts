@@ -7,6 +7,7 @@ import {
     fitViewport,
     initViewport,
     keyToAction,
+    pinchActions,
     viewportReducer,
     zoomAbout,
     type Viewport,
@@ -94,10 +95,46 @@ describe('viewportReducer', () => {
         expect(viewportReducer(panned, { type: 'fit' }).vp).toEqual(start.vp);
     });
 
+    it('keeps a zoomed-in scale on resize and re-clamps (phone URL bar, MAJOR 2)', () => {
+        const sized = viewportReducer(start, { type: 'resize', view: phone });
+        const zoomed = viewportReducer(sized, { type: 'zoomBy', factor: 4 });
+        const taller = { width: 375, height: 660 };
+        const resized = viewportReducer(zoomed, {
+            type: 'resize',
+            view: taller,
+        });
+        expect(resized.vp.scale).toBeCloseTo(zoomed.vp.scale, 10);
+        expect(resized.vp).toEqual(clampViewport(resized.vp, taller, 2048));
+        const centre = toTexture(resized.vp, { x: 375 / 2, y: 330 });
+        const was = toTexture(zoomed.vp, { x: 375 / 2, y: 300 });
+        expect(centre.x).toBeCloseTo(was.x, 6);
+        expect(centre.y).toBeCloseTo(was.y, 6);
+    });
+
+    it('still re-fits on resize while at fit scale', () => {
+        const sized = viewportReducer(start, { type: 'resize', view: phone });
+        const taller = { width: 375, height: 660 };
+        const resized = viewportReducer(sized, { type: 'resize', view: taller });
+        expect(resized.vp).toEqual(fitViewport(taller, 2048));
+    });
+
     it('re-fits on resize', () => {
         const resized = viewportReducer(start, { type: 'resize', view: phone });
         expect(resized.view).toEqual(phone);
         expect(resized.vp).toEqual(fitViewport(phone, 2048));
+    });
+
+    it('a pinch keeps the texture point under the fingers fixed as the midpoint moves', () => {
+        let state = viewportReducer(start, { type: 'resize', view: desktop });
+        state = viewportReducer(state, { type: 'zoomBy', factor: 3 });
+        const before = { mid: { x: 700, y: 360 }, dist: 100 };
+        const after = { mid: { x: 760, y: 400 }, dist: 150 };
+        const held = toTexture(state.vp, before.mid);
+        for (const a of pinchActions(before, after))
+            state = viewportReducer(state, a);
+        const under = toTexture(state.vp, after.mid);
+        expect(under.x).toBeCloseTo(held.x, 6);
+        expect(under.y).toBeCloseTo(held.y, 6);
     });
 
     it('maps keys to actions', () => {

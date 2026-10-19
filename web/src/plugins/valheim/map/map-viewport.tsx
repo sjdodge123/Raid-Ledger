@@ -57,6 +57,15 @@ function TextureLayer({ size, transform, children }: TextureLayerProps) {
     );
 }
 
+const POSITIONED = /(^|\s)(absolute|fixed|relative|sticky)(\s|$)/;
+
+/** The surface class: the caller's layout wins; `relative` only as a default. */
+export function surfaceClass(className?: string): string {
+    if (!className) return `relative ${SURFACE_CLASS}`;
+    const position = POSITIONED.test(className) ? '' : 'relative ';
+    return `${position}${SURFACE_CLASS} ${className}`;
+}
+
 function MapViewportSurface(props: MapViewportProps) {
     const { contentSize, label, onCommands, className, children } = props;
     const { ref, viewport, transform, handlers, style, zoomIn, zoomOut, fit } =
@@ -73,9 +82,7 @@ function MapViewportSurface(props: MapViewportProps) {
             tabIndex={0}
             {...handlers}
             style={style}
-            className={
-                className ? `${SURFACE_CLASS} ${className}` : SURFACE_CLASS
-            }
+            className={surfaceClass(className)}
         >
             <TextureLayer size={contentSize} transform={transform}>
                 {children(viewport)}

@@ -117,6 +117,49 @@ function zoomBy(
     );
 }
 
+const SCALE_EPSILON = 1e-6;
+
+/**
+ * A resize refits only when the map was at fit scale (or not yet measured);
+ * otherwise it keeps the user's zoom and the texture point at the centre —
+ * a phone's `dvh` frame resizes whenever the URL bar shows or hides.
+ */
+function resizeVp(state: ViewportState, next: Size): Viewport {
+    const { vp, view, content } = state;
+    const atFit = Math.abs(vp.scale - fitScale(view, content)) < SCALE_EPSILON;
+    if (view.width <= 0 || view.height <= 0 || atFit)
+        return fitViewport(next, content);
+    const dx = (next.width - view.width) / 2;
+    const dy = (next.height - view.height) / 2;
+    return clampViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }, next, content);
+}
+
+/** Two-finger pinch geometry: the pointers' midpoint and distance. */
+export interface PinchGeometry {
+    mid: Point;
+    dist: number;
+}
+
+/**
+ * One pinch step: zoom about the PREVIOUS midpoint (where the fingers held
+ * the texture), then pan by the midpoint's travel — so the texture point
+ * under the fingers follows them without drift.
+ */
+export function pinchActions(
+    before: PinchGeometry,
+    after: PinchGeometry,
+): ViewportAction[] {
+    if (before.dist === 0) return [];
+    return [
+        { type: 'zoomBy', factor: after.dist / before.dist, anchor: before.mid },
+        {
+            type: 'pan',
+            dx: after.mid.x - before.mid.x,
+            dy: after.mid.y - before.mid.y,
+        },
+    ];
+}
+
 export function viewportReducer(
     state: ViewportState,
     action: ViewportAction,
@@ -124,11 +167,7 @@ export function viewportReducer(
     const { view, content } = state;
     switch (action.type) {
         case 'resize':
-            return {
-                ...state,
-                view: action.view,
-                vp: fitViewport(action.view, content),
-            };
+            return { ...state, view: action.view, vp: resizeVp(state, action.view) };
         case 'fit':
             return { ...state, vp: fitViewport(view, content) };
         case 'pan':

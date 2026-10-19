@@ -20,7 +20,9 @@ import type {
 import {
     initViewport,
     keyToAction,
+    pinchActions,
     viewportReducer,
+    type PinchGeometry,
     type Point,
     type ViewportAction,
     type Viewport,
@@ -37,9 +39,7 @@ function localPoint(el: Element, clientX: number, clientY: number): Point {
     return { x: clientX - r.left, y: clientY - r.top };
 }
 
-function pinchGeometry(
-    pointers: Pointers,
-): { mid: Point; dist: number } | null {
+function pinchGeometry(pointers: Pointers): PinchGeometry | null {
     const [a, b] = [...pointers.values()];
     if (!a || !b) return null;
     return {
@@ -66,21 +66,14 @@ function movePointer(
             dy: next.y - prev.y,
         });
     const after = pinchGeometry(pointers);
-    if (!before || !after || before.dist === 0) return;
-    dispatch({
-        type: 'zoomBy',
-        factor: after.dist / before.dist,
-        anchor: after.mid,
-    });
-    dispatch({
-        type: 'pan',
-        dx: after.mid.x - before.mid.x,
-        dy: after.mid.y - before.mid.y,
-    });
+    if (!before || !after) return;
+    for (const action of pinchActions(before, after)) dispatch(action);
 }
 
 function keyDownHandler(dispatch: Dispatch<ViewportAction>) {
     return (e: KeyboardEvent<HTMLElement>) => {
+        // Ctrl/Cmd/Alt + `+`/`-`/`0` is the browser's own zoom — leave it alone.
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         const action = keyToAction(e.key);
         if (!action) return;
         e.preventDefault();
@@ -180,10 +173,16 @@ function useViewportCommands(dispatch: Dispatch<ViewportAction>) {
     return { zoomIn, zoomOut, fit };
 }
 
+/**
+ * Gesture-surface styles only. No `position`: the caller owns layout (the map
+ * frame passes `absolute inset-0`; an inline `relative` would override it and
+ * collapse the surface). `MapViewport` adds `relative` when the caller's
+ * class names no position of its own.
+ */
 export const VIEWPORT_STYLE: CSSProperties = {
     touchAction: 'none',
     overflow: 'hidden',
-    position: 'relative',
+    userSelect: 'none',
 };
 
 export interface MapViewportApi {

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MapViewport, type MapViewportCommands } from './map-viewport';
+import {
+    MapViewport,
+    surfaceClass,
+    type MapViewportCommands,
+} from './map-viewport';
+import { VIEWPORT_STYLE } from './use-map-viewport';
 
 const VIEW = { width: 400, height: 300 };
 
@@ -45,6 +50,18 @@ describe('MapViewport (ROK-1837 D5/D10)', () => {
         expect(app.style.touchAction).toBe('none');
     });
 
+    it("never forces a position, so the caller's absolute inset-0 sizes it (Codex P1)", () => {
+        const { app } = renderViewport();
+        expect(app.style.position).toBe('');
+        expect(VIEWPORT_STYLE).toEqual({
+            touchAction: 'none',
+            overflow: 'hidden',
+            userSelect: 'none',
+        });
+        expect(surfaceClass('absolute inset-0')).not.toMatch(/\brelative\b/);
+        expect(surfaceClass()).toMatch(/^relative /);
+    });
+
     it('lays children out in texture px with a 0 0 transform origin', () => {
         const { layer } = renderViewport();
         expect(layer.style.width).toBe('256px');
@@ -80,6 +97,21 @@ describe('MapViewport gestures (ROK-1837 D10)', () => {
         expect(zoomed).not.toBe(fitT);
         fireEvent.keyDown(app, { key: 'ArrowRight' });
         expect(layer.style.transform).not.toBe(zoomed);
+    });
+
+    it('Ctrl/Cmd/Alt + +/-/0 stay the browser zoom (not prevented, no map zoom)', () => {
+        const { app, layer } = renderViewport();
+        const fitT = layer.style.transform;
+        for (const mod of ['ctrlKey', 'metaKey', 'altKey']) {
+            const notPrevented = fireEvent.keyDown(app, { key: '+', [mod]: true });
+            expect(notPrevented).toBe(true);
+        }
+        expect(layer.style.transform).toBe(fitT);
+    });
+
+    it('wheel outside the map surface is never prevented (page scroll stays native)', () => {
+        renderViewport();
+        expect(fireEvent.wheel(document.body, { deltaY: 100 })).toBe(true);
     });
 
     it('a one-pointer drag pans once zoomed in', () => {
