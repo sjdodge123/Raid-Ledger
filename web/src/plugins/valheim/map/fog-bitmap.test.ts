@@ -17,7 +17,7 @@ function fixtureGzip(): { bytes: Uint8Array; size: number } {
     return { bytes: new Uint8Array(Buffer.from(msg.explored.data, 'base64')), size: msg.grid.textureSize };
 }
 
-async function gzip(raw: Uint8Array): Promise<Uint8Array> {
+async function gzip(raw: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
     const stream = new ReadableStream<BufferSource>({ start(c) { c.enqueue(raw); c.close(); } });
     return new Uint8Array(await new Response(stream.pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
 }
