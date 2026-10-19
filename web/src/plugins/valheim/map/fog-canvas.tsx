@@ -4,7 +4,7 @@
  * the viewport's transformed layer, so pan/zoom moves it without a repaint;
  * it repaints only when a layer or the theme colour changes.
  */
-import { memo, useEffect, useRef } from 'react';
+import { memo, useLayoutEffect, useRef } from 'react';
 import { buildFogPixels } from './fog-bitmap';
 import { useThemeFogRgb } from './fog-theme';
 
@@ -24,7 +24,10 @@ export const FogCanvas = memo(function FogCanvas({
 }: FogCanvasProps) {
     const ref = useRef<HTMLCanvasElement | null>(null);
     const rgb = useThemeFogRgb(ref);
-    useEffect(() => {
+    // Layout effect, not passive: the fog must land before the browser paints,
+    // or a base image mounted beside a still-blank canvas flashes unexplored
+    // terrain for a frame (Codex r4).
+    useLayoutEffect(() => {
         const ctx = ref.current?.getContext('2d');
         if (!ctx) return;
         const image = ctx.createImageData(size, size);

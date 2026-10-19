@@ -37,15 +37,23 @@ function PinDisc({ pin }: { pin: ValheimMapPin }) {
     );
 }
 
-function PinLabel({ text, shown }: { text: string; shown: boolean }) {
+interface PinLabelProps {
+    text: string;
+    shown: boolean;
+    /** Crossed out — on the label itself: a decoration on the button never reaches this out-of-flow span. */
+    checked: boolean;
+}
+
+function PinLabel({ text, shown, checked }: PinLabelProps) {
     const visibility = shown
         ? 'block'
         : 'hidden group-hover:block group-focus-visible:block';
+    const strike = checked ? ' line-through' : '';
     return (
         <span
             aria-hidden="true"
             data-open={shown}
-            className={`${LABEL_CLASS} ${visibility}`}
+            className={`${LABEL_CLASS} ${visibility}${strike}`}
         >
             {text}
         </span>
@@ -111,6 +119,7 @@ function PinButton({
             <PinDisc pin={pin} />
             <PinLabel
                 text={text}
+                checked={pin.checked}
                 shown={open || labels || scale >= PIN_LABELS_ALWAYS_SCALE}
             />
         </button>
