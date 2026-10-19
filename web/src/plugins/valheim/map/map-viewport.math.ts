@@ -97,11 +97,31 @@ const centreOf = (view: Size): Point => ({
     y: view.height / 2,
 });
 
+function panBy(state: ViewportState, dx: number, dy: number): Viewport {
+    const { vp, view, content } = state;
+    return clampViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }, view, content);
+}
+
+function zoomBy(
+    state: ViewportState,
+    factor: number,
+    anchor?: Point,
+): Viewport {
+    const { vp, view, content } = state;
+    const min = fitScale(view, content);
+    const next = clamp(vp.scale * factor, min, Math.max(min, MAX_NATIVE_SCALE));
+    return clampViewport(
+        zoomAbout(vp, anchor ?? centreOf(view), next),
+        view,
+        content,
+    );
+}
+
 export function viewportReducer(
     state: ViewportState,
     action: ViewportAction,
 ): ViewportState {
-    const { view, content, vp } = state;
+    const { view, content } = state;
     switch (action.type) {
         case 'resize':
             return {
@@ -112,30 +132,12 @@ export function viewportReducer(
         case 'fit':
             return { ...state, vp: fitViewport(view, content) };
         case 'pan':
+            return { ...state, vp: panBy(state, action.dx, action.dy) };
+        case 'zoomBy':
             return {
                 ...state,
-                vp: clampViewport(
-                    { ...vp, x: vp.x + action.dx, y: vp.y + action.dy },
-                    view,
-                    content,
-                ),
+                vp: zoomBy(state, action.factor, action.anchor),
             };
-        case 'zoomBy': {
-            const min = fitScale(view, content);
-            const next = clamp(
-                vp.scale * action.factor,
-                min,
-                Math.max(min, MAX_NATIVE_SCALE),
-            );
-            return {
-                ...state,
-                vp: clampViewport(
-                    zoomAbout(vp, action.anchor ?? centreOf(view), next),
-                    view,
-                    content,
-                ),
-            };
-        }
     }
 }
 

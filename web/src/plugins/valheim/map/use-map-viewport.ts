@@ -79,6 +79,24 @@ function movePointer(
     });
 }
 
+function keyDownHandler(dispatch: Dispatch<ViewportAction>) {
+    return (e: KeyboardEvent<HTMLElement>) => {
+        const action = keyToAction(e.key);
+        if (!action) return;
+        e.preventDefault();
+        dispatch(action);
+    };
+}
+
+function doubleClickHandler(dispatch: Dispatch<ViewportAction>) {
+    return (e: MouseEvent<HTMLElement>) =>
+        dispatch({
+            type: 'zoomBy',
+            factor: 2,
+            anchor: localPoint(e.currentTarget, e.clientX, e.clientY),
+        });
+}
+
 function usePointerHandlers(dispatch: Dispatch<ViewportAction>) {
     const pointers = useRef<Pointers>(new Map());
     return useMemo(
@@ -101,18 +119,8 @@ function usePointerHandlers(dispatch: Dispatch<ViewportAction>) {
                 void pointers.current.delete(e.pointerId),
             onPointerCancel: (e: PointerEvent<HTMLElement>) =>
                 void pointers.current.delete(e.pointerId),
-            onDoubleClick: (e: MouseEvent<HTMLElement>) =>
-                dispatch({
-                    type: 'zoomBy',
-                    factor: 2,
-                    anchor: localPoint(e.currentTarget, e.clientX, e.clientY),
-                }),
-            onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
-                const action = keyToAction(e.key);
-                if (!action) return;
-                e.preventDefault();
-                dispatch(action);
-            },
+            onDoubleClick: doubleClickHandler(dispatch),
+            onKeyDown: keyDownHandler(dispatch),
         }),
         [dispatch],
     );
@@ -159,6 +167,19 @@ function useViewportSize(
     }, [ref, dispatch]);
 }
 
+function useViewportCommands(dispatch: Dispatch<ViewportAction>) {
+    const zoomIn = useCallback(
+        () => dispatch({ type: 'zoomBy', factor: BUTTON_ZOOM_FACTOR }),
+        [dispatch],
+    );
+    const zoomOut = useCallback(
+        () => dispatch({ type: 'zoomBy', factor: 1 / BUTTON_ZOOM_FACTOR }),
+        [dispatch],
+    );
+    const fit = useCallback(() => dispatch({ type: 'fit' }), [dispatch]);
+    return { zoomIn, zoomOut, fit };
+}
+
 export const VIEWPORT_STYLE: CSSProperties = {
     touchAction: 'none',
     overflow: 'hidden',
@@ -188,15 +209,7 @@ export function useMapViewport(contentSize: number): MapViewportApi {
     useViewportSize(ref, dispatch);
     useWheelZoom(ref, dispatch);
     const handlers = usePointerHandlers(dispatch);
-    const zoomIn = useCallback(
-        () => dispatch({ type: 'zoomBy', factor: BUTTON_ZOOM_FACTOR }),
-        [],
-    );
-    const zoomOut = useCallback(
-        () => dispatch({ type: 'zoomBy', factor: 1 / BUTTON_ZOOM_FACTOR }),
-        [],
-    );
-    const fit = useCallback(() => dispatch({ type: 'fit' }), []);
+    const { zoomIn, zoomOut, fit } = useViewportCommands(dispatch);
     const { scale, x, y } = state.vp;
     const transform = `translate(${x}px, ${y}px) scale(${scale})`;
     return {

@@ -76,6 +76,23 @@ export interface MapBaseImage {
     error: Error | null;
 }
 
+/** An object URL for `blob`, revoked when the blob changes or on unmount. */
+function useObjectUrl(blob: Blob | undefined): string | null {
+    const [entry, setEntry] = useState<{ blob: Blob; url: string } | null>(
+        null,
+    );
+    useEffect(() => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        // The object URL is an external resource: create + revoke live in one
+        // effect so StrictMode's remount and a new blob each get a fresh URL.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEntry({ blob, url });
+        return () => URL.revokeObjectURL(url);
+    }, [blob]);
+    return entry && entry.blob === blob ? entry.url : null;
+}
+
 /** The base map as an object URL; null until `baseMap.ready`. Revoked on change/unmount. */
 export function useMapBaseImage(
     characterId: number,
@@ -99,20 +116,8 @@ export function useMapBaseImage(
         retry: false,
         staleTime: Infinity,
     });
-    const [entry, setEntry] = useState<{ blob: Blob; url: string } | null>(
-        null,
-    );
-    useEffect(() => {
-        if (!query.data) return;
-        const blob = query.data;
-        const url = URL.createObjectURL(blob);
-        // The object URL is an external resource: create + revoke live in one
-        // effect so StrictMode's remount and a new blob each get a fresh URL.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setEntry({ blob, url });
-        return () => URL.revokeObjectURL(url);
-    }, [query.data]);
-    const url = ready && entry && entry.blob === query.data ? entry.url : null;
+    const objectUrl = useObjectUrl(query.data);
+    const url = ready ? objectUrl : null;
     return { url, isLoading: ready && query.isPending, error: query.error };
 }
 
