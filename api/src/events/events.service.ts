@@ -1,4 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { isNewGroupTag } from './event-group-tag.helpers';
+import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -143,7 +145,19 @@ export class EventsService {
       .update(schema.events)
       .set(updateData)
       .where(eq(schema.events.id, id));
-    return this.postMutate(id, userId, 'updated', APP_EVENT_EVENTS.UPDATED);
+    const res = await this.postMutate(
+      id,
+      userId,
+      'updated',
+      APP_EVENT_EVENTS.UPDATED,
+    );
+    // ROK-1832 D6b: a newly set group gets its late-tag fan-out.
+    if (isNewGroupTag(dto.guildId, existing.guildId)) {
+      this.eventEmitter.emit(HUB_NOTIFICATION_EVENTS.EVENT_TAGGED, {
+        eventId: id,
+      });
+    }
+    return res;
   }
 
   /** Deletes an event after ownership verification. */

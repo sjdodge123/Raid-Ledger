@@ -11,6 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 
 let service: EventsService;
 let mockDb: MockDb;
+let emitter: { emit: jest.Mock };
 
 const mockUser = {
   id: 1,
@@ -88,6 +89,7 @@ async function setupEach() {
   }).compile();
 
   service = module.get<EventsService>(EventsService);
+  emitter = module.get(EventEmitter2);
 }
 
 async function testCreateEvent() {
@@ -190,6 +192,26 @@ describe('EventsService — update', () => {
   it('should update when user is admin', () => testUpdateAsAdmin());
   it('should throw ForbiddenException when not creator or admin', () =>
     testUpdateForbidden());
+});
+
+describe('EventsService — update group tag (ROK-1832 D6b)', () => {
+  const tagged = 'hub.event-tagged';
+  async function updateGuild(stored: number | null, next: number | null) {
+    mockDb.limit
+      .mockResolvedValueOnce([{ ...mockEvent, guildId: stored }])
+      .mockResolvedValueOnce([defaultRow]);
+    await service.update(1, 1, false, { guildId: next });
+    return emitter.emit.mock.calls.filter((c: unknown[]) => c[0] === tagged);
+  }
+  it('emits when the group changes', async () => {
+    expect(await updateGuild(3, 7)).toEqual([[tagged, { eventId: 1 }]]);
+  });
+  it('does not emit on a re-save with the same group', async () => {
+    expect(await updateGuild(7, 7)).toEqual([]);
+  });
+  it('does not emit when untagging', async () => {
+    expect(await updateGuild(7, null)).toEqual([]);
+  });
 });
 
 describe('EventsService — delete', () => {
