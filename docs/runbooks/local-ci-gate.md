@@ -64,6 +64,26 @@ The `git push` hook in `.claude/settings.json` runs `scripts/smoke/push-gate.sh`
 
 **Integration shards can run two at a time (ROK-1793, opt-in).** The integration step runs `INTEGRATION_SHARDS` jest processes (default 4), serially by default. `INTEGRATION_PARALLEL=2` runs them in waves of two (1+2, then 3+4). On the fleet pass `--integration-parallel=2` instead (`rl_validate_ci` `args`): the runner does not inherit laptop env vars. Each parallel shard gets `INTEGRATION_PARALLEL_HEAP_MB` (default 2560, against 4096 serial, so two shards plus their parents stay under the runner's 6 GB) and its own Redis db index on the sidecar (`redis://rl-test-redis-…:6379/<shard>`). Each jest process already starts its own Postgres Testcontainer (the jest config's `globalSetup`), and BullMQ keys carry a per-process `test-<pid>-` prefix, so shards share no state. Values above 2 are capped at 2. A non-number falls back to serial. `CI=true` with `DATABASE_URL` set also forces serial, because then every shard would use the same database. A failed shard fails the tier and stops its still-running wave partner (SIGTERM to its process tree; its row in `Shard results` reads `STOPPED`). The next wave never starts, and the never-ran spec report still prints, including the stopped shard's specs. On bash ≥ 4.3 (the runner) `wait -n` catches whichever shard fails first; macOS bash 3.2 waits in shard order, so a later shard's failure is noticed only when the earlier one ends. Parallel output is prefixed `[shard i/N]`. The default stays 1 until a fleet run measures the 2560 MB heap. ROK-1268 saw OOMs at 3 GB under sustained runs, so raise `INTEGRATION_SHARDS` (e.g. 6) if a parallel shard OOMs.
 
+## Parallel fleet gate (ROK-1793 S2, opt-in)
+
+`rl_validate_ci({fleet:true, parallel:true, base_url, against_env_slug, worktree_path})` splits one `--fleet` run across two runners. Off by default (`parallel` omitted = today's serial gate); the CLAUDE.md gate rule is unchanged until three measured runs hold the ≤30 min target.
+
+**What runs where.** The parent task borrows one free slot and starts children:
+
+| Child | Slot | Runs | Rows it owns |
+|---|---|---|---|
+| `a` | yours | `validate-ci.sh --fleet --no-e2e` with `RL_GATE_E2E=deferred` — build, tsc, lint, bundle, shell parse, unit, tools, contract, integration, migration, container | every row except the two below; its Playwright and Discord rows read `SKIPPED — phase 1, see child b` |
+| `b` | borrowed | `RL_GATE_DISCORD=defer validate-ci.sh --only-e2e` — Playwright against the same env | Playwright; an in-scope Discord smoke is stamped `SKIPPED — deferred to phase 2` and the log gets `[parallel] discord-deferred` |
+| `c` | yours, after `b` | `RL_GATE_DISCORD=only validate-ci.sh --only-e2e` — only when `b` printed the marker | Discord smoke (its Playwright row reads `SKIPPED — phase 2`) |
+
+Discord smoke stays serial and runs last on your own slot: the bot identity and channel set belong to a slot, and the fleet holds one Discord lock (operator ruling). The borrowed slot is released as soon as `b` ends.
+
+**No-queue rule.** A slot is borrowed only when it is unclaimed, its lease queue is empty and no laptop Mutagen session targets it. The parent never waits for one. If none is free the log says `[parallel] fallback: serial (no free slot)` (or `[parallel] fallback: serial (memory)` when the host cannot admit a heavy and a `medium` task together) and the ordinary serial gate runs; `parallel.mode` is then `serial_fallback`. A fallback is not a failure.
+
+**Reading the result.** Poll the parent only. Its log relays each child's `[step-time]` + `<name>: <STATUS>` lines, then prints ONE merged `========== Summary ==========` whose notes name the child (`— child <id> slot <N>`); the pre-push sentinel reads that table as before. Terminal `rl_task_status` adds `children[]` (`task_id`, `role`, `slot`, `status`, `exit`) — to dig into a FAIL, `rl_task_logs` the child's `task_id`. A row a child owns but never printed is merged as `FAIL — missing from child <id>`. `fail_fast:true` cancels the sibling on the first child FAIL; cancelling the parent cancels every child.
+
+The child modes are plain env vars, so they can be reproduced locally: an unknown value, `RL_GATE_DISCORD=only` without `--only-e2e`, or `RL_GATE_E2E=deferred` without `--no-e2e` exits 2. `validate-ci.sh` reads them once and unsets them, so nested runs (the `scripts/*.spec.mjs` specs) never inherit a child mode. Harness: `scripts/test/validate-ci-gate-discord.test.sh`.
+
 ## Scoping the Playwright tier
 
 `rl_validate_ci({e2e_scope})` — `auto` (default) / `all` / `none` — forwards `E2E_SCOPE` to `validate-ci.sh`. Under `auto` it runs only the specs `scripts/smoke/scope-specs.sh` maps the branch diff to.
