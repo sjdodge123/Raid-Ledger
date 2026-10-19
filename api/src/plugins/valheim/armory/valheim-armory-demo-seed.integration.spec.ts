@@ -92,11 +92,10 @@ afterEach(async () => {
   }
 });
 
-afterAll(async () => {
+afterAll(() => {
   delete process.env.VALHEIM_LINK_BLOB_DIR;
   if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
-  await testApp.app.get(SettingsService).setDemoMode(false);
 });
 
 describe('POST /admin/test/valheim/armory-character (ROK-1836 D8)', () => {
