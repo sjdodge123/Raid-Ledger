@@ -75,7 +75,7 @@ export function projectCatalog(
   // Object member. `fromEntries` defines own keys (no `__proto__` setter).
   const pairs: [string, ValheimCatalogEntry][] = [];
   for (const prefab of prefabs) {
-    if (!Object.hasOwn(catalog.items, prefab)) continue;
+    if (!Object.prototype.hasOwnProperty.call(catalog.items, prefab)) continue;
     const entry = catalog.items[prefab];
     if (entry) pairs.push([prefab, toEntry(entry)]);
   }
