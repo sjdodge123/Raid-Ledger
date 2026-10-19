@@ -22,6 +22,7 @@ function build() {
     isActiveUser: jest.fn().mockResolvedValue(true),
     setOwner: jest.fn().mockResolvedValue(undefined),
     listEvents: jest.fn().mockResolvedValue([]),
+    findUsers: jest.fn().mockResolvedValue([]),
     insertEvents: jest.fn((_t: unknown, rows: Record<string, unknown>[]) =>
       Promise.resolve(rows.map((r) => ({ id: 1, createdAt: at, ...r }))),
     ),
