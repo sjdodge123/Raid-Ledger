@@ -171,12 +171,14 @@ describe('armory detail hubId (ROK-1836 follow-up)', () => {
 describe('armory claim events resolve users (ROK-1836 follow-up)', () => {
   it('resolves from/to/actor; a deleted user resolves to null', async () => {
     const c = await seedCharacter(1);
-    await memberToken(testApp, 'alice');
-    await memberToken(testApp, 'bob');
     const U = schema.users;
+    // Plain rows (no login credentials) so alice can be deleted below.
     const users = await testApp.db
-      .select({ id: U.id, name: U.username })
-      .from(U);
+      .insert(U)
+      .values(
+        ['alice', 'bob'].map((n) => ({ discordId: `local:${n}`, username: n })),
+      )
+      .returning({ id: U.id, name: U.username });
     const idOf = (n: string) => users.find((u) => u.name === n)?.id ?? 0;
     const admin = await loginAsAdmin(testApp.request, testApp.seed);
     const adminUser = testApp.seed.adminUser;
