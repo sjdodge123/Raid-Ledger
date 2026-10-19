@@ -5,6 +5,10 @@ import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
 import type { NotificationService } from './notification.service';
 import type { CreateNotificationInput } from './notification.types';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
+import {
+  EVENT_NOTICE_TTL_SECONDS,
+  eventNoticeKey,
+} from './event-notice-plan.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -166,8 +170,9 @@ async function dispatchFollowupInvites(
   actingCreatorId: number,
 ): Promise<void> {
   const { db, notificationService } = deps;
+  let recipients: number[];
   try {
-    const recipients = await resolvePostEventFollowupRecipients(
+    recipients = await resolvePostEventFollowupRecipients(
       db,
       endedEventId,
       actingCreatorId,
@@ -185,4 +190,35 @@ async function dispatchFollowupInvites(
     await releaseFanout(db, endedEventId);
     throw err;
   }
+  // Outside the try: the DMs are out, so a claim failure must not roll the
+  // fan-out back (a retry would DM everyone twice).
+  if ('eventId' in payload) {
+    await claimFollowupEventNotices(db, payload.eventId, recipients);
+  }
+}
+
+/**
+ * ROK-1832 (Codex r3): claim each follow-up recipient's per-(user, event)
+ * notice key for the follow-up event, in the same `notification_dedup` store
+ * `NotificationDedupService` reads, so the scheduler's deferred group announce
+ * (which carries no `followupForEventId`) skips them. A key some other path
+ * already holds is left as is.
+ */
+async function claimFollowupEventNotices(
+  db: Db,
+  eventId: number,
+  userIds: readonly number[],
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const expiresAt = new Date(
+    Date.now() + EVENT_NOTICE_TTL_SECONDS * 1000,
+  ).toISOString();
+  const rows = userIds.map(
+    (id) => sql`(${eventNoticeKey(eventId, id)}, ${expiresAt})`,
+  );
+  await db.execute(sql`
+    INSERT INTO notification_dedup (dedup_key, expires_at)
+    VALUES ${sql.join(rows, sql`, `)}
+    ON CONFLICT (dedup_key) DO NOTHING
+  `);
 }

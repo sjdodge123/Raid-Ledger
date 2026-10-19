@@ -127,8 +127,9 @@ export async function hasPostedEmbed(
 }
 
 /**
- * D4 backfill: users who already hold a game or group notice for the event —
- * notices sent before the per-user `event-notice:*` claims existed.
+ * D4 backfill: users who already hold a game, group or follow-up quick-sign-up
+ * notice for the event — notices sent before the per-user `event-notice:*`
+ * claims existed.
  */
 export async function findPriorEventNoticeUserIds(
   db: Db,
@@ -143,7 +144,11 @@ export async function findPriorEventNoticeUserIds(
     .where(
       and(
         inArray(n.userId, [...userIds]),
-        inArray(n.type, ['subscribed_game', 'hub_event_tagged']),
+        inArray(n.type, [
+          'subscribed_game',
+          'hub_event_tagged',
+          'post_event_followup',
+        ]),
         sql`${n.payload}->>'eventId' = ${String(eventId)}`,
       ),
     );
