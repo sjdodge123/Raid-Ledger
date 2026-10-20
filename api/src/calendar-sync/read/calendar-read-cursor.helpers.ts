@@ -62,6 +62,22 @@ function eligiblePrimary(
   return rest.sort((a, b) => a.localeCompare(b))[0];
 }
 
+/**
+ * Codex r3: the picker rows' `primary` flag after the dedicated-calendar
+ * exclusion (`isRaidLedger` already set). Apple can flag the Raid Ledger
+ * calendar primary (no `home`, it sorts first); the picker hides that row,
+ * so the default selection would show nothing checked while the sync reads
+ * the fallback. The flag moves to that same fallback (`eligiblePrimary`).
+ */
+export function withEligiblePrimary(
+  provider: CalendarProviderKey,
+  calendars: readonly ProviderCalendar[],
+): ProviderCalendar[] {
+  if (!NO_PRIMARY_ALIAS.has(provider)) return [...calendars];
+  const primary = eligiblePrimary(calendars, new Set());
+  return calendars.map((c) => ({ ...c, primary: c.id === primary }));
+}
+
 /** `buildSyncedFields`' cursor part: written only when the provider sent one. */
 export function cursorFields(cursor: Record<string, string> | undefined): {
   syncCursor?: Record<string, string>;

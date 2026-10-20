@@ -17,9 +17,11 @@ import {
   cursorFields,
   isCursor,
   resolvePrimaryAlias,
+  withEligiblePrimary,
   storedCursor,
 } from './calendar-read-cursor.helpers';
 import { buildSyncedFields, fetchWindow } from './calendar-read-sync.helpers';
+import { toProviderCalendars } from '../providers/apple/apple-read.helpers';
 
 const NOW = new Date('2026-10-20T12:00:00Z');
 const stamp = { now: NOW, random: () => 0.5 };
@@ -102,6 +104,41 @@ describe('resolvePrimaryAlias', () => {
       'primary',
       'x',
     ]);
+  });
+});
+
+describe('withEligiblePrimary — picker primary vs. the dedicated exclusion (Codex r3)', () => {
+  const col = (id: string) => ({
+    id,
+    href: `/123/calendars/${id}/`,
+    displayName: id,
+    components: ['VEVENT'],
+    ctag: null,
+    writable: true,
+    timezone: null,
+  });
+  // No `home`; the dedicated calendar sorts first by href → flagged primary.
+  const listed = toProviderCalendars([col('work'), col('a-raid-ledger')]);
+  const picker = listed.map((c) => ({
+    ...c,
+    isRaidLedger: c.id === 'a-raid-ledger',
+  }));
+
+  it('Apple: the flag moves to the calendar the default selection reads', () => {
+    expect(listed.find((c) => c.primary)?.id).toBe('a-raid-ledger');
+    const rows = withEligiblePrimary('apple', picker);
+    expect(rows.filter((c) => c.primary).map((c) => c.id)).toEqual(['work']);
+    const excluded = new Set(['a-raid-ledger']);
+    expect(resolvePrimaryAlias('apple', ['primary'], rows, excluded)).toEqual([
+      'work',
+    ]);
+  });
+
+  it('Apple with an eligible primary keeps it; Google is untouched', () => {
+    const home = [cal('home', true), cal('rl-x', false, true), cal('a')];
+    expect(withEligiblePrimary('apple', home)).toEqual(home);
+    const google = [cal('rl-x', true, true), cal('a')];
+    expect(withEligiblePrimary('google', google)).toEqual(google);
   });
 });
 
