@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   LIFECYCLE_DEFAULTS,
@@ -22,6 +23,10 @@ import {
   toActivityDto,
 } from './channel-lifecycle-admin.helpers';
 import { selectGameLifecycleActivity } from './game-activity.queries';
+import {
+  CHANNEL_LIFECYCLE_HUB_LINKER,
+  type HubLinker,
+} from './channel-lifecycle.types';
 
 /** 400 text when `enabled: true` cannot resolve an Archived category (D5). */
 export const ENABLE_REFUSED =
@@ -42,6 +47,9 @@ export class ChannelLifecycleAdminService {
     @Inject(DrizzleAsyncProvider) private readonly db: LifecycleDb,
     private readonly settings: SettingsService,
     private readonly client: DiscordBotClientService,
+    @Optional()
+    @Inject(CHANNEL_LIFECYCLE_HUB_LINKER)
+    private readonly hubLinker?: HubLinker,
   ) {}
 
   /** Current settings (defaults when unset). */
@@ -104,6 +112,9 @@ export class ChannelLifecycleAdminService {
     const rows = await selectGameLifecycleActivity(this.db, {
       now,
       windowDays: settings.recentActivityDays,
+      // Same hub-link input as `reconcile`, so the preview shows `link_hub`.
+      hubNeedsLinkGameIds:
+        (await this.hubLinker?.hubNeedsLinkGameIds?.()) ?? new Set<number>(),
       ...(guildId ? { guildId } : {}),
     });
     const items = rows

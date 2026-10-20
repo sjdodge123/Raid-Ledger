@@ -14,6 +14,8 @@ import {
 } from '../services/channel-bindings-invariant.helpers';
 import * as ops from './channel-lifecycle.discord-ops';
 import * as store from './channel-lifecycle.store';
+import * as queries from './game-activity.queries';
+import type { HubLinker } from './channel-lifecycle.types';
 import type { LifecycleDb } from './channel-lifecycle.store';
 import {
   ChannelLifecycleAdminService,
@@ -33,7 +35,7 @@ const BASE: ChannelLifecycleSettingsDto = {
 };
 const guild = { id: 'g1' } as unknown as Guild;
 
-function build(connected = true) {
+function build(connected = true, hubLinker?: HubLinker) {
   const settings = {
     getChannelLifecycleSettings: jest.fn().mockResolvedValue(BASE),
     setChannelLifecycleSettings: jest
@@ -49,6 +51,7 @@ function build(connected = true) {
     {} as LifecycleDb,
     settings as unknown as SettingsService,
     client as unknown as DiscordBotClientService,
+    hubLinker,
   );
   return { svc, settings };
 }
@@ -113,6 +116,35 @@ describe('updateSettings — enable guard', () => {
       BadRequestException,
     );
     expect(settings.setChannelLifecycleSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe('activity preview — hub-link parity with reconcile (Codex r2 P2)', () => {
+  it("passes the hub linker's hubNeedsLinkGameIds into the derivation", async () => {
+    const ids = new Set([7]);
+    const linker: HubLinker = {
+      linkHubsForGame: jest.fn().mockResolvedValue(0),
+      hubNeedsLinkGameIds: jest.fn().mockResolvedValue(ids),
+    };
+    const select = jest
+      .spyOn(queries, 'selectGameLifecycleActivity')
+      .mockResolvedValue([]);
+    await build(true, linker).svc.activity(true);
+    expect(select).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hubNeedsLinkGameIds: ids }),
+    );
+  });
+
+  it('without a linker the derivation gets an empty set', async () => {
+    const select = jest
+      .spyOn(queries, 'selectGameLifecycleActivity')
+      .mockResolvedValue([]);
+    await build().svc.activity(false);
+    expect(select).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hubNeedsLinkGameIds: new Set() }),
+    );
   });
 });
 
