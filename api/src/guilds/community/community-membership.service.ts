@@ -23,6 +23,7 @@ import {
   isLive,
   requireCommunityHub,
 } from './community-hub.lookup';
+import { liveCommunityRole } from './community-hub.reads';
 import { mayModerate } from './community-ladder.helpers';
 import {
   findMembership,
@@ -44,6 +45,20 @@ export interface CommunityMemberRoleResult {
 
 /** 403 body of the leader-only routes (matches `GuildLeaderGuard`). */
 export const LEADER_ONLY = 'Guild leader access required';
+
+/**
+ * Codex r4 — the actor's ladder role read on `tx`, the hub lock's own
+ * connection (staff ⇒ leader). Never read a role through the pool while the
+ * lock is held: with `DB_POOL_MAX=1` that read would wait on the lock's tx.
+ */
+export async function ladderRoleOn(
+  tx: DbOrTx,
+  actor: GuildActor,
+  hubId: number,
+): Promise<LadderRole> {
+  if (isStaff(actor)) return 'leader';
+  return (await liveCommunityRole(tx, hubId, actor.id)) ?? 'visitor';
+}
 
 /**
  * ROK-1870 L3 — Join / Leave / Remove / role changes on a community hub
@@ -127,7 +142,7 @@ export class CommunityMembershipService {
     await this.db.transaction(async (tx) => {
       await lockHubRow(tx, hubId);
       const target = await this.liveTarget(hubId, userId, tx);
-      if (!mayModerate(await this.role(actor, hubId), target.role)) {
+      if (!mayModerate(await ladderRoleOn(tx, actor, hubId), target.role)) {
         throw new ForbiddenException("You can't remove this member");
       }
       await markLeft(tx, hubId, userId, actor.id);
@@ -145,7 +160,8 @@ export class CommunityMembershipService {
     await requireCommunityHub(this.db, hubId, true);
     const row = await this.db.transaction(async (tx) => {
       await lockHubRow(tx, hubId);
-      await this.assertLeader(actor, hubId);
+      if ((await ladderRoleOn(tx, actor, hubId)) !== 'leader')
+        throw new ForbiddenException(LEADER_ONLY);
       const target = await this.liveTarget(hubId, userId, tx);
       if (target.role === 'leader') {
         throw new ConflictException("The leader's role cannot be changed");

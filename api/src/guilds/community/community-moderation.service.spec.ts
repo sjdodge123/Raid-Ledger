@@ -285,3 +285,45 @@ describe('banUser (M22)', () => {
     expect(rolledBack).toBe(true);
   });
 });
+
+describe('banUser — caller role on the lock tx (Codex r4)', () => {
+  it('reads the caller role on TX after the lock, never via the pool', async () => {
+    jest.mocked(lookup.requireCommunityHub).mockResolvedValue(HUB);
+    jest.mocked(mq.findMembership).mockResolvedValue(memberRow({ userId: 3 }));
+    jest.mocked(reads.liveCommunityRole).mockResolvedValue('officer');
+    members.role.mockResolvedValue('member');
+    await expect(svc.banUser(officer, 7, 3, {})).resolves.toBeUndefined();
+    expect(reads.liveCommunityRole).toHaveBeenCalledWith(TX, 7, officer.id);
+    const lockAt = jest.mocked(mq.lockHubRow).mock.invocationCallOrder[0];
+    const roleAt = jest.mocked(reads.liveCommunityRole).mock
+      .invocationCallOrder[0];
+    expect(lockAt).toBeLessThan(roleAt ?? 0);
+    expect(members.role).not.toHaveBeenCalled();
+    expect(mq.ban).toHaveBeenCalledWith(
+      TX,
+      expect.objectContaining({ userId: 3 }),
+    );
+  });
+});
+
+describe('unbanUser — a historical leader row (Codex r4)', () => {
+  /** A sole leader who left, then was pre-banned: stored role stays leader. */
+  const formerLeader = memberRow({ role: 'leader', leftAt: AT, bannedAt: AT });
+
+  it('staff lift the ban on a former leader who left', async () => {
+    members.role.mockResolvedValue('leader');
+    jest.mocked(mq.findMembership).mockResolvedValue(formerLeader);
+    jest.mocked(mq.unban).mockResolvedValue(true);
+    await expect(
+      svc.unbanUser({ id: 9, role: 'admin' }, 7, 3),
+    ).resolves.toBeUndefined();
+    expect(mq.unban).toHaveBeenCalledWith(db, 7, 3);
+  });
+
+  it('the hub leader lifts it too (it was never the live leader)', async () => {
+    members.role.mockResolvedValue('leader');
+    jest.mocked(mq.findMembership).mockResolvedValue(formerLeader);
+    jest.mocked(mq.unban).mockResolvedValue(true);
+    await expect(svc.unbanUser(leader, 7, 3)).resolves.toBeUndefined();
+  });
+});

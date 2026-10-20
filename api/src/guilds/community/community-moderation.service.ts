@@ -25,7 +25,6 @@ import {
   requireCommunityHub,
   restoreHub,
 } from './community-hub.lookup';
-import { liveCommunityRole } from './community-hub.reads';
 import { mayChangeStatus, mayModerate } from './community-ladder.helpers';
 import {
   ban,
@@ -39,6 +38,7 @@ import {
 import {
   CommunityMembershipService,
   LEADER_ONLY,
+  ladderRoleOn,
 } from './community-membership.service';
 import { conflictOnUnique } from './community-db-errors';
 import { findProposalUser } from './community-proposals.users';
@@ -141,7 +141,7 @@ export class CommunityModerationService {
     const liveRole = row !== null && isLive(row) ? row.role : null;
     if (liveRole === 'leader')
       throw new ConflictException('The leader cannot be banned');
-    if (!mayModerate(await this.members.role(actor, hubId), liveRole)) {
+    if (!mayModerate(await ladderRoleOn(tx, actor, hubId), liveRole)) {
       throw new ForbiddenException("You can't ban this member");
     }
   }
@@ -199,10 +199,8 @@ export class CommunityModerationService {
     userId: number,
   ): Promise<void> {
     await lockHubRow(tx, hubId);
-    const role = isStaff(actor)
-      ? 'leader'
-      : await liveCommunityRole(tx, hubId, actor.id);
-    if (role !== 'leader') throw new ForbiddenException(LEADER_ONLY);
+    if ((await ladderRoleOn(tx, actor, hubId)) !== 'leader')
+      throw new ForbiddenException(LEADER_ONLY);
     const target = await this.members.liveTarget(hubId, userId, tx);
     if (target.role === 'leader')
       throw new ConflictException('Already the leader');

@@ -10,6 +10,7 @@ import type * as schema from '../../drizzle/schema';
 import type { GuildActor } from '../guild-access.service';
 import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
 import * as lookup from './community-hub.lookup';
+import * as reads from './community-hub.reads';
 import * as mq from './community-membership.queries';
 import { CommunityMembershipService } from './community-membership.service';
 
@@ -21,6 +22,10 @@ jest.mock('./community-hub.lookup', () => ({
   assertInDiscord: jest.fn(),
 }));
 jest.mock('./community-membership.queries');
+jest.mock('./community-hub.reads', () => ({
+  ...jest.requireActual('./community-hub.reads'),
+  liveCommunityRole: jest.fn(),
+}));
 
 const AT = new Date('2026-10-01T00:00:00Z');
 const actor: GuildActor = { id: 1, role: 'member' };
@@ -43,10 +48,12 @@ const row = (
 });
 const order: string[] = [];
 const adapter = { resolveLadder: jest.fn() };
+/** The handle the mocked transaction hands its callback. */
+const TX = { tx: true };
 const db = {
   transaction: async (fn: (tx: object) => Promise<unknown>) => {
     order.push('begin');
-    const out = await fn({});
+    const out = await fn(TX);
     order.push('commit');
     return out;
   },
@@ -86,7 +93,7 @@ describe('leave as leader (D13)', () => {
     jest.mocked(mq.findMembership).mockResolvedValue(row({ role: 'leader' }));
     jest.mocked(lookup.countLiveMembers).mockResolvedValue(1);
     await svc.leave(actor, 7);
-    expect(lookup.archiveHub).toHaveBeenCalledWith({}, 7, 'empty');
+    expect(lookup.archiveHub).toHaveBeenCalledWith(TX, 7, 'empty');
   });
 });
 
@@ -122,15 +129,15 @@ describe('role-sensitive writes serialise with transfers (M22)', () => {
   });
 
   it('remove reads the target under the hub lock — a just-promoted leader is refused', async () => {
-    adapter.resolveLadder.mockResolvedValue('officer');
+    jest.mocked(reads.liveCommunityRole).mockResolvedValue('officer');
     await expect(svc.remove(actor, 7, 3)).rejects.toThrow(ForbiddenException);
     expect(order).toEqual(['begin', 'lock', 'read']);
-    expect(mq.findMembership).toHaveBeenCalledWith({}, 7, 3);
+    expect(mq.findMembership).toHaveBeenCalledWith(TX, 7, 3);
     expect(mq.markLeft).not.toHaveBeenCalled();
   });
 
   it('setRole reads the target under the hub lock — never demotes the new leader', async () => {
-    adapter.resolveLadder.mockResolvedValue('leader');
+    jest.mocked(reads.liveCommunityRole).mockResolvedValue('leader');
     await expect(svc.setRole(actor, 7, 3, { role: 'member' })).rejects.toThrow(
       ConflictException,
     );
@@ -145,5 +152,47 @@ describe('role-sensitive writes serialise with transfers (M22)', () => {
     );
     expect(order).toEqual(['begin', 'lock', 'read']);
     expect(mq.markLeft).not.toHaveBeenCalled();
+  });
+});
+
+describe('caller role is read on the lock tx, never the pool (Codex r4)', () => {
+  /** Lock, then the caller-role read on TX; the pool adapter is never asked. */
+  function expectRoleReadOnTx(): void {
+    expect(reads.liveCommunityRole).toHaveBeenCalledWith(TX, 7, actor.id);
+    const lockAt = jest.mocked(mq.lockHubRow).mock.invocationCallOrder[0];
+    const roleAt = jest.mocked(reads.liveCommunityRole).mock
+      .invocationCallOrder[0];
+    expect(lockAt).toBeLessThan(roleAt ?? 0);
+    expect(adapter.resolveLadder).not.toHaveBeenCalled();
+  }
+
+  beforeEach(() => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({ userId: 3 }));
+  });
+
+  it('setRole: a caller demoted to officer meanwhile is refused (403)', async () => {
+    jest.mocked(reads.liveCommunityRole).mockResolvedValue('officer');
+    adapter.resolveLadder.mockResolvedValue('leader');
+    await expect(svc.setRole(actor, 7, 3, { role: 'officer' })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expectRoleReadOnTx();
+    expect(mq.setRole).not.toHaveBeenCalled();
+  });
+
+  it('remove: the ladder uses the role read on the tx', async () => {
+    jest.mocked(reads.liveCommunityRole).mockResolvedValue('leader');
+    adapter.resolveLadder.mockResolvedValue('member');
+    await expect(svc.remove(actor, 7, 3)).resolves.toBeUndefined();
+    expectRoleReadOnTx();
+    expect(mq.markLeft).toHaveBeenCalledWith(TX, 7, 3, actor.id);
+  });
+
+  it('staff need no hub membership (no role read)', async () => {
+    jest.mocked(mq.setRole).mockResolvedValue(row({ userId: 3 }));
+    await expect(
+      svc.setRole({ id: 9, role: 'admin' }, 7, 3, { role: 'officer' }),
+    ).resolves.toMatchObject({ userId: 3 });
+    expect(reads.liveCommunityRole).not.toHaveBeenCalled();
   });
 });

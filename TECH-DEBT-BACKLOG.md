@@ -3454,10 +3454,6 @@ same day (#1278, #1279, #1280).
 
 - low `web/src/components/hub/community/community-member-menu.tsx` (desktop dropdown placement) — on the LAST member row the portalled Manage menu opens downward past the bottom of an 800px-tall window (menu bottom at ~829px) and the page cannot scroll further, so "Make leader" is unreachable without resizing. The table-clipping bug it replaced is fixed; this is placement only. Suggested: flip the dropdown upward when the viewport has no room below (the `Combobox`/notify-bell portal pattern already measures — reuse its placement helper), or cap the menu height with an internal scroll.
 - nit setup checklist copy on `game_community` hubs still says "guild" in a few lines (e.g. "Import your roster"-style strings inherited from the WoW copy); route the remaining strings through `hub-copy.ts`.
-
-### 2026-10-20 — feat/rok-1870-community-hubs (surfaced during the Codex r3 fix round)
-
-- **low** — `api/src/guilds/community/community-membership.service.ts` (`remove`, `setRole`): both still read the caller's/target's role through the pool while holding the hub row lock, after Codex r3 moved `transferLeader` to re-read roles on the lock's tx. Reads do not block under MVCC, so this is not the ROK-1428-style self-deadlock, but a racing role change can still be decided on a pre-lock read. Suggested: pass the lock's `tx` into `liveCommunityRole` in both, as `transferLeader` now does, with a call-order unit case each.
 ### 2026-10-20 — feat/rok-1598-apple-caldav (surfaced during review r1 fix round)
 
 - **nit** `api/src/calendar-sync/services/calendar-connect-password.helpers.ts:55-58` — find-then-upsert race: two concurrent Apple connects for the same account can both report `created`, so the first read sync is enqueued twice (it collapses on the fixed job id; harmless). Not fixed in ROK-1598. Suggested: return `(xmax = 0) AS inserted` from the upsert's `RETURNING` instead of the prior find.
