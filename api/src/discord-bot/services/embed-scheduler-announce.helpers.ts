@@ -41,8 +41,10 @@ async function findPostedMessage(
 /**
  * ROK-1832 D6a: a group-tagged event deferred past its lead-time window is
  * announced when the scheduler posts its embed. Runs the same merged plan as
- * the create path (`notifyGameAffinity`); its per-event claim keeps it
- * idempotent. Untagged deferred events keep their pre-ROK-1832 behaviour.
+ * the create path (`notifyGameAffinity`) under its own group-only claim
+ * (Codex r7: the scheduler also picks up a new event before its lifecycle
+ * job runs, whose full announcement must still find its claim free); the
+ * per-(user, event) claims stop a user being noticed twice. Untagged deferred events keep their pre-ROK-1832 behaviour.
  */
 export async function announceDeferredGroupEvent(
   deps: DeferredAnnounceDeps,
@@ -67,6 +69,7 @@ export async function announceDeferredGroupEvent(
     // quick-sign-up sent before the per-user claims, or whose claim expired)
     // are skipped — the deferred announce carries no `followupForEventId`.
     excludePriorNoticeHolders: true,
+    groupOnly: true,
   });
 }
 

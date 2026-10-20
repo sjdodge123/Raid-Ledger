@@ -57,6 +57,7 @@ describe('announceGroupForEvent', () => {
         gameId: null,
         gameName: null,
         excludePriorNoticeHolders: true,
+        groupOnly: true,
       }),
     );
   });

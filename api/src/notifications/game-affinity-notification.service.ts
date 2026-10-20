@@ -17,6 +17,7 @@ import {
 } from './hub-notification.queries';
 import {
   EVENT_NOTICE_TTL_SECONDS,
+  eventAnnounceKey,
   eventNoticeKey,
 } from './event-notice-plan.helpers';
 import {
@@ -56,6 +57,11 @@ export interface GameAffinityNotificationInput {
    * by the deferred announce, which can run long after the follow-up DMs.
    */
   excludePriorNoticeHolders?: boolean;
+  /**
+   * ROK-1832 (Codex r7): the scheduler's group-only send. It claims a separate
+   * event-level key so a not-yet-run full announcement is not starved.
+   */
+  groupOnly?: boolean;
 }
 
 /**
@@ -82,7 +88,7 @@ export class GameAffinityNotificationService {
   async notifyGameAffinity(
     input: GameAffinityNotificationInput,
   ): Promise<void> {
-    const dedupKey = `game-alert:event:${input.eventId}`;
+    const dedupKey = eventAnnounceKey(input.eventId, input.groupOnly === true);
     if (await this.hasNoAudienceSource(input)) {
       // Mark it announced anyway: a later group tag (D6b) keys on this mark.
       await this.dedupService.checkAndMarkSent(

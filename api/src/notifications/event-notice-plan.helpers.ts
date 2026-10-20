@@ -46,6 +46,19 @@ export function planEventNotices(input: EventNoticePlanInput): EventNotice[] {
   return [...plan].map(([userId, type]) => ({ userId, type }));
 }
 
+/**
+ * The event-level announce claim (Codex r7). The scheduler's group-only send
+ * claims its own key, so it never consumes the full announcement's
+ * `game-alert:event:<id>` claim; the per-user keys below still dedupe users
+ * across the two sends. Both prefixes start `game-alert`, so the test resets
+ * that purge `game-alert*` cover them.
+ */
+export function eventAnnounceKey(eventId: number, groupOnly: boolean): string {
+  return groupOnly
+    ? `game-alert-group:event:${eventId}`
+    : `game-alert:event:${eventId}`;
+}
+
 /** The D4 per-(user, event) claim key. */
 export function eventNoticeKey(eventId: number, userId: number): string {
   return `event-notice:${eventId}:user:${userId}`;

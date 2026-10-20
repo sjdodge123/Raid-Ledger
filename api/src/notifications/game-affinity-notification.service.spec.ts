@@ -261,3 +261,44 @@ describe('GameAffinityNotificationService — durable prior notices (Codex r4)',
     expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
   });
 });
+
+describe('GameAffinityNotificationService — group-only scheduler send (Codex r7)', () => {
+  const groupOnly = {
+    ...input,
+    gameId: null,
+    gameName: null,
+    excludePriorNoticeHolders: true,
+    groupOnly: true,
+  };
+
+  beforeEach(() => {
+    affinity.mockReset();
+    guildOf.mockReset();
+    priorHolders.mockReset();
+    priorHolders.mockResolvedValue(new Set());
+    affinity.mockResolvedValue([10, 20]);
+    guildOf.mockResolvedValue(7);
+  });
+
+  it('leaves the full-announcement claim free for the later lifecycle job', async () => {
+    const h = build([20]);
+    await h.service.notifyGameAffinity(groupOnly);
+    expect(h.claimed.has('game-alert:event:1')).toBe(false);
+    await h.service.notifyGameAffinity(input);
+    // 10 is outside the group: only the full announcement reaches them.
+    expect(sentTypes(h.create)).toEqual([
+      [20, 'hub_event_tagged'],
+      [10, 'subscribed_game'],
+    ]);
+  });
+
+  it('a group-only send after the full announcement notices nobody twice', async () => {
+    const h = build([20]);
+    await h.service.notifyGameAffinity(input);
+    await h.service.notifyGameAffinity(groupOnly);
+    expect(sentTypes(h.create)).toEqual([
+      [20, 'hub_event_tagged'],
+      [10, 'subscribed_game'],
+    ]);
+  });
+});
