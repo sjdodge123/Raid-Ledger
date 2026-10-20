@@ -21,8 +21,13 @@ import { games } from './games';
 /** An overwrite bit's tri-state before archive changed it. */
 export type OverwritePriorState = 'allow' | 'deny' | 'inherit';
 
-/** The two bits an archive locks. */
-type ArchivedOverwriteFlag = 'SendMessages' | 'ViewChannel';
+/** The bits an archive locks (thread bits: Codex r4b — read-only means threads too). */
+type ArchivedOverwriteFlag =
+  | 'SendMessages'
+  | 'SendMessagesInThreads'
+  | 'CreatePublicThreads'
+  | 'CreatePrivateThreads'
+  | 'ViewChannel';
 
 /**
  * One overwrite bit an archive changed, with the state to restore.

@@ -1,6 +1,7 @@
 /**
  * ROK-1428 D6 (Codex r2): archive's permission-overwrite plan and its exact
- * inverse. Archive denies `@everyone` SendMessages (+ ViewChannel when hiding),
+ * inverse. Archive denies `@everyone` SendMessages + the thread send/create
+ * bits (+ ViewChannel when hiding),
  * turns any other role/member Allow for those bits into a Deny (Codex r3), and
  * gives the bot's member overwrite an explicit allow for the same bits, so
  * the bot can still post (and see) while the channel is archived. Every bit it
@@ -8,6 +9,7 @@
  * priors back — a prior explicit Allow/Deny returns instead of being cleared.
  */
 import {
+  DiscordAPIError,
   OverwriteType,
   PermissionFlagsBits,
   type PermissionOverwriteManager,
@@ -48,6 +50,17 @@ const ARCHIVED: Record<Target, OverwritePriorState> = {
   role: 'deny',
   member: 'deny',
 };
+
+/** Archive's read-only lock: posting AND thread replies/creation (Codex r4b). */
+const SEND_FLAGS: LockFlag[] = [
+  'SendMessages',
+  'SendMessagesInThreads',
+  'CreatePublicThreads',
+  'CreatePrivateThreads',
+];
+
+/** Discord's "that role/user/member no longer exists" codes. */
+const TARGET_GONE_CODES = new Set([10007, 10011, 10013]);
 
 /** A null record = archived before the record existed: only the send lock. */
 const LEGACY_CHANGES: ArchivedOverwriteChange[] = [
@@ -112,9 +125,7 @@ export function planArchive(
   ids: OverwriteIds,
   hide: boolean,
 ): ArchivedOverwriteChange[] {
-  const flags: LockFlag[] = hide
-    ? ['SendMessages', 'ViewChannel']
-    : ['SendMessages'];
+  const flags: LockFlag[] = hide ? [...SEND_FLAGS, 'ViewChannel'] : SEND_FLAGS;
   const changes: ArchivedOverwriteChange[] = [];
   for (const target of ['bot', 'everyone'] as const) {
     const ow = po.cache.get(target === 'bot' ? ids.botId : ids.everyoneId);
@@ -204,6 +215,27 @@ function leavesEmpty(
   return allow === 0n && deny === 0n;
 }
 
+/**
+ * Restore one group, skipping a role/member deleted while archived (Codex
+ * r4b): Discord rejects the write, and a throw would fail every later
+ * unarchive before the archived state is cleared.
+ */
+async function restoreGroupSafely(
+  po: PermissionOverwriteManager,
+  g: Group,
+): Promise<void> {
+  try {
+    await restoreGroup(po, g);
+  } catch (err) {
+    const fixed = g.isBot || g.changes.some((c) => c.target === 'everyone');
+    const gone =
+      err instanceof DiscordAPIError &&
+      typeof err.code === 'number' &&
+      TARGET_GONE_CODES.has(err.code);
+    if (fixed || !gone) throw err;
+  }
+}
+
 /** Restore one overwrite's priors; an overwrite left empty is deleted. */
 async function restoreGroup(
   po: PermissionOverwriteManager,
@@ -238,5 +270,5 @@ export async function restorePriors(
     ...groups.filter((g) => !g.isBot),
     ...groups.filter((g) => g.isBot),
   ];
-  for (const g of ordered) await restoreGroup(po, g);
+  for (const g of ordered) await restoreGroupSafely(po, g);
 }
