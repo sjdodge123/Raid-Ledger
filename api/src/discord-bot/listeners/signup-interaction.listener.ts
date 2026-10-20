@@ -288,15 +288,19 @@ export class SignupInteractionListener {
       );
   }
 
-  /** Settings context + the card's hub link (ROK-1872, best-effort). */
+  /**
+   * Settings context + the card's hub link (ROK-1872, best-effort). The client
+   * URL comes from settings, like the poster and embed-sync (Codex r6 P2).
+   */
   private async buildEmbedContext(eventId: number): Promise<EmbedContext> {
-    const [branding, timezone] = await Promise.all([
+    const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
     const ctx = {
       communityName: branding.communityName,
-      clientUrl: process.env.CLIENT_URL ?? null,
+      clientUrl,
       timezone,
     };
     return withEventHubLink(this.db, ctx, eventId, this.logger);

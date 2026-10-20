@@ -120,3 +120,41 @@ describe('card refresh paths keep the hub link (ROK-1872)', () => {
     expect('hubLink' in (await listener['buildContext']())).toBe(false);
   });
 });
+
+// ROK-1428 Codex r6 P2: the poster and embed-sync resolve the client URL via
+// `SettingsService.getClientUrl()`; a refresh built from `process.env` swapped
+// a working Hub link for a stale one when the two differ.
+describe('card refresh paths use the settings-backed client URL', () => {
+  const STALE = 'https://stale-env.example';
+  const prevUrl = process.env.CLIENT_URL;
+  beforeAll(() => (process.env.CLIENT_URL = STALE));
+  afterAll(() => (process.env.CLIENT_URL = prevUrl));
+  beforeEach(() => resolve.mockReset().mockResolvedValue(HUB));
+
+  it('running-late re-render resolves the hub against settings, not env', async () => {
+    const { deps, build } = handlerDeps();
+    await lateRefresh(deps as RunningLateDeps, 42);
+    expect(ctxOf(build)).toMatchObject({ clientUrl: BASE });
+    expect(resolve).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      BASE,
+      expect.anything(),
+    );
+  });
+
+  it('roach-out re-render uses the settings client URL', async () => {
+    const { deps, build } = handlerDeps();
+    await roachRefresh(deps as RoachOutDeps, 42);
+    expect(ctxOf(build)).toMatchObject({ clientUrl: BASE });
+  });
+
+  it('signup listener context uses the settings client URL', async () => {
+    const { module } = await createSignupInteractionTestModule();
+    const svc = module.get<{ getClientUrl?: unknown }>(SettingsService);
+    svc.getClientUrl = jest.fn().mockResolvedValue(BASE);
+    const listener = module.get(SignupInteractionListener);
+    const ctx = await listener['buildEmbedContext'](42);
+    expect(ctx).toMatchObject({ clientUrl: BASE });
+  });
+});
