@@ -17,6 +17,8 @@
  * and computes a THISANDFUTURE shift wall clock to wall clock — a weekly
  * 19:00 New York series moved to 22:00Z on Oct 27 is 23:00Z on Nov 3. With
  * a VTIMEZONE the conversion uses its rules, never an Intl lookup (Codex r6).
+ * Codex r7: a UTC master's EXDATE / RDATE naming an IANA TZID with no
+ * VTIMEZONE (floating in ical.js) is rewritten to its UTC instant.
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -132,12 +134,53 @@ function alignOverride(override: ICAL.Component, target: Target): void {
   }
 }
 
+function isUtcMaster(master: ICAL.Component): boolean {
+  const value: unknown = master.getFirstPropertyValue('dtstart');
+  return (
+    value instanceof ICAL.Time &&
+    !value.isDate &&
+    value.zone === ICAL.Timezone.utcTimezone
+  );
+}
+
+/** A floating value placed by its IANA TZID → that instant, in UTC. */
+function toUtc(
+  value: ICAL.Time,
+  tzid: string,
+  floating: FloatingZone,
+): ICAL.Time {
+  if (value.isDate || value.zone === ICAL.Timezone.utcTimezone) return value;
+  if (isRealZone(value.zone)) return value;
+  const ms = timeToMs(value, tzid, floating);
+  return ms === null ? value : ICAL.Time.fromJSDate(new Date(ms), true);
+}
+
+/** Codex r7: a UTC master's zoned EXDATE / RDATE → UTC instants. */
+function alignToUtc(master: ICAL.Component, floating: FloatingZone): void {
+  for (const name of ['exdate', 'rdate'] as const) {
+    for (const prop of master.getAllProperties(name)) {
+      const tzid = tzidOf(prop);
+      if (tzid === null) continue;
+      const values: unknown[] = prop.getValues();
+      prop.setValues(
+        values.map((v) =>
+          v instanceof ICAL.Time ? toUtc(v, tzid, floating) : v,
+        ),
+      );
+    }
+  }
+}
+
 /** Rewrite UNTIL / EXDATE / RDATE + override times onto the series' clock. */
 export function alignSeriesZone(
   master: ICAL.Component,
   floating: FloatingZone,
   overrides: readonly ICAL.Component[] = [],
 ): void {
+  if (isUtcMaster(master)) {
+    alignToUtc(master, floating);
+    return;
+  }
   const target = seriesTarget(master, floating);
   if (target === null) return;
   if (target.real) {

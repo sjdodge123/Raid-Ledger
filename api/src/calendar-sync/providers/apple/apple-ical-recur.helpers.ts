@@ -34,6 +34,7 @@ import ICAL from 'ical.js';
 import type { BusyBlock, TimeRange } from '../calendar-provider.interface';
 import {
   normalizePeriodRdates,
+  splitDuration,
   type PeriodEnds,
 } from './apple-ical-rdate-period.helpers';
 import {
@@ -106,13 +107,9 @@ function durationMsOf(vevent: ICAL.Component): number | null {
 /** DURATION split into its nominal day part and its exact time part. */
 function durationParts(vevent: ICAL.Component): DurationParts {
   const d = vevent.getFirstPropertyValue('duration');
-  if (!(d instanceof ICAL.Duration)) return { days: 0, exactMs: 0 };
-  const sign = d.isNegative ? -1 : 1;
-  const seconds = d.hours * 3600 + d.minutes * 60 + d.seconds;
-  return {
-    days: sign * (d.weeks * 7 + d.days),
-    exactMs: sign * seconds * 1000,
-  };
+  return d instanceof ICAL.Duration
+    ? splitDuration(d)
+    : { days: 0, exactMs: 0 };
 }
 
 /** The end instant of a timed occurrence starting at `t` (= `startMs`). */

@@ -344,3 +344,71 @@ describe('THISANDFUTURE DURATION:PT24H across the New York DST end (Codex r6)', 
     expect(wideParse(ics.replace(vtimezoneOf(ics), ''))).toEqual(expected);
   });
 });
+
+describe('UTC master + IANA-zoned RDATE / EXDATE without VTIMEZONE (Codex r7)', () => {
+  const utcSeries = (lines: string[]) =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:utc-master@icloud.test',
+      'DTSTART:20261020T230000Z',
+      'DTEND:20261021T000000Z',
+      ...lines,
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ].join('\r\n');
+
+  it('an RDATE at 19:00 New York lands at 23:00Z, not 19:00Z', () => {
+    const ics = utcSeries(['RDATE;TZID=America/New_York:20261022T190000']);
+    expect(starts(ics)).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+    ]);
+  });
+
+  it('an EXDATE at 19:00 New York removes the 23:00Z occurrence', () => {
+    const ics = utcSeries([
+      'RRULE:FREQ=DAILY;COUNT=3',
+      'EXDATE;TZID=America/New_York:20261021T190000',
+    ]);
+    expect(starts(ics)).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+    ]);
+  });
+});
+
+describe('duration-form period RDATE across the New York DST end (Codex r7)', () => {
+  const tz = vtimezoneOf(fixture('weekly-ny.ics'));
+  const ics = (zone: string) =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      zone,
+      'BEGIN:VEVENT',
+      'UID:period-pt24h@icloud.test',
+      'DTSTART;TZID=America/New_York:20261020T120000',
+      'DTEND;TZID=America/New_York:20261020T130000',
+      'RDATE;TZID=America/New_York;VALUE=PERIOD:20261031T120000/PT24H',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ]
+      .filter((l) => l.length > 0)
+      .join('\r\n')
+      .concat('\r\n');
+  const expected = [
+    '2026-10-20T16:00:00.000Z/2026-10-20T17:00:00.000Z',
+    '2026-10-31T16:00:00.000Z/2026-11-01T16:00:00.000Z',
+  ];
+
+  it('ends exactly 24 hours later (VTIMEZONE)', () => {
+    expect(rows(ics(tz.trimEnd()))).toEqual(expected);
+  });
+
+  it('ends exactly 24 hours later (no VTIMEZONE)', () => {
+    expect(rows(ics(''))).toEqual(expected);
+  });
+});

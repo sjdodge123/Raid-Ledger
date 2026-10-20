@@ -7,6 +7,10 @@
  * the series'. A value that is neither a Time nor a usable Period is dropped
  * on its own; the rest of the series still expands. Mutates the per-parse
  * master in place.
+ *
+ * Codex r7: a duration-form period (`<start>/PT24H`) ends like a DURATION —
+ * its day/week part on the wall clock, its hour/minute/second part as exact
+ * time — so noon New York Oct 31 `/PT24H` ends 16:00Z Nov 1, not 17:00Z.
  */
 import ICAL from 'ical.js';
 import { timeToMs, type FloatingZone } from './apple-ical-time.helpers';
@@ -19,6 +23,34 @@ function tzidOf(prop: ICAL.Property): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
+/** A DURATION split into its nominal day part and its exact time part. */
+export function splitDuration(d: ICAL.Duration): {
+  days: number;
+  exactMs: number;
+} {
+  const sign = d.isNegative ? -1 : 1;
+  const seconds = d.hours * 3600 + d.minutes * 60 + d.seconds;
+  return {
+    days: sign * (d.weeks * 7 + d.days),
+    exactMs: sign * seconds * 1000,
+  };
+}
+
+/** A period's end instant: explicit end exact, a duration nominal + exact. */
+function periodEndMs(
+  period: ICAL.Period,
+  start: ICAL.Time,
+  tzid: string | null,
+  floating: FloatingZone,
+): number | null {
+  if (!period.duration) return timeToMs(period.getEnd(), tzid, floating);
+  const { days, exactMs } = splitDuration(period.duration);
+  const shifted = start.clone();
+  shifted.adjust(days, 0, 0, 0);
+  const base = timeToMs(shifted, tzid, floating);
+  return base === null ? null : base + exactMs;
+}
+
 /** One RDATE value → its start Time (recording a period's end), or null. */
 function startOf(
   value: unknown,
@@ -29,7 +61,7 @@ function startOf(
   if (value instanceof ICAL.Time) return value;
   if (!(value instanceof ICAL.Period) || !value.start) return null;
   const startMs = timeToMs(value.start, tzid, floating);
-  const endMs = timeToMs(value.getEnd(), tzid, floating);
+  const endMs = periodEndMs(value, value.start, tzid, floating);
   if (startMs === null || endMs === null) return null;
   if (endMs > startMs) ends.set(startMs, endMs);
   return value.start;
