@@ -26,7 +26,7 @@ import {
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
-  CronJobsPanel, BackupsPanel, LogsPanel,
+  CronJobsPanel, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage,
@@ -89,6 +89,7 @@ function AdminSettingsRoutes() {
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
       <Route path="general/backups" element={<BackupsPanel />} />
       <Route path="general/logs" element={<LogsPanel />} />
+      <Route path="general/hubs" element={<HubsPanel />} />
       {AdminIntegrationRoutes()}
       <Route path="discord" element={<DiscordOverviewPage />} />
       <Route path="discord/auth" element={<DiscordAuthPage />} />
@@ -146,6 +147,7 @@ export function AppRoutes() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/games/:id" element={<GameDetailPage />} />
+        <Route path="/hubs" element={<HubsDirectoryPage />} />
         <Route path="/lfg/:gameSlug" element={<LfgGroupPage />} />
         <Route path="/community-lineup/:id" element={<LineupDetailPage />} />
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
