@@ -13,8 +13,10 @@ interface RequestWithGuild {
 }
 
 /**
- * ROK-1830 D5-A — admits only the guild's Leader (today: admin/operator) via
- * `GuildAccessService.canManageEditors`. Officers hold `canEdit` and are
+ * ROK-1830 D5-A — admits only the guild's Leader via
+ * `GuildAccessService.canManageDiscord`: admin/operator on every kind, plus
+ * (ROK-1870 §2.5) a `game_community` hub's ladder Leader — a WoW GM stays
+ * refused. Officers hold `canEdit` and are
  * refused here, so the Discord channel binding cannot be rebound by a
  * delegated editor; editor delegation enforces the same rule one layer down,
  * in `GuildEditorsService`. Mount AFTER the JWT auth guard, like
@@ -29,7 +31,7 @@ export class GuildLeaderGuard implements CanActivate {
     const user = request.user;
     if (!user) return false;
     const guildId = parseGuildIdParam(request.params?.['id']);
-    if (!(await this.access.canManageEditors(user, guildId))) {
+    if (!(await this.access.canManageDiscord(user, guildId))) {
       throw new ForbiddenException('Guild leader access required');
     }
     return true;

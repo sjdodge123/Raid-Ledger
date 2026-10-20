@@ -29,7 +29,8 @@ import { findGuild } from './guild-core.queries';
 import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
 
 /**
- * ROK-1786 — the guild's GM post, rules and links. Reads need `canView`
+ * ROK-1786 — the guild's GM post, rules and links. Reads need `canReadOverview`
+ * (`canView`, or a visitor on an active community hub — ROK-1870 D14)
  * (403 before 404, like `GET :id`); writes arrive behind `GuildEditorGuard`.
  */
 @Injectable()
@@ -42,7 +43,7 @@ export class GuildProfileService {
   ) {}
 
   async get(actor: GuildActor, guildId: number): Promise<GuildProfile> {
-    if (!(await this.access.canView(actor, guildId))) {
+    if (!(await this.access.canReadOverview(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
     await this.assertGuild(guildId);

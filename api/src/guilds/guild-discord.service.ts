@@ -40,7 +40,7 @@ import { findGuild } from './guild-core.queries';
 
 /**
  * ROK-1788 (S4) — the guild page's read-only Discord channel mirror. Reads
- * need `canView` (403 before 404); writes arrive behind `GuildLeaderGuard`
+ * need `canReadOverview` (403 before 404; community visitors pass, D14); writes arrive behind `GuildLeaderGuard`
  * (ROK-1830 D5-A: Leader/staff only — an Officer is refused).
  * Discord itself is behind `ChannelMirrorService` (60s cache, never stored).
  */
@@ -59,7 +59,7 @@ export class GuildDiscordService {
     actor: GuildActor,
     guildId: number,
   ): Promise<GuildDiscordMirrorDto> {
-    if (!(await this.access.canView(actor, guildId))) {
+    if (!(await this.access.canReadOverview(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
     await this.assertGuild(guildId);
