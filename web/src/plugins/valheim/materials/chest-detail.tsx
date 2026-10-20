@@ -40,6 +40,17 @@ function Contents({
     detail: ValheimContainerDetail;
     ctx: ItemIconContext;
 }): JSX.Element {
+    // Checked first: an unreadable chest has no stacks, but it is not empty (Codex r2).
+    if (detail.unreadable)
+        return (
+            <p
+                role="status"
+                className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning"
+            >
+                Raid Ledger couldn’t read this chest’s contents in the last
+                scan, so what it holds is unknown.
+            </p>
+        );
     if (detail.stacks.length === 0)
         return <p className="text-sm text-muted">This chest is empty.</p>;
     return (
