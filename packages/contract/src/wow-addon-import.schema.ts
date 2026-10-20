@@ -55,6 +55,13 @@ export const AddonImportRequestSchema = z.object({
     dryRun: z.boolean().default(true),
     confirm: z.object({
         updateRuleset: z.boolean().optional(),
+        /**
+         * ROK-1739 (Codex r2 P2): the ruleset the preview showed and the user
+         * approved. When present the apply writes the inferred ruleset only if
+         * the fresh inference still equals it; otherwise it warns
+         * RULESET_CHANGED again and writes nothing (re-preview). Additive.
+         */
+        updateRulesetTo: WowForeverRulesetSchema.optional(),
         repinGuid: z.boolean().optional(),
     }).strict().optional(),
 }).strict();
