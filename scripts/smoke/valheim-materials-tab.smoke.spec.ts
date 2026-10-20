@@ -178,7 +178,8 @@ test.describe("Valheim hub — Materials personal section per viewer (ROK-1853)"
     await expect(totalRows(personal, wide)).toHaveCount(1);
     await expect(totalRows(personal, wide)).toContainText("999");
     await expect(page.getByText(/^1 chest$/)).toBeVisible();
-    await expect(page.getByText(/not scanned/)).toHaveCount(0);
+    // The admin-only omittedPrivate line; the shared warnings block may say "was not scanned".
+    await expect(page.getByText(/personal chests? not scanned/)).toHaveCount(0);
 
     await page.context().clearCookies();
     await signInContextAs(page.context(), f.memberUserId);
