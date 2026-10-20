@@ -104,6 +104,8 @@ describe('Valheim Link v1 golden fixtures — valid', () => {
       'character-vanilla',
       'items-atlas',
       'items-file-icons',
+      'containers-basic',
+      'containers-private',
       'map-personal',
       'map-shared-layer',
     ]);
