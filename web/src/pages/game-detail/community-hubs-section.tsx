@@ -39,7 +39,7 @@ function HubRow({ hub, onJoin, joining }: { hub: HubDirectoryEntry; onJoin: () =
     );
 }
 
-function ProposalRow({ proposal, gameId }: { proposal: HubProposal; gameId: number }): JSX.Element {
+function ProposalRow({ proposal }: { proposal: HubProposal }): JSX.Element {
     const [confirming, setConfirming] = useState(false);
     const withdraw = useWithdrawProposal();
     return (
@@ -117,7 +117,7 @@ export function CommunityHubsSection({ gameId, gameName }: { gameId: number; gam
                 <>
                     <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted">Your proposals</p>
                     <ul className="divide-y divide-edge-subtle">
-                        {data.myProposals.map((p) => <ProposalRow key={p.id} proposal={p} gameId={gameId} />)}
+                        {data.myProposals.map((p) => <ProposalRow key={p.id} proposal={p} />)}
                     </ul>
                 </>
             )}
