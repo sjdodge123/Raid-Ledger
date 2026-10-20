@@ -6,7 +6,11 @@
 import {
     ADDON_IMPORT_MAX_BYTES,
     ADDON_IMPORT_PAGE_RE,
+    WOW_FOREVER_RULESET_LABELS,
+    WOW_FOREVER_SELECTABLE_RULESETS,
     type AddonImportResultDto,
+    type AddonImportRulesetInferenceDto,
+    type WowForeverSelectableRuleset,
     type AddonImportWarning,
 } from '@raid-ledger/contract';
 import type { AddonImportConfirm } from './use-addon-import';
@@ -110,3 +114,20 @@ export function resultHeadline(result: AddonImportResultDto): string {
     return `${noun} imported.`;
 }
 
+
+/**
+ * ROK-1739 D5/D6: the realm-inferred ruleset when the create picker can use it.
+ * Hardcore is never selectable (A1), so a Hardcore inference returns null.
+ */
+export function selectableInference(inference: AddonImportRulesetInferenceDto | undefined): WowForeverSelectableRuleset | null {
+    if (!inference) return null;
+    return WOW_FOREVER_SELECTABLE_RULESETS.find((v) => v === inference.ruleset) ?? null;
+}
+
+/** ROK-1739 §6.3: the picker hint naming the realm the inference came from. */
+export function rulesetPickerHint(inference: AddonImportRulesetInferenceDto | undefined): string | undefined {
+    if (!inference) return undefined;
+    if (selectableInference(inference)) return `Pre-selected from realm ${inference.realmName} — change it if that's wrong.`;
+    const label = WOW_FOREVER_RULESET_LABELS[inference.ruleset];
+    return `Realm ${inference.realmName} is listed as ${label}, which can't be added yet — pick a ruleset.`;
+}

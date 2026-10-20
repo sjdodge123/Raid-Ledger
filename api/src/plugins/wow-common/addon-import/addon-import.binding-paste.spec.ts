@@ -129,4 +129,36 @@ describe('bindEverySection', () => {
     expect(r.diff).toEqual({ level: { from: 58, to: 59 } });
     expect(r.setRuleset).toBe('hardcore');
   });
+
+  // ROK-1739 Codex r4 P2: the preview showed only the authoritative
+  // section's normal→pvp, so confirming pvp must apply — another section's
+  // `hardcore` must not raise RULESET_CONFIRM_STALE.
+  it('checks the ruleset confirmation against the authoritative section only', () => {
+    const char = section({ ruleset: 'pvp' }, 1, 'char', base.exportedAt);
+    const raid = section(
+      { ruleset: 'hardcore' },
+      1,
+      'raid',
+      base.exportedAt + 60,
+    );
+    const r = bindEverySection([char, raid], character, {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    expect(r.errors.map((e) => e.code)).toEqual([]);
+    expect(r.setRuleset).toBe('pvp');
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
+    ]);
+  });
+
+  it('still checks identity and the GUID confirm on a non-authoritative section', () => {
+    const char = section({ ruleset: 'pvp' }, 1, 'char', base.exportedAt);
+    const raid = section({ guid: 'Player-4395-0FFFFFFF' }, 1, 'raid');
+    const r = bindEverySection([char, raid], character, {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    expect(r.errors.map((e) => e.code)).toEqual(['GUID_CONFIRM_REQUIRED']);
+  });
 });

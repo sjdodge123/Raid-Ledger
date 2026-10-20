@@ -26,15 +26,18 @@ const OPTIONS: readonly RadioOption<PickValue>[] = WOW_FOREVER_SELECTABLE_RULESE
 export interface AddonImportRulesetPickerProps {
     value: WowForeverSelectableRuleset | null;
     onChange: (value: WowForeverSelectableRuleset) => void;
+    /** ROK-1739 §6.3: where a pre-selection came from, or why a Hardcore inference left it empty. */
+    hint?: string | undefined;
 }
 
-export function AddonImportRulesetPicker({ value, onChange }: AddonImportRulesetPickerProps): JSX.Element {
+export function AddonImportRulesetPicker({ value, onChange, hint }: AddonImportRulesetPickerProps): JSX.Element {
     return (
         <div data-testid="addon-import-ruleset-picker" className="space-y-1.5">
             <RadioGroup<PickValue>
                 label="Ruleset" appearance="segmented" options={OPTIONS}
                 value={value ?? ''} onChange={(v) => { if (v !== '') onChange(v); }}
             />
+            {hint && <p data-testid="addon-import-ruleset-inference" className="text-sm text-secondary">{hint}</p>}
             <p id={RULESET_HINT_ID} className="text-sm text-muted">
                 The export doesn&apos;t say which ruleset this character plays on. Pick one to import.
             </p>

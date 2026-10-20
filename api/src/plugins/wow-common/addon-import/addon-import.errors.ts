@@ -29,6 +29,8 @@ const DEFAULT_MESSAGES: Record<AddonImportErrorCode, string> = {
   RATE_LIMITED: 'Too many imports — try again later.',
   CHARACTER_CLAIMED: 'That character is already claimed by another player.',
   RULESET_REQUIRED: 'Choose which ruleset this character plays on.',
+  RULESET_CONFIRM_STALE:
+    "The realm's ruleset changed since your preview — preview again and confirm the new value.",
 };
 
 /** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, everything else 422 (contract). */
