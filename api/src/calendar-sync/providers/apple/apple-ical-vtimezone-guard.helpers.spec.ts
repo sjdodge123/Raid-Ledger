@@ -67,3 +67,52 @@ describe('a VTIMEZONE observance rule ical.js cannot expand in bounded time (Cod
     expect(Date.now() - began).toBeLessThan(1000);
   }, 10_000);
 });
+
+describe('a malformed VTIMEZONE observance (Codex r12)', () => {
+  const STD_START = 'DTSTART:19701025T030000';
+  const malformed: [string, (ics: string) => string][] = [
+    ['an invalid RRULE string', (s) => withDaylightRule(s, 'FREQ=BOGUS;;=')],
+    ['a broken DTSTART', (s) => s.replace(STD_START, 'DTSTART:broken')],
+    ['no DTSTART', (s) => s.replace(`${STD_START}\r\n`, '')],
+    ['no TZOFFSETTO', (s) => s.replace('TZOFFSETTO:+0100\r\n', '')],
+    [
+      'a broken TZOFFSETTO',
+      (s) => s.replace('TZOFFSETTO:+0100', 'TZOFFSETTO:x'),
+    ],
+  ];
+
+  it.each(malformed)(
+    '%s → that VTIMEZONE is dropped, its TZID resolves through IANA',
+    (_, breakIt) => {
+      expect(parse(breakIt(berlin))).toEqual({
+        blocks: expect.any(Array),
+        skipped: 0,
+      });
+      expect(spans(breakIt(berlin))).toEqual(expected);
+    },
+  );
+
+  it.each(malformed)(
+    '%s, TZID not an IANA zone → its events are skipped, not thrown',
+    (_, breakIt) => {
+      const ics = breakIt(berlin).replace(
+        /Europe\/Berlin/g,
+        'Mars/Olympus_Mons',
+      );
+      expect(parse(ics)).toEqual({ blocks: [], skipped: 2 });
+    },
+  );
+
+  it.each(malformed)(
+    '%s in the collection calendar-timezone → its IANA TZID',
+    (_, breakIt) => {
+      const vtz = /BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE\r\n/.exec(berlin)?.[0];
+      if (!vtz) throw new Error('fixture has no VTIMEZONE');
+      const zone = `BEGIN:VCALENDAR\r\n${breakIt(vtz)}END:VCALENDAR\r\n`;
+      const floating = berlin
+        .replace(/BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE\r\n/, '')
+        .replace(/;TZID=Europe\/Berlin/g, '');
+      expect(spans(floating, zone)).toEqual(expected);
+    },
+  );
+});

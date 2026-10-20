@@ -23,9 +23,9 @@ import {
   decodeCopyId,
   deriveInstanceId,
 } from '../rl-copy-id.helpers';
-import { parseIcsRoot } from './apple-ical-time.helpers';
 import {
   dropCostlyTimezones,
+  parseCalendarRoot,
   safeFloatingZone,
 } from './apple-ical-vtimezone-guard.helpers';
 import { expandSeries, type SeriesContext } from './apple-ical-recur.helpers';
@@ -131,7 +131,7 @@ function splitCalendars(ics: string): string[] {
 }
 
 function parseCalendar(text: string, ctx: SeriesContext): IcsParseResult {
-  const root = parseIcsRoot(text);
+  const root = parseCalendarRoot(text);
   if (!root) return { blocks: [], skipped: 1 };
   // Codex r11: before ANY event time is converted through a VTIMEZONE.
   dropCostlyTimezones(root, ctx.range.end);
