@@ -17,10 +17,10 @@ import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identit
 import { nonEmpty } from '../common/testing/narrow';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
 import {
-  SEED_GUILD_GM_POST,
   SEED_GUILD_LINKS,
   SEED_GUILD_RULES,
 } from './demo-test-guild-content.helpers';
+import { SEED_HUB_POST_NEWEST } from './demo-test-hub-posts.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/wow/seed-guild';
@@ -311,7 +311,8 @@ describe('POST /admin/test/wow/seed-guild — withContent (ROK-1786)', () => {
     const profile = await guildGet(out.guildId, 'profile', token);
     expect(profile.status).toBe(200);
     expect(profile.body.gmPost).toEqual(
-      expect.objectContaining({ body: SEED_GUILD_GM_POST }),
+      // ROK-1868 A3: gmPost is derived from the newest seeded hub post.
+      expect.objectContaining({ body: SEED_HUB_POST_NEWEST }),
     );
     expect(profile.body.rules).toEqual(SEED_GUILD_RULES);
     expect(profile.body.links).toEqual(SEED_GUILD_LINKS);
@@ -333,11 +334,12 @@ describe('POST /admin/test/wow/seed-guild — withContent re-seed (ROK-1786)', (
     const first = await seedGuild('Restore Keepers', { withContent: true });
     const officer = await tokenFor(first.users.officer);
     const base = `/plugins/wow/guilds/${first.guildId}`;
-    const patched = await testApp.request
-      .patch(`${base}/profile`)
+    // ROK-1868: a new post (not the retired PATCH profile gmPost) is the edit.
+    const posted = await testApp.request
+      .post(`/guilds/${first.guildId}/posts`)
       .set('Authorization', `Bearer ${officer}`)
-      .send({ gmPost: 'Changed by the smoke' });
-    expect(patched.status).toBe(200);
+      .send({ body: 'Changed by the smoke', relayToDiscord: false });
+    expect(posted.status).toBe(201);
     const added = await testApp.request
       .post(`${base}/addons`)
       .set('Authorization', `Bearer ${officer}`)
@@ -347,7 +349,7 @@ describe('POST /admin/test/wow/seed-guild — withContent re-seed (ROK-1786)', (
     expect(second.content?.addonIds).toEqual(first.content?.addonIds);
     const token = await tokenFor(first.users.member);
     const profile = await guildGet(first.guildId, 'profile', token);
-    expect(profile.body.gmPost.body).toBe(SEED_GUILD_GM_POST);
+    expect(profile.body.gmPost.body).toBe(SEED_HUB_POST_NEWEST);
     const addons = await guildGet(first.guildId, 'addons', token);
     expect((addons.body.addons as AddonBody[]).map((a) => a.id)).toEqual(
       first.content?.addonIds,

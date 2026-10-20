@@ -245,11 +245,13 @@ describe('profile', () => {
     expect(res.status).toBe(400);
   });
 
-  it('/mine carries the GM post headline', async () => {
-    const post = await call('patch', `/${guildId}/profile`, 'admin', {
-      gmPost: 'Mine headline\nSecond line',
-    });
-    expect(post.status).toBe(200);
+  it('/mine carries the newest hub post headline (ROK-1868 D11)', async () => {
+    // ROK-1868 A3: the GM post is written through POST /guilds/:id/posts now.
+    const post = await testApp.request
+      .post(`/guilds/${guildId}/posts`)
+      .set('Authorization', `Bearer ${tokens.admin}`)
+      .send({ body: 'Mine headline\nSecond line', relayToDiscord: false });
+    expect(post.status).toBe(201);
     const res = await call('get', '/mine', 'plain');
     const mine = (res.body.guilds as { id: number }[]).find(
       (g) => g.id === guildId,
