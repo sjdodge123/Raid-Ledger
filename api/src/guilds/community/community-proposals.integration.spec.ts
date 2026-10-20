@@ -447,7 +447,9 @@ describe('A7 visibility of a proposed hub', () => {
     expect((await page(proposer)).status).toBe(404);
     const staff = await page(admin);
     expect(staff.status).toBe(200);
-    expect(staff.body).toEqual(expect.objectContaining({ id }));
+    // The hub page nests the summary under `guild` (GuildPage), not at the root.
+    expect(staff.body.guild.id).toBe(id);
+    expect(staff.body.status).toBe('proposed');
   });
 });
 
