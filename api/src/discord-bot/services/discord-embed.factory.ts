@@ -1,6 +1,7 @@
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { Injectable } from '@nestjs/common';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import type { HubLink } from '../embeds/hub-link-button.helpers';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import {
   createChannelEmbed,
@@ -86,6 +87,8 @@ export interface EmbedContext {
   communityName?: string | null;
   clientUrl?: string | null;
   timezone?: string | null;
+  /** ROK-1872 (D15): the event's resolved hub link; absent ⇒ no Hub button. */
+  hubLink?: HubLink | null;
 }
 
 /** Controls what action row buttons are attached to the embed. */
@@ -141,6 +144,7 @@ export class DiscordEmbedFactory {
       state,
       resolveClientUrl(context),
       options,
+      context.hubLink,
     );
     // Operator, sitting #3: the inline masked event link is emitted only when
     // no row is attached — the row's `View Event` button is that same link.
@@ -259,13 +263,15 @@ function buildRowFor(
   eventId: number,
   state: EmbedState,
   clientUrl: string | undefined,
-  options?: BuildEventEmbedOptions,
+  options: BuildEventEmbedOptions | undefined,
+  hubLink: HubLink | null | undefined,
 ): ActionRowBuilder<ButtonBuilder> | undefined {
   if (options?.multiGroup || TERMINAL_STATES.includes(state)) return undefined;
   const buttons = options?.buttons ?? 'signup';
   if (buttons === 'none') return undefined;
-  if (buttons === 'signup') return buildSignupButtons(eventId, clientUrl);
-  if (buttons === 'view') return buildViewButton(eventId, clientUrl);
+  if (buttons === 'signup')
+    return buildSignupButtons(eventId, clientUrl, hubLink);
+  if (buttons === 'view') return buildViewButton(eventId, clientUrl, hubLink);
   return buttons;
 }
 

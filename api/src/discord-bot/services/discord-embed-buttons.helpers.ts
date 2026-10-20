@@ -1,10 +1,15 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
+import { hubLinkButton, type HubLink } from '../embeds/hub-link-button.helpers';
 
-/** Build the standard signup action row (Sign Up, Tentative, Decline, View Event). */
+/**
+ * Build the standard signup action row (Sign Up, Tentative, Decline, View
+ * Event), plus a trailing `Hub` link button when a hub link resolved (D16).
+ */
 export function buildSignupButtons(
   eventId: number,
   clientUrl?: string | null,
+  hubLink?: HubLink | null,
 ): ActionRowBuilder<ButtonBuilder> {
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -29,5 +34,7 @@ export function buildSignupButtons(
         .setURL(`${baseUrl}/events/${eventId}`),
     );
   }
+  const hub = hubLinkButton(hubLink);
+  if (hub) row.addComponents(hub);
   return row;
 }

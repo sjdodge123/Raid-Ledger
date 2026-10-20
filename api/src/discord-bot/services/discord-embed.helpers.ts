@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { hubLinkButton, type HubLink } from '../embeds/hub-link-button.helpers';
 import {
   formatRoster,
   ROSTER_NAME_CAP,
@@ -155,19 +156,24 @@ function toRosterEntry(
 }
 
 /**
- * Build a standalone "View Event" link button.
+ * Build a standalone "View Event" link button, plus a `Hub` link button when
+ * a hub link resolved (D16).
  */
 export function buildViewButton(
   eventId: number,
   clientUrl?: string | null,
+  hubLink?: HubLink | null,
 ): ActionRowBuilder<ButtonBuilder> | undefined {
   const baseUrl = clientUrl || process.env.CLIENT_URL;
   if (!baseUrl) return undefined;
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setLabel('View Event')
       .setStyle(ButtonStyle.Link)
       .setURL(`${baseUrl}/events/${eventId}`),
   );
+  const hub = hubLinkButton(hubLink);
+  if (hub) row.addComponents(hub);
+  return row;
 }

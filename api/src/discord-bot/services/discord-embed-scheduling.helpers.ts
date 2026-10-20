@@ -212,13 +212,24 @@ function leadingTimeLines(slots: SchedulingPollSlot[]): string[] {
 }
 
 /** Open: intro, slots, tie rule when tied, deadline, then the vote link. */
+/**
+ * The poll link line, with ` · Hub ↗` appended when the game has a hub
+ * (ROK-1872, D16). Without one the line is byte-identical to before.
+ */
+function pollLinks(label: string, data: SchedulingPollEmbedData): string {
+  const poll = maskedLink(label, data.pollUrl);
+  const hub = data.hubLink;
+  if (!hub) return poll;
+  return `${poll} · ${maskedLink(`${hub.label} ${ARROW}`, hub.url)}`;
+}
+
 function openDescription(data: SchedulingPollEmbedData): string[] {
   const lines = votingHead(data.slots);
   // The rule is the comparator's own copy — never restated locally.
   if (topSlotsAreTied(data.slots)) lines.push('', `*${SLOT_TIE_RULE}*`);
   // The deadline sits directly above the link it closes (S1-AC3).
   lines.push('', ...deadlineLines(data.deadline));
-  lines.push(maskedLink(`Vote now ${ARROW}`, data.pollUrl));
+  lines.push(pollLinks(`Vote now ${ARROW}`, data));
   return lines;
 }
 
@@ -252,7 +263,7 @@ function terminalDescription(data: SchedulingPollEmbedData): string[] {
   } else {
     lines.push(...leadingTimeLines(data.slots), '', expiredHint(data));
   }
-  lines.push('', maskedLink(`View poll ${ARROW}`, data.pollUrl));
+  lines.push('', pollLinks(`View poll ${ARROW}`, data));
   return lines;
 }
 
@@ -264,7 +275,7 @@ function buildDescription(data: SchedulingPollEmbedData): string {
     // ROK-1607: the time is settled — a locked-in card must never invite a
     // vote. Only `open` says "Vote now".
     const lines = votingHead(data.slots);
-    lines.push('', maskedLink(`View poll ${ARROW}`, data.pollUrl));
+    lines.push('', pollLinks(`View poll ${ARROW}`, data));
     return lines.join('\n');
   }
   return terminalDescription(data).join('\n');

@@ -8,6 +8,7 @@
  * seam keeps compiling.
  */
 import type { EmbedBuilder } from 'discord.js';
+import type { HubLink } from '../discord-bot/embeds/hub-link-button.helpers';
 import { formatRoster } from '../discord-bot/embeds/embed-roster.helpers';
 import { lineupLink } from './lineup-notification-author.helpers';
 import {
@@ -38,6 +39,8 @@ export type LineupPhase = 'nominations' | 'voting' | 'decided';
 /** Shared context for embed building — resolved once by the service. */
 export interface EmbedContext {
   baseUrl: string;
+  /** ROK-1872 (D16): the decided game's hub link; absent ⇒ no `Hub` link. */
+  hubLink?: HubLink | null;
   lineupId: number;
   communityName: string;
   phase: LineupPhase;
@@ -177,6 +180,12 @@ export function buildVotingOpenEmbed(
   return { embed };
 }
 
+/** ` · [Hub ↗](url)` when the decided game has a hub, else empty (ROK-1872). */
+function hubSuffix(ctx: EmbedContext): string {
+  const hub = ctx.hubLink;
+  return hub ? ` · [${hub.label} ${ARROW}](${hub.url})` : '';
+}
+
 /** Matches found — decided phase (AC-5). */
 export function buildDecidedEmbed(
   ctx: EmbedContext,
@@ -194,7 +203,7 @@ export function buildDecidedEmbed(
     descIntro(ctx) +
       copy.body +
       reason +
-      `\n\n${lineupLink(ctx, `View results ${ARROW}`)}`,
+      `\n\n${lineupLink(ctx, `View results ${ARROW}`)}${hubSuffix(ctx)}`,
   );
 
   const podium = topVotedField(sorted, ctx);
@@ -224,8 +233,8 @@ function addTierField(
 /** The trailing link line of the event-created embed (event first, then lineup). */
 function eventCreatedLinks(ctx: EmbedContext, eventId?: number): string {
   const lineup = lineupLink(ctx, `Open lineup ${ARROW}`);
-  if (!eventId) return lineup;
-  return `[Open event ${ARROW}](${ctx.baseUrl}/events/${eventId}) · ${lineup}`;
+  if (!eventId) return lineup + hubSuffix(ctx);
+  return `[Open event ${ARROW}](${ctx.baseUrl}/events/${eventId}) · ${lineup}${hubSuffix(ctx)}`;
 }
 
 /** Event created from a scheduled match (AC-10). */
