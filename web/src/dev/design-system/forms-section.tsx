@@ -4,7 +4,8 @@
  * `Checkbox`, `RadioGroup`, `Slider`, `SearchInput`, `Combobox`, plus ROK-1655's
  * `PasswordInput` here and `FilePicker` / `ColorInput` / `Button brandColor` in
  * forms-pickers-demo.tsx, and ROK-1653's segmented "All" filter and row-menu
- * recipes plus the one-save-at-a-time row lock in forms-recipes-demo.tsx. Every example mounts the REAL component, so this page
+ * recipes plus the one-save-at-a-time row lock in forms-recipes-demo.tsx,
+ * and ROK-1868's `MarkdownBlock` / `CharCounter` in markdown-block-demo.tsx. Every example mounts the REAL component, so this page
  * is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the
@@ -31,6 +32,7 @@ import { SavedSecretStatus } from '../../components/admin/saved-secret-status';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { PickerStates } from './forms-pickers-demo';
 import { RecipeStates } from './forms-recipes-demo';
+import { MarkdownStates } from './markdown-block-demo';
 
 function ButtonVariants(): JSX.Element {
     return (
@@ -234,6 +236,7 @@ export function FormsSection(): JSX.Element {
                     <SearchStates />
                     <PickerStates />
                     <RecipeStates />
+                    <MarkdownStates />
                 </StateGrid>
             </div>
         </Section>
