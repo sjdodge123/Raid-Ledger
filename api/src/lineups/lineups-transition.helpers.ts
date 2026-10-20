@@ -89,7 +89,7 @@ export async function runStatusTransition(
     id,
     dto,
     lineup,
-    healClearedEventEmbeds(deps.embedSyncQueue, deps.logger),
+    healClearedEventEmbeds(deps.embedSyncQueue, deps.logger, deps.eventEmitter),
   );
   // ROK-1374: the tie hold describes one vote. Cleared only once the CAS
   // above has landed (leaving voting for a non-decided status, or an operator

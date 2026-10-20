@@ -16,6 +16,10 @@ export const APP_EVENT_EVENTS = {
   /** ROK-1370: a reschedule poll opened against this event — flip the embed to
    *  RESCHEDULING and tear down the Discord Scheduled Event until lock-in. */
   RESCHEDULING: 'event.rescheduling',
+  /** ROK-1857: a reschedule poll was cleared WITHOUT a lock-in (poll expiry or
+   *  lineup abort) — the event keeps its original time. Payload `{ eventId }`.
+   *  Lock-in does not use this: it emits UPDATED. */
+  RESCHEDULE_CLEARED: 'event.reschedule_cleared',
 } as const;
 
 /**

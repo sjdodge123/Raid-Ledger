@@ -7,6 +7,8 @@
  * and embed-failure isolation.
  */
 import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { runLineupAbort, type AbortDeps } from './lineups-abort.helpers';
 
 jest.mock('./lineups-query.helpers', () => ({
@@ -255,5 +257,31 @@ describe('runLineupAbort', () => {
       'Nobody nominated a game before the deadline.',
       'Raid Ledger',
     );
+  });
+});
+
+// ROK-1857: an abort that clears a linked reschedule poll tells the calendar
+// write path (via RESCHEDULE_CLEARED) so the members' copies are restored.
+describe('runLineupAbort — cleared reschedule polls (ROK-1857)', () => {
+  it('emits RESCHEDULE_CLEARED with { eventId } for every cleared event', async () => {
+    const { deps } = makeMocks();
+    const emit = jest.fn().mockReturnValue(true);
+    mockedFindLineupById.mockResolvedValue([buildingLineup()]);
+    mockedApplyStatusUpdate.mockImplementation(
+      (_db, _queue, _id, _dto, _lineup, onEventsCleared) => {
+        onEventsCleared?.([31, 32]);
+        return Promise.resolve(null);
+      },
+    );
+    await runLineupAbort(
+      { ...deps, eventEmitter: { emit } as unknown as EventEmitter2 },
+      7,
+      null,
+      99,
+    );
+    expect(emit.mock.calls).toEqual([
+      [APP_EVENT_EVENTS.RESCHEDULE_CLEARED, { eventId: 31 }],
+      [APP_EVENT_EVENTS.RESCHEDULE_CLEARED, { eventId: 32 }],
+    ]);
   });
 });

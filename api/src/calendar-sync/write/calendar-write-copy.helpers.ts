@@ -19,6 +19,8 @@ export const COPY_FOOTER = 'Added by Raid Ledger';
 export interface CopyEventRow {
   title: string;
   cancelled: boolean;
+  /** ROK-1857: `events.rescheduling_poll_id` is set. */
+  rescheduling: boolean;
   start: Date;
   end: Date;
 }
@@ -32,6 +34,7 @@ export async function loadCopyEvent(
     .select({
       title: schema.events.title,
       cancelledAt: schema.events.cancelledAt,
+      reschedulingPollId: schema.events.reschedulingPollId,
       start: utcIsoText(sql`lower(${schema.events.duration})`),
       end: utcIsoText(sql`upper(${schema.events.duration})`),
     })
@@ -42,6 +45,7 @@ export async function loadCopyEvent(
   return {
     title: row.title,
     cancelled: row.cancelledAt !== null,
+    rescheduling: row.reschedulingPollId !== null,
     start: parseTimestampUtc(row.start),
     end: parseTimestampUtc(row.end),
   };
