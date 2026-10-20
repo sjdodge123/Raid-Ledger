@@ -70,10 +70,30 @@ interface Tables {
   paren: Int32Array;
 }
 
+/** End of the tag name starting at i (letters, digits, `-`). */
+function tagNameEnd(s: string, i: number): number {
+  let j = i;
+  while (j < s.length && /[A-Za-z0-9-]/.test(s[j] ?? '')) j++;
+  return j;
+}
+
+/**
+ * A `<name` followed by whitespace, `/` or `>` is an element opening even when
+ * its `>` sits on a later line (`<img\nsrc=x onerror=…>`) — reject it as long
+ * as a `>` follows anywhere. Plain `<3`, `a < b` and `x<y` (no `>`) stay text.
+ */
+function isMultiLineTag(s: string, i: number, t: Tables): boolean {
+  if (!/[A-Za-z]/.test(s[i + 1] ?? '')) return false;
+  const after = s[tagNameEnd(s, i + 1)] ?? '';
+  return /[\s/>]/.test(after) && (t.gt[i + 1] ?? s.length) < s.length;
+}
+
 /** Classify the `<` at i: a violation, or the index to resume from. */
 function scanAngle(s: string, i: number, t: Tables): HubPostMarkdownViolation | number {
   const close = t.gt[i + 1] ?? s.length;
-  if (close >= (t.nl[i] ?? s.length) || !TAG_START.test(s[i + 1] ?? '')) return i + 1;
+  if (close >= (t.nl[i] ?? s.length) || !TAG_START.test(s[i + 1] ?? '')) {
+    return isMultiLineTag(s, i, t) ? 'html' : i + 1;
+  }
   const inner = s.slice(i + 1, close);
   if (AUTOLINK.test(inner)) return isSafeMarkdownHref(inner) ? close + 1 : 'unsafe-link';
   return 'html';

@@ -19,6 +19,8 @@ describe('findHubPostMarkdownViolation', () => {
     'hello </div> world',
     '<?xml version="1.0"?>',
     '<!DOCTYPE html>',
+    '<img\nsrc=x onerror=alert(1)>',
+    'line one <b\nline two>',
   ])('refuses HTML: %s', (body) => {
     expect(findHubPostMarkdownViolation(body)).toBe('html');
   });
@@ -30,7 +32,8 @@ describe('findHubPostMarkdownViolation', () => {
     '`<div>` is a tag',
     '``a `<b>` c``',
     '\\<b>escaped',
-    'line one <b\nline two>',
+    'a <b\nwith no closing bracket',
+    '<3\n> quoted',
     '**Raid** at *8*: [plan](https://x.y/a)',
     'see [the hub](/guilds/7?post=3#posts)',
     '<https://raid.gamernight.net/guilds/1>',
