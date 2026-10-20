@@ -167,3 +167,42 @@ describe('zone formatter cache (review r1)', () => {
     expect(ctor).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('DST ambiguity through an embedded VTIMEZONE (Codex r11)', () => {
+  const wide = {
+    start: new Date('2026-03-01T00:00:00Z'),
+    end: new Date('2026-11-17T00:00:00Z'),
+  };
+  const event = (start: string): string =>
+    fixture('berlin-vtimezone.ics')
+      .replace(/BEGIN:VEVENT[\s\S]*END:VEVENT\r\n/, '')
+      .replace(
+        'END:VCALENDAR',
+        [
+          'BEGIN:VEVENT',
+          'UID:dst-edge@icloud.test',
+          `DTSTART;TZID=Europe/Berlin:${start}`,
+          'DURATION:PT1M',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\r\n'),
+      );
+  const startOf = (ics: string): string | undefined =>
+    parseBusyFromIcs(ics, {
+      range: wide,
+      calendarTimezone: null,
+    }).blocks[0]?.start.toISOString();
+
+  it.each([
+    ['20261025T023000', '2026-10-25T00:30:00.000Z'],
+    ['20260329T023000', '2026-03-29T01:30:00.000Z'],
+    ['20261025T013000', '2026-10-24T23:30:00.000Z'],
+    ['20261025T033000', '2026-10-25T02:30:00.000Z'],
+  ])(
+    '%s gives the same instant with and without the VTIMEZONE',
+    (wall, utc) => {
+      expect(startOf(stripVtimezone(event(wall)))).toBe(utc);
+      expect(startOf(event(wall))).toBe(utc);
+    },
+  );
+});

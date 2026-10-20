@@ -14,6 +14,7 @@
  *   UTC (Q5).
  */
 import ICAL from 'ical.js';
+import { vtzOffsetAt } from './apple-ical-vtimezone-offset.helpers';
 
 export const DAY_MS = 86_400_000;
 
@@ -118,15 +119,30 @@ export function zonedToUtc(t: WallClock, zone: string): number | null {
   if (!fmt) return null;
   const guess = wallMs(t);
   if (!Number.isFinite(guess)) return null;
-  const before = offsetAt(fmt, guess - DAY_MS);
-  const after = offsetAt(fmt, guess + DAY_MS);
+  return wallToUtc(guess, (ms) => offsetAt(fmt, ms));
+}
+
+/**
+ * Wall-clock ms (as if UTC) → UTC ms, given the zone's offset at an
+ * instant: the first real occurrence, else (a gap) the pre-gap offset.
+ */
+function wallToUtc(guess: number, offset: (ms: number) => number): number {
+  const before = offset(guess - DAY_MS);
+  const after = offset(guess + DAY_MS);
   const real = [guess - before, guess - after].filter(
-    (ms) => ms + offsetAt(fmt, ms) === guess,
+    (ms) => ms + offset(ms) === guess,
   );
   return real.length > 0 ? Math.min(...real) : guess - before;
 }
 
-export function isRealZone(zone: ICAL.Timezone | null | undefined): boolean {
+/** Codex r11: a VTIMEZONE wall time, with the same DST rules as IANA. */
+function vtzToUtc(t: WallClock, zone: ICAL.Timezone): number {
+  return wallToUtc(wallMs(t), (ms) => vtzOffsetAt(zone, ms));
+}
+
+export function isRealZone(
+  zone: ICAL.Timezone | null | undefined,
+): zone is ICAL.Timezone {
   return (
     zone !== null &&
     zone !== undefined &&
@@ -138,18 +154,7 @@ export function isRealZone(zone: ICAL.Timezone | null | undefined): boolean {
 function placeFloating(t: ICAL.Time, floating: FloatingZone): number | null {
   if (floating === null) return wallMs(t);
   if (typeof floating === 'string') return zonedToUtc(t, floating);
-  const placed = ICAL.Time.fromData(
-    {
-      year: t.year,
-      month: t.month,
-      day: t.day,
-      hour: t.hour,
-      minute: t.minute,
-      second: t.second,
-    },
-    floating,
-  );
-  return placed.toUnixTime() * 1000;
+  return vtzToUtc(t, floating);
 }
 
 /**
@@ -162,7 +167,7 @@ export function timeToMs(
   floating: FloatingZone,
 ): number | null {
   if (t.zone === ICAL.Timezone.utcTimezone) return wallMs(t);
-  if (isRealZone(t.zone)) return t.toUnixTime() * 1000;
+  if (isRealZone(t.zone)) return vtzToUtc(t, t.zone);
   if (tzid !== null) return zonedToUtc(t, tzid);
   return placeFloating(t, floating);
 }
