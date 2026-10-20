@@ -9,7 +9,8 @@
  *
  * Ruleset pick (D13): when the create target's export carries no ruleset the
  * preview asks for one. The pick is reset on every new preview and is sent as
- * `ruleset` on apply ONLY when `target.ruleset === null`.
+ * `ruleset` on apply ONLY when `target.ruleset === null`. ROK-1739: a
+ * selectable realm inference pre-selects the pick (state only, never stored).
  */
 import { useEffect, useRef, useState } from 'react';
 import type {
@@ -19,7 +20,7 @@ import type {
     WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import { toast } from '../../../../lib/toast';
-import { resultHeadline } from './addon-import.helpers';
+import { resultHeadline, selectableInference } from './addon-import.helpers';
 import {
     useAddonImportApply,
     useAddonImportNewApply,
@@ -82,7 +83,8 @@ function makeCheck(mode: AddonImportMode, m: Mutations, s: FlowState) {
         m.apply.reset();
         s.setChecked({ importString, result, target });
         s.setConfirm({});
-        s.setRuleset(null);
+        // ROK-1739 D5: pre-select a selectable realm inference; the user's pick still wins on apply.
+        s.setRuleset(needsRulesetPick(target) ? selectableInference(result.rulesetInference) : null);
         s.setStep('preview');
     };
     return (importString: string) => {

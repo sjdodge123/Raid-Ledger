@@ -147,6 +147,54 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
     });
 });
 
+const BLOODMOON = { realmName: 'Bloodmoon', source: 'realm-map' } as const;
+/** A null-ruleset create preview whose realm resolved through the admin's realm map (ROK-1739). */
+const inferred = (ruleset: 'pvp' | 'hardcore'): Reply => ({ status: 200, body: newCharResult({ ruleset: null }, { rulesetInference: { ruleset, ...BLOODMOON } }) });
+
+describe('AddonImportDialog create mode — realm-inferred ruleset (ROK-1739 §6.3)', () => {
+    it('pre-selects the inferred ruleset, labels the target as inferred and sends it as the pick', async () => {
+        const bodies = mockCreate(inferred('pvp'));
+        const user = userEvent.setup();
+        renderCreate();
+        await pasteAndCheck(user);
+        expect(screen.getByTestId('addon-import-target')).toHaveTextContent('Creates Ana · US · PvP (inferred from Bloodmoon) · Level 60 Paladin');
+        const picker = within(screen.getByRole('radiogroup', { name: 'Ruleset' }));
+        expect(picker.getByRole('radio', { name: 'PvP' })).toBeChecked();
+        expect(screen.getByTestId('addon-import-ruleset-inference')).toHaveTextContent("Pre-selected from realm Bloodmoon — change it if that's wrong.");
+        expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled();
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        await waitFor(() => expect(bodies).toHaveLength(2));
+        expect(bodies[1]).toMatchObject({ dryRun: false, ruleset: 'pvp' });
+    });
+
+    it("sends the user's own pick when they override the inferred one", async () => {
+        const bodies = mockCreate(inferred('pvp'));
+        const user = userEvent.setup();
+        renderCreate();
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('radio', { name: 'Normal' }));
+        expect(screen.getByRole('radio', { name: 'Normal' })).toBeChecked();
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        await waitFor(() => expect(bodies).toHaveLength(2));
+        expect(bodies[1]).toMatchObject({ dryRun: false, ruleset: 'normal' });
+    });
+
+    it('does not apply a Hardcore inference: nothing picked, the Hardcore hint, Import disabled', async () => {
+        const bodies = mockCreate(inferred('hardcore'));
+        const user = userEvent.setup();
+        renderCreate();
+        await pasteAndCheck(user);
+        expect(screen.getByTestId('addon-import-target')).toHaveTextContent('· ruleset not in export ·');
+        const picker = within(screen.getByRole('radiogroup', { name: 'Ruleset' }));
+        expect(picker.queryByRole('radio', { checked: true })).toBeNull();
+        expect(screen.getByTestId('addon-import-ruleset-inference')).toHaveTextContent(
+            "Realm Bloodmoon is listed as Hardcore, which can't be added yet — pick a ruleset.",
+        );
+        expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
+        expect(bodies).toHaveLength(1);
+    });
+});
+
 describe('AddonImportDialog create mode — an apply in flight', () => {
     it('cannot be closed (Escape, ×) until the apply settles, then hands the result to onCreated', async () => {
         let release: () => void = () => {};

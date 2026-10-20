@@ -66,6 +66,37 @@ describe('AddonImportPreview', () => {
     });
 });
 
+describe('AddonImportPreview — realm-inferred RULESET_CHANGED (ROK-1739 §6.2)', () => {
+    const warning = { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' } as const;
+
+    it('names the realm and says the value was inferred from the admin realm list, keeping the opt-in checkbox', async () => {
+        const onImport = vi.fn();
+        const result = charResult({ warnings: [warning], rulesetInference: { ruleset: 'pvp', realmName: 'Bloodmoon', source: 'realm-map' } });
+        renderWithProviders(<Harness result={result} onImport={onImport} />);
+        const banner = screen.getByTestId('addon-import-warning');
+        expect(banner).toHaveTextContent('Realm "Bloodmoon" is listed as PvP — this character is Normal here.');
+        expect(banner).not.toHaveTextContent('The export says');
+        expect(screen.getByTestId('addon-import-inference-source')).toHaveTextContent(
+            'Inferred from the realm list your admin maintains — not from the export.',
+        );
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Update ruleset to PvP' }));
+        await userEvent.click(importButton());
+        expect(onImport).toHaveBeenCalledWith({ updateRuleset: true });
+    });
+
+    it("credits Blizzard's realm data for a blizzard-sourced inference", () => {
+        const result = charResult({ warnings: [warning], rulesetInference: { ruleset: 'pvp', realmName: 'Bloodmoon', source: 'blizzard' } });
+        renderWithProviders(<Harness result={result} onImport={vi.fn()} />);
+        expect(screen.getByTestId('addon-import-inference-source')).toHaveTextContent("Inferred from Blizzard's realm data.");
+    });
+
+    it('keeps the export copy and shows no source line without an inference', () => {
+        renderWithProviders(<Harness result={charResult({ warnings: [warning] })} onImport={vi.fn()} />);
+        expect(screen.getByTestId('addon-import-warning')).toHaveTextContent('The export says this character is on a PvP realm, not Normal.');
+        expect(screen.queryByTestId('addon-import-inference-source')).toBeNull();
+    });
+});
+
 describe('AddonImportPreviewActions while importing (Codex P2)', () => {
     it('disables Back so a late apply response cannot land on a step the user left', () => {
         const confirm: AddonImportConfirm = {};
