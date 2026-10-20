@@ -1,0 +1,104 @@
+/**
+ * ROK-1870 §3.1 — the community hub's settings-sheet sections: the blurb
+ * editor, the Banned list (Unban) for editors, Archive for the Leader and
+ * Restore for staff only.
+ */
+import type { JSX, ReactNode } from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useQuery } from '@tanstack/react-query';
+import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import { server } from '../../../test/mocks/server';
+import { communityHubBodies, communityHubCalls, communityHubHandlers } from '../../../test/mocks/community-hub-handlers';
+import { buildCommunityPage } from '../../../test/factories/community-hub';
+import { renderWithProviders } from '../../../test/render-helpers';
+import type { HubCtx } from '../../../plugins/hub-module';
+import { communityHubModule } from './community-hub-module';
+import { CommunitySettingsSections } from './community-settings';
+import { HubSettingsSheet } from '../settings/settings-sheet';
+import { http, HttpResponse } from 'msw';
+
+let userRole = 'member';
+vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
+    useAuth: () => ({ user: { id: 1, role: userRole }, isAuthenticated: true }),
+}));
+
+function WithCtx({ page, children }: { page: GuildPage; children: (ctx: HubCtx) => ReactNode }): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['test-raids'], queryFn: () => new Promise<GuildRaidsDto>(() => undefined), enabled: false });
+    return <>{children({ page, raids })}</>;
+}
+
+function renderSections(page: GuildPage): void {
+    renderWithProviders(<WithCtx page={page}>{(ctx) => <CommunitySettingsSections {...ctx} />}</WithCtx>);
+}
+
+beforeEach(() => {
+    userRole = 'member';
+    communityHubCalls.length = 0;
+    communityHubBodies.length = 0;
+    server.use(...communityHubHandlers);
+});
+
+describe('community settings sections', () => {
+    it('is the module’s settings hook', () => {
+        expect(communityHubModule.settingsSections).toBe(CommunitySettingsSections);
+    });
+
+    it('shows the blurb editor, disabled with the reason while no edit route exists', () => {
+        renderSections(buildCommunityPage({ role: 'leader' }));
+        const box = screen.getByRole('textbox', { name: 'Short description' });
+        expect(box).toHaveValue('Honour mode runs');
+        expect(box).toBeDisabled();
+        expect(screen.getByTestId('community-settings-blurb')).toHaveTextContent(/isn.t available yet/);
+    });
+
+    it('lists banned users and unbans one', async () => {
+        renderSections(buildCommunityPage({ role: 'officer' }));
+        expect(await screen.findByText('Griefer')).toBeInTheDocument();
+        expect(screen.getByText(/Spam/)).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Unban Griefer' }));
+        await waitFor(() => expect(communityHubCalls).toContain('DELETE /hubs/41/bans/5'));
+    });
+
+    it('lets the leader archive an active hub after a confirm', async () => {
+        renderSections(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Archive hub' }));
+        expect(communityHubCalls).not.toContain('PATCH /hubs/41/status');
+        await userEvent.click(screen.getByTestId('community-archive-confirm'));
+        await waitFor(() => expect(communityHubBodies).toEqual([{ status: 'archived' }]));
+    });
+
+    it('offers an officer neither Archive nor Restore', async () => {
+        renderSections(buildCommunityPage({ role: 'officer' }));
+        await screen.findByText('Griefer');
+        expect(screen.queryByRole('button', { name: 'Archive hub' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Restore hub' })).not.toBeInTheDocument();
+    });
+
+    it('lets staff restore an archived hub', async () => {
+        userRole = 'admin';
+        renderSections(buildCommunityPage({ role: 'leader', community: { status: 'archived' } }));
+        expect(screen.queryByRole('button', { name: 'Archive hub' })).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Restore hub' }));
+        await waitFor(() => expect(communityHubBodies).toEqual([{ status: 'active' }]));
+    });
+
+    it('does not offer Restore to a non-staff leader', () => {
+        renderSections(buildCommunityPage({ role: 'leader', community: { status: 'archived' } }));
+        expect(screen.queryByRole('button', { name: 'Restore hub' })).not.toBeInTheDocument();
+    });
+
+    it('renders inside the hub settings sheet', async () => {
+        server.use(
+            http.get('http://localhost:3000/guilds/41/discord', () => HttpResponse.json({ state: 'unset' })),
+            http.get('http://localhost:3000/guilds/41/editors', () => HttpResponse.json({ editors: [] })),
+        );
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'leader' })}>{(ctx) => (
+            <HubSettingsSheet ctx={ctx} module={communityHubModule} onClose={() => undefined} onChangeChannel={() => undefined} />
+        )}</WithCtx>);
+        expect(await screen.findByTestId('community-settings-banned')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Archive hub' })).toBeInTheDocument();
+    });
+});

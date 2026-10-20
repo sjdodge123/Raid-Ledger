@@ -70,6 +70,7 @@ export interface HubSettingsSheetProps {
 }
 
 function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+    const Extra = mod?.settingsSections;
     return (
         <div className="flex flex-col gap-5" data-testid="guild-settings-sheet">
             <DiscordSection guildId={ctx.page.guild.id} onChangeChannel={onChangeChannel} />
@@ -79,6 +80,7 @@ function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetP
             <SettingsSection title="Visibility" testId="guild-settings-visibility">
                 <HideHubRow page={ctx.page} />
             </SettingsSection>
+            {Extra && <Extra {...ctx} />}
         </div>
     );
 }

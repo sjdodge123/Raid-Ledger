@@ -9,6 +9,7 @@ import type { HubMemberColumn, HubModule } from '../../../plugins/hub-module';
 import { CommunityJoinPill, CommunityKindPill } from './community-hero';
 import { CommunityJoinedCell, CommunityPlayerCell, CommunityRoleCell } from './community-member-cells';
 import { CommunityMemberActions } from './community-member-actions';
+import { CommunitySettingsSections } from './community-settings';
 
 const COMMUNITY_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
     { id: 'player', header: 'Player', cell: CommunityPlayerCell },
@@ -26,6 +27,7 @@ export const communityHubModule: HubModule = {
     coreWidgetVisible: () => true,
     memberColumns: COMMUNITY_MEMBER_COLUMNS,
     memberActions: CommunityMemberActions,
+    settingsSections: CommunitySettingsSections,
     heroPills: [CommunityKindPill, CommunityJoinPill],
     memberRows: (page) => page.ranks.flatMap((g) => g.members),
     membersBlurb: (page) => `${page.guild.memberCount} ${page.guild.memberCount === 1 ? 'member' : 'members'}`,

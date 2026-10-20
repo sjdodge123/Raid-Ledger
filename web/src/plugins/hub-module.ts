@@ -157,6 +157,12 @@ export interface HubModule {
      * header-less column; the component decides per row whether to render.
      */
     memberActions?: ComponentType<{ row: HubMemberRow; ctx: HubCtx }>;
+    /**
+     * ROK-1870 — extra sections at the bottom of the settings sheet (community
+     * hubs: blurb, Banned list, Archive / Restore). The component gates its own
+     * rows on the viewer's role.
+     */
+    settingsSections?: ComponentType<HubCtx>;
 }
 
 export interface HubModuleRegistration {
@@ -169,8 +175,8 @@ export interface HubModuleRegistration {
  * inactive. `game_community` is core-owned (ROK-1870 A4) and always returns.
  */
 export function useHubModule(kind: string): HubModule | undefined {
-    if (kind === communityHubModule.kind) return communityHubModule;
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
+    if (kind === communityHubModule.kind) return communityHubModule;
     const found = getHubModuleRegistrations().find((r) => r.module.kind === kind);
     return found && activeSlugs.has(found.pluginSlug) ? found.module : undefined;
 }
