@@ -38,10 +38,6 @@ import {
   type GameLifecycleActivityRow,
 } from './game-activity.queries';
 
-/** `lastRunError` when no archive category can be found or created. */
-export const NO_ARCHIVE_CATEGORY_TEXT =
-  'Choose or allow an Archived category before enabling';
-
 /**
  * ROK-1431 — the channel-lifecycle reconciler (spec ROK-1428 §2.5): gates,
  * single-flight, plan, execute, record the run. The cron, the admin
