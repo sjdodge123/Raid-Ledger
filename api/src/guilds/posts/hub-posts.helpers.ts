@@ -10,9 +10,13 @@ import type {
 } from '@raid-ledger/contract';
 import type { HubPostSelect } from '../../drizzle/schema/hub-posts';
 
-/** Keyset position: `(created_at DESC, id DESC)`. */
+/**
+ * Keyset position: `(created_at DESC, id DESC)`. `createdAt` is the DB's
+ * full-precision UTC ISO text (up to µs) — a JS `Date` would round `now()`
+ * rows to ms and make the raw-column comparison skip or repeat rows.
+ */
 export interface HubPostCursor {
-  createdAt: Date;
+  createdAt: string;
   id: number;
 }
 
@@ -34,11 +38,12 @@ export interface HubPostPeople {
 
 const INVALID_CURSOR = 'Invalid cursor';
 
+/** UTC ISO-8601 with 0–6 fractional digits (what `to_char(... .US)` emits). */
+const CURSOR_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
+
 /** Opaque base64url of `<createdAtISO>|<id>`. */
 export function encodeCursor(pos: HubPostCursor): string {
-  return Buffer.from(`${pos.createdAt.toISOString()}|${pos.id}`).toString(
-    'base64url',
-  );
+  return Buffer.from(`${pos.createdAt}|${pos.id}`).toString('base64url');
 }
 
 /** Parse a cursor from `encodeCursor`; anything else is a 400. */
@@ -49,11 +54,12 @@ export function decodeCursor(cursor: string): HubPostCursor {
   if (parts.length !== 2 || iso === undefined || idText === undefined) {
     throw new BadRequestException(INVALID_CURSOR);
   }
-  const createdAt = new Date(iso);
-  if (!/^[1-9]\d{0,9}$/.test(idText) || Number.isNaN(createdAt.getTime())) {
+  const validAt =
+    CURSOR_ISO.test(iso) && !Number.isNaN(new Date(iso).getTime());
+  if (!/^[1-9]\d{0,9}$/.test(idText) || !validAt) {
     throw new BadRequestException(INVALID_CURSOR);
   }
-  return { createdAt, id: Number(idText) };
+  return { createdAt: iso, id: Number(idText) };
 }
 
 /** `${clientUrl}/guilds/<id>?post=<postId>#posts` — the Posts-tab deep link. */

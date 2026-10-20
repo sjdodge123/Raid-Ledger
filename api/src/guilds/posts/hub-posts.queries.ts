@@ -2,20 +2,18 @@
  * ROK-1868 L2 — `hub_posts` reads/writes (no access logic). Every read joins
  * `users` twice (author + last editor) so the service maps with `toHubPost`.
  *
- * Keyset order is `(created_at DESC, id DESC)` on the MILLISECOND-truncated
- * timestamp: the cursor carries a JS `Date` (ms), while `now()`-stamped rows
- * (the backfill) carry microseconds — comparing raw values would skip rows.
+ * Keyset order is `(created_at DESC, id DESC)` on the RAW columns so
+ * `idx_hub_posts_guild_created` serves both the ORDER BY and the row-compare
+ * cursor. `now()`-stamped rows (the backfill) carry microseconds, which a JS
+ * `Date` would round to ms — so the cursor carries `cursorAt`, the DB's own
+ * full-precision UTC text, and the comparison stays exact.
  */
 import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { HubPostSelect } from '../../drizzle/schema/hub-posts';
-import type {
-  HubPostCursor,
-  HubPostPeople,
-  HubPostPersonRow,
-} from './hub-posts.helpers';
+import type { HubPostCursor, HubPostPeople } from './hub-posts.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -34,7 +32,11 @@ export interface HubPostPage {
   next: HubPostCursor | null;
 }
 
-const createdMs = sql`date_trunc('milliseconds', ${hubPosts.createdAt})`;
+/** Feed order on the indexed columns (newest first, id breaks ties). */
+const feedOrder = [desc(hubPosts.createdAt), desc(hubPosts.id)] as const;
+
+/** `created_at` as UTC ISO text with microseconds, for the next cursor. */
+const cursorAt = sql<string>`to_char(${hubPosts.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 const authorColumns = {
   userId: author.id,
@@ -54,10 +56,9 @@ const editorColumns = {
   discordId: editor.discordId,
 };
 
-interface JoinedRow {
-  post: HubPostSelect;
-  author: HubPostPersonRow | null;
-  editor: HubPostPersonRow | null;
+/** A selected row: the record plus its full-precision cursor timestamp. */
+export interface JoinedRow extends HubPostRecord {
+  cursorAt: string;
 }
 
 function selectRecords(db: Db, where: SQL | undefined) {
@@ -66,23 +67,45 @@ function selectRecords(db: Db, where: SQL | undefined) {
       post: hubPosts,
       author: authorColumns,
       editor: editorColumns,
+      cursorAt,
     })
     .from(hubPosts)
     .leftJoin(author, eq(author.id, hubPosts.authorId))
     .leftJoin(editor, eq(editor.id, hubPosts.updatedBy))
     .where(where)
-    .orderBy(desc(createdMs), desc(hubPosts.id));
+    .orderBy(...feedOrder);
+}
+
+/** Drop the cursor-only column so callers see a plain record. */
+function withoutCursor(row: JoinedRow): HubPostRecord {
+  return { post: row.post, author: row.author, editor: row.editor };
 }
 
 /** Split a `limit + 1` probe into the page and the next cursor. */
 export function pageOf(rows: readonly JoinedRow[], limit: number): HubPostPage {
-  const records = rows.slice(0, limit);
-  const last = records[records.length - 1];
+  const kept = rows.slice(0, limit);
+  const records = kept.map(withoutCursor);
+  const last = kept[kept.length - 1];
   const next =
     rows.length > limit && last
-      ? { createdAt: last.post.createdAt, id: last.post.id }
+      ? { createdAt: last.cursorAt, id: last.post.id }
       : null;
   return { records, next };
+}
+
+/** The `limit + 1` probe query behind `listPosts` (exported for SQL tests). */
+export function listPostsQuery(
+  db: Db,
+  guildId: number,
+  limit: number,
+  cursor: HubPostCursor | null,
+) {
+  const after = cursor
+    ? sql`(${hubPosts.createdAt}, ${hubPosts.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
+    : undefined;
+  return selectRecords(db, and(eq(hubPosts.guildId, guildId), after)).limit(
+    limit + 1,
+  );
 }
 
 /** Newest-first page of a guild's posts after `cursor` (exclusive). */
@@ -92,13 +115,7 @@ export async function listPosts(
   limit: number,
   cursor: HubPostCursor | null,
 ): Promise<HubPostPage> {
-  const after = cursor
-    ? sql`(${createdMs}, ${hubPosts.id}) < (${cursor.createdAt.toISOString()}::timestamptz, ${cursor.id})`
-    : undefined;
-  const rows = await selectRecords(
-    db,
-    and(eq(hubPosts.guildId, guildId), after),
-  ).limit(limit + 1);
+  const rows = await listPostsQuery(db, guildId, limit, cursor);
   return pageOf(rows, limit);
 }
 
@@ -112,7 +129,7 @@ export async function findPost(
     db,
     and(eq(hubPosts.guildId, guildId), eq(hubPosts.id, postId)),
   ).limit(1);
-  return row;
+  return row && withoutCursor(row);
 }
 
 /** The guild's newest post, if any. */
@@ -121,7 +138,16 @@ export async function latestPost(
   guildId: number,
 ): Promise<HubPostRecord | undefined> {
   const [row] = await selectRecords(db, eq(hubPosts.guildId, guildId)).limit(1);
-  return row;
+  return row && withoutCursor(row);
+}
+
+/** `DISTINCT ON (guild_id)` newest-post query (exported for SQL tests). */
+export function latestByGuildQuery(db: Db, guildIds: readonly number[]) {
+  return db
+    .selectDistinctOn([hubPosts.guildId])
+    .from(hubPosts)
+    .where(inArray(hubPosts.guildId, [...guildIds]))
+    .orderBy(hubPosts.guildId, ...feedOrder);
 }
 
 /** guildId → newest post (`DISTINCT ON (guild_id)`), for list headlines. */
@@ -131,11 +157,7 @@ export async function latestPostsByGuild(
 ): Promise<Map<number, HubPostSelect>> {
   const out = new Map<number, HubPostSelect>();
   if (guildIds.length === 0) return out;
-  const rows = await db
-    .selectDistinctOn([hubPosts.guildId])
-    .from(hubPosts)
-    .where(inArray(hubPosts.guildId, [...guildIds]))
-    .orderBy(hubPosts.guildId, desc(createdMs), desc(hubPosts.id));
+  const rows = await latestByGuildQuery(db, guildIds);
   for (const row of rows) out.set(row.guildId, row);
   return out;
 }

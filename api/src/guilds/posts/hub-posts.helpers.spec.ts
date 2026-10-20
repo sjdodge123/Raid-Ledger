@@ -45,12 +45,13 @@ function person(over: Partial<HubPostPersonRow> = {}): HubPostPersonRow {
 }
 
 describe('encodeCursor / decodeCursor', () => {
-  it('round-trips created_at (ms precision) and id', () => {
-    const cursor = encodeCursor({ createdAt: AT, id: 42 });
+  it.each([
+    ['microsecond', '2026-10-20T12:34:56.789123Z'],
+    ['millisecond', AT.toISOString()],
+  ])('round-trips a %s created_at and id losslessly', (_label, iso) => {
+    const cursor = encodeCursor({ createdAt: iso, id: 42 });
     expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
-    const back = decodeCursor(cursor);
-    expect(back.id).toBe(42);
-    expect(back.createdAt.toISOString()).toBe(AT.toISOString());
+    expect(decodeCursor(cursor)).toEqual({ createdAt: iso, id: 42 });
   });
 
   it.each([
@@ -61,6 +62,14 @@ describe('encodeCursor / decodeCursor', () => {
       Buffer.from('2026-10-20T00:00:00.000Z').toString('base64url'),
     ],
     ['bad date', Buffer.from('yesterday|4').toString('base64url')],
+    [
+      'non-UTC date',
+      Buffer.from('2026-10-20T12:00:00+02:00|4').toString('base64url'),
+    ],
+    [
+      'impossible date',
+      Buffer.from('2026-13-40T12:00:00.000Z|4').toString('base64url'),
+    ],
     ['bad id', Buffer.from(`${AT.toISOString()}|x4`).toString('base64url')],
     ['zero id', Buffer.from(`${AT.toISOString()}|0`).toString('base64url')],
     [

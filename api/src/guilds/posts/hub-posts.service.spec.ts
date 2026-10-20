@@ -261,7 +261,7 @@ describe('HubPostsService reads', () => {
     const { service } = build();
     jest.mocked(listPosts).mockResolvedValue({
       records: [record()],
-      next: { createdAt: T, id: 11 },
+      next: { createdAt: T.toISOString(), id: 11 },
     });
     const out = await service.list(actor, 7, {});
     expect(listPosts).toHaveBeenCalledWith({}, 7, 10, null);
