@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type * as schema from '../../drizzle/schema';
 import type { GuildActor } from '../guild-access.service';
 import * as lookup from './community-hub.lookup';
+import * as reads from './community-hub.reads';
 import * as mq from './community-membership.queries';
 import { CommunityMembershipService } from './community-membership.service';
 import { CommunityModerationService } from './community-moderation.service';
@@ -20,6 +21,10 @@ jest.mock('./community-hub.lookup', () => ({
   assertUserExists: jest.fn(),
 }));
 jest.mock('./community-membership.queries');
+jest.mock('./community-hub.reads', () => ({
+  ...jest.requireActual('./community-hub.reads'),
+  liveCommunityRole: jest.fn(),
+}));
 jest.mock('./community-proposals.users');
 
 const AT = new Date('2026-10-01T00:00:00Z');
@@ -80,12 +85,14 @@ const members = {
   liveTarget: jest.fn(),
 };
 let rolledBack = false;
+/** The handle the mocked transaction hands its callback. */
+const TX = { tx: true };
 const db = {
   select: jest.fn(),
   update: jest.fn(),
   transaction: async (fn: (tx: object) => Promise<unknown>) => {
     try {
-      return await fn({});
+      return await fn(TX);
     } catch (err: unknown) {
       rolledBack = true;
       throw err;
@@ -106,6 +113,7 @@ beforeEach(async () => {
   }).compile();
   svc = mod.get(CommunityModerationService);
   members.liveTarget.mockResolvedValue(memberRow({}));
+  jest.mocked(reads.liveCommunityRole).mockResolvedValue('leader');
   jest.mocked(users.findProposalUser).mockResolvedValue({
     id: 3,
     username: 'tgt',
@@ -145,6 +153,35 @@ describe('transferLeader', () => {
       ConflictException,
     );
     expect(mq.swapLeader).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the caller under the hub lock — a Leader demoted by a racing transfer is refused (403)', async () => {
+    jest.mocked(reads.liveCommunityRole).mockResolvedValue('officer');
+    jest.mocked(mq.swapLeader).mockResolvedValue(true);
+    await expect(svc.transferLeader(leader, 7, 3)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(mq.swapLeader).not.toHaveBeenCalled();
+    expect(reads.liveCommunityRole).toHaveBeenCalledWith(TX, 7, leader.id);
+    const lockAt = jest.mocked(mq.lockHubRow).mock.invocationCallOrder[0];
+    const roleAt = jest.mocked(reads.liveCommunityRole).mock
+      .invocationCallOrder[0];
+    expect(lockAt).toBeLessThan(roleAt ?? 0);
+    expect(mq.lockHubRow).toHaveBeenCalledWith(TX, 7);
+  });
+
+  it('reads the target on the locked tx, not the pool', async () => {
+    jest.mocked(mq.swapLeader).mockResolvedValue(true);
+    await svc.transferLeader(leader, 7, 3);
+    expect(members.liveTarget).toHaveBeenCalledWith(7, 3, TX);
+  });
+
+  it('staff transfer without a hub membership (no role read)', async () => {
+    jest.mocked(mq.swapLeader).mockResolvedValue(true);
+    await expect(
+      svc.transferLeader({ id: 99, role: 'admin' }, 7, 3),
+    ).resolves.toEqual({ leaderUserId: 3 });
+    expect(reads.liveCommunityRole).not.toHaveBeenCalled();
   });
 
   it('commits a clean swap', async () => {
