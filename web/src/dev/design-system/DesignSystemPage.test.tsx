@@ -635,3 +635,26 @@ describe('DesignSystemPage — TabRow demo (ROK-1785)', () => {
         expect(within(demo).getByRole('region', { name: 'Overview' })).toHaveAttribute('id', 'ds-tab-overview');
     });
 });
+
+describe('DesignSystemPage — ROK-1868 markdown (Forms, V13)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('mounts the real MarkdownBlock sample', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const block = within(screen.getByTestId('ds-forms')).getByTestId('ds-markdown-block');
+        expect(block.querySelector('ul'), 'MarkdownBlock sample must render a bulleted list').not.toBeNull();
+        expect(block.querySelector('ol'), 'MarkdownBlock sample must render a numbered list').not.toBeNull();
+    });
+
+    it('mounts the lazy MarkdownEditor demo: the real toolbar arrives once the chunk loads', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        const toolbar = await within(forms).findByRole('toolbar', { name: 'Formatting' }, { timeout: 5000 });
+        expect(within(toolbar).getByRole('button', { name: 'Bold' })).toBeInTheDocument();
+        expect(within(forms).getByTestId('ds-md-editor')).toHaveAttribute('data-md-editor');
+    });
+});

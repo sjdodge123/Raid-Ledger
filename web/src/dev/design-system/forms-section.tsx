@@ -5,7 +5,7 @@
  * `PasswordInput` here and `FilePicker` / `ColorInput` / `Button brandColor` in
  * forms-pickers-demo.tsx, and ROK-1653's segmented "All" filter and row-menu
  * recipes plus the one-save-at-a-time row lock in forms-recipes-demo.tsx,
- * and ROK-1868's `MarkdownBlock` / `CharCounter` in markdown-block-demo.tsx. Every example mounts the REAL component, so this page
+ * and ROK-1868's `MarkdownBlock` / `CharCounter` in markdown-block-demo.tsx and the lazy `MarkdownEditor` in markdown-editor-demo.tsx. Every example mounts the REAL component, so this page
  * is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the
@@ -33,6 +33,7 @@ import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { PickerStates } from './forms-pickers-demo';
 import { RecipeStates } from './forms-recipes-demo';
 import { MarkdownStates } from './markdown-block-demo';
+import { MarkdownEditorStates } from './markdown-editor-demo';
 
 function ButtonVariants(): JSX.Element {
     return (
@@ -237,6 +238,7 @@ export function FormsSection(): JSX.Element {
                     <PickerStates />
                     <RecipeStates />
                     <MarkdownStates />
+                    <MarkdownEditorStates />
                 </StateGrid>
             </div>
         </Section>
