@@ -54,6 +54,16 @@ describe('resolveSlot', () => {
     expect(await resolveSlot('rl-agent', 'rl-infra', 'nomatch')).toBe(2);
   });
 
+  it('exact mode (parallel gate): no fallback to another agent\'s claimed slot', async () => {
+    execFileOk(JSON.stringify({ slots: [{ slot: 2, claimed_by: 'someone' }, { slot: 3, claimed_by: null }] }));
+    expect(await resolveSlot('rl-agent', 'rl-infra', 'nomatch', { exact: true })).toBeNull();
+  });
+
+  it('exact mode still returns the caller\'s own slot', async () => {
+    execFileOk(JSON.stringify({ slots: [{ slot: 1, claimed_by: 'other' }, { slot: 4, claimed_by: 'me' }] }));
+    expect(await resolveSlot('rl-agent', 'rl-infra', 'me', { exact: true })).toBe(4);
+  });
+
   it('returns null when nothing is claimed', async () => {
     execFileOk(JSON.stringify({ slots: [{ slot: 1, claimed_by: null }] }));
     expect(await resolveSlot('rl-agent', 'rl-infra', 'me')).toBeNull();
