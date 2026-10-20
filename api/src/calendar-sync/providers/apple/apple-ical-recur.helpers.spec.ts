@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import ICAL from 'ical.js';
 import { parseBusyFromIcs } from './apple-ical-parse.helpers';
+import { MAX_SERIES_ITERATIONS } from './apple-ical-recur.helpers';
 
 const fixture = (name: string): string =>
   readFileSync(join(__dirname, '__fixtures__', name), 'utf8').replace(
@@ -410,5 +412,145 @@ describe('duration-form period RDATE across the New York DST end (Codex r7)', ()
 
   it('ends exactly 24 hours later (no VTIMEZONE)', () => {
     expect(rows(ics(''))).toEqual(expected);
+  });
+});
+
+describe('UTC master + zoned override RECURRENCE-ID (Codex r8)', () => {
+  const tz = vtimezoneOf(fixture('weekly-ny.ics')).trimEnd();
+  const vevent = (lines: string[]) => [
+    'BEGIN:VEVENT',
+    'UID:utc-override@icloud.test',
+    ...lines,
+    'END:VEVENT',
+  ];
+  const ics = (zone: string, override: string[]) =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      zone,
+      ...vevent([
+        'DTSTART:20261020T230000Z',
+        'DTEND:20261021T000000Z',
+        'RRULE:FREQ=DAILY;COUNT=3',
+      ]),
+      ...vevent([
+        'RECURRENCE-ID;TZID=America/New_York:20261021T190000',
+        ...override,
+      ]),
+      'END:VCALENDAR',
+      '',
+    ]
+      .filter((l) => l.length > 0)
+      .join('\r\n')
+      .concat('\r\n');
+  const moved = [
+    'DTSTART;TZID=America/New_York:20261021T210000',
+    'DTEND;TZID=America/New_York:20261021T220000',
+  ];
+  const cancelled = [
+    'DTSTART;TZID=America/New_York:20261021T190000',
+    'DTEND;TZID=America/New_York:20261021T200000',
+    'STATUS:CANCELLED',
+  ];
+
+  it.each([
+    ['VTIMEZONE', tz],
+    ['no VTIMEZONE', ''],
+  ])('a rescheduled override replaces its occurrence (%s)', (_, zone) => {
+    expect(starts(ics(zone, moved)).sort()).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-10-22T01:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+    ]);
+  });
+
+  it.each([
+    ['VTIMEZONE', tz],
+    ['no VTIMEZONE', ''],
+  ])('a cancelled override removes its occurrence (%s)', (_, zone) => {
+    expect(starts(ics(zone, cancelled))).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+    ]);
+  });
+});
+
+const costlySeries = (dtstart: string, dtend: string, rrule: string) =>
+  [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'BEGIN:VEVENT',
+    'UID:costly@icloud.test',
+    `DTSTART:${dtstart}`,
+    `DTEND:${dtend}`,
+    `RRULE:${rrule}`,
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'UID:good-neighbour@icloud.test',
+    'DTSTART:20261021T180000Z',
+    'DTEND:20261021T190000Z',
+    'END:VEVENT',
+    'END:VCALENDAR',
+    '',
+  ].join('\r\n');
+
+describe('recurrence work is bounded before ical.js iterates (Codex r8)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it.each([
+    [
+      'FREQ=SECONDLY;BYMONTH=1;BYMONTHDAY=1',
+      '20260101T235959Z',
+      '20260102T000000Z',
+    ],
+    [
+      'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30',
+      '20260101T120000Z',
+      '20260101T130000Z',
+    ],
+    [
+      'FREQ=MINUTELY;BYHOUR=3;BYMINUTE=0',
+      '20150101T000000Z',
+      '20150101T000100Z',
+    ],
+  ])(
+    'refuses %s in bounded time and keeps the neighbour',
+    (rule, start, end) => {
+      const started = Date.now();
+      const result = parse(costlySeries(start, end, rule));
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(result.skipped).toBe(1);
+      expect(result.blocks.map((b) => b.start.toISOString())).toEqual([
+        '2026-10-21T18:00:00.000Z',
+      ]);
+    },
+  );
+
+  it('stops a huge-COUNT series with no in-window occurrence at the cap, never past it', () => {
+    const next = jest.spyOn(ICAL.RecurExpansion.prototype, 'next');
+    const started = Date.now();
+    const result = parse(
+      costlySeries(
+        '20250101T000000Z',
+        '20250101T000001Z',
+        'FREQ=SECONDLY;COUNT=100000000',
+      ),
+    );
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(result.skipped).toBe(1);
+    expect(next.mock.calls.length).toBeLessThanOrEqual(MAX_SERIES_ITERATIONS);
+  });
+
+  it('still expands an ordinary DAILY;BYMONTH series', () => {
+    const ics = costlySeries(
+      '20261019T120000Z',
+      '20261019T130000Z',
+      'FREQ=DAILY;BYMONTH=10;COUNT=3',
+    );
+    expect(starts(ics)).toEqual([
+      '2026-10-20T12:00:00.000Z',
+      '2026-10-21T12:00:00.000Z',
+      '2026-10-21T18:00:00.000Z',
+    ]);
   });
 });

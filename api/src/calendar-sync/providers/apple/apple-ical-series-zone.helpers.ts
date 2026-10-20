@@ -18,7 +18,8 @@
  * 19:00 New York series moved to 22:00Z on Oct 27 is 23:00Z on Nov 3. With
  * a VTIMEZONE the conversion uses its rules, never an Intl lookup (Codex r6).
  * Codex r7: a UTC master's EXDATE / RDATE naming an IANA TZID with no
- * VTIMEZONE (floating in ical.js) is rewritten to its UTC instant.
+ * VTIMEZONE (floating in ical.js) is rewritten to its UTC instant; Codex
+ * r8: so are its overrides' zoned RECURRENCE-ID / DTSTART / DTEND.
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -171,6 +172,34 @@ function alignToUtc(master: ICAL.Component, floating: FloatingZone): void {
   }
 }
 
+/** A zoned value (VTIMEZONE rules, else its IANA TZID) → its UTC instant. */
+function zonedToUtc(
+  value: ICAL.Time,
+  tzid: string,
+  floating: FloatingZone,
+): ICAL.Time {
+  if (!isRealZone(value.zone)) return toUtc(value, tzid, floating);
+  return value.convertToZone(ICAL.Timezone.utcTimezone);
+}
+
+/**
+ * Codex r8: a UTC master's override RECURRENCE-ID / DTSTART / DTEND → UTC,
+ * so ical.js keys the override on the occurrence it replaces.
+ */
+function overrideToUtc(override: ICAL.Component, floating: FloatingZone): void {
+  for (const name of OVERRIDE_TIMES) {
+    const prop = override.getFirstProperty(name);
+    const value = prop?.getFirstValue();
+    const tzid = prop ? tzidOf(prop) : null;
+    if (!prop || !(value instanceof ICAL.Time) || value.isDate) continue;
+    if (tzid === null) continue;
+    const utc = zonedToUtc(value, tzid, floating);
+    if (utc.zone !== ICAL.Timezone.utcTimezone) continue;
+    prop.setValue(utc);
+    prop.removeParameter('tzid');
+  }
+}
+
 /** Rewrite UNTIL / EXDATE / RDATE + override times onto the series' clock. */
 export function alignSeriesZone(
   master: ICAL.Component,
@@ -179,6 +208,7 @@ export function alignSeriesZone(
 ): void {
   if (isUtcMaster(master)) {
     alignToUtc(master, floating);
+    for (const o of overrides) overrideToUtc(o, floating);
     return;
   }
   const target = seriesTarget(master, floating);
