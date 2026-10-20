@@ -16,7 +16,10 @@ import {
   loadRecipeSetRows,
   type RecipeSetRows,
 } from '../valheim-recipes.repository';
-import { MATERIALS_READ_TX, MaterialsReader } from './valheim-materials.repository';
+import {
+  MATERIALS_READ_TX,
+  MaterialsReader,
+} from './valheim-materials.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
