@@ -54,7 +54,9 @@ describe('ROK-1823 U2 signAccessToken — clock-only iat/exp', () => {
     const t = build();
     const notAfter = new Date(NOW.getTime() + 10 * 60 * 1000 + 900);
     const token = signAccessToken(t.deps, CLAIMS, { notAfter });
-    expect(decode(t.jwt, token).exp).toBe(Math.floor(notAfter.getTime() / 1000));
+    expect(decode(t.jwt, token).exp).toBe(
+      Math.floor(notAfter.getTime() / 1000),
+    );
   });
 
   it('a notAfter later than iat + ttl leaves exp at iat + ttl', () => {
@@ -98,7 +100,12 @@ describe('ROK-1823 U2 signAccessToken — version claims', () => {
     const t = build();
     const claims = { ...CLAIMS, sub: 8, impersonatedBy: 7, tv: 0, itv: 12 };
     const payload = decode(t.jwt, signAccessToken(t.deps, claims));
-    expect(payload).toMatchObject({ sub: 8, impersonatedBy: 7, tv: 0, itv: 12 });
+    expect(payload).toMatchObject({
+      sub: 8,
+      impersonatedBy: 7,
+      tv: 0,
+      itv: 12,
+    });
   });
 
   it('mint deps are the jwt signer only — no blocklist floor is consulted', () => {

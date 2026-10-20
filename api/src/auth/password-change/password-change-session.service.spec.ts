@@ -11,7 +11,6 @@ const BUMPED = 5;
 
 function build(blockSucceeds = true) {
   const calls: string[] = [];
-  let blockedAt: number | undefined;
   const refresh = {
     revokeAllAndBump: jest.fn(() => {
       calls.push('revokeAllAndBump');
@@ -23,15 +22,11 @@ function build(blockSucceeds = true) {
     }),
   };
   const blocklist = {
-    // Mirrors TokenBlocklistService with no prior block: stamps floor(now); floor = stamp + 1.
+    // ROK-1823 D10: the mint no longer reads a block floor (no minIatFor).
     blockUser: jest.fn(() => {
       calls.push('blockUser');
-      if (blockSucceeds) blockedAt = Math.floor(Date.now() / 1000);
       return Promise.resolve(blockSucceeds);
     }),
-    minIatFor: jest.fn(() =>
-      Promise.resolve(blockedAt === undefined ? undefined : blockedAt + 1),
-    ),
   };
   const jwt = new JwtService({ secret: 'test-secret' });
   const service = new PasswordChangeSessionService(
@@ -45,7 +40,6 @@ function build(blockSucceeds = true) {
     blocklist,
     jwt,
     calls,
-    blockedAt: () => blockedAt,
   };
 }
 
@@ -87,16 +81,6 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
       username: 'admin',
       role: 'admin',
     });
-  });
-
-  it('the re-issued token, minted in the block second, has an iat the block cannot reject', async () => {
-    jest.useFakeTimers({ now: new Date('2026-10-16T12:00:00.250Z') });
-    const t = build();
-    const tv = await t.service.revokeAllSessions(CALLER.id);
-    const { accessToken } = await t.service.issueSession(CALLER, null, tv);
-    const { iat } = t.jwt.decode<{ iat: number }>(accessToken);
-    // TokenBlocklistService.isBlocked rejects `iat <= blockedAt`.
-    expect(iat).toBe((t.blockedAt() ?? Number.NaN) + 1);
   });
 });
 
