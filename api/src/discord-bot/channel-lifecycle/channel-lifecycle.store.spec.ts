@@ -5,11 +5,9 @@ import {
 } from './channel-lifecycle.store';
 
 function fakeDb(): { db: LifecycleDb; values: jest.Mock } {
-  const values = jest
-    .fn()
-    .mockReturnValue({
-      onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
-    });
+  const values = jest.fn().mockReturnValue({
+    onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+  });
   const db = { insert: jest.fn().mockReturnValue({ values }) };
   return { db: db as unknown as LifecycleDb, values };
 }
