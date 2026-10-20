@@ -43,6 +43,18 @@ function Branch({ entries, names, kindOf, collapsed, onToggle, label }: BranchPr
     );
 }
 
+/** Ids of the branches the user folded; every branch starts open. */
+function useCollapsed(): { collapsed: ReadonlySet<number>; onToggle: (id: number) => void } {
+    const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set());
+    const onToggle = (id: number): void =>
+        setCollapsed((cur) => {
+            const next = new Set(cur);
+            if (!next.delete(id)) next.add(id);
+            return next;
+        });
+    return { collapsed, onToggle };
+}
+
 export function RecipeTree({
     nodes,
     truncated,
@@ -59,13 +71,7 @@ export function RecipeTree({
 }): JSX.Element {
     const roots = useMemo(() => foldNodes(nodes), [nodes]);
     const kindOf = useMemo(() => rootKindOf(nodes, rootKinds), [nodes, rootKinds]);
-    const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set());
-    const onToggle = (id: number): void =>
-        setCollapsed((cur) => {
-            const next = new Set(cur);
-            if (!next.delete(id)) next.add(id);
-            return next;
-        });
+    const { collapsed, onToggle } = useCollapsed();
     return (
         <div className="space-y-2">
             <Branch entries={roots} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} label={label} />

@@ -28,7 +28,7 @@ function TargetList({ targets, names, onRemove }: Omit<Props, 'plan'>): JSX.Elem
             {targets.map((t, i) => {
                 const name = names.nameOf(t.prefab, t.kind);
                 return (
-                    <li key={`${t.prefab}:${t.quality}`} className="flex items-center justify-between gap-2 text-sm text-foreground">
+                    <li key={`${t.prefab}:${t.kind}:${t.quality}`} className="flex items-center justify-between gap-2 text-sm text-foreground">
                         <span>
                             {name}
                             {t.kind === 'item' && ` · q${t.quality}`} × {formatAmount(t.amount)}

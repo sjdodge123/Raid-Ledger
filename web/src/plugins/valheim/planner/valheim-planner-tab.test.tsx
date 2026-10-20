@@ -2,11 +2,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { materialsFixture, valheimMaterialsHandler } from '../../../test/mocks/valheim-materials-handlers';
 import {
+    VALHEIM_RECIPE_PLAN_URL,
+    VALHEIM_RECIPE_TREE_URL,
     recipeCatalogEmpty,
+    recipeCatalogFixture,
     valheimRecipeCatalogHandler,
     valheimRecipePlanHandler,
     valheimRecipeTreeHandler,
@@ -160,5 +164,57 @@ describe('ValheimPlannerTab', () => {
         await waitFor(() => expect(screen.queryByRole('list', { name: 'Planned items' })).toBeNull());
         expect(localStorage.getItem(plannerStorageKey(8))).toBeNull();
         expect(localStorage.getItem(KEY)).toBe(STORED);
+    });
+
+    it('removing the last target clears the plan tree back to the idle prompt', async () => {
+        localStorage.setItem(KEY, STORED);
+        const user = userEvent.setup();
+        renderTab();
+        expect(await screen.findByRole('list', { name: 'What your list needs' })).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Remove Iron sword' }));
+        await waitFor(() => expect(screen.queryByRole('list', { name: 'What your list needs' })).toBeNull());
+        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+    });
+
+    it('a failed plan shows an error with Retry, not the idle prompt; Retry recovers', async () => {
+        server.use(http.get(VALHEIM_RECIPE_PLAN_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        localStorage.setItem(KEY, STORED);
+        const user = userEvent.setup();
+        renderTab();
+        await waitFor(() => expect(screen.queryByRole('alert')?.textContent ?? 'no alert').toContain('Couldn’t load your list’s plan.'));
+        expect(screen.queryByText('Pick an item or piece to see what it takes.')).toBeNull();
+        server.use(valheimRecipePlanHandler(planHits));
+        await user.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByRole('list', { name: 'What your list needs' })).toBeInTheDocument();
+    });
+
+    it('a failed tree shows an error naming the pick', async () => {
+        server.use(http.get(VALHEIM_RECIPE_TREE_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const user = userEvent.setup();
+        renderTab();
+        await pickIronSword(user);
+        await waitFor(() => expect(screen.queryByRole('alert')?.textContent ?? 'no alert').toContain('Couldn’t load what Iron sword needs.'));
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    it('an item and a piece sharing a prefab keep their own names', async () => {
+        const base = recipeCatalogFixture();
+        const shared = { prefab: 'Shared', category: 'Misc', icon: null, maxQuality: 1, sources: { recipes: 1, processes: 0 } };
+        server.use(valheimRecipeCatalogHandler({
+            ...base,
+            entries: [...base.entries, { ...shared, kind: 'item', name: 'Shared item' }, { ...shared, kind: 'piece', name: 'Shared piece' }],
+        }));
+        localStorage.setItem(KEY, JSON.stringify([
+            { prefab: 'Shared', kind: 'item', quality: 1, amount: 1 },
+            { prefab: 'Shared', kind: 'piece', quality: 1, amount: 1 },
+        ]));
+        renderTab();
+        const planned = await screen.findByRole('list', { name: 'Planned items' });
+        expect(within(planned).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+            expect.stringContaining('Shared item · q1 × 1'),
+            expect.stringContaining('Shared piece × 1'),
+        ]);
+        const tree = await screen.findByRole('list', { name: 'What your list needs' });
+        expect(within(tree).getAllByTestId('valheim-planner-row-name').map((n) => n.textContent)).toEqual(['Shared item', 'Shared piece']);
     });
 });
