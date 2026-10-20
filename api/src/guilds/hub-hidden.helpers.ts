@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { eq, inArray, isNotNull, and } from 'drizzle-orm';
+import { eq, inArray, isNotNull, and, ne, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { isStaff, type GuildActor } from './guild-access.service';
@@ -36,18 +36,26 @@ export async function assertNotHidden(
   }
 }
 
-/** True when the hub is hidden and the actor is not staff (L-5). */
+/**
+ * True when the hub is hidden — or (ROK-1870 A7) a community hub that is
+ * `proposed` / `archived` — and the actor is not staff (L-5).
+ */
 export async function isHiddenFrom(
   db: Db,
   actor: GuildActor,
   guildId: number,
 ): Promise<boolean> {
   if (isStaff(actor)) return false;
-  const hiddenAt = await findHiddenAt(db, guildId);
-  return hiddenAt !== null && hiddenAt !== undefined;
+  const [row] = await db
+    .select({ hiddenAt: schema.guilds.hiddenAt, status: schema.guilds.status })
+    .from(schema.guilds)
+    .where(eq(schema.guilds.id, guildId))
+    .limit(1);
+  if (row === undefined) return false;
+  return row.hiddenAt !== null || row.status !== 'active';
 }
 
-/** L-5 list filter: staff see every hub, everyone else loses the hidden ones. */
+/** L-5 list filter: staff see every hub, everyone else loses the hidden (and A7 non-active) ones. */
 export async function dropHiddenFor<T extends { id: number }>(
   db: Db,
   actor: GuildActor,
@@ -64,7 +72,7 @@ export async function dropHiddenFor<T extends { id: number }>(
           g.id,
           hubs.map((h) => h.id),
         ),
-        isNotNull(g.hiddenAt),
+        or(isNotNull(g.hiddenAt), ne(g.status, 'active')),
       ),
     );
   const hidden = new Set(rows.map((r) => r.id));

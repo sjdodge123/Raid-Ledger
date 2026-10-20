@@ -12,6 +12,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { games } from './games';
 import { pelicanServers } from './pelican-servers';
+import { users } from './users';
 
 /**
  * ROK-1724 (built for ROK-1170): in-game guilds — plugin-owned.
@@ -33,7 +34,10 @@ export const guilds = pgTable(
      * ROK-1830: which hub kind this group is (mirrors contract `GUILD_KINDS`).
      * Every insert path today is WoW, so the default stays (spec Q5).
      */
-    kind: varchar('kind', { length: 20, enum: ['wow_guild', 'game_server'] })
+    kind: varchar('kind', {
+      length: 20,
+      enum: ['wow_guild', 'game_server', 'game_community'],
+    })
       .default('wow_guild')
       .notNull(),
     region: varchar('region', { length: 10 }).notNull(),
@@ -60,6 +64,33 @@ export const guilds = pgTable(
     ),
     /** ROK-1831: admin hid the hub — 404 for non-staff, data kept. */
     hiddenAt: timestamp('hidden_at', { withTimezone: true }),
+    /**
+     * ROK-1870: a community hub's life (proposed → active → archived). Every
+     * other kind is always `active` (`guilds_status_kind_check`).
+     */
+    status: varchar('status', {
+      length: 10,
+      enum: ['proposed', 'active', 'archived'],
+    })
+      .default('active')
+      .notNull(),
+    /** ROK-1870 D10: the short pitch on the directory + game-page cards. */
+    blurb: varchar('blurb', { length: 280 }),
+    /** ROK-1870 D8: who proposed the community hub. */
+    proposedBy: integer('proposed_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    /** ROK-1870 D8: the staff member who approved it. */
+    reviewedBy: integer('reviewed_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /** ROK-1870: admin | leader | empty (D13 auto-archive). */
+    archivedReason: varchar('archived_reason', {
+      length: 10,
+      enum: ['admin', 'leader', 'empty'],
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -83,13 +114,35 @@ export const guilds = pgTable(
     // ROK-1157: FK backing index — the partial unique above does not count.
     index('idx_guilds_game_id').on(table.gameId),
     index('idx_guilds_pelican_server_id').on(table.pelicanServerId),
+    /** ROK-1870 D11: one non-archived community hub per (game, lower(name)). */
+    uniqueIndex('idx_guilds_community_name')
+      .on(table.gameId, table.nameKey)
+      .where(
+        sql`${table.kind} = 'game_community' AND ${table.status} <> 'archived'`,
+      ),
+    index('idx_guilds_proposed_by').on(table.proposedBy),
+    index('idx_guilds_reviewed_by').on(table.reviewedBy),
+    /** ROK-1870: the directory + the admin proposal queue. */
+    index('idx_guilds_kind_status').on(table.kind, table.status),
     check(
       'guilds_kind_check',
-      sql`${table.kind} IN ('wow_guild', 'game_server')`,
+      sql`${table.kind} IN ('wow_guild', 'game_server', 'game_community')`,
     ),
     check(
       'guilds_server_kind_check',
       sql`${table.pelicanServerId} IS NULL OR ${table.kind} = 'game_server'`,
+    ),
+    check(
+      'guilds_status_check',
+      sql`${table.status} IN ('proposed', 'active', 'archived')`,
+    ),
+    check(
+      'guilds_status_kind_check',
+      sql`${table.status} = 'active' OR ${table.kind} = 'game_community'`,
+    ),
+    check(
+      'guilds_community_server_check',
+      sql`${table.kind} <> 'game_community' OR ${table.pelicanServerId} IS NULL`,
     ),
   ],
 );

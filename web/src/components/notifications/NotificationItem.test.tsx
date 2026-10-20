@@ -188,6 +188,8 @@ describe('NotificationItem — hub notifications', () => {
     it.each([
         ['hub_leader_post', '/guilds/7'],
         ['hub_event_tagged', '/events/42'],
+        ['hub_proposal_submitted', '/admin/settings/general/hubs'],
+        ['hub_proposal_reviewed', '/guilds/7'],
     ] as const)('%s renders its own icon and navigates to payload.url', async (type, url) => {
         const user = userEvent.setup();
         const { onClose } = renderItem(makeNotification({ type, payload: { guildId: 7, url } }));

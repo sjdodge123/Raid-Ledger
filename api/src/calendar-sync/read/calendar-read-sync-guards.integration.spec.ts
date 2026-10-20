@@ -39,7 +39,10 @@ import { SettingsService } from '../../settings/settings.service';
 import { setCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
 import { CALENDAR_READ_QUEUE, readSyncJobId } from '../calendar-sync.constants';
 import { TransientError } from '../providers/calendar-provider.errors';
-import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
+import {
+  CALENDAR_FAKE_PROVIDER,
+  type CalendarReadProvider,
+} from '../providers/calendar-provider.registry';
 import { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-store';
 import * as googleHttp from '../providers/google/google-http';
@@ -413,5 +416,49 @@ describe('F2 — a transient failure never overwrites a needs_reconnect', () => 
       'auth',
       null,
     ]);
+  });
+});
+
+describe('Codex r7 — the cursor is re-checked under the commit lock', () => {
+  it('an `unchanged` answer to a cursor the purge cleared re-reads in full', async () => {
+    const m = await member();
+    seedOneBlock();
+    const cursor = { w: 'window', 'c:home': '7' };
+    await testApp.db
+      .update(c)
+      .set({ syncCursor: cursor })
+      .where(eq(c.id, m.connectionId));
+    const stale = await row(m.connectionId);
+    await purgeAllCalendarReadData(testApp.db);
+    // The fake has no cursor; read it as the interface to answer `unchanged`.
+    const reader: CalendarReadProvider = fake;
+    const original = reader.fetchBusy.bind(reader);
+    const spy = jest
+      .spyOn(reader, 'fetchBusy')
+      .mockImplementation((creds, range, ids, sent) =>
+        sent
+          ? Promise.resolve({ blocks: [], unchanged: true, cursor: sent })
+          : original(creds, range, ids),
+      );
+    try {
+      const outcome = await runCalendarReadSync(
+        {
+          db: testApp.db,
+          provider: fake,
+          clientUrl: await settings.getClientUrl(),
+          defaultTimezone: 'UTC',
+        },
+        stale,
+      );
+      // Without the re-check: 'unchanged', zero blocks, the cursor restored.
+      expect(outcome).toBe('synced');
+      expect(spy.mock.calls.map((call) => call[3])).toEqual([
+        cursor,
+        undefined,
+      ]);
+      expect(await blocksOf(m.connectionId)).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

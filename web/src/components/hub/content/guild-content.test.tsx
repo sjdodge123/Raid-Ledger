@@ -158,7 +158,7 @@ describe('Resources: rules and links', () => {
         serve(true, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed' }] });
         renderPage('#resources');
         await userEvent.click(await screen.findByTestId('guild-rules-edit'));
-        await userEvent.click(screen.getByRole('button', { name: 'Add section' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Add section' }));
         const titles = screen.getAllByLabelText('Section title');
         await userEvent.type(at(titles, 1), 'Attendance');
         await userEvent.type(at(screen.getAllByLabelText('Rules'), 1), 'Sign up by Tuesday');
@@ -171,7 +171,7 @@ describe('Resources: rules and links', () => {
         serve(true);
         renderPage('#resources');
         await userEvent.click(await screen.findByTestId('guild-links-edit'));
-        await userEvent.click(screen.getByRole('button', { name: 'Add group' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Add group' }));
         await userEvent.type(screen.getByLabelText('Group title'), 'Logs');
         await userEvent.type(screen.getByLabelText('Label'), 'Warcraft Logs');
         await userEvent.type(screen.getByLabelText('URL'), 'https://classic.warcraftlogs.com/guild/1');

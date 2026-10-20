@@ -29,6 +29,8 @@ export interface ReadConformanceHarness {
   ): void | Promise<void>;
   /** The next read request fails as `kind`. */
   failNextRead(kind: 'auth' | 'rate' | 'transient'): void;
+  /** The user's main calendar id; `primary` (fake, Google) when absent (ROK-1598 A5). */
+  primaryCalendarId?: string;
 }
 
 export type ReadConformanceFactory = () =>
@@ -36,8 +38,9 @@ export type ReadConformanceFactory = () =>
 
 type ReadHarness = () => ReadConformanceHarness;
 
-/** Both the fake and Google expose the user's main calendar as `primary`. */
-const PRIMARY = 'primary';
+/** The fake and Google expose the user's main calendar as `primary`; Apple names it. */
+const primaryOf = (h: ReadConformanceHarness) =>
+  h.primaryCalendarId ?? 'primary';
 const RANGE: TimeRange = {
   start: new Date('2026-11-01T00:00:00.000Z'),
   end: new Date('2026-11-29T00:00:00.000Z'),
@@ -58,7 +61,7 @@ function describeCalendars(get: ReadHarness): void {
     const h = get();
     const id = await h.provider.ensureRaidLedgerCalendar(h.credentials, null);
     const rows = await h.provider.listCalendars(h.credentials);
-    expect(rows.find((r) => r.id === PRIMARY)).toMatchObject({
+    expect(rows.find((r) => r.id === primaryOf(h))).toMatchObject({
       primary: true,
       isRaidLedger: false,
     });
@@ -73,22 +76,24 @@ function describeCalendars(get: ReadHarness): void {
 function describeBusy(get: ReadHarness): void {
   it('fetchBusy returns [start, end) blocks, drops Free events and those outside the range', async () => {
     const h = get();
-    await h.seedEvent(PRIMARY, {
+    await h.seedEvent(primaryOf(h), {
       start: at('03T18:00'),
       end: at('03T20:00'),
       busy: true,
     });
-    await h.seedEvent(PRIMARY, {
+    await h.seedEvent(primaryOf(h), {
       start: at('04T18:00'),
       end: at('04T20:00'),
       busy: false,
     });
-    await h.seedEvent(PRIMARY, {
+    await h.seedEvent(primaryOf(h), {
       start: new Date('2026-12-10T18:00:00.000Z'),
       end: new Date('2026-12-10T19:00:00.000Z'),
       busy: true,
     });
-    const out = await h.provider.fetchBusy(h.credentials, RANGE, [PRIMARY]);
+    const out = await h.provider.fetchBusy(h.credentials, RANGE, [
+      primaryOf(h),
+    ]);
     expect(out.blocks).toEqual([
       { start: at('03T18:00'), end: at('03T20:00'), allDay: false },
     ]);
@@ -113,14 +118,14 @@ function describeBusy(get: ReadHarness): void {
 
   it('a calendar that is gone is reported in missingCalendarIds; the rest still read', async () => {
     const h = get();
-    await h.seedEvent(PRIMARY, {
+    await h.seedEvent(primaryOf(h), {
       start: at('03T18:00'),
       end: at('03T20:00'),
       busy: true,
     });
     const out = await h.provider.fetchBusy(h.credentials, RANGE, [
       'gone-cal',
-      PRIMARY,
+      primaryOf(h),
     ]);
     expect(out.missingCalendarIds).toEqual(['gone-cal']);
     expect(out.blocks).toHaveLength(1);
@@ -138,7 +143,7 @@ function describeReadErrors(get: ReadHarness): void {
       const h = get();
       h.failNextRead(kind);
       await expect(
-        h.provider.fetchBusy(h.credentials, RANGE, [PRIMARY]),
+        h.provider.fetchBusy(h.credentials, RANGE, [primaryOf(h)]),
       ).rejects.toBeInstanceOf(cls);
     },
   );

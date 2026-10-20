@@ -13,11 +13,16 @@ import { hasGoogleReadScopes } from '../providers/google/google-oauth.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Whether a grant on `provider` carries the read scopes (Google-only today). */
+/**
+ * Whether a grant on `provider` allows reading. Google: the read scopes.
+ * Apple (ROK-1598 D10): an app-specific password reads everything — there
+ * is no scope step, so a stored Apple connection is always read-capable.
+ */
 export function grantAllowsRead(
   provider: CalendarProviderKey,
   grantedScopes: readonly string[],
 ): boolean {
+  if (provider === 'apple') return true;
   return provider === 'google' && hasGoogleReadScopes(grantedScopes);
 }
 

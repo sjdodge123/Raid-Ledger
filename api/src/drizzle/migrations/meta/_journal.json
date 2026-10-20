@@ -1657,43 +1657,57 @@
     {
       "idx": 237,
       "version": "7",
-      "when": 1792515039754,
-      "tag": "0237_channel_bindings_lifecycle",
+      "when": 1792516742598,
+      "tag": "0237_community_hub_guild_columns",
       "breakpoints": true
     },
     {
       "idx": 238,
       "version": "7",
-      "when": 1792515132570,
-      "tag": "0238_guild_profiles_discord_channel_source",
+      "when": 1792517407172,
+      "tag": "0238_hub_proposal_notification_types",
       "breakpoints": true
     },
     {
       "idx": 239,
       "version": "7",
-      "when": 1792515133872,
-      "tag": "0239_backfill_discord_channel_source",
+      "when": 1792517507172,
+      "tag": "0239_channel_bindings_lifecycle",
       "breakpoints": true
     },
     {
       "idx": 240,
       "version": "7",
-      "when": 1792515170292,
-      "tag": "0240_channel_lifecycle_suppressions",
+      "when": 1792517607172,
+      "tag": "0240_guild_profiles_discord_channel_source",
       "breakpoints": true
     },
     {
       "idx": 241,
       "version": "7",
-      "when": 1792519425151,
-      "tag": "0241_channel_bindings_archived_overwrites",
+      "when": 1792517707172,
+      "tag": "0241_backfill_discord_channel_source",
       "breakpoints": true
     },
     {
       "idx": 242,
       "version": "7",
+      "when": 1792517807172,
+      "tag": "0242_channel_lifecycle_suppressions",
+      "breakpoints": true
+    },
+    {
+      "idx": 243,
+      "version": "7",
+      "when": 1792519425151,
+      "tag": "0243_channel_bindings_archived_overwrites",
+      "breakpoints": true
+    },
+    {
+      "idx": 244,
+      "version": "7",
       "when": 1792520502617,
-      "tag": "0242_schedule_votes_updated_at",
+      "tag": "0244_schedule_votes_updated_at",
       "breakpoints": true
     }
   ]

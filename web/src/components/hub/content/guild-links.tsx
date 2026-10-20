@@ -2,13 +2,16 @@
  * ROK-1786 — "Links & resources" (prototype `proposed/LinksResources.tsx`):
  * titled groups of external links. Editors edit the whole set inline.
  */
-import { useState, type JSX } from 'react';
+import { lazy, Suspense, useState, type JSX } from 'react';
 import { ArrowTopRightOnSquareIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildLinkGroup } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { WidgetCard } from '../hub-bits';
-import { LinksEditor } from './guild-links-editor';
 import { useUpdateGuildProfile } from '../api/use-guild-content';
+
+/** Editors only, opened on demand — its own chunk, out of the hub page bundle. */
+const LinksEditor = lazy(() => import('./guild-links-editor').then((m) => ({ default: m.LinksEditor })));
+const EDITOR_FALLBACK = <div className="h-24 animate-pulse rounded-lg bg-panel" aria-busy="true" />;
 
 function LinkGroupView({ group }: { group: GuildLinkGroup }): JSX.Element {
     return (
@@ -41,8 +44,8 @@ export function GuildLinks({ guildId, links, canEdit }: { guildId: number; links
     ) : undefined;
     let body: JSX.Element;
     if (editing && canEdit) {
-        body = <LinksEditor initial={links} saving={save.isPending} failed={!!save.error} onCancel={() => setEditing(false)}
-            onSave={(next) => save.mutate({ links: next }, { onSuccess: () => setEditing(false) })} />;
+        body = <Suspense fallback={EDITOR_FALLBACK}><LinksEditor initial={links} saving={save.isPending} failed={!!save.error} onCancel={() => setEditing(false)}
+            onSave={(next) => save.mutate({ links: next }, { onSuccess: () => setEditing(false) })} /></Suspense>;
     } else if (links.length === 0) {
         body = <p className="text-sm text-muted">{canEdit ? 'No links yet. Add guides, logs or a Discord invite.' : 'No links shared yet.'}</p>;
     } else {

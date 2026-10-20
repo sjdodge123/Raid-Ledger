@@ -20,6 +20,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { GameTasteProfileResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { GameTasteSection } from './GameTasteSection';
+import { LazyGameTasteSection } from './game-taste-section-lazy';
 
 const mockUseGameTasteProfile = vi.fn();
 
@@ -156,5 +157,14 @@ describe('<GameTasteSection> — populated state (confidence > 0)', () => {
         expect(
             screen.getByTestId('axis-breakdown'),
         ).toBeInTheDocument();
+    });
+});
+
+describe('<LazyGameTasteSection> (ROK-1870 bundle split)', () => {
+    it('holds a skeleton, then renders the real section from its own chunk', async () => {
+        mockUseGameTasteProfile.mockReturnValue(makeResult({ data: makeProfile() }));
+        renderWithProviders(<LazyGameTasteSection gameId={42} />);
+        expect(await screen.findByTestId('game-taste-section')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-taste-loading')).toBeNull();
     });
 });

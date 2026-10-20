@@ -116,3 +116,10 @@ describe('setupSteps — game_server hubs (ROK-1831)', () => {
         expect(ids({ kind: 'wow_guild' })).toContain('roster');
     });
 });
+
+describe('setupSteps — game_community hubs (ROK-1870)', () => {
+    it('drops "Assign a Leader": the approved proposer already leads', () => {
+        expect(ids({ kind: 'game_community' })).not.toContain('leader');
+        expect(ids({})).toContain('leader');
+    });
+});

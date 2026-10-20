@@ -108,6 +108,7 @@ const CHROME_MODULE = 'discord-bot/embeds/embed-chrome.helpers.ts';
  */
 const KNOWN_SPEC_HELPER_FIXTURES = [
   'calendar-sync/calendar-oauth.integration.spec-helpers.ts',
+  'calendar-sync/providers/apple/apple-caldav.spec-helpers.ts',
   'calendar-sync/providers/google/google-calendar-api.spec-helpers.ts',
   'calendar-sync/providers/testing/calendar-provider.conformance.spec-helpers.ts',
   'calendar-sync/providers/testing/calendar-read.conformance.spec-helpers.ts',

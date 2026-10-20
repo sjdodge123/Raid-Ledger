@@ -14,36 +14,8 @@ import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
 const BASE = '/plugins/wow/guilds';
 const STALE_MS = 60_000;
 
-export function memberCountLabel(count: number): string {
-    return `${count} ${count === 1 ? 'member' : 'members'}`;
-}
-
-export function guildHref(guildId: number): string {
-    return `/guilds/${guildId}`;
-}
-
-/**
- * Core `GET /guilds/mine` (ROK-1831) — every hub kind the viewer belongs to.
- * The viewer's guilds WITH the query state. A caller that treats "no guilds"
- * as a fact (the Players "get your guild" prompt) has to tell an empty answer
- * apart from an unsettled or failed one — `useMyGuilds` cannot.
- */
-export function useMyGuildsQuery(): UseQueryResult<{ guilds: MyGuild[] }, Error> {
-    const { isAuthenticated } = useAuth();
-    const viewer = useViewerCacheScope();
-    return useQuery({
-        queryKey: ['plugins', 'wow', 'guilds', 'mine', viewer],
-        queryFn: () => fetchApi('/guilds/mine', {}, MyGuildsSchema),
-        enabled: isAuthenticated,
-        staleTime: STALE_MS,
-        retry: false,
-    });
-}
-
-/** The viewer's guilds; `[]` while loading, on error, or signed out. */
-export function useMyGuilds(): MyGuild[] {
-    return useMyGuildsQuery().data?.guilds ?? [];
-}
+/** Moved to core with the nav fillers (ROK-1870 D9); re-exported so WoW cards keep one import. */
+export { guildHref, memberCountLabel, useMyGuilds, useMyGuildsQuery } from '../../../components/layout/hub-nav/my-hubs-queries';
 
 /** Guilds of one game the viewer can open (same shape as `mine`); `[]` until known. */
 export function useGameGuilds(gameId: number | undefined): MyGuild[] {

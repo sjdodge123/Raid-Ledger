@@ -51,6 +51,16 @@ const NOTIFICATION_TYPE_META: {
         description: 'An event is tagged to a group you belong to',
     },
     {
+        type: 'hub_proposal_submitted',
+        label: 'Hub proposals',
+        description: 'Someone proposes a new community hub for review (staff)',
+    },
+    {
+        type: 'hub_proposal_reviewed',
+        label: 'Hub proposal decisions',
+        description: 'Your community hub proposal is approved or rejected',
+    },
+    {
         type: 'event_cancelled',
         label: 'Event Cancelled',
         description: 'When an event you signed up for is cancelled',

@@ -36,6 +36,7 @@ import { DemoTestGuildController } from './demo-test-guild.controller';
 import { DemoTestGuildDiscordController } from './demo-test-guild-discord.controller';
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
 import { DemoTestChannelLifecycleController } from './demo-test-channel-lifecycle.controller';
+import { DemoTestCommunityHubsController } from './demo-test-community-hubs.controller';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
 import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
 import { DemoTestJoinPostController } from './demo-test-join-post.controller';
@@ -145,6 +146,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestGuildDiscordController,
     DemoTestHubMemberController,
     DemoTestChannelLifecycleController,
+    DemoTestCommunityHubsController,
     DemoTestGameRolesController,
     DemoTestJoinPostController,
     AiChatTestController,

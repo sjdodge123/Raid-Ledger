@@ -22,6 +22,7 @@ import { useGuildDiscord } from '../discord/use-guild-discord';
 import { HubEditorsSection } from './settings-editors';
 import { SettingsSection } from './settings-rows';
 import { HideHubRow } from './hide-hub-row';
+import { hubCopy } from '../hub-copy';
 
 function channelLine(mirror: GuildDiscordMirrorDto): string {
     if (mirror.state === 'ok') return `#${mirror.channel.name}`;
@@ -69,16 +70,34 @@ export interface HubSettingsSheetProps {
     onChangeChannel: () => void;
 }
 
-function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+/**
+ * The Leader / admin rows (ROK-1830 S4) — an Officer who opens a community
+ * hub's sheet doesn't get them. A community hub keeps Discord only: page
+ * editors mean nothing for that kind (D6) and Archive replaces hiding (A7).
+ */
+function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+    const isCommunity = ctx.page.community !== undefined;
     return (
-        <div className="flex flex-col gap-5" data-testid="guild-settings-sheet">
+        <>
             <DiscordSection guildId={ctx.page.guild.id} onChangeChannel={onChangeChannel} />
+            {!isCommunity && <>
             <SettingsSection title="Page editors" blurb="Who can edit this guild’s page." testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
             </SettingsSection>
             <SettingsSection title="Visibility" testId="guild-settings-visibility">
                 <HideHubRow page={ctx.page} />
             </SettingsSection>
+            </>}
+        </>
+    );
+}
+
+function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+    const Extra = mod?.settingsSections;
+    return (
+        <div className="flex flex-col gap-5" data-testid="guild-settings-sheet">
+            {ctx.page.viewer.canManageEditors && <LeaderSections ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />}
+            {Extra && <Extra {...ctx} />}
         </div>
     );
 }
@@ -88,7 +107,7 @@ export function HubSettingsSheet({ ctx, module: mod, onClose, onChangeChannel }:
     const shared = {
         isOpen: true,
         onClose,
-        title: 'Guild settings',
+        title: hubCopy(ctx.page.guild.kind).settingsTitle,
         footer: <Button variant="secondary" onClick={onClose} data-testid="guild-settings-done">Done</Button>,
     };
     const body = <SheetBody ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />;

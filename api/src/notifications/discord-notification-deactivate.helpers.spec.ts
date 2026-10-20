@@ -9,6 +9,7 @@ import {
   type DeactivationReason,
 } from './discord-notification-deactivate.helpers';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
+import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 
 async function runWith(reason?: DeactivationReason): Promise<jest.Mock> {
   const db = createDrizzleMock();
@@ -33,6 +34,11 @@ async function runWith(reason?: DeactivationReason): Promise<jest.Mock> {
   return create;
 }
 
+jest.mock('../guilds/community/community-membership.queries', () => ({
+  ...jest.requireActual('../guilds/community/community-membership.queries'),
+  refreshUserHubCounts: jest.fn(),
+}));
+
 describe('deactivation reason (ROK-1749)', () => {
   it('renders the sweep reason into the admin notification', async () => {
     const create = await runWith('reconciliation-sweep');
@@ -44,6 +50,11 @@ describe('deactivation reason (ROK-1749)', () => {
         payload: expect.objectContaining({ reason: 'reconciliation-sweep' }),
       }),
     );
+  });
+
+  it("refreshes the user's community hub member counts (ROK-1870)", async () => {
+    await runWith('reconciliation-sweep');
+    expect(refreshUserHubCounts).toHaveBeenCalledWith(expect.anything(), 7);
   });
 
   it('renders the 50278 reason', async () => {

@@ -11,6 +11,10 @@ import { at } from '../../test/defined';
 import { registerPlugin } from '../../plugins/plugin-registry';
 import { usePluginStore } from '../../stores/plugin-store';
 
+vi.mock('./hub-nav/use-hub-nav-active', () => ({
+    useHubNavActive: (pathname: string) => ({ guild: false, hubs: pathname === '/hubs' }),
+}));
+
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({
         user: { id: 1, username: 'TestUser', role: 'member' },
@@ -36,6 +40,11 @@ vi.mock('../notifications', () => ({
 
 vi.mock('./ThemeToggle', () => ({
     ThemeToggle: () => null,
+}));
+
+// ROK-1870 D9: the core hub link queries `/guilds/mine`; its own spec lives in hub-nav/.
+vi.mock('./hub-nav/nav-guild-link', () => ({
+    NavGuildLink: () => null,
 }));
 
 vi.mock('./UserMenu', () => ({
@@ -78,5 +87,21 @@ describe('Header — plugin nav links (ROK-1785)', () => {
         const wrapper = link.parentElement;
         expect(wrapper?.className, 'below lg the plugin slot must render nothing in the bar (Codex P2: md overflow)').toBe('hidden lg:contents');
         usePluginStore.setState({ activeSlugs: new Set() });
+    });
+});
+
+describe('Header — the Hubs link (ROK-1870, operator ruling 2026-10-20)', () => {
+    it('sits right after Games in the main navigation and points at /hubs', () => {
+        renderHeader();
+        const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+        const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent);
+        expect(labels.slice(0, 5)).toEqual(['Calendar', 'Games', 'Hubs', 'Events', 'Players']);
+        expect(screen.getByRole('link', { name: 'Hubs' })).toHaveAttribute('href', '/hubs');
+    });
+
+    it('takes the active colour on /hubs like its siblings', () => {
+        render(<MemoryRouter initialEntries={['/hubs']}><Header onMenuClick={vi.fn()} /></MemoryRouter>);
+        expect(screen.getByRole('link', { name: 'Hubs' }).className).toContain('text-emerald-400');
+        expect(screen.getByRole('link', { name: 'Games' }).className).not.toContain('text-emerald-400');
     });
 });
