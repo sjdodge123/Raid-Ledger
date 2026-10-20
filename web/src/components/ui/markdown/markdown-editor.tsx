@@ -52,14 +52,12 @@ function useA11y(p: MarkdownEditorProps, countId: string): Record<string, string
 }
 
 /** Emits normalised markdown upward and re-syncs when the parent swaps `value`. */
-function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>, openLink: () => void) {
+function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>, setLinkOpen: (open: boolean) => void) {
     const last = useRef(p.value);
-    const linkRef = useRef(openLink);
-    linkRef.current = openLink;
     const extensions = useMemo(() => buildMarkdownExtensions({
         ...(p.placeholder === undefined ? {} : { placeholder: p.placeholder }),
-        onLinkShortcut: () => linkRef.current(),
-    }), [p.placeholder]);
+        onLinkShortcut: () => setLinkOpen(true),
+    }), [p.placeholder, setLinkOpen]);
     const editor = useEditor({
         extensions, content: p.value, contentType: 'markdown', editable: !p.disabled,
         autofocus: p.autoFocus ? 'end' : false, editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists },
@@ -82,7 +80,7 @@ export default function MarkdownEditor(props: MarkdownEditorProps): JSX.Element 
     const raw = useA11y(props, countId);
     const attrsKey = JSON.stringify(raw);
     const attrs = useMemo(() => JSON.parse(attrsKey) as Record<string, string>, [attrsKey]);
-    const editor = useMarkdownEditor(props, attrs, () => setLinkOpen(true));
+    const editor = useMarkdownEditor(props, attrs, setLinkOpen);
     const over = props.value.length > props.maxLength;
     return (
         <div className="w-full">
