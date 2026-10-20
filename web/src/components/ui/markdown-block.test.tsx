@@ -61,6 +61,14 @@ describe('MarkdownBlock — allowed elements', () => {
         expect(mount('**[a](/x)**').querySelector('strong > a')?.getAttribute('href')).toBe('/x');
     });
 
+    it('splits a paragraph and a following list', () => {
+        const root = mount('intro\n- a\n- b\n\nafter');
+        expect(root.querySelectorAll('p')).toHaveLength(2);
+        expect(root.querySelectorAll('ul > li')).toHaveLength(2);
+    });
+});
+
+describe('MarkdownBlock — hard-break continuations in list items (Codex r2)', () => {
     it('keeps an unindented line after a hard break inside its numbered item (Codex r2)', () => {
         const root = mount('1. one  \ncontinued\n2. two');
         expect(root.querySelectorAll('ol'), 'a hard-break continuation must not split the list').toHaveLength(1);
@@ -90,12 +98,6 @@ describe('MarkdownBlock — allowed elements', () => {
         const root = mount('- one\nafter');
         expect(root.querySelectorAll('ul > li')).toHaveLength(1);
         expect(root.querySelector('p')?.textContent).toBe('after');
-    });
-
-    it('splits a paragraph and a following list', () => {
-        const root = mount('intro\n- a\n- b\n\nafter');
-        expect(root.querySelectorAll('p')).toHaveLength(2);
-        expect(root.querySelectorAll('ul > li')).toHaveLength(2);
     });
 });
 
