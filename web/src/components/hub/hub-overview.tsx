@@ -10,8 +10,18 @@ import type { CoreWidgetId, HubCtx, HubModule } from '../../plugins/hub-module';
 import { GuildAttendance } from './events/guild-attendance';
 import { GuildEvents } from './events/guild-events';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
-import { LatestPostCard } from './posts/latest-post-card';
 import { useHubSettings } from './settings/hub-settings-context';
+
+/**
+ * ROK-1868 §3.4 — lazy so the post card, composer and post hooks (shared with
+ * the lazy Posts tab) stay out of the `hub-page` chunk. The fallback holds the
+ * card's two-column cell so the grid doesn't jump when it lands.
+ */
+const LatestPostCard = lazy(() => import('./posts/latest-post-card').then((m) => ({ default: m.LatestPostCard })));
+
+function PostCellSkeleton(): JSX.Element {
+    return <div className="h-32 animate-pulse rounded-lg border border-edge bg-panel md:col-span-2" aria-busy="true" data-testid="guild-gm-post-loading" />;
+}
 
 
 /**
@@ -64,7 +74,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
         : [];
     const cells: Cell[] = [
         ...checklist,
-        { key: 'gm-post', order: 10, span: 1, node: <LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} /> },
+        { key: 'gm-post', order: 10, span: 1, node: <Suspense fallback={<PostCellSkeleton />}><LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} /></Suspense> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
     if (!data) return cells;
