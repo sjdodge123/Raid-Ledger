@@ -121,13 +121,20 @@ export class EventGuildTagService {
       EXTENSION_POINTS.EVENT_GUILD_TAGGER,
       EVENT_GUILD_TAGGER_KEY,
     );
-    if (!tagger || !this.registry.isActive(tagger.pluginSlug)) {
+    if (!tagger || !this.isTaggerLive(tagger)) {
       throw new BadRequestException(GUILD_TAGGING_UNAVAILABLE);
     }
     await tagger.assertCanTag(
       { id: actor.id, role: actor.role },
       guildId,
       gameId,
+    );
+  }
+
+  /** A core-owned tagger (`pluginSlug: null`, ROK-1831) is always live. */
+  private isTaggerLive(tagger: EventGuildTagger): boolean {
+    return (
+      tagger.pluginSlug === null || this.registry.isActive(tagger.pluginSlug)
     );
   }
 

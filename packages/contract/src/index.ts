@@ -221,6 +221,7 @@ export * from './valheim-link-map.schema.js';
 export * from './valheim-link-items.schema.js';
 export * from './valheim-link-message.schema.js';
 export * from './valheim-link-admin.schema.js';
+export * from './valheim-armory.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
@@ -236,6 +237,8 @@ export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
 export * from './hub-onboarding.schema.js';
+// Game-server community hub — join, Quick Play list, hide (ROK-1831).
+export * from './hub-server.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';

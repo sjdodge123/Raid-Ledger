@@ -12,6 +12,7 @@ import { GameSearchInput } from '../../../components/events/game-search-input';
 import { PelicanStateChip } from './pelican-state-chip';
 import { PluginSlot } from '../../plugin-slot';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { CommunityHubSwitch } from './pelican-server-hub-switch';
 import { PLUGINS_HREF, quickPlayHint, quickPlayPluginToActivate } from './pelican-servers.helpers';
 
 export type ServerUpdateHandler = (id: number, patch: PelicanServerUpdate, gameName?: string | null) => void;
@@ -154,6 +155,7 @@ export function PelicanServerRow(p: ServerRowProps & { showExtras?: boolean }) {
             <td className="px-2 py-3 min-w-[10rem]"><GamePicker row={p.row} suggestions={p.suggestions} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
             <td className="px-2 py-3"><QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
+            <td className="px-2 py-3"><CommunityHubSwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><LastSynced at={p.row.lastSyncedAt} /></td>
             {p.showExtras && <td className="px-2 py-3"><RowExtras row={p.row} inline /></td>}
         </tr>
@@ -176,6 +178,10 @@ export function PelicanServerCard(p: ServerRowProps) {
             <div className="flex items-start justify-between gap-3">
                 <span className="text-sm text-secondary">Detect Quick Play from server logs</span>
                 <QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} />
+            </div>
+            <div className="flex items-start justify-between gap-3">
+                <span className="text-sm text-secondary">Community hub</span>
+                <CommunityHubSwitch row={p.row} onUpdate={p.onUpdate} />
             </div>
             <p className="text-xs text-muted">Last synced <LastSynced at={p.row.lastSyncedAt} /></p>
             <RowExtras row={p.row} />

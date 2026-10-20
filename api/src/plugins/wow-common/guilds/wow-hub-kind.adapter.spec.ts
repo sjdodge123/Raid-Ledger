@@ -18,6 +18,8 @@ import {
 } from './wow-hub-kind.adapter';
 import type { LinkedMemberRow } from './guild-membership.helpers';
 import { RANK_GRANTS_CONFER_EDIT } from './guild-delegation.helpers';
+import type { GuildPageService } from './guild-page.service';
+import type { GuildRaidsService } from './guild-raids.service';
 
 const GUILD = 7;
 const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({
@@ -34,7 +36,31 @@ let adapter: WowHubKindAdapter;
 beforeEach(() => {
   db = createDrizzleMock();
   const asDb: unknown = db;
-  adapter = new WowHubKindAdapter(asDb as PostgresJsDatabase<typeof schema>);
+  const pagesStub: unknown = { page: pageFn, mineRanks: mineRanksFn };
+  const raidsStub: unknown = { raids: raidsFn };
+  adapter = new WowHubKindAdapter(
+    asDb as PostgresJsDatabase<typeof schema>,
+    pagesStub as GuildPageService,
+    raidsStub as GuildRaidsService,
+  );
+});
+
+const pageFn = jest.fn();
+const raidsFn = jest.fn();
+const mineRanksFn = jest.fn();
+
+describe('ROK-1831 core route delegation', () => {
+  it('page / raids / mineRanks hand off to the existing WoW services', async () => {
+    pageFn.mockResolvedValueOnce('page');
+    raidsFn.mockResolvedValueOnce('raids');
+    mineRanksFn.mockResolvedValueOnce(new Map());
+    await expect(adapter.page(actor('member'), 5)).resolves.toBe('page');
+    await expect(adapter.raids(actor('member'), 5)).resolves.toBe('raids');
+    await expect(adapter.mineRanks(42, [5])).resolves.toEqual(new Map());
+    expect(pageFn).toHaveBeenCalledWith(actor('member'), 5);
+    expect(raidsFn).toHaveBeenCalledWith(actor('member'), 5);
+    expect(mineRanksFn).toHaveBeenCalledWith(42, [5]);
+  });
 });
 
 /** Queue the membership rows, then the member-grant lookup (if queried). */

@@ -116,7 +116,7 @@ test('AC-M6b-11: 409 path returns available_envs from consolidated read', async 
   // the shape gates and hit the env_not_found code path.
   const res = await fetch(`${srv.base}/api/test-plans/missing-slug/2026-05-21-1530-7f3a`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({
       goal: 'validate env not found path',
       story_id: 'ROK-1337',
@@ -146,7 +146,7 @@ test('AC-M6b-12: corrupt env-registry returns 500 env_registry_unreadable', asyn
     // ROK-1337 — v2 path + body.
     res = await fetch(`${srv.base}/api/test-plans/any-slug/2026-05-21-1530-7f3a`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
       body: JSON.stringify({
         goal: 'validate registry parse error',
         story_id: 'ROK-1337',
@@ -181,7 +181,7 @@ test('AC-M6b-13: missing-slug entries trigger console.warn', async () => {
   // env_not_found path that loads the registry.
   const res = await fetch(`${srv.base}/api/test-plans/nope/2026-05-21-1530-7f3a`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-agent-token': 'test-token-not-used' }, // ROK-1847
     body: JSON.stringify({
       goal: 'validate missing slug warning',
       story_id: 'ROK-1337',

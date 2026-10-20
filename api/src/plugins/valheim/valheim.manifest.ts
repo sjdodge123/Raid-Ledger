@@ -16,7 +16,7 @@ export const VALHEIM_MANIFEST: PluginManifest = {
     'Valheim server presence — reads who is on a Pelican-hosted Valheim server for Quick Play.',
   author: { name: 'Raid Ledger' },
   gameSlugs: [VALHEIM_GAME_SLUG],
-  capabilities: ['game-log-parser'],
+  capabilities: ['game-log-parser', 'cron-registrar'],
   settingKeys: [],
   dependencies: [PELICAN_PLUGIN_ID],
 };

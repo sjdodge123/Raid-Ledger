@@ -1,5 +1,5 @@
 {
-  "id": "fc0074d5-7e4d-4d57-948a-57a8fe1ee06e",
+  "id": "e17c4c11-b343-47bb-a53c-b0332ea3e471",
   "prevId": "f7bbe2f2-7c73-4f05-a28e-d1ede6205260",
   "version": "7",
   "dialect": "postgresql",
@@ -376,6 +376,12 @@
         },
         "rescheduling_poll_id": {
           "name": "rescheduling_poll_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_from_poll_id": {
+          "name": "created_from_poll_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -11073,18 +11079,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "introduced_by_user_id": {
-          "name": "introduced_by_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "corroborated_at": {
-          "name": "corroborated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11152,21 +11146,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_guild_members_introduced_by_user_id": {
-          "name": "idx_guild_members_introduced_by_user_id",
-          "columns": [
-            {
-              "expression": "introduced_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -11189,19 +11168,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "captured_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "guild_members_introduced_by_user_id_users_id_fk": {
-          "name": "guild_members_introduced_by_user_id_users_id_fk",
-          "tableFrom": "guild_members",
-          "tableTo": "users",
-          "columnsFrom": [
-            "introduced_by_user_id"
           ],
           "columnsTo": [
             "id"

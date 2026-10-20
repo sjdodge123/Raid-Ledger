@@ -13,6 +13,7 @@ import type { HubCtx, HubModule } from '../../../plugins/hub-module';
 import { Button } from '../../ui/button';
 import { RoleBadge } from '../../ui/role-badge';
 import { useAddGuildEditor, useGuildEditors, useRemoveGuildEditor } from '../api/use-guild';
+import { hubCopy } from '../hub-copy';
 
 function AlwaysEditors(): JSX.Element {
     return (
@@ -59,7 +60,7 @@ export function HubEditorsSection({ ctx, module: mod }: { ctx: HubCtx; module: H
                 {list.map((e) => <EditorChip key={e.id} editor={e} disabled={pending} onRemove={() => remove.mutate(e.id)} />)}
             </ul>
             {editors.isSuccess && list.length === 0 && (
-                <p className="text-sm text-muted">No one yet. Add a rank or a member below — start with your Guild Master.</p>
+                <p className="text-sm text-muted">{hubCopy(page.guild.kind).editorsEmpty}</p>
             )}
             {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error.message}</p>}
             {Delegation

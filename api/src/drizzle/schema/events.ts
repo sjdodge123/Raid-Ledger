@@ -110,6 +110,10 @@ export const events = pgTable(
      *  via a scheduling poll. Non-null hides the event from calendars/queries.
      *  Not using .references() to avoid circular import with community-lineup-matches. */
     reschedulingPollId: integer('rescheduling_poll_id'),
+    /** ROK-1844: the standalone poll (community_lineup_matches.id) this event
+     *  was created from. Set only at creation; completing that poll may sign
+     *  its voters up to this event. No .references() (circular import). */
+    createdFromPollId: integer('created_from_poll_id'),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */

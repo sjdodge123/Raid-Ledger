@@ -122,7 +122,7 @@ export async function upsertGuild(
         schema.guilds.region,
         schema.guilds.nameKey,
       ],
-      targetWhere: sql`${schema.guilds.realmSlug} IS NULL`,
+      targetWhere: sql`${schema.guilds.realmSlug} IS NULL AND ${schema.guilds.kind} = 'wow_guild'`,
       set,
     })
     .returning({ id: schema.guilds.id });

@@ -13,7 +13,10 @@
 #   3. Re-asserts the canonical rl-fleet group-write + setgid on the dirs
 #      rl-agent must write (traefik/conf.d — matches the state/ pattern),
 #      plus 640 root:rl-fleet on .env (bot tokens — group-readable, never o+r).
-#   4. Rebuilds + restarts gc-sweeper (its sweep.sh is COPY'd at image build).
+#   4. Rebuilds + restarts gc-sweeper (its sweep.sh is COPY'd at image build)
+#      and the dashboard (ROK-1847: a bind-mounted server.js edit is not live
+#      until the node process restarts, and the image must carry every module
+#      server.js imports).
 #   5. Stamps /srv/rl-infra/.deployed_sha for rl_status visibility.
 #
 # Usage: ./rl-infra/deploy.sh            (target from RL_DEPLOY_TARGET or default)
@@ -29,7 +32,7 @@ rsync -rltvh --no-perms --no-owner --no-group --omit-dir-times \
     --exclude='.git' \
     "$SRC/" "$VM:/srv/rl-infra/" | tail -3
 
-echo "==> VM-side: exec bits, canonical perms, gc-sweeper rebuild"
+echo "==> VM-side: exec bits, canonical perms, gc-sweeper + dashboard rebuild"
 ssh "$VM" bash -s <<'REMOTE'
 set -euo pipefail
 cd /srv/rl-infra
@@ -63,6 +66,11 @@ bash runner/ensure-runner-dirs.sh --root /srv/rl-infra || true
 docker compose build gc-sweeper >/dev/null 2>&1
 docker compose up -d gc-sweeper >/dev/null 2>&1
 echo "gc-sweeper rebuilt + restarted"
+# ROK-1847 — the dashboard runs server.js once at start, so rsynced edits to it
+# (and to plan-auth.js, which it imports) stay inactive until a restart.
+# --force-recreate restarts it even when the image layers are unchanged.
+docker compose up -d --build --force-recreate dashboard >/dev/null 2>&1
+echo "dashboard rebuilt + restarted"
 REMOTE
 
 DEPLOYED_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD)

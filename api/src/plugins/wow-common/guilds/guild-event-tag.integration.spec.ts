@@ -1,6 +1,6 @@
 /**
  * ROK-1787 — tagging events to a guild (events.guild_id) through the real
- * HTTP stack: EventGuildTagService → EVENT_GUILD_TAGGER → GuildEventTagger →
+ * HTTP stack: EventGuildTagService → EVENT_GUILD_TAGGER → HubEventTagger (core, ROK-1831) →
  * GuildAccessService.canEdit. GM has no implicit rights; editors are grants.
  */
 import * as bcrypt from 'bcrypt';

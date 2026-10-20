@@ -8,7 +8,7 @@
  * channel, next raid) merged with the prototype's content steps (rules, links,
  * recommended mods); the spec's wording wins (Lead ruling, PR-3 r1).
  */
-import type { GuildDiscordMirrorDto, GuildProfile } from '@raid-ledger/contract';
+import type { GuildDiscordMirrorDto, GuildKind, GuildProfile } from '@raid-ledger/contract';
 
 /** How a step is acted on: a tab hash, or an overlay only the page can open. */
 export type SetupStepAction = { kind: 'tab'; hash: string } | { kind: 'channel' } | { kind: 'blocked'; reason: string };
@@ -37,6 +37,24 @@ export interface SetupStepsInput {
     hasModSources: boolean;
     /** This viewer can open the channel picker — Leader and admin only. */
     canPickChannel: boolean;
+    /** ROK-1831: the hub kind; `game_server` drops the WoW-only steps and swaps copy. Default: WoW. */
+    kind?: GuildKind | undefined;
+}
+
+/** ROK-1831: steps a `game_server` hub never has — no roster import, no Publish (the admin switch is the publish). */
+const SERVER_DROPPED = new Set(['roster', 'publish']);
+
+/** ROK-1831: server-hub copy for the core steps whose WoW wording does not fit. */
+const SERVER_COPY: Record<string, Pick<SetupStep, 'label' | 'description' | 'actionLabel'>> = {
+    rules: { label: 'Add your server rules', description: 'They show on the Resources tab.', actionLabel: 'Add rules' },
+    links: { label: 'Add useful links', description: 'Discord, mod packs and connect info, all on Resources.', actionLabel: 'Add links' },
+    'next-raid': { label: 'Schedule your first event', description: 'Events show on the Events tab.', actionLabel: 'Schedule' },
+};
+
+/** Apply the per-kind step set and copy. */
+function forKind(steps: SetupStep[], kind: GuildKind | undefined): SetupStep[] {
+    if (kind !== 'game_server') return steps;
+    return steps.filter((s) => !SERVER_DROPPED.has(s.id)).map((s) => ({ ...s, ...(SERVER_COPY[s.id] ?? {}) }));
 }
 
 /**
@@ -109,7 +127,7 @@ export function setupSteps(input: SetupStepsInput): SetupStep[] {
         id: 'publish', label: 'Publish this hub', description: 'Decide who can find the hub.',
         done: false, action: { kind: 'blocked', reason: PUBLISH_BLOCKED_REASON }, actionLabel: 'Publish',
     });
-    return steps;
+    return forKind(steps, input.kind);
 }
 
 export interface SetupProgress {

@@ -1,7 +1,8 @@
 /**
  * Tests for the ITAD search deps builder — banned/hidden lookup batching
  * (READLOGS:D2). The search pipeline used to issue one `games` SELECT per
- * result; it must issue exactly one for the whole result set.
+ * result; it must issue one per moderation phase (pre-upsert slugs,
+ * post-upsert ids — ROK-1843) for the whole result set, independent of N.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GameDetailDto } from '@raid-ledger/contract';
@@ -52,7 +53,7 @@ function buildDeps(db: MockDb, slugs: string[], itad = mockItadService(slugs)) {
 }
 
 describe('buildItadSearchDeps — banned/hidden batching (READLOGS:D2)', () => {
-  it('checks banned/hidden for N results with exactly one games query', async () => {
+  it('checks banned/hidden for N results with one batched query per phase', async () => {
     const db = createDrizzleMock();
     resolveGamesSelect(db, []);
     const deps = buildDeps(db, ['game-a', 'game-b', 'game-c']);
@@ -60,7 +61,12 @@ describe('buildItadSearchDeps — banned/hidden batching (READLOGS:D2)', () => {
     const result = await executeItadSearch(deps, 'game');
 
     expect(result.games).toHaveLength(3);
-    expect(db.select).toHaveBeenCalledTimes(1);
+    // Two queries for N results, never one per result: (1) the pre-upsert
+    // slug batch (READLOGS:D2) and (2) the post-upsert by-id batch (ROK-1843),
+    // which must run after the upsert because an alternate-key match can land
+    // on a moderated row whose id is only known once the upsert returns.
+    // The failed-upsert `hasModeratedMatch` lookup does not fire here.
+    expect(db.select).toHaveBeenCalledTimes(2);
   });
 
   it('skips the games query entirely when there are no results', async () => {

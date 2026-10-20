@@ -49,14 +49,16 @@ write_driver() {
     local entry="$1"; shift
     {
         echo 'set -euo pipefail'
+        # stdin carries the CLI checkout's own script (ROK-1849 Codex r1);
+        # log its name so tests can tell the restore from the purge.
         echo 'ssh_run() {'
+        echo '  local in; in=$(cat)'
+        echo '  if [[ "$in" == *"rl-exec-bits:"* ]]; then printf "%s [restore-exec-bits.sh]\n" "$*" >> "$ARGV_LOG"; return "${RESTORE_RC:-0}"; fi'
         echo '  printf "%s\n" "$*" >> "$ARGV_LOG"'
-        echo '  case "$*" in'
-        echo '    *restore-exec-bits.sh*) return "${RESTORE_RC:-0}" ;;'
-        echo '  esac'
         echo '  return 0'
         echo '}'
-        echo 'mutagen() { return 0; }'
+        echo "RL_INFRA_SELF_DIR=$(printf '%q' "$WORKTREE_ROOT/rl-infra")"
+        echo 'mutagen() { [[ "$*" == *--template* ]] && echo 2; return 0; }'
         echo 'require_repo_root() { :; }'
         echo 'ensure_claim() { :; }'
         echo 'current_slot() { echo 3; }'
@@ -68,6 +70,7 @@ write_driver() {
         echo 'git() { echo main; }'
         echo 'TARGET=remote'
         echo 'REPO_ROOT=/tmp/fake-repo'
+        echo 'RL_PROXMOX_USER=rl-agent RL_PROXMOX_HOST=rl-infra'
         local fn
         for fn in "$@"; do
             slice_fn "$fn"
@@ -96,7 +99,7 @@ test_w1_flush_invokes_restore_with_bash() {
     local driver="$TMP_STATE/driver.sh"
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
-    write_driver "$driver" 'flush_mutagen 3' flush_mutagen restore_runner_exec_bits
+    write_driver "$driver" 'flush_mutagen 3' flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
 
     bash "$driver" >/dev/null 2>&1
     local log
@@ -106,8 +109,8 @@ test_w1_flush_invokes_restore_with_bash() {
         "flush_mutagen must dispatch the post-sync exec-bit restore; without it every caller is back to the chmod folklore"
     assert_contains "$log" "run-on-runner" \
         "the restore must go through run-on-runner (rl-agent is not in the docker group, so a raw ssh docker exec cannot work)"
-    assert_contains "$log" "bash /workspace/rl-infra/runner/restore-exec-bits.sh" \
-        "the restore must be invoked with an EXPLICIT bash interpreter — it is synced through the same 0644 path it repairs and cannot rely on its own exec bit"
+    assert_contains "$log" "bash -s -- /workspace [restore-exec-bits.sh]" \
+        "the restore must be the CLI checkout's own copy streamed to an EXPLICIT bash (ROK-1849: nothing executes from the synced branch tree, and its exec bit is not trusted)"
 }
 
 # W2 — a failed restore is loud and non-zero, not swallowed.
@@ -117,7 +120,7 @@ test_w2_failed_restore_is_loud_and_nonzero() {
     local driver="$TMP_STATE/driver.sh"
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
-    write_driver "$driver" 'flush_mutagen 3' flush_mutagen restore_runner_exec_bits
+    write_driver "$driver" 'flush_mutagen 3' flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
 
     local out rc=0
     out=$(RESTORE_RC=$EXPECTED_FATAL_CODE bash "$driver" 2>&1) || rc=$?
@@ -140,7 +143,8 @@ test_w3_validate_ci_aborts_before_dispatch() {
     export ARGV_LOG="$TMP_STATE/argv.log"
     : > "$ARGV_LOG"
     write_driver "$driver" 'cmd_validate_ci --static' \
-        cmd_validate_ci flush_mutagen restore_runner_exec_bits
+        cmd_validate_ci sync_slot_and_purge ensure_mutagen_sync mutagen_session_config_version \
+        require_current_sync_config flush_mutagen purge_runner_synced_secrets restore_runner_exec_bits run_operator_script_on_runner rl_infra_self_dir
 
     local out rc=0
     out=$(RESTORE_RC=$EXPECTED_FATAL_CODE bash "$driver" 2>&1) || rc=$?
@@ -179,7 +183,7 @@ test_w4_claim_warns_but_does_not_abort() {
     # abort the claim on a restore failure and leak the slot. It must carry an
     # explicit non-fatal handler.
     local call
-    call=$(grep -nE '^[[:space:]]*flush_mutagen "\$SLOT"' <<<"$body" || true)
+    call=$(grep -nE '^[[:space:]]*sync_slot_and_purge "\$SLOT"' <<<"$body" || true)
     if [[ "$call" == *"||"* ]]; then
         TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
     else

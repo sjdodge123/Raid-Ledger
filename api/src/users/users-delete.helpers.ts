@@ -22,6 +22,7 @@ import {
   deleteUserScreenshotsBestEffort,
   selectUserScreenshotPaths,
 } from '../feedback/feedback-screenshot-user.helpers';
+import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
 
 const logger = new Logger('UserDelete');
 
@@ -163,6 +164,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.hubOnboardingDismissals,
     column: schema.hubOnboardingDismissals.userId,
   },
+  // ROK-1831: game-server hub presence membership (CASCADE) — personal
+  // presence history (last seen, character name); it goes with the user.
+  {
+    table: schema.hubServerMembers,
+    column: schema.hubServerMembers.userId,
+  },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {
@@ -225,6 +232,15 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1833: `created_by` is SET NULL; a server's link token outlives the
   // admin who issued it (the mod keeps posting).
   schema.valheimLinkTokens,
+  // ROK-1835: `claimed_by` is SET NULL — a Valheim character is the game
+  // server's record (pushed by the mod), not user-authored, so it outlives the
+  // claimer (a hard delete leaves it unclaimed; an admin can reassign). The
+  // claim audit's from/to/actor columns are SET NULL history. The pair CHECK
+  // means SET NULL alone would fail, so deleteUserTransaction first releases
+  // the claims (releaseValheimClaimsForDeletedUser). Ban+wipe keeps the users
+  // row, so the claim stays pointed at the banned user there.
+  schema.valheimProfiles,
+  schema.valheimProfileClaimEvents,
 ];
 
 /**
@@ -337,6 +353,7 @@ export async function deleteUserTransaction(
   const shots = await db.transaction(async (tx) => {
     const paths = await selectUserScreenshotPaths(tx, userId);
     await wipeUserData(tx, userId, reassignToUserId);
+    await releaseValheimClaimsForDeletedUser(tx, userId);
     await tx.delete(schema.users).where(eq(schema.users.id, userId));
     return paths;
   });

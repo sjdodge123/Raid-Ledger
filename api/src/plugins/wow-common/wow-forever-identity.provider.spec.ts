@@ -87,7 +87,6 @@ describe('WowCommonModule character-identity registration', () => {
     const registerAdapter = jest.fn();
     const identity = new WowForeverIdentityProvider();
     const noSlugs = { gameSlugs: [] as string[] };
-    const tagger = { pluginSlug: 'blizzard' } as never;
     const mod = new WowCommonModule(
       { registerAdapter } as never,
       {} as never,
@@ -97,7 +96,6 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       {} as never,
       identity,
-      tagger,
       { kind: 'wow_guild' } as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
@@ -113,10 +111,9 @@ describe('WowCommonModule character-identity registration', () => {
     ]);
   });
 
-  it('registers the guild event tagger under the single "*" key (ROK-1787)', () => {
+  it('no longer registers an event guild tagger — core owns tagging (ROK-1831)', () => {
     const registerAdapter = jest.fn();
     const noSlugs = { gameSlugs: [] as string[] };
-    const tagger = { pluginSlug: 'blizzard' };
     const mod = new WowCommonModule(
       { registerAdapter } as never,
       {} as never,
@@ -126,21 +123,13 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       {} as never,
       { gameSlugs: [] } as never,
-      tagger as never,
       { kind: 'wow_guild' } as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
     const taggerCalls = registerAdapter.mock.calls.filter(
       ([point]) => point === EXTENSION_POINTS.EVENT_GUILD_TAGGER,
     );
-    expect(taggerCalls).toEqual([
-      [
-        EXTENSION_POINTS.EVENT_GUILD_TAGGER,
-        '*',
-        tagger,
-        { ownerPluginId: 'blizzard' },
-      ],
-    ]);
+    expect(taggerCalls).toEqual([]);
   });
 });
 
@@ -158,7 +147,6 @@ describe('WowCommonModule hub-kind registration (ROK-1830)', () => {
       {} as never,
       {} as never,
       { gameSlugs: [] } as never,
-      { pluginSlug: 'blizzard' } as never,
       hubKind as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();

@@ -12,7 +12,7 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import { PRIVATE_CHANNEL, discordMessage, okMirror } from '../../../test/mocks/guild-discord-handlers';
 import { GuildDiscordMirror } from './guild-discord-mirror';
 
-const URL = 'http://localhost:3000/plugins/wow/guilds/7/discord';
+const URL = 'http://localhost:3000/guilds/7/discord';
 
 function serve(mirror: GuildDiscordMirrorDto): { served: () => boolean } {
     let hit = false;

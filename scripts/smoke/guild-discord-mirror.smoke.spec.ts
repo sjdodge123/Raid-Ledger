@@ -81,10 +81,10 @@ async function bindAsAdmin(fx: Fixture, privateAck?: boolean): Promise<void> {
     if (res.state !== 'ok') throw new Error(`bind: ${JSON.stringify(res)}`);
 }
 
-/** Open the guild Overview and wait for the mirror GET to answer. */
+/** Open the guild Overview and wait for the mirror GET (core `/guilds/:id/discord`, ROK-1831) to answer. */
 async function openOverview(page: Page, guildId: number): Promise<void> {
     const mirrorRead = page.waitForResponse((r) =>
-        r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(`/plugins/wow/guilds/${guildId}/discord`));
+        r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(`/guilds/${guildId}/discord`));
     await page.goto(`/guilds/${guildId}`);
     expect((await mirrorRead).status(), 'GET .../discord answers 200').toBe(200);
 }

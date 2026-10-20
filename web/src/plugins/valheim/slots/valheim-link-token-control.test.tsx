@@ -113,9 +113,10 @@ describe('ValheimLinkTokenControl', () => {
         await user.click(await screen.findByRole('button', { name: 'Generate token' }));
         const steps = await screen.findByTestId('valheim-link-token-instructions');
         const origin = window.location.origin;
-        expect(steps).toHaveTextContent(`RaidLedger.BaseUrl = ${origin}`);
-        expect(steps).toHaveTextContent('RaidLedger.ServerId = 7');
-        expect(steps).toHaveTextContent('RaidLedger.ServerToken');
+        expect(steps).toHaveTextContent(`BaseUrl = ${origin}`);
+        expect(steps).toHaveTextContent('ServerId = 7');
+        expect(steps).toHaveTextContent('ServerToken');
+        expect(steps).not.toHaveTextContent(VALHEIM_RAW_TOKEN);
         expect(steps).toHaveTextContent(`POST ${origin}/api/plugins/valheim/link/messages/{kind}`);
         expect(steps).toHaveTextContent(`PUT ${origin}/api/plugins/valheim/link/blobs/{sha256}`);
     });
@@ -130,6 +131,7 @@ describe('ValheimLinkTokenControl — rotate, revoke, errors', () => {
         await user.click(await screen.findByRole('button', { name: 'Rotate' }));
         const confirm = await screen.findByRole('dialog', { name: 'Rotate the mod token?' });
         expect(confirm).toHaveTextContent('stops working immediately');
+        expect(confirm).toHaveTextContent('see the setup notes in the token dialog');
         expect(calls.rotate).toBe(0);
         await user.click(within(confirm).getByRole('button', { name: 'Rotate token' }));
         await screen.findByRole('dialog', { name: 'Mod token for Valheim — Main' });

@@ -604,6 +604,10 @@ const renderStep = (slug, plan, step, draft) => {
     });
     link.title = `Open: ${step.test_url}`;
     desc.appendChild(link);
+  } else if (step.test_url_blocked) {
+    // ROK-1847 — the server stripped a test_url that fails the allow-list.
+    desc.appendChild(el('div', { class: 'step-link-blocked',
+      text: '⚠ Link blocked — this step\'s test link was not an approved fleet URL. Ask the agent for a new plan.' }));
   }
   if (pendingReset) {
     desc.appendChild(el('div', { class: 'step-reset-banner',

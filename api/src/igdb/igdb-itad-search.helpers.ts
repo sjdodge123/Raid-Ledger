@@ -28,6 +28,13 @@ export interface ItadSearchDeps {
   /** READLOGS:D2: batch lookup — returns the subset of `slugs` that are
    * banned or hidden, in ONE query for the whole result set. */
   findBannedOrHiddenSlugs: (slugs: string[]) => Promise<Set<string>>;
+  /** ROK-1843: the subset of persisted game `ids` that are banned or hidden.
+   * Re-applied after the upsert, which can land on a moderated row by
+   * steamAppId / igdbId / name even though its incoming slug was clean. */
+  findBannedOrHiddenIds: (ids: number[]) => Promise<Set<number>>;
+  /** ROK-1843: whether a candidate collides with a banned/hidden row on ANY
+   * key — consulted when its upsert failed, before the in-memory fallback. */
+  hasModeratedMatch: (game: GameDetailDto) => Promise<boolean>;
   upsertGame: (game: GameDetailDto) => Promise<GameDetailDto>;
   /** ROK-986: Callback when a game is upserted without IGDB data. */
   onUnenriched?: (gameId: number) => void;
@@ -88,7 +95,12 @@ export async function executeItadSearch(
   const enriched = await enrichAll(deps, preFiltered, steamMap);
   const postFiltered = applyPostFilters(enriched, adultFilter);
   const visible = await removeHidden(deps, postFiltered);
-  const persisted = await upsertAll(deps, visible);
+  const upserted = await removeHiddenPersisted(
+    deps,
+    await upsertAll(deps, visible),
+  );
+  notifyUpserted(deps, upserted);
+  const persisted = upserted.map((u) => u.game);
 
   logger.debug(
     `ITAD search "${query}": ${raw.length} raw, ${persisted.length} final`,
@@ -171,26 +183,71 @@ async function removeHidden(
   return games.filter((g) => !excluded.has(g.slug));
 }
 
+/**
+ * Remove persisted rows that are banned or hidden, by DB id (ROK-1843). The
+ * slug filter above only saw the incoming ITAD slug; the upsert may have
+ * matched a moderated row by an alternate key.
+ */
+async function removeHiddenPersisted(
+  deps: ItadSearchDeps,
+  upserted: UpsertOutcome[],
+): Promise<UpsertOutcome[]> {
+  const ids = [
+    ...new Set(upserted.filter((u) => u.persisted).map((u) => u.game.id)),
+  ];
+  if (ids.length === 0) return upserted;
+  const excluded = await deps.findBannedOrHiddenIds(ids);
+  return upserted.filter((u) => !(u.persisted && excluded.has(u.game.id)));
+}
+
+/** One search hit after the upsert; `persisted` = it has a real DB id. */
+interface UpsertOutcome {
+  game: GameDetailDto;
+  persisted: boolean;
+}
+
 /** Upsert all games to DB to get real IDs. */
 async function upsertAll(
   deps: ItadSearchDeps,
   games: GameDetailDto[],
-): Promise<GameDetailDto[]> {
-  const results: GameDetailDto[] = [];
+): Promise<UpsertOutcome[]> {
+  const results: UpsertOutcome[] = [];
   for (const game of games) {
     try {
-      const persisted = await deps.upsertGame(game);
-      results.push(persisted);
-      if (persisted.id != null) {
-        deps.onGameUpserted?.(persisted.id);
-        if (!persisted.igdbId) deps.onUnenriched?.(persisted.id);
-      }
+      results.push({ game: await deps.upsertGame(game), persisted: true });
     } catch {
+      if (await isModeratedCandidate(deps, game)) continue;
       logger.warn(`Failed to upsert game "${game.slug}", using in-memory`);
-      results.push(game);
+      results.push({ game, persisted: false });
     }
   }
   return results;
+}
+
+/**
+ * ROK-1843: a candidate whose upsert failed is surfaced in-memory only when
+ * no banned/hidden row matches it on any key. Fails closed: if the lookup
+ * itself fails, the candidate is dropped.
+ */
+async function isModeratedCandidate(
+  deps: ItadSearchDeps,
+  game: GameDetailDto,
+): Promise<boolean> {
+  try {
+    return await deps.hasModeratedMatch(game);
+  } catch {
+    logger.warn(`Moderation lookup failed for "${game.slug}", dropping it`);
+    return true;
+  }
+}
+
+/** Fire the upsert callbacks for persisted rows that survived moderation. */
+function notifyUpserted(deps: ItadSearchDeps, upserted: UpsertOutcome[]): void {
+  for (const { game, persisted } of upserted) {
+    if (!persisted || game.id == null) continue;
+    deps.onGameUpserted?.(game.id);
+    if (!game.igdbId) deps.onUnenriched?.(game.id);
+  }
 }
 
 /** Check if a game name matches adult keywords. */
