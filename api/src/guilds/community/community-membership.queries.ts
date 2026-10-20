@@ -97,16 +97,28 @@ export interface BanInput {
   reason: string | null;
 }
 
-/** D7 ban (idempotent) — ends a live membership; pre-bans a non-member. */
-export async function ban(db: DbOrTx, input: BanInput): Promise<void> {
-  const now = new Date();
+/** The awaitable, SQL-renderable upsert `ban` runs. */
+export type BanStatement = PromiseLike<unknown> & {
+  toSQL(): { sql: string; params: unknown[] };
+};
+
+/**
+ * The ban upsert. Every timestamp is bound through column typing — a raw
+ * `Date` inside a `sql` fragment reaches postgres.js unserialised and throws
+ * (M2). On conflict `left_at` keeps its value, else takes the inserted one.
+ */
+export function banUpsert(
+  db: DbOrTx,
+  input: BanInput,
+  now: Date,
+): BanStatement {
   const fields = {
     bannedAt: now,
     bannedBy: input.bannedBy,
     banReason: input.reason,
     updatedAt: now,
   };
-  await db
+  return db
     .insert(m)
     .values({
       guildId: input.guildId,
@@ -117,8 +129,13 @@ export async function ban(db: DbOrTx, input: BanInput): Promise<void> {
     })
     .onConflictDoUpdate({
       target: [m.guildId, m.userId],
-      set: { ...fields, leftAt: sql`COALESCE(${m.leftAt}, ${now})` },
+      set: { ...fields, leftAt: sql`COALESCE(${m.leftAt}, excluded.left_at)` },
     });
+}
+
+/** D7 ban (idempotent) — ends a live membership; pre-bans a non-member. */
+export async function ban(db: DbOrTx, input: BanInput): Promise<void> {
+  await banUpsert(db, input, new Date());
 }
 
 /** Clear the ban only — the user must Join again. False when not banned. */
