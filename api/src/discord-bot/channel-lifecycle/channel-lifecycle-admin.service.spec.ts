@@ -200,14 +200,17 @@ describe('assertPinnable (PATCH bindings pinned rule)', () => {
 });
 
 describe('activity ?all=true widens the game set (Codex r3 P2)', () => {
-  it.each([true, false])('passes allGames=%s into the derivation', async (all) => {
-    const select = jest
-      .spyOn(queries, 'selectGameLifecycleActivity')
-      .mockResolvedValue([]);
-    await build().svc.activity(all);
-    expect(select).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ allGames: all }),
-    );
-  });
+  it.each([true, false])(
+    'passes allGames=%s into the derivation',
+    async (all) => {
+      const select = jest
+        .spyOn(queries, 'selectGameLifecycleActivity')
+        .mockResolvedValue([]);
+      await build().svc.activity(all);
+      expect(select).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ allGames: all }),
+      );
+    },
+  );
 });

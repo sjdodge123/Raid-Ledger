@@ -98,7 +98,9 @@ describe('ChannelLifecycleNudgeProcessor', () => {
     );
 
     it('a stopped tick (offline) throws; the final attempt captures once', async () => {
-      lifecycle.reconcile.mockResolvedValue(result({ stoppedReason: 'offline' }));
+      lifecycle.reconcile.mockResolvedValue(
+        result({ stoppedReason: 'offline' }),
+      );
       await expect(processor.process(job(1))).rejects.toThrow(/offline/);
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });

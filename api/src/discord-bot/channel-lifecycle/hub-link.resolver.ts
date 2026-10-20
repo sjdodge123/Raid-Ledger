@@ -8,14 +8,15 @@
  * ROK-1870's route ships (L11) — until then that URL would be a 404 (D15).
  */
 import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
   HUB_LINK_LABEL,
   type HubLink,
 } from '../embeds/hub-link-button.helpers';
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 type GuildKind = schema.GuildSelect['kind'];
 
 /**

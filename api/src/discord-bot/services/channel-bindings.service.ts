@@ -32,7 +32,10 @@ import type {
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
 import { defined } from '../../common/defined.helpers';
-import { suppressUnboundAutoBindings } from '../channel-lifecycle/channel-lifecycle.store';
+import {
+  suppressUnboundAutoBindings,
+  type LifecycleDb,
+} from '../channel-lifecycle/channel-lifecycle.store';
 
 export interface BindingRecord extends BindingLifecycleColumns {
   id: string;
@@ -55,6 +58,21 @@ interface UpsertBindingOpts {
   gameId: number | null;
   config?: ChannelBindingConfig;
   recurrenceGroupId?: string | null;
+  lifecycle?: BindLifecycle;
+}
+
+/** ROK-1428 (Codex r3): lifecycle ownership written in the binding's own insert. */
+interface BindLifecycle {
+  autoManaged: boolean;
+  lifecycleState: 'active' | 'archived';
+}
+
+/** `bind()` extras for the channel lifecycle; other callers pass none. */
+export interface BindOptions {
+  /** Run on this handle (the reconcile lock's tx) instead of the pool. */
+  db?: LifecycleDb;
+  /** Stamp lifecycle ownership atomically with the row. */
+  lifecycle?: BindLifecycle;
 }
 
 @Injectable()
@@ -84,15 +102,17 @@ export class ChannelBindingsService {
     gameId: number | null,
     config?: ChannelBindingConfig,
     recurrenceGroupId?: string | null,
+    options: BindOptions = {},
   ): Promise<{ binding: BindingRecord; replacedChannelIds: string[] }> {
+    const db = options.db ?? this.db;
     const replacedChannelIds = await cleanupSeriesBindings(
-      this.db,
+      db,
       guildId,
       channelId,
       channelType,
       recurrenceGroupId,
     );
-    const binding = await this.upsertBinding({
+    const binding = await this.upsertBinding(db, {
       guildId,
       channelId,
       channelType,
@@ -100,6 +120,7 @@ export class ChannelBindingsService {
       gameId,
       ...(config !== undefined ? { config } : {}),
       ...(recurrenceGroupId !== undefined ? { recurrenceGroupId } : {}),
+      ...(options.lifecycle ? { lifecycle: options.lifecycle } : {}),
     });
     this.logger.log(
       `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
@@ -122,17 +143,20 @@ export class ChannelBindingsService {
    * the UPDATE leaves the stored config untouched. An explicit object
    * (including `{}`) replaces it. A new row still defaults to `{}`.
    */
-  private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
+  private async upsertBinding(
+    db: LifecycleDb,
+    opts: UpsertBindingOpts,
+  ): Promise<BindingRecord> {
     // ROK-1415: covers BOTH branches — the UPDATE branch never writes gameId,
     // and findExistingBinding matches on gameId, so opts.gameId IS the stored
     // value there. This closes the second, undocumented route into the inert
     // (voice, game-voice-monitor, NULL) triple.
     assertUpsertTriple(opts);
-    await assertQuickPlayGameFree(this.db, opts); // ROK-1766 D3
-    const existing = await findExistingBinding(this.db, opts);
+    await assertQuickPlayGameFree(db, opts); // ROK-1766 D3
+    const existing = await findExistingBinding(db, opts);
     if (existing) {
       const [result] = await mappingConflicts(() =>
-        this.db
+        db
           .update(schema.channelBindings)
           .set({
             channelType: opts.channelType,
@@ -143,6 +167,7 @@ export class ChannelBindingsService {
             // minPlayers / gracePeriod set from the admin form. An explicit
             // `{}` still means "clear it" and IS written.
             ...(opts.config !== undefined && { config: opts.config }),
+            ...opts.lifecycle,
             updatedAt: new Date(),
           })
           .where(eq(schema.channelBindings.id, existing.id))
@@ -151,7 +176,7 @@ export class ChannelBindingsService {
       return defined(result, 'updated channel binding');
     }
     const [result] = await mappingConflicts(() =>
-      this.db
+      db
         .insert(schema.channelBindings)
         .values({
           guildId: opts.guildId,
@@ -161,6 +186,7 @@ export class ChannelBindingsService {
           gameId: opts.gameId,
           recurrenceGroupId: opts.recurrenceGroupId ?? null,
           config: opts.config ?? {},
+          ...opts.lifecycle,
         })
         .returning(),
     );

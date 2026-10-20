@@ -8,7 +8,8 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { GameActivitySignalKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
@@ -38,7 +39,7 @@ export type {
  * candidate binding (a quiet auto channel must surface to be archived).
  */
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 const DAY_MS = 86_400_000;
 const cb = schema.channelBindings;
 

@@ -14,7 +14,8 @@
  */
 import { ConflictException } from '@nestjs/common';
 import { and, asc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
-import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
 const NONSERIES_CONSTRAINT_PREFIX = 'channel_bindings_nonseries_';
@@ -118,7 +119,7 @@ export async function mappingConflicts<T>(op: () => Promise<T>): Promise<T> {
  * operator message if the resolved triple already occupies a slot.
  */
 export async function assertNoBindingConflict(
-  db: PostgresJsDatabase<typeof schema>,
+  db: PgDatabase<PostgresJsQueryResultHKT, typeof schema>,
   existing: BindingConflictInput & { id: string },
   newPurpose?: string,
 ): Promise<void> {
@@ -154,7 +155,7 @@ export async function assertNoBindingConflict(
  * for rows that predate the write guard (ROK-1766 D3 — no DB index).
  */
 export async function findQuickPlayBinding(
-  db: PostgresJsDatabase<typeof schema>,
+  db: PgDatabase<PostgresJsQueryResultHKT, typeof schema>,
   guildId: string,
   gameId: number,
   excludeChannelId?: string,
@@ -182,7 +183,7 @@ export async function findQuickPlayBinding(
  * non-series QP binding for a game another channel already holds -> 409.
  */
 export async function assertQuickPlayGameFree(
-  db: PostgresJsDatabase<typeof schema>,
+  db: PgDatabase<PostgresJsQueryResultHKT, typeof schema>,
   c: Omit<BindingConflictInput, 'recurrenceGroupId'> & {
     recurrenceGroupId?: string | null;
   },
@@ -214,7 +215,7 @@ export async function assertQuickPlayGameFree(
  * ROK-1766 D4: Quick Play Announcements rows live in their own match space.
  */
 export async function findExistingBinding(
-  db: PostgresJsDatabase<typeof schema>,
+  db: PgDatabase<PostgresJsQueryResultHKT, typeof schema>,
   opts: {
     guildId: string;
     channelId: string;
@@ -257,7 +258,7 @@ export async function findExistingBinding(
  * deletes the prior voice row; the text announce row survives (and vice versa).
  */
 export async function cleanupSeriesBindings(
-  db: PostgresJsDatabase<typeof schema>,
+  db: PgDatabase<PostgresJsQueryResultHKT, typeof schema>,
   guildId: string,
   channelId: string,
   channelType: string,

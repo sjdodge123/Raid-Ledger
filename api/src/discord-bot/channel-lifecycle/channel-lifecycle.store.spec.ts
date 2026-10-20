@@ -4,6 +4,7 @@ import {
   withReconcileLock,
   type LifecycleDb,
 } from './channel-lifecycle.store';
+import { sql } from 'drizzle-orm';
 
 function fakeDb(): { db: LifecycleDb; values: jest.Mock } {
   const values = jest.fn().mockReturnValue({
@@ -76,6 +77,13 @@ describe('withReconcileLock (single-flight, spec §2.3)', () => {
       withReconcileLock(db, () => Promise.resolve(7)),
     ).resolves.toEqual({ acquired: true, value: 7 });
     expect(txExecute).toHaveBeenCalledTimes(1);
+    expect(outerExecute).not.toHaveBeenCalled();
+  });
+
+  it('hands fn the lock tx, so its queries never touch the pool (Codex r3 P2)', async () => {
+    const { db, txExecute, outerExecute } = lockDb(true);
+    await withReconcileLock(db, (tx) => tx.execute(sql`SELECT 1`));
+    expect(txExecute).toHaveBeenCalledTimes(2);
     expect(outerExecute).not.toHaveBeenCalled();
   });
 

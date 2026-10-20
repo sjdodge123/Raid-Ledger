@@ -59,11 +59,16 @@ function keyOf(
   ids: OverwriteIds,
   c: ArchivedOverwriteChange,
 ): { id: string; type: OverwriteType } {
+  if ('id' in c) {
+    const isRole = c.target === 'role';
+    return {
+      id: c.id,
+      type: isRole ? OverwriteType.Role : OverwriteType.Member,
+    };
+  }
   if (c.target === 'everyone')
     return { id: ids.everyoneId, type: OverwriteType.Role };
-  if (c.target === 'bot') return { id: ids.botId, type: OverwriteType.Member };
-  const type = c.target === 'role' ? OverwriteType.Role : OverwriteType.Member;
-  return { id: c.id, type };
+  return { id: ids.botId, type: OverwriteType.Member };
 }
 const toValue = (s: OverwritePriorState): boolean | null =>
   s === 'allow' ? true : s === 'deny' ? false : null;

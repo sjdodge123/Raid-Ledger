@@ -16,9 +16,14 @@ export const CHANNEL_LIFECYCLE_HUB_LINKER = Symbol(
 
 /** Links a game's channel-less hubs to its managed channel; returns how many. */
 export interface HubLinker {
-  linkHubsForGame(gameId: number, channelId: string): Promise<number>;
+  /** `db` = the reconcile lock's tx (Codex r3); defaults to the pool. */
+  linkHubsForGame(
+    gameId: number,
+    channelId: string,
+    db?: LifecycleDb,
+  ): Promise<number>;
   /** Games with an eligible hub that has no channel yet (L8); absent ⇒ none. */
-  hubNeedsLinkGameIds?(): Promise<ReadonlySet<number>>;
+  hubNeedsLinkGameIds?(db?: LifecycleDb): Promise<ReadonlySet<number>>;
 }
 
 /** The default seam until L8: links nothing. */

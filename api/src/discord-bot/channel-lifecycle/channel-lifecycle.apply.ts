@@ -60,7 +60,8 @@ async function linkHubs(
   game: PlannedGame,
   channel: { id: string; autoManaged: boolean },
 ): Promise<number> {
-  const n = await ctx.hubLinker.linkHubsForGame(game.row.gameId, channel.id);
+  const { gameId } = game.row;
+  const n = await ctx.hubLinker.linkHubsForGame(gameId, channel.id, ctx.db);
   if (n > 0 && channel.autoManaged) await refreshTopic(ctx, game, channel.id);
   return n;
 }
@@ -87,28 +88,37 @@ async function deleteOrphan(guild: Guild, channelId: string): Promise<void> {
   }
 }
 
-/** Bind a just-created channel (only through `bind()`); on failure delete it (R18). */
+/**
+ * Bind a just-created channel (only through `bind()`), stamping lifecycle
+ * ownership in the SAME insert (Codex r3: no half-owned manual-looking row);
+ * on failure delete it (R18).
+ */
 async function bindNewChannel(
   ctx: ApplyContext,
   gameId: number,
   channelId: string,
-): Promise<string> {
+): Promise<void> {
   try {
-    const bound = await ctx.bindings.bind(
+    await ctx.bindings.bind(
       ctx.guild.id,
       channelId,
       'text',
       'game-announcements',
       gameId,
+      undefined,
+      undefined,
+      {
+        db: ctx.db,
+        lifecycle: { autoManaged: true, lifecycleState: 'active' },
+      },
     );
-    return bound.binding.id;
   } catch (err) {
     await deleteOrphan(ctx.guild, channelId);
     throw err;
   }
 }
 
-/** Create → bind (only through `bind()`) → mark auto-managed → link hubs. */
+/** Create → bind as auto-managed (one insert, via `bind()`) → link hubs. */
 async function applyCreate(
   ctx: ApplyContext,
   game: PlannedGame,
@@ -123,11 +133,7 @@ async function applyCreate(
     parentId: await gamesParent(ctx),
     topic: lifecycleTopic(ctx, game),
   });
-  const bindingId = await bindNewChannel(ctx, gameId, channelId);
-  await setLifecycleState(ctx.db, bindingId, {
-    autoManaged: true,
-    lifecycleState: 'active',
-  });
+  await bindNewChannel(ctx, gameId, channelId);
   const linkedHubs = await linkHubs(ctx, game, {
     id: channelId,
     autoManaged: true,

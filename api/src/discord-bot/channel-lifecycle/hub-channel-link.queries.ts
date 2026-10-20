@@ -6,12 +6,13 @@
  * guild hubs never are).
  */
 import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { GuildDiscordManagedForDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { HUB_LINK_KINDS } from './hub-link.resolver';
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 type ChannelSource = 'auto' | 'manual';
 
 const { guilds, guildProfiles, channelBindings, games } = schema;

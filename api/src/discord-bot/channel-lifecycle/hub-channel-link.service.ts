@@ -4,6 +4,7 @@ import type { GuildDiscordManagedForDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { HubLinker } from './channel-lifecycle.types';
+import type { LifecycleDb } from './channel-lifecycle.store';
 import {
   findManagedForChannel,
   linkHubsForGame,
@@ -23,13 +24,17 @@ export class HubChannelLinkService implements HubLinker {
   ) {}
 
   /** Link every eligible channel-less hub of `gameId`; returns how many. */
-  linkHubsForGame(gameId: number, channelId: string): Promise<number> {
-    return linkHubsForGame(this.db, gameId, channelId);
+  linkHubsForGame(
+    gameId: number,
+    channelId: string,
+    db?: LifecycleDb,
+  ): Promise<number> {
+    return linkHubsForGame(db ?? this.db, gameId, channelId);
   }
 
   /** Games with an eligible hub lacking a channel (feeds `hubNeedsLink`). */
-  hubNeedsLinkGameIds(): Promise<Set<number>> {
-    return selectHubNeedsLinkGameIds(this.db);
+  hubNeedsLinkGameIds(db?: LifecycleDb): Promise<Set<number>> {
+    return selectHubNeedsLinkGameIds(db ?? this.db);
   }
 
   /** The game a lifecycle-managed channel belongs to, or null. */

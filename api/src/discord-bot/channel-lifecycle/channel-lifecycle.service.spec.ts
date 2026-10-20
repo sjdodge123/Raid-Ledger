@@ -36,9 +36,10 @@ jest.mock('./hub-link.resolver');
 jest.mock('./hub-channel-link.queries');
 jest.mock('./channel-lifecycle.store', () => ({
   withReconcileLock: jest.fn(
-    async (_db: unknown, fn: () => Promise<unknown>) => ({
+    // The fake lock hands the db itself over as its tx.
+    async (db: unknown, fn: (tx: unknown) => Promise<unknown>) => ({
       acquired: true,
-      value: await fn(),
+      value: await fn(db),
     }),
   ),
   setLifecycleState: jest.fn(),
@@ -222,13 +223,20 @@ describe('actions', () => {
       'text',
       'game-announcements',
       1,
+      undefined,
+      undefined,
+      // Codex r3: ownership rides the binding's own insert, on the lock's tx.
+      {
+        db: expect.anything(),
+        lifecycle: { autoManaged: true, lifecycleState: 'active' },
+      },
     );
-    expect(store.setLifecycleState).toHaveBeenCalledWith(
+    expect(store.setLifecycleState).not.toHaveBeenCalled();
+    expect(hubLinker.linkHubsForGame).toHaveBeenCalledWith(
+      1,
+      'new-ch',
       expect.anything(),
-      'b-new',
-      { autoManaged: true, lifecycleState: 'active' },
     );
-    expect(hubLinker.linkHubsForGame).toHaveBeenCalledWith(1, 'new-ch');
     expect(res.created).toBe(1);
     expect(settings.recordChannelLifecycleRun).toHaveBeenCalledWith(
       expect.objectContaining({ error: null }),
@@ -243,6 +251,7 @@ describe('actions', () => {
       expect.any(String),
     );
     expect(res.failed).toBe(1);
+    // Codex r3 P2: no separate ownership write can leave a half-owned row.
     expect(store.setLifecycleState).not.toHaveBeenCalled();
   });
   it('archive stores the previous parent; unarchive restores it', async () => {

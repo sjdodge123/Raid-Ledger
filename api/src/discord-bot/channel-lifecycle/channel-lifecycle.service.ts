@@ -77,8 +77,8 @@ export class ChannelLifecycleService {
     if (!this.client.isConnected() || !guild) {
       return emptyResult(opts.dryRun, 'offline');
     }
-    const run = await withReconcileLock(this.db, () =>
-      this.runLocked(guild, settings, opts),
+    const run = await withReconcileLock(this.db, (tx) =>
+      this.runLocked(tx, guild, settings, opts),
     );
     if (!run.acquired) {
       throw new ConflictException('A reconcile is already running');
@@ -86,8 +86,9 @@ export class ChannelLifecycleService {
     return run.value;
   }
 
-  /** Plan + (unless dry) execute and record, under the lock. */
+  /** Plan + (unless dry) execute and record, under the lock — DB work on `tx`. */
   private async runLocked(
+    tx: LifecycleDb,
     guild: Guild,
     settings: ChannelLifecycleSettingsDto,
     opts: ReconcileOptions,
@@ -107,10 +108,10 @@ export class ChannelLifecycleService {
           emptyResult(false, 'no-archive-category'),
         );
       }
-      const rows = await this.selectRows(guild, settings, opts, now);
+      const rows = await this.selectRows(tx, guild, settings, opts, now);
       const plan = planReconcile(rows, settings);
       if (opts.dryRun) return plannedResult(plan);
-      const ctx = await this.context(guild, settings, categories, now);
+      const ctx = await this.context(tx, guild, settings, categories, now);
       const result = await executePlan(ctx, plan);
       if (result.stoppedReason === 'permissions') {
         this.reportPermission(settings, opts);
@@ -123,14 +124,15 @@ export class ChannelLifecycleService {
 
   /** The activity rows for this tick (scoped to the bot's guild). */
   private async selectRows(
+    tx: LifecycleDb,
     guild: Guild,
     settings: ChannelLifecycleSettingsDto,
     opts: ReconcileOptions,
     now: Date,
   ): Promise<GameLifecycleActivityRow[]> {
     const hubNeedsLinkGameIds =
-      (await this.hubLinker.hubNeedsLinkGameIds?.()) ?? new Set<number>();
-    return selectGameLifecycleActivity(this.db, {
+      (await this.hubLinker.hubNeedsLinkGameIds?.(tx)) ?? new Set<number>();
+    return selectGameLifecycleActivity(tx, {
       now,
       windowDays: settings.recentActivityDays,
       guildId: guild.id,
@@ -141,13 +143,14 @@ export class ChannelLifecycleService {
 
   /** The executor context for a live tick. */
   private async context(
+    db: LifecycleDb,
     guild: Guild,
     settings: ChannelLifecycleSettingsDto,
     categories: ReconcileCategories,
     now: Date,
   ): Promise<ApplyContext> {
     const clientUrl = await this.settings.getClientUrl();
-    const { db, bindings, hubLinker } = this;
+    const { bindings, hubLinker } = this;
     return {
       guild,
       db,

@@ -6,13 +6,17 @@
  * single-flight lock shared by the cron, the admin route and the nudge.
  */
 import { and, eq, sql } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ArchivedOverwrites } from '../../drizzle/schema/channel-bindings';
 import type { ChannelLifecycleSuppressionReason } from '../../drizzle/schema/channel-lifecycle-suppressions';
 
-/** The app's Drizzle handle. */
-export type LifecycleDb = PostgresJsDatabase<typeof schema>;
+/**
+ * The app's Drizzle handle — the pool OR a transaction on it (the reconcile
+ * lock's `tx`), so every query under the lock can run on its connection.
+ */
+export type LifecycleDb = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 
 /** The lifecycle columns a reconcile writes on a managed binding. */
 export interface LifecycleStatePatch {
@@ -106,17 +110,19 @@ export type LockedRun<T> = { acquired: true; value: T } | { acquired: false };
 /**
  * Single-flight (spec §2.3): run `fn` while holding the transaction-scoped
  * `hashtext('channel-lifecycle')` advisory lock; a concurrent caller gets
- * `{acquired: false}` at once. `fn` uses the outer db — the lock is a mutex.
+ * `{acquired: false}` at once. `fn` gets the lock's `tx` and must run ALL its
+ * DB work on it (Codex r3): a query on the pool while the tx holds a
+ * connection deadlocks a `DB_POOL_MAX=1` pool.
  */
 export async function withReconcileLock<T>(
   db: LifecycleDb,
-  fn: () => Promise<T>,
+  fn: (tx: LifecycleDb) => Promise<T>,
 ): Promise<LockedRun<T>> {
   return db.transaction(async (tx) => {
     const rows = await tx.execute<{ locked: boolean }>(
       sql`SELECT pg_try_advisory_xact_lock(hashtext('channel-lifecycle')) AS locked`,
     );
     if (rows[0]?.locked !== true) return { acquired: false };
-    return { acquired: true, value: await fn() };
+    return { acquired: true, value: await fn(tx) };
   });
 }
