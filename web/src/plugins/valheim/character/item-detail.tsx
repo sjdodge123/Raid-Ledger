@@ -21,8 +21,10 @@ import { BottomSheet } from '../../../components/ui/bottom-sheet';
 import { useAnchoredPopup } from '../../../components/ui/use-anchored-popup';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { useEscapeLayer } from '../../../hooks/use-escape-layer';
+import { useTabTrap } from '../../../hooks/use-focus-trap';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
+import { Z_INDEX } from '../../../lib/z-index';
 import { clampPopover } from './popover-clamp';
 import {
     durabilityPct,
@@ -128,7 +130,13 @@ interface PopoverProps extends ItemDetailData {
     onClose: () => void;
     anchorRef: RefObject<HTMLElement | null>;
     returnRef: RefObject<HTMLElement | null>;
-    container: HTMLElement;
+    /**
+     * The tile sits inside an open dialog (the Materials chest `Modal`). The
+     * popover still portals to `<body>`: the frame's `overflow-hidden` plus its
+     * forwards-filled `transform` would clip a `fixed` child (Codex r4) — so it
+     * layers above the modal and keeps Tab inside itself instead.
+     */
+    stacked: boolean;
 }
 
 /** Used until the popover has laid out (jsdom never lays out). */
@@ -141,8 +149,14 @@ const FALLBACK = { width: 288, height: 240 };
  */
 function popoverStyle(
     pos: { top: number; left: number } | null,
+    stacked: boolean,
 ): CSSProperties {
-    return { top: 0, left: 0, visibility: pos ? 'visible' : 'hidden' };
+    return {
+        top: 0,
+        left: 0,
+        zIndex: stacked ? Z_INDEX.MODAL_STACKED : Z_INDEX.MODAL,
+        visibility: pos ? 'visible' : 'hidden',
+    };
 }
 
 /**
@@ -200,6 +214,7 @@ function useFocusAndEscape(
     visible: boolean,
     onClose: () => void,
     returnRef: RefObject<HTMLElement | null>,
+    stacked: boolean,
 ): void {
     useEffect(() => {
         if (visible) popupRef.current?.focus();
@@ -209,6 +224,8 @@ function useFocusAndEscape(
         returnRef.current?.focus();
     }, [onClose, returnRef]);
     useEscapeLayer(true, onEscape);
+    // Portalled outside the modal's trap: Tab must not walk off the page.
+    useTabTrap(stacked, popupRef);
 }
 
 const POPOVER_TITLE = 'mb-1 text-sm font-semibold text-foreground';
@@ -217,14 +234,14 @@ function ItemPopover({
     onClose,
     anchorRef,
     returnRef,
-    container,
+    stacked,
     ...data
 }: PopoverProps): JSX.Element {
     const popupRef = useRef<HTMLDivElement | null>(null);
     const titleId = useId();
     const pos = useAnchoredPopup(anchorRef, popupRef, true, onClose);
     useClampedPopover(pos, anchorRef, popupRef);
-    useFocusAndEscape(popupRef, pos !== null, onClose, returnRef);
+    useFocusAndEscape(popupRef, pos !== null, onClose, returnRef, stacked);
     return createPortal(
         <div
             ref={popupRef}
@@ -232,15 +249,15 @@ function ItemPopover({
             aria-labelledby={titleId}
             tabIndex={-1}
             data-testid="valheim-item-popover"
-            className="fixed z-50 w-72 rounded-lg border border-edge bg-panel p-3 shadow-lg focus:outline-none"
-            style={popoverStyle(pos)}
+            className="fixed w-72 rounded-lg border border-edge bg-panel p-3 shadow-lg focus:outline-none"
+            style={popoverStyle(pos, stacked)}
         >
             <h3 id={titleId} className={POPOVER_TITLE}>
                 {data.resolved.label}
             </h3>
             <ItemDetailBody {...data} />
         </div>,
-        container,
+        document.body,
     );
 }
 

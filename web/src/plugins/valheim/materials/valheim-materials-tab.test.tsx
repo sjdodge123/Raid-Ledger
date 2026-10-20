@@ -17,6 +17,7 @@ import {
     valheimContainersHandler,
     valheimMaterialsHandler,
 } from '../../../test/mocks/valheim-materials-handlers';
+import { Z_INDEX } from '../../../lib/z-index';
 import { MATERIALS_EMPTY_COPY } from './materials.helpers';
 import { ValheimMaterialsTab } from './valheim-materials-tab';
 
@@ -226,6 +227,33 @@ describe('ValheimMaterialsTab', () => {
                 screen.queryByRole('button', { name: 'Close modal' }),
             ).not.toBeInTheDocument(),
         );
+    });
+
+    it('desktop: the item popover portals outside the chest modal frame, so the frame cannot clip it (Codex r4)', async () => {
+        media.desktop = true;
+        server.use(valheimMaterialsHandler(materialsFixture()));
+        renderTab();
+        const chests = await screen.findByRole('list', { name: 'Chests' });
+        await userEvent.click(
+            within(chests).getByRole('button', { name: /Wood chest/ }),
+        );
+        const contents = await screen.findByRole('list', {
+            name: 'Chest contents',
+        });
+        const frame = contents.closest('[aria-modal="true"]');
+        expect(frame).toHaveClass('overflow-hidden');
+        await userEvent.click(
+            within(contents).getByRole('button', { name: /Iron sword/ }),
+        );
+        const popover = await screen.findByTestId('valheim-item-popover');
+        expect(frame?.contains(popover)).toBe(false);
+        expect(popover.parentElement).toBe(document.body);
+        expect(popover.style.zIndex).toBe(String(Z_INDEX.MODAL_STACKED));
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByTestId('valheim-item-popover')).toBeNull();
+        expect(
+            screen.getByRole('list', { name: 'Chest contents' }),
+        ).toBeInTheDocument();
     });
 
     it('sorts the desktop table from its header buttons', async () => {
