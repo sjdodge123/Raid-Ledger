@@ -33,6 +33,12 @@ vi.mock('../../hooks/use-system-status', () => ({
     useSystemStatus: () => mockUseSystemStatus(),
 }));
 
+/** Render the page and wait for the Forms grid's lazy tail (pickers, recipes, markdown — forms-lazy-demos.tsx). */
+async function renderWithFormsTail(): Promise<void> {
+    renderWithProviders(<DesignSystemPage />);
+    await within(screen.getByTestId('ds-forms')).findByRole('radiogroup', { name: 'Filter by theme' });
+}
+
 function demoMode(enabled: boolean): void {
     mockUseSystemStatus.mockReturnValue({ data: { demoMode: enabled }, isLoading: false });
 }
@@ -73,9 +79,9 @@ describe('DesignSystemPage — Forms section', () => {
         mockUseSystemStatus.mockReset();
     });
 
-    it('the Forms section mounts the real primitives, wired through Field', () => {
+    it('the Forms section mounts the real primitives, wired through Field', async () => {
         demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
+        await renderWithFormsTail();
         const forms = screen.getByTestId('ds-forms');
         const invalid = within(forms).getByRole('textbox', { name: 'Event name' });
         expect(invalid).toHaveAttribute('aria-invalid', 'true');
@@ -108,9 +114,9 @@ describe('DesignSystemPage — Forms section', () => {
         expect(within(screen.getByRole('listbox', { name: 'Game' })).getAllByRole('option').length).toBeGreaterThan(1);
     });
 
-    it('the Forms section renders the segmented "All" filter and the row-menu recipes (ROK-1653)', () => {
+    it('the Forms section renders the segmented "All" filter and the row-menu recipes (ROK-1653)', async () => {
         demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
+        await renderWithFormsTail();
         const forms = screen.getByTestId('ds-forms');
         const themes = within(forms).getByRole('radiogroup', { name: 'Filter by theme' });
         expect(within(themes).getByRole('radio', { name: 'All (6)' })).toBeChecked();
@@ -139,9 +145,9 @@ describe('DesignSystemPage — Forms section: cross-row save lock', () => {
         mockUseSystemStatus.mockReset();
     });
 
-    it('the Forms section renders the one-save-at-a-time row lock: loading on the saving row, disabled on its sibling', () => {
+    it('the Forms section renders the one-save-at-a-time row lock: loading on the saving row, disabled on its sibling', async () => {
         demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
+        await renderWithFormsTail();
         const rowsGroup = within(screen.getByTestId('ds-forms')).getByRole('group', { name: 'Rows sharing one save' });
         const saving = within(rowsGroup).getByRole('button', { name: 'Save #lobby-a' });
         expect(saving).toHaveAttribute('aria-busy', 'true');
@@ -426,9 +432,9 @@ describe('DesignSystemPage — ROK-1655 form foundation (Forms)', () => {
         expect(within(forms).getByRole('button', { name: 'Hide Password' })).toBeInTheDocument();
     });
 
-    it('mounts FilePicker, ColorInput and a brandColor Button', () => {
+    it('mounts FilePicker, ColorInput and a brandColor Button', async () => {
         demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
+        await renderWithFormsTail();
         const forms = screen.getByTestId('ds-forms');
         expect(within(forms).queryByRole('button', { name: 'Upload logo' }), 'a FilePicker trigger must be present').not.toBeNull();
         expect(forms.querySelector('input[type="file"]'), 'the FilePicker keeps its hidden native input').not.toBeNull();
@@ -557,7 +563,7 @@ describe('DesignSystemPage — ROK-1648 L13 dev-gallery demos', () => {
 
     it('the FilePicker demo counts every pick, so re-picking the same file is visible', async () => {
         demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
+        await renderWithFormsTail();
         const forms = screen.getByTestId('ds-forms');
         const input = forms.querySelector<HTMLInputElement>('input[type="file"]:not([disabled])')!;
         const logo = new File(['png'], 'logo.png', { type: 'image/png' });
