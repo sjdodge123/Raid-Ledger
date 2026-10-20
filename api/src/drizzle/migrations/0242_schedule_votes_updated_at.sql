@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineup_schedule_votes" ADD COLUMN "updated_at" timestamp;

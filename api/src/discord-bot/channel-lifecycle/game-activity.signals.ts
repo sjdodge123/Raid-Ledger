@@ -42,17 +42,17 @@ export const eventSignal: GameActivitySignal = {
        AND lower(e.duration)::timestamptz >= ${ts(windowStart)}`,
 };
 
-/** A scheduling/standalone poll = one match with slots; created or voted in the window (A2, A5). */
+/** A scheduling/standalone poll = one match with slots; created, voted or re-voted (stance flip, `updated_at`) in the window (A2, A5). */
 export const pollSignal: GameActivitySignal = {
   kind: 'poll',
   select: ({ windowStart }) => sql`
     SELECT m.game_id, m.id::text AS item_id,
-           max(GREATEST(m.created_at, v.created_at))::timestamptz AS last_at
+           max(GREATEST(m.created_at, v.created_at, v.updated_at))::timestamptz AS last_at
       FROM community_lineup_matches m
       JOIN community_lineup_schedule_slots s ON s.match_id = m.id
       LEFT JOIN community_lineup_schedule_votes v ON v.slot_id = s.id
      GROUP BY m.game_id, m.id
-    HAVING max(GREATEST(m.created_at, v.created_at))::timestamptz >= ${ts(windowStart)}`,
+    HAVING max(GREATEST(m.created_at, v.created_at, v.updated_at))::timestamptz >= ${ts(windowStart)}`,
 };
 
 /** Event plans (Discord-native time polls) created or poll-started in the window; votes are not stored (A2). */

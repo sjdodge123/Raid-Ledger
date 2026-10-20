@@ -1688,6 +1688,13 @@
       "when": 1792519425151,
       "tag": "0241_channel_bindings_archived_overwrites",
       "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1792520502617,
+      "tag": "0242_schedule_votes_updated_at",
+      "breakpoints": true
     }
   ]
 }

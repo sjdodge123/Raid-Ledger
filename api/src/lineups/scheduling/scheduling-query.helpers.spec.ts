@@ -186,6 +186,8 @@ describe('scheduling-query.helpers', () => {
       expect(mockDb.set).toHaveBeenCalledWith({
         stance: 'no',
         source: 'discord',
+        // ROK-1428 Codex r2: a flip stamps updated_at (poll activity signal).
+        updatedAt: expect.any(Date),
       });
       expect(result).toEqual([{ id: 5 }]);
     });

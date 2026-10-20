@@ -87,7 +87,12 @@ async function makeLineup(): Promise<number> {
 /** A poll = a match with `slots` slots, one admin vote per slot at `voteDays`. */
 async function makePoll(
   gameId: number,
-  o: { createdDays: number; slots: number; voteDays?: number },
+  o: {
+    createdDays: number;
+    slots: number;
+    voteDays?: number;
+    updatedDays?: number;
+  },
 ): Promise<void> {
   const lineupId = await makeLineup();
   const [m] = nonEmpty(
@@ -111,9 +116,14 @@ async function makePoll(
       'slot',
     );
     if (o.voteDays !== undefined) {
-      await testApp.db
-        .insert(schema.communityLineupScheduleVotes)
-        .values({ slotId: s.id, userId: userId(), createdAt: at(o.voteDays) });
+      await testApp.db.insert(schema.communityLineupScheduleVotes).values({
+        slotId: s.id,
+        userId: userId(),
+        createdAt: at(o.voteDays),
+        ...(o.updatedDays !== undefined
+          ? { updatedAt: at(o.updatedDays) }
+          : {}),
+      });
     }
   }
 }
@@ -222,6 +232,28 @@ describe('game lifecycle activity — polls, plans, lineup votes (D6–D10)', ()
       row?.signals.find((s) => s.kind === 'poll')?.lastActivityAt.getTime() ??
       0;
     expect(Math.abs(last - at(-2).getTime())).toBeLessThan(1000);
+  });
+
+  it('D6b: an old vote whose stance flipped 2 days ago counts (updated_at, Codex r2)', async () => {
+    const g = await makeGame();
+    await makePoll(g, {
+      createdDays: -40,
+      slots: 1,
+      voteDays: -40,
+      updatedDays: -2,
+    });
+    const row = await rowFor(g);
+    expect(countOf(row, 'poll')).toBe(1);
+    const last =
+      row?.signals.find((s) => s.kind === 'poll')?.lastActivityAt.getTime() ??
+      0;
+    expect(Math.abs(last - at(-2).getTime())).toBeLessThan(1000);
+  });
+
+  it('D6c: an old poll with an old, never-flipped vote is absent', async () => {
+    const g = await makeGame();
+    await makePoll(g, { createdDays: -40, slots: 1, voteDays: -40 });
+    expect(countOf(await rowFor(g), 'poll')).toBe(0);
   });
 
   it('D7: one poll with 12 votes is ONE item and never creates (A1, X3)', async () => {

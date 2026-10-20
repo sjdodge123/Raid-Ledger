@@ -1,7 +1,9 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
 /** ROK-1430 — the signal registry API (D2). */
 import { sql } from 'drizzle-orm';
 import {
   DEFAULT_SIGNALS,
+  pollSignal,
   SIGNAL_REGISTRY,
   registerSignal,
   resetSignalRegistry,
@@ -44,5 +46,17 @@ describe('game activity signal registry', () => {
     registerSignal(hub);
     resetSignalRegistry();
     expect(SIGNAL_REGISTRY).toHaveLength(4);
+  });
+});
+
+describe('poll signal reads stance flips (Codex r2)', () => {
+  it('takes GREATEST of match created, vote created AND vote updated_at', () => {
+    const now = new Date('2026-10-20T00:00:00Z');
+    const q = new PgDialect().sqlToQuery(
+      pollSignal.select({ now, windowStart: now }),
+    );
+    expect(q.sql).toContain(
+      'GREATEST(m.created_at, v.created_at, v.updated_at)',
+    );
   });
 });
