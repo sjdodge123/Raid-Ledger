@@ -22,6 +22,9 @@ export function gameHubsKey(gameId: number): readonly ['game-hubs', number] {
     return ['game-hubs', gameId];
 }
 
+/** Every game's card — the D12 proposal limit is global, so a submit/withdraw changes them all. */
+const ALL_GAME_HUBS = ['game-hubs'] as const;
+
 /** Read the game's hubs, the viewer's proposals and whether they may propose. */
 export function useGameHubs(gameId: number): UseQueryResult<GameHubs> {
     return useQuery({
@@ -59,14 +62,14 @@ export function useJoinGameHub(gameId: number): UseMutationResult<CommunityHubJo
     });
 }
 
-/** Withdraw one of the viewer's pending proposals. */
-export function useWithdrawProposal(gameId: number): UseMutationResult<void, Error, number> {
+/** Withdraw one of the viewer's pending proposals (refreshes every game card). */
+export function useWithdrawProposal(): UseMutationResult<void, Error, number> {
     const qc = useQueryClient();
     return useMutation<void, Error, number>({
         mutationFn: (proposalId) => fetchApi<void>(`/hubs/proposals/${proposalId}`, { method: 'DELETE' }),
         onSuccess: () => toast.success('Proposal withdrawn'),
         onError: (err) => toast.error(err.message),
-        onSettled: () => void qc.invalidateQueries({ queryKey: gameHubsKey(gameId) }),
+        onSettled: () => void qc.invalidateQueries({ queryKey: ALL_GAME_HUBS }),
     });
 }
 
@@ -79,7 +82,7 @@ export function useProposeHub(gameId: number): UseMutationResult<HubProposal, Er
         onSuccess: (proposal) => {
             qc.setQueryData<GameHubs>(key, (d) => (d ? { ...d, myProposals: [...d.myProposals, proposal] } : d));
             toast.success('Sent for review');
-            void qc.invalidateQueries({ queryKey: key });
+            void qc.invalidateQueries({ queryKey: ALL_GAME_HUBS });
         },
     });
 }

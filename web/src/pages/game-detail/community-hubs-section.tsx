@@ -41,7 +41,7 @@ function HubRow({ hub, onJoin, joining }: { hub: HubDirectoryEntry; onJoin: () =
 
 function ProposalRow({ proposal, gameId }: { proposal: HubProposal; gameId: number }): JSX.Element {
     const [confirming, setConfirming] = useState(false);
-    const withdraw = useWithdrawProposal(gameId);
+    const withdraw = useWithdrawProposal();
     return (
         <li className="flex flex-wrap items-center gap-3 py-2">
             <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{proposal.name}</p>
