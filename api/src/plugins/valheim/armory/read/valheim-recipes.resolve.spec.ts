@@ -526,6 +526,42 @@ describe('resolvePlan — anyOneOf, cooking fuel, pieces', () => {
     ]);
   });
 
+  it('smelter fuel is per product, not per run (§5b)', () => {
+    const g = graphOf({
+      processors: [processor('smelter', 'smelter', 'Coal', 2)],
+      processes: [
+        proc('smelter', 'Ore', 'Bar', { output: { prefab: 'Bar', amount: 5 } }),
+      ],
+    });
+    const plan = resolvePlan(g, [item('Bar', 10)], new Map());
+    expect(shape(plan.nodes)).toEqual([
+      '0<- Bar:process×10',
+      '1<0 Ore:gathered×2',
+      '2<0 Coal:fuel×20',
+    ]);
+    expect(plan.shoppingList).toContainEqual({
+      prefab: 'Coal',
+      need: 20,
+      have: 0,
+      short: 20,
+    });
+  });
+
+  it('smelter fuel draws per-product Coal from stock', () => {
+    const g = graphOf({
+      processors: [processor('smelter', 'smelter', 'Coal', 2)],
+      processes: [
+        proc('smelter', 'Ore', 'Bar', { output: { prefab: 'Bar', amount: 5 } }),
+      ],
+    });
+    const plan = resolvePlan(g, [item('Bar', 10)], new Map([['Coal', 15]]));
+    const fuel = nodeOf(plan.nodes, 'Coal');
+    expect({ have: fuel.have, short: fuel.short }).toEqual({
+      have: 15,
+      short: 5,
+    });
+  });
+
   it('cooking fuel is an estimate, not a fuel node', () => {
     const g = graphOf({
       processors: [processor('oven', 'cooking', 'Wood')],

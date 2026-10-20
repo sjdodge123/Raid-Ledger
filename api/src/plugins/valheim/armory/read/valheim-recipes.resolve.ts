@@ -155,7 +155,10 @@ function expandProcess(ctx: Ctx, step: Step, src: ProcessSource): void {
   ctx.b.addSurplus(need.prefab, runs * process.output.amount - taken.rest);
 }
 
-/** Smelter fuel → a `fuel` child; cooking fuel → `fuelEstimates` only. */
+/**
+ * Smelter fuel → a `fuel` child (per product); cooking fuel → `fuelEstimates`
+ * only, as lit seconds (`seconds` per run: it burns per second lit).
+ */
 function addFuel(
   ctx: Ctx,
   need: Need,
@@ -167,7 +170,9 @@ function addFuel(
   if (processor.fuel === null) return;
   const perProduct = processor.fuelPerProduct ?? 0;
   if (processor.type === 'smelter' && perProduct > 0) {
-    expandFuel(ctx, child(need, id, processor.fuel, perProduct * runs));
+    // §5b: fuel per PRODUCT — a run yields `output.amount` products.
+    const products = runs * process.output.amount;
+    expandFuel(ctx, child(need, id, processor.fuel, perProduct * products));
   } else if (processor.type === 'cooking' && process.seconds !== null) {
     ctx.b.addFuelEstimate(
       processor.fuel,

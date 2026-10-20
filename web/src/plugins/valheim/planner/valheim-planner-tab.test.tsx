@@ -176,6 +176,27 @@ describe('ValheimPlannerTab', () => {
         expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
     });
 
+    it('editing the search after a pick drops the pick: Add disabled, tree back to idle', async () => {
+        const user = userEvent.setup();
+        renderTab();
+        await pickIronSword(user);
+        expect(await screen.findByRole('list', { name: 'What Iron sword needs' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add to list' })).toBeEnabled();
+        await user.type(screen.getByRole('combobox', { name: 'Search an item or piece' }), 'x');
+        expect(screen.getByRole('button', { name: 'Add to list' })).toBeDisabled();
+        expect(screen.queryByRole('list', { name: 'What Iron sword needs' })).toBeNull();
+        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+    });
+
+    it('clearing the search after a pick drops the pick', async () => {
+        const user = userEvent.setup();
+        renderTab();
+        await pickIronSword(user);
+        await user.clear(screen.getByRole('combobox', { name: 'Search an item or piece' }));
+        expect(screen.getByRole('button', { name: 'Add to list' })).toBeDisabled();
+        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+    });
+
     it('a failed plan shows an error with Retry, not the idle prompt; Retry recovers', async () => {
         server.use(http.get(VALHEIM_RECIPE_PLAN_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
         localStorage.setItem(KEY, STORED);

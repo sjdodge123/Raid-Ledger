@@ -4,7 +4,7 @@
  * "Add to list"; the list-narrowing filters sit in the `FilterEntry` funnel
  * (toolbar trigger ≥1024px, FAB + sheet below).
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { ValheimRecipeCatalogEntry } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Combobox } from '../../../components/ui/combobox';
@@ -89,9 +89,33 @@ function AmountRow({ picked, quality, onQuality, onAdd, atCap }: Pick<PickerProp
     );
 }
 
+/**
+ * The search text and the pick stay in step: an edit that no longer reads as
+ * the picked entry's label drops the pick, so "Add to list" cannot add a stale
+ * one. A ref holds the latest pick — the Combobox calls `onChange` and then
+ * `onInputChange` in one event, before `picked` re-renders.
+ */
+function usePickerText(picked: Entry | null, onPick: (e: Entry | null) => void) {
+    const [text, setText] = useState('');
+    const latest = useRef(picked);
+    useEffect(() => {
+        latest.current = picked;
+    }, [picked]);
+    const pick = (e: Entry | null): void => {
+        latest.current = e;
+        onPick(e);
+    };
+    const edit = (t: string): void => {
+        setText(t);
+        const cur = latest.current;
+        if (cur !== null && t !== cur.name) pick(null);
+    };
+    return { text, pick, edit };
+}
+
 export function PlannerTargetPicker(props: PickerProps): JSX.Element {
     const { entries, filters, picked, onPick } = props;
-    const [text, setText] = useState('');
+    const { text, pick, edit } = usePickerText(picked, onPick);
     const [isOpen, setOpen] = useState(false);
     const options = useMemo(() => narrow(entries, filters, text), [entries, filters, text]);
     return (
@@ -105,9 +129,9 @@ export function PlannerTargetPicker(props: PickerProps): JSX.Element {
                     getKey={(e) => `${e.kind}:${e.prefab}`}
                     getLabel={(e) => e.name}
                     value={picked}
-                    onChange={onPick}
+                    onChange={pick}
                     inputValue={text}
-                    onInputChange={setText}
+                    onInputChange={edit}
                     emptyText="Nothing craftable matches"
                 />
                 <FilterEntryTrigger activeCount={activePlannerFilters(filters)} isOpen={isOpen} onOpenChange={setOpen} />
