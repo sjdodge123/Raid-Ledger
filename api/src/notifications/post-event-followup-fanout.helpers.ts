@@ -159,8 +159,8 @@ export async function runFollowupFanout(
 
 /**
  * Resolve recipients, load the event-path start time, and dispatch the DMs via
- * `createMany`. Rolls the fan-out claim back and rethrows on failure so a retry
- * (or the other path) can re-attempt.
+ * `createMany`. Rolls the fan-out claim (and any per-user notice claims) back
+ * and rethrows on failure so a retry (or the other path) can re-attempt.
  */
 async function dispatchFollowupInvites(
   deps: FollowupFanoutDeps,
@@ -170,55 +170,79 @@ async function dispatchFollowupInvites(
   actingCreatorId: number,
 ): Promise<void> {
   const { db, notificationService } = deps;
-  let recipients: number[];
+  // Event path carries the new follow-up event's id + start time; the poll
+  // path has no fixed time yet (ROK-1422) and no event to claim notices for.
+  const eventId = 'eventId' in payload ? payload.eventId : null;
+  let claimed: number[] = [];
   try {
-    recipients = await resolvePostEventFollowupRecipients(
+    const recipients = await resolvePostEventFollowupRecipients(
       db,
       endedEventId,
       actingCreatorId,
     );
-    // Event path carries the new follow-up event's start time; the poll path
-    // has no fixed time yet (ROK-1422).
     const startEpoch =
-      'eventId' in payload
-        ? await loadEventStartEpoch(db, payload.eventId)
-        : null;
+      eventId !== null ? await loadEventStartEpoch(db, eventId) : null;
+    if (eventId !== null) {
+      claimed = await claimFollowupEventNotices(db, eventId, recipients);
+    }
+    const sendTo = eventId !== null ? claimed : recipients;
     await notificationService.createMany(
-      buildInputs(recipients, endedTitle, payload, startEpoch),
+      buildInputs(sendTo, endedTitle, payload, startEpoch),
     );
   } catch (err) {
     await releaseFanout(db, endedEventId);
+    if (eventId !== null) {
+      await releaseFollowupEventNotices(db, eventId, claimed);
+    }
     throw err;
-  }
-  // Outside the try: the DMs are out, so a claim failure must not roll the
-  // fan-out back (a retry would DM everyone twice).
-  if ('eventId' in payload) {
-    await claimFollowupEventNotices(db, payload.eventId, recipients);
   }
 }
 
 /**
- * ROK-1832 (Codex r3): claim each follow-up recipient's per-(user, event)
- * notice key for the follow-up event, in the same `notification_dedup` store
- * `NotificationDedupService` reads, so the scheduler's deferred group announce
- * (which carries no `followupForEventId`) skips them. A key some other path
- * already holds is left as is.
+ * ROK-1832 (Codex r3 + r8): claim each follow-up recipient's per-(user, event)
+ * notice key for the follow-up event BEFORE sending, in the same
+ * `notification_dedup` store `NotificationDedupService` reads. Whichever of
+ * this fan-out and the scheduler's deferred group notice (which carries no
+ * `followupForEventId`) claims a user first notices them; the other skips.
+ * An expired row is taken over, as `checkAndMarkSent` does.
+ *
+ * @returns the recipients THIS call claimed — the only ones to DM.
  */
 async function claimFollowupEventNotices(
   db: Db,
   eventId: number,
   userIds: readonly number[],
-): Promise<void> {
-  if (userIds.length === 0) return;
+): Promise<number[]> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) return [];
   const expiresAt = new Date(
     Date.now() + EVENT_NOTICE_TTL_SECONDS * 1000,
   ).toISOString();
-  const rows = userIds.map(
+  const rows = ids.map(
     (id) => sql`(${eventNoticeKey(eventId, id)}, ${expiresAt})`,
   );
-  await db.execute(sql`
+  const won = await db.execute<{ dedup_key: string }>(sql`
     INSERT INTO notification_dedup (dedup_key, expires_at)
     VALUES ${sql.join(rows, sql`, `)}
-    ON CONFLICT (dedup_key) DO NOTHING
+    ON CONFLICT (dedup_key) DO UPDATE SET expires_at = EXCLUDED.expires_at
+      WHERE notification_dedup.expires_at IS NOT NULL
+        AND notification_dedup.expires_at < NOW()
+    RETURNING dedup_key
+  `);
+  const keys = new Set(Array.from(won, (r) => r.dedup_key));
+  return ids.filter((id) => keys.has(eventNoticeKey(eventId, id)));
+}
+
+/** Give back the notice claims of a fan-out whose send failed. */
+async function releaseFollowupEventNotices(
+  db: Db,
+  eventId: number,
+  userIds: readonly number[],
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const keys = userIds.map((id) => sql`${eventNoticeKey(eventId, id)}`);
+  await db.execute(sql`
+    DELETE FROM notification_dedup
+    WHERE dedup_key IN (${sql.join(keys, sql`, `)})
   `);
 }
