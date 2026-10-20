@@ -715,3 +715,66 @@ describe('modded quantity overflow', () => {
     });
   });
 });
+
+describe('plan — Codex r3 (pieces, batch surplus, list cap)', () => {
+  it('a piece target never nets a same-prefab chest item', async () => {
+    await importMsg(server, bronzeRecipes());
+    await importMsg(
+      server,
+      scanMsg([box({ items: [stack('piece_chest', 1)] })]),
+    );
+    const p = await plan('targets=piece_chest:1:1:0:piece');
+    expect(p.shoppingList).toEqual([
+      { prefab: 'Wood', need: 10, have: 0, short: 10 },
+    ]);
+  });
+
+  it('two targets share one batch: 20 nails per Bronze → one Bronze', async () => {
+    await importMsg(
+      server,
+      bronzeRecipes({
+        recipes: [
+          recipeEntry('Recipe_Nails', 'BronzeNails', [recipeRes('Bronze', 1)], {
+            amount: 20,
+          }),
+          recipeEntry('Recipe_WallA', 'ModWallA', [
+            recipeRes('BronzeNails', 4),
+          ]),
+          recipeEntry('Recipe_WallB', 'ModWallB', [
+            recipeRes('BronzeNails', 4),
+          ]),
+        ],
+      }),
+    );
+    const p = await plan('targets=ModWallA:1:1,ModWallB:1:1');
+    const nails = p.nodes.filter((n) => n.prefab === 'BronzeNails');
+    expect(nails.map((n) => n.crafts)).toEqual([1, 0]);
+    expect(p.shoppingList).toEqual([
+      { prefab: 'Bronze', need: 1, have: null, short: null },
+    ]);
+  });
+
+  it('20 targets × 100 M Wood: the capped list total flags truncated', async () => {
+    await importMsg(
+      server,
+      bronzeRecipes({
+        recipes: [
+          recipeEntry('Recipe_ModW', 'ModW', [recipeRes('Wood', 10_000)]),
+        ],
+      }),
+    );
+    const twenty = Array.from({ length: 20 }, () => 'ModW:1:10000').join(',');
+    const p = await plan(`targets=${twenty}`);
+    expect({ truncated: p.truncated, list: p.shoppingList }).toEqual({
+      truncated: true,
+      list: [
+        {
+          prefab: 'Wood',
+          need: VALHEIM_PLAN_QUANTITY_MAX,
+          have: null,
+          short: null,
+        },
+      ],
+    });
+  });
+});
