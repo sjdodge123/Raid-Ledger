@@ -697,8 +697,9 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   §3.1 primitives only — each control in a `Field hideLabel` named per row ("Realm name, row 2"), the
   row's inline error on its key field, and a 44px ghost `iconOnly` remove `Button` named "Remove <key>"
   (`XMarkIcon aria-hidden`). From `lg` the rows are one grid row each under an `aria-hidden` `text-xs
-  text-muted` column header sharing the rows' grid template; below `lg` (§4.18) the short selects + remove
-  share a line and the text field goes full-width under them — no `<table>`. Under the list: "Add <thing>"
+  text-muted` column header sharing the rows' grid template; below `lg` (§4.18) the same DOM order wraps
+  onto two lines (key select + key text field, then value select + remove) — no `<table>`, and no `order-*`
+  reshuffle, so the focus order matches the visual order at every width (WCAG 2.4.3). Under the list: "Add <thing>"
   `secondary` and `Save` `primary` (`disabled` while unchanged, `loading` while pending); an empty list shows
   the §4.5 quiet sentence. Validate the whole list with the contract schema on Save and keep re-validating
   live after the first attempt. Reference: `plugins/wow/components/forever-realm-rulesets-form.tsx` +
