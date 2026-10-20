@@ -39,9 +39,27 @@ const bcryptHash = jest.fn(
     return Promise.resolve('GENERATED_HASH');
   },
 );
+const bcryptCompare = jest.fn(
+  (...args: [password: string, hash: string]): Promise<boolean> => {
+    void args;
+    return Promise.resolve(false);
+  },
+);
 jest.mock('bcrypt', () => ({
   hash: (password: string, saltRounds: number) =>
     bcryptHash(password, saltRounds),
+  compare: (password: string, hash: string) => bcryptCompare(password, hash),
+}));
+
+// ROK-1823: records every session revoke and whether it ran inside the
+// credential write's transaction.
+const txState = { depth: 0 };
+const revokeCalls: Array<{ userId: number; inTx: boolean }> = [];
+jest.mock('../auth/refresh/refresh-rotation.helpers', () => ({
+  revokeAllAndBumpTx: (_tx: unknown, userId: number) => {
+    revokeCalls.push({ userId, inTx: txState.depth > 0 });
+    return Promise.resolve(2);
+  },
 }));
 
 // The captured drizzle write builder mutates this between scenarios.
@@ -53,6 +71,7 @@ const dbState: DbState = { linkedUserRows: [], existingCredRows: [] };
 const capturedWrites: Array<{
   op: 'insert-values' | 'onConflictDoUpdate-set' | 'update-set';
   values: Record<string, unknown>;
+  inTx: boolean;
 }> = [];
 
 function makeSelectChain(table: unknown) {
@@ -73,10 +92,18 @@ const fakeDb = {
   select: () => ({ from: (table: unknown) => makeSelectChain(table) }),
   insert: () => ({
     values: (values: Record<string, unknown>) => {
-      capturedWrites.push({ op: 'insert-values', values });
+      capturedWrites.push({
+        op: 'insert-values',
+        values,
+        inTx: txState.depth > 0,
+      });
       return {
         onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => {
-          capturedWrites.push({ op: 'onConflictDoUpdate-set', values: set });
+          capturedWrites.push({
+            op: 'onConflictDoUpdate-set',
+            values: set,
+            inTx: txState.depth > 0,
+          });
           return Promise.resolve();
         },
         onConflictDoNothing: () => Promise.resolve(),
@@ -86,11 +113,23 @@ const fakeDb = {
   }),
   update: () => ({
     set: (values: Record<string, unknown>) => {
-      capturedWrites.push({ op: 'update-set', values });
+      capturedWrites.push({
+        op: 'update-set',
+        values,
+        inTx: txState.depth > 0,
+      });
       return { where: () => Promise.resolve(undefined) };
     },
   }),
   delete: () => ({ where: () => Promise.resolve(undefined) }),
+  transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+    txState.depth += 1;
+    try {
+      return await fn(fakeDb);
+    } finally {
+      txState.depth -= 1;
+    }
+  },
 };
 
 jest.mock('postgres', () => {
@@ -104,7 +143,10 @@ function resetRok1356Harness() {
   dbState.linkedUserRows = [];
   dbState.existingCredRows = [];
   capturedWrites.length = 0;
+  revokeCalls.length = 0;
   bcryptHash.mockClear();
+  bcryptCompare.mockReset();
+  bcryptCompare.mockResolvedValue(false);
   delete process.env.RESET_PASSWORD;
   delete process.env.ADMIN_PASSWORD;
   process.env.DATABASE_URL = 'postgres://test/fake';
@@ -344,5 +386,74 @@ describe('ROK-1576 — first-deploy log hints', () => {
     // behind nginx, not the port the operator published (Codex, ROK-1576).
     expect(printed).toMatch(/port you published/);
     expect(printed).not.toMatch(/:3000\/login/);
+  });
+});
+
+describe("ROK-1823 — a password reset ends the old password's sessions", () => {
+  beforeEach(() => {
+    resetRok1356Harness();
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('local-admin --reset → the credential write and the revoke + version bump share one transaction', async () => {
+    process.env.RESET_PASSWORD = 'true';
+    dbState.existingCredRows = [{ userId: 7, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    expect(capturedWrites).toEqual([
+      {
+        op: 'update-set',
+        values: { passwordHash: 'GENERATED_HASH' },
+        inTx: true,
+      },
+    ]);
+    expect(revokeCalls).toEqual([{ userId: 7, inTx: true }]);
+  });
+
+  it('linked-user reset → revokes the user the credential was bound to, inside the bind transaction', async () => {
+    process.env.RESET_PASSWORD = 'true';
+    dbState.linkedUserRows = [{ id: 42 }];
+    dbState.existingCredRows = [{ userId: 42, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    expect(rebindWrite()).toEqual({
+      op: 'onConflictDoUpdate-set',
+      values: { passwordHash: 'GENERATED_HASH', userId: 42 },
+      inTx: true,
+    });
+    expect(revokeCalls).toEqual([{ userId: 42, inTx: true }]);
+  });
+
+  it('a fleet re-seed re-applying the SAME fixed ADMIN_PASSWORD revokes nothing', async () => {
+    process.env.RESET_PASSWORD = 'true';
+    process.env.ADMIN_PASSWORD = 'fleet-fixed-pw';
+    bcryptCompare.mockResolvedValue(true);
+    dbState.existingCredRows = [{ userId: 7, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    expect(bcryptCompare).toHaveBeenCalledWith('fleet-fixed-pw', 'SEEDED_HASH');
+    expect(capturedWrites).toEqual([
+      {
+        op: 'update-set',
+        values: { passwordHash: 'GENERATED_HASH' },
+        inTx: false,
+      },
+    ]);
+    expect(revokeCalls).toEqual([]);
+  });
+
+  it('a carried-forward rebind (no reset, no fixed password) revokes nothing', async () => {
+    dbState.linkedUserRows = [{ id: 42 }];
+    dbState.existingCredRows = [{ userId: 7, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    expect(rebindWrite()?.values.passwordHash).toBe('SEEDED_HASH');
+    expect(revokeCalls).toEqual([]);
   });
 });
