@@ -117,6 +117,11 @@ describe('normalizeHubPostBody', () => {
     expect(normalizeHubPostBody('a\tb')).toBe('a\tb');
   });
 
+  it('N2b keeps U+200D so a family emoji stays one emoji', () => {
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+    expect(normalizeHubPostBody(`hi ${family}`)).toBe(`hi ${family}`);
+  });
+
   it('N3 U+2028 / U+2029 become newlines', () => {
     expect(normalizeHubPostBody('a\u2028b\u2029c')).toBe('a\nb\nc');
   });

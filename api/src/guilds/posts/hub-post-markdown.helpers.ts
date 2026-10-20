@@ -31,14 +31,14 @@ function normalizeChar(ch: string): string {
   if (c === 0x2028 || c === 0x2029) return '\n';
   if (c === 0x09 || c === 0x0a) return ch;
   if (c < 0x20) return '';
-  if ((c >= 0x200b && c <= 0x200d) || c === 0xfeff) return '';
+  if (c === 0x200b || c === 0x200c || c === 0xfeff) return '';
   return ch;
 }
 
 /**
  * Normalise a validated hub-post body (§2.4): CRLF/CR → LF, U+2028/2029 → LF,
- * strip C0 controls except `\n`/`\t` and the zero-width chars U+200B–U+200D,
- * U+FEFF, then collapse 3+ consecutive newlines to 2. Trailing whitespace is
+ * strip C0 controls except `\n`/`\t` and the zero-width chars U+200B, U+200C
+ * and U+FEFF (U+200D stays: it joins multi-person / family emoji), then collapse 3+ consecutive newlines to 2. Trailing whitespace is
  * kept (a markdown hard break). Only ever shrinks or keeps the length.
  */
 export function normalizeHubPostBody(body: string): string {
