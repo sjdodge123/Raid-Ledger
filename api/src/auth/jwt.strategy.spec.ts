@@ -3,8 +3,14 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
 import { TokenBlocklistService } from './token-blocklist.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { clearAuthUserCache, setCachedAuthUser } from './auth-user-cache';
+import {
+  clearAuthUserCache,
+  getCachedAuthUser,
+  invalidateAuthUser,
+  setCachedAuthUser,
+} from './auth-user-cache';
 import { KICK_COOLDOWN_MS } from './auth-status.helpers';
+import * as schema from '../drizzle/schema';
 
 let strategy: JwtStrategy;
 let mockBlocklist: { isBlocked: jest.Mock };
@@ -17,6 +23,7 @@ const mockUser = {
   kickedAt: null,
   bannedAt: null,
   banReason: null,
+  tokenVersion: 0,
 };
 
 /** Rebuild the fluent db.select chain to return a specific user row (or none). */
@@ -169,6 +176,28 @@ describe('JwtStrategy — ban/kick per-request lockout (ROK-313)', () => {
     expect(result).toMatchObject({ id: 1, role: 'member' });
   });
 
+  it('ROK-1823: loadAuthUser selects token_version and caches it', async () => {
+    mockDbReturns({ ...mockUser, tokenVersion: 3 });
+    await strategy.validate(buildPayload());
+    expect(mockDb.select).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenVersion: schema.users.tokenVersion }),
+    );
+    expect(getCachedAuthUser(1)?.tokenVersion).toBe(3);
+  });
+
+  it('ROK-1823: a row loaded across an invalidation is used once, never cached', async () => {
+    const limit = jest.fn(() => {
+      invalidateAuthUser(1); // a token-version bump commits mid-load
+      return Promise.resolve([mockUser]);
+    });
+    const where = jest.fn().mockReturnValue({ limit });
+    mockDb.select = jest.fn().mockReturnValue({ from: () => ({ where }) });
+    await expect(strategy.validate(buildPayload())).resolves.toMatchObject({
+      id: 1,
+    });
+    expect(getCachedAuthUser(1)).toBeNull();
+  });
+
   it('rejects a banned user served from the auth cache (cache-hit path)', async () => {
     setCachedAuthUser(1, {
       role: 'member',
@@ -177,6 +206,7 @@ describe('JwtStrategy — ban/kick per-request lockout (ROK-313)', () => {
       kickedAt: null,
       bannedAt: new Date(),
       banReason: null,
+      tokenVersion: 0,
     });
 
     await expect(strategy.validate(buildPayload())).rejects.toThrow(

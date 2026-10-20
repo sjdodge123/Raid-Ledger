@@ -68,6 +68,7 @@ function describeOriginalResets(testAppRef: { current: TestApp }) {
       kickedAt: null,
       bannedAt: null,
       banReason: null,
+      tokenVersion: 0,
     });
     expect(getCachedAuthUser(staleId)).not.toBeNull();
 

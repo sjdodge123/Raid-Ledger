@@ -6,14 +6,16 @@ import { PasswordChangeSessionService } from './password-change-session.service'
 
 const CALLER = { id: 7, username: 'admin', role: 'admin' as const };
 const ISSUED = { rawToken: 'raw', maxAgeMs: 1000, userId: 7, familyId: 'fam' };
+/** The version `revokeAllAndBump` returns (ROK-1823). */
+const BUMPED = 5;
 
 function build(blockSucceeds = true) {
   const calls: string[] = [];
   let blockedAt: number | undefined;
   const refresh = {
-    revokeAllForUser: jest.fn(() => {
-      calls.push('revokeAllForUser');
-      return Promise.resolve();
+    revokeAllAndBump: jest.fn(() => {
+      calls.push('revokeAllAndBump');
+      return Promise.resolve(BUMPED);
     }),
     issue: jest.fn(() => {
       calls.push('issue');
@@ -53,10 +55,11 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
     jest.restoreAllMocks();
   });
 
-  it('revokes refresh families BEFORE blocklisting, and issues nothing', async () => {
+  it('revokes + bumps BEFORE blocklisting, and issues nothing', async () => {
     const t = build();
     await t.service.revokeAllSessions(42);
-    expect(t.calls).toEqual(['revokeAllForUser', 'blockUser']);
+    expect(t.calls).toEqual(['revokeAllAndBump', 'blockUser']);
+    expect(t.refresh.revokeAllAndBump).toHaveBeenCalledWith(42);
     expect(t.blocklist.blockUser).toHaveBeenCalledWith(42);
     expect(t.refresh.issue).not.toHaveBeenCalled();
   });
@@ -65,7 +68,7 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     const t = build(false);
     await t.service.revokeAllSessions(42);
-    expect(t.refresh.revokeAllForUser).toHaveBeenCalledWith(42);
+    expect(t.refresh.revokeAllAndBump).toHaveBeenCalledWith(42);
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining('blocklist write failed'),
     );
@@ -73,7 +76,7 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
 
   it('issueSession mints a local refresh family and the caller claims', async () => {
     const t = build();
-    const session = await t.service.issueSession(CALLER, 'UA/1');
+    const session = await t.service.issueSession(CALLER, 'UA/1', BUMPED);
     expect(t.refresh.issue).toHaveBeenCalledWith(7, {
       authMethod: 'local',
       userAgent: 'UA/1',
@@ -89,10 +92,37 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
   it('the re-issued token, minted in the block second, has an iat the block cannot reject', async () => {
     jest.useFakeTimers({ now: new Date('2026-10-16T12:00:00.250Z') });
     const t = build();
-    await t.service.revokeAllSessions(CALLER.id);
-    const { accessToken } = await t.service.issueSession(CALLER, null);
+    const tv = await t.service.revokeAllSessions(CALLER.id);
+    const { accessToken } = await t.service.issueSession(CALLER, null, tv);
     const { iat } = t.jwt.decode<{ iat: number }>(accessToken);
     // TokenBlocklistService.isBlocked rejects `iat <= blockedAt`.
     expect(iat).toBe((t.blockedAt() ?? Number.NaN) + 1);
+  });
+
+  describe('ROK-1823 token version', () => {
+    it('revokeAllSessions returns the version the revoke bumped to', async () => {
+      const t = build();
+      await expect(t.service.revokeAllSessions(42)).resolves.toBe(BUMPED);
+    });
+
+    it('still returns the bumped version when the legacy blocklist write fails', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      const t = build(false);
+      await expect(t.service.revokeAllSessions(42)).resolves.toBe(BUMPED);
+    });
+
+    it('issueSession signs the version it is handed as the tv claim', async () => {
+      const t = build();
+      const tv = await t.service.revokeAllSessions(CALLER.id);
+      const { accessToken } = await t.service.issueSession(CALLER, null, tv);
+      expect(t.jwt.decode<{ tv?: number }>(accessToken).tv).toBe(BUMPED);
+    });
+
+    it('a failed revoke+bump throws and blocklists nothing', async () => {
+      const t = build();
+      t.refresh.revokeAllAndBump.mockRejectedValueOnce(new Error('tx failed'));
+      await expect(t.service.revokeAllSessions(42)).rejects.toThrow('tx failed');
+      expect(t.blocklist.blockUser).not.toHaveBeenCalled();
+    });
   });
 });
