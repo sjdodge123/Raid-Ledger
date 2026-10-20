@@ -4,6 +4,7 @@
  * is copied — the name comes from the mod catalogue.
  */
 import {
+    useCallback,
     useEffect,
     useId,
     useLayoutEffect,
@@ -19,6 +20,7 @@ import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
 import { useAnchoredPopup } from '../../../components/ui/use-anchored-popup';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
+import { useEscapeLayer } from '../../../hooks/use-escape-layer';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { clampPopover } from './popover-clamp';
@@ -189,7 +191,9 @@ function useClampedPopover(
 
 /**
  * Focus the popover once it is positioned (a `visibility: hidden` node refuses
- * focus); Escape closes it and returns focus to the tile.
+ * focus); Escape closes it and returns focus to the tile. It registers as an
+ * escape layer (`useEscapeLayer`, ROK-1738), so inside a `Modal` / `BottomSheet`
+ * (the Materials chest detail) one Escape closes only the popover (Codex r3).
  */
 function useFocusAndEscape(
     popupRef: RefObject<HTMLElement | null>,
@@ -200,16 +204,11 @@ function useFocusAndEscape(
     useEffect(() => {
         if (visible) popupRef.current?.focus();
     }, [popupRef, visible]);
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent): void => {
-            if (e.key === 'Escape') {
-                onClose();
-                returnRef.current?.focus();
-            }
-        };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [popupRef, onClose, returnRef]);
+    const onEscape = useCallback(() => {
+        onClose();
+        returnRef.current?.focus();
+    }, [onClose, returnRef]);
+    useEscapeLayer(true, onEscape);
 }
 
 const POPOVER_TITLE = 'mb-1 text-sm font-semibold text-foreground';

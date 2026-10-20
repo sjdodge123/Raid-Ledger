@@ -99,22 +99,20 @@ function ChestBody({
     );
 }
 
-export function ChestDetail(props: ChestDetailProps): JSX.Element {
+export function ChestDetail(props: ChestDetailProps): JSX.Element | null {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const { chest, onClose, ctx } = props;
-    const title = chest === null ? 'Chest' : chestLabel(chest, ctx);
+    // Unmounted with no selection: a closed BottomSheet only slides off-screen,
+    // so its Close button and body would stay focusable (Codex r3).
+    if (chest === null) return null;
+    const title = chestLabel(chest, ctx);
     const body = <ChestBody {...props} />;
     return isDesktop ? (
-        <Modal
-            isOpen={chest !== null}
-            onClose={onClose}
-            title={title}
-            maxWidth="max-w-lg"
-        >
+        <Modal isOpen onClose={onClose} title={title} maxWidth="max-w-lg">
             {body}
         </Modal>
     ) : (
-        <BottomSheet isOpen={chest !== null} onClose={onClose} title={title}>
+        <BottomSheet isOpen onClose={onClose} title={title}>
             {body}
         </BottomSheet>
     );

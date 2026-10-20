@@ -186,6 +186,48 @@ describe('ValheimMaterialsTab', () => {
         ).toBeInTheDocument();
     });
 
+    it('phone: no chest selected → no sheet is mounted (Codex r3)', async () => {
+        server.use(valheimMaterialsHandler(materialsFixture()));
+        renderTab();
+        await screen.findByRole('list', { name: 'Chests' });
+        // Not role queries: an off-screen closed sheet is hidden from those,
+        // but its Close button and body would still exist. (The Filters sheet
+        // keeps its own Close, so the chest sheet's title + body are checked.)
+        expect(screen.queryByText('Chest', { exact: true })).toBeNull();
+        expect(screen.queryByTestId('valheim-chest-detail')).toBeNull();
+    });
+
+    it('desktop: Escape in an item popover closes the popover, not the chest modal (Codex r3)', async () => {
+        media.desktop = true;
+        server.use(valheimMaterialsHandler(materialsFixture()));
+        renderTab();
+        const chests = await screen.findByRole('list', { name: 'Chests' });
+        await userEvent.click(
+            within(chests).getByRole('button', { name: /Wood chest/ }),
+        );
+        const contents = await screen.findByRole('list', {
+            name: 'Chest contents',
+        });
+        await userEvent.click(
+            within(contents).getByRole('button', { name: /Iron sword/ }),
+        );
+        await screen.findByTestId('valheim-item-popover');
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByTestId('valheim-item-popover')).toBeNull();
+        expect(
+            screen.getByRole('button', { name: 'Close modal' }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('list', { name: 'Chest contents' }),
+        ).toBeInTheDocument();
+        await userEvent.keyboard('{Escape}');
+        await waitFor(() =>
+            expect(
+                screen.queryByRole('button', { name: 'Close modal' }),
+            ).not.toBeInTheDocument(),
+        );
+    });
+
     it('sorts the desktop table from its header buttons', async () => {
         media.desktop = true;
         server.use(valheimMaterialsHandler(materialsFixture()));
