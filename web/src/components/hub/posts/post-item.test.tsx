@@ -99,3 +99,31 @@ describe('PostItem — deep-linked (ROK-1868 review MAJOR)', () => {
         expect(screen.getByRole('button', { name: /show less/i })).toHaveAttribute('aria-expanded', 'true');
     });
 });
+
+describe('PostItem — becomes the deep-link target while mounted (Codex r2)', () => {
+    it('expands a long post when highlighted turns false -> true', () => {
+        clampOverflows = true;
+        const post = buildHubPost({ id: 3 });
+        const { rerender } = renderWithProviders(<PostItem guildId={7} post={post} canEdit={false} />);
+        expect(screen.getByRole('button', { name: /show more/i })).toHaveAttribute('aria-expanded', 'false');
+        rerender(<PostItem guildId={7} post={post} canEdit={false} highlighted />);
+        expect(screen.queryByRole('button', { name: /show less/i }), 'a newly highlighted long post must expand').not.toBeNull();
+    });
+
+    it('does not re-expand after the reader collapses the highlighted post', async () => {
+        clampOverflows = true;
+        const post = buildHubPost({ id: 3 });
+        const { rerender } = renderWithProviders(<PostItem guildId={7} post={post} canEdit={false} />);
+        rerender(<PostItem guildId={7} post={post} canEdit={false} highlighted />);
+        await userEvent.click(screen.getByRole('button', { name: /show less/i }));
+        rerender(<PostItem guildId={7} post={{ ...post }} canEdit={false} highlighted />);
+        expect(screen.getByRole('button', { name: /show more/i }), 'a manual collapse must stick').toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('a short post that becomes highlighted still offers no toggle', () => {
+        const post = buildHubPost({ id: 3 });
+        const { rerender } = renderWithProviders(<PostItem guildId={7} post={post} canEdit={false} />);
+        rerender(<PostItem guildId={7} post={post} canEdit={false} highlighted />);
+        expect(screen.queryByRole('button', { name: /show (more|less)/i }), 'a short deep-linked post must not offer a toggle').toBeNull();
+    });
+});

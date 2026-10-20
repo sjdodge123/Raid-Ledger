@@ -84,9 +84,24 @@ function useScrollOnce(highlighted: boolean): RefObject<HTMLElement | null> {
     return ref;
 }
 
+/**
+ * Expansion state that opens when the item is (or BECOMES) the deep-link target —
+ * an already-mounted item reused for an in-app notification flips false -> true
+ * (Codex r2). Synced during render on the edge only, so a later manual collapse sticks.
+ */
+function useExpanded(highlighted: boolean): [boolean, () => void] {
+    const [expanded, setExpanded] = useState(highlighted);
+    const [wasHighlighted, setWasHighlighted] = useState(highlighted);
+    if (highlighted !== wasHighlighted) {
+        setWasHighlighted(highlighted);
+        if (highlighted) setExpanded(true);
+    }
+    return [expanded, () => setExpanded((v) => !v)];
+}
+
 /** A feed item; `highlighted` marks the deep-linked post. */
 export function PostItem({ guildId, post, canEdit, highlighted = false }: PostItemProps): JSX.Element {
-    const [expanded, setExpanded] = useState(highlighted);
+    const [expanded, toggleExpanded] = useExpanded(highlighted);
     const [mode, setMode] = useState<'read' | 'edit' | 'delete'>('read');
     const bodyId = `hub-post-body-${useId()}`;
     const ref = useScrollOnce(highlighted);
@@ -101,7 +116,7 @@ export function PostItem({ guildId, post, canEdit, highlighted = false }: PostIt
             </div>
             {canEdit && mode === 'edit'
                 ? <PostEditor guildId={guildId} post={post} onDone={() => setMode('read')} />
-                : <PostBody post={post} expanded={expanded} bodyId={bodyId} onToggle={() => setExpanded((v) => !v)} actions={actions} />}
+                : <PostBody post={post} expanded={expanded} bodyId={bodyId} onToggle={toggleExpanded} actions={actions} />}
             {canEdit && <DeletePostConfirm guildId={guildId} post={post} isOpen={mode === 'delete'} onClose={() => setMode('read')} />}
         </article>
     );
