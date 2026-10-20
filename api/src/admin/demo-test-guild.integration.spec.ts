@@ -300,6 +300,8 @@ describe('POST /admin/test/wow/seed-guild — withContent (ROK-1786)', () => {
       gmPost: null,
       rules: [],
       links: [],
+      // ROK-1868 A3: the profile carries the newest hub post (none here).
+      latestPost: null,
     });
     const addons = await guildGet(out.guildId, 'addons', token);
     expect(addons.body.addons).toEqual([]);
