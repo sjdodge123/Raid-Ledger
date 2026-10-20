@@ -1,5 +1,6 @@
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { characters } from '../../../drizzle/schema';
+import { lockAddonGuid } from './addon-import.locks';
 import type { AddonBindingResult } from './addon-import.binding';
 import { AddonImportError } from './addon-import.errors';
 import type { AddonApplyContext } from './addon-import-apply.types';
@@ -13,9 +14,10 @@ import { logGuidAudit } from './addon-import.guid-audit';
 
 /**
  * `pg_advisory_xact_lock(class, key)` namespace for GUID pins. Distinct from
- * the rate limit's class (1724), so the two keyspaces never collide.
+ * the rate limit's class (1724), so the two keyspaces never collide. Lives
+ * with THE import lock order in `addon-import.locks.ts` (ROK-1794).
  */
-export const ADDON_GUID_LOCK_CLASS = 17241;
+export { ADDON_GUID_LOCK_CLASS } from './addon-import.locks';
 
 export const GUID_ALREADY_LINKED_MESSAGE =
   'That in-game character is already linked to another Raid Ledger character.';
@@ -39,16 +41,15 @@ export function bindingUpdates(
  * poison the transaction (postgres.js), so check first, never catch-retry.
  * The check runs under a tx-scoped advisory lock on (game, region, GUID):
  * a second import pinning the same GUID to ANOTHER character blocks until
- * the first commits, then sees it as the holder → 422, never a 500.
+ * the first commits, then sees it as the holder → 422, never a 500. On
+ * apply the run already holds it (`lockImportScope`, taken BEFORE the guild
+ * lock — ROK-1794); this re-entry keeps the check safe for any caller.
  */
 export async function assertGuidFree(
   ctx: AddonApplyContext,
   guid: string,
 ): Promise<void> {
-  const key = `${ctx.gameId}:${ctx.region}:${guid}`;
-  await ctx.tx.execute(
-    sql`SELECT pg_advisory_xact_lock(${ADDON_GUID_LOCK_CLASS}::int4, hashtext(${key}))`,
-  );
+  await lockAddonGuid(ctx.tx, ctx.gameId, ctx.region, guid);
   const [holder] = await ctx.tx
     .select({ id: characters.id })
     .from(characters)

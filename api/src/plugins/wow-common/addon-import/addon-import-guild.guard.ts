@@ -9,6 +9,7 @@ import {
 } from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
+import { lockGuildName } from './addon-import.locks';
 import { fromUnix, type AddonApplyContext } from './addon-import-apply.types';
 
 /**
@@ -80,14 +81,15 @@ async function importerIsStaff(ctx: AddonApplyContext): Promise<boolean> {
  * and name key, so two first snapshots of a NEW guild serialise too): read
  * roster → count removals → write audit can't interleave, so two identical
  * concurrent imports count a removal once (the second reads the first's
- * roster and removes nothing). Released at commit/rollback.
+ * roster and removes nothing). Released at commit/rollback. On apply the
+ * run already holds it, taken AFTER the GUID lock (`addon-import.locks.ts`,
+ * ROK-1794 lock order); this re-entry never blocks.
  */
 export async function lockGuildImport(
   ctx: AddonApplyContext,
   nameKey: string,
 ): Promise<void> {
-  const key = `guild-import:${ctx.gameId}:${ctx.region}:${nameKey}`;
-  await ctx.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${key}))`);
+  await lockGuildName(ctx.tx, ctx.gameId, ctx.region, nameKey);
 }
 
 /**
