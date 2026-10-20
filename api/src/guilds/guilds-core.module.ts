@@ -62,6 +62,7 @@ import {
     GuildProfileService,
     HubKindRegistry,
     HubOnboardingService,
+    HubService,
     HubVisibleGuard,
   ],
 })

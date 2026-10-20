@@ -44,14 +44,23 @@ export class HubService {
     private readonly access: GuildAccessService,
   ) {}
 
-  /**
-   * The hub page, built by the guild kind's adapter. ROK-1832: core adds the
-   * viewer's per-group mute flag only for a member — the same predicate the
-   * mute POST enforces. A visitor or a staff non-member cannot mute, so the
-   * key is omitted rather than reported false.
-   */
+  /** The hub page, built by the guild kind's adapter, plus the viewer's mute flag. */
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
     const page = await (await this.adapterFor(guildId)).page(actor, guildId);
+    return this.withViewerMute(actor, guildId, page);
+  }
+
+  /**
+   * ROK-1832: add the viewer's per-group mute flag, only for a member — the
+   * same predicate the mute POST enforces. A visitor or a staff non-member
+   * cannot mute, so the key is omitted rather than reported false. Public so
+   * the `plugins/wow/guilds/:id` alias returns the same body as core.
+   */
+  async withViewerMute(
+    actor: GuildActor,
+    guildId: number,
+    page: GuildPage,
+  ): Promise<GuildPage> {
     if (page.viewer.role === 'visitor') return page;
     if (!(await this.access.isMember(actor.id, guildId))) return page;
     const notificationsMuted = await isHubMuted(this.db, actor.id, guildId);
