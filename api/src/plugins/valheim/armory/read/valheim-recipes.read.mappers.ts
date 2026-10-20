@@ -1,80 +1,33 @@
 /**
- * ROK-1854 L3 — pure parts of the recipe read routes: stored rows → the
- * graph's wire-typed input, query parsing (400s) and stock netting input.
- * No Nest DI, no I/O.
+ * ROK-1854 L3 — pure parts of the recipe read routes: query parsing (400s),
+ * the `/tree` 404 rule, stock netting input and empty bodies. No Nest DI.
  */
 import { BadRequestException } from '@nestjs/common';
+import { sql, type SQL } from 'drizzle-orm';
 import {
   VALHEIM_PLAN_TARGETS_MAX,
   ValheimPrefabIdSchema,
   ValheimRecipePlanTargetSchema,
+  type ValheimRecipeCatalogResponse,
+  type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
 } from '@raid-ledger/contract';
-import type { RecipeSetRows } from '../valheim-recipes.repository';
-import type { RecipeGraph, RecipeGraphRows } from './valheim-recipes.graph';
+import type { AuthenticatedUser } from '../../../../auth/types';
+import type { ValheimContainerScan } from '../../../../drizzle/schema';
+import type { RecipeGraph } from './valheim-recipes.graph';
 import type { MaterialsTotalRow } from './valheim-materials.mappers';
+import {
+  sharedSql,
+  toMaterialsViewer,
+  vehicleSql,
+  visibleSql,
+} from './valheim-materials.privacy';
+import type { RecipesReader } from './valheim-recipes.read.repository';
 
 /** Identical body for "no set", "no source" and "not a piece". */
 export const RECIPE_NOT_FOUND = 'Recipe not found';
 
 export type RecipeKind = 'item' | 'piece';
-
-/** DB rows → `RecipeGraphRows` (columns mirror the wire fields). */
-export function toRecipeGraphRows(rows: RecipeSetRows): RecipeGraphRows {
-  return {
-    stations: rows.stations.map((s) => ({
-      prefab: s.prefab,
-      name: s.name,
-      maxLevel: s.maxLevel,
-      stackableExtension: s.stackableExtension,
-      upgrader: s.upgrader,
-      icon: s.icon,
-    })),
-    recipes: rows.recipes.map((r) => ({
-      id: r.recipeId,
-      result: r.result,
-      amount: r.amount,
-      enabled: r.enabled,
-      station: r.station,
-      repairStation: r.repairStation,
-      minStationLevel: r.minStationLevel,
-      upgradeOnly: r.upgradeOnly,
-      anyOneOf: r.anyOneOf,
-      qualityResultAmountMultiplier: r.qualityResultAmountMultiplier,
-      formula: r.formula,
-      resources: r.resources,
-    })),
-    pieces: rows.pieces.map((p) => ({
-      prefab: p.prefab,
-      name: p.name,
-      category: p.category,
-      tool: p.tool,
-      station: p.station,
-      icon: p.icon,
-      resources: p.resources,
-    })),
-    processors: rows.processors.map((p) => ({
-      prefab: p.prefab,
-      type: p.type,
-      fuel: p.fuel,
-      fuelPerProduct: p.fuelPerProduct,
-      fuelSecondsPerUnit: p.fuelSecondsPerUnit,
-      windPowered: p.windPowered,
-      requiresRoof: p.requiresRoof,
-      maxInput: p.maxInput,
-      burntResult: p.burntResult,
-      defaultResult: p.defaultResult,
-    })),
-    processes: rows.processes.map((p) => ({
-      processor: p.processor,
-      inputs: p.inputs,
-      anyOneOf: p.anyOneOf,
-      output: { prefab: p.outputPrefab, amount: p.outputAmount },
-      seconds: p.seconds,
-      priority: p.priority,
-    })),
-  };
-}
 
 const INT_RE = /^\d{1,6}$/;
 
@@ -164,4 +117,77 @@ export function toStockMap(
     out.set(r.prefab, (out.get(r.prefab) ?? 0) + Number(r.total));
   }
   return out;
+}
+
+/** Stock options for `/plan` (D7). */
+export interface PlanStockOptions {
+  includePersonal: boolean;
+  includeVehicles: boolean;
+}
+
+/** D7: shared chests, plus the viewer's own personal ones when asked. */
+export function stockScope(
+  user: AuthenticatedUser,
+  opts: PlanStockOptions,
+): SQL {
+  const visible = opts.includePersonal
+    ? visibleSql(toMaterialsViewer(user))
+    : sharedSql;
+  return sql`(${visible} AND ${vehicleSql(opts.includeVehicles)})`;
+}
+
+/** The newest scan and its per-prefab stock in `scope`; no scan → nulls. */
+export async function loadStock(
+  r: RecipesReader,
+  serverId: number,
+  scope: SQL,
+): Promise<{
+  scan: ValheimContainerScan | null;
+  stock: Map<string, number> | null;
+}> {
+  const scan = await r.materials.latestScan(serverId);
+  if (!scan) return { scan: null, stock: null };
+  return { scan, stock: toStockMap(await r.materials.totals(scan.id, scope)) };
+}
+
+/** Each target's quality clamped to its item's `maxQuality` (spec §2.5). */
+export function clampTargets(
+  targets: readonly ValheimRecipePlanTarget[],
+  maxQuality: (prefab: string) => number,
+): ValheimRecipePlanTarget[] {
+  return targets.map((t) => ({
+    ...t,
+    quality: Math.min(t.quality, maxQuality(t.prefab)),
+  }));
+}
+
+/** No recipes snapshot yet. */
+export function emptyCatalogue(): ValheimRecipeCatalogResponse {
+  return {
+    gameVersion: null,
+    capturedAt: null,
+    catalogFallback: false,
+    entries: [],
+    stations: [],
+    itemAtlas: null,
+    recipeAtlas: null,
+  };
+}
+
+/** No recipes snapshot yet: the targets echoed, nothing resolved. */
+export function emptyPlan(
+  targets: ValheimRecipePlanTarget[],
+): ValheimRecipePlanResponse {
+  return {
+    targets,
+    nodes: [],
+    truncated: false,
+    stock: 'none',
+    capturedAt: null,
+    shoppingList: [],
+    fuelEstimates: [],
+    items: {},
+    itemAtlas: null,
+    recipeAtlas: null,
+  };
 }
