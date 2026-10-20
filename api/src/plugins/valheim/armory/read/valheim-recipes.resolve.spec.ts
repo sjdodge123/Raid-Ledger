@@ -232,18 +232,52 @@ describe('resolvePlan — Bronze chain', () => {
     const plan = resolvePlan(
       bronze,
       [item('Bronze'), item('Bronze')],
-      new Map([['Copper', 2]]),
+      new Map([['Copper', 3]]),
     );
     const coppers = plan.nodes.filter((n) => n.prefab === 'Copper');
+    // have = what the ledger held BEFORE each take: 3, then the remainder 1.
     expect(coppers.map((n) => [n.have, n.short])).toEqual([
-      [2, 0],
-      [0, 2],
+      [3, 0],
+      [1, 1],
     ]);
     expect(plan.shoppingList.find((l) => l.prefab === 'CopperOre')).toEqual({
       prefab: 'CopperOre',
-      need: 2,
+      need: 1,
       have: 0,
-      short: 2,
+      short: 1,
+    });
+  });
+
+  it('have = the stock available, not min(stock, need); short = max(0, need − have)', () => {
+    const plan = resolvePlan(
+      bronze,
+      [item('Bronze')],
+      new Map([['Copper', 40]]),
+    );
+    expect(nodeOf(plan.nodes, 'Copper')).toMatchObject({
+      quantity: 2,
+      have: 40,
+      short: 0,
+    });
+    expect(nodeOf(plan.nodes, 'Tin')).toMatchObject({ have: 0, short: 1 });
+  });
+
+  it('a shopping line has the stock at its first leaf and sums the shortfalls', () => {
+    const plan = resolvePlan(
+      bronze,
+      [item('Bronze', 2), item('Bronze', 2)],
+      new Map([['TinOre', 3]]),
+    );
+    const tinOre = plan.nodes.filter((n) => n.prefab === 'TinOre');
+    expect(tinOre.map((n) => [n.quantity, n.have, n.short])).toEqual([
+      [2, 3, 0],
+      [2, 1, 1],
+    ]);
+    expect(plan.shoppingList.find((l) => l.prefab === 'TinOre')).toEqual({
+      prefab: 'TinOre',
+      need: 4,
+      have: 3,
+      short: 1,
     });
   });
 });
@@ -403,6 +437,16 @@ describe('resolveTree — cycles, sources and caps', () => {
     const plan = resolvePlan(bronze, [item('Bronze')], null, { maxNodes: 3 });
     expect(plan.nodes).toHaveLength(3);
     expect(plan.truncated).toBe(true);
+  });
+
+  it('truncated: a crafted node whose children were all cut stays on the list', () => {
+    const plan = resolvePlan(bronze, [item('Bronze', 3)], null, {
+      maxNodes: 1,
+    });
+    expect(plan.truncated).toBe(true);
+    expect(plan.shoppingList).toEqual([
+      { prefab: 'Bronze', need: 3, have: null, short: null },
+    ]);
   });
 
   it(`defaults the node cap to ${VALHEIM_PLAN_NODES_MAX}`, () => {

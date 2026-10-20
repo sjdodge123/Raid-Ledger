@@ -164,4 +164,16 @@ describe('RecipeGraphCache', () => {
     expect(second).toBe(first);
     expect(first.recipesByResult.get('Sword')?.[0]?.id).toBe('a');
   });
+
+  it('a new revision of the same set (a re-import bumps imported_at) reloads', async () => {
+    const cache = new RecipeGraphCache();
+    const before = await cache.getOrLoad(3, 1_000, () =>
+      Promise.resolve(rows({ recipes: [recipe('a', 'Sword')] })),
+    );
+    const after = await cache.getOrLoad(3, 1_001, () =>
+      Promise.resolve(rows({ recipes: [] })),
+    );
+    expect(before.recipesByResult.has('Sword')).toBe(true);
+    expect(after.recipesByResult.has('Sword')).toBe(false);
+  });
 });

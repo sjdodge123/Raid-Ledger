@@ -85,6 +85,22 @@ describe('parsePlanTargets', () => {
     );
   });
 
+  it('passes an optional 5th :<kind> segment through; omitted stays absent (item)', () => {
+    expect(
+      parsePlanTargets('piece_chest:1:2:0:piece,Bronze:1:1:0:item'),
+    ).toEqual([
+      {
+        prefab: 'piece_chest',
+        quality: 1,
+        amount: 2,
+        fromQuality: 0,
+        kind: 'piece',
+      },
+      { prefab: 'Bronze', quality: 1, amount: 1, fromQuality: 0, kind: 'item' },
+    ]);
+    expect(parsePlanTargets('Bronze:1:1')[0]).not.toHaveProperty('kind');
+  });
+
   it.each([
     ['SwordIron:11:1', 'quality above 10'],
     ['SwordIron:0:1', 'quality 0'],
@@ -92,7 +108,10 @@ describe('parsePlanTargets', () => {
     ['SwordIron:1:0', 'amount 0'],
     ['Sword Iron:1:1', 'prefab outside the id regex'],
     ['SwordIron:1', 'too few parts'],
-    ['SwordIron:1:1:0:9', 'too many parts'],
+    ['SwordIron:1:1:0:item:x', 'too many parts'],
+    ['SwordIron:1:1:0:9', 'a kind other than item|piece'],
+    ['Bow:2:1:2', 'fromQuality equal to quality'],
+    ['Bow:2:1:3', 'fromQuality above quality'],
     ['SwordIron:1.5:1', 'non-integer quality'],
     ['SwordIron:1:1,', 'empty trailing target'],
   ])('400s on %s (%s)', (raw) => {
@@ -151,6 +170,21 @@ describe('quality clamp', () => {
     expect(out.map((t) => [t.quality, t.amount, t.fromQuality])).toEqual([
       [4, 2, 1],
       [3, 1, 0],
+    ]);
+  });
+
+  it('clamps fromQuality below the clamped quality (q1 → from scratch)', () => {
+    const maxQ = maxQualityLookup(graph, { SwordIron: entry(4) });
+    const out = clampTargets(
+      [
+        { prefab: 'SwordIron', quality: 10, amount: 1, fromQuality: 5 },
+        { prefab: 'woodwall', quality: 3, amount: 1, fromQuality: 2 },
+      ],
+      maxQ,
+    );
+    expect(out.map((t) => [t.quality, t.fromQuality])).toEqual([
+      [4, 3],
+      [1, 0],
     ]);
   });
 });
