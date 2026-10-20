@@ -4,6 +4,7 @@
  * `web/src/components/hub/hub-tabs.ts` (core).
  */
 import type { CharacterRole, GuildEditor, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
+import { updatedLabel as dateLabel } from '../../../components/hub/content/guild-content.helpers';
 
 /** Role label + the existing role colour class (`web/src/index.css` `.role-*`). */
 export const ROLE_META: Record<CharacterRole, { label: string; cls: string }> = {
@@ -29,18 +30,37 @@ export function realmLabel(realmSlug: string | null): string | null {
     return realmSlug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-/** Ranks staff may delegate to: every non-GM rank (rank grants start at 1; grant the GM as a member). */
-export function delegableRanks(page: GuildPage): { rankIndex: number; name: string }[] {
-    return page.ranks.flatMap((r) => (r.rankIndex !== null && r.rankIndex > 0 ? [{ rankIndex: r.rankIndex, name: rankLabel(r) }] : []));
-}
-
 /** Members staff may delegate to: everyone, the Guild Master included (rank 0 is not implicit). */
 export function delegableMembers(page: GuildPage): GuildMemberRow[] {
     return page.ranks.flatMap((r) => r.members);
 }
 
-/** True once a rank-0 (Guild Master) member holds a grant — directly, or via a rank grant covering rank 0. */
+/**
+ * True once a rank-0 (Guild Master) member holds a member grant. Rank grants are
+ * inactive (ROK-1794 "explicit grants only"): one covering rank 0 gives the GM
+ * nothing, so it does not count.
+ */
 export function gmIsEditor(page: GuildPage, editors: readonly GuildEditor[]): boolean {
     const gmIds = new Set(page.ranks.filter((r) => r.rankIndex === 0).flatMap((r) => r.members.map((m) => m.memberId)));
-    return editors.some((e) => (e.kind === 'rank' ? e.rankIndex === 0 : e.guildMemberId !== null && gmIds.has(e.guildMemberId)));
+    return editors.some((e) => e.kind === 'member' && e.guildMemberId !== null && gmIds.has(e.guildMemberId));
+}
+
+/**
+ * ROK-1794 (review): no Raid Ledger account owns the row, so a member grant on
+ * it could never confer rights — the picker shows it but will not grant it.
+ */
+export function isUnlinkedRow(m: GuildMemberRow): boolean {
+    return !m.linkedAccount && m.characterId === null;
+}
+
+/**
+ * The editor picker's option text, naming the linked RL account (staff-only
+ * `linkedAccount`) so a grant is never made on the roster name alone:
+ * "Aldren — Guild Master · linked to aldren since 14 Oct 2026". A non-staff
+ * viewer gets no `linkedAccount`, so a linked row keeps the plain name + rank.
+ */
+export function memberOptionLabel(m: GuildMemberRow): string {
+    const base = `${m.name} — ${rankLabel(m)}`;
+    if (m.linkedAccount) return `${base} · linked to ${m.linkedAccount.username} since ${dateLabel(m.linkedAccount.linkedSince)}`;
+    return isUnlinkedRow(m) ? `${base} · not linked to an account` : base;
 }

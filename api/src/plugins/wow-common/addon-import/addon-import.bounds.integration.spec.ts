@@ -12,6 +12,7 @@ import type { AddonWho } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { grantMemberEditor } from './testing/grant-member-editor';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { GUID_ALREADY_LINKED_MESSAGE } from './addon-import-binding.apply';
@@ -134,6 +135,7 @@ describe('future snapshotAt cannot lock a guild (ROK-1756 finding 1)', () => {
     expect(honest.status).toBe(200);
     const [guild] = await guildRows();
     expect(guild?.lastSnapshotAt?.getTime()).toBe(honestAt * 1000);
+    await grantMemberEditor(testApp.db); // staff made the importer an editor (ROK-1794)
 
     const later = await applyNew(token, guildString(honestAt + 60));
     expect(later.status).toBe(200);

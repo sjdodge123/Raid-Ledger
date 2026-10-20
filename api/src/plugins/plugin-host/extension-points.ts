@@ -306,6 +306,27 @@ export interface HubKindAdapter {
     userId: number,
     groupIds: number[],
   ): Promise<Map<number, HubMineRank>>;
+  /**
+   * ROK-1794: per-grant status for the Editors panel, keyed by grant id —
+   * the SAME predicate the ladder applies. Optional; omitted ⇒ no status.
+   */
+  editorStatus?(
+    groupId: number,
+    grants: HubEditorGrant[],
+  ): Promise<Map<number, HubEditorStatus>>;
+}
+
+/** ROK-1794: one `guild_editors` row as `HubKindAdapter.editorStatus` reads it. */
+export interface HubEditorGrant {
+  id: number;
+  kind: string;
+  guildMemberId: number | null;
+}
+
+/** ROK-1794: does the grant confer rights now, and to which RL account. */
+export interface HubEditorStatus {
+  effective: boolean;
+  linkedUsername: string | null;
 }
 
 /** ROK-1831: one row of `HubKindAdapter.mineRanks`. */

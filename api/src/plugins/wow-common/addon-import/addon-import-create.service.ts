@@ -35,6 +35,7 @@ import { pasteSections } from './addon-import.paste-run';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { parseImportRequest, rawFacts } from './addon-import.service.helpers';
+import { flagIfRosterHeld } from './addon-import-guild.flag';
 
 /**
  * ROK-1738 — `POST /plugins/wow/characters/addon-import`: import a
@@ -76,6 +77,8 @@ export class AddonImportCreateService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
+      // ROK-1794 AC4: both routes flag a held roster (Codex P2).
+      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await finishAttempt(this.audit, outcome);

@@ -98,6 +98,7 @@ describe('HubSettingsSheet (ROK-1830 S4)', () => {
         const panel = await screen.findByTestId('guild-editors-panel');
         const chip = await within(panel).findByTestId('guild-editor-chip');
         expect(chip).toHaveTextContent('Rank: Raider');
+        expect(chip, 'a kept rank grant renders inactive (ROK-1794)').toHaveTextContent('Inactive — re-grant by name');
         await userEvent.click(within(chip).getByRole('button', { name: 'Remove Rank: Raider' }));
         await waitFor(() => expect(deletes).toEqual([11]));
     });
@@ -146,5 +147,27 @@ describe('HubSettingsSheet (ROK-1830 S4)', () => {
             'a 500 must stop showing the channel line, not sit on “Loading…”',
         ).toBeNull());
         expect(screen.getByTestId('guild-settings-channel-error')).toHaveTextContent('Couldn’t load the Discord channel.');
+    });
+});
+
+// ROK-1794 (review): the server says whether a member grant confers rights
+// right now. Only an explicit `effective: false` reads inactive — a hub kind
+// that omits the field is unknown, so the chip keeps today's active look.
+describe('HubSettingsSheet — member grant effectiveness (ROK-1794 review)', () => {
+    const MEMBER: GuildEditor = { ...RANK_EDITOR, id: 21, kind: 'member', rankIndex: null, rankName: null, guildMemberId: 5, memberName: 'Brisa' };
+
+    it.each([
+        { name: 'effective false, no linked account', grant: { ...MEMBER, effective: false, linkedUsername: null }, active: 'false', text: 'Inactive — not linked' },
+        { name: 'effective false, linked after the grant', grant: { ...MEMBER, effective: false, linkedUsername: 'brisa-rl' }, active: 'false', text: 'Inactive — linked to brisa-rl after the grant' },
+        { name: 'effective true', grant: { ...MEMBER, effective: true, linkedUsername: 'brisa-rl' }, active: 'true', text: null },
+        { name: 'effective missing (non-WoW kind)', grant: MEMBER, active: 'true', text: null },
+    ])('$name', async ({ grant, active, text }) => {
+        serve({ state: 'unset' }, [grant]);
+        renderSheet();
+        const chip = await within(await screen.findByTestId('guild-editors-panel')).findByTestId('guild-editor-chip');
+        expect(chip).toHaveTextContent('Brisa');
+        expect(chip.getAttribute('data-active'), `data-active for ${JSON.stringify(grant.effective)}`).toBe(active);
+        if (text) expect(chip).toHaveTextContent(text);
+        else expect(chip.textContent, 'an active or unknown grant shows no inactive chip').not.toContain('Inactive');
     });
 });
