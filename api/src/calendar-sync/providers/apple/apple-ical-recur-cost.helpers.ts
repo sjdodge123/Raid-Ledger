@@ -13,6 +13,13 @@
  * never match), and a DAILY rule limited by BYMONTH / BYDAY whose DTSTART is
  * more than MAX_LIMITED_DAILY_DAYS before the window ends (one internal step
  * per elapsed day). Apple Calendar emits none of these.
+ *
+ * Codex r9: also refused — a DAILY BYDAY no step can reach (an INTERVAL that
+ * is a multiple of 7 only revisits DTSTART's weekday; an ordinal such as
+ * `1TU` never equals the bare weekday ical.js compares), and WEEKLY with
+ * BYWEEKNO (ical.js jumps a year per step, so `BYWEEKNO=1;BYMONTH=6` never
+ * matches). WEEKLY's BYMONTHDAY / BYYEARDAY are ignored by ical.js (illegal
+ * for WEEKLY), so they cannot trap it.
  */
 import ICAL from 'ical.js';
 import { DAY_MS } from './apple-ical-time.helpers';
@@ -26,6 +33,7 @@ const SUB_DAILY_EXPANDING: Readonly<Record<string, readonly string[]>> = {
 
 const DAILY_REFUSED = ['BYMONTHDAY', 'BYYEARDAY', 'BYWEEKNO', 'BYSETPOS'];
 const DAILY_LIMITING = ['BYMONTH', 'BYDAY'];
+const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
 /** ~274 years of daily steps (~0.5 s in ical.js). */
 export const MAX_LIMITED_DAILY_DAYS = 100_000;
@@ -36,23 +44,52 @@ function partsOf(recur: ICAL.Recur): string[] {
     .map(([k]) => k);
 }
 
-function isCostly(recur: ICAL.Recur, elapsedDays: number): boolean {
+/** What the cost check needs to know about the series' DTSTART. */
+interface StartFacts {
+  elapsedDays: number;
+  /** DTSTART's wall-clock weekday (`SU`…`SA`), else null. */
+  weekday: string | null;
+}
+
+/** Codex r9: no DAILY step from DTSTART lands on a BYDAY weekday. */
+function bydayUnreachable(recur: ICAL.Recur, weekday: string | null): boolean {
+  const byday = recur.parts.BYDAY;
+  if (!Array.isArray(byday) || byday.length === 0) return false;
+  const bare = byday.filter((d) => WEEKDAYS.includes(d));
+  if (bare.length < byday.length) return true;
+  if (recur.interval % 7 !== 0 || weekday === null) return false;
+  return !bare.includes(weekday);
+}
+
+function isCostlyDaily(recur: ICAL.Recur, facts: StartFacts): boolean {
   const parts = partsOf(recur);
-  const expanding = SUB_DAILY_EXPANDING[recur.freq];
-  if (expanding) return parts.some((p) => !expanding.includes(p));
-  if (recur.freq !== 'DAILY') return false;
   if (parts.some((p) => DAILY_REFUSED.includes(p))) return true;
+  if (bydayUnreachable(recur, facts.weekday)) return true;
   const limited = parts.some((p) => DAILY_LIMITING.includes(p));
-  return limited && elapsedDays > MAX_LIMITED_DAILY_DAYS;
+  return limited && facts.elapsedDays > MAX_LIMITED_DAILY_DAYS;
+}
+
+function isCostly(recur: ICAL.Recur, facts: StartFacts): boolean {
+  const expanding = SUB_DAILY_EXPANDING[recur.freq];
+  if (expanding) return partsOf(recur).some((p) => !expanding.includes(p));
+  if (recur.freq === 'WEEKLY') return partsOf(recur).includes('BYWEEKNO');
+  return recur.freq === 'DAILY' && isCostlyDaily(recur, facts);
+}
+
+function startFacts(master: ICAL.Component, rangeEnd: Date): StartFacts {
+  const start: unknown = master.getFirstPropertyValue('dtstart');
+  if (!(start instanceof ICAL.Time)) {
+    return { elapsedDays: rangeEnd.getTime() / DAY_MS, weekday: null };
+  }
+  const elapsedDays = (rangeEnd.getTime() - start.toUnixTime() * 1000) / DAY_MS;
+  return { elapsedDays, weekday: WEEKDAYS[start.dayOfWeek() - 1] ?? null };
 }
 
 /** True when any of the master's RRULEs cannot be expanded in bounded time. */
 export function isCostlyRule(master: ICAL.Component, rangeEnd: Date): boolean {
-  const start: unknown = master.getFirstPropertyValue('dtstart');
-  const startMs = start instanceof ICAL.Time ? start.toUnixTime() * 1000 : 0;
-  const elapsedDays = (rangeEnd.getTime() - startMs) / DAY_MS;
+  const facts = startFacts(master, rangeEnd);
   return master.getAllProperties('rrule').some((prop) => {
     const recur: unknown = prop.getFirstValue();
-    return recur instanceof ICAL.Recur && isCostly(recur, elapsedDays);
+    return recur instanceof ICAL.Recur && isCostly(recur, facts);
   });
 }

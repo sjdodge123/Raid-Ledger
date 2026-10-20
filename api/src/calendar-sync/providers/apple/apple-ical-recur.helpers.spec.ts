@@ -554,3 +554,51 @@ describe('recurrence work is bounded before ical.js iterates (Codex r8)', () => 
     ]);
   });
 });
+
+describe('DAILY / WEEKLY rules whose filter can never match (Codex r9)', () => {
+  it.each([
+    // Monday DTSTART stepping 7 days only ever reaches Mondays.
+    ['FREQ=DAILY;INTERVAL=7;BYDAY=TU', '20261019T120000Z', '20261019T130000Z'],
+    [
+      'FREQ=DAILY;INTERVAL=7;BYDAY=TU;UNTIL=20261117T000000Z',
+      '20261021T120000Z',
+      '20261021T130000Z',
+    ],
+    [
+      'FREQ=DAILY;INTERVAL=14;BYDAY=TH,FR',
+      '20261019T120000Z',
+      '20261019T130000Z',
+    ],
+    ['FREQ=DAILY;BYDAY=1TU', '20261019T120000Z', '20261019T130000Z'],
+    [
+      'FREQ=WEEKLY;BYWEEKNO=1;BYMONTH=6',
+      '20261019T120000Z',
+      '20261019T130000Z',
+    ],
+  ])(
+    'refuses %s in bounded time and keeps the neighbour',
+    (rule, start, end) => {
+      const started = Date.now();
+      const result = parse(costlySeries(start, end, rule));
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(result.skipped).toBe(1);
+      expect(result.blocks.map((b) => b.start.toISOString())).toEqual([
+        '2026-10-21T18:00:00.000Z',
+      ]);
+    },
+    10_000,
+  );
+
+  it('still expands a satisfiable DAILY;INTERVAL=7;BYDAY=MO from a Monday', () => {
+    const ics = costlySeries(
+      '20261019T120000Z',
+      '20261019T130000Z',
+      'FREQ=DAILY;INTERVAL=7;BYDAY=MO;COUNT=3',
+    );
+    expect(starts(ics)).toEqual([
+      '2026-10-26T12:00:00.000Z',
+      '2026-11-02T12:00:00.000Z',
+      '2026-10-21T18:00:00.000Z',
+    ]);
+  });
+});
