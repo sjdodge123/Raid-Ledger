@@ -11,13 +11,13 @@ import { Combobox } from '../../../components/ui/combobox';
 import { FilterEntry, FilterEntryTrigger } from '../../../components/ui/filter-entry';
 import { Input } from '../../../components/ui/input';
 import { Select } from '../../../components/ui/select';
-import { PLANNER_AMOUNT_MAX } from './planner.helpers';
 import {
     activePlannerFilters,
     DEFAULT_PLANNER_FILTERS,
-    PlannerFilterControls,
+    PLANNER_AMOUNT_MAX,
     type PlannerFilters,
-} from './planner-filters';
+} from './planner.helpers';
+import { PlannerFilterControls } from './planner-filters';
 
 type Entry = ValheimRecipeCatalogEntry;
 

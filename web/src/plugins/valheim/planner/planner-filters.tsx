@@ -6,26 +6,7 @@
 import type { JSX } from 'react';
 import { Select } from '../../../components/ui/select';
 import { Switch } from '../../../components/ui/switch';
-
-export interface PlannerFilters {
-    kind: 'both' | 'item' | 'piece';
-    category: string | null;
-    includePersonal: boolean;
-    includeVehicles: boolean;
-}
-
-export const DEFAULT_PLANNER_FILTERS: PlannerFilters = {
-    kind: 'both',
-    category: null,
-    includePersonal: false,
-    includeVehicles: true,
-};
-
-export const activePlannerFilters = (f: PlannerFilters): number =>
-    (f.kind === 'both' ? 0 : 1) +
-    (f.category === null ? 0 : 1) +
-    (f.includePersonal ? 1 : 0) +
-    (f.includeVehicles ? 0 : 1);
+import type { PlannerFilters } from './planner.helpers';
 
 function SwitchRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }): JSX.Element {
     return (
@@ -36,19 +17,16 @@ function SwitchRow({ label, checked, onChange }: { label: string; checked: boole
     );
 }
 
-export function PlannerFilterControls({
-    filters,
-    categories,
-    hasPersonal,
-    onChange,
-}: {
+interface ControlsProps {
     filters: PlannerFilters;
     categories: readonly string[];
     hasPersonal: boolean;
     onChange: (next: PlannerFilters) => void;
-}): JSX.Element {
+}
+
+function NarrowSelects({ filters, categories, onChange }: Omit<ControlsProps, 'hasPersonal'>): JSX.Element {
     return (
-        <div className="space-y-4">
+        <>
             <Select
                 aria-label="Kind"
                 value={filters.kind}
@@ -70,6 +48,15 @@ export function PlannerFilterControls({
                     </option>
                 ))}
             </Select>
+        </>
+    );
+}
+
+export function PlannerFilterControls(props: ControlsProps): JSX.Element {
+    const { filters, hasPersonal, onChange } = props;
+    return (
+        <div className="space-y-4">
+            <NarrowSelects {...props} />
             {hasPersonal && (
                 <SwitchRow
                     label="Include my personal chests"

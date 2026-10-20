@@ -20,6 +20,26 @@ export interface PlanTreeNode {
     children: PlanTreeNode[];
 }
 
+export interface PlannerFilters {
+    kind: 'both' | 'item' | 'piece';
+    category: string | null;
+    includePersonal: boolean;
+    includeVehicles: boolean;
+}
+
+export const DEFAULT_PLANNER_FILTERS: PlannerFilters = {
+    kind: 'both',
+    category: null,
+    includePersonal: false,
+    includeVehicles: true,
+};
+
+export const activePlannerFilters = (f: PlannerFilters): number =>
+    (f.kind === 'both' ? 0 : 1) +
+    (f.category === null ? 0 : 1) +
+    (f.includePersonal ? 1 : 0) +
+    (f.includeVehicles ? 0 : 1);
+
 export const PLANNER_AMOUNT_MAX = 10_000;
 export const PLANNER_NO_SET_COPY =
     'Recipes arrive when an admin with the mod joins the server.';

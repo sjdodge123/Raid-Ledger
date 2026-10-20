@@ -9,15 +9,16 @@ import type { ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@r
 import { useNow } from '../../../hooks/use-now';
 import { useValheimMaterials } from '../hooks/use-valheim-materials';
 import { useValheimRecipeCatalog, useValheimRecipePlan, useValheimRecipeTree } from '../hooks/use-valheim-recipes';
-import { DEFAULT_PLANNER_FILTERS, type PlannerFilters } from './planner-filters';
 import { loadPlannerTargets, savePlannerTargets } from './planner-storage';
 import { PlannerTargetPicker } from './planner-target-picker';
 import {
+    DEFAULT_PLANNER_FILTERS,
     PLANNER_AMOUNT_MAX,
     PLANNER_NO_SET_COPY,
     PLANNER_NO_STOCK_COPY,
     serializeTargets,
     stockAgeLabel,
+    type PlannerFilters,
     type PlannerTarget,
 } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
@@ -52,7 +53,7 @@ function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResp
     );
 }
 
-function PlannerBody({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
+function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogResponse) {
     const [filters, setFilters] = useState<PlannerFilters>(DEFAULT_PLANNER_FILTERS);
     const [picked, setPicked] = useState<Entry | null>(null);
     const [quality, setQuality] = useState(1);
@@ -70,6 +71,13 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
         setTargets(addTarget(targets, picked, quality, amount));
         setPicked(null);
     };
+    const onRemove = (i: number): void => setTargets(targets.filter((_, j) => j !== i));
+    return { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove };
+}
+
+function PlannerBody({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
+    const { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove } =
+        usePlannerState(serverId, catalog);
     const shown = picked !== null ? tree.data : plan.data;
     const label = picked !== null ? `What ${picked.name} needs` : 'What your list needs';
     return (
@@ -89,7 +97,7 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
                     )}
                 </div>
                 <div className="lg:col-start-1 lg:row-start-2">
-                    <ShoppingList targets={targets} plan={plan.data} names={names} onRemove={(i) => setTargets(targets.filter((_, j) => j !== i))} />
+                    <ShoppingList targets={targets} plan={plan.data} names={names} onRemove={onRemove} />
                 </div>
             </div>
         </div>
