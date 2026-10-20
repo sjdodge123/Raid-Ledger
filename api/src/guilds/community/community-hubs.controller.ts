@@ -31,7 +31,7 @@ import {
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { GuildEditorGuard } from '../guild-editor.guard';
-import { GuildLeaderGuard } from '../guild-leader.guard';
+import { CommunityLeaderGuard } from './community-leader.guard';
 import { HubVisibleGuard } from '../hub-visible.guard';
 import { parseBody } from './community-proposals.body';
 import { CommunityDirectoryService } from './community-directory.service';
@@ -117,7 +117,7 @@ export class CommunityHubsController {
   }
 
   @Patch(':id/members/:userId/role')
-  @UseGuards(HubVisibleGuard, GuildLeaderGuard)
+  @UseGuards(HubVisibleGuard, CommunityLeaderGuard)
   setRole(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -160,7 +160,7 @@ export class CommunityHubsController {
 
   @Post(':id/leader')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(HubVisibleGuard, GuildLeaderGuard)
+  @UseGuards(HubVisibleGuard, CommunityLeaderGuard)
   transferLeader(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -172,7 +172,7 @@ export class CommunityHubsController {
 
   /** No HubVisibleGuard: a leader of an archived hub gets 403, not 404 (M14). */
   @Patch(':id/status')
-  @UseGuards(GuildLeaderGuard)
+  @UseGuards(CommunityLeaderGuard)
   setStatus(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
