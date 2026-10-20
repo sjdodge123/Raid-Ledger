@@ -11,7 +11,7 @@ import { Button } from '../../ui/button';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { Pill } from '../hub-bits';
 import { DeletePostConfirm } from './delete-post-confirm';
-import { postDeepLink } from './hub-post.helpers';
+import { postDeepLink } from './post-link';
 import { PostByline } from './post-byline';
 import { PostEditor } from './post-editor';
 import { useOverflow } from './use-overflow';

@@ -21,7 +21,7 @@ import { HubHero } from './hub-hero';
 import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
-import { postIdFromSearch } from './posts/hub-post.helpers';
+import { postIdFromSearch } from './posts/post-link';
 import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';

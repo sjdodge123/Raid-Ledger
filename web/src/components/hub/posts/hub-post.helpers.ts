@@ -1,7 +1,7 @@
 /**
  * ROK-1868 — pure helpers for hub leader posts: the edited marker, the byline
- * meta line, the composer's relay hint + outcome notice, the deep-link id and
- * the composer's pre-submit body check (§3.3).
+ * meta line, the composer's relay hint + outcome notice and the composer's
+ * pre-submit body check (§3.3). The deep-link helpers live in `post-link.ts`.
  */
 import {
     findHubPostMarkdownViolation, HUB_POST_BODY_MAX, HUB_POST_MARKDOWN_MESSAGES,
@@ -63,19 +63,6 @@ export function relayOutcomeNotice(outcome: HubPostRelayOutcome, channelName: st
         case 'unavailable': return { tone: 'warning', text: 'Posted here only — Discord isn’t available for this hub right now.' };
         case 'not_requested': return null;
     }
-}
-
-/** `?post=<id>` from a location search string; null unless a positive integer. */
-export function postIdFromSearch(search: string): number | null {
-    const raw = new URLSearchParams(search).get('post');
-    if (raw === null || !/^\d+$/.test(raw)) return null;
-    const id = Number(raw);
-    return id > 0 ? id : null;
-}
-
-/** `${origin}/guilds/<id>?post=<postId>#posts` — the same shape the server links to. */
-export function postDeepLink(guildId: number, postId: number): string {
-    return `${window.location.origin}/guilds/${guildId}?post=${postId}#posts`;
 }
 
 /** Pre-submit check — the contract's subset message, the D20 length message, or null. */

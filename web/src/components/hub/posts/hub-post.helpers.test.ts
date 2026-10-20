@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { HUB_POST_MARKDOWN_MESSAGES } from '@raid-ledger/contract';
 import { buildHubPost } from '../../../test/factories/hub-posts';
 import {
-    bodyError, BODY_TOO_LONG, isEdited, postIdFromSearch, postMeta, relayHint, relayOutcomeNotice, serverBodyError,
+    bodyError, BODY_TOO_LONG, isEdited, postMeta, relayHint, relayOutcomeNotice, serverBodyError,
 } from './hub-post.helpers';
+import { postIdFromSearch } from './post-link';
 
 describe('relayHint', () => {
     it('names the channel when it is usable', () => {
