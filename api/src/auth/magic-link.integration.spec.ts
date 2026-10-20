@@ -12,7 +12,7 @@
  */
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { currentTokenVersion } from '../common/testing/sign-test-access-token';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -25,6 +25,7 @@ import {
 } from './magic-link.service';
 import { signPurposeJwt } from './purpose-jwt.helpers';
 import { REFRESH_COOKIE_NAME } from './refresh/refresh-cookie.helpers';
+import { RefreshTokenService } from './refresh/refresh-token.service';
 import { hashToken } from './single-use-token.helpers';
 import { invalidateAuthUser } from './auth-user-cache';
 import { bumpTokenVersion } from './token-version.helpers';
@@ -102,6 +103,19 @@ async function refreshRows(userId: number) {
     .select({ authMethod: schema.refreshTokens.authMethod })
     .from(schema.refreshTokens)
     .where(eq(schema.refreshTokens.userId, userId));
+}
+
+/** The user's refresh rows that are still live (not revoked). */
+async function liveRefreshRows(userId: number) {
+  return testApp.db
+    .select({ id: schema.refreshTokens.id })
+    .from(schema.refreshTokens)
+    .where(
+      and(
+        eq(schema.refreshTokens.userId, userId),
+        isNull(schema.refreshTokens.revokedAt),
+      ),
+    );
 }
 
 async function isConsumed(token: string): Promise<boolean> {
@@ -300,6 +314,31 @@ describe('POST /auth/redeem-magic-link — user-state gates (AC6)', () => {
     expect(res.body).toEqual(INVALID_BODY);
     expect(await isConsumed(token)).toBe(true);
     expect(await refreshRows(user.id)).toHaveLength(0);
+  });
+
+  /**
+   * ROK-1823 review P3: a password change committing AFTER `redeem`'s `tv`
+   * check but BEFORE the refresh family is issued must not leave a live
+   * family (or an access token) behind. The seam wraps the real `redeem` and
+   * runs the password-change revoke the moment it returns — deterministic.
+   */
+  it('a password change between the tv check and the issue → 401, no live refresh family', async () => {
+    const user = await createMember('raced-user');
+    const token = await mintToken(user.id);
+    const magic = testApp.app.get(MagicLinkService);
+    const realRedeem = magic.redeem.bind(magic);
+    jest.spyOn(magic, 'redeem').mockImplementation(async (t: string) => {
+      const redeemed = await realRedeem(t);
+      await testApp.app.get(RefreshTokenService).revokeAllAndBump(redeemed.id);
+      return redeemed;
+    });
+
+    const res = await redeem(token);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual(INVALID_BODY);
+    expect(extractRefreshCookie(res)).toBeNull();
+    expect(await liveRefreshRows(user.id)).toHaveLength(0);
   });
 
   /**
