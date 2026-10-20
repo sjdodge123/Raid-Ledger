@@ -6,10 +6,13 @@
  * single-flight lock shared by the cron, the admin route and the nudge.
  */
 import { randomUUID } from 'node:crypto';
+import { Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type Redis from 'ioredis';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
+import { COMPARE_AND_DELETE_LUA } from '../../common/redis-lease';
+import { errorMessage } from '../../common/error-format.helpers';
 import * as schema from '../../drizzle/schema';
 import type { ArchivedOverwrites } from '../../drizzle/schema/channel-bindings';
 import type { ChannelLifecycleSuppressionReason } from '../../drizzle/schema/channel-lifecycle-suppressions';
@@ -118,9 +121,21 @@ export const RECONCILE_LEASE_KEY = 'channel-lifecycle:reconcile-lease';
 /** Lease expiry: far above a tick's length, so only a crashed holder's lease lapses. */
 export const RECONCILE_LEASE_MS = 30 * 60_000;
 
-/** Delete the lease only while it is still ours (an expired one may be re-held). */
-const RELEASE_LUA =
-  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0";
+const leaseLogger = new Logger('ChannelLifecycleLease');
+
+/**
+ * Release the lease by token (compare-and-delete). Never throws: a sync or
+ * async failure is logged at warn and the lease is left to expire.
+ */
+async function releaseLease(redis: LeaseRedis, token: string): Promise<void> {
+  try {
+    await redis.eval(COMPARE_AND_DELETE_LUA, 1, RECONCILE_LEASE_KEY, token);
+  } catch (err: unknown) {
+    leaseLogger.warn(
+      `Reconcile lease release failed; it will expire: ${errorMessage(err)}`,
+    );
+  }
+}
 
 /**
  * Single-flight (spec §2.3, Codex r4b P1): run `fn` while holding a Redis
@@ -146,6 +161,6 @@ export async function withReconcileLock<T>(
   try {
     return { acquired: true, value: await fn() };
   } finally {
-    await redis.eval(RELEASE_LUA, 1, RECONCILE_LEASE_KEY, token).catch(() => 0);
+    await releaseLease(redis, token);
   }
 }

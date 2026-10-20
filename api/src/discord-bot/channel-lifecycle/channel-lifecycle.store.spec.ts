@@ -1,4 +1,5 @@
 /** ROK-1431 — the unbind hook (D9): only auto-managed game bindings are suppressed. */
+import { Logger } from '@nestjs/common';
 import {
   RECONCILE_LEASE_KEY,
   RECONCILE_LEASE_MS,
@@ -105,5 +106,41 @@ describe('withReconcileLock (single-flight lease, spec §2.3, Codex r4b P1)', ()
     await expect(
       withReconcileLock(redis, () => Promise.resolve('ok')),
     ).resolves.toEqual({ acquired: true, value: 'ok' });
+  });
+});
+
+describe('withReconcileLock release hardening (a release never throws)', () => {
+  it('a release that throws synchronously is swallowed and logged at warn', async () => {
+    const { redis, evalFn } = leaseRedis('OK');
+    evalFn.mockImplementation(() => {
+      throw new TypeError('redis.eval is not a function');
+    });
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await expect(
+        withReconcileLock(redis, () => Promise.resolve('ok')),
+      ).resolves.toEqual({ acquired: true, value: 'ok' });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('redis.eval is not a function'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a sync release throw does not mask fn rejecting', async () => {
+    const { redis, evalFn } = leaseRedis('OK');
+    evalFn.mockImplementation(() => {
+      throw new TypeError('sync');
+    });
+    jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementationOnce(() => undefined);
+    const boom = new Error('fn failed');
+    await expect(
+      withReconcileLock(redis, () => Promise.reject(boom)),
+    ).rejects.toBe(boom);
   });
 });
