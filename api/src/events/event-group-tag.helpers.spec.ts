@@ -1,7 +1,12 @@
 /** ROK-1832 D6b / OQ-3 — when an update newly tags a group. */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { createMockEvent } from '../common/testing/factories';
-import { findSeriesTagTargets, isNewGroupTag } from './event-group-tag.helpers';
+import {
+  emitNewGroupTag,
+  findSeriesTagTargets,
+  isNewGroupTag,
+} from './event-group-tag.helpers';
+import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
 
 const GROUP = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
@@ -53,5 +58,20 @@ describe('findSeriesTagTargets', () => {
       await findSeriesTagTargets(db as never, 1, 'all', { guildId: null }),
     ).toEqual([]);
     expect(db.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('emitNewGroupTag', () => {
+  it('emits EVENT_TAGGED only when the update newly sets a group', () => {
+    const emit = jest.fn();
+    emitNewGroupTag({ emit }, 7, 3, null);
+    expect(emit).toHaveBeenCalledWith(HUB_NOTIFICATION_EVENTS.EVENT_TAGGED, {
+      eventId: 7,
+    });
+    emit.mockClear();
+    emitNewGroupTag({ emit }, 7, 3, 3);
+    emitNewGroupTag({ emit }, 7, undefined, null);
+    emitNewGroupTag({ emit }, 7, null, 3);
+    expect(emit).not.toHaveBeenCalled();
   });
 });
