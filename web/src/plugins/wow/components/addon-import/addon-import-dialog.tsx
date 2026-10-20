@@ -60,6 +60,7 @@ function StepBody({ flow, gameId }: { flow: Flow; gameId?: number | undefined })
         return (
             <AddonImportPreview
                 result={flow.checked.result} confirm={flow.confirm} onConfirmChange={flow.setConfirm} error={flow.apply.error} gameId={gameId}
+                onPreviewAgain={flow.previewAgain} previewing={flow.preview.isPending}
                 target={flow.checked.target} ruleset={flow.ruleset} onRulesetChange={flow.setRuleset}
             />
         );

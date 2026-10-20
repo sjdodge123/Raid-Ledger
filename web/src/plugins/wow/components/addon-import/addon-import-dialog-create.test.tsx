@@ -266,3 +266,33 @@ describe('Import LedgerLink character filler → create dialog', () => {
         expect(toast.success).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('AddonImportDialog create mode — stale ruleset confirmation (ROK-1739, Codex r3 P2)', () => {
+    it('an update target refused with RULESET_CONFIRM_STALE shows the banner, never onCreated; Preview again re-previews', async () => {
+        const changed = (to: string): Reply => ({
+            status: 200,
+            body: newCharResult({ action: 'update', characterId: CREATED_ID, name: 'Ana' }, { warnings: [{ code: 'RULESET_CHANGED', from: 'normal', to }] }),
+        });
+        const previews = [changed('pvp'), changed('hardcore')];
+        const bodies: Body[] = [];
+        server.use(http.post(NEW_IMPORT_URL, async ({ request }) => {
+            const body = await request.json() as Body;
+            bodies.push(body);
+            const reply = body.dryRun ? previews.shift() ?? { status: 500, body: {} } : { status: 422, body: { code: 'RULESET_CONFIRM_STALE', message: 'stale' } };
+            return HttpResponse.json(reply.body as Record<string, unknown>, { status: reply.status });
+        }));
+        const user = userEvent.setup();
+        const { onCreated } = renderCreate();
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('checkbox', { name: /Update ruleset to PvP/ }));
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        const banner = await screen.findByTestId('addon-import-error');
+        expect(banner).toHaveTextContent("The realm's ruleset changed since your preview — preview again and confirm the new value.");
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(toast.success).not.toHaveBeenCalled();
+        await user.click(within(banner).getByRole('button', { name: 'Preview again' }));
+        expect(await screen.findByRole('checkbox', { name: /Update ruleset to Hardcore/ })).not.toBeChecked();
+        expect(bodies.map((b) => b.dryRun)).toEqual([true, false, true]);
+        expect(onCreated).not.toHaveBeenCalled();
+    });
+});

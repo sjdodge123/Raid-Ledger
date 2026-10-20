@@ -51,6 +51,7 @@ const COPY: Record<AddonImportErrorCode, Omit<AddonImportErrorCopy, 'action'>> =
     RATE_LIMITED: { title: 'Too many imports', body: 'You have hit the hourly import limit. Try again later.' },
     CHARACTER_CLAIMED: { title: 'Already claimed', body: 'Another player already has this character on Raid Ledger.' },
     RULESET_REQUIRED: { title: 'Choose a ruleset', body: "The export doesn't say which ruleset this character plays on. Pick one above, then import." },
+    RULESET_CONFIRM_STALE: { title: 'Ruleset changed', body: "The realm's ruleset changed since your preview — preview again and confirm the new value." },
 };
 
 /**

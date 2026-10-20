@@ -121,13 +121,16 @@ export function useAddonImportFlow(mode: AddonImportMode, isOpen: boolean) {
     const m = useModeMutations(mode);
     const openRef = useIsOpenRef(isOpen);
     const back = () => { m.apply.reset(); s.setStep('paste'); };
+    const check = makeCheck(mode, m, s);
+    // ROK-1739 (Codex r3 P2): after RULESET_CONFIRM_STALE, re-preview the same string.
+    const previewAgain = () => { if (s.checked) check(s.checked.importString); };
     const again = () => {
         s.setText(''); s.setChecked(null); s.setApplied(null); s.setRuleset(null);
         m.preview.reset(); m.apply.reset(); s.setStep('paste');
     };
     return {
-        ...s, preview: m.preview, apply: m.apply, back, again,
-        check: makeCheck(mode, m, s), runImport: makeRunImport(mode, m, s, openRef),
+        ...s, preview: m.preview, apply: m.apply, back, again, previewAgain,
+        check, runImport: makeRunImport(mode, m, s, openRef),
     };
 }
 

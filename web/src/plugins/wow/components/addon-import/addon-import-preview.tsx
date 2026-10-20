@@ -132,6 +132,9 @@ export interface AddonImportPreviewProps extends WarningsProps {
     /** The last apply error, shown as a danger banner. */
     error?: unknown;
     gameId?: number | undefined;
+    /** Re-runs the preview with the same string — offered on `RULESET_CONFIRM_STALE`. */
+    onPreviewAgain?: (() => void) | undefined;
+    previewing?: boolean | undefined;
     /** Create route only: what the import will create or update. */
     target?: AddonImportTargetDto | null | undefined;
     /** Create route only: the picked ruleset when the export has none (D13). */
@@ -160,7 +163,7 @@ export function AddonImportPreview(props: AddonImportPreviewProps): JSX.Element 
             <AddonImportSummary result={props.result} />
             {note && <p data-testid="addon-import-status-note" className="text-sm text-secondary">{note}</p>}
             <Warnings result={props.result} confirm={props.confirm} onConfirmChange={props.onConfirmChange} />
-            {props.error != null && <AddonImportErrorBanner error={props.error} gameId={props.gameId} />}
+            {props.error != null && <AddonImportErrorBanner error={props.error} gameId={props.gameId} onPreviewAgain={props.onPreviewAgain} previewing={props.previewing} />}
         </div>
     );
 }
