@@ -31,24 +31,36 @@ export async function findBoundChannelId(
   return row?.channelId ?? null;
 }
 
+/** A bound channel: its ack, and how it got there (ROK-1871, D7). */
+export interface BoundChannel {
+  channelId: string;
+  privateAck: boolean;
+  source: 'auto' | 'manual' | null;
+}
+
 /** The bound channel and whether a private-channel ack is on record, or null. */
 export async function findBinding(
   db: Db,
   guildId: number,
-): Promise<{ channelId: string; privateAck: boolean } | null> {
+): Promise<BoundChannel | null> {
   const [row] = await db
     .select({
       channelId: guildProfiles.discordChannelId,
       privateAck: guildProfiles.discordChannelPrivateAck,
+      source: guildProfiles.discordChannelSource,
     })
     .from(guildProfiles)
     .where(eq(guildProfiles.guildId, guildId))
     .limit(1);
   if (!row?.channelId) return null;
-  return { channelId: row.channelId, privateAck: row.privateAck };
+  return {
+    channelId: row.channelId,
+    privateAck: row.privateAck,
+    source: row.source ?? null,
+  };
 }
 
-/** Insert-or-update the binding columns only. */
+/** Insert-or-update the binding columns only; a Leader's set is `'manual'` (D7). */
 export async function saveBinding(
   db: Db,
   guildId: number,
@@ -59,6 +71,7 @@ export async function saveBinding(
     discordChannelPrivateAck: binding.privateAck,
     discordChannelSetBy: binding.setBy,
     discordChannelSetAt: binding.setAt,
+    discordChannelSource: 'manual' as const,
   };
   await db
     .insert(guildProfiles)
@@ -66,7 +79,10 @@ export async function saveBinding(
     .onConflictDoUpdate({ target: guildProfiles.guildId, set });
 }
 
-/** Reset the 4 binding columns (no-op without a profile row). */
+/**
+ * Reset the binding columns (no-op without a profile row). The clear is an
+ * explicit "no channel" — stamped `'manual'` so auto-link never refills it (D7).
+ */
 export async function clearBinding(db: Db, guildId: number): Promise<void> {
   await db
     .update(guildProfiles)
@@ -75,6 +91,7 @@ export async function clearBinding(db: Db, guildId: number): Promise<void> {
       discordChannelPrivateAck: false,
       discordChannelSetBy: null,
       discordChannelSetAt: null,
+      discordChannelSource: 'manual',
     })
     .where(eq(guildProfiles.guildId, guildId));
 }
