@@ -667,12 +667,14 @@ describe('hub + headers (R10/R11/R12)', () => {
 });
 
 describe('modded cycle (R14)', () => {
-  it('A needs B, B needs A: a cycle leaf, no hang, not truncated', async () => {
+  it('A needs B, B needs A (A in batches of 2): a cycle leaf, no hang, not truncated', async () => {
     await importMsg(
       server,
       bronzeRecipes({
         recipes: [
-          recipeEntry('Recipe_A', 'ModA', [recipeRes('ModB', 1)]),
+          recipeEntry('Recipe_A', 'ModA', [recipeRes('ModB', 1)], {
+            amount: 2,
+          }),
           recipeEntry('Recipe_B', 'ModB', [recipeRes('ModA', 1)]),
         ],
       }),
@@ -689,6 +691,11 @@ describe('modded cycle (R14)', () => {
       truncated: false,
       list: [{ prefab: 'ModA', need: 1, have: null, short: null }],
     });
+    // Codex r4: the batch's spare A is never credited to its own input.
+    await importMsg(server, scanMsg([box({ items: [stack('Wood', 1)] })]));
+    expect((await plan('targets=ModA:1:1')).shoppingList).toEqual([
+      { prefab: 'ModA', need: 1, have: 0, short: 1 },
+    ]);
   });
 });
 
@@ -716,7 +723,7 @@ describe('modded quantity overflow', () => {
   });
 });
 
-describe('plan — Codex r3 (pieces, batch surplus, list cap)', () => {
+describe('plan — Codex r3/r4 (pieces, batch surplus, list cap, kind)', () => {
   it('a piece target never nets a same-prefab chest item', async () => {
     await importMsg(server, bronzeRecipes());
     await importMsg(
@@ -776,5 +783,29 @@ describe('plan — Codex r3 (pieces, batch surplus, list cap)', () => {
         },
       ],
     });
+  });
+
+  it('a process output that is also a piece: no kind → item, kind=piece → build', async () => {
+    const out = { prefab: 'piece_chest', amount: 1 };
+    const smelt = { processor: 'smelter', anyOneOf: false, output: out };
+    const inputs = [{ prefab: 'CopperOre', amount: 1 }];
+    const processes = [{ ...smelt, inputs, seconds: 30, priority: 0 }];
+    await importMsg(server, bronzeRecipes({ processes }));
+    for (const [q, want] of [
+      [
+        '',
+        [
+          '0<- piece_chest:process×1',
+          '1<0 CopperOre:gathered×1',
+          '2<0 Coal:fuel×2',
+        ],
+      ],
+      ['?kind=piece', ['0<- piece_chest:recipe×1', '1<0 Wood:gathered×10']],
+    ] as const) {
+      expect({
+        q,
+        nodes: shape((await tree(`piece_chest/tree${q}`)).nodes),
+      }).toEqual({ q, nodes: want });
+    }
   });
 });

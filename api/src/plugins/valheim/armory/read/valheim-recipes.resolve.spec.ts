@@ -395,6 +395,32 @@ describe('resolveTree — cycles, sources and caps', () => {
     ]);
   });
 
+  it('a cyclic batch never credits its surplus to its own prerequisite', () => {
+    const g = graphOf({
+      recipes: [
+        recipe('ra', 'A', [res('B', 1)], { amount: 2 }),
+        recipe('rb', 'B', [res('A', 1)]),
+      ],
+    });
+    const plan = resolvePlan(g, [item('A')], new Map());
+    expect(nodeOf(plan.nodes, 'A', 'cycle')).toMatchObject({ short: 1 });
+    expect(plan.shoppingList).toEqual([
+      { prefab: 'A', need: 1, have: 0, short: 1 },
+    ]);
+  });
+
+  it('a cyclic process batch never credits its surplus to its input', () => {
+    const g = graphOf({
+      processors: [processor('smelter', 'smelter')],
+      processes: [
+        proc('smelter', 'B', 'A', { output: { prefab: 'A', amount: 2 } }),
+      ],
+      recipes: [recipe('rb', 'B', [res('A', 1)])],
+    });
+    const plan = resolvePlan(g, [item('A')], new Map());
+    expect(nodeOf(plan.nodes, 'A', 'cycle')).toMatchObject({ short: 1 });
+  });
+
   it('never auto-picks the obliterator (incinerator)', () => {
     const g = graphOf({
       processors: [processor('incinerator', 'incinerator')],
@@ -689,5 +715,28 @@ describe('resolvePlan — batch surplus across branches', () => {
       have: null,
       short: null,
     });
+  });
+});
+
+describe('resolvePlan — target kind inference', () => {
+  const g = graphOf({
+    processors: [processor('smelter', 'smelter')],
+    processes: [proc('smelter', 'Ore', 'Shared')],
+    pieces: [piece('Shared', [['Wood', 10]])],
+  });
+
+  it('no kind: a process output that is also a piece takes the item path', () => {
+    expect(shape(resolveTree(g, item('Shared'), null).nodes)).toEqual([
+      '0<- Shared:process×1',
+      '1<0 Ore:gathered×1',
+    ]);
+  });
+
+  it('kind piece: the same prefab is priced as a build', () => {
+    const tree = resolveTree(g, item('Shared', 1, { kind: 'piece' }), null);
+    expect(shape(tree.nodes)).toEqual([
+      '0<- Shared:recipe×1',
+      '1<0 Wood:gathered×10',
+    ]);
   });
 });

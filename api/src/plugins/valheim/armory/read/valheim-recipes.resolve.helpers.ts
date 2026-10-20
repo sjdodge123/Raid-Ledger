@@ -36,7 +36,7 @@ export function stationAt(recipe: ValheimRecipe, q: number): string | null {
   return recipe.station ?? (q > 1 ? recipe.repairStation : null);
 }
 
-/** `kind` omitted → `piece` when only a piece builds the prefab, else `item`. */
+/** `kind` omitted → `piece` when no recipe or process makes the prefab but a piece builds it, else `item`. */
 export type ResolveTarget = ValheimRecipePlanTarget;
 
 export interface ResolveOptions {

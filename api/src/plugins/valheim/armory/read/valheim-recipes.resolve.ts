@@ -129,8 +129,9 @@ function expandRecipe(ctx: Ctx, step: Step, recipe: ValheimRecipe): void {
     crafts: ctx.b.cap(steps.crafts),
   });
   if (!step.expand) return;
-  ctx.b.addSurplus(need.prefab, steps.surplus);
   expandChildren(ctx, need, id, recipe.anyOneOf, steps.totals);
+  // Only after the inputs: a cyclic batch must not feed its own prerequisite.
+  ctx.b.addSurplus(need.prefab, steps.surplus);
 }
 
 function expandProcess(ctx: Ctx, step: Step, src: ProcessSource): void {
@@ -145,13 +146,13 @@ function expandProcess(ctx: Ctx, step: Step, src: ProcessSource): void {
     crafts: ctx.b.cap(runs),
   });
   if (runs === 0 || !step.expand) return;
-  ctx.b.addSurplus(need.prefab, runs * process.output.amount - taken.rest);
   const inputs = process.inputs.map((i) => ({
     prefab: i.prefab,
     amount: i.amount * runs,
   }));
   expandChildren(ctx, need, id, process.anyOneOf, inputs);
   addFuel(ctx, need, id, src, runs);
+  ctx.b.addSurplus(need.prefab, runs * process.output.amount - taken.rest);
 }
 
 /** Smelter fuel → a `fuel` child; cooking fuel → `fuelEstimates` only. */
@@ -214,15 +215,21 @@ function expandPiece(ctx: Ctx, need: Need, piece: ValheimPiece): void {
   if (taken.rest > 0) expandChildren(ctx, need, id, false, totals);
 }
 
+/** `kind` omitted → `item` when a recipe OR a process makes it, else a piece. */
+function kindOf(graph: RecipeGraph, target: ResolveTarget): 'item' | 'piece' {
+  if (target.kind) return target.kind;
+  const p = target.prefab;
+  const made = graph.recipesByResult.has(p) || graph.processesByOutput.has(p);
+  return !made && graph.pieces.has(p) ? 'piece' : 'item';
+}
+
 function expandTarget(
   ctx: Ctx,
   target: ResolveTarget,
   maxQuality: (prefab: string) => number,
 ): void {
   const piece = ctx.graph.pieces.get(target.prefab);
-  const kind =
-    target.kind ??
-    (piece && !ctx.graph.recipesByResult.has(target.prefab) ? 'piece' : 'item');
+  const kind = kindOf(ctx.graph, target);
   const quality =
     kind === 'piece'
       ? 1
