@@ -34,7 +34,7 @@ import {
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
   DesignSystemPage,
-  SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, ViewportProbePage,
+  SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
   ValheimCharacterPage,
 } from './lazy-routes';
 
@@ -123,6 +123,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/scheduling" element={<SchedulingWireframesPage />} />
       <Route path="/dev/wireframes/server-schedule" element={<ServerScheduleWireframesPage />} />
       <Route path="/dev/wireframes/community-hubs" element={<CommunityHubWireframesPage />} />
+      <Route path="/dev/wireframes/hub-posts" element={<HubPostsWireframesPage />} />
       <Route path="/dev/viewport-probe" element={<ViewportProbePage />} />
     </>
   );
