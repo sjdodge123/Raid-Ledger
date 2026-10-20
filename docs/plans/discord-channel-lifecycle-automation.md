@@ -62,7 +62,7 @@ One query (a `UNION ALL` of per-signal sub-selects, built in TypeScript, not a D
 
 | Signal | Item | Counted when (window = `recentActivityDays`, default 30) | Game id |
 |---|---|---|---|
-| `event` | one `events` row, `cancelled_at IS NULL`, `is_ad_hoc = false` | `lower(duration) >= now() - window` (covers every upcoming event too) | direct |
+| `event` | one `events` row, `cancelled_at IS NULL` (ad-hoc voice-presence events INCLUDED — operator ruling 2026-10-20) | `lower(duration) >= now() - window` (covers every upcoming event too) | direct |
 | `poll` | one `community_lineup_matches` row with schedule slots | match created in window OR any `community_lineup_schedule_votes.created_at` in window | direct (match) |
 | `event_plan` | one `event_plans` row | `created_at` or `poll_started_at` in window (votes are Discord-native, not stored) | direct |
 | `lineup_vote` | one `(lineup, game)` pair | any `community_lineup_votes.created_at` for that game in window | direct |
@@ -70,7 +70,7 @@ One query (a `UNION ALL` of per-signal sub-selects, built in TypeScript, not a D
 
 Signals are a small registry (`GameActivitySignal[]`), so the hub signal is appended by a later layer without touching the others.
 
-**Hub hold:** a game with an **approved (`active`) community hub** counts as active regardless of the window, and a managed channel that is a hub's linked channel is never archived while that hub is active.
+**Hub hold (operator definition 2026-10-20):** a community hub is *active* while its `status = 'active'` AND it had hub activity inside the window (its approval, a leader post, a member join, or an event tagged to it). An active hub holds: its game counts as active and a managed channel that is its linked channel is never archived. With no hub activity for a full window the hub is *dormant* — the hold ends, the channel follows the other signals, and the hub page shows the leader "Quiet since <date>"; archiving the hub releases the hold at once.
 
 ### 2. Decisions per game (ruling 2)
 
