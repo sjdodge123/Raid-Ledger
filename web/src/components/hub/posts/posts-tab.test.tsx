@@ -53,7 +53,8 @@ describe('HubPostsTab (V5)', () => {
         const item = screen.getByText('Fourth post').closest('article');
         expect(item, 'the linked post must be marked current').toHaveAttribute('aria-current', 'true');
         if (!item) throw new Error('linked post not rendered');
-        expect(within(item).getByRole('button', { name: /show less/i })).toHaveAttribute('aria-expanded', 'true');
+        expect(within(item).getByTestId('hub-post-item-clamp'), 'the linked post opens unclamped').not.toHaveClass('max-h-[7.5rem]');
+        expect(within(item).queryByRole('button', { name: /show (more|less)/i }), 'a short body offers no toggle').toBeNull();
     });
 
     it('?post=3 fetches a post that is not on the first page and leads with it', async () => {
