@@ -74,6 +74,8 @@ export type GuildSummary = z.infer<typeof GuildSummarySchema>;
 /** ROK-1870 — the community-hub columns of one member (other kinds omit it). */
 export const GuildMemberCommunitySchema = z
   .object({
+    /** The member's `users.id` — the id every `/hubs/:id/members/:userId` route takes (`memberId` is the row id). */
+    userId: id,
     role: z.enum(['leader', 'officer', 'member']),
     joinedAt: isoDate,
   })
