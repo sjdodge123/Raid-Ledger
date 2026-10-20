@@ -126,9 +126,7 @@ export class HubPostsService {
       now: new Date(),
     });
     const channel = await this.channelFor(guildId);
-    if (channel.state === 'ok') {
-      await this.rememberDefault(guildId, parsed.relayToDiscord);
-    }
+    await this.rememberDefault(guildId, channel, parsed.relayToDiscord);
     this.emitCreated({
       guildId,
       actorId: actor.id,
@@ -136,16 +134,30 @@ export class HubPostsService {
       body: row.body,
     });
     const record = await this.requirePost(guildId, row.id);
-    const relayOutcome = await this.relayOutcome(
+    return this.relayAndRespond(
+      record,
       parsed.relayToDiscord,
       channel,
-      record,
       guild.name,
     );
+  }
+
+  /** D7: relay the committed post (bounded) and answer with its final row. */
+  private async relayAndRespond(
+    record: HubPostRecord,
+    requested: boolean,
+    channel: HubPostRelayChannel,
+    guildName: string,
+  ): Promise<CreateHubPostResponse> {
+    const relayOutcome = await this.relayOutcome(
+      requested,
+      channel,
+      record,
+      guildName,
+    );
+    const { guildId, id } = record.post;
     const final =
-      relayOutcome === 'sent'
-        ? await this.requirePost(guildId, row.id)
-        : record;
+      relayOutcome === 'sent' ? await this.requirePost(guildId, id) : record;
     return { post: this.map(final), relayOutcome };
   }
 
@@ -210,10 +222,13 @@ export class HubPostsService {
     }
   }
 
+  /** A4: the switch value is remembered only when the relay was available. */
   private async rememberDefault(
     guildId: number,
+    channel: HubPostRelayChannel,
     value: boolean,
   ): Promise<void> {
+    if (channel.state !== 'ok') return;
     await upsertProfile(this.db, guildId, {
       updatedAt: new Date(),
       postRelayDefault: value,

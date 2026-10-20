@@ -5,7 +5,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   UpdateGuildProfileSchema,
@@ -17,20 +16,22 @@ import * as schema from '../drizzle/schema';
 import { GuildAccessService, type GuildActor } from './guild-access.service';
 import {
   buildProfilePatch,
-  dropUnchangedGmPost,
   toGuildProfile,
+  withLatestPost,
 } from './guild-profile.helpers';
-import {
-  findProfileRow,
-  findUsername,
-  upsertProfile,
-} from './guild-profile.queries';
+import { findProfileRow, upsertProfile } from './guild-profile.queries';
 import { findGuild } from './guild-core.queries';
-import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
+import { HubPostsService } from './posts/hub-posts.service';
+
+/** ROK-1868 A3 / OQ-6: the legacy GM-post write answers 400 with this. */
+export const GM_POST_MOVED_MESSAGE =
+  'The leader post moved to POST /guilds/:id/posts';
 
 /**
  * ROK-1786 — the guild's GM post, rules and links. Reads need `canView`
  * (403 before 404, like `GET :id`); writes arrive behind `GuildEditorGuard`.
+ * ROK-1868 A3: `gmPost` is derived from the newest hub post (`latestPost`
+ * rides along); the legacy `gm_post` columns are never read or written.
  */
 @Injectable()
 export class GuildProfileService {
@@ -38,7 +39,7 @@ export class GuildProfileService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly access: GuildAccessService,
-    private readonly events: EventEmitter2,
+    private readonly posts: HubPostsService,
   ) {}
 
   async get(actor: GuildActor, guildId: number): Promise<GuildProfile> {
@@ -50,39 +51,32 @@ export class GuildProfileService {
   }
 
   /**
-   * Upsert; the GM post stamp moves only when its text changes. ROK-1832 D7:
-   * a changed, non-empty post fires the leader-post trigger (fire-and-forget,
-   * D10). D9: rules/links never notify — this is the only emit site.
+   * Upsert rules / links. A `gmPost` key is rejected (A3) — posts are
+   * written through `POST /guilds/:id/posts`, which is the only notify site.
    */
   async update(
     actor: GuildActor,
     guildId: number,
     body: unknown,
   ): Promise<GuildProfile> {
+    if (hasGmPostKey(body))
+      throw new BadRequestException(GM_POST_MOVED_MESSAGE);
     const input = parseUpdate(body);
     await this.assertGuild(guildId);
-    const stored = await findProfileRow(this.db, guildId);
-    const patch = dropUnchangedGmPost(
+    await upsertProfile(
+      this.db,
+      guildId,
       buildProfilePatch(input, actor.id, new Date()),
-      stored?.gmPost,
     );
-    await upsertProfile(this.db, guildId, patch);
-    // dropUnchangedGmPost keeps `gmPost` only when the text changed;
-    // normaliseGmPost already turned a blank post into null (cleared).
-    if (typeof patch.gmPost === 'string') {
-      this.events.emit(HUB_NOTIFICATION_EVENTS.LEADER_POST, {
-        guildId,
-        actorId: actor.id,
-        gmPost: patch.gmPost,
-      });
-    }
     return this.load(guildId);
   }
 
   private async load(guildId: number): Promise<GuildProfile> {
-    const row = await findProfileRow(this.db, guildId);
-    const by = await findUsername(this.db, row?.gmPostUpdatedBy ?? null);
-    return toGuildProfile(guildId, row, by);
+    const [row, latest] = await Promise.all([
+      findProfileRow(this.db, guildId),
+      this.posts.latest(guildId),
+    ]);
+    return withLatestPost(toGuildProfile(guildId, row, null), latest);
   }
 
   private async assertGuild(guildId: number): Promise<void> {
@@ -90,6 +84,10 @@ export class GuildProfileService {
       throw new NotFoundException('Guild not found');
     }
   }
+}
+
+function hasGmPostKey(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && 'gmPost' in body;
 }
 
 function parseUpdate(body: unknown): UpdateGuildProfileInput {

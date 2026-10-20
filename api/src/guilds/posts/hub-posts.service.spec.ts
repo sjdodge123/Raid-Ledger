@@ -10,7 +10,6 @@ import type { HubPostSelect } from '../../drizzle/schema/hub-posts';
 import type { GuildAccessService } from '../guild-access.service';
 import { HUB_NOTIFICATION_EVENTS } from '../../notifications/hub-notification.constants';
 import { findProfileRow, upsertProfile } from '../guild-profile.queries';
-import type { HubPostRelayService } from './hub-post-relay.service';
 import {
   deletePost,
   findPost,
@@ -53,7 +52,7 @@ function row(over: Partial<HubPostSelect> = {}): HubPostSelect {
     relayMessageId: null,
     relayedAt: null,
     ...over,
-  } as HubPostSelect;
+  };
 }
 
 function record(over: Partial<HubPostSelect> = {}): HubPostRecord {
@@ -79,7 +78,7 @@ function build(channel: object = { state: 'unset' }): Harness {
   const service = new HubPostsService(
     {} as PostgresJsDatabase<typeof schema>,
     { canView } as unknown as GuildAccessService,
-    relay as unknown as HubPostRelayService,
+    relay,
     { emit } as unknown as EventEmitter2,
   );
   return { service, emit, relay, canView };
@@ -127,7 +126,9 @@ describe('HubPostsService.create', () => {
     expect(relay.relay).not.toHaveBeenCalled();
     expect(upsertProfile).not.toHaveBeenCalled();
   });
+});
 
+describe('HubPostsService.create — relay', () => {
   it.each([true, false])(
     'A4: remembers relayToDiscord=%s when the relay is available',
     async (relayToDiscord) => {
@@ -165,7 +166,9 @@ describe('HubPostsService.create', () => {
     expect(out.relayOutcome).toBe('failed');
     expect(out.post.id).toBe(11);
   });
+});
 
+describe('HubPostsService.create — body pipeline', () => {
   it('400s an HTML body with the markdown message under `body`', async () => {
     const { service, emit } = build();
     const err = await service
@@ -255,12 +258,10 @@ describe('HubPostsService reads', () => {
 
   it('list: defaults the page to 10 and encodes the next cursor', async () => {
     const { service } = build();
-    jest
-      .mocked(listPosts)
-      .mockResolvedValue({
-        records: [record()],
-        next: { createdAt: T, id: 11 },
-      });
+    jest.mocked(listPosts).mockResolvedValue({
+      records: [record()],
+      next: { createdAt: T, id: 11 },
+    });
     const out = await service.list(actor, 7, {});
     expect(listPosts).toHaveBeenCalledWith({}, 7, 10, null);
     expect(out.posts).toHaveLength(1);
