@@ -201,15 +201,13 @@ export class OnboardingController {
     );
     // ROK-1810: revoke BEFORE the hash update so a failure in between leaves
     // the old password with no live sessions, never new password + old ones.
-    const tokenVersion = await this.passwordSession.revokeAllSessions(
-      req.user.id,
-    );
+    const tv = await this.passwordSession.revokeAllSessions(req.user.id);
     await this.updatePassword(localCred.id, parsed.data.newPassword);
 
     this.logger.log(
       `Admin user ${req.user.username} changed password via onboarding`,
     );
-    const accessToken = await this.reissueCallerSession(req, res, tokenVersion);
+    const accessToken = await this.reissueCallerSession(req, res, tv);
     return {
       success: true,
       message: 'Password changed successfully',
