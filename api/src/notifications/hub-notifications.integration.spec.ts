@@ -1,7 +1,8 @@
 /**
  * ROK-1832 — per-group (hub) notifications end-to-end against a real DB:
  *
- *   AC1  PATCH /guilds/:id/profile gmPost → `hub_leader_post` per member
+ *   AC1  POST /guilds/:id/posts → `hub_leader_post` per member, per NEW post
+ *        (ROK-1868; edits/deletes never notify, legacy PATCH gmPost → 400)
  *   AC2  a group-tagged event → one notice per (member, event); late tag
  *   AC3  rules / links edits never notify
  *   AC4  `hub_event_tagged` channel preferences are honoured
@@ -146,6 +147,13 @@ const patchProfile = (guildId: number, body: Record<string, unknown>) =>
     .set('Authorization', `Bearer ${adminToken}`)
     .send(body);
 
+/** ROK-1868: the leader post is a hub post now (relay off unless asked). */
+const createPost = (guildId: number, body: string) =>
+  testApp.request
+    .post(`/guilds/${guildId}/posts`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ body, relayToDiscord: false });
+
 const patchEvent = (eventId: number, body: Record<string, unknown>) =>
   testApp.request
     .patch(`/events/${eventId}`)
@@ -234,28 +242,27 @@ beforeEach(async () => {
 
 afterEach(() => jest.restoreAllMocks());
 
-describe('AC1 — leader post', () => {
-  /** A hub with: the admin author (a member), a member, a muted member, a deactivated member. */
-  async function scenario() {
-    const g = await insertHub();
-    await link(g.id, adminId);
-    const fan = await member(g.id, 'fan');
-    const muted = await member(g.id, 'muted');
-    await muteHub(g.id, muted);
-    const gone = await member(g.id, 'gone');
-    await testApp.db
-      .update(schema.users)
-      .set({ deactivatedAt: new Date() })
-      .where(eq(schema.users.id, gone));
-    return { g, fan, muted, gone };
-  }
+/** A hub with: the admin author (a member), a member, a muted member, a deactivated member. */
+async function leaderScenario() {
+  const g = await insertHub();
+  await link(g.id, adminId);
+  const fan = await member(g.id, 'fan');
+  const muted = await member(g.id, 'muted');
+  await muteHub(g.id, muted);
+  const gone = await member(g.id, 'gone');
+  await testApp.db
+    .update(schema.users)
+    .set({ deactivatedAt: new Date() })
+    .where(eq(schema.users.id, gone));
+  return { g, fan, muted, gone };
+}
 
+describe('AC1 — leader post', () => {
   it('notifies each active, unmuted member — not the author, a muted or a deactivated member', async () => {
-    const { g, fan, muted, gone } = await scenario();
-    const res = await patchProfile(g.id, {
-      gmPost: 'Raid tonight at 8\nBring flasks',
-    });
-    expect(res.status).toBe(200);
+    const { g, fan, muted, gone } = await leaderScenario();
+    const res = await createPost(g.id, '**Raid** tonight at 8\nBring flasks');
+    expect(res.status).toBe(201);
+    const postId = (res.body as { post: { id: number } }).post.id;
     expect(leaderSpy).toHaveBeenCalledTimes(1);
     await settle(leaderSpy);
     const rows = await rowsFor(fan, 'hub_leader_post');
@@ -263,26 +270,52 @@ describe('AC1 — leader post', () => {
     expect(rows[0]).toMatchObject({
       title: `New post in ${g.name}`,
       message: 'Raid tonight at 8',
-      payload: { guildId: g.id, guildName: g.name, url: `/guilds/${g.id}` },
+      payload: {
+        guildId: g.id,
+        guildName: g.name,
+        url: `/guilds/${g.id}?post=${postId}#posts`,
+      },
     });
     expect(await rowsFor(muted)).toHaveLength(0);
     expect(await rowsFor(gone)).toHaveLength(0);
     expect(await rowsFor(adminId, 'hub_leader_post')).toHaveLength(0);
   });
 
-  it('a second edit inside the cooldown adds nothing', async () => {
-    const { g, fan } = await scenario();
-    await patchProfile(g.id, { gmPost: 'First post' });
-    await patchProfile(g.id, { gmPost: 'First post, typo fixed' });
+  it('a second post inside the cooldown adds nothing', async () => {
+    const { g, fan } = await leaderScenario();
+    expect((await createPost(g.id, 'First post')).status).toBe(201);
+    expect((await createPost(g.id, 'Second post')).status).toBe(201);
+    expect(leaderSpy).toHaveBeenCalledTimes(2);
     await settle(leaderSpy);
     expect(await rowsFor(fan, 'hub_leader_post')).toHaveLength(1);
   });
+});
 
-  it('clearing the post notifies nobody', async () => {
-    const { g, fan } = await scenario();
-    const res = await patchProfile(g.id, { gmPost: null });
-    expect(res.status).toBe(200);
+describe('AC1 — only a NEW post notifies (ROK-1868)', () => {
+  it('editing or deleting a post notifies nobody', async () => {
+    const { g, fan } = await leaderScenario();
+    const created = await createPost(g.id, 'First post');
     await settle(leaderSpy);
+    const path = `/guilds/${g.id}/posts/${(created.body as { post: { id: number } }).post.id}`;
+    const auth = `Bearer ${adminToken}`;
+    const edit = await testApp.request
+      .patch(path)
+      .set('Authorization', auth)
+      .send({ body: 'First post, typo fixed' });
+    expect(edit.status).toBe(200);
+    const del = await testApp.request.delete(path).set('Authorization', auth);
+    expect(del.status).toBe(204);
+    expect(leaderSpy).toHaveBeenCalledTimes(1);
+    expect(await rowsFor(fan, 'hub_leader_post')).toHaveLength(1);
+  });
+
+  it('the legacy PATCH profile gmPost is refused (400) and notifies nobody', async () => {
+    const { g, fan } = await leaderScenario();
+    for (const gmPost of ['Raid tonight', null]) {
+      const res = await patchProfile(g.id, { gmPost });
+      expect(res.status).toBe(400);
+    }
+    expect(leaderSpy).not.toHaveBeenCalled();
     expect(await rowsFor(fan)).toHaveLength(0);
   });
 });
@@ -417,8 +450,8 @@ describe('Codex r5 — a hidden hub tells staff only (HubVisibleGuard parity)', 
 
   it('leader post: the ordinary member gets nothing, the operator still gets it', async () => {
     const { g, fan, op } = await hiddenScenario();
-    const res = await patchProfile(g.id, { gmPost: 'Hidden raid plans' });
-    expect(res.status).toBe(200);
+    const res = await createPost(g.id, 'Hidden raid plans');
+    expect(res.status).toBe(201);
     await settle(leaderSpy);
     expect(await rowsFor(fan)).toHaveLength(0);
     expect(await rowsFor(op, 'hub_leader_post')).toHaveLength(1);

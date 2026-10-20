@@ -189,7 +189,7 @@ describe('permission matrix', () => {
     async (who) => {
       const id = `/${guildId}`;
       const results = await Promise.all([
-        call('patch', `${id}/profile`, who, { gmPost: 'x' }),
+        call('patch', `${id}/profile`, who, { rules: [] }),
         call('post', `${id}/addons`, who, { url: CF }),
         call('patch', `${id}/addons/${otherAddonId}`, who, { note: 'x' }),
         call('delete', `${id}/addons/${otherAddonId}`, who),
@@ -209,12 +209,22 @@ describe('permission matrix', () => {
 describe('profile', () => {
   it('is empty before any edit', async () => {
     const res = await call('get', `/${guildId}/profile`, 'plain');
-    expect(res.body).toEqual({ guildId, gmPost: null, rules: [], links: [] });
+    expect(res.body).toEqual({
+      guildId,
+      gmPost: null,
+      latestPost: null,
+      rules: [],
+      links: [],
+    });
   });
 
-  it('a granted editor upserts and stamps the GM post', async () => {
+  it('a granted editor posts; the profile gmPost follows the newest post (A3)', async () => {
+    const post = await testApp.request
+      .post(`/guilds/${guildId}/posts`)
+      .set('Authorization', `Bearer ${tokens.deleg}`)
+      .send({ body: 'Raid Tuesday 8pm\nBring flasks', relayToDiscord: false });
+    expect(post.status).toBe(201);
     const res = await call('patch', `/${guildId}/profile`, 'deleg', {
-      gmPost: 'Raid Tuesday 8pm\nBring flasks',
       rules: [{ title: 'Loot', body: 'Council' }],
     });
     expect(res.status).toBe(200);
@@ -222,22 +232,32 @@ describe('profile', () => {
       body: 'Raid Tuesday 8pm\nBring flasks',
       updatedBy: 'content-deleg',
     });
+    expect(res.body.latestPost).toMatchObject({
+      body: 'Raid Tuesday 8pm\nBring flasks',
+    });
     expect(res.body.rules).toEqual([{ title: 'Loot', body: 'Council' }]);
   });
+});
 
-  it('keeps the stamp when the post text is unchanged', async () => {
-    const seeded = await call('patch', `/${guildId}/profile`, 'deleg', {
-      gmPost: 'Raid Tuesday 8pm\nBring flasks',
-    });
-    expect(seeded.status).toBe(200);
+describe('profile — legacy gmPost writes (ROK-1868 A3)', () => {
+  it('PATCH profile with a gmPost key is a 400 and changes nothing (A3)', async () => {
     const before = await call('get', `/${guildId}/profile`, 'plain');
     const res = await call('patch', `/${guildId}/profile`, 'admin', {
       gmPost: 'Raid Tuesday 8pm\nBring flasks',
       links: [{ title: 'Web', links: [{ label: 'Site', url: CF }] }],
     });
-    expect(res.status).toBe(200);
-    expect(res.body.gmPost).toEqual(before.body.gmPost);
-    expect(res.body.links).toHaveLength(1);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'The leader post moved to POST /guilds/:id/posts',
+    );
+    const after = await call('get', `/${guildId}/profile`, 'plain');
+    expect(after.body).toEqual(before.body);
+    const links = await call('patch', `/${guildId}/profile`, 'admin', {
+      links: [{ title: 'Web', links: [{ label: 'Site', url: CF }] }],
+    });
+    expect(links.status).toBe(200);
+    expect(links.body.gmPost).toEqual(before.body.gmPost);
+    expect(links.body.links).toHaveLength(1);
   });
 
   it('400 on an empty body', async () => {
