@@ -13,7 +13,7 @@ export interface DiscordGuildMemberFields {
 const PLACEHOLDER_PREFIXES = ['local:', 'unlinked:'];
 
 /** True for a real linked Discord id (OQ-6). */
-function isLinkedDiscordId(id: string | null): boolean {
+export function isLinkedDiscordId(id: string | null): boolean {
   return id !== null && !PLACEHOLDER_PREFIXES.some((p) => id.startsWith(p));
 }
 

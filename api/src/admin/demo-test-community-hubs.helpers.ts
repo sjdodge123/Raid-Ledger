@@ -15,6 +15,7 @@ import {
   insertCommunityHub,
 } from '../guilds/community/community-proposals.queries';
 import { archiveHub } from '../guilds/community/community-hub.lookup';
+import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -62,32 +63,75 @@ export async function resolveSeedGame(
   return any.id;
 }
 
-/** A user by username, created A2-eligible (in the Discord guild) if absent. */
+/** Every user the seed creates or reuses; the index derives its snowflake. */
+export const SEED_USERNAMES: readonly string[] = [
+  'community-leader',
+  'community-officer',
+  'community-member-1',
+  'community-member-2',
+  'community-member-3',
+  'community-member-4',
+  'community-banned',
+  'community-solo',
+  'demo-member',
+];
+
+/** Offset that keeps the synthetic ids clear of the integration specs' `91…`. */
+const SEED_SNOWFLAKE_BASE = 1870_000;
+
+/**
+ * A unique synthetic Discord snowflake (`9` + 17 digits) for a seed user, so
+ * the A2 gate (`isInDiscordGuild`) admits them — a `local:` placeholder does
+ * not (OQ-6). Throws for a username outside `SEED_USERNAMES`.
+ */
+export function seedDiscordId(username: string): string {
+  const index = SEED_USERNAMES.indexOf(username);
+  if (index < 0) throw new Error(`${username} is not a seed user`);
+  return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+}
+
+/** Re-arm an existing user: seen now, active, a placeholder id replaced. */
+async function refreshSeedUser(
+  db: Db,
+  hit: { id: number; discordId: string | null },
+  username: string,
+): Promise<void> {
+  const linked = isLinkedDiscordId(hit.discordId);
+  await db
+    .update(schema.users)
+    .set({
+      guildMemberSeenAt: new Date(),
+      deactivatedAt: null,
+      ...(linked ? {} : { discordId: seedDiscordId(username) }),
+    })
+    .where(eq(schema.users.id, hit.id));
+}
+
+/**
+ * A user by username, created A2-eligible (synthetic snowflake, seen in the
+ * Discord guild) if absent; an existing user keeps its role and real link.
+ */
 export async function ensureSeedUser(
   db: Db,
   username: string,
 ): Promise<number> {
   const u = schema.users;
   const [hit] = await db
-    .select({ id: u.id })
+    .select({ id: u.id, discordId: u.discordId })
     .from(u)
     .where(eq(u.username, username))
     .limit(1);
-  const now = new Date();
   if (hit) {
-    await db
-      .update(u)
-      .set({ guildMemberSeenAt: now, deactivatedAt: null })
-      .where(eq(u.id, hit.id));
+    await refreshSeedUser(db, hit, username);
     return hit.id;
   }
   const [row] = await db
     .insert(u)
     .values({
       username,
-      discordId: `local:community-seed:${username}`,
+      discordId: seedDiscordId(username),
       role: 'member',
-      guildMemberSeenAt: now,
+      guildMemberSeenAt: new Date(),
     })
     .returning({ id: u.id });
   if (!row) throw new Error(`seed user ${username} insert returned no row`);
