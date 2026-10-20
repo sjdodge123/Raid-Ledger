@@ -91,7 +91,7 @@ export class DemoTestChannelLifecycleController {
     const bound = await seedBinding(this.db, this.bindings, ref, input.binding);
     await seedSuppression(this.db, ref, input.suppression);
     const hubId = input.serverHubWithoutChannel
-      ? await seedServerHubWithoutChannel(this.db, game)
+      ? await seedServerHubWithoutChannel(this.db, game, req.user.id)
       : null;
     return {
       gameId: game.id,

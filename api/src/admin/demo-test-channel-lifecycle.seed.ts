@@ -15,6 +15,7 @@ import {
   type BindingSeed,
   type SeedContext,
 } from './demo-test-channel-lifecycle.helpers';
+import { joinServerHub } from './demo-test-hub-member.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const DAY_MS = 86_400_000;
@@ -207,12 +208,19 @@ async function findOrInsertServerHub(
   return defined(row, 'lifecycle hub').id;
 }
 
-/** A visible game_server hub on the game whose profile has no channel. */
+/**
+ * A visible game_server hub on the game whose profile has no channel, with
+ * `memberUserId` (the seeding admin) as a live manual member so the hub page
+ * and its Discord channel picker open for them. Idempotent: the hub is found
+ * by game, the Join is an upsert.
+ */
 export async function seedServerHubWithoutChannel(
   db: Db,
   game: { id: number; name: string },
+  memberUserId: number,
 ): Promise<number> {
   const hubId = await findOrInsertServerHub(db, game);
+  await joinServerHub(db, hubId, memberUserId, new Date());
   const g = schema.guilds;
   await db.update(g).set({ hiddenAt: null }).where(eq(g.id, hubId));
   const p = schema.guildProfiles;

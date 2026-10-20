@@ -217,36 +217,37 @@ describe('A6 — activity + suppressions', () => {
   });
 });
 
+/* ---- A8 helpers ---- */
+const A8_ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
+const DAY = 86_400_000;
+
+async function setDemoMode(on: boolean): Promise<void> {
+  process.env.DEMO_MODE = on ? 'true' : 'false';
+  await t.app.get(SettingsService).setDemoMode(on);
+}
+
+/** A game with two upcoming events — creatable on a reconcile. */
+async function a8ActiveGame(label: string): Promise<number> {
+  const [g] = nonEmpty(
+    await t.db
+      .insert(schema.games)
+      .values({ name: `A8 ${label}`, slug: `a8-${label}-${Date.now()}` })
+      .returning({ id: schema.games.id }),
+    'game',
+  );
+  for (const days of [3, 5]) {
+    const start = new Date(Date.now() + days * DAY);
+    await t.db.insert(schema.events).values({
+      title: `A8 ${label} event`,
+      gameId: g.id,
+      creatorId: t.seed.adminUser.id,
+      duration: [start, new Date(start.getTime() + 3_600_000)],
+    });
+  }
+  return g.id;
+}
+
 describe('A8 — DEMO_MODE-only gameIds filter on reconcile', () => {
-  const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
-  const DAY = 86_400_000;
-
-  async function setDemoMode(on: boolean): Promise<void> {
-    process.env.DEMO_MODE = on ? 'true' : 'false';
-    await t.app.get(SettingsService).setDemoMode(on);
-  }
-
-  /** A game with two upcoming events — creatable on a reconcile. */
-  async function activeGame(label: string): Promise<number> {
-    const [g] = nonEmpty(
-      await t.db
-        .insert(schema.games)
-        .values({ name: `A8 ${label}`, slug: `a8-${label}-${Date.now()}` })
-        .returning({ id: schema.games.id }),
-      'game',
-    );
-    for (const days of [3, 5]) {
-      const start = new Date(Date.now() + days * DAY);
-      await t.db.insert(schema.events).values({
-        title: `A8 ${label} event`,
-        gameId: g.id,
-        creatorId: t.seed.adminUser.id,
-        duration: [start, new Date(start.getTime() + 3_600_000)],
-      });
-    }
-    return g.id;
-  }
-
   const reconcile = (query: string) =>
     t.request.post(`${BASE}/reconcile?${query}`).set(as(admin)).send({});
 
@@ -258,14 +259,14 @@ describe('A8 — DEMO_MODE-only gameIds filter on reconcile', () => {
 
   afterEach(async () => {
     await t.app.get(SettingsService).setDemoMode(false);
-    if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
-    else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
+    if (A8_ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+    else process.env.DEMO_MODE = A8_ORIGINAL_DEMO_MODE;
   });
 
   it('DEMO_MODE on: a dry run plans only the listed game', async () => {
     await setDemoMode(true);
-    const a = await activeGame('a');
-    const b = await activeGame('b');
+    const a = await a8ActiveGame('a');
+    const b = await a8ActiveGame('b');
     const res = await reconcile(`dryRun=true&gameIds=${a}`);
     expect(res.status).toBe(200);
     const ids = (res.body.items as Array<{ gameId: number }>).map(
@@ -276,8 +277,8 @@ describe('A8 — DEMO_MODE-only gameIds filter on reconcile', () => {
   });
 
   it('absent gameIds: the dry run still plans every active game', async () => {
-    const a = await activeGame('a');
-    const b = await activeGame('b');
+    const a = await a8ActiveGame('a');
+    const b = await a8ActiveGame('b');
     const res = await reconcile('dryRun=true');
     expect(res.status).toBe(200);
     const ids = (res.body.items as Array<{ gameId: number }>).map(
@@ -288,7 +289,7 @@ describe('A8 — DEMO_MODE-only gameIds filter on reconcile', () => {
 
   it('DEMO_MODE off + gameIds → 403 "Only available in DEMO_MODE"', async () => {
     await setDemoMode(false);
-    const a = await activeGame('a');
+    const a = await a8ActiveGame('a');
     const res = await reconcile(`dryRun=true&gameIds=${a}`);
     expect(res.status).toBe(403);
     expect(res.body.message).toBe('Only available in DEMO_MODE');
