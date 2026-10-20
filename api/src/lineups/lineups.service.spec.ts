@@ -14,6 +14,10 @@ import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
+import * as lineupActions from './lineups-actions.helpers';
+
+const nudge = { touch: jest.fn() };
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 // ROK-1474: `buildDetailResponse` now runs the star projection (viewer's top
@@ -274,6 +278,7 @@ function describeLineupsService() {
           provide: TiebreakerService,
           useValue: { reset: jest.fn().mockResolvedValue(undefined) },
         },
+        { provide: GameActivityNudge, useValue: nudge },
       ],
     }).compile();
     service = module.get<LineupsService>(LineupsService);
@@ -347,6 +352,22 @@ function describeLineupsService() {
       const result = await service.findActive();
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('toggleVote nudge (ROK-1431)', () => {
+    it('nudges the voted game; a throwing nudge never fails the vote', async () => {
+      mockBuildDetail();
+      const detail = await service.findById(1);
+      const spy = jest.spyOn(lineupActions, 'runToggleVote');
+      spy.mockResolvedValue(detail);
+      await service.toggleVote(1, 42, 7);
+      expect(nudge.touch).toHaveBeenCalledWith(42);
+      nudge.touch.mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+      await expect(service.toggleVote(1, 42, 7)).resolves.toBe(detail);
+      spy.mockRestore();
     });
   });
 

@@ -14,6 +14,9 @@ import { SignupsService } from './signups.service';
 import { SettingsService } from '../settings/settings.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import { at } from '../common/testing/narrow';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
+
+const nudge = { touch: jest.fn() };
 
 const PLAN_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const CREATOR_ID = 42;
@@ -133,6 +136,7 @@ async function setupEach() {
         provide: SignupsService,
         useValue: { signup: jest.fn().mockResolvedValue(undefined) },
       },
+      { provide: GameActivityNudge, useValue: nudge },
     ],
   }).compile();
 
@@ -380,6 +384,18 @@ describe('EventPlansService — create', () => {
   it('should insert plan and post Discord poll', () =>
     testCreateInsertAndPost());
   it('should schedule BullMQ job', () => testCreateSchedulesJob());
+  it('nudges the plan game (ROK-1431)', async () => {
+    await service.create(CREATOR_ID, { ...validDto, gameId: 7 });
+    expect(nudge.touch).toHaveBeenCalledWith(7);
+  });
+  it('a throwing nudge never fails create (ROK-1431)', async () => {
+    nudge.touch.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    await expect(
+      service.create(CREATOR_ID, { ...validDto, gameId: 7 }),
+    ).resolves.toBeDefined();
+  });
   it('should mark draft if Discord fails', () => testCreateDiscordFails());
   it('should include "None" in poll answers', () => testCreateNoneOption());
   it('should not include re-poll content for round 1', () =>
