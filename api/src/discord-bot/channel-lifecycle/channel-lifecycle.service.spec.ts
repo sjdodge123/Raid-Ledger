@@ -23,7 +23,7 @@ import type { GameLifecycleActivityRow } from './game-activity.types';
 import type { SettingsService } from '../../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ChannelBindingsService } from '../services/channel-bindings.service';
-import type { LifecycleDb } from './channel-lifecycle.store';
+import type { LeaseRedis, LifecycleDb } from './channel-lifecycle.store';
 
 jest.mock('@sentry/nestjs', () => ({
   captureException: jest.fn(),
@@ -36,10 +36,9 @@ jest.mock('./hub-link.resolver');
 jest.mock('./hub-channel-link.queries');
 jest.mock('./channel-lifecycle.store', () => ({
   withReconcileLock: jest.fn(
-    // The fake lock hands the db itself over as its tx.
-    async (db: unknown, fn: (tx: unknown) => Promise<unknown>) => ({
+    async (_redis: unknown, fn: () => Promise<unknown>) => ({
       acquired: true,
-      value: await fn(db),
+      value: await fn(),
     }),
   ),
   setLifecycleState: jest.fn(),
@@ -110,12 +109,18 @@ const hubLinker = { linkHubsForGame: jest.fn().mockResolvedValue(0) };
 const guild = { id: 'g1', channels: { delete: jest.fn() } };
 const selectRows = jest.mocked(queries.selectGameLifecycleActivity);
 
+/** The pool fake: each game's transaction runs on the pool itself. */
+const poolDb = {
+  transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(poolDb),
+} as unknown as LifecycleDb;
+
 function makeService(): ChannelLifecycleService {
   return new ChannelLifecycleService(
-    {} as LifecycleDb,
+    poolDb,
     settings as unknown as SettingsService,
     client as unknown as DiscordBotClientService,
     bindings as unknown as ChannelBindingsService,
+    {} as LeaseRedis,
     hubLinker,
   );
 }
@@ -573,10 +578,10 @@ describe('settings stay off the lock tx (fix r4)', () => {
     settings.recordChannelLifecycleRun.mockImplementation(track('record'));
     jest
       .mocked(store.withReconcileLock)
-      .mockImplementationOnce(async (db, fn) => {
+      .mockImplementationOnce(async (_redis, fn) => {
         events.push('lock:start');
         try {
-          return { acquired: true, value: await fn(db) };
+          return { acquired: true, value: await fn() };
         } finally {
           events.push('lock:settled');
         }

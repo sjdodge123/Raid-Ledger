@@ -5,7 +5,9 @@
  * this file owns the lifecycle state columns, the suppression rows and the
  * single-flight lock shared by the cron, the admin route and the nudge.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
+import type Redis from 'ioredis';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -13,8 +15,8 @@ import type { ArchivedOverwrites } from '../../drizzle/schema/channel-bindings';
 import type { ChannelLifecycleSuppressionReason } from '../../drizzle/schema/channel-lifecycle-suppressions';
 
 /**
- * The app's Drizzle handle — the pool OR a transaction on it (the reconcile
- * lock's `tx`), so every query under the lock can run on its connection.
+ * The app's Drizzle handle — the pool OR a transaction on it (a game's
+ * per-game `tx`), so every query for that game runs on its connection.
  */
 export type LifecycleDb = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 
@@ -107,22 +109,43 @@ export async function suppressUnboundAutoBindings(
 /** Outcome of `withReconcileLock`. */
 export type LockedRun<T> = { acquired: true; value: T } | { acquired: false };
 
+/** The slice of the app's Redis client the reconcile lease uses. */
+export type LeaseRedis = Pick<Redis, 'set' | 'eval'>;
+
+/** The single-flight lease key shared by the cron, the admin route and the nudge. */
+export const RECONCILE_LEASE_KEY = 'channel-lifecycle:reconcile-lease';
+
+/** Lease expiry: far above a tick's length, so only a crashed holder's lease lapses. */
+export const RECONCILE_LEASE_MS = 30 * 60_000;
+
+/** Delete the lease only while it is still ours (an expired one may be re-held). */
+const RELEASE_LUA =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0";
+
 /**
- * Single-flight (spec §2.3): run `fn` while holding the transaction-scoped
- * `hashtext('channel-lifecycle')` advisory lock; a concurrent caller gets
- * `{acquired: false}` at once. `fn` gets the lock's `tx` and must run ALL its
- * DB work on it (Codex r3): a query on the pool while the tx holds a
- * connection deadlocks a `DB_POOL_MAX=1` pool.
+ * Single-flight (spec §2.3, Codex r4b P1): run `fn` while holding a Redis
+ * lease (`SET NX PX`); a concurrent caller gets `{acquired: false}` at once.
+ * The lease holds NO database connection, so `fn` commits each game in its
+ * own transaction on the pool (one at a time — a `DB_POOL_MAX=1` pool never
+ * needs a second connection) and a later game's failed write cannot roll
+ * back an earlier game's state. A failed release just lets the lease expire.
  */
 export async function withReconcileLock<T>(
-  db: LifecycleDb,
-  fn: (tx: LifecycleDb) => Promise<T>,
+  redis: LeaseRedis,
+  fn: () => Promise<T>,
 ): Promise<LockedRun<T>> {
-  return db.transaction(async (tx) => {
-    const rows = await tx.execute<{ locked: boolean }>(
-      sql`SELECT pg_try_advisory_xact_lock(hashtext('channel-lifecycle')) AS locked`,
-    );
-    if (rows[0]?.locked !== true) return { acquired: false };
-    return { acquired: true, value: await fn(tx) };
-  });
+  const token = randomUUID();
+  const ok = await redis.set(
+    RECONCILE_LEASE_KEY,
+    token,
+    'PX',
+    RECONCILE_LEASE_MS,
+    'NX',
+  );
+  if (ok !== 'OK') return { acquired: false };
+  try {
+    return { acquired: true, value: await fn() };
+  } finally {
+    await redis.eval(RELEASE_LUA, 1, RECONCILE_LEASE_KEY, token).catch(() => 0);
+  }
 }

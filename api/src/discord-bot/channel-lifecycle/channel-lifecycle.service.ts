@@ -13,6 +13,7 @@ import {
   type ReconcileResultDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../../redis/redis.module';
 import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
@@ -30,6 +31,7 @@ import {
 } from './channel-lifecycle.run';
 import {
   withReconcileLock,
+  type LeaseRedis,
   type LifecycleDb,
   type LockedRun,
 } from './channel-lifecycle.store';
@@ -73,6 +75,7 @@ export class ChannelLifecycleService {
     private readonly settings: SettingsService,
     private readonly client: DiscordBotClientService,
     private readonly bindings: ChannelBindingsService,
+    @Inject(REDIS_CLIENT) private readonly redis: LeaseRedis,
     @Optional()
     @Inject(CHANNEL_LIFECYCLE_HUB_LINKER)
     hubLinker?: HubLinker,
@@ -81,10 +84,11 @@ export class ChannelLifecycleService {
   }
 
   /**
-   * Run one reconcile tick. Every `SettingsService` call (the snapshot, the
-   * client URL, the category ids, the run record) happens OUTSIDE the lock's
-   * transaction (fix r4): they go through the pool, and a pooled query while
-   * the tx holds a connection deadlocks a `DB_POOL_MAX=1` pool.
+   * Run one reconcile tick. The single-flight is a Redis lease that holds no
+   * DB connection (Codex r4b P1); each game commits in its own transaction,
+   * and every `SettingsService` call (the snapshot, the client URL, the
+   * category ids, the run record) happens outside any of them (fix r4) — a
+   * pooled query while a tx holds a connection deadlocks `DB_POOL_MAX=1`.
    *
    * @throws ConflictException when another reconcile holds the lock (→ 409)
    */
@@ -111,13 +115,15 @@ export class ChannelLifecycleService {
     return this.record(tick.now, opts, run.value);
   }
 
-  /** The locked section, then (tx settled) the category-id write; a failure is handled after the rollback. */
+  /** The leased section, then the category-id write; a failure is handled after it settles. */
   private async runUnderLock(
     tick: LockedTick,
   ): Promise<LockedRun<ReconcileResultDto>> {
     let run: LockedRun<ReconcileResultDto>;
     try {
-      run = await withReconcileLock(this.db, (tx) => this.runLocked(tx, tick));
+      run = await withReconcileLock(this.redis, () =>
+        this.runLocked(this.db, tick),
+      );
     } catch (err) {
       await this.persistCategories(tick.settings, tick.categories);
       return { acquired: true, value: await this.handleTickError(tick, err) };
@@ -126,9 +132,9 @@ export class ChannelLifecycleService {
     return run;
   }
 
-  /** Plan + (unless dry) execute, under the lock — DB work on `tx`, no settings call. */
+  /** Plan + (unless dry) execute, under the lease — one tx per game, no settings call. */
   private async runLocked(
-    tx: LifecycleDb,
+    db: LifecycleDb,
     tick: LockedTick,
   ): Promise<ReconcileResultDto> {
     const { guild, settings, opts, now } = tick;
@@ -140,10 +146,10 @@ export class ChannelLifecycleService {
       : await this.resolveCategories(guild, settings);
     if (!categories) return emptyResult(false, 'no-archive-category');
     if (!opts.dryRun) tick.categories = categories;
-    const rows = await this.selectRows(tx, guild, settings, opts, now);
+    const rows = await this.selectRows(db, guild, settings, opts, now);
     const plan = planReconcile(rows, settings);
     if (opts.dryRun) return plannedResult(plan);
-    const result = await executePlan(this.context(tx, tick, categories), plan);
+    const result = await executePlan(this.context(db, tick, categories), plan);
     if (result.stoppedReason === 'permissions') {
       this.reportPermission(settings, opts);
     }

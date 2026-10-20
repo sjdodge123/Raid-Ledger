@@ -61,7 +61,7 @@ async function handleGone(
     reason: 'deleted',
   });
   if (binding) {
-    // On the lock's tx (int-fix 3): a pool unbind re-inserts the suppression on
+    // On the game's tx (int-fix 3): a pool unbind re-inserts the suppression on
     // a second connection, which waits on the tx's uncommitted row → deadlock.
     await ctx.bindings.unbindById(binding.id, { db: ctx.db });
     await unlinkAutoHubsForChannel(ctx.db, binding.channelId);
@@ -94,16 +94,25 @@ async function handleFailure(
   return { outcome: 'failed', detail: message };
 }
 
-/** Run one game, never throwing (per-game isolation). */
+/**
+ * Run one game, never throwing (per-game isolation). `ctx.db` is the pool:
+ * the game's writes commit in their OWN transaction (Codex r4b P1), so a
+ * failed statement — which poisons a postgres.js tx, savepoints included —
+ * rolls back only this game. Its cleanup gets a fresh tx of its own.
+ */
 async function runOne(
   ctx: ApplyContext,
   game: PlannedGame,
 ): Promise<ItemOutcome> {
   try {
-    return await applyAction(ctx, game);
+    return await ctx.db.transaction((tx) =>
+      applyAction({ ...ctx, db: tx }, game),
+    );
   } catch (err) {
     try {
-      return await handleFailure(ctx, game, err);
+      return await ctx.db.transaction((tx) =>
+        handleFailure({ ...ctx, db: tx }, game, err),
+      );
     } catch (inner) {
       Sentry.captureException(inner, {
         tags: { area: 'channel-lifecycle-cleanup' },

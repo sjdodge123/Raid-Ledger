@@ -1,10 +1,12 @@
 /** ROK-1431 — the unbind hook (D9): only auto-managed game bindings are suppressed. */
 import {
+  RECONCILE_LEASE_KEY,
+  RECONCILE_LEASE_MS,
   suppressUnboundAutoBindings,
   withReconcileLock,
+  type LeaseRedis,
   type LifecycleDb,
 } from './channel-lifecycle.store';
-import { sql } from 'drizzle-orm';
 
 function fakeDb(): { db: LifecycleDb; values: jest.Mock } {
   const values = jest.fn().mockReturnValue({
@@ -44,54 +46,64 @@ describe('suppressUnboundAutoBindings', () => {
   });
 });
 
-/** A db whose transaction runs the callback on a tx returning `locked`. */
-function lockDb(locked: boolean): {
-  db: LifecycleDb;
-  txExecute: jest.Mock;
-  outerExecute: jest.Mock;
+/** A Redis fake whose `SET NX` answers `setReply`. */
+function leaseRedis(setReply: 'OK' | null): {
+  redis: LeaseRedis;
+  set: jest.Mock;
+  evalFn: jest.Mock;
 } {
-  const txExecute = jest.fn().mockResolvedValue([{ locked }]);
-  const outerExecute = jest.fn();
-  const db = {
-    execute: outerExecute,
-    transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
-      cb({ execute: txExecute }),
-    ),
-  };
-  return { db: db as unknown as LifecycleDb, txExecute, outerExecute };
+  const set = jest.fn().mockResolvedValue(setReply);
+  const evalFn = jest.fn().mockResolvedValue(1);
+  const redis = { set, eval: evalFn } as unknown as LeaseRedis;
+  return { redis, set, evalFn };
 }
 
-describe('withReconcileLock (single-flight, spec §2.3)', () => {
-  it('a held lock → {acquired:false} at once; fn never runs', async () => {
-    const { db } = lockDb(false);
+describe('withReconcileLock (single-flight lease, spec §2.3, Codex r4b P1)', () => {
+  it('a held lease → {acquired:false} at once; fn never runs', async () => {
+    const { redis, evalFn } = leaseRedis(null);
     const fn = jest.fn();
-    await expect(withReconcileLock(db, fn)).resolves.toEqual({
+    await expect(withReconcileLock(redis, fn)).resolves.toEqual({
       acquired: false,
     });
     expect(fn).not.toHaveBeenCalled();
+    expect(evalFn).not.toHaveBeenCalled();
   });
 
-  it('takes the xact lock on the transaction connection, never the pool', async () => {
-    const { db, txExecute, outerExecute } = lockDb(true);
+  it('takes the lease with SET NX PX (expiring) and releases it by token', async () => {
+    const { redis, set, evalFn } = leaseRedis('OK');
     await expect(
-      withReconcileLock(db, () => Promise.resolve(7)),
+      withReconcileLock(redis, () => Promise.resolve(7)),
     ).resolves.toEqual({ acquired: true, value: 7 });
-    expect(txExecute).toHaveBeenCalledTimes(1);
-    expect(outerExecute).not.toHaveBeenCalled();
+    const token: unknown = set.mock.calls[0]?.[1];
+    expect(set).toHaveBeenCalledWith(
+      RECONCILE_LEASE_KEY,
+      expect.any(String),
+      'PX',
+      RECONCILE_LEASE_MS,
+      'NX',
+    );
+    expect(evalFn).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('del'"),
+      1,
+      RECONCILE_LEASE_KEY,
+      token,
+    );
   });
 
-  it('hands fn the lock tx, so its queries never touch the pool (Codex r3 P2)', async () => {
-    const { db, txExecute, outerExecute } = lockDb(true);
-    await withReconcileLock(db, (tx) => tx.execute(sql`SELECT 1`));
-    expect(txExecute).toHaveBeenCalledTimes(2);
-    expect(outerExecute).not.toHaveBeenCalled();
-  });
-
-  it('fn rejecting rejects the transaction (rollback releases the xact lock)', async () => {
-    const { db } = lockDb(true);
+  it('fn rejecting still releases the lease, then rejects', async () => {
+    const { redis, evalFn } = leaseRedis('OK');
     const boom = new Error('Failed query: insert into "app_settings"');
     await expect(
-      withReconcileLock(db, () => Promise.reject(boom)),
+      withReconcileLock(redis, () => Promise.reject(boom)),
     ).rejects.toBe(boom);
+    expect(evalFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed release does not mask the result (the lease expires)', async () => {
+    const { redis, evalFn } = leaseRedis('OK');
+    evalFn.mockRejectedValueOnce(new Error('redis down'));
+    await expect(
+      withReconcileLock(redis, () => Promise.resolve('ok')),
+    ).resolves.toEqual({ acquired: true, value: 'ok' });
   });
 });

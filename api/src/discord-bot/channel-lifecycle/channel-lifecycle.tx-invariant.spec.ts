@@ -1,6 +1,8 @@
 /**
- * ROK-1428 int-fix 3 — the lock-tx invariant: while `withReconcileLock`'s
- * transaction is open, NOTHING reachable from `reconcile` may touch the pool.
+ * ROK-1428 int-fix 3 — the tx invariant: while a game's transaction is open,
+ * NOTHING reachable from `reconcile` may touch the pool (zero pool access),
+ * and every game runs in a transaction of its own (Codex r4b P1 — the
+ * single-flight is a Redis lease, so no tx spans the whole tick).
  *
  * Fleet evidence (R9): the gone-channel path inserted the `deleted`
  * suppression on the lock's tx, then `unbindById` re-inserted it on a POOL
@@ -66,6 +68,8 @@ interface Harness {
   poolCallsInTx: string[];
   /** Root query methods issued on the tx, in order. */
   txCalls: string[];
+  /** Transactions opened on the pool. */
+  txCount: () => number;
 }
 
 /** The binding row a `delete … returning()` on the tx hands back. */
@@ -83,7 +87,6 @@ function deletedRow(gameId: number): Record<string, unknown> {
 
 function makeTx(txCalls: string[], gameId: number): LifecycleDb {
   const answers: Record<string, unknown> = {
-    execute: [{ locked: true }],
     delete: [deletedRow(gameId)],
     insert: [deletedRow(gameId)],
   };
@@ -105,6 +108,7 @@ function makeHarness(gameId: number): Harness {
   const txCalls: string[] = [];
   const tx = makeTx(txCalls, gameId);
   let open = false;
+  let opened = 0;
   const pool: unknown = new Proxy(
     {},
     {
@@ -112,7 +116,9 @@ function makeHarness(gameId: number): Harness {
         if (typeof prop !== 'string' || prop === 'then') return undefined;
         if (prop === 'transaction') {
           return async (fn: (t: LifecycleDb) => Promise<unknown>) => {
+            if (open) poolCallsInTx.push('nested transaction');
             open = true;
+            opened += 1;
             try {
               return await fn(tx);
             } finally {
@@ -125,7 +131,8 @@ function makeHarness(gameId: number): Harness {
       },
     },
   );
-  return { pool: pool as LifecycleDb, tx, poolCallsInTx, txCalls };
+  const txCount = (): number => opened;
+  return { pool: pool as LifecycleDb, tx, poolCallsInTx, txCalls, txCount };
 }
 
 function bound(
@@ -175,6 +182,10 @@ function makeService(h: Harness): ChannelLifecycleService {
     settings as unknown as SettingsService,
     client as unknown as DiscordBotClientService,
     new ChannelBindingsService(h.pool, emitter as unknown as EventEmitter2),
+    {
+      set: jest.fn().mockResolvedValue('OK'),
+      eval: jest.fn().mockResolvedValue(1),
+    },
     new HubChannelLinkService(h.pool),
   );
 }
@@ -190,21 +201,18 @@ beforeEach(() => {
   jest.mocked(ops.categoryHasRoom).mockResolvedValue(true);
 });
 
-/** Run one live tick over `row` with the activity read pinned to the tx. */
+/** Run one live tick over `row` (the activity read runs before any tx opens). */
 async function tick(
   h: Harness,
   row: GameLifecycleActivityRow,
 ): Promise<ReconcileResultDto> {
-  jest.mocked(queries.selectGameLifecycleActivity).mockImplementation((db) => {
-    if (db !== h.tx) h.poolCallsInTx.push('selectGameLifecycleActivity');
-    return Promise.resolve([row]);
-  });
+  jest.mocked(queries.selectGameLifecycleActivity).mockResolvedValue([row]);
   return makeService(h).reconcile({ dryRun: false, trigger: 'manual' });
 }
 
 const GONE = { outcome: 'failed', detail: 'channel deleted in Discord' };
 
-describe('reconcile never touches the pool while the lock tx is open', () => {
+describe('reconcile never touches the pool while a game tx is open', () => {
   it('10003 on archive: suppress + unbind + hub clear all run on the tx', async () => {
     const h = makeHarness(1);
     jest
@@ -213,6 +221,8 @@ describe('reconcile never touches the pool while the lock tx is open', () => {
     const res = await tick(h, bound(1, 'active', 0));
     expect(res.items[0]).toMatchObject(GONE);
     expect(h.poolCallsInTx).toEqual([]);
+    // archive's tx, then the gone-cleanup's own tx
+    expect(h.txCount()).toBe(2);
     // suppression 'deleted' → binding delete → 'unbound' (a no-op) → hub clear
     expect(h.txCalls).toEqual(
       expect.arrayContaining(['insert', 'delete', 'update']),
@@ -239,5 +249,6 @@ describe('reconcile never touches the pool while the lock tx is open', () => {
     const res = await tick(h, row);
     expect(res.items[0]).toMatchObject({ action: 'create', outcome: 'done' });
     expect(h.poolCallsInTx).toEqual([]);
+    expect(h.txCount()).toBe(1);
   });
 });
