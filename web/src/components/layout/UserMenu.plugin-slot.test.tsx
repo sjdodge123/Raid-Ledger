@@ -12,6 +12,8 @@ import { usePluginStore } from '../../stores/plugin-store';
 import { UserMenu } from './UserMenu';
 
 vi.mock('../../hooks/use-auth', () => ({
+    // ROK-1870 D9: the core hub nav entries key their query by viewer.
+    useViewerCacheScope: () => 'viewer-1',
     useAuth: () => ({
         user: { id: 42, username: 'TestUser', role: 'member', discordId: null, avatar: null, customAvatarUrl: null },
         isAuthenticated: true, isImpersonating: false,

@@ -1,5 +1,5 @@
 /**
- * ROK-1785 entry E (desktop): `nav:primary-links` filler. One guild → a
+ * ROK-1785 entry E (desktop), core since ROK-1870 D9 — rendered by `Header`. One guild → a
  * "Guild" link; two or more → a small menu (UserMenu's dropdown pattern,
  * design-system §4.14); none → nothing.
  */
@@ -7,10 +7,10 @@ import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import type { MyGuild } from '@raid-ledger/contract';
-import { navClass } from '../../../components/layout/nav-class';
-import { Button } from '../../../components/ui/button';
-import { GuildRows } from './guild-entry-bits';
-import { guildHref, useMyGuilds } from './guild-queries';
+import { navClass } from '../nav-class';
+import { Button } from '../../ui/button';
+import { GuildRows } from './hub-entry-bits';
+import { guildHref, useMyGuilds } from './my-hubs-queries';
 
 function useDismiss(ref: React.RefObject<HTMLDivElement | null>, isOpen: boolean, close: () => void): void {
     useEffect(() => {

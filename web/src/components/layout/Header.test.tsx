@@ -77,6 +77,11 @@ describe('Header — nav aria-label (AC: Semantic landmarks added to layout)', (
         expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Players' })).toBeInTheDocument();
     });
+
+    it('hides the members-only Hubs link from signed-out visitors (ROK-1870)', () => {
+        renderHeader();
+        expect(screen.queryByRole('link', { name: 'Hubs' })).not.toBeInTheDocument();
+    });
 });
 
 describe('Header — hamburger button', () => {
