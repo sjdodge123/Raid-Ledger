@@ -184,6 +184,21 @@ async function runCreate(
 }
 
 /**
+ * `update` target: bind the EXISTING row with the realm map's inference —
+ * a differing one is the opt-in `RULESET_CHANGED` (ROK-1739 D4).
+ */
+async function runUpdate(
+  tx: AddonImportTx,
+  input: CreateImportInput,
+  target: Extract<ImportTarget, { action: 'update' }>,
+): Promise<AddonImportNewResultDto> {
+  const inferred = input.inference?.ruleset;
+  const result = await runBound(tx, input, target.character, inferred);
+  const dto = targetDto(target, input.who, input.query.region);
+  return { ...result, target: dto };
+}
+
+/**
  * Apply: ONE tx, GUID lock first, re-resolve under it (D4). A claim
  * collision in the create step is mapped only AFTER rollback, then retried
  * ONCE in a fresh tx: if the colliding row is the caller's own (a manual
@@ -206,14 +221,7 @@ export async function applyImport(
       if (target.action === 'create') {
         return runCreate(tx, creator, input, target, phase);
       }
-      const result = await runBound(
-        tx,
-        input,
-        target.character,
-        input.inference?.ruleset,
-      );
-      const dto = targetDto(target, input.who, input.query.region);
-      return { ...result, target: dto };
+      return runUpdate(tx, input, target);
     });
   } catch (err) {
     if (!phase.creating) throw err;

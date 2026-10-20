@@ -111,19 +111,15 @@ export class AddonImportCreateService {
     input.onTarget = (id) => {
       outcome.characterId = id;
     };
+    const run = request.dryRun
+      ? previewImport(this.db, input)
+      : applyImport(this.db, this.characters, input);
     // ROK-1739 D7: the inference rides on preview AND apply, never persisted.
-    if (request.dryRun) {
-      return withRulesetInference(
-        await previewImport(this.db, input),
-        input.inference,
-      );
-    }
-    const res = withRulesetInference(
-      await applyImport(this.db, this.characters, input),
-      input.inference,
-    );
+    const res = withRulesetInference(await run, input.inference);
     // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
-    enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    if (!request.dryRun) {
+      enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    }
     return res;
   }
 

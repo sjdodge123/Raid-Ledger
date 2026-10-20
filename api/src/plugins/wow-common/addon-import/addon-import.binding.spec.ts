@@ -204,7 +204,11 @@ describe('bindToCharacter — ruleset', () => {
 describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
   const inferred = (
     over: Partial<AddonBindingOptions> = {},
-  ): AddonBindingOptions => ({ dryRun: false, inferredRuleset: 'pvp', ...over });
+  ): AddonBindingOptions => ({
+    dryRun: false,
+    inferredRuleset: 'pvp',
+    ...over,
+  });
 
   it('B1 null export ruleset + inferred pvp vs stored normal → RULESET_CHANGED, nothing written', () => {
     const r = bindToCharacter(payload({ ruleset: null }), char(), inferred());
