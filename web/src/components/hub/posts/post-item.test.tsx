@@ -86,3 +86,16 @@ describe('PostItem (V4)', () => {
         expect(await screen.findByTestId('hub-post-editor')).toBeInTheDocument();
     });
 });
+
+describe('PostItem — deep-linked (ROK-1868 review MAJOR)', () => {
+    it('a short highlighted post offers no Show more / Show less', () => {
+        renderWithProviders(<PostItem guildId={7} post={buildHubPost({ id: 3 })} canEdit={false} highlighted />);
+        expect(screen.queryByRole('button', { name: /show (more|less)/i }), 'a short deep-linked post must not offer a toggle').toBeNull();
+    });
+
+    it('a long highlighted post opens expanded with Show less', () => {
+        clampOverflows = true;
+        renderWithProviders(<PostItem guildId={7} post={buildHubPost({ id: 3 })} canEdit={false} highlighted />);
+        expect(screen.getByRole('button', { name: /show less/i })).toHaveAttribute('aria-expanded', 'true');
+    });
+});

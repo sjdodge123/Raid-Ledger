@@ -37,18 +37,23 @@ function RelayBadge({ post }: { post: HubPost }): JSX.Element | null {
     );
 }
 
+/** The 6-line body clamp, `max-h-[7.5rem]`, in rem. */
+const CLAMP_REM = 7.5;
+
 interface BodyProps { post: HubPost; expanded: boolean; bodyId: string; onToggle: () => void; actions: JSX.Element }
 
 function PostBody({ post, expanded, bodyId, onToggle, actions }: BodyProps): JSX.Element {
     const clampRef = useRef<HTMLDivElement>(null);
-    const overflowing = useOverflow(clampRef, [post.body, expanded]);
+    // Measured against the 6-line clamp (7.5rem) so a short deep-linked post, which opens
+    // expanded, offers no toggle (review MAJOR).
+    const overflowing = useOverflow(clampRef, [post.body, expanded], CLAMP_REM);
     return (
         <>
             <div ref={clampRef} id={bodyId} data-testid="hub-post-item-clamp" className={expanded ? '' : 'max-h-[7.5rem] overflow-hidden'}>
                 <MarkdownBlock text={post.body} className="text-sm text-secondary" testId="hub-post-item-text" />
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-                {(overflowing || expanded) && (
+                {overflowing && (
                     <Button variant="ghost" size="sm" aria-expanded={expanded} aria-controls={bodyId} onClick={onToggle}>
                         {expanded ? 'Show less' : 'Show more'}
                     </Button>
