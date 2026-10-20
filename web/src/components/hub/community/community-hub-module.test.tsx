@@ -179,6 +179,27 @@ describe('community Members tab', () => {
         expect(menu).not.toBeVisible();
     });
 
+    it('desktop: the Manage dropdown is portalled out of the table scroller (last row not clipped)', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        expect(screen.getByRole('menu', { name: 'Manage Mem' })).toBeInTheDocument();
+        expect(within(screen.getByTestId('guild-members-table')).queryByRole('menu')).toBeNull();
+    });
+
+    it('Make leader asks for confirmation before handing over', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        await userEvent.click(screen.getByTestId('community-member-make-leader'));
+        expect(screen.getByTestId('community-leader-dialog')).toBeInTheDocument();
+        expect(communityHubCalls).toEqual([]);
+        await userEvent.click(screen.getByTestId('community-leader-confirm'));
+        await waitFor(() => expect(communityHubCalls).toHaveLength(1));
+    });
+
     it('phone: Manage opens a bottom sheet with the same actions', async () => {
         selfId = 1;
         mockDesktop(false);
