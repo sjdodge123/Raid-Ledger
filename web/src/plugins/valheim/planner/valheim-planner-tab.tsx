@@ -61,7 +61,7 @@ function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogResponse
     const hasPersonal = useValheimMaterials(serverId, filters.includeVehicles).data?.personal != null;
     const plan = useValheimRecipePlan(serverId, serializeTargets(targets), filters.includePersonal && hasPersonal, filters.includeVehicles);
     const tree = useValheimRecipeTree(serverId, picked?.prefab ?? null, picked?.kind ?? 'item', quality);
-    const names = usePlannerNames(serverId, catalog, plan.data?.items);
+    const names = usePlannerNames(serverId, catalog, plan.data, tree.data);
     const onPick = (e: Entry | null): void => {
         setPicked(e);
         setQuality(1);

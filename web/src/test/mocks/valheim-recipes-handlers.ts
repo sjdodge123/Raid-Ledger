@@ -102,10 +102,13 @@ function walk(out: ValheimPlanNode[], prefab: string, qty: number, quality: numb
     }
 }
 
+/** The catalogue subset plan and tree responses carry for their nodes. */
+const responseItems = () => Object.fromEntries(Object.keys(NAMES).map((p) => [p, entry(p, 'Material')]));
+
 export function recipeTreeFixture(prefab: string, quality: number): ValheimRecipeTreeResponse {
     const nodes: ValheimPlanNode[] = [];
     walk(nodes, prefab, 1, quality, null, null);
-    return { target: { prefab, quality }, nodes, truncated: false };
+    return { target: { prefab, quality }, nodes, truncated: false, items: responseItems(), itemAtlas: null, recipeAtlas: null };
 }
 
 export const STOCK: Record<string, number> = { Wood: 5, IronScrap: 8, Coal: 100 };
@@ -119,7 +122,7 @@ export function recipePlanFixture(targets: ValheimRecipePlanTarget[], stock: Sto
         const have = stock === null ? null : (stock[prefab] ?? 0);
         return { prefab, need, have, short: have === null ? null : Math.max(0, need - have) };
     });
-    const items = Object.fromEntries(Object.keys(NAMES).map((p) => [p, entry(p, 'Material')]));
+    const items = responseItems();
     return {
         targets, nodes, truncated: false, stock: stock === null ? 'none' : 'scan',
         capturedAt: stock === null ? null : new Date(Date.now() - 7 * 60_000).toISOString(),

@@ -57,8 +57,8 @@ describe('ValheimPlannerTab', () => {
         const tree = await screen.findByRole('list', { name: 'What Iron sword needs' });
         const rows = within(tree).getAllByTestId('valheim-planner-row').map((r) => r.textContent ?? '');
         const names = within(tree).getAllByTestId('valheim-planner-row-name').map((n) => n.textContent);
-        // The tree route carries no `items` record (contract), so leaves outside the catalogue fall back to the prefab.
-        expect(names).toEqual(['Iron sword', 'Iron', 'IronScrap', 'Coal', 'Wood', 'LeatherScraps']);
+        // Gathered leaves sit outside the recipe catalogue; the tree's own `items` record names them.
+        expect(names).toEqual(['Iron sword', 'Iron', 'Iron scrap', 'Coal', 'Wood', 'Leather scraps']);
         expect(rows[0]).toContain('Forge · lvl 1');
         expect(rows[1]).toContain('Smelter · 31 s');
         expect(rows[2]).toContain('Gathered');

@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import type {
     ValheimCatalogEntry,
+    ValheimMapBaseMap,
     ValheimRecipeCatalogResponse,
 } from '@raid-ledger/contract';
 import {
@@ -20,6 +21,12 @@ export interface PlannerNames {
 }
 
 type Record_ = Record<string, ValheimCatalogEntry>;
+
+/** The catalogue subset a plan or tree response carries for its own nodes. */
+export interface PlannerNameSource {
+    items: Record_;
+    itemAtlas: ValheimMapBaseMap | null;
+}
 
 function splitCatalog(catalog: ValheimRecipeCatalogResponse): {
     items: Record_;
@@ -36,14 +43,24 @@ function splitCatalog(catalog: ValheimRecipeCatalogResponse): {
     return { items, pieces };
 }
 
+/**
+ * Plan and tree responses both carry `items` for their nodes — gathered
+ * leaves (Iron scrap) are outside the recipe catalogue, so merge both. All
+ * three share the one items catalogue, so any present atlas fits them.
+ */
 export function usePlannerNames(
     serverId: number,
     catalog: ValheimRecipeCatalogResponse,
-    planItems: Record_ | undefined,
+    plan: PlannerNameSource | undefined,
+    tree: PlannerNameSource | undefined,
 ): PlannerNames {
     const { items, pieces } = useMemo(() => splitCatalog(catalog), [catalog]);
-    const allItems = useMemo(() => ({ ...planItems, ...items }), [planItems, items]);
-    const itemCtx = useItemIconsFor({ serverId, items: allItems, atlas: catalog.itemAtlas });
+    const allItems = useMemo(
+        () => ({ ...plan?.items, ...tree?.items, ...items }),
+        [plan?.items, tree?.items, items],
+    );
+    const atlas = catalog.itemAtlas ?? tree?.itemAtlas ?? plan?.itemAtlas ?? null;
+    const itemCtx = useItemIconsFor({ serverId, items: allItems, atlas });
     const pieceCtx = useItemIconsFor({ serverId, items: pieces, atlas: catalog.recipeAtlas });
     return useMemo(
         () => ({
