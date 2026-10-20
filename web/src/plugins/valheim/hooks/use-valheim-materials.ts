@@ -4,11 +4,7 @@
  * `useViewerCacheScope()`; claim / owner mutations invalidate the
  * `valheimMaterialsKeys.all` prefix (`use-valheim-claims.ts`).
  */
-import {
-    keepPreviousData,
-    useQuery,
-    type UseQueryResult,
-} from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
     ValheimContainerDetailSchema,
     ValheimContainerListResponseSchema,
@@ -52,6 +48,21 @@ export const valheimMaterialsKeys = {
         ] as const,
 };
 
+/**
+ * Keep the previous rows while a filter changes, but never across viewers:
+ * the observer would otherwise show the last viewer's personal totals and
+ * chest locations during impersonation until the new response lands (Codex
+ * r2 P1). Key index 2 is the viewer scope. A fresh closure every render also
+ * defeats TanStack's placeholder memo, which reuses one by option identity.
+ */
+export function sameViewerPlaceholder<T>(
+    scope: Scope,
+    previous: T | undefined,
+    previousKey: readonly unknown[] | undefined,
+): T | undefined {
+    return previousKey?.[2] === scope ? previous : undefined;
+}
+
 function serverPath(serverId: number, rest: string, vehicles: boolean): string {
     const q = new URLSearchParams({ includeVehicles: String(vehicles) });
     return `${VALHEIM_ARMORY_PATH}/servers/${encodePathSegment(String(serverId))}/${rest}?${q.toString()}`;
@@ -71,7 +82,8 @@ export function useValheimMaterials(
                 {},
                 ValheimMaterialsResponseSchema,
             ),
-        placeholderData: keepPreviousData,
+        placeholderData: (prev, prevQuery) =>
+            sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
     });
 }
@@ -94,7 +106,8 @@ export function useValheimContainers(
                 {},
                 ValheimContainerListResponseSchema,
             ),
-        placeholderData: keepPreviousData,
+        placeholderData: (prev, prevQuery) =>
+            sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
     });
 }
