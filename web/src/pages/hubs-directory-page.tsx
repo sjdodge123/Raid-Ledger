@@ -7,6 +7,7 @@ import { useState, type JSX } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { HubDirectoryEntry } from '@raid-ledger/contract';
 import { Button } from '../components/ui/button';
+import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { SearchInput } from '../components/ui/search-input';
 import { FilterEntryTrigger } from '../components/ui/filter-entry';
 import {
@@ -75,7 +76,9 @@ export function HubsDirectoryPage(): JSX.Element {
                 <FilterEntryTrigger activeCount={directoryActiveCount(params)} isOpen={filtersOpen} onOpenChange={setFiltersOpen} />
             </div>
             <HubsDirectoryFilters params={params} onChange={update} gameName={gameName} isOpen={filtersOpen} onOpenChange={setFiltersOpen} />
-            {query.isSuccess && hubs.length === 0 ? <EmptyState filtered={filtered} onClear={clear} /> : <HubGrid hubs={hubs} params={params} />}
+            {query.isPending && <div data-testid="hubs-directory-loading" className="flex justify-center py-8"><LoadingSpinner /></div>}
+            {query.isError && <p role="alert" className="text-sm text-danger">Couldn’t load hubs. Try again in a moment.</p>}
+            {query.isSuccess && (hubs.length === 0 ? <EmptyState filtered={filtered} onClear={clear} /> : <HubGrid hubs={hubs} params={params} />)}
             {query.hasNextPage && (
                 <div className="flex justify-center">
                     <Button variant="secondary" size="sm" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>Load more</Button>

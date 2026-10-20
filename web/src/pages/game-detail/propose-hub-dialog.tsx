@@ -33,7 +33,7 @@ function ProposalFields({ form, gameName }: { form: ProposalForm; gameName: stri
                 <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{form.errors.banner}</p>
             )}
             <Field label="Hub name" error={form.errors.name}
-                hint={<>3–64 characters. Must be unique for this game. <span aria-live="polite">{form.name.length}/{HUB_NAME_MAX}</span></>}>
+                hint={<>3–64 characters. Must be unique for this game. <span>{form.name.length}/{HUB_NAME_MAX}</span></>}>
                 <Input value={form.name} maxLength={HUB_NAME_MAX} invalid={Boolean(form.errors.name)}
                     onChange={(e) => form.setName(e.target.value)} />
             </Field>

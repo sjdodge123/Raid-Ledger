@@ -67,4 +67,19 @@ describe('CommunityHubsSection', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Yes, withdraw' }));
         await waitFor(() => expect(deleted).toBe(1));
     });
+    it('a failed read keeps the card with an error line and a Retry that refetches', async () => {
+        let calls = 0;
+        server.use(http.get(`${API}/hubs/by-game/5`, () => { calls += 1; return HttpResponse.json({ message: 'boom' }, { status: 500 }); }));
+        renderCard();
+        expect(await screen.findByTestId('community-hubs-error')).toHaveTextContent('Couldn’t load community hubs');
+        const before = calls;
+        await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await waitFor(() => expect(calls).toBeGreaterThan(before));
+    });
+
+    it('says "1 member" in the singular', async () => {
+        server.use(...communityHubHandlers({ gameHubs: createMockGameHubs({ hubs: [createMockHubEntry({ memberCount: 1 })] }) }));
+        renderCard();
+        expect(await screen.findByText('1 member')).toBeInTheDocument();
+    });
 });

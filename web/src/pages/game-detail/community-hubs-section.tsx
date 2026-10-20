@@ -11,6 +11,7 @@ import { StatusChip } from '../../components/ui/status-chip';
 import { useGameHubs, useJoinGameHub, useWithdrawProposal } from './use-game-hubs';
 import { isHubMember } from './hub-join';
 import { ProposeHubDialog } from './propose-hub-dialog';
+import { memberCountLabel } from '../../components/layout/hub-nav/my-hubs-queries';
 
 const SHOWN = 3;
 type BlockedReason = NonNullable<GameHubs['proposeBlockedReason']>;
@@ -29,7 +30,7 @@ function HubRow({ hub, onJoin, joining }: { hub: HubDirectoryEntry; onJoin: () =
                 <Link to={`/guilds/${hub.id}`} className="block truncate text-sm font-medium text-foreground hover:underline">{hub.name}</Link>
                 {hub.blurb && <p className="truncate text-xs text-muted">{hub.blurb}</p>}
             </div>
-            <span className="shrink-0 text-xs text-muted">{hub.memberCount} members</span>
+            <span className="shrink-0 text-xs text-muted">{memberCountLabel(hub.memberCount)}</span>
             {isHubMember(hub) && <StatusChip tone="success" title="You are a member">Joined</StatusChip>}
             {hub.viewer === 'not-member' && (
                 <Button variant="secondary" size="sm" onClick={onJoin} disabled={joining} aria-label={`Join ${hub.name}`}>Join</Button>
@@ -88,13 +89,28 @@ function StartFooter({ data, onStart }: { data: GameHubs; onStart: () => void })
     );
 }
 
-/** Core game-page section; renders nothing until the card's payload loads. */
+const FRAME = 'mb-8 rounded-lg border border-edge bg-surface p-4';
+
+/** The card frame with a §4.5 error line when `/hubs/by-game` fails. */
+function HubsCardError({ onRetry }: { onRetry: () => void }): JSX.Element {
+    return (
+        <section className={FRAME} aria-labelledby="community-hubs-heading">
+            <h2 id="community-hubs-heading" className="text-lg font-semibold text-foreground">Community hubs</h2>
+            <p role="alert" data-testid="community-hubs-error" className="mt-2 flex items-center gap-2 text-sm text-muted">
+                Couldn’t load community hubs. <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button>
+            </p>
+        </section>
+    );
+}
+
+/** Core game-page section; renders nothing while loading, an error line on failure. */
 export function CommunityHubsSection({ gameId, gameName }: { gameId: number; gameName: string }): JSX.Element | null {
-    const { data } = useGameHubs(gameId);
+    const { data, isError, refetch } = useGameHubs(gameId);
     const [open, setOpen] = useState(false);
+    if (isError) return <HubsCardError onRetry={() => void refetch()} />;
     if (!data) return null;
     return (
-        <section className="mb-8 rounded-lg border border-edge bg-surface p-4" aria-labelledby="community-hubs-heading">
+        <section className={FRAME} aria-labelledby="community-hubs-heading">
             <h2 id="community-hubs-heading" className="text-lg font-semibold text-foreground">Community hubs</h2>
             <HubList data={data} gameId={gameId} gameName={gameName} />
             {data.myProposals.length > 0 && (

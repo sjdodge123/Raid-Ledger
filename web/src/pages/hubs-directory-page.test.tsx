@@ -82,4 +82,17 @@ describe('HubsDirectoryPage', () => {
         await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }));
         await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/hubs'));
     });
+    it('shows a spinner while loading and an alert when the read fails', async () => {
+        server.use(http.get(`${API}/hubs`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        renderPage();
+        expect(screen.getByTestId('hubs-directory-loading')).toBeInTheDocument();
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load hubs');
+        expect(screen.queryByTestId('hubs-directory-loading')).toBeNull();
+    });
+
+    it('labels the leader on a card ("Led by …")', async () => {
+        server.use(...communityHubHandlers({ directory: createMockHubDirectoryPage({ items: [createMockHubEntry({ memberCount: 1 })] }) }));
+        renderPage();
+        expect(await screen.findByText('1 member · Led by Mirelle')).toBeInTheDocument();
+    });
 });

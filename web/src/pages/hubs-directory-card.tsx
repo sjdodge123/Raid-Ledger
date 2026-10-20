@@ -3,6 +3,7 @@
  * (link to the hub page), blurb, member count + Leader, and an inline Join
  * that never navigates.
  */
+import { memberCountLabel } from '../components/layout/hub-nav/my-hubs-queries';
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { HubDirectoryEntry } from '@raid-ledger/contract';
@@ -39,7 +40,7 @@ export function HubDirectoryCard(props: HubCardProps): JSX.Element {
             {hub.blurb && <p className="line-clamp-2 text-sm text-secondary">{hub.blurb}</p>}
             <div className="mt-auto flex items-center gap-2 pt-1">
                 <span className="flex-1 text-xs text-muted">
-                    {hub.memberCount} members{hub.leaderName ? ` · ${hub.leaderName}` : ''}
+                    {memberCountLabel(hub.memberCount)}{hub.leaderName ? ` · Led by ${hub.leaderName}` : ''}
                 </span>
                 <ViewerAction {...props} />
             </div>

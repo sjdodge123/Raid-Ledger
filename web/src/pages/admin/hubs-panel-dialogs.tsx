@@ -3,7 +3,7 @@
  * Server errors render inline; the dialog closes only on success.
  */
 import { useState, type JSX } from 'react';
-import { HUB_BLURB_MAX, HUB_NAME_MAX, HUB_REJECT_REASON_MAX, type HubProposal } from '@raid-ledger/contract';
+import { HUB_BLURB_MAX, HUB_NAME_MAX, HUB_NAME_MIN, HUB_REJECT_REASON_MAX, type HubProposal } from '@raid-ledger/contract';
 import { Modal } from '../../components/ui/modal';
 import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
@@ -35,7 +35,7 @@ export function ApproveHubDialog({ proposal, onClose }: ProposalDialogProps): JS
     const [name, setName] = useState(proposal.name);
     const [blurb, setBlurb] = useState(proposal.blurb);
     const approve = useApproveHubProposal();
-    const valid = name.trim().length >= 3 && blurb.trim().length > 0;
+    const valid = name.trim().length >= HUB_NAME_MIN && blurb.trim().length > 0;
     const submit = (): void => approve.mutate({ id: proposal.id, body: { name: name.trim(), blurb: blurb.trim() } }, { onSuccess: onClose });
     const footer = (
         <DialogFooter error={approve.error?.message ?? null} onCancel={onClose}>
