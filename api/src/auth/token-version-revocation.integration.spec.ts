@@ -21,6 +21,7 @@ import { DiscordNotificationService } from '../notifications/discord-notificatio
 import { UsersModerationService } from '../users/users-moderation.service';
 import { REFRESH_COOKIE_NAME } from './refresh/refresh-cookie.helpers';
 import { RefreshTokenService } from './refresh/refresh-token.service';
+import { hashToken } from './refresh/refresh-token.helpers';
 
 let testApp: TestApp;
 
@@ -91,11 +92,12 @@ function rlRtFrom(res: Res): string {
   throw new Error(`response (status ${res.status}) set no rl_rt cookie`);
 }
 
-async function backdateRotations(userId: number): Promise<void> {
+/** Age ONE consumed row past the race grace (other rows stay untouched). */
+async function backdateRotation(rawToken: string): Promise<void> {
   await testApp.db
     .update(schema.refreshTokens)
     .set({ rotatedAt: new Date(Date.now() - 2 * 60 * 1000) })
-    .where(eq(schema.refreshTokens.userId, userId));
+    .where(eq(schema.refreshTokens.tokenHash, hashToken(rawToken)));
 }
 
 async function loginLocal(): Promise<Res> {
@@ -185,7 +187,7 @@ describe('ROK-1823 I3 — refresh reuse bumps the version user-wide', () => {
     expect((await me(tokenB)).status).toBe(200);
     const before = await tv(member.id);
 
-    await backdateRotations(member.id);
+    await backdateRotation(rtA);
     expect((await refresh(rtA)).status).toBe(401); // theft detected
 
     expect(await tv(member.id)).toBe(before + 1);
