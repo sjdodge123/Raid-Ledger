@@ -54,9 +54,7 @@ export const valheimContainerScans = pgTable(
       t.pelicanServerId,
       t.capturedAt,
     ),
-    index('valheim_container_scans_source_snapshot_idx').on(
-      t.sourceSnapshotId,
-    ),
+    index('valheim_container_scans_source_snapshot_idx').on(t.sourceSnapshotId),
     snapshotFk('valheim_container_scans', t.sourceSnapshotId),
   ],
 );

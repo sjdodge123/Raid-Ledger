@@ -30,7 +30,8 @@ export const serverFk = () =>
   integer('pelican_server_id')
     .notNull()
     .references(() => pelicanServers.id, { onDelete: 'cascade' });
-export const snapshotCol = () => bigint('source_snapshot_id', { mode: 'number' });
+export const snapshotCol = () =>
+  bigint('source_snapshot_id', { mode: 'number' });
 /**
  * Explicitly named: drizzle's default `<table>_source_snapshot_id_
  * valheim_link_snapshots_id_fk` exceeds Postgres' 63-char identifier limit
