@@ -3,6 +3,22 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-20 (additive) — `containers`
+
+- **Additive.** New message `kind: "containers"` (ROK-1853): every player-built
+  container on the dedicated server, sent every 10 minutes, keyed (`serverId`,
+  `worldUid`), latest `capturedAt` wins. Per container: `prefab`, `x`/`y`/`z`,
+  `creatorPlayerId` (the `character` kind's `playerId`), `privacy`
+  (`public`/`private`/`group`), `vehicle`, `slots`, `usedSlots`, `unreadable`,
+  `omittedEntries`, and `items[]` aggregated per (`prefab`, `quality`) with
+  `stack`; plus `omittedShared` / `omittedPrivate`. Caps: 4 096 containers, 256
+  items per container, 50 000 items in total; body cap
+  `VALHEIM_LINK_CONTAINERS_MAX_BYTES` 10 MiB (largest schema-valid ≈ 8.52 MB,
+  pinned by the largest-message spec). A new value in the closed `kind` enum is
+  additive under §9: the server ships first; the mod emits it only after its pin
+  refresh. `schema.json` regenerated; fixtures `containers-basic`,
+  `containers-private` and 8 invalid.
+
 ## v1 — 2026-10-20 (additive)
 
 - **Additive.** `VALHEIM_LINK_ITEMS_MAX_BYTES` is raised from 10 MiB to
