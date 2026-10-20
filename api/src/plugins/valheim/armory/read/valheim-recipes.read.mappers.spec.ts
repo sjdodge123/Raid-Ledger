@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import type { ValheimPiece, ValheimRecipe } from '@raid-ledger/contract';
+import {
+  VALHEIM_PLAN_TARGETS_MAX,
+  type ValheimPiece,
+  type ValheimRecipe,
+} from '@raid-ledger/contract';
 import type { ValheimItemCatalogEntryRow } from '../../../../drizzle/schema';
 import { maxQualityLookup } from './valheim-recipes.catalog.helpers';
 import { buildRecipeGraph } from './valheim-recipes.graph';

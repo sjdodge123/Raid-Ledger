@@ -114,14 +114,7 @@ export class ValheimRecipesService {
         null,
         { maxQuality: maxQ },
       );
-      const { items, atlas } = await this.nodeCatalog(r, set, res);
-      return {
-        target: { prefab, quality: q },
-        ...pickTree(res),
-        items,
-        itemAtlas: atlas,
-        recipeAtlas: await r.recipeAtlas(set),
-      };
+      return this.treeBody(r, set, { prefab, quality: q }, res);
     });
     return ValheimRecipeTreeResponseSchema.parse(body);
   }
@@ -162,6 +155,22 @@ export class ValheimRecipesService {
       capturedAt: scan ? toMinuteIso(scan.capturedAt) : null,
       shoppingList: res.shoppingList,
       fuelEstimates: res.fuelEstimates,
+      items,
+      itemAtlas: atlas,
+      recipeAtlas: await r.recipeAtlas(set),
+    };
+  }
+
+  private async treeBody(
+    r: RecipesReader,
+    set: ValheimRecipeSetRow,
+    target: { prefab: string; quality: number },
+    res: ResolveResult,
+  ) {
+    const { items, atlas } = await this.nodeCatalog(r, set, res);
+    return {
+      target,
+      ...pickTree(res),
       items,
       itemAtlas: atlas,
       recipeAtlas: await r.recipeAtlas(set),
