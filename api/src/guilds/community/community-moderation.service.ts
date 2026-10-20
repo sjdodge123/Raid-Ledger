@@ -9,6 +9,7 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  GuildSummary,
   HubBanDto,
   HubBanList,
   HubStatusUpdateDto,
@@ -34,6 +35,36 @@ import {
 } from './community-membership.queries';
 import { CommunityMembershipService } from './community-membership.service';
 import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
+import { toCommunitySummary } from './community-proposals.service';
+
+/** A raw ban row of `listBans`. */
+interface BanRow {
+  userId: number;
+  username: string;
+  avatar: string | null;
+  bannedAt: Date | null;
+  bannedBy: string | null;
+  reason: string | null;
+}
+
+/** Ban rows → contract items, newest first. */
+function toBanItems(rows: BanRow[]): HubBanList['items'] {
+  const items = rows.flatMap((r) =>
+    r.bannedAt === null
+      ? []
+      : [
+          {
+            userId: r.userId,
+            username: r.username,
+            avatarUrl: publicAvatarUrl(r.avatar),
+            bannedAt: r.bannedAt.toISOString(),
+            bannedBy: r.bannedBy,
+            reason: r.reason,
+          },
+        ],
+  );
+  return items.sort((a, b) => b.bannedAt.localeCompare(a.bannedAt));
+}
 
 /** ROK-1870 L3 — bans, leader transfer and archive/restore (§2.3–2.5). */
 @Injectable()
@@ -63,23 +94,7 @@ export class CommunityModerationService {
       .innerJoin(u, eq(u.id, m.userId))
       .leftJoin(by, eq(by.id, m.bannedBy))
       .where(and(eq(m.guildId, hubId), isNotNull(m.bannedAt)));
-    const items = rows.flatMap((r) =>
-      r.bannedAt === null
-        ? []
-        : [
-            {
-              userId: r.userId,
-              username: r.username,
-              avatarUrl: publicAvatarUrl(r.avatar),
-              bannedAt: r.bannedAt.toISOString(),
-              bannedBy: r.bannedBy,
-              reason: r.reason,
-            },
-          ],
-    );
-    return {
-      items: items.sort((a, b) => b.bannedAt.localeCompare(a.bannedAt)),
-    };
+    return { items: toBanItems(rows) };
   }
 
   /** PUT /hubs/:id/bans/:userId — idempotent; pre-bans a non-member. */
@@ -156,5 +171,20 @@ export class CommunityModerationService {
       await archiveHub(this.db, hubId, staff ? 'admin' : 'leader');
     else await restoreHub(this.db, hub);
     return { status: body.status };
+  }
+
+  /** PATCH /hubs/:id — Leader/Officer/staff edit the blurb (D10). */
+  async updateBlurb(
+    hubId: number,
+    blurb: string | null,
+  ): Promise<GuildSummary> {
+    await requireCommunityHub(this.db, hubId, true);
+    const [row] = await this.db
+      .update(schema.guilds)
+      .set({ blurb, updatedAt: new Date() })
+      .where(eq(schema.guilds.id, hubId))
+      .returning();
+    if (!row) throw new NotFoundException(HUB_NOT_FOUND);
+    return toCommunitySummary(row);
   }
 }

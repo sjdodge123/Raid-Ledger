@@ -77,11 +77,11 @@ export async function archiveHub(
     .where(eq(g.id, id));
 }
 
-/** Restore an archived hub; 409 when an active hub now holds its name (D11). */
-export async function restoreHub(
+/** D11: another non-archived hub on the game holds this hub's name. */
+async function hasRestoreClash(
   db: DbOrTx,
   hub: schema.GuildSelect,
-): Promise<void> {
+): Promise<boolean> {
   const [clash] = await db
     .select({ id: g.id })
     .from(g)
@@ -95,7 +95,15 @@ export async function restoreHub(
       ),
     )
     .limit(1);
-  if (clash) {
+  return clash !== undefined;
+}
+
+/** Restore an archived hub; 409 when an active hub now holds its name (D11). */
+export async function restoreHub(
+  db: DbOrTx,
+  hub: schema.GuildSelect,
+): Promise<void> {
+  if (await hasRestoreClash(db, hub)) {
     throw new ConflictException(
       'A hub with that name already exists for this game',
     );

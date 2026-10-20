@@ -54,6 +54,7 @@ import {
     HubService,
     HubVisibleGuard,
     HubEventTagger,
+    CommunityHubKindAdapter,
   ],
   exports: [
     GuildAccessService,
