@@ -32,7 +32,7 @@ function HubCard({ hub }: { hub: MockHub }): JSX.Element {
 
 function PanelBody(): JSX.Element {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid gap-4 @lg:grid-cols-3">
       <div><p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Game</p><Input defaultValue={GAME_NAME} fieldSize="sm" aria-label="Game" /></div>
       <div>
         <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Membership</p>
@@ -82,7 +82,7 @@ function Desktop({ filtered, setFiltered }: { filtered: boolean; setFiltered: (v
         <FunnelTriggerMock active={filtered ? 1 : 0} open={open} onClick={() => setOpen(!open)} />
       </div>
       {open && <InlinePanel onClear={() => setFiltered(false)} />}
-      <Grid hubs={hubs} cols="grid-cols-2 xl:grid-cols-3" />
+      <Grid hubs={hubs} cols="grid-cols-2 @xl:grid-cols-3" />
       <div className="flex justify-center"><Button variant="secondary" size="sm">Load more</Button></div>
     </div>
   );

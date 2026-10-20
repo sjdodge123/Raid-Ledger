@@ -16,13 +16,18 @@ export function Frame({ title, note, children }: { title: string; note: string; 
   );
 }
 
-/** A labelled viewport outline — phone is 390px wide, desktop fills the row. */
+/**
+ * A labelled viewport outline — phone is 390px wide, desktop fills the row.
+ * The outline is a CSS container (`@container`), so frames use container
+ * variants (`@sm:`, `@lg:`, `@xl:`) instead of viewport breakpoints: a phone
+ * frame on a desktop browser then really renders its phone layout.
+ */
 export function Device({ kind, children }: { kind: 'desktop' | 'phone'; children: ReactNode }): JSX.Element {
   const width = kind === 'phone' ? 'w-[390px] max-w-full' : 'min-w-0 flex-1 basis-[640px]';
   return (
     <div className={width}>
       <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">{kind === 'phone' ? 'Phone (390px)' : 'Desktop (≥1024px)'}</p>
-      <div className="relative overflow-hidden rounded-xl border border-edge bg-backdrop p-3">{children}</div>
+      <div className="@container relative overflow-hidden rounded-xl border border-edge bg-backdrop p-3">{children}</div>
     </div>
   );
 }

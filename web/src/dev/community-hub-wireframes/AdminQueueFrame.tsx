@@ -33,7 +33,7 @@ function Tabs({ active, onPick }: { active: TabId; onPick: (id: TabId) => void }
 
 function PendingRow({ p }: { p: MockProposal }): JSX.Element {
   return (
-    <li className="flex flex-col gap-2 py-3 lg:flex-row lg:items-center lg:gap-4">
+    <li className="flex flex-col gap-2 py-3 @lg:flex-row @lg:items-center @lg:gap-4">
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted">{p.game}</p>
         <p className="text-sm font-medium text-foreground">{p.name}</p>
@@ -52,7 +52,7 @@ function ActiveRows(): JSX.Element {
   return (
     <ul className="divide-y divide-edge-subtle">
       {HUBS.slice(0, 3).map((h, i) => (
-        <li key={h.id} className="flex flex-col gap-2 py-3 lg:flex-row lg:items-center lg:gap-4">
+        <li key={h.id} className="flex flex-col gap-2 py-3 @lg:flex-row @lg:items-center @lg:gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted">{h.game}</p>
             <p className="text-sm font-medium text-foreground">{h.name}</p>

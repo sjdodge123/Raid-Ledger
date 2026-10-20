@@ -53,8 +53,8 @@ function TabStrip({ active, onPick }: { active: Tab; onPick: (t: Tab) => void })
 
 function Overview(): JSX.Element {
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      <Card className="lg:col-span-2">
+    <div className="grid gap-3 @lg:grid-cols-2">
+      <Card className="@lg:col-span-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">Latest post</p>
         <p className="mt-2 whitespace-pre-line text-sm text-secondary">{LEADER_POST.body}</p>
         <p className="mt-2 text-xs text-muted">{LEADER_POST.author} · {LEADER_POST.when}</p>
@@ -88,7 +88,7 @@ function Members({ viewer }: { viewer: Viewer }): JSX.Element {
             <div className="h-8 w-8 shrink-0 rounded-full bg-panel" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate text-sm text-foreground">{m.name}</span>
             <StatusChip tone={m.role === 'Member' ? 'neutral' : 'success'} title={`Hub role: ${m.role}`}>{m.role}</StatusChip>
-            <span className="hidden text-xs text-muted sm:inline">Joined {m.joined}</span>
+            <span className="hidden text-xs text-muted @lg:inline">Joined {m.joined}</span>
             {memberActions(viewer, m)}
           </li>
         ))}
