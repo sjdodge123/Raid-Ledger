@@ -165,7 +165,9 @@ export function fetchWindow(
       calendars,
       readExclusions(conn, calendars),
     );
-    if (ids.length === 0) return { blocks: [] };
+    // Codex r5: the empty replacement also empties the cursor, so a calendar
+    // that reappears with its old ctag is read in full, not `unchanged`.
+    if (ids.length === 0) return { blocks: [], cursor: {} };
     // ROK-1598 D7: the stored cursor in, so Apple can answer `unchanged`.
     const cursor = storedCursor(conn.syncCursor);
     return deps.provider.fetchBusy(creds, range, ids, cursor);

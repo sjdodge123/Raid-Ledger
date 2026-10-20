@@ -210,6 +210,18 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
     expect(fetchBusy.mock.calls[0]?.slice(2)).toEqual([['home'], undefined]);
   });
 
+  it('Codex r5: no resolvable calendar → empty blocks AND an emptied cursor', async () => {
+    const { provider, fetchBusy } = stub();
+    provider.listCalendars = () => Promise.resolve([]);
+    const result = await fetchWindow({ db, provider }, conn(CURSOR), window);
+    expect(fetchBusy).not.toHaveBeenCalled();
+    expect(result).toEqual({ blocks: [], cursor: {} });
+    const stamp = { now: NOW, random: () => 0 };
+    expect(buildSyncedFields({ readCalendarIds: [] }, result, stamp)).toEqual(
+      expect.objectContaining({ syncCursor: {} }),
+    );
+  });
+
   it('collections raid-ledger-x + work, no home → the default read fetches work', async () => {
     const { provider, fetchBusy } = stub();
     provider.listCalendars = () =>
