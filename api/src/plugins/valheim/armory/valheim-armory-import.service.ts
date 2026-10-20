@@ -111,7 +111,17 @@ export class ValheimArmoryImportService {
   ): Promise<Applied> {
     if (msg.kind === 'character') return this.applyCharacter(tx, snap, msg);
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
-    return this.applyItems(tx, snap, msg);
+    if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
+    if (msg.kind === 'containers') return this.applyContainers();
+    return unsupportedKind(msg);
+  }
+
+  /** ROK-1853 L1: the kind is accepted and stored; L2 replaces this with the importer. */
+  private applyContainers(): Promise<Applied> {
+    return Promise.resolve({
+      status: 'failed',
+      detail: 'unsupported:containers',
+    });
   }
 
   private async applyCharacter(
@@ -161,3 +171,8 @@ export class ValheimArmoryImportService {
 
 const IMPORTED: Applied = { status: 'imported', detail: null };
 const STALE: Applied = { status: 'skipped_stale', detail: null };
+
+/** Exhaustiveness guard: a new `kind` in the contract is a compile error here. */
+function unsupportedKind(msg: never): never {
+  throw new Error(`unsupported Valheim Link kind: ${String(msg)}`);
+}
