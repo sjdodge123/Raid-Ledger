@@ -20,6 +20,8 @@ export interface WriteConformanceHarness {
   removeCalendarRemotely(calendarId: string): void | Promise<void>;
   /** The copy as the provider holds it now; null = it does not exist. */
   readCopy(ref: CopyRef): Promise<{ title: string; busy: boolean } | null>;
+  /** The user's main calendar id; `primary` when absent (ROK-1598 A5). */
+  primaryCalendarId?: string;
 }
 
 export type WriteConformanceFactory = () =>
@@ -141,13 +143,14 @@ function describeAdoption(get: WriteHarness): void {
   it('a copy with the same rlCopyId in ANOTHER calendar is not adopted', async () => {
     const h = get();
     const { ref } = await seedCopy(h);
+    const primary = h.primaryCalendarId ?? 'primary';
     const other = await h.provider.upsertEvent(
       h.credentials,
-      'primary',
+      primary,
       COPY,
       null,
     );
-    expect(other.calendarId).toBe('primary');
+    expect(other.calendarId).toBe(primary);
     expect(other.providerEventId).not.toBe(ref.providerEventId);
   });
 }
