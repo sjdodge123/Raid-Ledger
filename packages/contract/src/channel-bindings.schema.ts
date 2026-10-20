@@ -20,6 +20,10 @@ export const ChannelBindingConfigSchema = z.object({
   allowJustChatting: z.boolean().optional(),
 });
 
+/** ROK-1428: lifecycle state of an auto-managed game channel (absent ⇒ `active`). */
+export const BindingLifecycleStateEnum = z.enum(['active', 'archived']);
+export type BindingLifecycleState = z.infer<typeof BindingLifecycleStateEnum>;
+
 export const ChannelBindingSchema = z.object({
   id: z.string().uuid(),
   guildId: z.string(),
@@ -32,6 +36,17 @@ export const ChannelBindingSchema = z.object({
   /** Series (recurrence group) this binding scopes to; null for game/global bindings (ROK-1351). */
   recurrenceGroupId: z.string().uuid().nullable().optional(),
   config: ChannelBindingConfigSchema.nullable(),
+  /**
+   * ROK-1428 channel lifecycle. All optional so older fixtures and clients
+   * parse: absent ⇒ `active`, manual (`autoManaged: false`), unpinned.
+   */
+  lifecycleState: BindingLifecycleStateEnum.optional(),
+  /** True when Raid Ledger created this channel and may archive/unarchive it. */
+  autoManaged: z.boolean().optional(),
+  /** An admin pin: the reconciler never archives or unarchives a pinned binding. */
+  pinned: z.boolean().optional(),
+  /** When the lifecycle last archived the channel; null/absent while active. */
+  archivedAt: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -57,6 +72,8 @@ export const UpdateChannelBindingSchema = z.object({
    * 400s a monitor cleared to null); a number = reassign to that game.
    */
   gameId: z.number().int().nullable().optional(),
+  /** ROK-1428: pin/unpin an auto-managed binding (400 on a manual one). */
+  pinned: z.boolean().optional(),
 });
 
 export type BindingPurpose = z.infer<typeof BindingPurposeEnum>;
