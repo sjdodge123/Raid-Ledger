@@ -10,6 +10,8 @@ import {
   ValheimContainerDetailSchema,
   ValheimContainerListResponseSchema,
   ValheimMaterialsResponseSchema,
+  type ValheimCharacterMessage,
+  type ValheimMaterialStack,
   type ValheimMaterialsResponse,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
@@ -159,10 +161,9 @@ async function profile(
   steamId: string,
   claim: { by: number; source: 'auto' | 'manual' | 'admin' } | null,
 ): Promise<number> {
-  const ch = loadValheimFixture('character-vanilla') as never as Record<
-    string,
-    never
-  >;
+  const ch = loadValheimFixture(
+    'character-vanilla',
+  ) as unknown as ValheimCharacterMessage;
   const [row] = nonEmpty(
     await testApp.db
       .insert(P)
@@ -209,7 +210,7 @@ async function materials(t: string, q = ''): Promise<ValheimMaterialsResponse> {
   expect(res.status).toBe(200);
   return ValheimMaterialsResponseSchema.parse(res.body);
 }
-const totalsOf = (r: ValheimMaterialsResponse['shared'] | null | undefined) =>
+const totalsOf = (r: { totals: ValheimMaterialStack[] } | null | undefined) =>
   (r?.totals ?? []).map(
     (s) => `${s.prefab}:${s.quality}=${s.total}/${s.chests}`,
   );
@@ -296,7 +297,7 @@ describe('materials visibility (R1/R2/R4/R5/R6/R12)', () => {
     const asMember = await get(`${base(server)}/materials`, tokens.member);
     const r = await materials(admin);
     expect(JSON.stringify(r.shared)).toBe(JSON.stringify(asMember.body.shared));
-    expect(totalsOf(r.personal as never)).toEqual([
+    expect(totalsOf(r.personal)).toEqual([
       'Gold:1=3/1',
       'Silver:1=9/1',
       'Wood:1=100/1',
@@ -402,5 +403,181 @@ describe('containers list + detail (R2/R3/R11/R17)', () => {
       (await get(`${base(server)}/materials?includeVehicles=0`, tokens.member))
         .status,
     ).toBe(400);
+  });
+});
+
+describe('claim rules (R7/R8/R9/R10)', () => {
+  beforeEach(() => importMsg(server, world()));
+  const silver = async (t: string) =>
+    totalsOf((await materials(t)).personal).some((x) => x.startsWith('Silver'));
+
+  it("R7 manual claim: only with the viewer's own verified Steam id", async () => {
+    const otherUser = await makeUser('manualOther', 'member', 'S_ELSE');
+    await profile(server, OTHER_PID, 'S_OTHER', {
+      by: otherUser,
+      source: 'manual',
+    });
+    expect(await silver(sign(otherUser))).toBe(false);
+    await testApp.db.delete(P).where(eq(P.playerId, OTHER_PID));
+    const self = await makeUser('manualSelf', 'member', 'S_OTHER');
+    await profile(server, OTHER_PID, 'S_OTHER', { by: self, source: 'manual' });
+    expect(await silver(sign(self))).toBe(true);
+  });
+
+  it('R8 a playerId under two Steam ids: owner sees nothing, admin still does', async () => {
+    await profile(server, OWNER_PID, 'S_ALT', null);
+    expect((await materials(tokens.owner)).personal).toBeNull();
+    expect((await materials(admin)).personal?.chestCount).toBe(3);
+  });
+
+  it('R9 the same playerId claimed on ANOTHER server grants nothing', async () => {
+    const elsewhere = await makeServer(2);
+    await profile(elsewhere, OTHER_PID, 'S_OTHER', {
+      by: ownerId,
+      source: 'auto',
+    });
+    expect(await silver(tokens.owner)).toBe(false);
+  });
+
+  it('R10 an admin assignment after import flips visibility, no re-import', async () => {
+    const id = await profile(server, OTHER_PID, 'S_OTHER', null);
+    const late = await makeUser('late');
+    expect(await silver(sign(late))).toBe(false);
+    await testApp.db
+      .update(P)
+      .set({ claimedBy: late, claimSource: 'admin', claimedAt: new Date() })
+      .where(eq(P.id, id));
+    expect(await silver(sign(late))).toBe(true);
+  });
+});
+
+const FORBIDDEN = new Set([
+  'id',
+  'creatorPlayerId',
+  'steamId',
+  'steamId64',
+  'scanId',
+  'scan_id',
+  'containerId',
+  'playerId',
+]);
+function forbiddenKeys(v: unknown, out: string[] = []): string[] {
+  if (Array.isArray(v)) v.forEach((x) => forbiddenKeys(x, out));
+  else if (v !== null && typeof v === 'object') {
+    for (const [k, x] of Object.entries(v)) {
+      if (FORBIDDEN.has(k)) out.push(k);
+      forbiddenKeys(x, out);
+    }
+  }
+  return out;
+}
+
+describe('response shape (R13/R20) + fixtures', () => {
+  beforeEach(() => importMsg(server, world()));
+
+  it('R13 no row id, creatorPlayerId or SteamID anywhere; R20 no-store', async () => {
+    const key = await keyOf(OWNER_PID, 'piece_chest_private');
+    for (const path of ['/materials', '/containers', `/containers/${key}`]) {
+      const res = await get(`${base(server)}${path}`, admin);
+      expect(res.status).toBe(200);
+      expect({ path, keys: forbiddenKeys(res.body) }).toEqual({
+        path,
+        keys: [],
+      });
+      expect(JSON.stringify(res.body)).not.toContain(OWNER_PID);
+      expect(res.headers['cache-control']).toBe('private, no-store');
+    }
+  });
+});
+
+describe('golden fixtures', () => {
+  it('containers-private: member vs owner, warnings from shared chests', async () => {
+    await importMsg(server, loadValheimFixture('containers-private'));
+    const m = await materials(tokens.member);
+    expect(m.shared.warnings).toEqual({
+      unreadable: 1,
+      omittedEntries: 3,
+      omittedShared: 1,
+    });
+    expect(m.shared.chestCount).toBe(2);
+    expect(m.personal).toBeNull();
+    expect((await materials(tokens.owner)).personal?.chestCount).toBe(1);
+  });
+
+  it('containers-basic: every chest shared, totals present', async () => {
+    await importMsg(server, loadValheimFixture('containers-basic'));
+    const r = await materials(tokens.member);
+    expect(totalsOf(r.shared)).toContain('Wood:1=57/2');
+  });
+});
+
+describe('hub + scan states (R14/R15/R16/R18/R19)', () => {
+  const PATHS = ['/materials', '/containers', `/containers/${'A'.repeat(22)}`];
+
+  it('R14 hidden hub: member 404 HUB_NOT_FOUND; admin + operator 200', async () => {
+    await importMsg(server, world());
+    const hide = await testApp.request
+      .patch(`/guilds/${hubId}/hidden`)
+      .set(auth(admin))
+      .send({ hidden: true });
+    expect(hide.status).toBe(200);
+    for (const path of PATHS.slice(0, 2)) {
+      const res = await get(`${base(server)}${path}`, tokens.member);
+      expect({
+        path,
+        status: res.status,
+        body: res.body as unknown,
+      }).toMatchObject({ path, status: 404, body: { message: HUB_NOT_FOUND } });
+      expect((await get(`${base(server)}${path}`, admin)).status).toBe(200);
+      expect(
+        (await get(`${base(server)}${path}`, tokens.operator)).status,
+      ).toBe(200);
+    }
+  });
+
+  it('R15 a server with no hub: 404 on all three', async () => {
+    const bare = await makeServer(3);
+    await importMsg(bare, world());
+    for (const path of PATHS) {
+      const res = await get(`${base(bare)}${path}`, admin);
+      expect({ path, status: res.status }).toEqual({ path, status: 404 });
+    }
+  });
+
+  it('R16 no scan yet: empty 200s, detail 404', async () => {
+    const r = await materials(tokens.member);
+    expect(r.worldUid).toBeNull();
+    expect(r.shared.totals).toEqual([]);
+    expect(await listKeys(tokens.member)).toEqual([]);
+    expect(
+      (await get(`${base(server)}${PATHS[2] ?? ''}`, tokens.member)).status,
+    ).toBe(404);
+  });
+
+  it('R18 two worlds: the newest scan is served', async () => {
+    await importMsg(server, world());
+    await importMsg(
+      server,
+      world({
+        worldUid: '999',
+        capturedAt: '2026-10-18T09:00:00Z',
+        containers: [box({ items: [item('Flint', 2)] })],
+      }),
+    );
+    const r = await materials(tokens.member);
+    expect(r.worldUid).toBe('999');
+    expect(totalsOf(r.shared)).toEqual(['Flint:1=2/1']);
+  });
+
+  it('R19 no catalogue for the scan version: newest one + catalogFallback', async () => {
+    await importMsg(server, {
+      ...loadValheimFixture('items-atlas'),
+      gameVersion: '0.219.0',
+    });
+    await importMsg(server, world());
+    const r = await materials(tokens.member);
+    expect(r.catalogFallback).toBe(true);
+    expect(Object.keys(r.items)).toEqual(['Wood']);
+    expect(totalsOf(r.shared)).toContain('Stone:1=20/1');
   });
 });
