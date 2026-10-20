@@ -17,6 +17,7 @@ import {
   RescheduleEventDto,
   UserEventSignupsResponseDto,
   CancelEventDto,
+  UpdateEventReportLinkDto,
 } from '@raid-ledger/contract';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AvailabilityService } from '../availability/availability.service';
@@ -50,6 +51,7 @@ import {
   buildUpdateData,
 } from './event-update.helpers';
 import { inviteMemberToEvent } from './event-invite.helpers';
+import { setEventReportLink } from './event-report-link.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
@@ -158,6 +160,21 @@ export class EventsService {
       });
     }
     return res;
+  }
+
+  /**
+   * ROK-1725: sets or clears the report link. Deliberately skips postMutate —
+   * no UPDATED emit, so no embed redraw / Scheduled Event / calendar sync.
+   */
+  async updateReportLink(
+    id: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateEventReportLinkDto,
+  ): Promise<EventResponseDto> {
+    await setEventReportLink(this.db, id, userId, isAdmin, dto);
+    this.logger.log(`Event report link set: ${id} by user ${userId}`);
+    return this.findOne(id);
   }
 
   /** Deletes an event after ownership verification. */

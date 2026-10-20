@@ -118,6 +118,18 @@ export async function updateEvent(
     );
 }
 
+/** Set (string) or clear (null) an event's report link (ROK-1725); returns the updated event. */
+export async function updateEventReportLink(
+    eventId: number,
+    reportUrl: string | null,
+): Promise<EventResponseDto> {
+    return fetchApi(
+        `/events/${eventId}/report-link`,
+        { method: 'PATCH', body: JSON.stringify({ reportUrl }) },
+        EventResponseSchema,
+    );
+}
+
 /** Cancel an event (soft-cancel, ROK-374) */
 export async function cancelEvent(
     eventId: number,

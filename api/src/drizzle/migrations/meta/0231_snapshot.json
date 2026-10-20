@@ -1,5 +1,5 @@
 {
-  "id": "fb076e25-ab42-4594-aa6e-e4efa0c9edfa",
+  "id": "5209f1e5-d272-4286-a4d3-79f24965c0c4",
   "prevId": "e4d68d84-1be4-4437-9284-bbd0ee186f13",
   "version": "7",
   "dialect": "postgresql",
@@ -431,6 +431,12 @@
         "guild_id": {
           "name": "guild_id",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "report_url": {
+          "name": "report_url",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -5787,89 +5793,6 @@
           "columns": [
             "user_id",
             "game_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.hub_notification_mutes": {
-      "name": "hub_notification_mutes",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_hub_notification_mutes_guild_id": {
-          "name": "idx_hub_notification_mutes_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_notification_mutes_user_id_users_id_fk": {
-          "name": "hub_notification_mutes_user_id_users_id_fk",
-          "tableFrom": "hub_notification_mutes",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_notification_mutes_guild_id_guilds_id_fk": {
-          "name": "hub_notification_mutes_guild_id_guilds_id_fk",
-          "tableFrom": "hub_notification_mutes",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "hub_notification_mutes_user_id_guild_id_pk": {
-          "name": "hub_notification_mutes_user_id_guild_id_pk",
-          "columns": [
-            "user_id",
-            "guild_id"
           ]
         }
       },

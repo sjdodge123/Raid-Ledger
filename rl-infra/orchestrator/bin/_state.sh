@@ -218,19 +218,31 @@ env_registry::set_pinned() {
         'map(if .slug == $slug then .pinned = ($p == true) else . end)'
 }
 
+# An env's provenance is its created_for_branch, never the pin flag. An env
+# stamped with ANOTHER branch (non-empty, != the releasing claim's) is one a
+# branch-mismatch claim preserved; the releasing claim never owned it, so it is
+# never re-stamped — pinned or not (an operator may unpin it mid-claim). Else
+# the next claimant of the releasing branch inherits the other branch's
+# deployment (Codex fleet-claim r1 + r2). gc-sweeper/sweep.sh's expiry reaper
+# mirrors this predicate.
+ENV_REGISTRY_FOREIGN_JQ='((.created_for_branch // "") != "" and .created_for_branch != $b)'
+
 env_registry::mark_claimable_by_next() {
     local slot="$1" branch="$2"
     state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
-        'map(if .slot == $s
+        "map(if .slot == \$s and ($ENV_REGISTRY_FOREIGN_JQ | not)
              then .claimable_by_next = true
-                | .created_for_branch = $b
-             else . end)'
+                | .created_for_branch = \$b
+             else . end)"
 }
 
+# Optional 2nd arg: JSON array of slugs that KEEP claimable_by_next (the
+# pinned envs a branch-mismatch claim preserved — 2026-10-19 incident).
 env_registry::clear_claimable_for_slot() {
-    local slot="$1"
-    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" \
-        'map(if .slot == $s then .claimable_by_next = false else . end)'
+    local slot="$1" keep="${2:-[]}"
+    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --argjson keep "$keep" \
+        'map(if .slot == $s and ((.slug as $g | $keep | index($g)) == null)
+             then .claimable_by_next = false else . end)'
 }
 
 # ROK-1331 M1: thin audit wrapper for task-* commands. Folds the task_id into
@@ -342,6 +354,39 @@ state::mutate_with_precondition() {
         fi
         mv "$tmp" "$file"
         chmod 664 "$file" 2>/dev/null || true
+    ) 200>"$RL_LOCK_DIR/$lockname"
+}
+
+# Compare-and-swap plus read-back, all inside ONE flock window:
+#   state::cas_then_read <file> <guard> <filter> <read> [jq-args...]
+# <filter> is written only when <guard> is truthy (`jq -e`) against the file
+# as it stands under the lock; a false guard writes nothing. <read> then runs
+# under the same lock — against the swapped file, or the untouched one — and
+# its raw output is printed, so the caller checks the outcome with no window
+# for another writer between the swap and the read. The jq args are shared by
+# all three filters. Returns 1 only on an invalid file or a failed write.
+state::cas_then_read() {
+    local file="$1" guard="$2" filter="$3" read="$4"
+    shift 4
+    local lockname
+    lockname=$(basename "$file").lock
+    (
+        flock -x 200
+        if ! jq empty "$file" 2>/dev/null; then
+            echo "state::cas_then_read: $file is not valid JSON — refusing to mutate" >&2
+            exit 1
+        fi
+        if jq -e "$@" "$guard" "$file" >/dev/null 2>&1; then
+            local tmp
+            tmp=$(mktemp "${file}.XXXXXX") || exit 1
+            if ! jq "$@" "$filter" "$file" > "$tmp"; then
+                rm -f "$tmp"
+                exit 1
+            fi
+            mv "$tmp" "$file" || exit 1
+            chmod 664 "$file" 2>/dev/null || true
+        fi
+        jq -r "$@" "$read" "$file"
     ) 200>"$RL_LOCK_DIR/$lockname"
 }
 

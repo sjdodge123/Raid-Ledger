@@ -230,6 +230,8 @@ export const EventResponseSchema = z.object({
   privateVoice: z.boolean().nullable().optional(),
   /** ROK-1787: guild this event is tagged to (null = untagged). */
   guildId: z.number().int().nullable().optional(),
+  /** ROK-1725: organiser-pasted log report URL (allow-listed on write). */
+  reportUrl: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
