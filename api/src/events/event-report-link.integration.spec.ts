@@ -43,13 +43,19 @@ async function createEvent(creatorId: number, opts: EventOpts = {}) {
   return defined(event, 'event').id;
 }
 
-async function createMember(username: string) {
+interface MemberOpts {
+  role?: 'member' | 'operator';
+  deactivatedAt?: Date;
+}
+
+async function createMember(username: string, opts: MemberOpts = {}) {
   const [user] = await testApp.db
     .insert(schema.users)
     .values({
       discordId: `local:${username}@test.local`,
       username,
-      role: 'member',
+      role: opts.role ?? 'member',
+      deactivatedAt: opts.deactivatedAt ?? null,
     })
     .returning();
   const member = defined(user, username);
@@ -108,6 +114,30 @@ describe('PATCH /events/:id/report-link (ROK-1725)', () => {
     const res = await patchLink(eventId, adminToken, { reportUrl: WCL });
     expect(res.status).toBe(200);
     expect(await storedUrl(eventId)).toBe(WCL);
+  });
+
+  it('an operator may set the link on someone else’s event', async () => {
+    const owner = await createMember('rl-owner-op');
+    const operator = await createMember('rl-operator', { role: 'operator' });
+    const eventId = await createEvent(owner.id);
+    const res = await patchLink(eventId, operator.token, { reportUrl: WCL });
+    expect(res.status).toBe(200);
+    expect(await storedUrl(eventId)).toBe(WCL);
+  });
+
+  // The JWT strategy's lockout (ROK-1753) answers 401 before the route's
+  // NotDeactivatedGuard (403) is reached; the guard stays as defence in depth.
+  it('a deactivated organiser is refused (401 USER_DEACTIVATED) and nothing is written', async () => {
+    const m = await createMember('rl-deactivated', {
+      deactivatedAt: new Date(),
+    });
+    const eventId = await createEvent(m.id);
+    const res = await patchLink(eventId, m.token, { reportUrl: WCL });
+    expect({ status: res.status, code: res.body.code }).toEqual({
+      status: 401,
+      code: 'USER_DEACTIVATED',
+    });
+    expect(await storedUrl(eventId)).toBeNull();
   });
 
   it('another member is refused with 403 and nothing is written', async () => {
