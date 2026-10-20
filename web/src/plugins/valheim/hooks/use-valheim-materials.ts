@@ -24,13 +24,19 @@ export const valheimMaterialsKeys = {
     all: ['valheim', 'materials'] as const,
     totals: (scope: Scope, serverId: number, vehicles: boolean) =>
         [...valheimMaterialsKeys.all, scope, serverId, vehicles] as const,
-    containers: (scope: Scope, serverId: number, vehicles: boolean) =>
+    containers: (
+        scope: Scope,
+        serverId: number,
+        vehicles: boolean,
+        prefab: string | null,
+    ) =>
         [
             ...valheimMaterialsKeys.all,
             scope,
             serverId,
             vehicles,
             'containers',
+            prefab,
         ] as const,
     container: (
         scope: Scope,
@@ -63,8 +69,14 @@ export function sameViewerPlaceholder<T>(
     return previousKey?.[2] === scope ? previous : undefined;
 }
 
-function serverPath(serverId: number, rest: string, vehicles: boolean): string {
+function serverPath(
+    serverId: number,
+    rest: string,
+    vehicles: boolean,
+    prefab: string | null = null,
+): string {
     const q = new URLSearchParams({ includeVehicles: String(vehicles) });
+    if (prefab !== null) q.set('prefab', prefab);
     return `${VALHEIM_ARMORY_PATH}/servers/${encodePathSegment(String(serverId))}/${rest}?${q.toString()}`;
 }
 
@@ -88,10 +100,14 @@ export function useValheimMaterials(
     });
 }
 
-/** `GET …/servers/:id/containers?includeVehicles` — the visible chests. */
+/**
+ * `GET …/servers/:id/containers?includeVehicles[&prefab]` — the visible
+ * chests; with `prefab`, only those holding that item (the drill-down).
+ */
 export function useValheimContainers(
     serverId: number,
     includeVehicles: boolean,
+    prefab: string | null,
 ): UseQueryResult<ValheimContainerListResponse> {
     const scope = useViewerCacheScope();
     return useQuery({
@@ -99,10 +115,11 @@ export function useValheimContainers(
             scope,
             serverId,
             includeVehicles,
+            prefab,
         ),
         queryFn: () =>
             fetchApi(
-                serverPath(serverId, 'containers', includeVehicles),
+                serverPath(serverId, 'containers', includeVehicles, prefab),
                 {},
                 ValheimContainerListResponseSchema,
             ),

@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { delay, http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse, type JsonBodyType } from 'msw';
 import type { ReactNode } from 'react';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient } from '../../../test/render-helpers';
@@ -33,7 +33,7 @@ const personal = {
 const privateChest = { ...chestShared, privacy: 'personal' as const };
 
 /** First request answers; every later one hangs (the "pending" window). */
-function answerOnce(url: string, body: unknown) {
+function answerOnce(url: string, body: JsonBodyType) {
     let served = false;
     return http.get(url, async () => {
         if (served) await delay('infinite');
@@ -82,7 +82,7 @@ describe('materials hooks — placeholder data never crosses viewers', () => {
             ),
         );
         const { result, rerender } = renderHook(
-            ({ vehicles }) => useValheimContainers(7, vehicles),
+            ({ vehicles }) => useValheimContainers(7, vehicles, null),
             { wrapper, initialProps: { vehicles: true } },
         );
         await waitFor(() =>

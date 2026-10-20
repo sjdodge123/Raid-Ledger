@@ -1,23 +1,17 @@
 /**
  * ROK-1853 — the hub Materials tab: scan age, toolbar, shared totals, the
  * viewer's personal chests, the warning banner, and the chest list with a
- * drill-down. Empty state while the server has sent no scan (`worldUid` null).
+ * drill-down. Selecting a totals row narrows the chest list to the chests
+ * holding that item; a new search clears the selection. Empty state while the server has sent no scan (`worldUid` null).
  */
 import { useMemo, useState, type JSX } from 'react';
-import type {
-    ValheimContainerSummary,
-    ValheimMaterialsResponse,
-} from '@raid-ledger/contract';
-import {
-    useItemIconsFor,
-    type ItemIconContext,
-} from '../character/use-item-icons';
+import type { ValheimMaterialsResponse } from '@raid-ledger/contract';
+import { useItemIconsFor } from '../character/use-item-icons';
 import {
     useValheimContainers,
     useValheimMaterials,
 } from '../hooks/use-valheim-materials';
-import { ChestDetail } from './chest-detail';
-import { ChestList } from './chest-list';
+import { ChestsSection } from './chests-section';
 import {
     categoriesOf,
     DEFAULT_MATERIALS_FILTERS,
@@ -76,38 +70,6 @@ function WarningBanner({
     );
 }
 
-function ChestsSection({
-    serverId,
-    filters,
-    containers,
-    ctx,
-}: {
-    serverId: number;
-    filters: MaterialsFilters;
-    containers: readonly ValheimContainerSummary[];
-    ctx: ItemIconContext;
-}): JSX.Element {
-    const [open, setOpen] = useState<ValheimContainerSummary | null>(null);
-    return (
-        <section aria-labelledby="valheim-chests" className="space-y-2">
-            <h2
-                id="valheim-chests"
-                className="text-base font-semibold text-foreground"
-            >
-                Chests
-            </h2>
-            <ChestList containers={containers} ctx={ctx} onOpen={setOpen} />
-            <ChestDetail
-                serverId={serverId}
-                includeVehicles={filters.includeVehicles}
-                chest={open}
-                ctx={ctx}
-                onClose={() => setOpen(null)}
-            />
-        </section>
-    );
-}
-
 interface BodyProps {
     serverId: number;
     data: ValheimMaterialsResponse;
@@ -122,7 +84,18 @@ function MaterialsBody({
     setFilters,
 }: BodyProps): JSX.Element {
     const [sort, setSort] = useState<MaterialSort>(DEFAULT_SORT);
-    const chests = useValheimContainers(serverId, filters.includeVehicles);
+    const [selected, setSelected] = useState<string | null>(null);
+    const chests = useValheimContainers(
+        serverId,
+        filters.includeVehicles,
+        selected,
+    );
+    const onFilters = (next: MaterialsFilters): void => {
+        if (next.search !== filters.search) setSelected(null);
+        setFilters(next);
+    };
+    const onSelect = (prefab: string): void =>
+        setSelected((cur) => (cur === prefab ? null : prefab));
     const items = useMemo(
         () => ({ ...chests.data?.items, ...data.items }),
         [chests.data?.items, data.items],
@@ -135,13 +108,18 @@ function MaterialsBody({
         filterRows(all, filters.search, filters.category),
         sort,
     );
+    const holdingLabel =
+        selected === null
+            ? null
+            : ([...all, ...mine].find((r) => r.prefab === selected)?.label ??
+              selected);
     return (
         <div className="space-y-4">
             <ScanLine data={data} />
             <MaterialsToolbar
                 filters={filters}
                 categories={categoriesOf([...all, ...mine])}
-                onChange={setFilters}
+                onChange={onFilters}
             />
             <WarningBanner data={data} />
             <MaterialsTotalsTable
@@ -150,6 +128,8 @@ function MaterialsBody({
                 onSort={setSort}
                 ctx={ctx}
                 caption="Shared chest totals"
+                selected={selected}
+                onSelect={onSelect}
             />
             {data.personal !== null && (
                 <PersonalChestsSection
@@ -158,12 +138,16 @@ function MaterialsBody({
                     sort={sort}
                     onSort={setSort}
                     ctx={ctx}
+                    selected={selected}
+                    onSelect={onSelect}
                 />
             )}
             <ChestsSection
                 serverId={serverId}
-                filters={filters}
-                containers={chests.data?.containers ?? []}
+                includeVehicles={filters.includeVehicles}
+                chests={chests}
+                holdingLabel={holdingLabel}
+                onClear={() => setSelected(null)}
                 ctx={ctx}
             />
         </div>

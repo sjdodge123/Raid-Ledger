@@ -6,7 +6,11 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
+    VALHEIM_CONTAINERS_URL,
     VALHEIM_MATERIALS_URL,
+    chestShared,
+    chestSharedDetail,
+    containersFixture,
     materialsEmpty,
     materialsFixture,
     valheimContainerHandler,
@@ -260,6 +264,137 @@ describe('ValheimMaterialsTab', () => {
                     .getAllByRole('listitem')
                     .map((li) => li.textContent),
             ).toEqual([expect.stringContaining('Coins')]),
+        );
+    });
+
+    describe('item → chests drill-down (Codex r2)', () => {
+        /** `?prefab=Wood` answers the one chest holding it; records each query. */
+        function drillHandler(hits: string[]) {
+            return http.get(VALHEIM_CONTAINERS_URL, ({ request }) => {
+                const url = new URL(request.url);
+                hits.push(url.search);
+                const prefab = url.searchParams.get('prefab');
+                return HttpResponse.json(
+                    containersFixture(
+                        prefab === null ? undefined : [chestShared],
+                    ),
+                );
+            });
+        }
+        const woodToggle = async () =>
+            within(await sharedList()).getByRole('button', { name: /Wood/ });
+
+        it('phone: a row click selects the item, refetches with prefab=, and Clear resets', async () => {
+            const hits: string[] = [];
+            server.use(
+                valheimMaterialsHandler(materialsFixture()),
+                drillHandler(hits),
+            );
+            renderTab();
+            const wood = await woodToggle();
+            expect(wood).toHaveAttribute('aria-pressed', 'false');
+            await userEvent.click(wood);
+            expect(wood).toHaveAttribute('aria-pressed', 'true');
+            await waitFor(() =>
+                expect(hits).toContain('?includeVehicles=true&prefab=Wood'),
+            );
+            expect(
+                screen.getByTestId('valheim-chests-holding'),
+            ).toHaveTextContent('Chests holding Wood');
+            const chests = await screen.findByRole('list', { name: 'Chests' });
+            await waitFor(() =>
+                expect(within(chests).getAllByRole('listitem')).toHaveLength(1),
+            );
+            await userEvent.click(
+                screen.getByRole('button', { name: 'Clear' }),
+            );
+            expect(wood).toHaveAttribute('aria-pressed', 'false');
+            expect(
+                screen.queryByTestId('valheim-chests-holding'),
+            ).not.toBeInTheDocument();
+            await waitFor(() =>
+                expect(
+                    within(
+                        screen.getByRole('list', { name: 'Chests' }),
+                    ).getAllByRole('listitem'),
+                ).toHaveLength(2),
+            );
+        });
+
+        it('desktop: Enter on a row selects it; a new search clears the selection', async () => {
+            media.desktop = true;
+            const hits: string[] = [];
+            server.use(
+                valheimMaterialsHandler(materialsFixture()),
+                drillHandler(hits),
+            );
+            renderTab();
+            const table = await screen.findByRole('table', {
+                name: 'Shared chest totals',
+            });
+            const wood = within(table).getByRole('button', { name: /Wood/ });
+            wood.focus();
+            await userEvent.keyboard('{Enter}');
+            expect(wood).toHaveAttribute('aria-pressed', 'true');
+            await waitFor(() =>
+                expect(hits).toContain('?includeVehicles=true&prefab=Wood'),
+            );
+            await userEvent.type(
+                screen.getByRole('searchbox', { name: 'Search materials' }),
+                'wo',
+            );
+            await waitFor(() =>
+                expect(
+                    screen.queryByTestId('valheim-chests-holding'),
+                ).not.toBeInTheDocument(),
+            );
+            expect(
+                within(table).getByRole('button', { name: /Wood/ }),
+            ).toHaveAttribute('aria-pressed', 'false');
+        });
+    });
+
+    it('a failed chest list shows an error, not the empty copy (Codex r2)', async () => {
+        server.use(
+            valheimMaterialsHandler(materialsFixture()),
+            http.get(VALHEIM_CONTAINERS_URL, () =>
+                HttpResponse.json({ message: 'boom' }, { status: 500 }),
+            ),
+        );
+        renderTab();
+        await sharedList();
+        const section = screen.getByRole('region', { name: 'Chests' });
+        await waitFor(() =>
+            expect(section).not.toHaveTextContent('Loading chests…'),
+        );
+        expect(section).not.toHaveTextContent('No chests to show.');
+        expect(within(section).getByRole('alert')).toHaveTextContent(
+            'Couldn’t load the chests. Try again in a moment.',
+        );
+    });
+
+    it('an unreadable chest says so instead of "empty" (Codex r2)', async () => {
+        server.use(
+            valheimMaterialsHandler(materialsFixture()),
+            valheimContainerHandler({
+                ...chestSharedDetail,
+                unreadable: true,
+                usedSlots: 0,
+                stacks: [],
+            }),
+        );
+        renderTab();
+        const chests = await screen.findByRole('list', { name: 'Chests' });
+        await userEvent.click(
+            within(chests).getByRole('button', { name: /Wood chest/ }),
+        );
+        const detail = await screen.findByTestId('valheim-chest-detail');
+        await waitFor(() =>
+            expect(detail).not.toHaveTextContent('Loading chest…'),
+        );
+        expect(detail).not.toHaveTextContent('This chest is empty.');
+        expect(within(detail).getByRole('status')).toHaveTextContent(
+            'Raid Ledger couldn’t read this chest’s contents',
         );
     });
 });

@@ -17,6 +17,8 @@ interface PersonalProps {
     sort: MaterialSort;
     onSort: (next: MaterialSort) => void;
     ctx: ItemIconContext;
+    selected: string | null;
+    onSelect: (prefab: string) => void;
 }
 
 export function PersonalChestsSection({
@@ -25,6 +27,8 @@ export function PersonalChestsSection({
     sort,
     onSort,
     ctx,
+    selected,
+    onSelect,
 }: PersonalProps): JSX.Element {
     const rows = sortRows(
         filterRows(
@@ -59,6 +63,8 @@ export function PersonalChestsSection({
                 onSort={onSort}
                 ctx={ctx}
                 caption="Personal chest totals"
+                selected={selected}
+                onSelect={onSelect}
             />
         </section>
     );
