@@ -302,6 +302,57 @@ slot_running_task_ids() {
     echo "$found"
 }
 
+# Destroy the envs a dead / hoarded claim on $1 owned ($2=1 also drops the
+# Traefik route). Provenance decides ownership, never the pin flag alone: an
+# env is reaped only when it is NOT pinned and its created_for_branch is empty
+# or the dead claim's branch. Every other env stays on the slot, marked
+# claimable_by_next with its own stamp (Codex fleet-claim r2). Sets REAPED_ANY.
+reap_dead_claim_envs() {
+    local slot="$1" drop_route="$2" branch slug cid kept=" "
+    REAPED_ANY=0
+    branch=$(jq -r --argjson s "$slot" '[.[] | select(.slot == $s) | .branch // ""] | first // ""' "$CLAIMS" 2>/dev/null || echo "")
+    local slot_envs
+    slot_envs=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
+    while read -r slug cid; do
+        if [[ -z "$slug" || "$kept" == *" $slug "* ]]; then continue; fi
+        if keep_preserved_env "$slug" "$slot" "$branch"; then kept+="$slug "; continue; fi
+        log "  destroying env $slug (orphaned by dead claim)"
+        docker rm -f "$cid" >/dev/null 2>&1 || true
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        if [[ "$drop_route" == "1" ]]; then rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true; fi
+        clean_test_plan "$slug"
+        REAPED_ANY=1
+    done <<<"$slot_envs"
+}
+
+# Returns 0 (and re-marks the env claimable_by_next, audited) when env $1 must
+# survive the dead claim of branch $3 on slot $2: it is pinned, or it carries
+# another branch's created_for_branch. Its own stamp is kept; an unstamped
+# pinned env takes the dead branch's stamp so that branch can inherit it.
+keep_preserved_env() {
+    local slug="$1" slot="$2" branch="$3" row pinned owner event
+    row=$(jq -c --arg g "$slug" '[.[] | select(.slug == $g)] | first // {}' "$ENVS" 2>/dev/null || echo '{}')
+    pinned=$(jq -r '.pinned // false' <<<"$row")
+    owner=$(jq -r '.created_for_branch // ""' <<<"$row")
+    if [[ -n "$owner" && "$owner" != "$branch" ]]; then
+        event=reap_skipped_foreign_env
+        if [[ "$pinned" == "true" ]]; then event=reap_skipped_foreign_pinned; fi
+    elif [[ "$pinned" == "true" ]]; then
+        event=reap_skipped_pinned
+    else
+        return 1
+    fi
+    mutate "$ENVS" --arg g "$slug" --arg b "$branch" \
+        'map(if .slug == $g then .claimable_by_next = true
+             | (if (.created_for_branch // "") == "" then .created_for_branch = $b else . end) else . end)'
+    log "  keeping env $slug ($event, owner=${owner:-none})"
+    audit "$event" "$(jq -nc --arg slug "$slug" --argjson slot "$slot" --arg owner "$owner" --arg dead "$branch" \
+        '{slug:$slug, slot:$slot, created_for_branch:$owner, dead_claim_branch:$dead}')" || true
+    return 0
+}
+
 # 1a. ROK-1793 S2 — orphaned borrow rows. A parallel gate (gate-fanout) holds a
 # FREE second slot B through a claims row carrying `borrowed_for: <parent task
 # id>`; its trap releases it on every exit path. If the parent died before the
@@ -471,24 +522,15 @@ for slot in $DEAD_SLOTS; do
     # slot that never spun one". The ⏰ sweep below is GUILD-WIDE, so firing it
     # on an env-less release (the common validate-ci case) would delete a live
     # sibling env's channels.
-    SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
-    while read -r slug cid; do
-        [[ -z "$slug" ]] && continue
-        log "  destroying env $slug (orphaned by dead claim)"
-        docker rm -f "$cid" >/dev/null 2>&1 || true
-        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
-        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
-        clean_test_plan "$slug"
-    done <<<"$SLOT_ENVS"
+    reap_dead_claim_envs "$slot" 0
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
     audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
-    # Only when an env was actually destroyed — see the SLOT_ENVS comment above.
+    # Only when an env was actually destroyed — see the comment above.
     # `if` rather than `[[ … ]] && …`: under `set -e` a false AND-list mid-body
     # would abort the whole sweeper cycle.
-    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
+    if (( REAPED_ANY == 1 )); then sweeper_discord_sweep "$slot"; fi
     # Queued waiters are not promoted here. claim-wait wakes only on a change
     # to the lease-queue dir, and this reaper writes claims.json, not that dir,
     # so a queued waiter picks up the slot this freed on its next queue wake
@@ -514,22 +556,13 @@ HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AG
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 for slot in $HOARDED_SLOTS; do
     log "releasing hoarded slot $slot (claim age > ${MAX_CLAIM_AGE_SECONDS}s, keep_alive=false, expires_at=null)"
-    # ROK-1515 F1 — same capture-then-gate shape as §1 above.
-    SLOT_ENVS=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
-    while read -r slug cid; do
-        [[ -z "$slug" ]] && continue
-        docker rm -f "$cid" >/dev/null 2>&1 || true
-        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
-        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
-        rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
-        clean_test_plan "$slug"
-    done <<<"$SLOT_ENVS"
+    # ROK-1515 F1 — same reap-then-gate shape as §1 above.
+    reap_dead_claim_envs "$slot" 1
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false | .expires_at=null | .extends_count=0)'
     audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
-    if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
+    if (( REAPED_ANY == 1 )); then sweeper_discord_sweep "$slot"; fi
 done
 
 # 1d. ROK-1331 M5a — Claim-expiry reaper. Claims past `expires_at` get
@@ -554,11 +587,16 @@ for slot in $EXPIRED_SLOTS; do
         continue
     fi
     log "releasing expired slot $slot (past expires_at, queue depth=$QLEN)"
-    # Preserve envs so the queue head can inherit them on branch-match.
+    # Preserve envs so the queue head can inherit them on branch-match. An env
+    # stamped with ANOTHER branch keeps its own stamp, pinned or not — provenance
+    # is created_for_branch (mirrors env_registry::mark_claimable_by_next —
+    # Codex fleet-claim r1 + r2).
     SLOT_BRANCH=$(jq -r --argjson s "$slot" '.[] | select(.slot == $s) | .branch // ""' "$CLAIMS" 2>/dev/null || echo "")
     if [[ -n "$SLOT_BRANCH" ]]; then
         mutate "$ENVS" --argjson s "$slot" --arg b "$SLOT_BRANCH" \
-            'map(if .slot == $s then .claimable_by_next = true | .created_for_branch = $b else . end)'
+            'map(if .slot == $s
+                    and (((.created_for_branch // "") != "" and .created_for_branch != $b) | not)
+                 then .claimable_by_next = true | .created_for_branch = $b else . end)'
     fi
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'

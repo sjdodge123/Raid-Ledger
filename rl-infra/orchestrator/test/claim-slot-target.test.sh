@@ -179,6 +179,39 @@ test_claim_wait_bad_slot_bails() {
     assert_eq "$err" "invalid_slot" "claim-wait must surface invalid_slot from the inner claim"
 }
 
+# A hard error on a RE-POLL (not just the first claim) must surface at once,
+# not be swallowed until the timeout. Stubbed inotifywait/timeout make each
+# wake immediate; the stub corrupts queue.json so the re-poll errors.
+test_claim_wait_repoll_error_surfaces() {
+    CURRENT_TEST_NAME="claim-wait surfaces a re-poll error immediately (exit 2, no timeout)"
+    _seed_claims busy busy
+    export RL_AGENT_ID="cw-repoll"
+    local stub="$RL_STATE_DIR/stubbin"
+    mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nprintf garbage > "$RL_STATE_DIR/queue.json"\nexit 0\n' > "$stub/inotifywait"
+    printf '#!/usr/bin/env bash\nshift\nexec "$@"\n' > "$stub/timeout"
+    chmod +x "$stub/inotifywait" "$stub/timeout"
+    local out exit_code=0
+    out=$(PATH="$stub:$PATH" bash "$BIN_DIR/claim-wait" --branch feat-cw --timeout 5 2>/dev/null) || exit_code=$?
+    assert_exit_code "$exit_code" "2" "re-poll error exits 2"
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "queue_corrupt" "re-poll error JSON surfaced"
+    assert_eq "$(jq -r '.wait_timed_out // empty' <<<"$out" 2>/dev/null)" "" "not reported as a timeout"
+}
+
+# Codex r1 P2 — a branch_required refusal carries .slot; claim-wait must not
+# read that as a grant (exit 0 with nothing acquired).
+test_claim_wait_branch_required_not_a_grant() {
+    CURRENT_TEST_NAME="claim-wait without --branch on a slot holding claimable envs → exit 2 branch_required"
+    _seed_claims free free
+    export RL_AGENT_ID="cw-nobranch"
+    echo '[{"slug":"e1","slot":1,"claimable_by_next":true,"created_for_branch":"feat-x"}]' > "$RL_STATE_DIR/env-registry.json"
+    local out exit_code=0
+    out=$(bash "$BIN_DIR/claim-wait" --slot 1 --timeout 5 2>/dev/null) || exit_code=$?
+    assert_exit_code "$exit_code" "2" "refusal is not a grant"
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "branch_required" "refusal surfaced"
+    assert_eq "$(_slot_claimed 1)" "false" "slot not acquired"
+}
+
 # ROK-1793 S2 — a slot borrowed by a parallel gate (claims row agent
 # borrow-<P>, borrowed_for) is busy: `claim --slot N` enqueues instead of
 # granting it, a bare claim never picks it, and `status` shows it BUSY with
@@ -213,6 +246,9 @@ run_test "slot-zero-padded-grants" test_slot_zero_padded_grants
 run_test "slot-zero-padded-enqueues-canonical" test_slot_zero_padded_enqueues_canonical
 run_test "claim-wait-forwards-slot-grant" test_claim_wait_forwards_slot_grant
 run_test "claim-wait-bad-slot-bails" test_claim_wait_bad_slot_bails
+
+run_test "claim-wait-repoll-error-surfaces" test_claim_wait_repoll_error_surfaces
+run_test "claim-wait-branch-required-not-grant" test_claim_wait_branch_required_not_a_grant
 
 test_claim_clears_stale_borrow_fields() {
     CURRENT_TEST_NAME="claim of a free row carrying stale borrowed_for/borrowed_by drops them"

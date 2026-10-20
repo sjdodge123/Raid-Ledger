@@ -63,6 +63,8 @@ The release path matches in this order — (1) `agent_id` (a stable SHA1 of bran
 
 `scripts/validate-ci.sh` self-dispatches to `rl validate-ci` when `RL_TARGET=remote`, so `/push` / `/build` / `/fix-batch` work unchanged. Heartbeats fire every 60s while a claim is held; missed heartbeats > 30min auto-release the slot (gc-sweeper). Call `rl release` at end-of-session anyway so the slot returns immediately.
 
+**Pinned envs and claims (2026-10-19):** a branch-mismatch claim never destroys a pinned env (`env-pin`) — it stays on the slot and is reported in `preserved_pinned`. `rl_claim` derives `branch` from `worktree_path` and refuses a detached HEAD (`claim_branch_unresolved`), so check out a branch (or pass `branch`) before claiming a slot that holds an env you mean to redeploy.
+
 The full legacy→remote mapping table (env lock → `rl claim`/`rl release`, deploy → `rl env spin`, validate-ci, psql, playwright) lives in `.claude/skills/_shared/rl-infra-fleet.md`. Design + runbook: `rl-infra/README.md`.
 
 Chrome MCP, Discord MCP (companion bot + mcp-discord), Sentry, Linear and GitHub stay on the laptop — they're network or display-bound, not compute-heavy.

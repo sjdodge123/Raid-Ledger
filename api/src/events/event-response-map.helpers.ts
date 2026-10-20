@@ -60,6 +60,7 @@ function mapEventFields(
       (event.contentInstances as EventResponseDto['contentInstances']) ?? null,
     recurrenceGroupId: event.recurrenceGroupId ?? null,
     guildId: event.guildId ?? null,
+    reportUrl: event.reportUrl ?? null,
     recurrenceRule:
       (event.recurrenceRule as EventResponseDto['recurrenceRule']) ?? null,
     reminder15min: event.reminder15min,

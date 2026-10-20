@@ -15,6 +15,7 @@ export * from './game-registry.schema.js';
 
 // Events
 export * from './events.schema.js';
+export * from './event-report-link.schema.js';
 
 // Signups
 export * from './signups.schema.js';

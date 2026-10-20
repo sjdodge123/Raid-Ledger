@@ -1611,6 +1611,13 @@
       "when": 1792421891210,
       "tag": "0230_friendly_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 231,
+      "version": "7",
+      "when": 1792448068576,
+      "tag": "0231_gorgeous_kulan_gath",
+      "breakpoints": true
     }
   ]
 }
