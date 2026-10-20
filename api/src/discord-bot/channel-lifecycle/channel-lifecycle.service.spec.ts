@@ -185,6 +185,15 @@ describe('gates', () => {
       ConflictException,
     );
   });
+  it('a failing run record rejects promptly instead of hanging (R13)', async () => {
+    selectRows.mockResolvedValue([]);
+    const boom = new Error('Failed query: insert into "app_settings"');
+    settings.recordChannelLifecycleRun
+      .mockRejectedValueOnce(boom)
+      .mockRejectedValueOnce(boom);
+    await expect(makeService().reconcile(live)).rejects.toBe(boom);
+    expect(store.withReconcileLock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('actions', () => {

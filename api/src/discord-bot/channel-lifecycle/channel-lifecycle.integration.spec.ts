@@ -296,17 +296,30 @@ it('R13: concurrent reconciles → one result, one ConflictException', async () 
   const gate = new Promise<void>((r) => {
     release = r;
   });
+  let entered: () => void = () => undefined;
+  const inside = new Promise<'locked'>((r) => {
+    entered = () => r('locked');
+  });
   jest.mocked(ops.ensureCategory).mockImplementation(async (_g, o) => {
+    entered();
     await gate;
     return { id: `cat-${o.name}`, name: o.name, created: false };
   });
   const first = svc.reconcile(live);
-  await new Promise((r) => setImmediate(r));
-  const second = svc.reconcile(live).catch((e: unknown) => e);
-  const secondResult = await second;
-  release();
+  const firstSettled = first.then(
+    () => 'settled' as const,
+    () => 'settled' as const,
+  );
+  try {
+    // Deterministic: the second call starts only once the first is inside
+    // the lock (ensureCategory runs under it) — never on a setImmediate race.
+    expect(await Promise.race([inside, firstSettled])).toBe('locked');
+    const secondResult = await svc.reconcile(live).catch((e: unknown) => e);
+    expect(secondResult).toBeInstanceOf(ConflictException);
+  } finally {
+    release();
+  }
   await first;
-  expect(secondResult).toBeInstanceOf(ConflictException);
 });
 
 it('R14: disabled → the cron tick runs nothing', async () => {
