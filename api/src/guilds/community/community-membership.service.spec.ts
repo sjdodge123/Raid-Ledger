@@ -1,0 +1,109 @@
+/** ROK-1870 review — Join / leader-leave run under the hub row lock. */
+import { Test } from '@nestjs/testing';
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import type * as schema from '../../drizzle/schema';
+import type { GuildActor } from '../guild-access.service';
+import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
+import * as lookup from './community-hub.lookup';
+import * as mq from './community-membership.queries';
+import { CommunityMembershipService } from './community-membership.service';
+
+jest.mock('./community-hub.lookup', () => ({
+  ...jest.requireActual('./community-hub.lookup'),
+  requireCommunityHub: jest.fn(),
+  countLiveMembers: jest.fn(),
+  archiveHub: jest.fn(),
+  assertInDiscord: jest.fn(),
+}));
+jest.mock('./community-membership.queries');
+
+const AT = new Date('2026-10-01T00:00:00Z');
+const actor: GuildActor = { id: 1, role: 'member' };
+const row = (
+  over: Partial<schema.HubCommunityMemberSelect>,
+): schema.HubCommunityMemberSelect => ({
+  id: 50,
+  guildId: 7,
+  userId: 1,
+  role: 'member',
+  joinedAt: AT,
+  leftAt: null,
+  removedBy: null,
+  bannedAt: null,
+  bannedBy: null,
+  banReason: null,
+  createdAt: AT,
+  updatedAt: AT,
+  ...over,
+});
+const order: string[] = [];
+const db = {
+  transaction: async (fn: (tx: object) => Promise<unknown>) => {
+    order.push('begin');
+    const out = await fn({});
+    order.push('commit');
+    return out;
+  },
+};
+let svc: CommunityMembershipService;
+
+beforeEach(async () => {
+  jest.clearAllMocks();
+  order.length = 0;
+  const mod = await Test.createTestingModule({
+    providers: [
+      CommunityMembershipService,
+      { provide: DrizzleAsyncProvider, useValue: db },
+      { provide: CommunityHubKindAdapter, useValue: {} },
+    ],
+  }).compile();
+  svc = mod.get(CommunityMembershipService);
+  jest.mocked(mq.lockHubRow).mockImplementation(() => {
+    order.push('lock');
+    return Promise.resolve({ status: 'active' });
+  });
+});
+
+describe('leave as leader (D13)', () => {
+  it('counts under the hub lock and refuses with company — nothing written', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({ role: 'leader' }));
+    jest.mocked(lookup.countLiveMembers).mockImplementation(() => {
+      order.push('count');
+      return Promise.resolve(2);
+    });
+    await expect(svc.leave(actor, 7)).rejects.toThrow(ConflictException);
+    expect(order).toEqual(['begin', 'lock', 'count']);
+    expect(mq.markLeft).not.toHaveBeenCalled();
+  });
+
+  it('the last member leaving archives the hub in the same transaction', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({ role: 'leader' }));
+    jest.mocked(lookup.countLiveMembers).mockResolvedValue(1);
+    await svc.leave(actor, 7);
+    expect(lookup.archiveHub).toHaveBeenCalledWith({}, 7, 'empty');
+  });
+});
+
+describe('join', () => {
+  it('re-checks the hub is active under the lock (404 when archived meanwhile)', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'archived' });
+    await expect(svc.join(actor, 7)).rejects.toThrow(NotFoundException);
+    expect(mq.upsertJoin).not.toHaveBeenCalled();
+  });
+
+  it('upserts inside the locked transaction', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockImplementation(() => {
+      order.push('upsert');
+      return Promise.resolve(row({}));
+    });
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(3);
+    await expect(svc.join(actor, 7)).resolves.toEqual({
+      joined: true,
+      memberCount: 3,
+    });
+    expect(order).toEqual(['begin', 'lock', 'upsert', 'commit']);
+  });
+});

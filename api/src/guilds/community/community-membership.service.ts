@@ -14,6 +14,7 @@ import type {
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { isStaff, type GuildActor } from '../guild-access.service';
+import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
 import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
 import {
   archiveHub,
@@ -25,6 +26,7 @@ import {
 import { mayModerate } from './community-ladder.helpers';
 import {
   findMembership,
+  lockHubRow,
   markLeft,
   refreshMemberCount,
   setRole,
@@ -65,7 +67,11 @@ export class CommunityMembershipService {
       throw new ForbiddenException("You can't join this hub");
     if (!isLive(existing))
       await assertInDiscord(this.db, actor.id, isStaff(actor));
-    const row = await upsertJoin(this.db, hubId, actor.id, 'member');
+    const row = await this.db.transaction(async (tx) => {
+      if ((await lockHubRow(tx, hubId))?.status !== 'active')
+        throw new NotFoundException(HUB_NOT_FOUND);
+      return upsertJoin(tx, hubId, actor.id, 'member');
+    });
     if (row.bannedAt) throw new ForbiddenException("You can't join this hub");
     return {
       joined: true,
@@ -91,11 +97,13 @@ export class CommunityMembershipService {
     };
   }
 
+  /** D13 under the hub row lock, so a concurrent Join cannot slip in. */
   private async leaveAsLeader(hubId: number, userId: number): Promise<void> {
-    if ((await countLiveMembers(this.db, hubId)) > 1) {
-      throw new ConflictException('Transfer leadership before leaving');
-    }
     await this.db.transaction(async (tx) => {
+      await lockHubRow(tx, hubId);
+      if ((await countLiveMembers(tx, hubId)) > 1) {
+        throw new ConflictException('Transfer leadership before leaving');
+      }
       await markLeft(tx, hubId, userId, null);
       await archiveHub(tx, hubId, 'empty');
     });

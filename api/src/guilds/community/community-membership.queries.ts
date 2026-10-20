@@ -172,19 +172,37 @@ export async function setRole(
   return row ?? null;
 }
 
+/** Lock the hub row (`FOR UPDATE`) — serialises transfers, joins, leaves. */
+export async function lockHubRow(
+  tx: DbOrTx,
+  guildId: number,
+): Promise<{ status: schema.GuildSelect['status'] } | null> {
+  const g = schema.guilds;
+  const [row] = await tx
+    .select({ status: g.status })
+    .from(g)
+    .where(eq(g.id, guildId))
+    .for('update');
+  return row ?? null;
+}
+
 /**
  * D5 transfer: demote the live Leader to officer, then promote `toUserId`.
- * Run inside a transaction — false (target not live) means roll back.
+ * Locks the hub row, then the target's live row. Run inside a transaction —
+ * false (target not live) means the CALLER throws, so the demote rolls back.
  */
 export async function swapLeader(
   tx: DbOrTx,
   guildId: number,
   toUserId: number,
 ): Promise<boolean> {
-  const target = await findMembership(tx, guildId, toUserId);
-  if (!target || target.leftAt !== null || target.bannedAt !== null) {
-    return false;
-  }
+  await lockHubRow(tx, guildId);
+  const [target] = await tx
+    .select({ id: m.id })
+    .from(m)
+    .where(and(rowKey(guildId, toUserId), liveMemberPredicate()))
+    .for('update');
+  if (!target) return false;
   await tx
     .update(m)
     .set({ role: 'officer', updatedAt: new Date() })

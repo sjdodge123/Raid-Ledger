@@ -152,10 +152,11 @@ export class CommunityHubsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(HubVisibleGuard, GuildEditorGuard)
   unban(
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) userId: number,
   ): Promise<void> {
-    return this.moderation.unbanUser(id, userId);
+    return this.moderation.unbanUser(req.user, id, userId);
   }
 
   @Post(':id/leader')

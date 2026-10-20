@@ -33,9 +33,17 @@ import {
   swapLeader,
   unban,
 } from './community-membership.queries';
-import { CommunityMembershipService } from './community-membership.service';
+import {
+  CommunityMembershipService,
+  LEADER_ONLY,
+} from './community-membership.service';
+import { conflictOnUnique } from './community-db-errors';
+import { findProposalUser } from './community-proposals.users';
 import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
 import { toCommunitySummary } from './community-proposals.service';
+
+const NOT_BANNED = 'That user is not banned';
+const NOT_MEMBER = 'Not a member of this hub';
 
 /** A raw ban row of `listBans`. */
 interface BanRow {
@@ -122,15 +130,27 @@ export class CommunityModerationService {
     await refreshMemberCount(this.db, hubId);
   }
 
-  /** DELETE /hubs/:id/bans/:userId — 404 when not banned. */
-  async unbanUser(hubId: number, userId: number): Promise<void> {
+  /** DELETE /hubs/:id/bans/:userId — 404 when not banned; the D7 ladder. */
+  async unbanUser(
+    actor: GuildActor,
+    hubId: number,
+    userId: number,
+  ): Promise<void> {
     await requireCommunityHub(this.db, hubId, true);
+    const row = await findMembership(this.db, hubId, userId);
+    if (row?.bannedAt == null) throw new NotFoundException(NOT_BANNED);
+    if (!mayModerate(await this.members.role(actor, hubId), row.role)) {
+      throw new ForbiddenException("You can't lift this ban");
+    }
     if (!(await unban(this.db, hubId, userId))) {
-      throw new NotFoundException('That user is not banned');
+      throw new NotFoundException(NOT_BANNED);
     }
   }
 
-  /** POST /hubs/:id/leader — Leader or staff; one swap transaction (D5). */
+  /**
+   * POST /hubs/:id/leader — Leader or staff; one swap transaction (D5). A
+   * missed swap throws INSIDE the transaction, so the demote rolls back.
+   */
   async transferLeader(
     actor: GuildActor,
     hubId: number,
@@ -141,14 +161,24 @@ export class CommunityModerationService {
     const target = await this.members.liveTarget(hubId, userId);
     if (target.role === 'leader')
       throw new ConflictException('Already the leader');
-    const swapped = await this.db.transaction((tx) =>
-      swapLeader(tx, hubId, userId),
+    const user = await findProposalUser(this.db, userId);
+    if (user === null || user.deactivatedAt !== null)
+      throw new ConflictException('That user is no longer active');
+    await conflictOnUnique(
+      () =>
+        this.db.transaction(async (tx) => {
+          if (!(await swapLeader(tx, hubId, userId)))
+            throw new NotFoundException(NOT_MEMBER);
+        }),
+      'Leadership changed meanwhile — reload and try again',
     );
-    if (!swapped) throw new NotFoundException('Not a member of this hub');
     return { leaderUserId: userId };
   }
 
-  /** PATCH /hubs/:id/status — a Leader archives; only staff restore (M14). */
+  /**
+   * PATCH /hubs/:id/status — a Leader archives; only staff restore (M14). A
+   * leader of an archived hub is refused upstream by `CommunityLeaderGuard`.
+   */
   async setStatus(
     actor: GuildActor,
     hubId: number,
@@ -163,7 +193,9 @@ export class CommunityModerationService {
     const role = staff ? 'leader' : (row?.role ?? 'visitor');
     if (!mayChangeStatus(staff, role, body.status)) {
       throw new ForbiddenException(
-        staff ? HUB_NOT_FOUND : 'Only an admin can restore a hub',
+        body.status === 'archived'
+          ? LEADER_ONLY
+          : 'Only an admin can restore a hub',
       );
     }
     if (body.status === hub.status) return { status: body.status };
