@@ -254,8 +254,9 @@ describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
     expect(r.setRuleset).toBe('pvp');
   });
 
-  it('B6 realm map changed since preview (approved pvp, now hardcore) → re-warns, nothing written', () => {
+  it('B6 preview (dryRun) with a stale updateRulesetTo → re-warns the NEW value, no error, nothing written', () => {
     const opts = inferred({
+      dryRun: true,
       inferredRuleset: 'hardcore',
       confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
     });
@@ -274,6 +275,16 @@ describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
     });
     const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
     expect(r.setRuleset).toBe('hardcore');
+  });
+
+  it('B8 apply: realm map changed since preview (approved pvp, now hardcore) → RULESET_CONFIRM_STALE, nothing written', () => {
+    const opts = inferred({
+      inferredRuleset: 'hardcore',
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
+    expect(r.setRuleset).toBeUndefined();
   });
 });
 

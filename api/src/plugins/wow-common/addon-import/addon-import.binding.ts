@@ -49,9 +49,10 @@ export interface AddonBindingOptions {
     | {
         updateRuleset?: boolean | undefined;
         /**
-         * ROK-1739 (Codex r2 P2) — the ruleset the preview showed. When set,
-         * `updateRuleset` authorises only that value; a realm-map edit between
-         * preview and apply re-warns instead of writing. Absent = legacy.
+         * ROK-1739 (Codex r2/r3 P2) — the ruleset the preview showed. When
+         * set, `updateRuleset` authorises only that value; a realm-map edit
+         * between preview and apply rejects the apply with
+         * `RULESET_CONFIRM_STALE` (nothing written). Absent = legacy.
          */
         updateRulesetTo?: WowForeverRuleset | undefined;
         repinGuid?: boolean | undefined;
@@ -144,7 +145,8 @@ function guidOutcome(
  * Ruleset: precedence is the export's `who.ruleset` → the realm map's
  * `inferredRuleset` (ROK-1739) → no change (the addon could not tell). A
  * differing one warns; it is written only with `updateRuleset` — and, when
- * the client sent the previewed `updateRulesetTo`, only if it still matches.
+ * the client sent the previewed `updateRulesetTo`, only if it still matches;
+ * a mismatch on apply is `RULESET_CONFIRM_STALE` (preview never raises it).
  */
 function rulesetOutcome(
   who: AddonWho,
@@ -163,6 +165,10 @@ function rulesetOutcome(
   const approved = opts.confirm.updateRulesetTo;
   if (approved === undefined || approved === incoming) {
     result.setRuleset = incoming;
+  } else if (!opts.dryRun) {
+    // Codex r3 P2 — the confirmed value is stale: refuse the whole apply
+    // rather than commit the rest of the import without the ruleset change.
+    result.errors.push(new AddonImportError('RULESET_CONFIRM_STALE'));
   }
 }
 

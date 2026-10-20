@@ -127,6 +127,22 @@ const storedRuleset = async (id: string) =>
     'character',
   )[0].ruleset;
 
+/** The character columns an apply would write — for "nothing committed". */
+const storedRow = async (id: string) =>
+  nonEmpty(
+    await testApp.db
+      .select({
+        ruleset: schema.characters.ruleset,
+        class: schema.characters.class,
+        level: schema.characters.level,
+        addonGuid: schema.characters.addonGuid,
+        race: schema.characters.race,
+      })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, id)),
+    'character',
+  )[0];
+
 const characterCount = async (): Promise<number> => {
   const [row] = await testApp.db.select({ n: count() }).from(schema.characters);
   return Number(row?.n ?? 0);
@@ -193,7 +209,7 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
     expect(await storedRuleset(id)).toBe('pvp');
   });
 
-  it('I8b realm map edited between preview and apply → approved pvp is not swapped for hardcore; re-warns', async () => {
+  it('I8b realm map edited between preview and apply → 422 RULESET_CONFIRM_STALE, nothing committed; re-preview shows the new value', async () => {
     const token = await memberToken('realmdrift');
     const id = await createChar(token);
     const s = exportFrom('Bloodmoon');
@@ -201,6 +217,7 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
     expect(rulesetChanged(preview.body)).toEqual([
       { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
     ]);
+    const before = await storedRow(id);
     const drifted: WowForeverRealmRulesetEntryDto[] = [
       { region: 'us', realmName: 'Bloodmoon', ruleset: 'hardcore' },
     ];
@@ -214,11 +231,17 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
       dryRun: false,
       confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
     });
-    expect(res.status).toBe(200);
-    expect(rulesetChanged(res.body)).toEqual([
+    expect({ status: res.status, code: res.body.code }).toEqual({
+      status: 422,
+      code: 'RULESET_CONFIRM_STALE',
+    });
+    // Nothing committed: ruleset, class/level and the GUID pin all unchanged.
+    expect(await storedRow(id)).toEqual(before);
+    expect(before.ruleset).toBe('normal');
+    const again = await perChar(token, id, s);
+    expect(rulesetChanged(again.body)).toEqual([
       { code: 'RULESET_CHANGED', from: 'normal', to: 'hardcore' },
     ]);
-    expect(await storedRuleset(id)).toBe('normal');
   });
 
   it('I9 unknown realm → no RULESET_CHANGED, no rulesetInference, row unchanged even when confirmed', async () => {
