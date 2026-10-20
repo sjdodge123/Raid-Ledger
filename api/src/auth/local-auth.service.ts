@@ -19,7 +19,6 @@ import {
 } from './auth-status.helpers';
 import { defined } from '../common/defined.helpers';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { signAccessToken } from './access-token-mint.helpers';
 import { markerExpiry } from './impersonation/impersonation-session.helpers';
 
@@ -79,7 +78,6 @@ export class LocalAuthService {
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
     private sessions: ImpersonationSessionService,
-    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   /**

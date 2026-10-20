@@ -25,7 +25,6 @@ import { hashToken } from './refresh-token.helpers';
 import { SameOriginCookiePostGuard } from './same-origin-cookie-post.guard';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { mintRefreshAccessToken } from './refresh-access-token.helpers';
-import { TokenBlocklistService } from '../token-blocklist.service';
 
 /**
  * ROK-1353: POST /auth/refresh (rotate) + POST /auth/logout (revoke).
@@ -41,7 +40,6 @@ export class RefreshTokenController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly impersonation: ImpersonationSessionService,
-    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   /**
@@ -94,14 +92,15 @@ export class RefreshTokenController {
   /**
    * Revoke the family the presented token belongs to (this device's session).
    *
-   * Deliberately does NOT `blockUser` (ROK-1353): blocklist is keyed on userId
-   * and kills the access token on EVERY device, which is wrong for a routine
-   * single-device logout and — because smoke tests share one admin account
-   * across parallel workers — poisons every concurrent worker's cached token
-   * ("Token has been revoked" 401s). The long-lived credential (refresh
-   * family) is revoked immediately per AC; the ≤1h access token expires
-   * naturally and cannot be renewed. blockUser stays on deactivation, the
-   * security event that SHOULD terminate all devices.
+   * Deliberately does NOT bump the token version (ROK-1353, ROK-1823): the
+   * version is per user and kills the access token on EVERY device, which is
+   * wrong for a routine single-device logout and — because smoke tests share
+   * one admin account across parallel workers — poisons every concurrent
+   * worker's cached token ("Token has been revoked" 401s). The long-lived
+   * credential (refresh family) is revoked immediately per AC; the ≤1h access
+   * token expires naturally and cannot be renewed. Deactivation does not bump
+   * either: it is reversible (ROK-1753) and enforced per request by the
+   * strategy's deactivated check.
    */
   private async revokePresented(rawToken: string): Promise<void> {
     const row = await this.refreshService.findActiveByHash(hashToken(rawToken));

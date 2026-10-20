@@ -11,7 +11,6 @@ import {
 } from './auth-status.helpers';
 import type { UserRole } from '@raid-ledger/contract';
 import { promoteFirstDiscordLogin } from './fleet-first-login-admin.helpers';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { signAccessToken } from './access-token-mint.helpers';
 import { readTokenVersion } from './token-version.helpers';
 
@@ -36,7 +35,6 @@ export class AuthService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly eventEmitter: EventEmitter2,
-    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   async validateDiscordUser(

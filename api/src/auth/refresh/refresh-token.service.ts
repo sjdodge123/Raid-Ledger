@@ -6,7 +6,6 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { getSessionLengthDays } from '../../settings/settings-session.helpers';
-import { TokenBlocklistService } from '../token-blocklist.service';
 import { deactivatedException } from '../auth-status.helpers';
 import {
   type AuthMethod,
@@ -58,8 +57,8 @@ type ParentRow = Pick<
  *
  * issue() mints a new family; rotate() atomically consumes the presented row
  * and mints its child; reuse of a consumed row (outside the 10 s race grace)
- * is treated as theft → the whole family is revoked + the user is
- * blocklisted. ROK-1755: inside the grace a parent mints at most one
+ * is treated as theft → the whole family is revoked + the user's token
+ * version is bumped (ROK-1823). ROK-1755: inside the grace a parent mints at most one
  * sibling; later in-window replays get a non-revoking 409 `refresh_raced`.
  * revokeAllForUser/revokeFamily back logout + deactivation.
  */
@@ -71,7 +70,6 @@ export class RefreshTokenService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
-    private readonly blocklist: TokenBlocklistService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly impersonation: ImpersonationSessionService,
   ) {}
@@ -180,7 +178,7 @@ export class RefreshTokenService {
   /**
    * ROK-1754: ending a marker (delete + audit) runs AFTER the revoke and never
    * throws, so an audit failure cannot skip the revoke, the reuse-path
-   * `blockUser`, or logout's cookie clear. A marker left behind is harmless:
+   * token-version bump, or logout's cookie clear. A marker left behind is harmless:
    * its family is revoked, so `/auth/refresh` can never resume it.
    */
   private async endImpersonationBestEffort(
@@ -263,7 +261,7 @@ export class RefreshTokenService {
   /**
    * No row was consumed: classify why. Replaying an already-CONSUMED
    * (rotated, not-revoked) token is reuse/theft — revoke the whole family +
-   * blocklist the user so the live child dies too (standard rotation-with-
+   * bump the user's token version so the live child dies too (standard rotation-with-
    * reuse-detection). A merely revoked/expired/unknown token → 401 only.
    *
    * RACE GRACE (Codex P1, 2026-06-07): tabs share ONE cookie but the web
@@ -303,8 +301,8 @@ export class RefreshTokenService {
 
   /**
    * Theft: revoke the whole family, then revoke every access token the user
-   * holds — the legacy blocklist floor AND (ROK-1823 D7) a token-version
-   * bump, which also kills the access tokens of the user's other families.
+   * holds with a token-version bump (ROK-1823 D7), which also kills the
+   * access tokens of the user's other families.
    */
   private async revokeReusedFamily(
     existing: Pick<ParentRow, 'userId' | 'familyId'>,
@@ -313,7 +311,6 @@ export class RefreshTokenService {
       `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
     );
     await this.revokeFamily(existing.familyId);
-    await this.blocklist.blockUser(existing.userId);
     await bumpTokenVersion(this.db, existing.userId);
     invalidateAuthUser(existing.userId);
   }

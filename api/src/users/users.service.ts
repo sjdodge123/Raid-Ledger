@@ -38,7 +38,6 @@ import {
   NEXT_TOKEN_VERSION,
 } from '../auth/token-version.helpers';
 import { reactivateUserById } from './users-reactivate.helpers';
-import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
 import { defined } from '../common/defined.helpers';
 
@@ -54,7 +53,6 @@ export class UsersService {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
-    private readonly tokenBlocklist: TokenBlocklistService,
     @Optional() private readonly events?: EventEmitter2,
   ) {}
 
@@ -113,7 +111,6 @@ export class UsersService {
       .where(eq(schema.users.id, userId))
       .returning();
     invalidateAuthUser(userId);
-    await this.tokenBlocklist.blockUser(userId);
     return defined(updated, `role-updated user ${userId}`);
   }
 
@@ -340,7 +337,6 @@ export class UsersService {
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
     await bumpTokenVersion(this.db, userId); // ROK-1823 D7
     invalidateAuthUser(userId);
-    await this.tokenBlocklist.blockUser(userId);
     // ROK-1353: refresh-token rows are removed by the FK ON DELETE CASCADE in
     // deleteUserTransaction; the orchestrated guild-leave path additionally
     // calls revokeAllForUser (see discord-notification-deactivate.helpers).
