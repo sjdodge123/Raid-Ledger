@@ -16,6 +16,7 @@
  */
 import { pollForCondition } from "../../helpers/polling.js";
 import { SmokeAssertionError } from "../assert.js";
+import { resolveConfiguredGame } from "../configured-game.js";
 import { awaitProcessing, getNotificationsFor } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
 
@@ -47,10 +48,9 @@ function fail(msg: string): never {
   throw new SmokeAssertionError(msg);
 }
 
-function gameOf(ctx: TestContext): number {
-  const game = ctx.games[0];
-  if (!game) fail("no demo games to propose a hub for");
-  return game.id;
+/** A registry game — `ctx.games` comes from the smoke admin's characters and is empty on CI. */
+async function gameOf(ctx: TestContext): Promise<number> {
+  return (await resolveConfiguredGame(ctx)).id;
 }
 
 async function propose(ctx: TestContext, gameId: number, name: string): Promise<number> {
@@ -115,7 +115,7 @@ async function cleanup(ctx: TestContext, approvedId: number | null, openIds: num
 /** Propose → staff `hub_proposal_submitted`; approve → proposer "View hub". */
 async function proposeAndApprove(ctx: TestContext): Promise<void> {
   const name = `Smoke Hub ${Date.now().toString(36)}`;
-  const id = await propose(ctx, gameOf(ctx), name);
+  const id = await propose(ctx, await gameOf(ctx), name);
   let approved = false;
   try {
     await awaitProcessing(ctx.api);
@@ -141,7 +141,7 @@ async function proposeAndApprove(ctx: TestContext): Promise<void> {
 async function proposeAndReject(ctx: TestContext): Promise<void> {
   const name = `Smoke Reject ${Date.now().toString(36)}`;
   const reason = `Smoke reason ${Date.now().toString(36)}`;
-  const id = await propose(ctx, gameOf(ctx), name);
+  const id = await propose(ctx, await gameOf(ctx), name);
   let rejected = false;
   try {
     await ctx.api.post(`/admin/hubs/proposals/${id}/reject`, { reason });
