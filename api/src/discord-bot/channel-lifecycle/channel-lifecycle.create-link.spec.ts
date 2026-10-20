@@ -98,6 +98,7 @@ describe('create then hub-link failure (Codex r5 P1)', () => {
       run: [CREATE],
       deferred: [],
       skipped: 0,
+      verify: [],
     });
     expect(committed).toEqual(['bind new-ch']);
     expect(deleteChannel).not.toHaveBeenCalled();

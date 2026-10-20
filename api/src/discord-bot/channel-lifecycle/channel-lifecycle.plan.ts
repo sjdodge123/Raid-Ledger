@@ -16,6 +16,11 @@ export interface ReconcilePlan {
   run: PlannedGame[];
   deferred: PlannedGame[];
   skipped: number;
+  /**
+   * `none` games with an auto-managed binding: no Discord op runs for them,
+   * so the live run checks their channel still exists (Codex r6 P2).
+   */
+  verify: PlannedGame[];
 }
 
 /** D13 order: creates first, then unarchive, then archive. */
@@ -46,6 +51,9 @@ export function planReconcile(
     run: [...capped.slice(0, cap), ...links],
     deferred: capped.slice(cap),
     skipped: decided.filter((g) => g.action === 'none').length,
+    verify: decided.filter(
+      (g) => g.action === 'none' && g.row.binding?.autoManaged === true,
+    ),
   };
 }
 

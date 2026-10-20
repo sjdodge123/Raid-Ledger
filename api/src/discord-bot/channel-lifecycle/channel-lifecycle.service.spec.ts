@@ -106,7 +106,11 @@ const settings = {
 const client = { isConnected: jest.fn(), getGuild: jest.fn() };
 const bindings = { bind: jest.fn(), unbindById: jest.fn() };
 const hubLinker = { linkHubsForGame: jest.fn().mockResolvedValue(0) };
-const guild = { id: 'g1', channels: { delete: jest.fn() } };
+// Every bound channel is live (cached) — the Codex r6 existence sweep is a no-op here.
+const guild = {
+  id: 'g1',
+  channels: { delete: jest.fn(), cache: { has: () => true } },
+};
 const selectRows = jest.mocked(queries.selectGameLifecycleActivity);
 
 /** The pool fake: each game's transaction runs on the pool itself. */

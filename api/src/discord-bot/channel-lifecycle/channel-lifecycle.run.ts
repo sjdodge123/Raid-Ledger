@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import type { Guild } from 'discord.js';
 import * as Sentry from '@sentry/nestjs';
 import type { ReconcileResultDto } from '@raid-ledger/contract';
 import { applyAction, linkHubs } from './channel-lifecycle.apply';
@@ -6,6 +7,7 @@ import {
   ChannelGoneError,
   CreateCapacityError,
   LifecyclePermissionError,
+  lifecycleCall,
 } from './channel-lifecycle.errors';
 import {
   CAP_DETAIL,
@@ -124,6 +126,68 @@ async function linkAfterCreate(
   }
 }
 
+/** Map a game's failure onto an outcome in a fresh tx; never throws. */
+async function cleanupInTx(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  err: unknown,
+): Promise<ItemOutcome> {
+  try {
+    return await ctx.db.transaction((tx) =>
+      handleFailure({ ...ctx, db: tx }, game, err),
+    );
+  } catch (inner) {
+    Sentry.captureException(inner, {
+      tags: { area: 'channel-lifecycle-cleanup' },
+    });
+    return { outcome: 'failed', detail: 'cleanup failed' };
+  }
+}
+
+/**
+ * Cache-then-fetch existence check. Only Unknown Channel (10003, mapped to
+ * `ChannelGoneError`) counts as gone; any other failure is transient — keep
+ * the binding and look again next tick.
+ */
+async function channelIsGone(
+  guild: Guild,
+  channelId: string,
+): Promise<boolean> {
+  if (guild.channels.cache.has(channelId)) return false;
+  try {
+    await lifecycleCall('fetch', channelId, () =>
+      guild.channels.fetch(channelId),
+    );
+    return false;
+  } catch (err) {
+    if (err instanceof ChannelGoneError) return true;
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Lifecycle existence check failed for ${channelId}: ${message}`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Codex r6 P2: a `none` game runs no Discord op, so a hand-deleted managed
+ * channel would never trip the D9 cleanup. Check each one still exists and
+ * route a gone channel through the same `ChannelGoneError` cleanup.
+ */
+async function sweepGone(
+  ctx: ApplyContext,
+  games: readonly PlannedGame[],
+  result: ReconcileResultDto,
+): Promise<void> {
+  for (const game of games) {
+    const channelId = game.row.binding?.channelId;
+    if (!channelId || !(await channelIsGone(ctx.guild, channelId))) continue;
+    const gone = new ChannelGoneError(channelId);
+    tally(result, game, await cleanupInTx(ctx, game, gone));
+    result.skipped -= 1;
+  }
+}
+
 /**
  * Run one game, never throwing (per-game isolation). `ctx.db` is the pool:
  * the game's writes commit in their OWN transaction (Codex r4b P1), so a
@@ -140,16 +204,7 @@ async function runOne(
       applyAction({ ...ctx, db: tx }, game),
     );
   } catch (err) {
-    try {
-      return await ctx.db.transaction((tx) =>
-        handleFailure({ ...ctx, db: tx }, game, err),
-      );
-    } catch (inner) {
-      Sentry.captureException(inner, {
-        tags: { area: 'channel-lifecycle-cleanup' },
-      });
-      return { outcome: 'failed', detail: 'cleanup failed' };
-    }
+    return cleanupInTx(ctx, game, err);
   }
   const { createdChannelId } = item;
   if (createdChannelId === undefined) return item;
@@ -205,6 +260,7 @@ export async function executePlan(
 ): Promise<ReconcileResultDto> {
   const result = emptyResult(false, null);
   result.skipped = plan.skipped;
+  await sweepGone(ctx, plan.verify, result);
   const waiting = await runItems(ctx, plan.run, result);
   const stopped = 'stopped: missing permissions';
   for (const g of waiting)

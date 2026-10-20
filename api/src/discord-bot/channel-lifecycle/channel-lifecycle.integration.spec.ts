@@ -39,7 +39,8 @@ const channelDelete = jest.fn();
 const ADDED = { everyoneSend: true, everyoneView: false, botView: false };
 const guild = {
   id: GUILD,
-  channels: { delete: channelDelete },
+  // Bound channels are live (cached): the Codex r6 existence sweep is a no-op.
+  channels: { delete: channelDelete, cache: { has: () => true } },
 } as unknown as Guild;
 
 beforeAll(async () => {
