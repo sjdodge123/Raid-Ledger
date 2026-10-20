@@ -54,6 +54,41 @@ export interface ResolveResult {
   fuelEstimates: FuelEstimate[];
 }
 
+export interface Need {
+  prefab: string;
+  quantity: number;
+  parentId: number | null;
+  depth: number;
+  /** Prefabs on the path from the root to this node's parent. */
+  path: ReadonlySet<string>;
+  startStep: number;
+  quality: number;
+  /** False for an upgrade / quality > 1 target: stock has no quality. */
+  net: boolean;
+  /** anyOneOf: the other ingredients that could stand in. */
+  alternatives?: number;
+}
+
+export function child(
+  need: Need,
+  parentId: number,
+  prefab: string,
+  quantity: number,
+  alternatives?: number,
+): Need {
+  const base: Need = {
+    prefab,
+    quantity,
+    parentId,
+    depth: need.depth + 1,
+    path: new Set([...need.path, need.prefab]),
+    startStep: 1,
+    quality: 1,
+    net: true,
+  };
+  return alternatives === undefined ? base : { ...base, alternatives };
+}
+
 export type InputLine = { prefab: string; amount: number };
 
 /** What the ledger gave one node. */
