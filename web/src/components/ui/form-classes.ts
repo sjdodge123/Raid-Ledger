@@ -41,3 +41,11 @@ export const FIELD_PAD: Record<FieldSize, string> = {
 
 /** The md field frame, as the spike names it — for controls without sizes. */
 export const FIELD_FRAME = `${FIELD_FRAME_BASE} ${FIELD_PAD.md}`;
+
+/**
+ * The §4.11 focus ring for a frame whose focusable child is a
+ * `contenteditable` (ROK-1868 MarkdownEditor): the ring is drawn on the
+ * wrapper while focus is anywhere inside it, so the child may drop its own
+ * outline. Same token and alpha as {@link FOCUS_RING}.
+ */
+export const FOCUS_WITHIN_RING = 'focus-within:ring-2 focus-within:ring-success/80';
