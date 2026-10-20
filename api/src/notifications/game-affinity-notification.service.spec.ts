@@ -15,6 +15,16 @@ import {
   findPriorEventNoticeUserIds,
 } from './hub-notification.queries';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
+import {
+  runFollowupFanout,
+  type FollowupFanoutDeps,
+} from './post-event-followup-fanout.helpers';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import type {
+  CreateNotificationInput,
+  NotificationDto,
+} from './notification.types';
 
 jest.mock('./game-affinity-recipients.helpers', () => ({
   findGameAffinityRecipients: jest.fn(),
@@ -83,6 +93,38 @@ function build(groupIds: number[]): Harness {
     hub,
   );
   return { service, create, releaseKey, claimed };
+}
+
+/** The row `createMany` returns for an input it actually created. */
+function asCreated(i: CreateNotificationInput, n: number): NotificationDto {
+  const { userId, type, title, message } = i;
+  return { id: String(n), userId, type, title, message, createdAt: '' };
+}
+
+/**
+ * A fake db for the follow-up fan-out (ended event 50, creator 99) whose
+ * `notification_dedup` is the same `held` set the dedup service fake uses —
+ * the real paths share that table.
+ */
+function fanoutDb(held: Set<string>): FollowupFanoutDeps['db'] {
+  const dialect = new PgDialect();
+  const execute = jest.fn((q: SQL) => {
+    const { sql: text, params } = dialect.sqlToQuery(q);
+    if (text.includes('SET attendees_notified_at = now()')) {
+      return Promise.resolve([{ id: 1 }]);
+    }
+    if (text.includes('SELECT id, title, creator_id')) {
+      return Promise.resolve([{ id: 50, title: 'Raid', creator_id: 99 }]);
+    }
+    if (!text.includes('INSERT INTO notification_dedup')) {
+      return Promise.resolve([]);
+    }
+    const keys = params.map(String).filter((p) => p.startsWith('event-'));
+    const won = keys.filter((k) => !held.has(k));
+    won.forEach((k) => held.add(k));
+    return Promise.resolve(won.map((dedup_key) => ({ dedup_key })));
+  });
+  return { execute } as unknown as FollowupFanoutDeps['db'];
 }
 
 function sentTypes(create: jest.Mock): Array<[number, string]> {
@@ -218,15 +260,36 @@ describe('GameAffinityNotificationService — follow-up attendees (ROK-1371)', (
     followups.mockReset();
   });
 
-  it('excludes them and claims their per-user notice so a late tag skips them', async () => {
+  it('excludes them without claiming their per-user notice keys (Codex r9)', async () => {
     affinity.mockResolvedValue([10, 11]);
     guildOf.mockResolvedValue(null);
     followups.mockResolvedValue([11, 12]);
     const h = build([]);
     await h.service.notifyGameAffinity({ ...input, followupForEventId: 50 });
     expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
-    expect(h.claimed.has('event-notice:1:user:11')).toBe(true);
-    expect(h.claimed.has('event-notice:1:user:12')).toBe(true);
+    expect([...h.claimed].sort()).toEqual([
+      'event-notice:1:user:10',
+      'game-alert:event:1',
+    ]);
+  });
+
+  it('a follow-up fan-out that runs after it still notifies those attendees', async () => {
+    affinity.mockResolvedValue([10, 11]);
+    guildOf.mockResolvedValue(null);
+    followups.mockResolvedValue([11, 12]);
+    const h = build([]);
+    await h.service.notifyGameAffinity({ ...input, followupForEventId: 50 });
+    const createMany = jest.fn((rows: CreateNotificationInput[]) =>
+      Promise.resolve(rows.map(asCreated)),
+    );
+    await runFollowupFanout(
+      { db: fanoutDb(h.claimed), notificationService: { createMany } },
+      50,
+      { eventId: 1 },
+      99,
+    );
+    const sent = createMany.mock.calls[0]?.[0].map((r) => r.userId);
+    expect(sent).toEqual([11, 12]);
   });
 });
 

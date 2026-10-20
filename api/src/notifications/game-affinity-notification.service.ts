@@ -107,7 +107,7 @@ export class GameAffinityNotificationService {
       );
       return;
     }
-    const followupIds = await this.claimFollowupNotices(input);
+    const followupIds = await this.followupExclusions(input);
     const plan = await this.collectRecipients(input, followupIds);
     if (!plan) return;
     await this.dispatchAffinityNotifications(
@@ -190,11 +190,12 @@ export class GameAffinityNotificationService {
   /**
    * ROK-1371: the ended event's attendees when this event is a post-event
    * follow-up — they already receive the targeted quick-sign-up DM, so a
-   * broadcast would be a duplicate. Their per-(user, event) notice key is
-   * claimed too, so a later group tag (D6b) skips them as well. Empty for a
+   * broadcast would be a duplicate. A plain exclusion set: their per-user
+   * notice keys belong to the follow-up fan-out, the path that actually sends
+   * to them (Codex r9 — claiming here could starve that send). Empty for a
    * normal event (`followupForEventId` unset).
    */
-  private async claimFollowupNotices(
+  private async followupExclusions(
     input: GameAffinityNotificationInput,
   ): Promise<Set<number>> {
     if (input.followupForEventId == null) return new Set();
@@ -202,14 +203,6 @@ export class GameAffinityNotificationService {
       this.db,
       input.followupForEventId,
       input.creatorId,
-    );
-    await Promise.all(
-      ids.map((id) =>
-        this.dedupService.checkAndMarkSent(
-          eventNoticeKey(input.eventId, id),
-          EVENT_NOTICE_TTL_SECONDS,
-        ),
-      ),
     );
     return new Set(ids);
   }
