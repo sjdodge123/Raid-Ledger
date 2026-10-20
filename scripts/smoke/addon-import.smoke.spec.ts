@@ -146,16 +146,20 @@ async function expectLandedOn(page: Page, add: Locator, id: string, fullName: st
     await expect(add, 'the import closes Add Character').toHaveCount(0);
 }
 
+/**
+ * File scope (ROK-1739, Codex r2 P2): BOTH suites push into `createdIds`, so the
+ * drain runs once after every test in the file, not after the first suite only.
+ */
+test.afterAll(async () => {
+    const token = await getAdminToken();
+    for (const id of createdIds.splice(0)) await apiDelete(token, `/users/me/characters/${id}`);
+});
+
 test.describe('Addon Import string dialog (ROK-1724)', () => {
     test.beforeAll(async () => {
         const token = await getAdminToken();
         const game = (await apiGet(token, `/games/slug/${GAME_SLUG}`)) as { id?: number } | null;
         gameId = game?.id ?? null;
-    });
-
-    test.afterAll(async () => {
-        const token = await getAdminToken();
-        for (const id of createdIds.splice(0)) await apiDelete(token, `/users/me/characters/${id}`);
     });
 
     test.beforeEach(() => {
