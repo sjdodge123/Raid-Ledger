@@ -3,7 +3,7 @@
  * button — running-late / roach-out re-renders, the signup listener and the
  * event listener resolve the hub link exactly like the poster does.
  */
-import { Logger } from '@nestjs/common';
+import { Logger, type InjectionToken } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { resolveEventHubLink } from '../channel-lifecycle/embed-hub-link.helpers';
 import {
@@ -57,6 +57,13 @@ function handlerDeps(): { deps: unknown; build: jest.Mock } {
   return { deps, build };
 }
 
+/** Empty `useValue` providers for tokens a test never touches. */
+function stubs(
+  tokens: InjectionToken[],
+): Array<{ provide: InjectionToken; useValue: object }> {
+  return tokens.map((provide) => ({ provide, useValue: {} }));
+}
+
 function ctxOf(build: jest.Mock): unknown {
   return build.mock.calls[0]?.[1];
 }
@@ -96,10 +103,10 @@ describe('card refresh paths keep the hub link (ROK-1872)', () => {
     const module = await Test.createTestingModule({
       providers: [
         DiscordEventListener,
-        ...[DrizzleAsyncProvider, DiscordBotClientService, DiscordEmbedFactory]
-          .concat([EmbedPosterService, ChannelResolverService])
-          .concat([ScheduledEventService, EventLifecycleQueueService])
-          .map((provide) => ({ provide, useValue: {} })),
+        ...stubs([DrizzleAsyncProvider, DiscordBotClientService]),
+        ...stubs([DiscordEmbedFactory, EmbedPosterService]),
+        ...stubs([ChannelResolverService, ScheduledEventService]),
+        ...stubs([EventLifecycleQueueService]),
         { provide: SettingsService, useValue: settings },
       ],
     }).compile();

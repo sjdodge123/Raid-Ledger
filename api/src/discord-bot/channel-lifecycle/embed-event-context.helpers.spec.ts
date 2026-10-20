@@ -16,7 +16,11 @@ const resolve = jest.mocked(resolveEventHubLink);
 const db = {} as PostgresJsDatabase<typeof schema>;
 const logger = { warn: jest.fn() };
 const HUB = { url: 'https://x.test/guilds/7', label: 'Hub' as const };
-const CTX = { communityName: 'G', clientUrl: 'https://x.test', timezone: 'UTC' };
+const CTX = {
+  communityName: 'G',
+  clientUrl: 'https://x.test',
+  timezone: 'UTC',
+};
 
 describe('withEventHubLink (ROK-1872)', () => {
   beforeEach(() => resolve.mockReset());
@@ -35,9 +39,9 @@ describe('withEventHubLink (ROK-1872)', () => {
     expect('hubLink' in ctx).toBe(false);
   });
 
-  it('passes a missing client URL through as null', async () => {
+  it('passes a null client URL through', async () => {
     resolve.mockResolvedValueOnce(null);
-    await withEventHubLink(db, { timezone: 'UTC' }, 9, logger);
+    await withEventHubLink(db, { clientUrl: null, timezone: 'UTC' }, 9, logger);
     expect(resolve).toHaveBeenCalledWith(db, 9, null, logger);
   });
 });

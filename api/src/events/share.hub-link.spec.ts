@@ -2,6 +2,7 @@
  * ROK-1872 (ROK-1428 §2.8): a shared copy of the event card carries the
  * event's hub link, resolved like the poster; no hub ⇒ no `hubLink` key.
  */
+import type { InjectionToken } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ShareService } from './share.service';
 import { EventsService } from './events.service';
@@ -22,13 +23,20 @@ const BASE = 'https://raid.example.com';
 const HUB = { url: `${BASE}/guilds/7`, label: 'Hub' as const };
 const resolve = jest.mocked(resolveEventHubLink);
 
+/** An empty `useValue` provider for a token the test never touches. */
+function stub(provide: InjectionToken): {
+  provide: InjectionToken;
+  useValue: object;
+} {
+  return { provide, useValue: {} };
+}
+
 async function makeService(): Promise<ShareService> {
   const module = await Test.createTestingModule({
     providers: [
       ShareService,
-      ...[DrizzleAsyncProvider, DiscordBotClientService, DiscordEmbedFactory]
-        .concat([EventsService])
-        .map((provide) => ({ provide, useValue: {} })),
+      ...[DrizzleAsyncProvider, DiscordBotClientService].map(stub),
+      ...[DiscordEmbedFactory, EventsService].map(stub),
       {
         provide: SettingsService,
         useValue: {
