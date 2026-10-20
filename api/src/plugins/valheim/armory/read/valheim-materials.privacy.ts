@@ -1,0 +1,67 @@
+/**
+ * ROK-1853 D5 — the ONLY place the personal-chest rule lives. Every query
+ * that can reach a `private` container ANDs `personalVisibleSql`; shared
+ * queries use `sharedSql` and never see a private row.
+ */
+import { sql, type SQL } from 'drizzle-orm';
+import * as schema from '../../../../drizzle/schema';
+import type { AuthenticatedUser } from '../../../../auth/types';
+
+const c = schema.valheimContainers;
+
+/** Who is reading, reduced to what the predicate needs. */
+export interface MaterialsViewer {
+  id: number;
+  /** `users.role = 'admin'` (D6, not operator) and NOT impersonated. */
+  isAdmin: boolean;
+  /** An impersonated session sees no personal chests at all. */
+  impersonated: boolean;
+}
+
+/** The JWT user → viewer (an impersonating admin is never `isAdmin`). */
+export function toMaterialsViewer(user: AuthenticatedUser): MaterialsViewer {
+  const impersonated = user.impersonatedBy !== null;
+  return {
+    id: user.id,
+    isAdmin: user.role === 'admin' && !impersonated,
+    impersonated,
+  };
+}
+
+/** Public and group chests — no viewer term (D5). */
+export const sharedSql: SQL = sql`${c.privacy} <> 'private'`;
+
+/**
+ * Private chests this viewer may see: admins all of them; an impersonated
+ * session none; otherwise only chests whose creator is a character the
+ * viewer has claimed on THAT server — auto/admin claims, or a manual claim
+ * whose Steam id is the viewer's own verified one — and never a playerId
+ * that appears under two Steam ids on the server (admins only, design §3.2).
+ */
+export function personalVisibleSql(viewer: MaterialsViewer): SQL {
+  if (viewer.impersonated) return sql`false`;
+  const isPrivate = sql`${c.privacy} = 'private'`;
+  if (viewer.isAdmin) return isPrivate;
+  return sql`(${isPrivate} AND EXISTS (
+    SELECT 1 FROM valheim_profiles p JOIN users u ON u.id = p.claimed_by
+    WHERE p.pelican_server_id = ${c.pelicanServerId}
+      AND p.player_id = ${c.creatorPlayerId}
+      AND p.claimed_by = ${viewer.id}
+      AND (p.claim_source IN ('auto', 'admin')
+           OR (p.claim_source = 'manual' AND u.steam_id = p.steam_id))
+      AND NOT EXISTS (
+        SELECT 1 FROM valheim_profiles q
+        WHERE q.pelican_server_id = p.pelican_server_id
+          AND q.player_id = p.player_id
+          AND q.steam_id <> p.steam_id)))`;
+}
+
+/** Shared ∪ personal-visible — the list and detail routes. */
+export function visibleSql(viewer: MaterialsViewer): SQL {
+  return sql`(${sharedSql} OR ${personalVisibleSql(viewer)})`;
+}
+
+/** D10: `includeVehicles=false` drops carts and ships. */
+export function vehicleSql(includeVehicles: boolean): SQL {
+  return includeVehicles ? sql`true` : sql`NOT ${c.vehicle}`;
+}

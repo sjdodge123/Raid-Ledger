@@ -67,13 +67,13 @@ const baseMapReady = sql<boolean>`EXISTS (
     AND b.sha256 = ${m.baseMapSha256})`;
 
 /** ROK-1836: the atlas is ready once its blob row exists for the server. */
-const atlasReady = sql<boolean>`EXISTS (
+export const atlasReady = sql<boolean>`EXISTS (
   SELECT 1 FROM ${blobs} b
   WHERE b.pelican_server_id = ${cat.pelicanServerId}
     AND b.sha256 = ${cat.atlasSha256})`;
 
 /** Only the referenced prefabs leave the database — never the whole jsonb. */
-function itemsSubset(prefabs: readonly string[]) {
+export function itemsSubset(prefabs: readonly string[]) {
   if (prefabs.length === 0) return sql`'{}'::jsonb`.mapWith(cat.items);
   const list = sql.join(
     prefabs.map((id) => sql`${id}`),
