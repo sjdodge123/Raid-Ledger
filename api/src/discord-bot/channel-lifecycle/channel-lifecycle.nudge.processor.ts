@@ -7,6 +7,7 @@ import {
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import * as Sentry from '@sentry/nestjs';
+import type { ReconcileResultDto } from '@raid-ledger/contract';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
 import {
@@ -27,12 +28,35 @@ export function isFinalAttempt(
   return job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 }
 
+/** The reconcile result fields the nudge checks. */
+type NudgeResult = Pick<ReconcileResultDto, 'stoppedReason' | 'items'>;
+
+/**
+ * Why a resolved reconcile did NOT settle the nudged game (Codex r3 P2), or
+ * null. A `disabled` stop is the intended no-op; any other stop, or a
+ * failed/deferred item for the game, is retried by BullMQ.
+ */
+export function nudgeShortfall(
+  result: NudgeResult,
+  gameId: number,
+): string | null {
+  const stop = result.stoppedReason;
+  if (stop !== null && stop !== 'disabled') return `tick stopped: ${stop}`;
+  const bad = result.items.find(
+    (i) =>
+      i.gameId === gameId &&
+      (i.outcome === 'failed' || i.outcome === 'deferred'),
+  );
+  return bad ? `game ${gameId} ${bad.outcome}: ${bad.detail ?? ''}` : null;
+}
+
 /**
  * Worker for the per-game nudge (ROK-1431 D12, §2.9). Runs a single-game,
  * non-dry reconcile. A held advisory lock (409) is skipped — the daily run
  * catches it. A disabled setting makes `reconcile` itself a no-op. Other
  * failures are logged every attempt, Sentry-captured once (final attempt),
- * and rethrown so BullMQ retries (≤ 2 attempts).
+ * and rethrown so BullMQ retries (≤ 2 attempts) — including a reconcile that
+ * resolved without settling the game (`nudgeShortfall`).
  */
 @Processor(CHANNEL_LIFECYCLE_NUDGE_QUEUE)
 export class ChannelLifecycleNudgeProcessor
@@ -58,11 +82,15 @@ export class ChannelLifecycleNudgeProcessor
   async process(job: NudgeJob): Promise<void> {
     const { gameId } = job.data;
     try {
-      await this.lifecycle.reconcile({
+      const result = await this.lifecycle.reconcile({
         dryRun: false,
         trigger: 'nudge',
         gameIds: [gameId],
       });
+      const shortfall = nudgeShortfall(result, gameId);
+      if (shortfall !== null) {
+        throw new Error(`Nudge for game ${gameId}: ${shortfall}`);
+      }
     } catch (err) {
       if (err instanceof ConflictException) {
         this.logger.debug(`Nudge for game ${gameId} skipped: reconcile busy`);

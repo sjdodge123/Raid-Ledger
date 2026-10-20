@@ -26,7 +26,7 @@ describe('ChannelLifecycleNudgeProcessor', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    lifecycle.reconcile.mockResolvedValue({});
+    lifecycle.reconcile.mockResolvedValue({ stoppedReason: null, items: [] });
     const moduleRef = await Test.createTestingModule({
       providers: [
         ChannelLifecycleNudgeProcessor,
@@ -70,5 +70,51 @@ describe('ChannelLifecycleNudgeProcessor', () => {
     expect(isFinalAttempt({ attemptsMade: 0, opts: { attempts: 2 } })).toBe(
       false,
     );
+  });
+
+  describe('an unsuccessful reconcile result retries (Codex r3 P2)', () => {
+    const result = (o: object): object => ({
+      stoppedReason: null,
+      items: [],
+      ...o,
+    });
+    const item = (gameId: number, outcome: string): object => ({
+      gameId,
+      gameName: 'G',
+      action: 'create',
+      outcome,
+      detail: null,
+    });
+
+    it.each(['failed', 'deferred'])(
+      'a %s item for the nudged game throws so BullMQ retries',
+      async (outcome) => {
+        lifecycle.reconcile.mockResolvedValue(
+          result({ items: [item(9, outcome)] }),
+        );
+        await expect(processor.process(job(0))).rejects.toThrow(/game 9/);
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+      },
+    );
+
+    it('a stopped tick (offline) throws; the final attempt captures once', async () => {
+      lifecycle.reconcile.mockResolvedValue(result({ stoppedReason: 'offline' }));
+      await expect(processor.process(job(1))).rejects.toThrow(/offline/);
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    });
+
+    it('a done item resolves', async () => {
+      lifecycle.reconcile.mockResolvedValue(
+        result({ items: [item(9, 'done'), item(3, 'failed')] }),
+      );
+      await expect(processor.process(job(0))).resolves.toBeUndefined();
+    });
+
+    it('a disabled setting is a no-op, not a failure', async () => {
+      lifecycle.reconcile.mockResolvedValue(
+        result({ stoppedReason: 'disabled' }),
+      );
+      await expect(processor.process(job(0))).resolves.toBeUndefined();
+    });
   });
 });
