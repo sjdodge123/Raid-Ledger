@@ -33,7 +33,7 @@ function realmOf(guild: MyGuild): string | null {
 }
 
 /** Rank · realm · region for a guild or server; a community hub has no realm or region to show. */
-export function hubRowMeta(guild: MyGuild): string {
+function hubRowMeta(guild: MyGuild): string {
     if (guild.kind === 'game_community') return [guild.rankName, 'Community hub'].filter(Boolean).join(' · ');
     return [guild.rankName, realmOf(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
 }

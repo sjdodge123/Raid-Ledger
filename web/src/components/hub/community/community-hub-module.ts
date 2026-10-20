@@ -5,10 +5,16 @@
  * and Resources as the shell provides) — never server or WoW tabs. Every core
  * Overview widget shows to visitors too (D14).
  */
-import type { HubModule } from '../../../plugins/hub-module';
+import type { HubMemberColumn, HubModule } from '../../../plugins/hub-module';
 import { CommunityJoinPill, CommunityKindPill } from './community-hero';
-import { COMMUNITY_MEMBER_COLUMNS } from './community-member-cells';
+import { CommunityJoinedCell, CommunityPlayerCell, CommunityRoleCell } from './community-member-cells';
 import { CommunityMemberActions } from './community-member-actions';
+
+const COMMUNITY_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
+    { id: 'player', header: 'Player', cell: CommunityPlayerCell },
+    { id: 'role', header: 'Role', cell: CommunityRoleCell },
+    { id: 'joined', header: 'Joined', cell: CommunityJoinedCell },
+];
 
 export const COMMUNITY_MEMBERS_VISITOR_EMPTY = "Join to see who's here";
 export const COMMUNITY_MEMBERS_ALONE = 'Just you so far — share the hub link';

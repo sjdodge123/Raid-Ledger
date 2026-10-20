@@ -41,8 +41,8 @@ export function CommunityMemberActions({ row, ctx }: { row: HubMemberRow; ctx: H
                 <span role="menu" aria-label={`Manage ${row.name}`}
                     className="absolute right-0 top-full z-50 mt-1 flex w-44 flex-col overflow-hidden rounded-lg border border-edge bg-surface py-1 shadow-xl">
                     {actions.map((a) => (
-                        <button key={a} type="button" role="menuitem" data-testid={`community-member-${a}`} onClick={() => pick(a)}
-                            className={`px-3 py-2 text-left text-sm hover:bg-panel ${a === 'remove' || a === 'ban' ? 'text-danger' : 'text-secondary'}`}>{LABEL[a]}</button>
+                        <Button key={a} variant="ghost" size="sm" role="menuitem" data-testid={`community-member-${a}`} onClick={() => pick(a)}
+                            className={`justify-start rounded-none ${a === 'remove' || a === 'ban' ? 'text-danger' : 'text-secondary'}`}>{LABEL[a]}</Button>
                     ))}
                 </span>
             )}

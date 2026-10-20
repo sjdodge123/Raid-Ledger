@@ -8,13 +8,14 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { navClass } from '../nav-class';
 import { HUBS_PATH } from './my-hubs-queries';
 
 /** More-drawer row to the `/hubs` directory; tapping it closes the drawer. */
 export function DrawerHubsLink({ onClose, active }: { onClose?: (() => void) | undefined; active: boolean }): JSX.Element {
     return (
         <Link to={HUBS_PATH} onClick={onClose} data-testid="drawer-hubs-link" aria-current={active ? 'page' : undefined}
-            className={`flex min-h-[44px] items-center gap-3 border-b border-edge-subtle px-4 py-2 text-sm font-medium transition-colors hover:bg-overlay ${active ? 'text-emerald-400' : 'text-foreground'}`}>
+            className={`flex min-h-[44px] items-center gap-3 border-b border-edge-subtle px-4 py-2 text-sm font-medium transition-colors hover:bg-overlay ${active ? navClass('on', 'on') : 'text-foreground'}`}>
             <UserGroupIcon className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
             <span className="flex-1">Hubs</span>
             <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />

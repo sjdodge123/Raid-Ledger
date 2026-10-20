@@ -4,7 +4,7 @@
  * in `HubMemberColumn`). Role is a chip AND the word, never colour alone.
  */
 import type { JSX } from 'react';
-import type { HubMemberColumn, HubMemberRow } from '../../../plugins/hub-module';
+import type { HubMemberRow } from '../../../plugins/hub-module';
 import { StatusChip } from '../../ui/status-chip';
 
 const ROLE_LABEL = { leader: 'Leader', officer: 'Officer', member: 'Member' } as const;
@@ -30,9 +30,3 @@ export function CommunityJoinedCell({ row }: { row: HubMemberRow }): JSX.Element
     const label = new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     return <span className="text-muted" data-testid="community-member-joined">Joined {label}</span>;
 }
-
-export const COMMUNITY_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
-    { id: 'player', header: 'Player', cell: CommunityPlayerCell },
-    { id: 'role', header: 'Role', cell: CommunityRoleCell },
-    { id: 'joined', header: 'Joined', cell: CommunityJoinedCell },
-];
