@@ -6,9 +6,10 @@
  * Flow: seed a WoW guild (`POST /admin/test/wow/seed-guild`, unique name per
  * run, so the per-guild post cooldown never carries over), make the DM
  * recipient a live member through the kind-aware `POST /admin/test/hub-member`,
- * enable its Discord notifications, then PATCH the GM post as the admin. The
- * recipient's notification row is polled (no sleep) for "New post in <Group>"
- * with this guild's id in its payload.
+ * enable its Discord notifications, then create a hub post as the admin
+ * (ROK-1868: `POST /guilds/:id/posts`, relay off — only a NEW post notifies).
+ * The recipient's notification row is polled (no sleep) for "New post in
+ * <Group>" with this guild's id in its payload and the post's deep link.
  *
  * The DM itself cannot be read here: the companion is a bot and Discord refuses
  * bot-to-bot DMs (50007 — see `dm-embed-render.test.ts`). The embed is pinned
@@ -130,17 +131,33 @@ async function assertDmEmbed(ctx: TestContext, n: HubNotification, guildId: numb
   assertButtons(res, guildId);
 }
 
+/** ROK-1868: the leader post is a hub post; returns the new post's id. */
+async function createPost(ctx: TestContext, guildId: number): Promise<number> {
+  const body = await ctx.api.post<{ post?: { id?: unknown } }>(`/guilds/${guildId}/posts`, {
+    body: `Smoke **leader** post ${Date.now().toString(36)}\nSecond line.`,
+    relayToDiscord: false,
+  });
+  const id = body.post?.id;
+  if (typeof id !== "number") fail(`create post: no post.id in ${JSON.stringify(body)}`);
+  return id;
+}
+
 async function leaderPostNotifiesMembers(ctx: TestContext): Promise<void> {
   const { guildId, name } = await seedGroup(ctx);
   await addMember(ctx, guildId, ctx.dmRecipientUserId);
   await ctx.api.post("/admin/test/enable-discord-notifications", { userId: ctx.dmRecipientUserId });
-  await ctx.api.patch(`/guilds/${guildId}/profile`, {
-    gmPost: `Smoke leader post ${Date.now().toString(36)}\nSecond line.`,
-  });
+  const postId = await createPost(ctx, guildId);
   await awaitProcessing(ctx.api);
   const n = await waitForLeaderPost(ctx, guildId);
   if (n.title !== `New post in ${name}`) {
     fail(`expected the notification title "New post in ${name}", got "${n.title}"`);
+  }
+  if (!n.message?.startsWith("Smoke leader post ")) {
+    fail(`expected the markdown-stripped headline "Smoke leader post …", got "${n.message}"`);
+  }
+  const deepLink = `/guilds/${guildId}?post=${postId}#posts`;
+  if (n.payload?.url !== deepLink) {
+    fail(`expected payload.url "${deepLink}", got ${JSON.stringify(n.payload?.url)}`);
   }
   await assertDmEmbed(ctx, n, guildId, name);
 }
