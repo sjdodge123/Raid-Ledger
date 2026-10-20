@@ -46,6 +46,18 @@ export const WOW_FOREVER_PROBE_SETTING_KEYS: string[] = [
   WOW_FOREVER_PROBE_CHARACTER_KEY,
 ];
 
+/**
+ * JSON `WowForeverRealmRulesetsDto` — the admin-maintained realm →
+ * ruleset map (ROK-1739, D1). Absent = no rows.
+ */
+export const WOW_FOREVER_REALM_RULESETS_KEY =
+  'wow_forever_realm_rulesets' as SettingKey;
+
+/** The realm-ruleset map's setting key, for the plugin manifest. */
+export const WOW_FOREVER_REALM_RULESET_SETTING_KEYS: string[] = [
+  WOW_FOREVER_REALM_RULESETS_KEY,
+];
+
 /** Plugin-local event emitted after an admin saves the Forever config. */
 export const WOW_FOREVER_CONFIG_UPDATED = 'blizzard.forever-config.updated';
 

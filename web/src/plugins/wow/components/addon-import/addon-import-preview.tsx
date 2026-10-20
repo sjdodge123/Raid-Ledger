@@ -3,7 +3,8 @@
  *
  * Summary + class/level diff + provenance, then each warning as a `warning`
  * status banner (design-system §4.7). `RULESET_CHANGED` carries an optional
- * "Update ruleset" checkbox (→ `confirm.updateRuleset`); `GUID_CHANGED`
+ * "Update ruleset" checkbox (→ `confirm.updateRuleset` + the previewed
+ * `updateRulesetTo`); `GUID_CHANGED`
  * carries a REQUIRED one (→ `confirm.repinGuid`) — `canApplyAddonImport`
  * keeps Import disabled until it is ticked. `noop` / `stale` previews have
  * nothing to apply.
@@ -15,12 +16,14 @@
 import type { JSX, ReactNode } from 'react';
 import {
     WOW_FOREVER_RULESET_LABELS,
+    WowForeverRulesetSchema,
     type AddonImportResultDto,
+    type AddonImportRulesetInferenceDto,
     type AddonImportTargetDto,
     type AddonImportWarning,
     type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
-import { canApplyAddonImport } from './addon-import.helpers';
+import { canApplyAddonImport, rulesetPickerHint } from './addon-import.helpers';
 import { Checkbox } from '../../../../components/ui/checkbox';
 import { Button } from '../../../../components/ui/button';
 import { AddonImportSummary } from './addon-import-summary';
@@ -55,14 +58,43 @@ interface WarningsProps {
     onConfirmChange: (next: AddonImportConfirm) => void;
 }
 
-function RulesetWarning({ warning, confirm, onConfirmChange }: Omit<WarningsProps, 'result'> & { warning: AddonImportWarning }): JSX.Element {
+const INFERENCE_SOURCE: Record<AddonImportRulesetInferenceDto['source'], string> = {
+    'realm-map': 'Inferred from the realm list your admin maintains — not from the export.',
+    blizzard: 'Inferred from Blizzard\'s realm data.',
+};
+
+type RulesetWarningProps = Omit<WarningsProps, 'result'> & { warning: AddonImportWarning; inference: AddonImportRulesetInferenceDto | undefined };
+
+/** ROK-1739 §6.2: an inferred change names the realm; without an inference the copy is unchanged. */
+function rulesetWarningTitle(warning: AddonImportWarning, inference: AddonImportRulesetInferenceDto | undefined): string {
+    const to = rulesetLabel(warning.to);
+    const from = rulesetLabel(warning.from);
+    if (inference) return `Realm "${inference.realmName}" is listed as ${to} — this character is ${from} here.`;
+    return `The export says this character is on a ${to} realm, not ${from}.`;
+}
+
+/**
+ * ROK-1739 (Codex r2 P2): ticking the box approves the previewed `to`, sent as
+ * `updateRulesetTo` so the apply refuses a value the realm map changed to since.
+ */
+function withRulesetConfirm(confirm: AddonImportConfirm, checked: boolean, to: unknown): AddonImportConfirm {
+    const approved = WowForeverRulesetSchema.safeParse(to);
+    return {
+        ...(confirm.repinGuid !== undefined ? { repinGuid: confirm.repinGuid } : {}),
+        updateRuleset: checked,
+        ...(checked && approved.success ? { updateRulesetTo: approved.data } : {}),
+    };
+}
+
+function RulesetWarning({ warning, inference, confirm, onConfirmChange }: RulesetWarningProps): JSX.Element {
     const to = rulesetLabel(warning.to);
     return (
-        <WarningBanner title={`The export says this character is on a ${to} realm, not ${rulesetLabel(warning.from)}.`}>
+        <WarningBanner title={rulesetWarningTitle(warning, inference)}>
+            {inference && <p data-testid="addon-import-inference-source" className="text-sm text-secondary">{INFERENCE_SOURCE[inference.source]}</p>}
             <Checkbox
                 label={`Update ruleset to ${to}`}
                 checked={confirm.updateRuleset === true}
-                onChange={(e) => onConfirmChange({ ...confirm, updateRuleset: e.target.checked })}
+                onChange={(e) => onConfirmChange(withRulesetConfirm(confirm, e.target.checked, warning.to))}
             />
         </WarningBanner>
     );
@@ -85,7 +117,9 @@ function Warnings({ result, confirm, onConfirmChange }: WarningsProps): JSX.Elem
     return (
         <>
             {result.warnings.map((w) => {
-                if (w.code === 'RULESET_CHANGED') return <RulesetWarning key={w.code} warning={w} confirm={confirm} onConfirmChange={onConfirmChange} />;
+                if (w.code === 'RULESET_CHANGED') {
+                    return <RulesetWarning key={w.code} warning={w} inference={result.rulesetInference} confirm={confirm} onConfirmChange={onConfirmChange} />;
+                }
                 if (w.code === 'GUID_CHANGED') return <GuidWarning key={w.code} confirm={confirm} onConfirmChange={onConfirmChange} />;
                 if (w.code === 'STALE_EXPORT') return <WarningBanner key={w.code} title="This export is older than the data already imported." />;
                 return null;
@@ -98,6 +132,9 @@ export interface AddonImportPreviewProps extends WarningsProps {
     /** The last apply error, shown as a danger banner. */
     error?: unknown;
     gameId?: number | undefined;
+    /** Re-runs the preview with the same string — offered on `RULESET_CONFIRM_STALE`. */
+    onPreviewAgain?: (() => void) | undefined;
+    previewing?: boolean | undefined;
     /** Create route only: what the import will create or update. */
     target?: AddonImportTargetDto | null | undefined;
     /** Create route only: the picked ruleset when the export has none (D13). */
@@ -105,12 +142,15 @@ export interface AddonImportPreviewProps extends WarningsProps {
     onRulesetChange?: ((value: WowForeverSelectableRuleset) => void) | undefined;
 }
 
-function TargetSection({ target, ruleset, onRulesetChange }: Pick<AddonImportPreviewProps, 'target' | 'ruleset' | 'onRulesetChange'>): JSX.Element | null {
+type TargetSectionProps = Pick<AddonImportPreviewProps, 'target' | 'ruleset' | 'onRulesetChange'> & { inference: AddonImportRulesetInferenceDto | undefined };
+
+function TargetSection({ target, ruleset, onRulesetChange, inference }: TargetSectionProps): JSX.Element | null {
     if (!target) return null;
+    const pick = needsRulesetPick(target) && onRulesetChange;
     return (
         <>
-            <AddonImportTargetBanner target={target} />
-            {needsRulesetPick(target) && onRulesetChange && <AddonImportRulesetPicker value={ruleset ?? null} onChange={onRulesetChange} />}
+            <AddonImportTargetBanner target={target} inference={inference} pick={ruleset} />
+            {pick && <AddonImportRulesetPicker value={ruleset ?? null} onChange={pick} hint={rulesetPickerHint(inference)} />}
         </>
     );
 }
@@ -119,11 +159,11 @@ export function AddonImportPreview(props: AddonImportPreviewProps): JSX.Element 
     const note = STATUS_NOTE[props.result.status];
     return (
         <div className="space-y-3">
-            <TargetSection target={props.target} ruleset={props.ruleset} onRulesetChange={props.onRulesetChange} />
+            <TargetSection target={props.target} ruleset={props.ruleset} onRulesetChange={props.onRulesetChange} inference={props.result.rulesetInference} />
             <AddonImportSummary result={props.result} />
             {note && <p data-testid="addon-import-status-note" className="text-sm text-secondary">{note}</p>}
             <Warnings result={props.result} confirm={props.confirm} onConfirmChange={props.onConfirmChange} />
-            {props.error != null && <AddonImportErrorBanner error={props.error} gameId={props.gameId} />}
+            {props.error != null && <AddonImportErrorBanner error={props.error} gameId={props.gameId} onPreviewAgain={props.onPreviewAgain} previewing={props.previewing} />}
         </div>
     );
 }

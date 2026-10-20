@@ -201,6 +201,133 @@ describe('bindToCharacter — ruleset', () => {
   });
 });
 
+describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
+  const inferred = (
+    over: Partial<AddonBindingOptions> = {},
+  ): AddonBindingOptions => ({
+    dryRun: false,
+    inferredRuleset: 'pvp',
+    ...over,
+  });
+
+  it('B1 null export ruleset + inferred pvp vs stored normal → RULESET_CHANGED, nothing written', () => {
+    const r = bindToCharacter(payload({ ruleset: null }), char(), inferred());
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
+    ]);
+    expect(r.setRuleset).toBeUndefined();
+    expect(codes(r)).toEqual([]);
+  });
+
+  it('B2 the same with confirm.updateRuleset → writes the inferred pvp', () => {
+    const opts = inferred({ confirm: { updateRuleset: true } });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBe('pvp');
+  });
+
+  it('B3 stored pvp + inferred pvp → no warning, nothing written', () => {
+    const r = bindToCharacter(
+      payload({ ruleset: null }),
+      char({ ruleset: 'pvp' }),
+      inferred({ confirm: { updateRuleset: true } }),
+    );
+    expect(warns(r)).not.toContain('RULESET_CHANGED');
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it("B4 the export's own roleplaying beats the inferred pvp", () => {
+    const r = bindToCharacter(
+      payload({ ruleset: 'roleplaying' }),
+      char(),
+      inferred(),
+    );
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'roleplaying' },
+    ]);
+  });
+
+  it('B5 confirmed updateRulesetTo equal to the fresh inference → written', () => {
+    const opts = inferred({
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBe('pvp');
+  });
+
+  it('B6 preview (dryRun) with a stale updateRulesetTo → re-warns the NEW value, no error, nothing written', () => {
+    const opts = inferred({
+      dryRun: true,
+      inferredRuleset: 'hardcore',
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBeUndefined();
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'hardcore' },
+    ]);
+    expect(codes(r)).toEqual([]);
+  });
+
+  it('B7 no updateRulesetTo (older client) → legacy write of the fresh value', () => {
+    const opts = inferred({
+      inferredRuleset: 'hardcore',
+      confirm: { updateRuleset: true },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBe('hardcore');
+  });
+
+  it('B8 apply: realm map changed since preview (approved pvp, now hardcore) → RULESET_CONFIRM_STALE, nothing written', () => {
+    const opts = inferred({
+      inferredRuleset: 'hardcore',
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it('B9 apply: realm mapping removed since preview (approved pvp, now nothing) → RULESET_CONFIRM_STALE, nothing written', () => {
+    const opts: AddonBindingOptions = {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    };
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it('B10 apply: mapping now equals the stored normal (approved pvp) → RULESET_CONFIRM_STALE, nothing written', () => {
+    const opts = inferred({
+      inferredRuleset: 'normal',
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it('B11 preview (dryRun) after the mapping was removed → no error, no warning', () => {
+    const opts: AddonBindingOptions = {
+      dryRun: true,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    };
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual([]);
+    expect(warns(r)).not.toContain('RULESET_CHANGED');
+  });
+
+  it('B12 legacy confirm (no updateRulesetTo) with the mapping removed → no error, nothing written', () => {
+    const opts: AddonBindingOptions = {
+      dryRun: false,
+      confirm: { updateRuleset: true },
+    };
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual([]);
+    expect(r.setRuleset).toBeUndefined();
+  });
+});
+
 describe('bindToCharacter — GUID', () => {
   it('pins when the character has no GUID yet', () => {
     const r = bindToCharacter(payload(), char({ addonGuid: null }), APPLY);

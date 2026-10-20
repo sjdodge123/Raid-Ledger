@@ -2,6 +2,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   AddonImportNewRequestSchema,
   type AddonWho,
+  type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import type * as schema from '../../../drizzle/schema';
 import {
@@ -21,6 +22,9 @@ import {
   buildRaidPayload,
   buildWho,
 } from './testing/addon-fixture.builder';
+import { createFallbackRuleset } from '../forever-realm-rulesets.helpers';
+
+type Picked = WowForeverSelectableRuleset | undefined;
 
 function thrown(fn: () => unknown) {
   try {
@@ -95,6 +99,40 @@ describe('createDtoFromExport (ROK-1738 D7 / D13 / A1)', () => {
     const who = buildWho({ fullName: '', raw: {} });
     expect(thrown(() => createDtoFromExport(who, 'us', 7)).code).toBe(
       'INVALID_PAYLOAD',
+    );
+  });
+});
+
+describe('createDtoFromExport — realm-map fallback (ROK-1739 D5/D6)', () => {
+  const nullWho = () => buildWho({ ruleset: null });
+  const dto = (who: AddonWho, picked?: Picked, fallback?: Picked) =>
+    createDtoFromExport(who, 'us', 7, picked, fallback);
+
+  it("C1 null export + pick normal + fallback pvp → normal (the user's pick wins)", () => {
+    expect(dto(nullWho(), 'normal', 'pvp').ruleset).toBe('normal');
+  });
+
+  it('C2 null export + no pick + fallback pvp → pvp', () => {
+    expect(dto(nullWho(), undefined, 'pvp').ruleset).toBe('pvp');
+  });
+
+  it('C3 null export + no pick + no fallback → RULESET_REQUIRED', () => {
+    expect(thrown(() => dto(nullWho())).code).toBe('RULESET_REQUIRED');
+  });
+
+  it('C4 export pvp + pick normal + fallback roleplaying → pvp (D13 unchanged)', () => {
+    const who = buildWho({ ruleset: 'pvp' });
+    expect(dto(who, 'normal', 'roleplaying').ruleset).toBe('pvp');
+  });
+
+  it('a Hardcore inference is never a create fallback → RULESET_REQUIRED', () => {
+    const fallback = createFallbackRuleset({
+      ruleset: 'hardcore',
+      realmName: 'Last Stand',
+      source: 'realm-map',
+    });
+    expect(thrown(() => dto(nullWho(), undefined, fallback)).code).toBe(
+      'RULESET_REQUIRED',
     );
   });
 });
