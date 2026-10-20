@@ -52,7 +52,7 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
 | Field | Type | Meaning |
 |---|---|---|
 | `schemaVersion` | `1` | Contract version. The mod emits **exactly one**. |
-| `kind` | `"character"` \| `"map"` \| `"items"` | Discriminator (§3–§5). |
+| `kind` | `"character"` \| `"map"` \| `"items"` \| `"containers"` | Discriminator (§3–§5a). |
 | `serverId` | string `^[A-Za-z0-9_-]{1,64}$` | Raid Ledger's id for the game server, issued with the token. |
 | `capturedAt` | ISO-8601 UTC, `Z` offset (`2026-10-17T20:15:00Z`), at most 3 fractional digits (≤ 24 chars) | When the mod read the data. Not later than server time + 5 min (§1). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,5}){1,3}$` (`0.220.5`) | `Version.GetVersionString()`. |
