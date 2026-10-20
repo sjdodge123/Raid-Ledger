@@ -74,3 +74,15 @@ export function useDeleteHubPost(guildId: number): UseMutationResult<void, Error
     const onSuccess = useRefreshPosts(guildId);
     return useMutation({ mutationFn: (postId) => deleteHubPost(guildId, postId), onSuccess });
 }
+
+/** Overview's "Previous posts" check — peeks at the first two posts. */
+export function useHasPreviousPosts(guildId: number, enabled: boolean): boolean {
+    const viewer = useViewerCacheScope();
+    const peek = useQuery({
+        queryKey: [...hubPostsKey(guildId), 'peek', viewer],
+        queryFn: () => fetchHubPosts(guildId, null, 2),
+        enabled: enabled && guildId > 0,
+        retry: false,
+    });
+    return (peek.data?.posts.length ?? 0) >= 2;
+}
