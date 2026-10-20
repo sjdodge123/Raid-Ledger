@@ -202,8 +202,11 @@ describe('AppleCalendarAdapter — errors and 412 rules', () => {
     server.editObject(urlOf(ref));
     const edited = server.object(urlOf(ref))?.etag;
     const mark = server.requests.length;
-    const next = await a.upsertEvent(CREDS, 'home', COPY, ref);
-    expect(next.providerEventId).toBe(ref.providerEventId);
+    const put = a.upsertEvent(CREDS, 'home', COPY, ref);
+    await expect(put).resolves.toMatchObject({
+      providerEventId: ref.providerEventId,
+    });
+    const next = await put;
     expect(sent('PUT', mark).map((r) => r.ifMatch)).toEqual([ref.etag, edited]);
     expect(next.etag).toBe(server.object(urlOf(ref))?.etag);
   });
@@ -350,8 +353,9 @@ describe('AppleCalendarAdapter — withDiscovery (§2.3)', () => {
       ...CREDS,
       homeSetUrl: `${FAKE_PARTITION_ORIGIN}/7654321/calendars/`,
     };
-    const out = await a.fetchBusy(stale, RANGE, ['home']);
-    expect(out.missingCalendarIds).toBeUndefined();
+    const read = a.fetchBusy(stale, RANGE, ['home']);
+    await expect(read).resolves.toMatchObject({ blocks: [] });
+    expect((await read).missingCalendarIds).toBeUndefined();
     expect(persist).toHaveBeenCalledTimes(1);
     expect(persist).toHaveBeenCalledWith(CREDS);
   });
