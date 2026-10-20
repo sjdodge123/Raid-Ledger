@@ -34,12 +34,20 @@ test.beforeAll(async () => {
 });
 
 interface Member { userId: number; jwt: string }
-interface OverviewConnection { id: number; provider: string; status: string; accountLabel: string | null }
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** `body[key]` as a number, or a loud failure naming the route's answer. */
+function numberField(body: unknown, key: string, label: string): number {
+    const n = isRecord(body) ? body[key] : undefined;
+    if (typeof n !== 'number') throw new Error(`${label}: ${JSON.stringify(body)}`);
+    return n;
+}
 
 async function createMember(): Promise<number> {
-    const user = (await apiPost(adminToken, '/admin/test/seed-non-guild-user', { quietDms: true })) as { userId?: number };
-    if (typeof user.userId !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(user)}`);
-    return user.userId;
+    const user: unknown = await apiPost(adminToken, '/admin/test/seed-non-guild-user', { quietDms: true });
+    return numberField(user, 'userId', 'seed-non-guild-user');
 }
 
 async function removeMember(userId: number): Promise<void> {
@@ -47,24 +55,24 @@ async function removeMember(userId: number): Promise<void> {
 }
 
 async function seedApple(userId: number, body: Record<string, unknown>): Promise<number> {
-    const conn = (await apiPost(adminToken, '/admin/test/calendar/seed-connection', {
+    const conn: unknown = await apiPost(adminToken, '/admin/test/calendar/seed-connection', {
         userId, provider: 'apple', ...body,
-    })) as { id?: number };
-    if (typeof conn.id !== 'number') throw new Error(`seed-connection apple: ${JSON.stringify(conn)}`);
-    return conn.id;
+    });
+    return numberField(conn, 'id', 'seed-connection apple');
 }
 
 /** The member's own overview row for `id` (raw JSON — the route answer must be the real shape). */
 async function overviewRow(jwt: string, id: number): Promise<Record<string, unknown> | undefined> {
-    const overview = (await apiGet(jwt, '/users/me/calendars')) as { connections?: Array<Record<string, unknown>> } | null;
-    return overview?.connections?.find((c) => c.id === id);
+    const overview: unknown = await apiGet(jwt, '/users/me/calendars');
+    const list = isRecord(overview) ? overview.connections : undefined;
+    return Array.isArray(list) ? list.filter(isRecord).find((c) => c.id === id) : undefined;
 }
 
 /** Poll the API after a seed: the page must never be asserted before the row is readable. */
 async function expectSeeded(jwt: string, id: number, status: string): Promise<void> {
     await expect.poll(async () => {
-        const row = (await overviewRow(jwt, id)) as OverviewConnection | undefined;
-        return row ? `${row.provider}/${row.status}` : 'absent';
+        const row = await overviewRow(jwt, id);
+        return row ? `${String(row.provider)}/${String(row.status)}` : 'absent';
     }, { message: `connection ${id} in GET /users/me/calendars`, timeout: 15_000 }).toBe(`apple/${status}`);
 }
 
