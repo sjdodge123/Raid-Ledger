@@ -41,6 +41,14 @@ type CategoryIds = Pick<
  * ROK-1432 — the admin surface of channel lifecycle (spec ROK-1428 §2.3):
  * settings with the enable guard, the activity table, suppressions.
  */
+/** A PATCH category id: omitted keeps `current`, `null` resets, a string sets. */
+function keepOrReset(
+  patched: string | null | undefined,
+  current: string | null,
+): string | null {
+  return patched === undefined ? current : patched;
+}
+
 @Injectable()
 export class ChannelLifecycleAdminService {
   constructor(
@@ -74,9 +82,17 @@ export class ChannelLifecycleAdminService {
       return this.settings.setChannelLifecycleSettings(patch);
     }
     const current = await this.settings.getChannelLifecycleSettings();
+    // `undefined` keeps the configured category; an explicit `null` resets it
+    // to the default (find-or-create by name) — Codex r5.
     const ids = await this.resolveForEnable({
-      gamesCategoryId: patch.gamesCategoryId ?? current.gamesCategoryId,
-      archiveCategoryId: patch.archiveCategoryId ?? current.archiveCategoryId,
+      gamesCategoryId: keepOrReset(
+        patch.gamesCategoryId,
+        current.gamesCategoryId,
+      ),
+      archiveCategoryId: keepOrReset(
+        patch.archiveCategoryId,
+        current.archiveCategoryId,
+      ),
     });
     return this.settings.setChannelLifecycleSettings({ ...patch, ...ids });
   }

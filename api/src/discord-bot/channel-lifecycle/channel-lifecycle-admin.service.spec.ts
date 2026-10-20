@@ -99,7 +99,47 @@ describe('updateSettings — enable guard', () => {
     });
     expect(out.archiveCategoryId).toBe('cat-arch');
   });
+});
 
+describe('updateSettings — enable categories (Codex r5)', () => {
+  it('an explicit null category resets to the default on enable (Codex r5)', async () => {
+    const { svc, settings } = build();
+    settings.getChannelLifecycleSettings.mockResolvedValue({
+      ...BASE,
+      gamesCategoryId: 'old-games',
+      archiveCategoryId: 'old-arch',
+    });
+    const spy = stubCategories('ok');
+    await svc.updateSettings({
+      enabled: true,
+      gamesCategoryId: null,
+      archiveCategoryId: null,
+    });
+    const asked = spy.mock.calls.map(([, o]) => [o.name, o.id]);
+    expect(asked).toEqual([
+      ['Archived', null],
+      ['Games', null],
+    ]);
+  });
+
+  it('an omitted category keeps the configured one on enable', async () => {
+    const { svc, settings } = build();
+    settings.getChannelLifecycleSettings.mockResolvedValue({
+      ...BASE,
+      gamesCategoryId: 'old-games',
+      archiveCategoryId: 'old-arch',
+    });
+    const spy = stubCategories('ok');
+    await svc.updateSettings({ enabled: true });
+    const asked = spy.mock.calls.map(([, o]) => [o.name, o.id]);
+    expect(asked).toEqual([
+      ['Archived', 'old-arch'],
+      ['Games', 'old-games'],
+    ]);
+  });
+});
+
+describe('updateSettings — patch validation', () => {
   it('passes a non-enable patch straight through without Discord', async () => {
     const { svc, settings } = build(false);
     const spy = stubCategories('ok');
