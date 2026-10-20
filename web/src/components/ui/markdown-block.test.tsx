@@ -61,6 +61,37 @@ describe('MarkdownBlock — allowed elements', () => {
         expect(mount('**[a](/x)**').querySelector('strong > a')?.getAttribute('href')).toBe('/x');
     });
 
+    it('keeps an unindented line after a hard break inside its numbered item (Codex r2)', () => {
+        const root = mount('1. one  \ncontinued\n2. two');
+        expect(root.querySelectorAll('ol'), 'a hard-break continuation must not split the list').toHaveLength(1);
+        expect(root.querySelectorAll('p'), 'the continuation must not become a paragraph').toHaveLength(0);
+        const items = root.querySelectorAll('ol > li');
+        expect(items).toHaveLength(2);
+        expect(items[0]?.textContent).toBe('onecontinued');
+        expect(items[0]?.querySelectorAll('br')).toHaveLength(1);
+    });
+
+    it('keeps an unindented line after a backslash hard break inside its bullet item (Codex r2)', () => {
+        const root = mount('- one\\\ncontinued\n- two');
+        expect(root.querySelectorAll('ul'), 'a hard-break continuation must not split the list').toHaveLength(1);
+        expect(root.querySelectorAll('p'), 'the continuation must not become a paragraph').toHaveLength(0);
+        const items = root.querySelectorAll('ul > li');
+        expect(items).toHaveLength(2);
+        expect(items[0]?.textContent).toBe('onecontinued');
+    });
+
+    it('a blank line after a hard-break item still ends the list', () => {
+        const root = mount('- one  \n\nafter');
+        expect(root.querySelectorAll('ul > li')).toHaveLength(1);
+        expect(root.querySelector('p')?.textContent).toBe('after');
+    });
+
+    it('an unindented line after an item WITHOUT a hard break still starts a paragraph', () => {
+        const root = mount('- one\nafter');
+        expect(root.querySelectorAll('ul > li')).toHaveLength(1);
+        expect(root.querySelector('p')?.textContent).toBe('after');
+    });
+
     it('splits a paragraph and a following list', () => {
         const root = mount('intro\n- a\n- b\n\nafter');
         expect(root.querySelectorAll('p')).toHaveLength(2);

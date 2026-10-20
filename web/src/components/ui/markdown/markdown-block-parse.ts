@@ -2,7 +2,8 @@
  * Block grouping for `MarkdownBlock` (ROK-1868 D14). Pure: source in, blocks
  * out. A blank line ends a block; consecutive `- ` / `* ` / `+ ` lines form a
  * bullet list and `N. ` lines a numbered list (one level — indented markers
- * flatten into the same list); an indented non-marker line continues the
+ * flatten into the same list); an indented non-marker line, or any non-marker
+ * line after a hard-break line (trailing two spaces / `\`), continues the
  * previous item (rendered after a `<br>`); everything else is a paragraph
  * whose single newlines are `<br>`s. Headings, quotes, rules, tables and HTML
  * are NOT recognised — they are paragraph text, rendered literally.
@@ -40,6 +41,13 @@ function stripBreakMarker(line: string): string {
     return trimmed.endsWith('\\') && !trimmed.endsWith('\\\\') ? trimmed.slice(0, -1) : trimmed;
 }
 
+/** True when `line` ends in a CommonMark hard break: two+ trailing spaces, or one unescaped `\`. */
+function endsWithHardBreak(line: string): boolean {
+    if (/ {2,}$/.test(line)) return true;
+    const trimmed = line.trimEnd();
+    return trimmed.endsWith('\\') && !trimmed.endsWith('\\\\');
+}
+
 function newList(item: ListLine): MarkdownBlockNode {
     return item.kind === 'ul'
         ? { kind: 'ul', items: [[item.text]] }
@@ -58,8 +66,12 @@ function extend(cur: MarkdownBlockNode | null, raw: string, item: ListLine | nul
         cur.lines.push(raw);
         return true;
     }
-    if (!/^\s/.test(raw)) return false;
-    cur.items[cur.items.length - 1]?.push(raw);
+    const last = cur.items[cur.items.length - 1];
+    if (!last) return false;
+    // Indented, or the item's previous line ends in a hard break — TipTap serialises a
+    // break inside a list item with NO continuation indent (`1. one  \ncontinued`).
+    if (!/^\s/.test(raw) && !endsWithHardBreak(last[last.length - 1] ?? '')) return false;
+    last.push(raw);
     return true;
 }
 
