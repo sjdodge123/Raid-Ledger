@@ -49,18 +49,18 @@ while [[ $# -gt 0 ]]; do
             break
             ;;
         *)
-            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|light] -- <cmd> [args...]" >&2
+            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|medium|light] -- <cmd> [args...]" >&2
             exit 2
             ;;
     esac
 done
 
 if [[ $# -eq 0 ]]; then
-    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|light] -- <cmd> [args...]" >&2
+    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] [--weight heavy|medium|light] -- <cmd> [args...]" >&2
     exit 2
 fi
 
-if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "light" ]]; then
+if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "medium" && "$WEIGHT" != "light" ]]; then
     echo "{\"ok\":false,\"error\":\"invalid_weight\",\"weight\":\"$WEIGHT\"}" >&2
     exit 2
 fi
@@ -173,9 +173,9 @@ heartbeat_loop() {
 # could deadlock it behind its own reservation. The standalone path (operator
 # CLI, or a direct wrapper invocation) is gated normally.
 ADMISSION_KEY=""
-if [[ "$WEIGHT" == "heavy" && -z "${RL_ADMISSION_HELD:-}" ]]; then
+if [[ ( "$WEIGHT" == "heavy" || "$WEIGHT" == "medium" ) && -z "${RL_ADMISSION_HELD:-}" ]]; then
     ADMISSION_KEY="hb-$$-$(date +%s)"
-    if ! admission::acquire "$ADMISSION_KEY" "$ADMISSION_KEY" ""; then
+    if ! admission::acquire "$ADMISSION_KEY" "$ADMISSION_KEY" "" "" "$(admission::need_mb_for "$WEIGHT")"; then
         echo "[admission] admission_timeout — refusing to start a heavy run on a loaded host" >&2
         exit 75
     fi

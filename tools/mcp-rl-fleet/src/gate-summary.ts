@@ -98,3 +98,17 @@ export function staticGateGreen(logTail?: string): boolean {
     rows.some((r) => re.test(r.name) && r.status === 'PASS'),
   );
 }
+
+/**
+ * ROK-1793 S2 review P1 — is a split parent's merged table clean enough to
+ * grant any tier? Build + TypeScript + Lint must PASS and no non-Discord row may
+ * FAIL: the children run concurrently, so a Playwright PASS from child B is not
+ * evidence that child A's rows passed. Discord keeps the ROK-1533 exception.
+ *
+ * @param logTail - Raw tail of the parent's log (the merged table).
+ */
+export function splitGateClean(logTail?: string): boolean {
+  const rows = summaryRows(logTail);
+  if (rows.some((r) => r.status === 'FAIL' && !/^Discord\b/.test(r.name))) return false;
+  return REQUIRED_STATIC.every((re) => rows.some((r) => re.test(r.name) && r.status === 'PASS'));
+}

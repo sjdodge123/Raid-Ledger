@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# ROK-1793 S2 — parallel fleet gate parent (spec planning-artifacts/specs/ROK-1793-S2.md).
+#
+# Usage: gate-fanout <P> --owner-slot A --exclude-slots csv --inner-env str
+#            --a-args str --b-args str --serial-args str [--fail-fast]
+#            [--child-timeout N] [--force-serial reason]
+#
+# Runs as task P (weight light, holds no admission). Borrows a FREE second slot
+# B, copies slot A's tree onto it, dispatches child A (A: `RL_GATE_E2E=deferred`
+# + a-args, heavy) and child B (B: `RL_GATE_DISCORD=defer` + b-args, medium,
+# agent borrow-P), relays both children's raw `[step-time]` + `Name: STATUS`
+# lines, and — only when B printed `[parallel] discord-deferred` — runs phase-2
+# child C on A (`RL_GATE_DISCORD=only` + b-args, light). Then exec's
+# _gate_merge.sh P (exit code = merge's). No free slot / low memory / a failed
+# copy run the serial args on A exactly as a non-parallel gate (exit passthrough);
+# so does --force-serial <reason> (the MCP could not enumerate Mutagen-busy slots,
+# so no slot is known to be safe to borrow — Codex r2 P1). B is released the
+# moment child B is terminal, not when A also ends (Codex r2 P2).
+# The EXIT trap cancels live children and releases the borrow on EVERY path.
+set -euo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# Child tools resolve by name so a test PATH shim wins; the real bin dir is the
+# fallback on the host.
+PATH="$PATH:$BIN_DIR_SELF"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_parser.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_admission.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_borrow.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_fanout.sh"
+
+P="${1:-}"; shift || true
+[[ "$P" =~ ^[a-z0-9]{8,32}$ ]] || { echo '{"ok":false,"error":"invalid_parent_task_id"}' >&2; exit 2; }
+OWNER_SLOT="" EXCLUDE="" INNER_ENV="" A_ARGS="" B_ARGS="" SERIAL_ARGS="" FAIL_FAST=0 CHILD_TIMEOUT=5400 FORCE_SERIAL=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --owner-slot) OWNER_SLOT="$2"; shift 2 ;;
+        --exclude-slots) EXCLUDE="$2"; shift 2 ;;
+        --inner-env) INNER_ENV="$2"; shift 2 ;;
+        --a-args) A_ARGS="$2"; shift 2 ;;
+        --b-args) B_ARGS="$2"; shift 2 ;;
+        --serial-args) SERIAL_ARGS="$2"; shift 2 ;;
+        --fail-fast) FAIL_FAST=1; shift ;;
+        --child-timeout) CHILD_TIMEOUT="$2"; shift 2 ;;
+        --force-serial) FORCE_SERIAL="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\"}" >&2; exit 2 ;;
+    esac
+done
+[[ "$OWNER_SLOT" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_owner_slot"}' >&2; exit 2; }
+[[ "$CHILD_TIMEOUT" =~ ^[0-9]+$ ]] || CHILD_TIMEOUT=5400
+# P is light: children must run their own admission gate.
+unset RL_ADMISSION_HELD
+# Codex r4 P2: the owner slot must be the DISPATCHING agent's own claim — no
+# fallback to whoever holds it, or an unclaimed caller would borrow B and copy
+# another agent's workspace onto it. Refused before any borrow/copy/dispatch.
+OWNER_AGENT="${RL_AGENT_ID:-}"
+SLOT_AGENT=$(jq -r --argjson s "$OWNER_SLOT" '.[] | select(.slot == $s and .claimed == true) | .agent_id // ""' "$RL_CLAIMS_FILE" 2>/dev/null || true)
+if [[ -z "$OWNER_AGENT" || "$OWNER_AGENT" == "unknown" || "$OWNER_AGENT" != "$SLOT_AGENT" ]]; then
+    echo "[parallel] refused: slot $OWNER_SLOT is not claimed by the dispatching agent"
+    echo '{"ok":false,"error":"parallel_requires_claim"}' >&2
+    exit 2
+fi
+MERGE="${RL_GATE_MERGE:-$BIN_DIR_SELF/_gate_merge.sh}"
+BORROWED="" FANOUT_CHILDREN="" FANOUT_SERIAL_PID="" FANOUT_SERIAL_WD=""
+trap fanout::cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+# serial_run <reason> — today's single-slot gate on A; exits with its code.
+# Bounded by CHILD_TIMEOUT exactly as a child is (Codex r6 P2; exit 124 on timeout).
+serial_run() {
+    local rc=0
+    echo "[parallel] fallback: serial ($1)"
+    state::mutate "$RL_TASKS_DIR/$P.json" '.parallel = {mode: "serial_fallback", borrowed_slot: null}' || true
+    fanout::run_bounded "$CHILD_TIMEOUT" env RL_AGENT_ID="$OWNER_AGENT" run-on-runner-with-heartbeat \
+        --weight heavy -- bash -c "$(fanout::inner "" "$SERIAL_ARGS")" || rc=$?
+    exit "$rc"
+}
+
+[[ -z "$FORCE_SERIAL" ]] || serial_run "$FORCE_SERIAL"
+
+B=""; RC=0
+B=$(borrow::try "$OWNER_SLOT" "$P" "$EXCLUDE") || RC=$?
+case "$RC" in
+    0) ;;
+    3) serial_run "memory" ;;
+    *) serial_run "no free slot" ;;
+esac
+BORROWED="$B"
+echo "[parallel] borrowed slot $B"
+state::mutate "$RL_TASKS_DIR/$P.json" --argjson b "$B" '.parallel = {mode: "parallel", borrowed_slot: $b}' || true
+if ! borrow::copy_tree "$OWNER_SLOT" "$B"; then
+    borrow::release "$B" "$P" || true
+    BORROWED=""
+    serial_run "copy failed"
+fi
+
+CA=$(fanout::child_id "$P" a); CB=$(fanout::child_id "$P" b)
+# Child A runs --no-e2e, which validate-ci.sh refuses (exit 2) alongside
+# E2E_SPECS — so A drops the Playwright selectors; B, C and serial keep them.
+fanout::dispatch a "$OWNER_SLOT" heavy "$OWNER_AGENT" false "env -u E2E_SPECS -u E2E_SCOPE RL_GATE_E2E=deferred " "$A_ARGS"
+fanout::dispatch b "$B" medium "$(borrow::agent_id "$P")" true "RL_GATE_DISCORD=defer " "$B_ARGS"
+# wait_all frees the borrow as soon as CB is terminal, so B's queue moves while
+# A still runs; the release below (and the EXIT trap) are backstops.
+FANOUT_BORROW_CHILD="$CB"
+fanout::wait_all "$FAIL_FAST" "$CA" "$CB"
+
+fanout::release_borrow
+
+if grep -q '^\[parallel\] discord-deferred' "$RL_TASKS_DIR/$CB.log" 2>/dev/null \
+    && ! { [[ "$FAIL_FAST" == "1" ]] && { fanout::failed "$CA" || fanout::failed "$CB"; }; }; then
+    fanout::dispatch c "$OWNER_SLOT" light "$OWNER_AGENT" false "RL_GATE_DISCORD=only " "$B_ARGS"
+    fanout::wait_all 0 "$(fanout::child_id "$P" c)"
+fi
+
+fanout::cleanup
+trap - EXIT TERM INT
+if [[ -f "$MERGE" ]]; then
+    exec bash "$MERGE" "$P"
+fi
+echo "[parallel] merge: not available"
+exit 1
