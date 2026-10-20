@@ -4,7 +4,7 @@
  * is a 400 pointing at `POST /guilds/:id/posts`; rules/links still save and
  * nothing in this service notifies any more (the emit moved to post create).
  */
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { HubPost } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
@@ -42,17 +42,24 @@ function post(over: Partial<HubPost> = {}): HubPost {
   };
 }
 
-function build(latest: HubPost | null): {
+function build(
+  latest: HubPost | null,
+  readable = true,
+): {
   service: GuildProfileService;
   latestFn: jest.Mock;
+  canReadOverview: jest.Mock;
 } {
   const latestFn = jest.fn().mockResolvedValue(latest);
   const posts = { latest: latestFn } as unknown as HubPostsService;
-  const access = {
-    canView: jest.fn().mockResolvedValue(true),
-  } as unknown as GuildAccessService;
+  const canReadOverview = jest.fn().mockResolvedValue(readable);
+  const access = { canReadOverview } as unknown as GuildAccessService;
   const db = {} as PostgresJsDatabase<typeof schema>;
-  return { service: new GuildProfileService(db, access, posts), latestFn };
+  return {
+    service: new GuildProfileService(db, access, posts),
+    latestFn,
+    canReadOverview,
+  };
 }
 
 beforeEach(() => {
@@ -88,6 +95,20 @@ describe('GuildProfileService.get — gmPost derived from the newest post', () =
     const out = await service.get(actor, 7);
     expect(out.gmPost).toBeNull();
     expect(out.latestPost).toBeNull();
+  });
+
+  it('gates the read on canReadOverview for this actor + guild', async () => {
+    const { service, canReadOverview } = build(post());
+    await service.get(actor, 7);
+    expect(canReadOverview).toHaveBeenCalledWith(actor, 7);
+  });
+
+  it('is a 403 and reads no post when canReadOverview refuses', async () => {
+    const { service, latestFn } = build(post(), false);
+    const err = await service.get(actor, 7).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect(latestFn).not.toHaveBeenCalled();
+    expect(findProfileRow).not.toHaveBeenCalled();
   });
 });
 
