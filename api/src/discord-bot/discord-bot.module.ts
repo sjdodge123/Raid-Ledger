@@ -11,6 +11,7 @@ import { NotificationModule } from '../notifications/notification.module';
 import { ItadModule } from '../itad/itad.module';
 import { GameTasteModule } from '../game-taste/game-taste.module';
 import { DiscordBotService } from './discord-bot.service';
+import { ChannelLifecycleModule } from './channel-lifecycle/channel-lifecycle.module';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotInviteController } from './discord-bot-invite.controller';
@@ -133,6 +134,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     // ROK-1454 D10: /lfg writes through LfgService. LfgModule imports only
     // Drizzle/Cron/Settings, so this cannot cycle back into the bot.
     LfgModule,
+    forwardRef(() => ChannelLifecycleModule),
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),

@@ -31,6 +31,7 @@ import type {
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
 import { defined } from '../../common/defined.helpers';
+import { suppressUnboundAutoBindings } from '../channel-lifecycle/channel-lifecycle.store';
 
 export interface BindingRecord {
   id: string;
@@ -189,18 +190,18 @@ export class ChannelBindingsService {
       eq(schema.channelBindings.channelId, channelId),
     ];
 
-    if (recurrenceGroupId) {
-      conditions.push(
-        eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-      );
-    } else {
-      conditions.push(sql`${schema.channelBindings.recurrenceGroupId} IS NULL`);
-    }
+    conditions.push(
+      recurrenceGroupId
+        ? eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId)
+        : sql`${schema.channelBindings.recurrenceGroupId} IS NULL`,
+    );
 
     const result = await this.db
       .delete(schema.channelBindings)
       .where(and(...conditions))
       .returning();
+    // ROK-1431 D9: unbinding a managed channel stops the lifecycle recreating it.
+    await suppressUnboundAutoBindings(this.db, result);
 
     if (result.length > 0) {
       this.logger.log(
@@ -223,6 +224,7 @@ export class ChannelBindingsService {
       .delete(schema.channelBindings)
       .where(eq(schema.channelBindings.id, id))
       .returning();
+    await suppressUnboundAutoBindings(this.db, result);
     const channelIds = result.map((row) => row.channelId);
     return this.announced(channelIds, result.length > 0);
   }
