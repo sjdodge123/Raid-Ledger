@@ -20,6 +20,7 @@ export interface HubCopy {
     composerLabel: string;
     composerHint: string;
     postRemoved: string;
+    postsBlurb: string;
 }
 
 const WOW_COPY: HubCopy = {
@@ -35,6 +36,7 @@ const WOW_COPY: HubCopy = {
     composerLabel: 'New post',
     composerHint: 'Members see this at the top of the guild page.',
     postRemoved: 'This post was removed.',
+    postsBlurb: 'Everything the guild master and officers have posted, newest first.',
 };
 
 const SERVER_COPY: HubCopy = {
@@ -50,6 +52,7 @@ const SERVER_COPY: HubCopy = {
     composerLabel: 'New post',
     composerHint: 'Members see this at the top of the server page.',
     postRemoved: 'This post was removed.',
+    postsBlurb: 'Everything the server leader and officers have posted, newest first.',
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = { wow_guild: WOW_COPY, game_server: SERVER_COPY };
