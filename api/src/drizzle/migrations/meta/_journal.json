@@ -1660,6 +1660,20 @@
       "when": 1792515039754,
       "tag": "0237_channel_bindings_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1792515132570,
+      "tag": "0238_guild_profiles_discord_channel_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1792515133872,
+      "tag": "0239_backfill_discord_channel_source",
+      "breakpoints": true
     }
   ]
 }
