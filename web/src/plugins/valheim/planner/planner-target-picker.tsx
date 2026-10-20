@@ -1,0 +1,143 @@
+/**
+ * ROK-1854 — pick a target: the shared `Combobox` over the catalogue (name
+ * or prefab, D11), a quality `Select` (items only), an amount `Input` and
+ * "Add to list"; the list-narrowing filters sit in the `FilterEntry` funnel
+ * (toolbar trigger ≥1024px, FAB + sheet below).
+ */
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import type { ValheimRecipeCatalogEntry } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
+import { Combobox } from '../../../components/ui/combobox';
+import { FilterEntry, FilterEntryTrigger } from '../../../components/ui/filter-entry';
+import { Input } from '../../../components/ui/input';
+import { Select } from '../../../components/ui/select';
+import {
+    activePlannerFilters,
+    DEFAULT_PLANNER_FILTERS,
+    PLANNER_AMOUNT_MAX,
+    type PlannerFilters,
+    PLANNER_TARGETS_MAX,
+} from './planner.helpers';
+import { PlannerFilterControls } from './planner-filters';
+
+type Entry = ValheimRecipeCatalogEntry;
+
+interface PickerProps {
+    entries: readonly Entry[];
+    filters: PlannerFilters;
+    onFilters: (next: PlannerFilters) => void;
+    hasPersonal: boolean;
+    picked: Entry | null;
+    onPick: (entry: Entry | null) => void;
+    quality: number;
+    onQuality: (q: number) => void;
+    onAdd: (amount: number) => void;
+    /** The list is at PLANNER_TARGETS_MAX: adding is refused. */
+    atCap: boolean;
+}
+
+function narrow(entries: readonly Entry[], f: PlannerFilters, text: string): Entry[] {
+    const q = text.trim().toLowerCase();
+    return entries.filter(
+        (e) =>
+            (f.kind === 'both' || e.kind === f.kind) &&
+            (f.category === null || e.category === f.category) &&
+            (q === '' || e.name.toLowerCase().includes(q) || e.prefab.toLowerCase().includes(q)),
+    ).slice(0, 50);
+}
+
+function Funnel(props: PickerProps & { isOpen: boolean; setOpen: (o: boolean) => void }): JSX.Element {
+    const { entries, filters, onFilters, hasPersonal, isOpen, setOpen } = props;
+    const categories = useMemo(() => [...new Set(entries.map((e) => e.category))].sort(), [entries]);
+    return (
+        <FilterEntry
+            activeCount={activePlannerFilters(filters)}
+            isOpen={isOpen}
+            onOpenChange={setOpen}
+            onClearAll={() => onFilters(DEFAULT_PLANNER_FILTERS)}
+        >
+            <PlannerFilterControls filters={filters} categories={categories} hasPersonal={hasPersonal} onChange={onFilters} />
+        </FilterEntry>
+    );
+}
+
+function AmountRow({ picked, quality, onQuality, onAdd, atCap }: Pick<PickerProps, 'picked' | 'quality' | 'onQuality' | 'onAdd' | 'atCap'>): JSX.Element {
+    const [amount, setAmount] = useState('1');
+    const n = Number(amount);
+    const valid = Number.isInteger(n) && n >= 1 && n <= PLANNER_AMOUNT_MAX;
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            {picked !== null && picked.kind === 'item' && picked.maxQuality > 1 && (
+                <Select aria-label="Quality" value={String(quality)} onChange={(e) => onQuality(Number(e.target.value))} wrapperClassName="w-28">
+                    {Array.from({ length: picked.maxQuality }, (_, i) => (
+                        <option key={i + 1} value={i + 1}>
+                            Quality {i + 1}
+                        </option>
+                    ))}
+                </Select>
+            )}
+            <Input aria-label="Amount" type="number" min={1} max={PLANNER_AMOUNT_MAX} value={amount} invalid={!valid} onChange={(e) => setAmount(e.target.value)} className="w-24" />
+            <Button variant="primary" disabled={picked === null || !valid || atCap} onClick={() => onAdd(n)}>
+                Add to list
+            </Button>
+            {atCap && (
+                <p role="status" className="w-full text-xs text-muted">
+                    Your list holds up to {PLANNER_TARGETS_MAX} targets — remove one to add another.
+                </p>
+            )}
+        </div>
+    );
+}
+
+/**
+ * The search text and the pick stay in step: an edit that no longer reads as
+ * the picked entry's label drops the pick, so "Add to list" cannot add a stale
+ * one. A ref holds the latest pick — the Combobox calls `onChange` and then
+ * `onInputChange` in one event, before `picked` re-renders.
+ */
+function usePickerText(picked: Entry | null, onPick: (e: Entry | null) => void) {
+    const [text, setText] = useState('');
+    const latest = useRef(picked);
+    useEffect(() => {
+        latest.current = picked;
+    }, [picked]);
+    const pick = (e: Entry | null): void => {
+        latest.current = e;
+        onPick(e);
+    };
+    const edit = (t: string): void => {
+        setText(t);
+        const cur = latest.current;
+        if (cur !== null && t !== cur.name) pick(null);
+    };
+    return { text, pick, edit };
+}
+
+export function PlannerTargetPicker(props: PickerProps): JSX.Element {
+    const { entries, filters, picked, onPick } = props;
+    const { text, pick, edit } = usePickerText(picked, onPick);
+    const [isOpen, setOpen] = useState(false);
+    const options = useMemo(() => narrow(entries, filters, text), [entries, filters, text]);
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center gap-2">
+                <Combobox<Entry>
+                    className="flex-1"
+                    label="Search an item or piece"
+                    placeholder="Search an item or piece"
+                    options={options}
+                    getKey={(e) => `${e.kind}:${e.prefab}`}
+                    getLabel={(e) => e.name}
+                    value={picked}
+                    onChange={pick}
+                    inputValue={text}
+                    onInputChange={edit}
+                    emptyText="Nothing craftable matches"
+                />
+                <FilterEntryTrigger activeCount={activePlannerFilters(filters)} isOpen={isOpen} onOpenChange={setOpen} />
+            </div>
+            <Funnel {...props} isOpen={isOpen} setOpen={setOpen} />
+            <AmountRow {...props} />
+        </div>
+    );
+}

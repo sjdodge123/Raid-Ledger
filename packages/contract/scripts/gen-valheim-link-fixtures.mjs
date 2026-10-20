@@ -3,6 +3,7 @@
 // character and world names, no seeds. Run from the repo root:
 //   node packages/contract/scripts/gen-valheim-link-fixtures.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { recipesFixtures } from './gen-valheim-link-fixtures.recipes.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, gzipSync } from 'node:zlib';
@@ -243,8 +244,10 @@ const invalidContainers = {
     'containers-unknown-key': [withChest({ ...chest('piece_chest_wood', 1, 1, []), owner: 'Testviking' }), { path: 'containers.0', code: 'unrecognized_keys' }],
     'containers-quality-zero': [withChest(chest('piece_chest_wood', 1, 1, [cstack('Wood', 0, 5)])), { path: 'containers.0.items.0.quality', code: 'too_small' }],
 };
+const recipes = recipesFixtures(header);
+for (const [name, v] of Object.entries(recipes.valid)) write(dir, name, v);
 const expected = {};
-for (const [name, [msg, want]] of Object.entries({ ...invalid, ...invalidContainers })) {
+for (const [name, [msg, want]] of Object.entries({ ...invalid, ...invalidContainers, ...recipes.invalid })) {
     write(invalidDir, name, msg);
     expected[name] = want;
 }

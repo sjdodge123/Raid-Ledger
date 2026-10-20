@@ -85,4 +85,5 @@ export * from './schema/pelican-schedules';
 export * from './schema/valheim-link';
 export * from './schema/valheim-armory';
 export * from './schema/valheim-containers';
+export * from './schema/valheim-recipes';
 export * from './schema/discord-game-roles';

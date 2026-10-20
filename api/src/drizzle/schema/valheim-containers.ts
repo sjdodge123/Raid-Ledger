@@ -18,7 +18,7 @@ import {
   snapshotCol,
   snapshotFk,
   tsz,
-} from './valheim-armory';
+} from './valheim-columns';
 
 /** Container privacy as the mod sent it; `group` is stored, never derived (ROK-1853). */
 export type ValheimContainerPrivacyRow = 'public' | 'private' | 'group';

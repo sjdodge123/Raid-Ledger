@@ -15,10 +15,9 @@ import type {
 } from '@raid-ledger/contract';
 import type { AuthenticatedUser } from '../../../../auth/types';
 import type { ValheimContainerScan } from '../../../../drizzle/schema';
-import { HUB_NOT_FOUND } from '../../../../guilds/hub-hidden.helpers';
 import { projectCatalog } from './valheim-armory-catalog.helpers';
-import { refuseHiddenHub } from './valheim-armory-hub-visibility.helpers';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
+import { assertServerHubVisible } from './valheim-hub-guard.helpers';
 import {
   distinctPrefabs,
   emptyMaterials,
@@ -173,13 +172,8 @@ export class ValheimMaterialsService {
   }
 
   /** A4 + ROK-1856: the hub must exist and be visible (before any read). */
-  private async assertHub(
-    serverId: number,
-    user: AuthenticatedUser,
-  ): Promise<void> {
-    const hub = await this.hubs.findServerHub(serverId);
-    if (!hub) throw new NotFoundException(HUB_NOT_FOUND);
-    refuseHiddenHub(hub, { id: user.id, role: user.role });
+  private assertHub(serverId: number, user: AuthenticatedUser): Promise<void> {
+    return assertServerHubVisible(this.hubs, serverId, user);
   }
 }
 

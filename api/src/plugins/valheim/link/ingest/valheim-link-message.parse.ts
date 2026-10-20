@@ -5,6 +5,7 @@ import {
   VALHEIM_LINK_CONTAINERS_MAX_BYTES,
   VALHEIM_LINK_ITEMS_MAX_BYTES,
   VALHEIM_LINK_MAP_MAX_BYTES,
+  VALHEIM_LINK_RECIPES_MAX_BYTES,
   ValheimLinkMessageSchema,
   type ValheimLinkMessage,
   type ValheimLinkMessageKind,
@@ -21,6 +22,7 @@ export const VALHEIM_LINK_KIND_MAX_BYTES: Record<
   map: VALHEIM_LINK_MAP_MAX_BYTES,
   items: VALHEIM_LINK_ITEMS_MAX_BYTES,
   containers: VALHEIM_LINK_CONTAINERS_MAX_BYTES,
+  recipes: VALHEIM_LINK_RECIPES_MAX_BYTES,
 };
 
 /** A schema issue as returned to the mod — never the offending value. */

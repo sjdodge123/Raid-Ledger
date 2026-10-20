@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ValheimCharacterMessageSchema } from './valheim-link-character.schema.js';
 import { ValheimItemsMessageSchema } from './valheim-link-items.schema.js';
 import { ValheimContainersMessageSchema } from './valheim-link-containers.schema.js';
+import { ValheimRecipesMessageSchema } from './valheim-link-recipes.schema.js';
 import { ValheimMapMessageSchema } from './valheim-link-map.schema.js';
 import { VALHEIM_LINK_SCHEMA_VERSION } from './valheim-link-common.schema.js';
 
@@ -14,10 +15,11 @@ export const ValheimLinkMessageSchema = z.discriminatedUnion('kind', [
     ValheimMapMessageSchema,
     ValheimItemsMessageSchema,
     ValheimContainersMessageSchema,
+    ValheimRecipesMessageSchema,
 ]);
 export type ValheimLinkMessage = z.infer<typeof ValheimLinkMessageSchema>;
 
-export const ValheimLinkMessageKindSchema = z.enum(['character', 'map', 'items', 'containers']);
+export const ValheimLinkMessageKindSchema = z.enum(['character', 'map', 'items', 'containers', 'recipes']);
 export type ValheimLinkMessageKind = z.infer<typeof ValheimLinkMessageKindSchema>;
 
 /**

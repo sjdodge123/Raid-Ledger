@@ -146,5 +146,53 @@
   "containers-quality-zero": {
     "path": "containers.0.items.0.quality",
     "code": "too_small"
+  },
+  "recipes-unknown-station": {
+    "path": "recipes.0.station",
+    "code": "custom"
+  },
+  "recipes-duplicate-id": {
+    "path": "recipes.1.id",
+    "code": "custom"
+  },
+  "recipes-duplicate-resource": {
+    "path": "recipes.0.resources.1.prefab",
+    "code": "custom"
+  },
+  "recipes-duplicate-station": {
+    "path": "stations.1.prefab",
+    "code": "custom"
+  },
+  "recipes-piece-unknown-station": {
+    "path": "pieces.0.station",
+    "code": "custom"
+  },
+  "recipes-process-unknown-processor": {
+    "path": "processes.0.processor",
+    "code": "custom"
+  },
+  "recipes-process-duplicate-input": {
+    "path": "processes.0.inputs.1.prefab",
+    "code": "custom"
+  },
+  "recipes-icon-without-atlas": {
+    "path": "atlas",
+    "code": "custom"
+  },
+  "recipes-icon-outside-atlas": {
+    "path": "pieces.0.icon",
+    "code": "custom"
+  },
+  "recipes-station-level-zero": {
+    "path": "stations.0.maxLevel",
+    "code": "too_small"
+  },
+  "recipes-bad-processor-type": {
+    "path": "processors.0.type",
+    "code": "invalid_value"
+  },
+  "recipes-unknown-key": {
+    "path": "recipes.0",
+    "code": "unrecognized_keys"
   }
 }

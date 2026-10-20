@@ -28,6 +28,8 @@ export const VALHEIM_LINK_MAP_MAX_BYTES = 8_388_608;
 export const VALHEIM_LINK_ITEMS_MAX_BYTES = 12_582_912;
 /** Request-body cap for a `containers` message; worst case ≈ 8.51 MB (ROK-1853, largest-message spec). */
 export const VALHEIM_LINK_CONTAINERS_MAX_BYTES = 10_485_760;
+/** Request-body cap for a `recipes` message; worst case ≈ 10.31 MB at the design caps (ROK-1854, largest-message spec). */
+export const VALHEIM_LINK_RECIPES_MAX_BYTES = 12_582_912;
 /** Recommended cap for one binary upload (base-map PNG or icon atlas). */
 export const VALHEIM_LINK_BINARY_MAX_BYTES = 16_777_216;
 
@@ -49,6 +51,16 @@ export const VALHEIM_LINK_CONTAINERS_MAX = 4096;
 export const VALHEIM_LINK_CONTAINER_ITEMS_MAX = 256;
 export const VALHEIM_LINK_CONTAINER_ENTRIES_MAX = 50_000;
 export const VALHEIM_LINK_CONTAINER_SLOTS_MAX = 4096;
+/** `recipes` (ROK-1854): recipes[], pieces[], stations[], processors[], processes[]; resources per recipe/piece; inputs per process; entries summed over the message; station levels. */
+export const VALHEIM_LINK_RECIPES_MAX = 4096;
+export const VALHEIM_LINK_PIECES_MAX = 4096;
+export const VALHEIM_LINK_STATIONS_MAX = 256;
+export const VALHEIM_LINK_PROCESSORS_MAX = 256;
+export const VALHEIM_LINK_PROCESSES_MAX = 2048;
+export const VALHEIM_LINK_REQUIREMENTS_MAX = 16;
+export const VALHEIM_LINK_PROCESS_INPUTS_MAX = 8;
+export const VALHEIM_LINK_RECIPE_ENTRIES_MAX = 12_000;
+export const VALHEIM_LINK_STATION_LEVEL_MAX = 20;
 
 // ---------- primitives ----------
 
