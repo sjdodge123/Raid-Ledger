@@ -17,6 +17,8 @@ export interface HubCopy {
     /** Events card empty states (ROK-1870: a community hub has no "guild"). */
     upcomingEmpty: string;
     recentEmpty: string;
+    /** The settings trigger + sheet title (ROK-1870: a community hub is not a guild). */
+    settingsTitle: string;
 }
 
 const WOW_COPY: HubCopy = {
@@ -29,6 +31,7 @@ const WOW_COPY: HubCopy = {
     editorsEmpty: 'No one yet. Add a rank or a member below — start with your Guild Master.',
     upcomingEmpty: 'No upcoming guild events. A guild editor can pick this guild when creating an event.',
     recentEmpty: 'No guild events in the last 8 weeks.',
+    settingsTitle: 'Guild settings',
 };
 
 const SERVER_COPY: HubCopy = {
@@ -41,6 +44,7 @@ const SERVER_COPY: HubCopy = {
     editorsEmpty: 'No one yet — start with your server leader.',
     upcomingEmpty: 'No upcoming guild events. A guild editor can pick this guild when creating an event.',
     recentEmpty: 'No guild events in the last 8 weeks.',
+    settingsTitle: 'Guild settings',
 };
 
 /** ROK-1870 — a community hub has a leader (the approved proposer) and sessions, no server. */
@@ -54,6 +58,7 @@ const COMMUNITY_COPY: HubCopy = {
     editorsEmpty: 'No one yet — start with your hub leader.',
     upcomingEmpty: 'No upcoming hub events. A hub editor can pick this hub when creating an event.',
     recentEmpty: 'No hub events in the last 8 weeks.',
+    settingsTitle: 'Hub settings',
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {

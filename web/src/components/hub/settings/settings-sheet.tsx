@@ -22,6 +22,7 @@ import { useGuildDiscord } from '../discord/use-guild-discord';
 import { HubEditorsSection } from './settings-editors';
 import { SettingsSection } from './settings-rows';
 import { HideHubRow } from './hide-hub-row';
+import { hubCopy } from '../hub-copy';
 
 function channelLine(mirror: GuildDiscordMirrorDto): string {
     if (mirror.state === 'ok') return `#${mirror.channel.name}`;
@@ -106,7 +107,7 @@ export function HubSettingsSheet({ ctx, module: mod, onClose, onChangeChannel }:
     const shared = {
         isOpen: true,
         onClose,
-        title: 'Guild settings',
+        title: hubCopy(ctx.page.guild.kind).settingsTitle,
         footer: <Button variant="secondary" onClick={onClose} data-testid="guild-settings-done">Done</Button>,
     };
     const body = <SheetBody ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />;

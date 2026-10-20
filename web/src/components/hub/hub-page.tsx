@@ -30,6 +30,7 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
+import { hubCopy } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
@@ -167,7 +168,7 @@ function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.El
                     action={canManage || hubBellVisible(ctx.page.viewer) ? (
                         <div className="flex items-center gap-2">
                             <HubNotifyBell page={ctx.page} />
-                            {canManage && <HubSettingsTrigger onOpen={s.openSettings} />}
+                            {canManage && <HubSettingsTrigger onOpen={s.openSettings} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
                         </div>
                     ) : null} />
                 <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
