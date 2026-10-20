@@ -4,25 +4,36 @@ import { SettingsModule } from '../../settings/settings.module';
 import { DiscordBotModule } from '../discord-bot.module';
 import { ChannelLifecycleAdminController } from './channel-lifecycle-admin.controller';
 import { ChannelLifecycleAdminService } from './channel-lifecycle-admin.service';
+import { ChannelLifecycleNudgeModule } from './channel-lifecycle.nudge.module';
+import { ChannelLifecycleNudgeProcessor } from './channel-lifecycle.nudge.processor';
 import { ChannelLifecycleScheduler } from './channel-lifecycle.scheduler';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
-import {
-  CHANNEL_LIFECYCLE_HUB_LINKER,
-  NOOP_HUB_LINKER,
-} from './channel-lifecycle.types';
+import { CHANNEL_LIFECYCLE_HUB_LINKER } from './channel-lifecycle.types';
+import { HubChannelLinkService } from './hub-channel-link.service';
 
 /**
- * ROK-1431 — channel lifecycle automation: the reconciler + its daily cron.
- * The hub-link seam defaults to a no-op until L8 provides the real linker.
+ * ROK-1428 — channel lifecycle automation: the reconciler + its daily cron
+ * (L5), the per-game nudge processor (L5b), the hub auto-linker (L8) and the
+ * admin routes (L6).
  */
 @Module({
-  imports: [forwardRef(() => DiscordBotModule), SettingsModule, CronJobModule],
+  imports: [
+    forwardRef(() => DiscordBotModule),
+    SettingsModule,
+    CronJobModule,
+    ChannelLifecycleNudgeModule,
+  ],
   controllers: [ChannelLifecycleAdminController],
   providers: [
     ChannelLifecycleService,
     ChannelLifecycleAdminService,
     ChannelLifecycleScheduler,
-    { provide: CHANNEL_LIFECYCLE_HUB_LINKER, useValue: NOOP_HUB_LINKER },
+    ChannelLifecycleNudgeProcessor,
+    HubChannelLinkService,
+    {
+      provide: CHANNEL_LIFECYCLE_HUB_LINKER,
+      useExisting: HubChannelLinkService,
+    },
   ],
   exports: [ChannelLifecycleService, ChannelLifecycleScheduler],
 })
