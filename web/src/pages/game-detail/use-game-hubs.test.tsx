@@ -43,7 +43,7 @@ describe('proposal mutations refresh every game card', () => {
     it('submit invalidates another game\'s card (the limit may now be reached)', async () => {
         vi.mocked(fetchApi).mockResolvedValue({ id: 12 });
         const { result } = renderHook(() => useProposeHub(1), { wrapper });
-        await act(() => result.current.mutateAsync({ gameId: 1, name: 'Crew' }));
+        await act(() => result.current.mutateAsync({ gameId: 1, name: 'Crew', blurb: 'A crew' }));
         expect(otherCardInvalidated()).toBe(true);
     });
 });
