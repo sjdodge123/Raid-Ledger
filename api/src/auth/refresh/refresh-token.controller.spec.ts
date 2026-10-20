@@ -11,7 +11,6 @@ import type * as schema from '../../drizzle/schema';
 import { RefreshTokenController } from './refresh-token.controller';
 import type { RefreshTokenService } from './refresh-token.service';
 import type { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
-import type { TokenBlocklistService } from '../token-blocklist.service';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie.helpers';
 import { mintRefreshAccessToken } from './refresh-access-token.helpers';
 
@@ -35,7 +34,6 @@ function build() {
     {} as JwtService,
     {} as PostgresJsDatabase<typeof schema>,
     {} as ImpersonationSessionService,
-    {} as TokenBlocklistService,
   );
   const cookie = jest.fn();
   const clearCookie = jest.fn();

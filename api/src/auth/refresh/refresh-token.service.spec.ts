@@ -8,7 +8,6 @@ import type Redis from 'ioredis';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
-import type { TokenBlocklistService } from '../token-blocklist.service';
 import type { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { RefreshTokenService } from './refresh-token.service';
 
@@ -34,7 +33,6 @@ function build() {
   const service = new RefreshTokenService(
     chain as unknown as PostgresJsDatabase<typeof schema>,
     settings as unknown as SettingsService,
-    {} as TokenBlocklistService,
     {} as Redis,
     {} as ImpersonationSessionService,
   );

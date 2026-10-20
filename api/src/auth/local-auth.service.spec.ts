@@ -1,4 +1,3 @@
-import type { TokenBlocklistService } from './token-blocklist.service';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -49,10 +48,6 @@ function baseUser(overrides: Record<string, unknown>) {
   };
 }
 
-const mockBlocklist = {
-  minIatFor: jest.fn().mockResolvedValue(undefined),
-} as unknown as TokenBlocklistService;
-
 beforeEach(() => {
   (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 });
@@ -64,7 +59,6 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     await expect(
@@ -79,7 +73,6 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     await expect(service.validateCredentials('a@b.com', 'pw')).rejects.toThrow(
@@ -93,7 +86,6 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     const user = await service.validateCredentials('a@b.com', 'pw');
@@ -115,7 +107,6 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     const user = await service.validateCredentials('a@b.com', 'pw');
@@ -137,7 +128,6 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     await expect(service.impersonate(admin, 5)).rejects.toThrow(
@@ -151,7 +141,6 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     const result = await service.impersonate(admin, 5);
@@ -164,7 +153,6 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
       db,
       mockJwt,
       mockSessions,
-      mockBlocklist,
     );
 
     await expect(service.impersonate(admin, 5)).rejects.toBeInstanceOf(

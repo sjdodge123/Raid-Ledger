@@ -36,9 +36,9 @@ function buildFakeRedisMock(): unknown {
   const store = new Map<string, string>([
     ['bull:test-1-:meta', '{}'],
     ['bull:test-1-:active', '[]'],
-    ['jwt_block:abc', '1'],
-    ['jwt_block:def', '1'],
-    ['jwt_block:ghi', '1'],
+    ['lineup-reminder:abc', '1'],
+    ['lineup-reminder:def', '1'],
+    ['lineup-reminder:ghi', '1'],
     ['settings:cache', '{}'],
   ]);
   return { client: {}, store };
@@ -121,8 +121,8 @@ describe('dumpFailureSnapshot — filesystem + buckets', () => {
       { count: number; sample: string[] }
     >;
     expect(prefixes['bull']).toBeDefined();
-    expect(prefixes['jwt_block']).toBeDefined();
-    expect(prefixes['jwt_block']?.count).toBe(3);
+    expect(prefixes['lineup-reminder']).toBeDefined();
+    expect(prefixes['lineup-reminder']?.count).toBe(3);
     fs.unlinkSync(filePath);
   });
 
