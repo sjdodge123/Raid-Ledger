@@ -27,12 +27,25 @@ export class ChannelLifecycleNudgeListener {
   /** A new event (each recurring instance emits its own) is game activity. */
   @OnEvent(APP_EVENT_EVENTS.CREATED)
   handleEventCreated(payload: unknown): void {
-    GameActivityNudge.safeTouch(this.nudge, readLifecycleGameId(payload));
+    this.touch(payload);
   }
 
   /** An edited / rescheduled event may have moved to a different game. */
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
   handleEventUpdated(payload: unknown): void {
-    GameActivityNudge.safeTouch(this.nudge, readLifecycleGameId(payload));
+    this.touch(payload);
+  }
+
+  /**
+   * `safeTouch` already swallows every error, so this try/catch is the
+   * listener guard's literal requirement (`event-listeners.guard.spec.ts`):
+   * an @OnEvent handler must never throw into the emitter.
+   */
+  private touch(payload: unknown): void {
+    try {
+      GameActivityNudge.safeTouch(this.nudge, readLifecycleGameId(payload));
+    } catch {
+      // never throw into the event emitter — the nudge is best-effort
+    }
   }
 }
