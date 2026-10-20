@@ -20,6 +20,12 @@
  * BYWEEKNO (ical.js jumps a year per step, so `BYWEEKNO=1;BYMONTH=6` never
  * matches). WEEKLY's BYMONTHDAY / BYYEARDAY are ignored by ical.js (illegal
  * for WEEKLY), so they cannot trap it.
+ *
+ * Codex r10: also refused — an INTERVAL above `MAX_INTERVAL[FREQ]`. ical.js
+ * adds a day-based step one day at a time (`increment_monthday` loops
+ * INTERVAL times for DAILY, 7·INTERVAL for WEEKLY, and the sub-daily FREQs
+ * carry into it), eagerly, before the first occurrence is returned —
+ * `FREQ=DAILY;INTERVAL=100000000` spends ~17 s inside the first `next()`.
  */
 import ICAL from 'ical.js';
 import { DAY_MS } from './apple-ical-time.helpers';
@@ -34,6 +40,22 @@ const SUB_DAILY_EXPANDING: Readonly<Record<string, readonly string[]>> = {
 const DAILY_REFUSED = ['BYMONTHDAY', 'BYYEARDAY', 'BYWEEKNO', 'BYSETPOS'];
 const DAILY_LIMITING = ['BYMONTH', 'BYDAY'];
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+/**
+ * Largest INTERVAL kept per FREQ. Day-based FREQs stop at about a year per
+ * step (366 days in each FREQ's unit; WEEKLY 53), so one step costs at most
+ * ~366 day-loop turns. MONTHLY / YEARLY add INTERVAL arithmetically (O(1))
+ * — their century ceilings are defensive only. Every real calendar rule fits.
+ */
+export const MAX_INTERVAL: Readonly<Record<string, number>> = {
+  SECONDLY: 366 * 86_400,
+  MINUTELY: 366 * 1_440,
+  HOURLY: 366 * 24,
+  DAILY: 366,
+  WEEKLY: 53,
+  MONTHLY: 1_200,
+  YEARLY: 100,
+};
 
 /** ~274 years of daily steps (~0.5 s in ical.js). */
 export const MAX_LIMITED_DAILY_DAYS = 100_000;
@@ -70,6 +92,8 @@ function isCostlyDaily(recur: ICAL.Recur, facts: StartFacts): boolean {
 }
 
 function isCostly(recur: ICAL.Recur, facts: StartFacts): boolean {
+  const ceiling = MAX_INTERVAL[recur.freq];
+  if (ceiling !== undefined && recur.interval > ceiling) return true;
   const expanding = SUB_DAILY_EXPANDING[recur.freq];
   if (expanding) return partsOf(recur).some((p) => !expanding.includes(p));
   if (recur.freq === 'WEEKLY') return partsOf(recur).includes('BYWEEKNO');
