@@ -121,6 +121,10 @@ function reconnectSet<T extends object>(both: T, accountLabel: string | null) {
     // A grant without an email keeps the stored label (undefined = skip).
     accountLabel: accountLabel ?? undefined,
     lastErrorCode: null,
+    // ROK-1598 Codex r5: a reconnect (e.g. of a row whose blocks a pending
+    // disconnect already purged) must not answer `unchanged` off an old
+    // provider cursor — the next read is a full read.
+    syncCursor: null,
     updatedAt: new Date(),
   };
 }
