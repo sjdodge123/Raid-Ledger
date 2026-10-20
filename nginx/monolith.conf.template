@@ -81,6 +81,26 @@ server {
         proxy_send_timeout 60s;
     }
 
+    location /api/plugins/valheim/link/ {
+        # ROK-1850: Valheim Link blobs (16 MiB, CONTRACT §7) and the 12 MiB items message
+        # must reach the API's own per-kind 413; every other route keeps the 10m cap.
+        # proxy_pass with a URI replaces the matched prefix, so the plugin path is
+        # re-added here (the /api/ block relies on the same stripping).
+        client_max_body_size 17m;
+        proxy_pass http://127.0.0.1:3000/plugins/valheim/link/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $proxy_proto;
+        proxy_cache_bypass $http_upgrade;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:3000/;
         proxy_http_version 1.1;
