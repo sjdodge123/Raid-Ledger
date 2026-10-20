@@ -101,6 +101,23 @@ describe('MarkdownBlock — hard-break continuations in list items (Codex r2)', 
     });
 });
 
+describe('MarkdownBlock — link titles (Codex r3)', () => {
+    it.each([
+        ['double quotes', '[Plan](https://example.com "Strategy")'],
+        ['single quotes', "[Plan](https://example.com 'Strategy')"],
+        ['parentheses', '[Plan](https://example.com (Strategy))'],
+    ])('a link with a %s title is still a link, title dropped', (_kind, md) => {
+        const link = mount(md).querySelector('a');
+        expect(link, `${md} must render as a link, not literal text`).not.toBeNull();
+        expect(link?.getAttribute('href')).toBe('https://example.com');
+        expect(link?.textContent).toBe('Plan');
+    });
+
+    it('the title never rescues an unsafe destination', () => {
+        expect(mount('[x](javascript:alert(1) "t")').querySelector('a')).toBeNull();
+    });
+});
+
 describe('MarkdownBlock — disallowed input is literal', () => {
     it('renders <script> as text, never an element', () => {
         const root = mount('<script>alert(1)</script>');

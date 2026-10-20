@@ -3,7 +3,7 @@
  * (ROK-1868 D15). Pure: text in, a node tree out — never HTML.
  *
  * Grammar: **bold** / __bold__, *italic* / _italic_, ***both***, ~~strike~~
- * (opt-in), `code`, [label](href), <https://…> autolinks (opt-in) and `\`
+ * (opt-in), `code`, [label](href "optional title"), <https://…> autolinks (opt-in) and `\`
  * escapes of ASCII punctuation. Marks nest (bold inside a link, a link inside
  * bold) up to MAX_DEPTH. A link whose href fails the contract's
  * `isSafeMarkdownHref` is NOT a link — its source stays literal text. `![`
@@ -126,13 +126,23 @@ function closeParen(s: string, i: number): number {
     return -1;
 }
 
+/**
+ * The destination of a `(…)` link body: an optional `"title"`, `'title'` or
+ * `(title)` after whitespace (TipTap emits one for a pasted titled link) is
+ * dropped, then `\(` / `\)` are unescaped. `\S+\s+` cannot backtrack.
+ */
+function linkDestination(raw: string): string {
+    const titled = /^(\S+)\s+(?:"[^"]*"|'[^']*'|\([^()]*\))\s*$/.exec(raw);
+    return (titled?.[1] ?? raw).replace(/\\([()])/g, '$1');
+}
+
 /** `[label](href)` at i — only when the href is safe; balanced `(…)` and escaped `\(` / `\)` stay in the href. */
 function matchLink(ctx: Ctx, i: number): Hit | null {
     const { s } = ctx;
     const close = closeBracket(s, i);
     if (close <= i + 1 || s[close + 1] !== '(') return null;
     const paren = closeParen(s, close + 2);
-    const href = paren === -1 ? '' : s.slice(close + 2, paren).replace(/\\([()])/g, '$1');
+    const href = paren === -1 ? '' : linkDestination(s.slice(close + 2, paren));
     if (href === '' || !isSafeMarkdownHref(href)) return null;
     return { nodes: [{ kind: 'link', href, children: parseNested(ctx, s.slice(i + 1, close), true) }], end: paren + 1 };
 }
