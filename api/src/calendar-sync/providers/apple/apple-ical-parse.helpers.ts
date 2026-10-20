@@ -23,7 +23,11 @@ import {
   decodeCopyId,
   deriveInstanceId,
 } from '../rl-copy-id.helpers';
-import { parseIcsRoot, resolveFloatingZone } from './apple-ical-time.helpers';
+import { parseIcsRoot } from './apple-ical-time.helpers';
+import {
+  dropCostlyTimezones,
+  safeFloatingZone,
+} from './apple-ical-vtimezone-guard.helpers';
 import { expandSeries, type SeriesContext } from './apple-ical-recur.helpers';
 
 export interface IcsParseContext {
@@ -129,6 +133,8 @@ function splitCalendars(ics: string): string[] {
 function parseCalendar(text: string, ctx: SeriesContext): IcsParseResult {
   const root = parseIcsRoot(text);
   if (!root) return { blocks: [], skipped: 1 };
+  // Codex r11: before ANY event time is converted through a VTIMEZONE.
+  dropCostlyTimezones(root, ctx.range.end);
   const results = groupByUid(root.getAllSubcomponents('vevent')).map((s) =>
     parseSeries(s, ctx),
   );
@@ -145,7 +151,7 @@ export function parseBusyFromIcs(
 ): IcsParseResult {
   const series: SeriesContext = {
     range: ctx.range,
-    floating: resolveFloatingZone(ctx.calendarTimezone),
+    floating: safeFloatingZone(ctx.calendarTimezone, ctx.range.end),
     isBusy,
   };
   const results = splitCalendars(ics).map((c) => parseCalendar(c, series));

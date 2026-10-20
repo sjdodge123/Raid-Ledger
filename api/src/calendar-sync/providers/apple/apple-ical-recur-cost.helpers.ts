@@ -117,3 +117,36 @@ export function isCostlyRule(master: ICAL.Component, rangeEnd: Date): boolean {
     return recur instanceof ICAL.Recur && isCostly(recur, facts);
   });
 }
+
+const SUB_DAILY = Object.keys(SUB_DAILY_EXPANDING);
+/** ical.js expands a VTIMEZONE this many years past the current one. */
+const TZ_COVERAGE_DAYS = 6 * 366;
+
+/**
+ * Codex r11: an observance rule ical.js expands with no step cap — every
+ * transition from DTSTART to ~5 years past now, in one synchronous loop.
+ */
+function isCostlyObservance(obs: ICAL.Component, rangeEnd: Date): boolean {
+  const horizon = new Date(
+    Math.max(rangeEnd.getTime(), Date.now()) + TZ_COVERAGE_DAYS * DAY_MS,
+  );
+  if (isCostlyRule(obs, horizon)) return true;
+  const { elapsedDays } = startFacts(obs, horizon);
+  return obs.getAllProperties('rrule').some((prop) => {
+    const recur: unknown = prop.getFirstValue();
+    if (!(recur instanceof ICAL.Recur)) return false;
+    if (SUB_DAILY.includes(recur.freq)) return true;
+    return recur.freq === 'DAILY' && elapsedDays > MAX_LIMITED_DAILY_DAYS;
+  });
+}
+
+/**
+ * Codex r11: true when a VTIMEZONE's STANDARD / DAYLIGHT recurrences cannot
+ * be expanded in bounded time (same ceilings as an event RRULE, plus no
+ * sub-daily FREQ — the expansion has no iteration cap).
+ */
+export function isCostlyTimezone(vtz: ICAL.Component, rangeEnd: Date): boolean {
+  return vtz
+    .getAllSubcomponents()
+    .some((obs) => isCostlyObservance(obs, rangeEnd));
+}
