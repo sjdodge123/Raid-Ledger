@@ -21,6 +21,7 @@ import {
   leaderRows,
   newHub,
   postRows,
+  resetThrottler,
   profileRow,
   settle,
   stubDiscord,
@@ -37,6 +38,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await clearPostCooldowns(ctx);
+  resetThrottler(ctx);
   discord = stubDiscord(ctx);
   leaderSpy = jest.spyOn(
     ctx.testApp.app.get(HubNotificationService),
@@ -77,7 +79,7 @@ const relayPost = (
 
 /** ~1300 source chars of the D14 subset: bold, links, code, a list. */
 const LONG_MARKDOWN = Array.from(
-  { length: 12 },
+  { length: 15 },
   (_, i) =>
     `**Week ${i}** raid: read [the plan](https://example.com/plan/${i}) and bring \`flask\` plus food.`,
 )
@@ -151,7 +153,7 @@ describe('P12, P15 — a relayed post is never re-sent', () => {
     const created = await relayPost(g, 'Original plan');
     expect(created.body.relayOutcome).toBe('sent');
     await settle(leaderSpy);
-    expect(await leaderRows(ctx, ctx.userIds.plain)).toHaveLength(1);
+    expect(await leaderRows(ctx, ctx.userIds.plain, g)).toHaveLength(1);
     const id = (created.body.post as { id: number }).id;
     discord.sendEmbed.mockClear();
     await clearPostCooldowns(ctx);
@@ -169,8 +171,8 @@ describe('P12, P15 — a relayed post is never re-sent', () => {
     expect(discord.sendEmbed).not.toHaveBeenCalled();
     expect(discord.editEmbed).not.toHaveBeenCalled();
     expect(leaderSpy).toHaveBeenCalledTimes(1);
-    expect(await leaderRows(ctx, ctx.userIds.plain)).toHaveLength(1);
-    expect(await leaderRows(ctx, ctx.userIds.officerA)).toHaveLength(0);
+    expect(await leaderRows(ctx, ctx.userIds.plain, g)).toHaveLength(1);
+    expect(await leaderRows(ctx, ctx.userIds.officerA, g)).toHaveLength(0);
   });
 
   it('P15: DELETE → 204, row gone, deleteMessage once, GET → 404', async () => {
@@ -213,8 +215,8 @@ describe('P16 — cooldown vs relay', () => {
     ]);
     expect(leaderSpy).toHaveBeenCalledTimes(2);
     await settle(leaderSpy);
-    expect(await leaderRows(ctx, ctx.userIds.plain)).toHaveLength(1);
-    const [notice] = await leaderRows(ctx, ctx.userIds.plain);
+    expect(await leaderRows(ctx, ctx.userIds.plain, g)).toHaveLength(1);
+    const [notice] = await leaderRows(ctx, ctx.userIds.plain, g);
     const firstId = (first.body.post as { id: number }).id;
     expect(notice?.payload).toMatchObject({
       url: `/guilds/${g}?post=${firstId}#posts`,

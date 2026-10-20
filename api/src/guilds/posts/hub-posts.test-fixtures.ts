@@ -11,6 +11,7 @@
  */
 import { ChannelType, PermissionFlagsBits, type Guild } from 'discord.js';
 import { asc, eq } from 'drizzle-orm';
+import { getStorageToken, ThrottlerStorageService } from '@nestjs/throttler';
 import type { Message } from 'discord.js';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { nonEmpty } from '../../common/testing/narrow';
@@ -194,13 +195,25 @@ export const postRows = (ctx: PostsCtx, guildId: number) =>
     .where(eq(schema.hubPosts.guildId, guildId))
     .orderBy(asc(schema.hubPosts.id));
 
-/** `hub_leader_post` notification rows for one user. */
-export async function leaderRows(ctx: PostsCtx, userId: number) {
+/**
+ * `hub_leader_post` notification rows for one user about ONE hub. The four
+ * actors are shared by every test in a file and each test builds its own hub,
+ * so the hub filter keeps other tests' notices out of the count.
+ */
+export async function leaderRows(
+  ctx: PostsCtx,
+  userId: number,
+  guildId: number,
+) {
   const rows = await ctx.testApp.db
     .select()
     .from(schema.notifications)
     .where(eq(schema.notifications.userId, userId));
-  return rows.filter((r) => r.type === 'hub_leader_post');
+  return rows.filter(
+    (r) =>
+      r.type === 'hub_leader_post' &&
+      (r.payload as { guildId?: unknown } | null)?.guildId === guildId,
+  );
 }
 
 /** The hub's profile row (relay default, bound channel). */
@@ -229,6 +242,23 @@ export async function clearPostCooldowns(ctx: PostsCtx): Promise<void> {
   const redis = ctx.testApp.app.get<RedisLike>(REDIS_CLIENT);
   const keys = await redis.keys('hub-post:*');
   if (keys.length > 0) await redis.del(...keys);
+}
+
+/**
+ * Empty the throttler's in-memory hit store. `POST /guilds/:id/posts` carries
+ * its own 10/min `@Throttle` (THROTTLE_DISABLED does not lift a per-route
+ * override) and the tracker is the client IP — one for every supertest call —
+ * so without a reset the 11th create in a file 429s. `onApplicationShutdown`
+ * is the storage's public reset: it clears both the records and the hit
+ * expirations (clearing `storage` alone leaves the expirations, which re-count
+ * on the next hit); the sweep restarts lazily on the next `increment`.
+ */
+export function resetThrottler(ctx: PostsCtx): void {
+  const storage = ctx.testApp.app.get<unknown>(getStorageToken());
+  if (!(storage instanceof ThrottlerStorageService)) {
+    throw new Error('expected the default in-memory ThrottlerStorageService');
+  }
+  storage.onApplicationShutdown();
 }
 
 /** Awaits every promise a spied fire-and-forget method returned. */

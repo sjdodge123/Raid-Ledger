@@ -22,6 +22,7 @@ import {
   leaderRows,
   newHub,
   postRows,
+  resetThrottler,
   settle,
   stubDiscord,
   type PostsCtx,
@@ -42,6 +43,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await clearPostCooldowns(ctx);
+  resetThrottler(ctx);
   discord = stubDiscord(ctx);
   leaderSpy = jest.spyOn(
     ctx.testApp.app.get(HubNotificationService),
@@ -150,10 +152,10 @@ describe('P6–P8 — create', () => {
     expect(discord.sendEmbed).not.toHaveBeenCalled();
     expect(leaderSpy).toHaveBeenCalledTimes(1);
     await settle(leaderSpy);
-    expect(await leaderRows(ctx, ctx.userIds.plain)).toHaveLength(1);
-    expect(await leaderRows(ctx, ctx.userIds.officerB)).toHaveLength(1);
-    expect(await leaderRows(ctx, ctx.userIds.officerA)).toHaveLength(0);
-    expect(await leaderRows(ctx, ctx.userIds.outsider)).toHaveLength(0);
+    expect(await leaderRows(ctx, ctx.userIds.plain, g)).toHaveLength(1);
+    expect(await leaderRows(ctx, ctx.userIds.officerB, g)).toHaveLength(1);
+    expect(await leaderRows(ctx, ctx.userIds.officerA, g)).toHaveLength(0);
+    expect(await leaderRows(ctx, ctx.userIds.outsider, g)).toHaveLength(0);
   });
 
   it('P7: a plain member is refused POST / PATCH / DELETE with 403', async () => {
@@ -389,5 +391,17 @@ describe('P24–P25 — accepted bodies', () => {
     for (const banned of ['\r', zw, bel, '\n\n\n']) {
       expect(stored.includes(banned)).toBe(false);
     }
+  });
+});
+
+describe('create throttle — 10/min per route', () => {
+  it('the first 10 creates inside a minute → 201; the 11th → 429, not written', async () => {
+    const g = await newHub(ctx);
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i += 1) {
+      statuses.push((await createPost(ctx, g, `Post ${i}`)).status);
+    }
+    expect(statuses).toEqual([...Array.from({ length: 10 }, () => 201), 429]);
+    expect(await postRows(ctx, g)).toHaveLength(10);
   });
 });
