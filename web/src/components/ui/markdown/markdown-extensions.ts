@@ -28,6 +28,18 @@ import { MD_CLASSES } from './markdown-classes';
 
 const LITERAL_BLOCK_TOKENS = ['heading', 'blockquote', 'code', 'hr', 'table', 'html', 'lheading'] as const;
 
+/**
+ * Inline tokens outside the subset that stay literal text. Stored `![alt](url)`
+ * would otherwise load as just its alt text and the next save would drop the URL
+ * (Codex P2). Pasted `<img>` HTML is still dropped by the schema — this is the
+ * markdown-source path only.
+ */
+const LITERAL_INLINE_TOKENS = ['image'] as const;
+
+function isInlineLiteral(token: MarkdownToken): boolean {
+    return (token.type === 'html' && token.block === false) || (LITERAL_INLINE_TOKENS as readonly string[]).includes(token.type ?? '');
+}
+
 /** A token outside the subset → its source text, as a paragraph (block) or text (inline). */
 function literalBlock(tokenName: string): AnyExtension {
     return Extension.create({
@@ -37,7 +49,7 @@ function literalBlock(tokenName: string): AnyExtension {
             const raw = (token.raw ?? '').replace(/\n+$/, '');
             if (!raw.trim()) return [];
             const text = h.createTextNode(raw);
-            return token.type === 'html' && token.block === false ? text : h.createNode('paragraph', {}, [text]);
+            return isInlineLiteral(token) ? text : h.createNode('paragraph', {}, [text]);
         },
     });
 }
@@ -84,6 +96,6 @@ export function buildMarkdownExtensions(opts: { placeholder?: string; onLinkShor
         Placeholder.configure({ placeholder: opts.placeholder ?? '' }),
         LinkShortcut.configure({ onOpen: opts.onLinkShortcut }),
         Markdown.configure({ markedOptions: { breaks: true, gfm: true } }),
-        ...LITERAL_BLOCK_TOKENS.map(literalBlock),
+        ...[...LITERAL_BLOCK_TOKENS, ...LITERAL_INLINE_TOKENS].map(literalBlock),
     ];
 }

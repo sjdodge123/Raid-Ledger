@@ -9,6 +9,7 @@ import type { Editor } from '@tiptap/core';
 import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
 import MarkdownEditor from './markdown-editor';
 import { normalizeEditorMarkdown } from './markdown-serialize';
+import { MarkdownBlock } from '../markdown-block';
 
 // jsdom has no ClipboardEvent; ProseMirror's pasteHTML constructs one.
 if (typeof globalThis.ClipboardEvent === 'undefined') {
@@ -113,5 +114,19 @@ describe('MarkdownEditor (V10) — keyboard, paste, contract', () => {
         setup('x'.repeat(4001));
         expect(screen.getByTestId('md-editor-count')).toHaveTextContent('4001/4000');
         expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+    });
+});
+
+describe('MarkdownEditor — stored image syntax (ROK-1868 Codex P2)', () => {
+    it('loads ![alt](url) as literal text and saves it back unchanged', () => {
+        const md = 'Before ![map](https://example.com/map.png) after';
+        const { editor } = setup(md);
+        expect(editor.getText(), 'the image source must stay literal text, not collapse to its alt').toBe(md);
+        const saved = normalizeEditorMarkdown(editor.getMarkdown());
+        // The serializer escapes the brackets (`!\\[map\\](…)`), which is the same literal
+        // text: it must keep the URL and read exactly like the stored source.
+        expect(saved, 'the URL must survive a save').toContain('(https://example.com/map.png)');
+        const shown = (text: string): string | null => render(<MarkdownBlock text={text} />).container.textContent;
+        expect(shown(saved), 'the saved source must display exactly like the stored one').toBe(shown(md));
     });
 });
