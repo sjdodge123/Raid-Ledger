@@ -179,7 +179,12 @@ export async function revokeAllAndBumpTx(
   tx: Db,
   userId: number,
 ): Promise<number> {
+  // Bump FIRST (review P3): the UPDATE row-locks `users`, so an
+  // `issueAtTokenVersion` racing this transaction either sees the new version
+  // or holds its FOR SHARE lock until its row is committed — and the revoke
+  // below, a later statement, then sees that row too.
+  const version = await bumpTokenVersion(tx, userId);
   await lockUserFamilies(tx, userId);
   await revokeActiveRows(tx, eq(t.userId, userId));
-  return bumpTokenVersion(tx, userId);
+  return version;
 }

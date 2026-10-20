@@ -94,9 +94,17 @@ export class AuthService {
     } satisfies DiscordLoginPayload);
   }
 
-  /** ROK-1823: signs the user's CURRENT token version as `tv`. */
-  async login(user: { id: number; username: string; role: UserRole }) {
-    const tv = await readTokenVersion(this.db, user.id);
+  /**
+   * ROK-1823: signs the user's CURRENT token version as `tv` — or, when the
+   * caller already checked a version (magic-link redeem, review P3), exactly
+   * that one, so the check and the mint can never disagree.
+   */
+  async login(
+    user: { id: number; username: string; role: UserRole },
+    checkedTokenVersion?: number,
+  ) {
+    const tv =
+      checkedTokenVersion ?? (await readTokenVersion(this.db, user.id));
     const access_token = signAccessToken(
       { jwt: this.jwtService },
       { username: user.username, sub: user.id, role: user.role, tv },

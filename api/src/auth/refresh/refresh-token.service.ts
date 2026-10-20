@@ -46,6 +46,31 @@ export interface IssuedRefreshToken {
   familyId: string;
 }
 
+/** What a fresh login says about the family it starts. */
+type IssueOptions = { authMethod: AuthMethod; userAgent?: string | null };
+
+/** A brand-new family's first row, plus what `issue` hands back for it. */
+function newFamily(
+  userId: number,
+  opts: IssueOptions,
+  maxAgeMs: number,
+): {
+  row: typeof schema.refreshTokens.$inferInsert;
+  issued: IssuedRefreshToken;
+} {
+  const rawToken = generateRawToken();
+  const familyId = crypto.randomUUID();
+  const row = {
+    userId,
+    tokenHash: hashToken(rawToken),
+    familyId,
+    authMethod: opts.authMethod,
+    userAgent: opts.userAgent ?? null,
+    expiresAt: new Date(Date.now() + maxAgeMs),
+  };
+  return { row, issued: { rawToken, maxAgeMs, userId, familyId } };
+}
+
 /** The parent fields a child row inherits. */
 type ParentRow = Pick<
   typeof schema.refreshTokens.$inferSelect,
@@ -75,22 +100,39 @@ export class RefreshTokenService {
   ) {}
 
   /** Mint a brand-new refresh family for a fresh login. */
-  async issue(
-    userId: number,
-    opts: { authMethod: AuthMethod; userAgent?: string | null },
-  ): Promise<IssuedRefreshToken> {
+  async issue(userId: number, opts: IssueOptions): Promise<IssuedRefreshToken> {
     const maxAgeMs = await this.sessionMaxAgeMs();
-    const rawToken = generateRawToken();
-    const familyId = crypto.randomUUID();
-    await this.db.insert(schema.refreshTokens).values({
-      userId,
-      tokenHash: hashToken(rawToken),
-      familyId,
-      authMethod: opts.authMethod,
-      userAgent: opts.userAgent ?? null,
-      expiresAt: new Date(Date.now() + maxAgeMs),
+    const family = newFamily(userId, opts, maxAgeMs);
+    await this.db.insert(schema.refreshTokens).values(family.row);
+    return family.issued;
+  }
+
+  /**
+   * ROK-1823 review P3: `issue`, but only while `users.token_version` still
+   * equals `tokenVersion` — the version the caller already checked. The user
+   * row is read FOR SHARE in the insert's transaction, so a concurrent bump
+   * either commits first (→ null, nothing inserted) or waits for this commit
+   * and then revokes the new row (`revokeAllAndBumpTx` bumps BEFORE it
+   * revokes). Null → the caller answers 401. The session length is read
+   * before the transaction opens (Codex r2: no outer-pool read inside it).
+   */
+  async issueAtTokenVersion(
+    userId: number,
+    tokenVersion: number,
+    opts: IssueOptions,
+  ): Promise<IssuedRefreshToken | null> {
+    const maxAgeMs = await this.sessionMaxAgeMs();
+    const family = newFamily(userId, opts, maxAgeMs);
+    return this.db.transaction(async (tx) => {
+      const [user] = await tx
+        .select({ tokenVersion: schema.users.tokenVersion })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .for('share');
+      if (user?.tokenVersion !== tokenVersion) return null;
+      await tx.insert(schema.refreshTokens).values(family.row);
+      return family.issued;
     });
-    return { rawToken, maxAgeMs, userId, familyId };
   }
 
   /**

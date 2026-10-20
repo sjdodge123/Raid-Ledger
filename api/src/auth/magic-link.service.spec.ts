@@ -135,6 +135,7 @@ describe('MagicLinkService.redeem — token checks (AC3/AC4)', () => {
       id: 1,
       username: 'a',
       role: 'member',
+      tokenVersion: 2,
     });
     expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(token) });
   });

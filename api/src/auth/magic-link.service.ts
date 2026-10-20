@@ -26,6 +26,8 @@ export interface MagicLinkUser {
   id: number;
   username: string;
   role: UserRole;
+  /** ROK-1823: the version `redeem` checked — the session binds to exactly it. */
+  tokenVersion: number;
 }
 
 function invalidLink(): UnauthorizedException {
@@ -87,7 +89,12 @@ export class MagicLinkService {
     await assertKickCooldownOrClear(this.db, user).catch(() => {
       throw invalidLink();
     });
-    return { id: user.id, username: user.username, role: user.role };
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+    };
   }
 
   private verify(token: string): MagicLinkPayload {
