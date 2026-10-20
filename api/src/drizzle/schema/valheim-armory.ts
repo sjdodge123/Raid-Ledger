@@ -2,46 +2,29 @@ import {
   pgTable,
   serial,
   bigserial,
-  bigint,
   integer,
   text,
-  timestamp,
   jsonb,
   doublePrecision,
   index,
   unique,
   check,
-  foreignKey,
 } from 'drizzle-orm/pg-core';
-import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type {
   ValheimCharacterMessage,
   ValheimItemDefinition,
   ValheimMapMessage,
 } from '@raid-ledger/contract';
-import { pelicanServers } from './pelican-servers';
 import { users } from './users';
-import { valheimLinkSnapshots } from './valheim-link';
+import {
+  importedAt,
+  serverFk,
+  snapshotCol,
+  snapshotFk,
+  tsz,
+} from './valheim-columns';
 
-const tsz = (name: string) => timestamp(name, { withTimezone: true });
-const importedAt = () => tsz('imported_at').notNull().defaultNow();
-const serverFk = () =>
-  integer('pelican_server_id')
-    .notNull()
-    .references(() => pelicanServers.id, { onDelete: 'cascade' });
-const snapshotCol = () => bigint('source_snapshot_id', { mode: 'number' });
-/**
- * Explicitly named: drizzle's default `<table>_source_snapshot_id_
- * valheim_link_snapshots_id_fk` exceeds Postgres' 63-char identifier limit
- * (constraint-name-length.spec.ts, ROK-1387).
- */
-const snapshotFk = (table: string, col: AnyPgColumn) =>
-  foreignKey({
-    columns: [col],
-    foreignColumns: [valheimLinkSnapshots.id],
-    name: `${table}_source_snapshot_fk`,
-  }).onDelete('set null');
 const userFk = (name: string) =>
   integer(name).references(() => users.id, { onDelete: 'set null' });
 
