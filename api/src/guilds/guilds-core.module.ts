@@ -1,5 +1,6 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
+import { SettingsModule } from '../settings/settings.module';
 import { GuildAccessService } from './guild-access.service';
 import { GuildDiscordController } from './guild-discord.controller';
 import { GuildDiscordService } from './guild-discord.service';
@@ -33,7 +34,7 @@ import {
  * `guilds/:id` (ROK-1831); `/plugins/wow/guilds/**` stay as WoW aliases.
  */
 @Module({
-  imports: [ChannelMirrorModule],
+  imports: [ChannelMirrorModule, SettingsModule],
   // Order matters (ROK-1831): the literal `guilds/onboarding` and
   // `guilds/mine` must register before `guilds/:id`.
   controllers: [

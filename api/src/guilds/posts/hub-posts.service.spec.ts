@@ -18,6 +18,7 @@ import {
   updatePostBody,
   type HubPostRecord,
 } from './hub-posts.queries';
+import type { HubPostRelayService } from './hub-post-relay.service';
 import { HubPostsService } from './hub-posts.service';
 
 jest.mock('../guild-core.queries', () => ({
@@ -78,7 +79,7 @@ function build(channel: object = { state: 'unset' }): Harness {
   const service = new HubPostsService(
     {} as PostgresJsDatabase<typeof schema>,
     { canView } as unknown as GuildAccessService,
-    relay,
+    relay as unknown as HubPostRelayService,
     { emit } as unknown as EventEmitter2,
   );
   return { service, emit, relay, canView };
