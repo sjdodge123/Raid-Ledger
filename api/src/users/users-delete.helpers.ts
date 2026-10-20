@@ -175,6 +175,13 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.hubServerMembers,
     column: schema.hubServerMembers.userId,
   },
+  // ROK-1870: community-hub membership (CASCADE) — the user's own join/role
+  // row goes with them. `removed_by` / `banned_by` are SET NULL moderation
+  // history on OTHER users' rows; the table is classified by its owner column.
+  {
+    table: schema.hubCommunityMembers,
+    column: schema.hubCommunityMembers.userId,
+  },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {
@@ -234,6 +241,9 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // are SET NULL audit columns; the guild's content outlives its editor.
   schema.guildProfiles,
   schema.guildRecommendedAddons,
+  // ROK-1870: `guilds.proposed_by` / `reviewed_by` are SET NULL provenance; a
+  // community hub belongs to its members, not to whoever proposed/approved it.
+  schema.guilds,
   // ROK-1833: `created_by` is SET NULL; a server's link token outlives the
   // admin who issued it (the mod keeps posting).
   schema.valheimLinkTokens,
