@@ -8,9 +8,9 @@
  * stacked cards below it — exactly one is mounted, so a selector never
  * matches a hidden copy.
  */
-import { useState, type JSX } from 'react';
+import { createContext, useContext, useMemo, useState, type JSX } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
-import type { HubCtx, HubModule } from '../../plugins/hub-module';
+import type { HubCtx, HubMemberColumn, HubMemberRow, HubModule } from '../../plugins/hub-module';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { Checkbox } from '../ui/checkbox';
@@ -49,12 +49,34 @@ function emptyLine(mod: HubModule | undefined, page: GuildPage): string {
     return empty ?? 'No members yet.';
 }
 
+interface ActionsValue { ctx: HubCtx; Actions: NonNullable<HubModule['memberActions']> }
+
+/** Feeds the row-action cell without rebuilding the column (a new column would remount an open menu). */
+const MemberActionsContext = createContext<ActionsValue | null>(null);
+
+function MemberActionsCell({ row }: { row: HubMemberRow }): JSX.Element | null {
+    const value = useContext(MemberActionsContext);
+    if (value === null) return null;
+    return <value.Actions row={row} ctx={value.ctx} />;
+}
+
+const ACTIONS_COLUMN: HubMemberColumn = { id: 'actions', header: '', cell: MemberActionsCell };
+
+/** The module's columns plus its row-action column (ROK-1870 `memberActions`). */
+function useMemberColumns(mod: HubModule | undefined): readonly HubMemberColumn[] {
+    const hasActions = mod?.memberActions !== undefined;
+    const base = mod?.memberColumns;
+    return useMemo(() => (hasActions ? [...(base ?? []), ACTIONS_COLUMN] : base ?? []), [hasActions, base]);
+}
+
 export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     const page: GuildPage = ctx.page;
     const [query, setQuery] = useState('');
     const [grouped, setGrouped] = useState(true);
     const isDesktop = useMediaQuery(DESKTOP_MQ);
-    const columns = mod?.memberColumns ?? [];
+    const columns = useMemberColumns(mod);
+    const Actions = mod?.memberActions;
+    const actionsValue = useMemo(() => (Actions ? { ctx, Actions } : null), [Actions, ctx]);
     const allRows = mod?.memberRows(page) ?? [];
     const rows = filterMembers(allRows, query, mod?.memberSearch);
     const groupCol = groupingColumn(columns);
@@ -73,7 +95,11 @@ export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModul
                 {allRows.length > 0 && rows.length === 0 && (
                     <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>
                 )}
-                {rows.length > 0 && <List bands={bands} columns={columns} rowClass={mod?.memberRowClass} />}
+                {rows.length > 0 && (
+                    <MemberActionsContext.Provider value={actionsValue}>
+                        <List bands={bands} columns={columns} rowClass={mod?.memberRowClass} />
+                    </MemberActionsContext.Provider>
+                )}
             </Card>
         </section>
     );
