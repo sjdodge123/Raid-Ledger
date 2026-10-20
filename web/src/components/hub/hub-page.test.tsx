@@ -269,3 +269,44 @@ describe('GuildPage — group notification bell (ROK-1832)', () => {
         expect(screen.queryByTestId('hub-notify-bell')).not.toBeInTheDocument();
     });
 });
+
+describe('GuildPage — Posts tab (ROK-1868 V6)', () => {
+    function serveLatest(withPost: boolean): void {
+        const latestPost = withPost ? { id: 3, guildId: 7, body: 'Raid night is Thursday.', author: { userId: 1, displayName: 'Grimtusk', avatarUrl: null },
+            createdAt: '2026-10-03T12:00:00.000Z', updatedAt: '2026-10-03T12:00:00.000Z', editedBy: null, relay: null } : null;
+        server.use(
+            http.get(`${BASE}/profile`, () => HttpResponse.json({ guildId: 7, gmPost: null, latestPost, rules: [], links: [] })),
+            http.get(`${BASE}/posts`, () => HttpResponse.json({ posts: latestPost ? [latestPost] : [], nextCursor: null })),
+        );
+    }
+
+    async function tabLabels(): Promise<(string | null)[]> {
+        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        return within(nav).getAllByRole('link').map((a) => a.textContent);
+    }
+
+    it('hides Posts while the hub has no post', async () => {
+        serve(makePage());
+        serveLatest(false);
+        renderPage();
+        await screen.findByTestId('guild-gm-post-empty');
+        expect(await tabLabels(), 'a hub with 0 posts must not show the Posts tab').toEqual(['Overview', 'Members', 'Events', 'Raids']);
+    });
+
+    it('pins Posts after Events once the hub has a post', async () => {
+        serve(makePage());
+        serveLatest(true);
+        renderPage();
+        await screen.findByTestId('guild-gm-post-body');
+        expect(await tabLabels(), 'Posts is a core tab pinned after Events').toEqual(['Overview', 'Members', 'Events', 'Posts', 'Raids']);
+    });
+
+    it('#posts routes to the lazily-loaded Posts tab', async () => {
+        window.location.hash = '#posts';
+        serve(makePage());
+        serveLatest(true);
+        renderPage();
+        const tab = await screen.findByTestId('hub-posts-tab');
+        expect(await within(tab).findByText('Raid night is Thursday.')).toBeInTheDocument();
+    });
+});
