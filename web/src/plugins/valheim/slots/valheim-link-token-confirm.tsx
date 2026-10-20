@@ -5,10 +5,13 @@ import { ValheimOverlay } from './valheim-overlay';
 
 export type TokenConfirmKind = 'rotate' | 'revoke';
 
-const COPY: Record<TokenConfirmKind, { title: string; action: string; pending: string; body: (name: string) => string }> = {
+interface ConfirmCopy { title: string; action: string; pending: string; body: (name: string) => string; note?: string }
+
+const COPY: Record<TokenConfirmKind, ConfirmCopy> = {
     rotate: {
         title: 'Rotate the mod token?', action: 'Rotate token', pending: 'Rotating…',
         body: (name) => `The current token for ${name} stops working immediately. The mod stops uploading until you paste the new token into its config.`,
+        note: 'The old token stops working immediately — see the setup notes in the token dialog.',
     },
     revoke: {
         title: 'Revoke the mod token?', action: 'Revoke token', pending: 'Revoking…',
@@ -40,6 +43,7 @@ export function ValheimLinkTokenConfirm({ kind, serverName, isPending, onConfirm
     return (
         <ValheimOverlay title={copy.title} onClose={close} footer={footer}>
             <p className="text-sm text-secondary">{copy.body(serverName)}</p>
+            {copy.note !== undefined && <p className="mt-2 text-sm text-muted">{copy.note}</p>}
         </ValheimOverlay>
     );
 }
