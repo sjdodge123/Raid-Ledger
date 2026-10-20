@@ -2,7 +2,8 @@
  * ROK-1837 L2 — bytes behind the map tab: the base-map PNG (D3) and the
  * stored gzip fog bitsets (D4). Every lookup is scoped to the character
  * that owns the map and the MAP's server; the base map is located by
- * `(server, sha256)` → `valheim_link_blobs.storage_path` only.
+ * `(server, sha256)` → `valheim_link_blobs.storage_path` only. A hidden
+ * hub answers non-staff `Guild not found` first (ROK-1856, L-5).
  */
 import * as path from 'node:path';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
@@ -12,6 +13,8 @@ import type { ValheimMapFogLayer } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
 import { getValheimLinkBlobDir } from '../../link/blobs/valheim-link-blob.store';
+import type { GuildActor } from '../../../../guilds/guild-access.service';
+import { assertCharacterHubVisible } from './valheim-armory-hub-visibility.helpers';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -54,7 +57,12 @@ export class ValheimArmoryMapBytesService {
   ) {}
 
   /** The map's base-map file; 404 unless the map is the character's and ready. */
-  async baseMap(id: number, mapId: number): Promise<BaseMapFile> {
+  async baseMap(
+    id: number,
+    mapId: number,
+    actor: GuildActor,
+  ): Promise<BaseMapFile> {
+    await assertCharacterHubVisible(this.reads, actor, id);
     const [row] = await this.db
       .select({ serverId: m.pelicanServerId, sha256: m.baseMapSha256 })
       .from(m)
@@ -73,7 +81,9 @@ export class ValheimArmoryMapBytesService {
     id: number,
     mapId: number,
     layer: ValheimMapFogLayer,
+    actor: GuildActor,
   ): Promise<FogBytes> {
+    await assertCharacterHubVisible(this.reads, actor, id);
     const [row] = await this.db
       .select({
         explored: m.explored,
