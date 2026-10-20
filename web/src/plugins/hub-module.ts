@@ -13,7 +13,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { CreateGuildEditorInput, GuildEditor, GuildKind, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
 import { getHubModuleRegistrations } from './plugin-registry';
-import { communityHubModule } from '../components/hub/community/community-hub-module';
+import { COMMUNITY_HUB_KIND, useCommunityHubModule } from '../components/hub/community/community-hub-module-loader';
 
 /** The api `GUILD_KINDS` / `guilds.kind` column (ROK-1830 S1; `game_community` since ROK-1870). */
 export type HubKind = GuildKind;
@@ -172,11 +172,20 @@ export interface HubModuleRegistration {
 
 /**
  * The module for this hub kind, or `undefined` while its owning plugin is
- * inactive. `game_community` is core-owned (ROK-1870 A4) and always returns.
+ * inactive. `game_community` is core-owned (ROK-1870 A4): it returns once its
+ * lazy chunk has loaded (`useHubModulePending` is true until then).
  */
 export function useHubModule(kind: string): HubModule | undefined {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
-    if (kind === communityHubModule.kind) return communityHubModule;
+    const community = useCommunityHubModule(kind === COMMUNITY_HUB_KIND);
+    if (kind === COMMUNITY_HUB_KIND) return community;
     const found = getHubModuleRegistrations().find((r) => r.module.kind === kind);
     return found && activeSlugs.has(found.pluginSlug) ? found.module : undefined;
+}
+
+/** True while this hub kind's module is still being fetched (only the lazy core `game_community` module ever is). */
+export function useHubModulePending(kind: string | undefined): boolean {
+    const wanted = kind === COMMUNITY_HUB_KIND;
+    const mod = useCommunityHubModule(wanted);
+    return wanted && mod === undefined;
 }

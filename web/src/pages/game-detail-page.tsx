@@ -12,7 +12,7 @@ import { SteamIcon } from '../components/icons/SteamIcon';
 import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
-import { CommunityHubsSection } from './game-detail/community-hubs-section';
+import { LazyCommunityHubsSection } from './game-detail/community-hubs-section-lazy';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
@@ -116,7 +116,7 @@ function CoopSupportAndActivity({ game, gameId, isAuthenticated }: {
     return (
         <>
             {gameId && <PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />}
-            {gameId && isAuthenticated && <CommunityHubsSection gameId={gameId} gameName={game.name} />}
+            {gameId && isAuthenticated && <LazyCommunityHubsSection gameId={gameId} gameName={game.name} />}
             <CoopFeaturesSection game={game} />
             {gameId && <CommunityActivitySection gameId={gameId} />}
         </>

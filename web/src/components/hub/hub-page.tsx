@@ -16,7 +16,7 @@ import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
 import { httpStatusOf } from '../../lib/api/api-error';
-import { type HubCtx, type HubModSource, type HubModule, useHubModule } from '../../plugins/hub-module';
+import { type HubCtx, type HubModSource, type HubModule, useHubModule, useHubModulePending } from '../../plugins/hub-module';
 import { HubHero } from './hub-hero';
 import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
@@ -205,10 +205,12 @@ export function GuildPage(): JSX.Element {
     // the plugin list has settled — and drawing it would remount the frame when
     // the module arrives (see `HubResourceVisibility`).
     const pluginsHydrated = usePluginsHydrated();
+    // A community hub's module is its own lazy chunk — hold the skeleton until it lands.
+    const modulePending = useHubModulePending(query.data?.guild.kind);
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-    if (!query.data || !pluginsHydrated) return <LoadingState />;
+    if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
 }

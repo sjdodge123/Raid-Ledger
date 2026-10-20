@@ -15,7 +15,7 @@ import { buildCommunityMember, buildCommunityPage } from '../../../test/factorie
 import { mockDesktop } from '../../../test/handlers/media';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { usePluginStore } from '../../../stores/plugin-store';
-import { useHubModule, type CoreWidgetId, type HubCtx } from '../../../plugins/hub-module';
+import { useHubModule, useHubModulePending, type CoreWidgetId, type HubCtx } from '../../../plugins/hub-module';
 import { HubMembers } from '../hub-members';
 import { communityHubModule } from './community-hub-module';
 import { CommunityJoinPill, CommunityKindPill } from './community-hero';
@@ -195,10 +195,16 @@ describe('W11: useHubModule', () => {
         expect(seen.every((v) => v === true)).toBe(true);
     });
 
-    it('returns the core community module with every plugin off', () => {
+    it('returns the core community module with every plugin off, once its lazy chunk resolves', async () => {
         usePluginStore.setState({ activeSlugs: new Set<string>() });
         const { result } = renderHook(() => useHubModule('game_community'));
-        expect(result.current).toBe(communityHubModule);
+        await waitFor(() => expect(result.current).toBe(communityHubModule));
         expect(result.current?.tabs).toEqual([]);
+    });
+
+    it('reports the community module pending until loaded, and never for other kinds', async () => {
+        const { result } = renderHook(() => ({ community: useHubModulePending('game_community'), wow: useHubModulePending('wow_guild') }));
+        expect(result.current.wow).toBe(false);
+        await waitFor(() => expect(result.current.community).toBe(false));
     });
 });
