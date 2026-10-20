@@ -20,6 +20,7 @@ import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_REALM_RULESETS_KEY } from '../forever.settings';
+import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import {
   buildCharPayload,
   buildImportString,
@@ -248,8 +249,13 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
     const token = await memberToken('realmlater');
     const id = await createChar(token);
     const s = exportFrom('Silent Hollow');
+    const enqueue = jest
+      .spyOn(testApp.app.get(WowItemMetaService), 'enqueue')
+      .mockResolvedValue(0);
     const first = await perChar(token, id, s, { dryRun: false });
     expect(first.body.status).toBe('applied');
+    // The snapshot write queues gear resolution — proves the spy is wired.
+    expect(enqueue).toHaveBeenCalledTimes(1);
     expect(rulesetChanged(first.body)).toEqual([]);
     const mapped: WowForeverRealmRulesetEntryDto[] = [
       ...MAP,
@@ -270,8 +276,14 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
       dryRun: false,
       confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
     });
-    expect(apply.status).toBe(200);
+    expect({ http: apply.status, status: apply.body.status }).toEqual({
+      http: 200,
+      status: 'applied',
+    });
     expect(await storedRuleset(id)).toBe('pvp');
+    // Ruleset-only apply: the snapshot is unchanged, so no re-resolution.
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    enqueue.mockRestore();
     const again = await perChar(token, id, s);
     expect({
       status: again.body.status,
