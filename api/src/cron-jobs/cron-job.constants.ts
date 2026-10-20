@@ -283,6 +283,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       "Adds each linked game's Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC",
     category: 'Maintenance',
   },
+  ChannelLifecycleScheduler_reconcile: {
+    description:
+      'ROK-1428: reconciles game text channels daily at 04:15 — creates a channel for a game whose activity crossed the create threshold, archives quiet auto-managed channels into the Archived category, brings them back on new activity, links hubs to their managed channel (the nudge queue runs the same reconcile for one game within ~60 s of new activity)',
+    category: 'Discord',
+  },
   EphemeralVoiceScheduler_scanCreateWindow: {
     description:
       'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds',
