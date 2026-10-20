@@ -52,7 +52,7 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
 | Field | Type | Meaning |
 |---|---|---|
 | `schemaVersion` | `1` | Contract version. The mod emits **exactly one**. |
-| `kind` | `"character"` \| `"map"` \| `"items"` | Discriminator (§3–§5). |
+| `kind` | `"character"` \| `"map"` \| `"items"` \| `"recipes"` | Discriminator (§3–§5b). |
 | `serverId` | string `^[A-Za-z0-9_-]{1,64}$` | Raid Ledger's id for the game server, issued with the token. |
 | `capturedAt` | ISO-8601 UTC, `Z` offset (`2026-10-17T20:15:00Z`), at most 3 fractional digits (≤ 24 chars) | When the mod read the data. Not later than server time + 5 min (§1). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,5}){1,3}$` (`0.220.5`) | `Version.GetVersionString()`. |
@@ -163,6 +163,85 @@ origin, inside the atlas) · `{ kind: "file", file: "<name>.png", blob? }`
 `VALHEIM_LINK_BINARY_MAX_BYTES`, §7) and the PNG is uploaded through the §1
 blob route; without `blob` the server leaves the icon unresolved.
 
+## 5b. `kind: "recipes"` — crafting, building and processing export
+
+Sent by an **admin** client once per (game version, mod set), and only after
+Raid Ledger ships support for it (the server ships first, §9). Snapshot key
+`(serverId, gameVersion)`; the latest `capturedAt` wins. Names come from the
+mod's ObjectDB export like `items` (§5), so modded recipes work. Icons are
+**atlas-only** (no `file` icons) from a separately uploaded `atlas` PNG (§1).
+Requirements carry the **raw** `Piece.Requirement` fields; Raid Ledger
+computes the per-quality cost with the formula below.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `locale` | `^[A-Za-z_-]{2,32}$` | Valheim language of the names (`English`). |
+| `atlas` | binary ref \| `null` | Piece + station icon atlas. Required when any icon is non-null. |
+| `stations[]` (0–256) | station | `prefab` unique. |
+| `recipes[]` (0–4 096) | recipe | `id` unique. |
+| `pieces[]` (0–4 096) | piece | `prefab` unique. |
+| `processors[]` (0–256) | processor | `prefab` unique. |
+| `processes[]` (0–2 048) | process | Mod sorts by `processor`, then `priority` desc; the server does not check order. |
+
+Station: `prefab`; `name` 1–96; `maxLevel` 1–20 (1 + distinct extension
+prefabs); `stackableExtension` (an extension with `m_stack` exists — the
+in-game level may exceed `maxLevel`); `upgrader?` (**1.0.20**
+`CraftingStation.m_upgrader`, optional, absent on 0.221.x); `icon` atlas icon
+\| `null`.
+
+Recipe: `id` `^[A-Za-z0-9_.-]{1,96}$` (Recipe asset name, or `<result>.<n>`);
+`result` prefab (resolved against the `items` catalogue, not in-message);
+`amount` 1–10 000 (items per craft); `enabled`; `station` and `repairStation`
+prefab \| `null`, each resolving to `stations[].prefab`; `minStationLevel`
+0–20; `upgradeOnly` (`m_noCraftOnlyUpgrade`, `false` on 0.221); `anyOneOf`
+(`m_requireOnlyOneIngredient`: resources are alternatives);
+`qualityResultAmountMultiplier` 0–100 (only meaningful with `anyOneOf`);
+`formula` `"vanilla"` \| `"custom"` (`custom` = the live per-quality values
+disagree with the formula below); `resources[]` 0–16 with `prefab` unique:
+`prefab`, `amount` / `amountPerLevel` / `extraAmountOnlyOneIngredient` int
+0–10 000 each (raw), `recover`, `upgraderResource?` (**1.0.20**
+`m_upgraderResource`, optional). Several recipes may share one `result`.
+
+Piece: `prefab`; `name` 1–96; `category` (`Piece.m_category`, open set, ≤ 48);
+`tool` prefab (the build tool — `Hammer`, `Hoe`…; not resolved in-message);
+`station` prefab \| `null` resolving to `stations[].prefab`; `icon`;
+`resources[]` 0–16 of `{ prefab, amount 0–10 000, recover }`, `prefab`
+unique. Pieces have no quality.
+
+Processor: `prefab` (name and icon come from `pieces[]` when buildable);
+`type` `"smelter"` \| `"fermenter"` \| `"cooking"` \| `"incinerator"` (new
+values are additive, §9); `fuel` prefab \| `null`; `fuelPerProduct` int
+0–1 000 \| `null` (smelter only); `fuelSecondsPerUnit` 0.001–86 400 \| `null`
+(cooking with fuel only); `windPowered`; `requiresRoof`; `maxInput` int
+1–10 000 \| `null`; `burntResult` prefab \| `null` (cooking
+`m_overCookedItem`); `defaultResult` `{ prefab, perInputs 1–10 000 }` \|
+`null` (obliterator catch-all).
+
+Process: `processor` resolving to `processors[].prefab`; `inputs[]` 1–8 of
+`{ prefab, amount 1–10 000 }`, `prefab` unique; `anyOneOf` (obliterator
+`m_requireOnlyOneIngredient`); `output` `{ prefab, amount 1–10 000 }`;
+`seconds` 0–604 800 \| `null` (null for the obliterator); `priority` int
+−10 000–10 000.
+
+**Per-quality formula** (Raid Ledger side; from the 0.221.4 IL):
+
+```
+amount(r, q)       = q <= 1 ? r.amount : (q - 1) * r.amountPerLevel          // r = one resource
+stationLevel(R, q) = max(1, R.minStationLevel) + (q - 1)                       // R = the recipe
+station(R, q)      = R.station ?? (q > 1 ? R.repairStation : null)
+craft to quality Q from scratch  = Σ_{q=1..Q}  amount(r, q)  per resource, one step per q (station(R,q) at stationLevel(R,q))
+upgrade q0 → Q                   = Σ_{q=q0+1..Q} amount(r, q)
+items produced per craft         = R.amount at q = 1; 1 per upgrade step
+smelter fuel                     = fuelPerProduct × outputs (when fuel ≠ null); cooking fuel = estimate only (burns per second lit)
+```
+
+`maxQuality` comes from the `items` catalogue. `formula: "custom"` makes the
+web say "upgrade cost may differ in game". For `anyOneOf` recipes the
+resources are alternatives; the `extraAmountOnlyOneIngredient` and
+`qualityResultAmountMultiplier` rules are **UNVERIFIED** — v1 shows each
+alternative at `amount(r, q)` and does not apply the extras.
+
+
 ## 6. Strict keys and refinements
 
 Every object is **strict**: an unknown key rejects the whole message. These
@@ -177,6 +256,11 @@ rules are enforced by the Zod schema but **cannot be expressed in
 - bitmap `data` length a multiple of 4 and within the size-tied gzip cap (§4);
 - int64 ids inside the signed 64-bit range; SteamID64 ≥ the individual base;
 - an `atlas` icon needs a non-null `atlas` and must lie inside it.
+- `recipes`: `stations[]`/`pieces[]`/`processors[]` `prefab` and `recipes[].id`
+  unique; `resources[].prefab` (`inputs[].prefab`) unique per recipe / piece /
+  process; `station`, `repairStation` and piece `station` resolve to
+  `stations[].prefab`, `processes[].processor` to `processors[].prefab`;
+  Σ recipe + piece resources + process inputs ≤ `VALHEIM_LINK_RECIPE_ENTRIES_MAX`.
 
 **Server-enforced (not in Zod, not in `schema.json`).** The contract package
 stays synchronous and browser-safe, so it never inflates. The ingest endpoint
@@ -211,6 +295,8 @@ all pass Zod.
 | `VALHEIM_LINK_BITMAP_DATA_MAX_CHARS` | 3 000 000 | one bitmap's `data` | a 2048² mask is 512 KiB raw before gzip; ≤ ~700 KB base64 even if incompressible |
 | `VALHEIM_LINK_BITMAP_EDGE_MAX` | 4096 | `textureSize`, bitmap edges | 2048 vanilla |
 | `VALHEIM_LINK_ITEMS_MAX_BYTES` | 12 582 912 (12 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid (10 000 file icons, each with a `blob` ref) ≈ 11.05 MB |
+| `VALHEIM_LINK_RECIPES_MAX_BYTES` | 12 582 912 (12 MiB) | one `recipes` body | ≈ 0.5 MB vanilla. Largest schema-valid (4 096 recipes, 4 096 pieces, 12 000 requirement entries, every icon an atlas rect) ≈ 10.33 MB |
+| `VALHEIM_LINK_RECIPE_ENTRIES_MAX` | 12 000 | Σ recipe + piece resources + process inputs in one `recipes` body | ≈ 3 000 vanilla |
 | `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas, file icon) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
 | array caps | see §3–§5 | | |
 
@@ -227,6 +313,8 @@ when one no longer fits its cap (ROK-1855) — add the new field to its builder.
 
 All values are synthetic: SteamID64s `765611980000000xx`, invented names
 (`Testviking`, `Fixtureheim`), no seeds, no real world names.
+Valid: `character-*` (2), `map-*` (2), `items-*` (2), `recipes-vanilla` and
+`recipes-processing`; invalid cases per kind live under `invalid/`.
 
 - `fixtures/<name>.json` — a message that **must parse**. Map bitmaps must
   inflate to exactly `⌈width·height/8⌉` bytes.

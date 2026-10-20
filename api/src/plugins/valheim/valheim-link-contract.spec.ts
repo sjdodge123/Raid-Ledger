@@ -106,6 +106,8 @@ describe('Valheim Link v1 golden fixtures — valid', () => {
       'items-file-icons',
       'map-personal',
       'map-shared-layer',
+      'recipes-processing',
+      'recipes-vanilla',
     ]);
   });
 

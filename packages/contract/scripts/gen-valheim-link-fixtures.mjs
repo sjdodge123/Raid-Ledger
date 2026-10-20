@@ -3,6 +3,7 @@
 // character and world names, no seeds. Run from the repo root:
 //   node packages/contract/scripts/gen-valheim-link-fixtures.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { recipesFixtures } from './gen-valheim-link-fixtures.recipes.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, gzipSync } from 'node:zlib';
@@ -199,8 +200,10 @@ const invalid = {
     'map-bitmap-oversized-compressed': [{ ...mapPersonal, grid: { textureSize: 64, pixelSizeMetres: 12 }, explored: bitmapWith(64, gzipSync(noise(4096), { level: 0 }).toString('base64')) }, { path: 'explored.data', code: 'custom' }],
     'map-basemap-size-mismatch': [{ ...mapShared, baseMap: { ...mapShared.baseMap, width: 1024, height: 1024 } }, { path: 'baseMap', code: 'custom' }],
 };
+const recipes = recipesFixtures(header);
+for (const [name, v] of Object.entries(recipes.valid)) write(dir, name, v);
 const expected = {};
-for (const [name, [msg, want]] of Object.entries(invalid)) {
+for (const [name, [msg, want]] of Object.entries({ ...invalid, ...recipes.invalid })) {
     write(invalidDir, name, msg);
     expected[name] = want;
 }

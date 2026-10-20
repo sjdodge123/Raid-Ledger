@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "recipes",
+  "locale": "English",
+  "atlas": null,
+  "stations": [
+    {
+      "prefab": "piece_workbench",
+      "name": "Workbench",
+      "maxLevel": 5,
+      "stackableExtension": false,
+      "icon": null
+    },
+    {
+      "prefab": "forge",
+      "name": "Forge",
+      "maxLevel": 7,
+      "stackableExtension": false,
+      "icon": null
+    }
+  ],
+  "recipes": [
+    {
+      "id": "Recipe_SwordIron",
+      "result": "SwordIron",
+      "amount": 1,
+      "enabled": true,
+      "station": "forge",
+      "repairStation": "forge",
+      "minStationLevel": 1,
+      "upgradeOnly": false,
+      "anyOneOf": false,
+      "qualityResultAmountMultiplier": 1,
+      "formula": "vanilla",
+      "resources": [
+        {
+          "prefab": "Iron",
+          "amount": 20,
+          "amountPerLevel": 10,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        },
+        {
+          "prefab": "Wood",
+          "amount": 2,
+          "amountPerLevel": 1,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        },
+        {
+          "prefab": "LeatherScraps",
+          "amount": 3,
+          "amountPerLevel": 1,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        }
+      ]
+    },
+    {
+      "id": "Recipe_Club",
+      "result": "Club",
+      "amount": 1,
+      "enabled": true,
+      "station": "piece_workbench",
+      "repairStation": "piece_workbench",
+      "minStationLevel": 1,
+      "upgradeOnly": false,
+      "anyOneOf": false,
+      "qualityResultAmountMultiplier": 1,
+      "formula": "vanilla",
+      "resources": [
+        {
+          "prefab": "Wood",
+          "amount": 6,
+          "amountPerLevel": 3,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        }
+      ]
+    }
+  ],
+  "pieces": [
+    {
+      "prefab": "piece_chest",
+      "name": "Chest",
+      "category": "Furniture",
+      "tool": "Hammer",
+      "station": "piece_workbench",
+      "icon": null,
+      "resources": [
+        {
+          "prefab": "Wood",
+          "amount": 10,
+          "recover": true
+        }
+      ]
+    }
+  ],
+  "processors": [
+    {
+      "prefab": "smelter",
+      "type": "smelter",
+      "fuel": "Coal",
+      "fuelPerProduct": 2,
+      "fuelSecondsPerUnit": null,
+      "windPowered": false,
+      "requiresRoof": false,
+      "maxInput": 10,
+      "burntResult": null,
+      "defaultResult": null
+    }
+  ],
+  "processes": [
+    {
+      "processor": "smelter",
+      "inputs": [
+        {
+          "prefab": "IronScrap",
+          "amount": 1
+        }
+      ],
+      "anyOneOf": false,
+      "output": {
+        "prefab": "Iron",
+        "amount": 1
+      },
+      "seconds": 31,
+      "priority": 0
+    }
+  ]
+}
