@@ -31,6 +31,8 @@ export interface ImpersonationTarget {
   id: number;
   username: string;
   role: (typeof schema.users.$inferSelect)['role'];
+  /** ROK-1823 D6: read in the SAME select as the role → the token's `tv`. */
+  tokenVersion: number;
 }
 
 @Injectable()
@@ -144,15 +146,14 @@ export class ImpersonationSessionService {
   /**
    * For `/auth/refresh` (lane A2): the target to mint while the marker is
    * live and valid (§3.4.2 rules); otherwise ends the marker and returns null.
-   * `beforeValidate` (ROK-1810 Codex r4) runs with the marker's target id
-   * BEFORE the target's role is loaded and validated — the refresh path pins
-   * the target's block floor there, so a promotion (role commit, then block)
-   * landing after the pin is either seen by validation or covers the token.
+   * ROK-1823 D6: the target's role and token version come from ONE select —
+   * `setRole` bumps the version in the same UPDATE as the role, so a
+   * promotion racing this read either ends the impersonation (admin role
+   * seen) or revokes the minted token at commit (old version signed).
    */
   async resolveForRefresh(
     familyId: string,
     refreshUserId: number,
-    beforeValidate?: (targetUserId: number) => Promise<void>,
   ): Promise<{ target: ImpersonationTarget; expiresAt: Date } | null> {
     const [marker] = await this.db
       .select()
@@ -160,7 +161,6 @@ export class ImpersonationSessionService {
       .where(eq(markers.familyId, familyId))
       .limit(1);
     if (!marker) return null;
-    await beforeValidate?.(marker.targetUserId);
     const impersonator = await this.loadUser(marker.impersonatorUserId);
     const target = await this.loadUser(marker.targetUserId);
     const reason = markerEndReason(
@@ -174,8 +174,11 @@ export class ImpersonationSessionService {
       await this.end(familyId, reason ?? 'target_promoted');
       return null;
     }
-    const { id, username, role } = target;
-    return { target: { id, username, role }, expiresAt: marker.expiresAt };
+    const { id, username, role, tokenVersion } = target;
+    return {
+      target: { id, username, role, tokenVersion },
+      expiresAt: marker.expiresAt,
+    };
   }
 
   private async loadUser(id: number) {
@@ -186,6 +189,7 @@ export class ImpersonationSessionService {
         role: schema.users.role,
         bannedAt: schema.users.bannedAt,
         kickedAt: schema.users.kickedAt,
+        tokenVersion: schema.users.tokenVersion,
       })
       .from(schema.users)
       .where(eq(schema.users.id, id))

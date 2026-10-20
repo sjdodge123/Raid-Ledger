@@ -60,11 +60,16 @@ export class MagicLinkController {
       throw new UnauthorizedException(INVALID_MAGIC_LINK_MESSAGE);
     }
     const user = await this.magicLinkService.redeem(parsed.data.token);
-    const issued = await this.refreshService.issue(user.id, {
-      authMethod: 'magic',
-      userAgent: req.headers['user-agent'] ?? null,
-    });
+    // ROK-1823 review P3: the family and the access token both bind to the
+    // version `redeem` checked. A bump landing after that check refuses the
+    // family, and the access token never re-reads a newer version.
+    const issued = await this.refreshService.issueAtTokenVersion(
+      user.id,
+      user.tokenVersion,
+      { authMethod: 'magic', userAgent: req.headers['user-agent'] ?? null },
+    );
+    if (!issued) throw new UnauthorizedException(INVALID_MAGIC_LINK_MESSAGE);
     setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
-    return this.authService.login(user);
+    return this.authService.login(user, user.tokenVersion);
   }
 }

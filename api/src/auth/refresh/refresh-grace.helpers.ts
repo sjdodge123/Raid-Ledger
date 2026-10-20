@@ -6,9 +6,9 @@
  * `SET NX PX` keyed on the parent row, so a captured token replayed inside
  * the window can no longer fork unlimited live chains: every later in-window
  * replay is `raced` → 409 `refresh_raced`, NO token and NO revoke (3+ tabs
- * sharing one cookie jar must not revoke their own family and blocklist the
- * user). Only a replay older than the window is reuse → family revoke +
- * blocklist. Was 60 s and uncapped (ROK-1353).
+ * sharing one cookie jar must not revoke their own family and bump the
+ * user's token version). Only a replay older than the window is reuse →
+ * family revoke + token-version bump (ROK-1823). Was 60 s and uncapped (ROK-1353).
  */
 import {
   ConflictException,
@@ -69,7 +69,7 @@ export const GRACE_KEY_TTL_MS =
  * (`replacedBy` null — a grace sibling never sets it) is still in flight, so
  * a replay of it is a race loser (age 0), never theft. Fleet run
  * 2c53b4959397: a 14 s API stall between consume and child turned a reload
- * into "reuse" → blockUser(admin). `rotatedAgoMs` is computed in SQL on the
+ * into "reuse" → an admin-wide revoke. `rotatedAgoMs` is computed in SQL on the
  * DB clock that stamped `rotatedAt` (review S2), never app `Date.now()`.
  */
 export function rotationAgeMs(row: {

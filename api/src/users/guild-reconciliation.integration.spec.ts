@@ -16,7 +16,7 @@
  *      stamped, kept active and avatar-synced in the same pass);
  *   5. local: / unlinked: ids are never candidates, even when stamped.
  */
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -115,9 +115,10 @@ describe('GuildReconciliationService — seen-in-guild scoping (ROK-1749)', () =
     expect(after.deactivatedAt).toBeNull();
     expect(after.guildMemberSeenAt).toBeNull();
 
-    const token = testApp.app
-      .get(JwtService)
-      .sign({ sub: guest.id, username: guest.username });
+    const token = await signTestAccessToken(testApp, {
+      sub: guest.id,
+      username: guest.username,
+    });
     const vote = await testApp.request
       .post(`/lineups/${lineupId}/vote`)
       .set('Authorization', `Bearer ${token}`)

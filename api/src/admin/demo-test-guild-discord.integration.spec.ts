@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { SettingsService } from '../settings/settings.service';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
@@ -40,11 +40,13 @@ function guildRoute(path: string): string {
   return `/plugins/wow/guilds/${guild.guildId}/discord${path}`;
 }
 
-function memberToken(): string {
+function memberToken(): Promise<string> {
   const { userId, username } = guild.users.member;
-  return testApp.app
-    .get(JwtService)
-    .sign({ sub: userId, username, role: 'member' });
+  return signTestAccessToken(testApp, {
+    sub: userId,
+    username,
+    role: 'member',
+  });
 }
 
 function bind(body: Record<string, unknown>) {
@@ -119,7 +121,7 @@ describe('POST /admin/test/wow/guild-discord-channel', () => {
     expect((await bind({ channelId: PUBLIC_ID })).status).toBe(200);
     const read = await testApp.request
       .get(guildRoute(''))
-      .set('Authorization', `Bearer ${memberToken()}`);
+      .set('Authorization', `Bearer ${await memberToken()}`);
     expect(read.status).toBe(200);
     expect(read.body.state).toBe('ok');
     expect(read.body.channel.url).toBe(

@@ -152,9 +152,9 @@ export async function truncateAllTables(
   // during a full integration run (ROK-1059, ROK-1232). The mock Redis store,
   // the auth-user cache, and the SettingsService cache are module/instance-
   // level singletons held alive by the TestApp singleton on `process`.
-  // Without clearing them here, a `jwt_block:<userId>` entry written by an
-  // earlier suite can silently invalidate tokens issued to the freshly
-  // re-seeded admin, a stale `community_name` (or any setting) read can
+  // Without clearing them here, a stale cached auth-user row (role, token
+  // version) from an earlier suite can reject the freshly re-seeded admin, a
+  // stale `community_name` (or any setting) read can
   // bias logic in the next spec, and a `lineup-*` dedup key can silence a
   // notification expected by spec B.
   clearAuthUserCache();
@@ -200,8 +200,7 @@ async function obliterateAllQueues(): Promise<void> {
 /**
  * Prefixes purged from the mock Redis store on each truncate.
  *
- * `jwt_block:` blocks token reuse after revocation; the dedup prefixes mirror
- * the Playwright reset (`demo-test-reset.service.ts:flushDedupRedisCache`) so
+ * The dedup prefixes mirror the Playwright reset (`demo-test-reset.service.ts:flushDedupRedisCache`) so
  * a `lineup-reminder:1:99:24h` written by spec A cannot silence a matching
  * notification expected by spec B. ROK-1059 + ROK-1232. The recruitment and
  * game-alert groups (ROK-1202) cover `recruitment-bump:event:N` /
@@ -218,7 +217,6 @@ async function obliterateAllQueues(): Promise<void> {
  * copy left behind makes the next test's first post read as a duplicate.
  */
 export const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
-  'jwt_block:',
   'lineup-',
   'event-',
   'tiebreaker-',

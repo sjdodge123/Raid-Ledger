@@ -32,6 +32,7 @@ function buildMockRequest(userId = 1): AuthenticatedRequest {
       discordId: null,
       deactivatedAt: null,
       impersonatedBy: null,
+      tokenVersion: 0,
     },
   };
 }

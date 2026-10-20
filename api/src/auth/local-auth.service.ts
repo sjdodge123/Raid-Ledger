@@ -19,7 +19,6 @@ import {
 } from './auth-status.helpers';
 import { defined } from '../common/defined.helpers';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { signAccessToken } from './access-token-mint.helpers';
 import { markerExpiry } from './impersonation/impersonation-session.helpers';
 
@@ -28,6 +27,8 @@ export interface ImpersonatingCaller {
   id: number;
   username: string;
   impersonatedBy?: number | null;
+  /** ROK-1823 D6: the version that authenticated the request → `itv`. */
+  tokenVersion: number;
 }
 
 /** ROK-1754: `POST /auth/impersonate/:userId` response (no original_token). */
@@ -77,7 +78,6 @@ export class LocalAuthService {
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
     private sessions: ImpersonationSessionService,
-    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   /**
@@ -176,11 +176,16 @@ export class LocalAuthService {
   /**
    * Generate JWT for authenticated user
    */
-  async login(user: typeof users.$inferSelect) {
+  login(user: typeof users.$inferSelect) {
     return {
-      access_token: await signAccessToken(
-        { jwt: this.jwtService, blocklist: this.blocklist },
-        { username: user.username, sub: user.id, role: user.role },
+      access_token: signAccessToken(
+        { jwt: this.jwtService },
+        {
+          username: user.username,
+          sub: user.id,
+          role: user.role,
+          tv: user.tokenVersion,
+        },
       ),
       user: {
         id: user.id,
@@ -264,19 +269,21 @@ export class LocalAuthService {
     return target;
   }
 
-  private async buildImpersonationToken(
-    adminUser: { id: number },
+  private buildImpersonationToken(
+    adminUser: Pick<ImpersonatingCaller, 'id' | 'tokenVersion'>,
     target: typeof users.$inferSelect,
     notAfter: Date,
-  ): Promise<ImpersonationStartResult> {
+  ): ImpersonationStartResult {
     return {
-      access_token: await signAccessToken(
-        { jwt: this.jwtService, blocklist: this.blocklist },
+      access_token: signAccessToken(
+        { jwt: this.jwtService },
         {
           username: target.username,
           sub: target.id,
           role: target.role,
           impersonatedBy: adminUser.id,
+          tv: target.tokenVersion,
+          itv: adminUser.tokenVersion,
         },
         { notAfter },
       ),

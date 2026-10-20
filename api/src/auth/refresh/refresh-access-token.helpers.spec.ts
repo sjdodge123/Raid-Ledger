@@ -1,97 +1,28 @@
 /**
- * ROK-1810 Codex P2: the access token `/auth/refresh` mints in the same second
- * as a `blockUser` (a sibling tab refreshing right after a password change)
- * must not be born revoked. Drives the real TokenBlocklistService over an
- * in-memory Redis and the real JwtService.
+ * ROK-1823 U4 (D5b/D6): the `/auth/refresh` access token is minted from ONE
+ * snapshot (`refresh_tokens ⋈ users`) — a revoked/missing row signs nothing,
+ * the own token carries the snapshot's role + version, and an impersonation
+ * token's `itv` is the snapshot version, never a later read. Drives the real
+ * ImpersonationSessionService and JwtService over a queued db fake.
  */
 import { JwtService } from '@nestjs/jwt';
-import type Redis from 'ioredis';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { TokenBlocklistService } from '../token-blocklist.service';
-import { mockRedisEval } from '../../common/testing/redis-mock';
+import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { mintRefreshAccessToken } from './refresh-access-token.helpers';
 
 const NOW = new Date('2026-10-16T12:00:00.250Z');
-const USER = { id: 7, username: 'admin', role: 'admin' as const };
+const HOLDER = { id: 7, username: 'admin', role: 'admin' as const };
 const TARGET = { id: 8, username: 'target', role: 'member' as const };
+const ROTATED = { userId: HOLDER.id, familyId: 'fam-1', rawToken: 'raw-child' };
 
-function dbReturning(rows: unknown[]): PostgresJsDatabase<typeof schema> {
-  const chain = {
-    select: () => chain,
-    from: () => chain,
-    where: () => chain,
-    limit: () => Promise.resolve(rows),
-  };
-  return chain as unknown as PostgresJsDatabase<typeof schema>;
+interface Decoded {
+  sub: number;
+  role: string;
+  tv?: number;
+  itv?: number;
+  impersonatedBy?: number;
 }
-
-function build(live: { target: typeof TARGET; expiresAt: Date } | null) {
-  const store = new Map<string, string>();
-  const redis = {
-    set: jest.fn((key: string, value: string) => {
-      store.set(key, value);
-      return Promise.resolve('OK');
-    }),
-    get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
-    eval: jest.fn(mockRedisEval(store, new Map<string, number>())),
-  };
-  const blocklist = new TokenBlocklistService(redis as unknown as Redis);
-  const jwt = new JwtService({ secret: 'test-secret' });
-  const impersonation = {
-    resolveForRefresh: jest.fn(
-      async (_f: string, _u: number, pin?: (id: number) => Promise<void>) => {
-        if (live) await pin?.(live.target.id);
-        return live;
-      },
-    ),
-  };
-  const deps = { db: dbReturning([USER]), jwt, blocklist, impersonation };
-  return { deps, blocklist, jwt };
-}
-
-const ROTATED = { userId: USER.id, familyId: 'fam-1', rawToken: 'raw-child' };
-
-async function mintOrFail(
-  deps: Parameters<typeof mintRefreshAccessToken>[0],
-): Promise<string> {
-  const token = await mintRefreshAccessToken(deps, ROTATED);
-  if (token === null) throw new Error('expected a token, got null (401)');
-  return token;
-}
-
-function iatOf(jwt: JwtService, token: string): number {
-  return jwt.decode<{ iat: number }>(token).iat;
-}
-
-describe('ROK-1810 mintRefreshAccessToken — same-second mint after a block', () => {
-  beforeEach(() => jest.useFakeTimers({ now: NOW }));
-  afterEach(() => jest.useRealTimers());
-
-  it('the own-token path minted in the block second is NOT rejected by isBlocked', async () => {
-    const t = build(null);
-    await t.blocklist.blockUser(USER.id);
-    const token = await mintOrFail(t.deps);
-    const iat = iatOf(t.jwt, token);
-    expect(await t.blocklist.isBlocked(USER.id, iat)).toBe(false);
-  });
-
-  it('the impersonation path clears the impersonating admin block too', async () => {
-    const expiresAt = new Date(NOW.getTime() + 30 * 60 * 1000);
-    const t = build({ target: TARGET, expiresAt });
-    await t.blocklist.blockUser(USER.id);
-    const token = await mintOrFail(t.deps);
-    const iat = iatOf(t.jwt, token);
-    expect(await t.blocklist.isBlocked(USER.id, iat)).toBe(false);
-    expect(t.jwt.decode<{ sub: number }>(token).sub).toBe(TARGET.id);
-  });
-
-  it('with no block the iat is the current second', async () => {
-    const t = build(null);
-    const token = await mintOrFail(t.deps);
-    expect(iatOf(t.jwt, token)).toBe(Math.floor(NOW.getTime() / 1000));
-  });
-});
 
 /** A db fake whose successive `.limit()` reads resolve the queued rows. */
 function queuedDb(...reads: unknown[][]) {
@@ -99,108 +30,102 @@ function queuedDb(...reads: unknown[][]) {
   const chain = {
     select: () => chain,
     from: () => chain,
+    innerJoin: () => chain,
     where: () => chain,
     limit,
   };
   return { db: chain as unknown as PostgresJsDatabase<typeof schema>, limit };
 }
 
-describe('ROK-1810 Codex r2 — refresh mint after a concurrent revoke', () => {
+function build(...reads: unknown[][]) {
+  const { db, limit } = queuedDb(...reads);
+  const jwt = new JwtService({ secret: 'test-secret' });
+  const sign = jest.spyOn(jwt, 'sign');
+  const impersonation = new ImpersonationSessionService(db);
+  const resolve = jest.spyOn(impersonation, 'resolveForRefresh');
+  return { deps: { db, jwt, impersonation }, jwt, sign, limit, resolve };
+}
+
+const snapshot = (tokenVersion: number, revokedAt: Date | null = null) => [
+  { revokedAt, ...HOLDER, tokenVersion },
+];
+const marker = (expiresAt: Date) => [
+  {
+    familyId: ROTATED.familyId,
+    impersonatorUserId: HOLDER.id,
+    targetUserId: TARGET.id,
+    expiresAt,
+  },
+];
+const userRow = (u: typeof HOLDER | typeof TARGET, tokenVersion: number) => [
+  { ...u, bannedAt: null, kickedAt: null, tokenVersion },
+];
+
+async function mintDecoded(t: ReturnType<typeof build>): Promise<Decoded> {
+  const token = await mintRefreshAccessToken(t.deps, ROTATED);
+  if (token === null) throw new Error('expected a token, got null (401)');
+  return t.jwt.decode<Decoded>(token);
+}
+
+describe('ROK-1823 U4 refresh mint — snapshot gate', () => {
   beforeEach(() => jest.useFakeTimers({ now: NOW }));
   afterEach(() => jest.useRealTimers());
 
-  it('floor present + rotated row revoked → null (401), nothing signed', async () => {
-    const t = build(null);
-    await t.blocklist.blockUser(USER.id);
-    const q = queuedDb([{ revokedAt: new Date(NOW) }], [USER]);
-    const sign = jest.spyOn(t.jwt, 'sign');
-    const deps = { ...t.deps, db: q.db };
-    await expect(mintRefreshAccessToken(deps, ROTATED)).resolves.toBeNull();
-    expect(sign).not.toHaveBeenCalled();
+  it('rotated row revoked → null (401), nothing signed, no marker read', async () => {
+    const t = build(snapshot(4, new Date(NOW.getTime() - 1)));
+    expect(await mintRefreshAccessToken(t.deps, ROTATED)).toBeNull();
+    expect(t.sign).not.toHaveBeenCalled();
+    expect(t.resolve).not.toHaveBeenCalled();
   });
 
-  it('floor present + rotated row live → a token that survives the floor', async () => {
-    const t = build(null);
-    await t.blocklist.blockUser(USER.id);
-    const q = queuedDb([{ revokedAt: null }], [USER]);
-    const token = await mintOrFail({ ...t.deps, db: q.db });
-    expect(await t.blocklist.isBlocked(USER.id, iatOf(t.jwt, token))).toBe(
-      false,
-    );
-    expect(q.limit).toHaveBeenCalledTimes(2);
+  it('rotated row missing → null (401), nothing signed', async () => {
+    const t = build([]);
+    expect(await mintRefreshAccessToken(t.deps, ROTATED)).toBeNull();
+    expect(t.sign).not.toHaveBeenCalled();
   });
 
-  // ROK-1820: a password change commits the revoke BEFORE `blockUser` writes
-  // Redis. A refresh whose floor read lands in that gap sees no floor, yet its
-  // rotated row is already revoked — it must still 401 with nothing signed.
-  it('no floor + rotated row revoked → null (401), nothing signed', async () => {
-    const t = build(null);
-    const q = queuedDb([{ revokedAt: new Date(NOW) }], [USER]);
-    const sign = jest.spyOn(t.jwt, 'sign');
-    const deps = { ...t.deps, db: q.db };
-    await expect(mintRefreshAccessToken(deps, ROTATED)).resolves.toBeNull();
-    expect(sign).not.toHaveBeenCalled();
-  });
-
-  it('no floor + rotated row live → re-check, then the user lookup', async () => {
-    const t = build(null);
-    const q = queuedDb([{ revokedAt: null }], [USER]);
-    await mintOrFail({ ...t.deps, db: q.db });
-    expect(q.limit).toHaveBeenCalledTimes(2);
+  it('own token: the snapshot role and version, from that one read', async () => {
+    const t = build(snapshot(4), []);
+    const payload = await mintDecoded(t);
+    expect(payload).toMatchObject({ sub: HOLDER.id, role: 'admin', tv: 4 });
+    expect(payload).not.toHaveProperty('itv');
+    // snapshot + marker lookup only — the holder is never re-read.
+    expect(t.limit).toHaveBeenCalledTimes(2);
   });
 });
 
-describe('ROK-1810 Codex r4 — target promoted between the floor pin and validation', () => {
+describe('ROK-1823 U4 refresh mint — impersonation versions (D6)', () => {
   beforeEach(() => jest.useFakeTimers({ now: NOW }));
   afterEach(() => jest.useRealTimers());
 
-  it('the impersonation token keeps the PRE-promotion iat, so the promotion block revokes it', async () => {
+  it('tv = target version; itv = the SNAPSHOT version even when the impersonator reload is higher', async () => {
     const expiresAt = new Date(NOW.getTime() + 30 * 60 * 1000);
-    const t = build(null);
-    await t.blocklist.blockUser(TARGET.id);
-    const preFloor = await t.blocklist.minIatFor(TARGET.id);
-    const resolveForRefresh = jest.fn(
-      async (_f: string, _u: number, pin?: (id: number) => Promise<void>) => {
-        await pin?.(TARGET.id);
-        await t.blocklist.blockUser(TARGET.id); // setRole('admin') → block
-        return { target: TARGET, expiresAt };
-      },
+    const t = build(
+      snapshot(4),
+      marker(expiresAt),
+      userRow(HOLDER, 9),
+      userRow(TARGET, 2),
     );
-    const deps = { ...t.deps, impersonation: { resolveForRefresh } };
-    const iat = iatOf(t.jwt, await mintOrFail(deps));
-    expect(iat).toBe(preFloor);
-    expect(await t.blocklist.isBlocked(TARGET.id, iat)).toBe(true);
-  });
-});
-
-describe('ROK-1820 refresh impersonation exp vs the marker deadline', () => {
-  beforeEach(() => jest.useFakeTimers({ now: NOW }));
-  afterEach(() => jest.useRealTimers());
-
-  const SECOND = Math.floor(NOW.getTime() / 1000);
-
-  it('a floored iat never pushes exp past the marker expires_at', async () => {
-    const expiresAt = new Date((SECOND + 20) * 1000 + 500);
-    const t = build({ target: TARGET, expiresAt });
-    await t.blocklist.blockUser(USER.id);
-    const token = await mintOrFail(t.deps);
-    expect(t.jwt.decode<{ iat: number; exp: number }>(token)).toMatchObject({
-      iat: SECOND + 1,
-      exp: SECOND + 20,
+    const payload = await mintDecoded(t);
+    expect(payload).toMatchObject({
+      sub: TARGET.id,
+      impersonatedBy: HOLDER.id,
+      tv: 2,
+      itv: 4,
     });
   });
 
-  it('floor reaches the deadline → the holder gets their OWN token, not a born-expired one', async () => {
-    const expiresAt = new Date((SECOND + 1) * 1000);
-    const t = build({ target: TARGET, expiresAt });
-    await t.blocklist.blockUser(USER.id);
-    const token = await mintOrFail(t.deps);
-    const claims = t.jwt.decode<{ sub: number; impersonatedBy?: number }>(
-      token,
+  it('marker deadline inside the current second → the holder OWN token (snapshot version)', async () => {
+    const expiresAt = new Date(NOW.getTime() + 500);
+    const t = build(
+      snapshot(4),
+      marker(expiresAt),
+      userRow(HOLDER, 4),
+      userRow(TARGET, 2),
     );
-    expect({ sub: claims.sub, impersonatedBy: claims.impersonatedBy }).toEqual({
-      sub: USER.id,
-      impersonatedBy: undefined,
-    });
+    const payload = await mintDecoded(t);
+    expect(payload).toMatchObject({ sub: HOLDER.id, tv: 4 });
+    expect(payload).not.toHaveProperty('impersonatedBy');
+    expect(payload).not.toHaveProperty('itv');
   });
 });

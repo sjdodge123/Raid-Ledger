@@ -40,6 +40,7 @@ const USER: AuthenticatedUser = {
   discordId: null,
   deactivatedAt: null,
   impersonatedBy: null,
+  tokenVersion: 0,
 };
 
 /** A thenable query chain resolving to `rows` whatever the builder calls. */

@@ -40,6 +40,8 @@ import {
 
 jest.mock('bcrypt', () => ({
   hash: () => Promise.resolve('GENERATED_HASH'),
+  // ROK-1823: a re-seed re-applies the SAME fixed password → no revoke.
+  compare: () => Promise.resolve(true),
 }));
 
 const OPERATOR_DISCORD_ID = '111222333444555666';

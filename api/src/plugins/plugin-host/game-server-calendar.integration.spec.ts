@@ -12,7 +12,7 @@
  * `game-server-calendar.service.spec.ts` ("provider timeout").
  */
 import { Logger } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../../common/testing/sign-test-access-token';
 import { inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -534,9 +534,10 @@ describe('Game-server calendar + status endpoints (ROK-268, integration)', () =>
           .returning(),
         'member',
       );
-      const token = testApp.app
-        .get(JwtService)
-        .sign({ sub: member.id, username: member.username });
+      const token = await signTestAccessToken(testApp, {
+        sub: member.id,
+        username: member.username,
+      });
 
       const calendar = await testApp.request
         .get(calendarUrl())

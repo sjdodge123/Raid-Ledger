@@ -6,7 +6,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
-import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { at } from '../common/testing/narrow';
 
 function describeUsersServiceGetUserActivity() {
@@ -22,10 +21,6 @@ function describeUsersServiceGetUserActivity() {
         {
           provide: DrizzleAsyncProvider,
           useValue: mockDb,
-        },
-        {
-          provide: TokenBlocklistService,
-          useValue: { blockUser: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
