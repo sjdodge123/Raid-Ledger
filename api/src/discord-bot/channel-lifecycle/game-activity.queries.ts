@@ -9,16 +9,26 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  BindingLifecycleState,
-  GameActivitySignalKind,
-} from '@raid-ledger/contract';
+import type { GameActivitySignalKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
   SIGNAL_REGISTRY,
   type GameActivitySignal,
   type SignalWindow,
 } from './game-activity.signals';
+import type {
+  GameLifecycleActivityOptions,
+  GameLifecycleActivityRow,
+  GameSignalSummary,
+  LifecycleCandidateBinding,
+} from './game-activity.types';
+
+export type {
+  GameLifecycleActivityOptions,
+  GameLifecycleActivityRow,
+  GameSignalSummary,
+  LifecycleCandidateBinding,
+} from './game-activity.types';
 
 /**
  * ROK-1430 (spec D1, §2.2) — per-game lifecycle activity: the signal registry
@@ -31,57 +41,6 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 const DAY_MS = 86_400_000;
 const cb = schema.channelBindings;
-
-/** The game-announcements binding the lifecycle may manage (never a series row, D12/X11). */
-export interface LifecycleCandidateBinding {
-  id: string;
-  guildId: string;
-  channelId: string;
-  lifecycleState: BindingLifecycleState;
-  autoManaged: boolean;
-  pinned: boolean;
-  archivedAt: Date | null;
-  restoreParentId: string | null;
-}
-
-/** One signal kind's contribution for a game. */
-export interface GameSignalSummary {
-  kind: GameActivitySignalKind;
-  itemCount: number;
-  lastActivityAt: Date;
-}
-
-/** One game's derived lifecycle input. */
-export interface GameLifecycleActivityRow {
-  gameId: number;
-  gameName: string;
-  gameSlug: string;
-  signals: GameSignalSummary[];
-  itemCount: number;
-  lastActivityAt: Date | null;
-  /** An active community hub holds the channel open (D8) — false until L11. */
-  hubHold: boolean;
-  /** A hub of this game has no channel and wants the managed one (D7) — false until L8. */
-  hubNeedsLink: boolean;
-  suppressed: boolean;
-  binding: LifecycleCandidateBinding | null;
-}
-
-/** Options for `selectGameLifecycleActivity`. */
-export interface GameLifecycleActivityOptions {
-  now: Date;
-  windowDays: number;
-  /** Defaults to the live `SIGNAL_REGISTRY`. */
-  signals?: readonly GameActivitySignal[];
-  /** Scope bindings + suppressions to the bot's guild. */
-  guildId?: string;
-  /** Restrict to these games (per-game nudge). */
-  gameIds?: readonly number[];
-  /** HUB-HOLD SEAM (L11/M7): games an active community hub holds open. */
-  hubHoldGameIds?: ReadonlySet<number>;
-  /** HUB-LINK SEAM (L8): games with a hub whose channel is NULL. */
-  hubNeedsLinkGameIds?: ReadonlySet<number>;
-}
 
 interface AggregateRow extends Record<string, unknown> {
   game_id: number;
