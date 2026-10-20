@@ -78,7 +78,7 @@ export class AddonImportCreateService {
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
       // ROK-1794 AC4: both routes flag a held roster (Codex P2).
-      await flagIfRosterHeld(this.db, userId, err, this.logger);
+      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await finishAttempt(this.audit, outcome);

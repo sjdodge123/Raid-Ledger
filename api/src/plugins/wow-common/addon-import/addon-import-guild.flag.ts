@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -19,8 +19,8 @@ function heldMessage(guildName: string, err: RosterHeldError): string {
 }
 
 /**
- * ROK-1794 AC4 — flag a held guild snapshot to every admin as an in-app
- * `system` notice. Runs on the outer db AFTER the import transaction rolled
+ * ROK-1794 AC4 — flag a held guild snapshot to every active admin and
+ * operator as an in-app `system` notice. Runs on the outer db AFTER the import transaction rolled
  * back; never throws (the importer still gets the 422). The guild name is
  * the STORED one, never the pasted payload's (ROK-1724 echo rule).
  */
@@ -41,18 +41,32 @@ export async function flagHeldRoster(
 
 /**
  * ROK-1794 Codex P2 — the ONE place both import routes (per-character and
- * character-less) send a failed import: flags it when it was a held roster.
+ * character-less) send a failed import: flags it when it was a held roster
+ * on APPLY. A preview (`dryRun`) runs the same guard and throws the same
+ * error, but changed nothing — it flags no one (review P3).
  */
 export async function flagIfRosterHeld(
   db: Db,
   importerId: number,
   err: unknown,
   logger: Logger,
+  dryRun: boolean,
 ): Promise<void> {
-  if (err instanceof RosterHeldError) {
+  if (!dryRun && err instanceof RosterHeldError) {
     await flagHeldRoster(db, importerId, err, logger);
   }
 }
+
+/**
+ * Who can act on a hold — staff, the roles that may import past it
+ * (`importerIsStaff`): admins AND operators, still active (review P3; same
+ * recipients as the tiebreaker escalation).
+ */
+export const STAFF_ROLES = ['admin', 'operator'] as const;
+const staffRecipients = and(
+  inArray(schema.users.role, [...STAFF_ROLES]),
+  isNull(schema.users.deactivatedAt),
+);
 
 async function insertFlags(
   db: Db,
@@ -66,7 +80,7 @@ async function insertFlags(
   const admins = await db
     .select({ id: schema.users.id })
     .from(schema.users)
-    .where(eq(schema.users.role, 'admin'));
+    .where(staffRecipients);
   if (!guild || admins.length === 0) return;
   const { guildId, removed, added, live, dropsEditor } = err;
   await db.insert(schema.notifications).values(

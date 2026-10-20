@@ -75,8 +75,9 @@ export class AddonImportService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) result = err.code;
-      // ROK-1794 AC4: the tx rolled back — flag a held roster to admins.
-      await flagIfRosterHeld(this.db, userId, err, this.logger);
+      // ROK-1794 AC4: the tx rolled back — flag a held roster to staff
+      // (apply only — a preview flags no one).
+      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await this.finish(userId, characterId, facts, result, perSection);
