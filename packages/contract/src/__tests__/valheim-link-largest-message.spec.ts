@@ -4,6 +4,15 @@ import {
     VALHEIM_LINK_BITMAP_DATA_MAX_CHARS,
     VALHEIM_LINK_BITMAP_EDGE_MAX,
     VALHEIM_LINK_CHARACTER_MAX_BYTES,
+    VALHEIM_LINK_PIECES_MAX,
+    VALHEIM_LINK_PROCESSES_MAX,
+    VALHEIM_LINK_PROCESSORS_MAX,
+    VALHEIM_LINK_RECIPE_ENTRIES_MAX,
+    VALHEIM_LINK_RECIPES_MAX,
+    VALHEIM_LINK_RECIPES_MAX_BYTES,
+    VALHEIM_LINK_REQUIREMENTS_MAX,
+    VALHEIM_LINK_STATION_LEVEL_MAX,
+    VALHEIM_LINK_STATIONS_MAX,
     VALHEIM_LINK_GRID_EDGE_MAX,
     VALHEIM_LINK_INT64_MIN,
     VALHEIM_LINK_INVENTORY_ITEMS_MAX,
@@ -155,10 +164,54 @@ function largestItems(): unknown {
     };
 }
 
+// ROK-1854 — `recipes`: the 12 000-entry budget binds; 1 input per process first,
+// then 16 resources per recipe until it is spent, then empty recipes and pieces.
+const atlasIcon = { kind: 'atlas', x: 15_872, y: 15_872, w: 512, h: 512 };
+const recipeResource = (j: number) => ({
+    prefab: prefab(j), amount: 10_000, amountPerLevel: 10_000, extraAmountOnlyOneIngredient: 10_000, recover: false, upgraderResource: false,
+});
+function recipeAt(i: number, resourceCount: number) {
+    return {
+        id: `r${i}`.padEnd(96, 'x'), result: prefab(i), amount: 10_000, enabled: false, station: prefab(0), repairStation: prefab(0),
+        minStationLevel: VALHEIM_LINK_STATION_LEVEL_MAX, upgradeOnly: false, anyOneOf: false, qualityResultAmountMultiplier: 99.99999999999997,
+        formula: 'vanilla', resources: Array.from({ length: resourceCount }, (_, j) => recipeResource(j)),
+    };
+}
+function pieceAt(i: number) {
+    return { prefab: prefab(i), name: ctl(96), category: 'C'.repeat(48), tool: prefab(0), station: prefab(0), icon: atlasIcon, resources: [] };
+}
+function largestRecipes(): unknown {
+    const inputs = VALHEIM_LINK_PROCESSES_MAX;
+    const budget = VALHEIM_LINK_RECIPE_ENTRIES_MAX - inputs;
+    const full = Math.floor(budget / VALHEIM_LINK_REQUIREMENTS_MAX);
+    const rest = budget % VALHEIM_LINK_REQUIREMENTS_MAX;
+    return {
+        ...header,
+        kind: 'recipes',
+        locale: 'L'.repeat(32),
+        atlas: binaryRef(16_384),
+        stations: Array.from({ length: VALHEIM_LINK_STATIONS_MAX }, (_, i) => ({
+            prefab: prefab(i), name: ctl(96), maxLevel: VALHEIM_LINK_STATION_LEVEL_MAX, stackableExtension: false, upgrader: false, icon: atlasIcon,
+        })),
+        recipes: Array.from({ length: VALHEIM_LINK_RECIPES_MAX }, (_, i) =>
+            recipeAt(i, i < full ? VALHEIM_LINK_REQUIREMENTS_MAX : i === full ? rest : 0)),
+        pieces: Array.from({ length: VALHEIM_LINK_PIECES_MAX }, (_, i) => pieceAt(i)),
+        processors: Array.from({ length: VALHEIM_LINK_PROCESSORS_MAX }, (_, i) => ({
+            prefab: prefab(i), type: 'incinerator', fuel: prefab(0), fuelPerProduct: 1_000, fuelSecondsPerUnit: 86399.99999999999,
+            windPowered: false, requiresRoof: false, maxInput: 10_000, burntResult: prefab(0), defaultResult: { prefab: prefab(0), perInputs: 10_000 },
+        })),
+        processes: Array.from({ length: VALHEIM_LINK_PROCESSES_MAX }, (_, i) => ({
+            processor: prefab(i % VALHEIM_LINK_PROCESSORS_MAX), inputs: [{ prefab: prefab(0), amount: 10_000 }], anyOneOf: false,
+            output: { prefab: prefab(0), amount: 10_000 }, seconds: 604799.9999999999, priority: -10_000,
+        })),
+    };
+}
+
 const KINDS = [
     ['character', largestCharacter, VALHEIM_LINK_CHARACTER_MAX_BYTES],
     ['map', largestMap, VALHEIM_LINK_MAP_MAX_BYTES],
     ['items', largestItems, VALHEIM_LINK_ITEMS_MAX_BYTES],
+    ['recipes', largestRecipes, VALHEIM_LINK_RECIPES_MAX_BYTES],
 ] as const;
 
 describe.each(KINDS)('largest schema-valid %s message (ROK-1855)', (kind, build, cap) => {
@@ -170,5 +223,17 @@ describe.each(KINDS)('largest schema-valid %s message (ROK-1855)', (kind, build,
         // A builder that quietly shrank would pass the cap for the wrong reason.
         expect(bytes).toBeGreaterThan(cap / 2);
         expect(bytes, `${kind}: ${bytes} bytes vs cap ${cap}`).toBeLessThanOrEqual(cap);
+    });
+});
+
+describe('recipes entry cap (ROK-1854)', () => {
+    it('one more resource over VALHEIM_LINK_RECIPE_ENTRIES_MAX is too_big at the root', () => {
+        const msg = largestRecipes() as { recipes: Array<{ resources: unknown[] }> };
+        const spare = msg.recipes.find((r) => r.resources.length < VALHEIM_LINK_REQUIREMENTS_MAX);
+        if (!spare) throw new Error('builder left no recipe with room');
+        spare.resources.push({ prefab: 'extra', amount: 1, amountPerLevel: 1, extraAmountOnlyOneIngredient: 0, recover: false });
+        const res = ValheimLinkMessageSchema.safeParse(msg);
+        expect(res.success).toBe(false);
+        expect(res.error?.issues.some((i) => i.code === 'too_big' && i.path.length === 0)).toBe(true);
     });
 });
