@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/nestjs';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
 import { CHANNEL_LIFECYCLE_NUDGE_QUEUE } from './channel-lifecycle.nudge';
@@ -11,7 +11,7 @@ import {
   type NudgeJob,
 } from './channel-lifecycle.nudge.processor';
 
-jest.mock('@sentry/node', () => ({ captureException: jest.fn() }));
+jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
 describe('ChannelLifecycleNudgeProcessor', () => {
   const lifecycle = { reconcile: jest.fn() };

@@ -155,3 +155,19 @@ describe('reassignMiscFks — games_dedup_audit delete is parameterised (ROK-175
     );
   });
 });
+
+describe('reassignMiscFks — channel_lifecycle_suppressions (ROK-1428 D9)', () => {
+  it('drops only colliding loser rows, then moves the rest to the winner', async () => {
+    const statements = await recordStatements(11, 22);
+    const deleteIdx = indexOfMatch(
+      statements,
+      /^DELETE FROM channel_lifecycle_suppressions AS l USING channel_lifecycle_suppressions AS w .*l\.guild_id IS NOT DISTINCT FROM w\.guild_id/,
+    );
+    const updateIdx = indexOfMatch(
+      statements,
+      /^UPDATE channel_lifecycle_suppressions SET game_id = 22 WHERE game_id = 11$/,
+    );
+    expect(deleteIdx).toBeGreaterThanOrEqual(0);
+    expect(updateIdx).toBeGreaterThan(deleteIdx);
+  });
+});

@@ -11,7 +11,6 @@ import { listGuildCategories } from '../discord-bot-client.guild.helpers';
 import {
   isDiscordCode,
   lifecycleCall,
-  resolveTextChannel,
   UNKNOWN_CHANNEL,
 } from './channel-lifecycle.errors';
 

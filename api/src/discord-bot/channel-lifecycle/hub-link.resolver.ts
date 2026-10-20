@@ -2,15 +2,16 @@
  * Resolve the game-hub link an embed shows — ROK-1872 (ROK-1428 §2.8, D15).
  *
  * Precedence: the event's tagged hub (if visible) → the game's single visible
- * hub → ≥ 2 hubs → the `/hubs?game=<id>` directory → none → null. Only kinds
- * in {@link HUB_LINK_KINDS} count as a game's hubs.
+ * hub → ≥ 2 hubs → the OLDEST one (lowest id; deterministic, and the first
+ * hub a game got) → none → null. Only kinds in {@link HUB_LINK_KINDS} count.
+ * TODO(ROK-1873): link the `/hubs?game=<id>` directory for ≥ 2 hubs once
+ * ROK-1870's route ships (L11) — until then that URL would be a 404 (D15).
  */
 import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
   HUB_LINK_LABEL,
-  HUBS_LINK_LABEL,
   type HubLink,
 } from '../embeds/hub-link-button.helpers';
 
@@ -64,15 +65,12 @@ function pickHubLink(
   gameId: number,
   base: string,
 ): HubLink | null {
-  const only = ids.length === 1 ? ids[0] : undefined;
-  const target = tagged !== null && ids.includes(tagged) ? tagged : only;
-  if (target !== undefined) {
-    return { url: `${base}/guilds/${target}`, label: HUB_LINK_LABEL };
-  }
-  if (ids.length >= 2) {
-    return { url: `${base}/hubs?game=${gameId}`, label: HUBS_LINK_LABEL };
-  }
-  return null;
+  const oldest = ids.length > 0 ? Math.min(...ids) : undefined;
+  const target = tagged !== null && ids.includes(tagged) ? tagged : oldest;
+  if (target === undefined) return null;
+  // TODO(ROK-1873): ids.length >= 2 → `${base}/hubs?game=${gameId}` (HUBS_LINK_LABEL).
+  void gameId;
+  return { url: `${base}/guilds/${target}`, label: HUB_LINK_LABEL };
 }
 
 /**

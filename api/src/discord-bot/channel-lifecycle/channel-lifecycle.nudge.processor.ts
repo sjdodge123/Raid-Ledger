@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/nestjs';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
 import {
@@ -75,7 +75,7 @@ export class ChannelLifecycleNudgeProcessor
       );
       if (isFinalAttempt(job)) {
         Sentry.captureException(err, {
-          tags: { context: 'channel-lifecycle-nudge' },
+          tags: { area: 'channel-lifecycle-nudge' },
           extra: { gameId },
         });
       }

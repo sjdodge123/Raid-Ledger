@@ -195,7 +195,14 @@ export async function reassignMiscFks(
   await safeReassign(tx, 'event_plans', 'game_id', loserId, winnerId);
   // Table may not exist yet (pending migration) — savepoint protects txn.
   // Both are UNIQUE(user_id, game_id): a mute on both sides collapses to one.
-  for (const t of ['game_interest_suppressions', 'game_notification_mutes']) {
+  // ROK-1428 D9: channel_lifecycle_suppressions (UNIQUE guild_id, game_id)
+  // likewise survives the merge — the loser's row drops only on a collision.
+  const uniques = [
+    'game_interest_suppressions',
+    'game_notification_mutes',
+    'channel_lifecycle_suppressions',
+  ];
+  for (const t of uniques) {
     await safeReassignWithUnique(tx, t, 'game_id', loserId, winnerId);
   }
   // `games_dedup_audit.canonical_game_id` is a notNull FK with NO `onDelete`,
@@ -397,6 +404,8 @@ function getConflictColumns(
     // (user_id, game_id)
     game_interest_suppressions: ['user_id'],
     game_notification_mutes: ['user_id'], // PK (user_id, game_id)
+    // (guild_id, game_id)
+    channel_lifecycle_suppressions: ['guild_id'],
     // (user_id, game_id, name, realm) OR Forever (game_id, region, lower(name))
     characters: characterUniqueKeyJoin,
     // (game_id, slug)

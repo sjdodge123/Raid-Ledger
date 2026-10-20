@@ -65,13 +65,14 @@ describe('resolveGameHubLink (D15)', () => {
     expect(sql).toContain('"guilds"."kind" in');
   });
 
-  it('H4: two or more hubs link the directory, labelled "Hubs"', async () => {
-    mock.where.mockResolvedValueOnce([{ id: 5 }, { id: 6 }]);
+  // TODO(ROK-1873): L11 flips this to the `/hubs?game=` directory once it exists.
+  it('H4: two or more hubs link the oldest (lowest id) hub — never a 404 directory', async () => {
+    mock.where.mockResolvedValueOnce([{ id: 6 }, { id: 5 }]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 12,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/hubs?game=12`, label: 'Hubs' });
+    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
   });
 
   it('H5: no hub, no game or no CLIENT_URL resolves to null', async () => {
@@ -114,16 +115,16 @@ describe('resolveGameHubLinkSafe', () => {
 });
 
 describe('resolveGameHubLinks (batch)', () => {
-  it('groups hubs per game with the single-vs-directory rule', async () => {
+  it('groups hubs per game; ≥ 2 hubs → the oldest (TODO(ROK-1873))', async () => {
     const mock = createDrizzleMock();
     mock.where.mockResolvedValueOnce([
       { id: 5, gameId: 1 },
-      { id: 6, gameId: 2 },
       { id: 7, gameId: 2 },
+      { id: 6, gameId: 2 },
     ]);
     const links = await resolveGameHubLinks(asDb(mock), [1, 2, 3, 1], BASE);
     expect(links.get(1)).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
-    expect(links.get(2)).toEqual({ url: `${BASE}/hubs?game=2`, label: 'Hubs' });
+    expect(links.get(2)).toEqual({ url: `${BASE}/guilds/6`, label: 'Hub' });
     expect(links.has(3)).toBe(false);
   });
 

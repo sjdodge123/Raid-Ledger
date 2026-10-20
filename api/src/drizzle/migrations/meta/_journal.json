@@ -1681,6 +1681,13 @@
       "when": 1792515170292,
       "tag": "0240_channel_lifecycle_suppressions",
       "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1792519425151,
+      "tag": "0241_channel_bindings_archived_overwrites",
+      "breakpoints": true
     }
   ]
 }
