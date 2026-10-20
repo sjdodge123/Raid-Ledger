@@ -33,6 +33,12 @@ export interface HubsDirectoryFiltersProps {
 function GameFilter({ params, onChange, gameName }: HubsDirectoryFiltersProps): JSX.Element {
     // null = untouched: the box shows the URL's game (?game=N) instead of an empty field.
     const [text, setText] = useState<string | null>(null);
+    // Codex r3: "Clear all" (or any outside change) resets the draft so the box shows the real filter.
+    const [syncedGameId, setSyncedGameId] = useState(params.gameId);
+    if (syncedGameId !== params.gameId) {
+        setSyncedGameId(params.gameId);
+        setText(null);
+    }
     const search = useGameSearch(text ?? '');
     const options: GameOption[] = (search.data?.data ?? []).map((g) => ({ id: g.id, name: g.name }));
     const value: GameOption | null = params.gameId ? { id: params.gameId, name: gameName ?? `Game ${params.gameId}` } : null;
