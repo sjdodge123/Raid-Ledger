@@ -3400,3 +3400,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-19 — feat/rok-1836-character-page (surfaced during the ROK-1836 fleet test plan `2026-10-19-1713-cde9`)
 
 - **[low]** `api/src/plugins/valheim/armory/valheim-armory-demo-seed.helpers.ts` — re-posting the `armory-character` fixture for an existing key deletes and re-inserts the profile, so the `characterId` changes on every reset; a fleet test plan's `test_url`s (deep links to `/valheim/characters/<id>`) go stale after the first `reset_hint` (steps 3/7/8 of the ROK-1836 plan opened the not-found page). Pre-existing design of the L1 fixture, not this branch. Suggested: reset in place by key (`UPDATE … WHERE pelican_server_id, steam_id, player_id` on the identity unique, falling back to insert), keeping the id stable; same for the ROK-1837 `map-fixture`.
+
+### 2026-10-20 — fix/rok-1794-unsigned-guild-export (review)
+
+- **low** — `api/src/plugins/wow-common/guilds/guild-delegation.helpers.ts:38` — a GUID claim's audit row (`activity_log.created_at`) and the link's timestamps come from the transaction-start `now()`, so a pin transaction that STARTS before a member grant but COMMITS after it stamps a claim older than the grant and the link can count as confirmed (`gt(al.createdAt, ge.createdAt)` misses it). Narrow window (one import tx racing a staff grant). Suggested: compare against `clock_timestamp()` taken at commit time, or order claims vs grants by a monotonic sequence instead of wall-clock timestamps.

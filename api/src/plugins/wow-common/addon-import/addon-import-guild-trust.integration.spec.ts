@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as bcrypt from 'bcrypt';
-import { and, count, eq, gte, sql } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import {
@@ -29,6 +29,8 @@ import {
   buildMember,
   buildWho,
 } from './testing/addon-fixture.builder';
+import { NOT_AN_EDITOR_MESSAGE } from './addon-import-guild.guard';
+import { ROSTER_HELD_TITLE } from './addon-import-guild.flag';
 import { grantMemberEditor } from './testing/grant-member-editor';
 import { FIXTURE_NOW_MS, pinExportClock } from './testing/pin-export-clock';
 import type { AddonGuildMember } from '@raid-ledger/contract';
@@ -173,6 +175,20 @@ const whoAsOther = (guid: string, name = OTHER_NAME) =>
     raw: { getUnitName: name, unitName: [name, null] },
   });
 
+/**
+ * The editor guard's refusal (review P3): `assertExporterInGuild` answers the
+ * same code for a shape miss, so only the message proves the guard fired.
+ */
+const expectNotEditor = (res: {
+  status: number;
+  body: { code?: string; message?: string };
+}) =>
+  expect([res.status, res.body.code, res.body.message]).toEqual([
+    422,
+    'NOT_IN_GUILD',
+    NOT_AN_EDITOR_MESSAGE,
+  ]);
+
 /** A real member (FIXTURE_GUID) creates the 40-member guild and is pinned. */
 async function seedRealGuild(): Promise<{ token: string; id: string }> {
   const token = await memberToken('realgm');
@@ -196,8 +212,7 @@ describe('ROK-1794 — unsigned guild snapshots', () => {
     ]);
     forged.who = whoAsOther(forgerGuid);
     const res = await apply(token, id, buildImportString(forged));
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expectNotEditor(res);
     expect(await rowCount(schema.guildMembers)).toBe(40);
     expect(await guildRow()).toEqual(before);
   });
@@ -466,8 +481,7 @@ describe('ROK-1794 — explicit grants only (operator ruling 2026-10-19)', () =>
       forger.id,
       rosterAs(y, OTHER_NAME, 1, promote(y)),
     );
-    expect(forged.status).toBe(422);
-    expect(forged.body.code).toBe('NOT_IN_GUILD');
+    expectNotEditor(forged);
     // The real GM (a member editor) carries the roster in a newer import —
     // the dropped corroboration path would have let the forger in after it.
     expect((await apply(gm.token, gm.id, sliced(0, 2))).status).toBe(200);
@@ -477,8 +491,7 @@ describe('ROK-1794 — explicit grants only (operator ruling 2026-10-19)', () =>
       forger.id,
       rosterAs(y, OTHER_NAME, 3, promote(y)),
     );
-    expect(again.status).toBe(422);
-    expect(again.body.code).toBe('NOT_IN_GUILD');
+    expectNotEditor(again);
     expect(await guildRow()).toEqual(before);
     expect(await memberRank(y)).toBe(rankBefore);
   });
@@ -489,8 +502,7 @@ describe('ROK-1794 — explicit grants only (operator ruling 2026-10-19)', () =>
     expect((await apply(token, id, fixture('guild-1-page'))).status).toBe(200);
     const before = await guildRow();
     const res = await apply(token, id, sliced(0, 1));
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expectNotEditor(res);
     expect(await guildRow()).toEqual(before);
   });
 
@@ -510,8 +522,7 @@ describe('ROK-1794 — explicit grants only (operator ruling 2026-10-19)', () =>
     const m = await linkRosterMember('plain', y, OTHER_NAME);
     const before = await guildRow();
     const res = await apply(m.token, m.id, rosterAs(y, OTHER_NAME, 1, asIs));
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expectNotEditor(res);
     expect(await guildRow()).toEqual(before);
   });
 });
@@ -549,8 +560,87 @@ describe('ROK-1794 — member grants on a confirmed link', () => {
     expect((await apply(token, id, buildImportString(pin))).status).toBe(200);
     const before = await guildRow();
     const res = await apply(token, id, rosterAs(y, OTHER_NAME, 1, asIs));
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expectNotEditor(res);
     expect(await guildRow()).toEqual(before);
+  });
+});
+
+describe('ROK-1794 review P3 — a created character', () => {
+  it(`${AC(5)}: a character the CREATE route makes on the granted GUID after the grant is refused`, async () => {
+    await seedRealGuild();
+    const y = rosterGuid(1);
+    await grantMemberEditor(testApp.db, y);
+    const token = await memberToken('created');
+    const made = await testApp.request
+      .post('/plugins/wow/characters/addon-import')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        importString: buildImportString(
+          buildCharPayload({ who: whoAsOther(y) }),
+        ),
+        dryRun: false,
+      });
+    expect([made.status, made.body.target?.action]).toEqual([200, 'create']);
+    const id = made.body.target.characterId as string;
+    // Born pinned: no GUID claim is audited, so only the grant-vs-creation
+    // time (`lte(c.createdAt, ge.createdAt)`) stands between it and the edit.
+    const claims = await testApp.db
+      .select({ id: schema.activityLog.id })
+      .from(schema.activityLog)
+      .where(
+        and(
+          eq(schema.activityLog.action, 'addon_guid_claimed'),
+          sql`${schema.activityLog.metadata}->>'characterId' = ${id}`,
+        ),
+      );
+    expect(claims).toEqual([]);
+    const before = await guildRow();
+    const res = await apply(token, id, rosterAs(y, OTHER_NAME, 1, asIs));
+    expectNotEditor(res);
+    expect(await guildRow()).toEqual(before);
+  });
+});
+
+describe('ROK-1794 review P3 — held-roster flag', () => {
+  it(`${AC(4)}: a held PREVIEW flags no one; the held apply flags every active admin and operator`, async () => {
+    const { token, id } = await seedRealGuild();
+    const [op] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:op@test.local',
+          username: 'op',
+          role: 'operator',
+        })
+        .returning(),
+      'operator',
+    );
+    const self = roster().filter((m) => m.guid === FIXTURE_GUID);
+    const held = buildImportString(buildGuildPayload(self));
+    const flagged = async () =>
+      (
+        await testApp.db
+          .select({ userId: schema.notifications.userId })
+          .from(schema.notifications)
+          .where(eq(schema.notifications.title, ROSTER_HELD_TITLE))
+      )
+        .map((r) => r.userId)
+        .sort((a, b) => a - b);
+    const preview = await post(token, id, held, { dryRun: true });
+    expect([preview.status, preview.body.code]).toEqual([
+      422,
+      'INVALID_PAYLOAD',
+    ]);
+    expect(await flagged()).toEqual([]);
+    const res = await apply(token, id, held);
+    expect([res.status, res.body.code]).toEqual([422, 'INVALID_PAYLOAD']);
+    const staff = await testApp.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(inArray(schema.users.role, ['admin', 'operator']));
+    expect(staff.map((u) => u.id)).toContain(op.id);
+    expect(await flagged()).toEqual(
+      staff.map((u) => u.id).sort((a, b) => a - b),
+    );
   });
 });
