@@ -18,6 +18,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import * as discordQueries from '../guild-discord.queries';
 import * as postQueries from './hub-posts.queries';
 import type { HubPostRecord } from './hub-posts.queries';
+import { DISCORD_API_TIMEOUT_MS } from '../../discord-bot/services/scheduled-event.helpers';
 import { HubPostRelayService } from './hub-post-relay.service';
 
 jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
@@ -148,7 +149,7 @@ const TARGET = { guildId: 7, guildName: 'Onyx', channelId: 'c1' };
 beforeEach(() => {
   jest.clearAllMocks();
   bound.mockResolvedValue('c1');
-  setRelay.mockResolvedValue(undefined);
+  setRelay.mockResolvedValue(true);
 });
 
 describe('availability (D8)', () => {
@@ -273,6 +274,7 @@ describe('relay error classification (§2.4)', () => {
     expect(capture).toHaveBeenCalledWith(boom, {
       tags: { hub_post_relay: 'send' },
     });
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(setRelay).not.toHaveBeenCalled();
   });
 
@@ -280,6 +282,76 @@ describe('relay error classification (§2.4)', () => {
     const { svc, client } = setup({ clientUrl: null });
     expect(await svc.relay(record('hi'), TARGET)).toBe('failed');
     expect(client.sendEmbed).not.toHaveBeenCalled();
+  });
+});
+
+/** A promise the test settles by hand. */
+function deferred<T>() {
+  const hooks: { resolve: (v: T) => void; reject: (e: unknown) => void } = {
+    resolve: () => undefined,
+    reject: () => undefined,
+  };
+  const promise = new Promise<T>((res, rej) => {
+    hooks.resolve = res;
+    hooks.reject = rej;
+  });
+  return { promise, ...hooks };
+}
+
+/** Let every queued promise reaction run (real timers). */
+const flush = (): Promise<void> =>
+  new Promise((res) => {
+    setImmediate(res);
+  });
+
+describe('relay that outlives the Discord timeout (Codex r2 P2)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  /** Start a relay whose send hangs; return it once the cap has passed. */
+  async function timedOut() {
+    jest.useFakeTimers();
+    const ctx = setup();
+    const sent = deferred<{ id: string }>();
+    ctx.client.sendEmbed.mockReturnValue(sent.promise);
+    const out = ctx.svc.relay(record('hi'), TARGET);
+    await jest.advanceTimersByTimeAsync(DISCORD_API_TIMEOUT_MS);
+    jest.useRealTimers();
+    return { ...ctx, sent, out };
+  }
+
+  it('answers failed on time, then records the ids when the send lands', async () => {
+    const { sent, out } = await timedOut();
+    await expect(out).resolves.toBe('failed');
+    expect(setRelay).not.toHaveBeenCalled();
+    sent.resolve({ id: 'm9' });
+    await flush();
+    expect(setRelay).toHaveBeenCalledTimes(1);
+    expect(setRelay).toHaveBeenCalledWith({}, 42, {
+      channelId: 'c1',
+      messageId: 'm9',
+      at: expect.any(Date),
+    });
+  });
+
+  it('deletes the late message when the post was deleted meanwhile', async () => {
+    setRelay.mockResolvedValue(false);
+    const { svc, client, sent, out } = await timedOut();
+    const unrelay = jest.spyOn(svc, 'unrelay');
+    await expect(out).resolves.toBe('failed');
+    sent.resolve({ id: 'm9' });
+    await flush();
+    expect(unrelay).toHaveBeenCalledWith('c1', 'm9');
+    expect(client.deleteMessage).toHaveBeenCalledWith('c1', 'm9');
+  });
+
+  it('reports a late send failure once, as its own error', async () => {
+    const { sent, out } = await timedOut();
+    await expect(out).resolves.toBe('failed');
+    const late = new Error('late boom');
+    sent.reject(late);
+    await flush();
+    expect(setRelay).not.toHaveBeenCalled();
+    expect(capture.mock.calls.filter(([e]) => e === late)).toHaveLength(1);
   });
 });
 

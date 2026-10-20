@@ -34,7 +34,9 @@ export type HubPostRelaySendOutcome = 'sent' | 'failed';
  *
  * - `availability(guildId)` (D8) never throws.
  * - `relay(record, target)` sends the embed, stores the ids via `setRelay`
- *   and classifies errors (warn vs Sentry); it resolves, never rejects.
+ *   and classifies errors (warn vs Sentry); it resolves, never rejects. A
+ *   send that outlives the Discord cap answers `failed` on time but still
+ *   records its ids when it lands (or unrelays it if the post is gone).
  * - `unrelay(channelId, messageId)` is best effort and never rejects.
  * - `discordGuildId()` feeds the relay `messageUrl` in `toHubPost`.
  */
@@ -63,7 +65,11 @@ export class HubPostRelayService {
     }
   }
 
-  /** Send one post to the bound channel and record where it landed. */
+  /**
+   * Send one post to the bound channel and record where it landed. The
+   * answer is bounded by `timedDiscordCall`, but the ids are persisted off
+   * the send itself, so a send that lands after the cap is still recorded.
+   */
   async relay(
     record: HubPostRecord,
     target: HubPostRelayTarget,
@@ -74,12 +80,13 @@ export class HubPostRelayService {
         this.logger.warn('Hub post relay skipped: no client URL configured');
         return 'failed';
       }
-      const messageId = await this.send(record, target, clientUrl);
-      await setRelay(this.db, record.post.id, {
-        channelId: target.channelId,
-        messageId,
-        at: new Date(),
-      });
+      const sending = this.send(record, target, clientUrl);
+      const persisted = sending.then((message) =>
+        this.persist(record.post.id, target.channelId, message.id),
+      );
+      void persisted.catch(() => undefined); // observed below or by `watchLate`
+      await this.boundedWait(sending, persisted, record.post.id, target);
+      await persisted;
       return 'sent';
     } catch (err: unknown) {
       this.report('send', `post ${record.post.id}`, err);
@@ -103,11 +110,12 @@ export class HubPostRelayService {
     return this.client.getGuildId();
   }
 
-  private async send(
+  /** Start the Discord send (unbounded — `boundedWait` caps the answer). */
+  private send(
     record: HubPostRecord,
     target: HubPostRelayTarget,
     clientUrl: string,
-  ): Promise<string> {
+  ): Promise<{ id: string }> {
     const { embed, row } = buildHubPostEmbed({
       guildName: target.guildName,
       authorName: record.author?.displayName ?? record.author?.username ?? null,
@@ -116,12 +124,51 @@ export class HubPostRelayService {
       deepLink: postDeepLink(clientUrl, target.guildId, record.post.id),
       clientUrl,
     });
-    const message = await timedDiscordCall(
-      'hubPostRelay',
-      () => this.client.sendEmbed(target.channelId, embed, row),
-      { channelId: target.channelId },
+    return this.client.sendEmbed(target.channelId, embed, row);
+  }
+
+  /** Wait at most the Discord cap; on timeout, keep watching the send. */
+  private async boundedWait(
+    sending: Promise<{ id: string }>,
+    persisted: Promise<void>,
+    postId: number,
+    target: HubPostRelayTarget,
+  ): Promise<void> {
+    try {
+      await timedDiscordCall('hubPostRelay', () => sending, {
+        channelId: target.channelId,
+      });
+    } catch (err: unknown) {
+      this.watchLate(persisted, postId, err);
+      throw err;
+    }
+  }
+
+  /** Log a timed-out relay that landed; report a late failure once. */
+  private watchLate(
+    persisted: Promise<void>,
+    postId: number,
+    waitErr: unknown,
+  ): void {
+    void persisted.then(
+      () => this.logger.log(`Timed-out hub post relay landed for ${postId}`),
+      (lateErr: unknown) => {
+        // A send that failed inside the cap is reported by `relay` itself.
+        if (lateErr !== waitErr) this.report('send', `post ${postId}`, lateErr);
+      },
     );
-    return message.id;
+  }
+
+  /** Store the ids; a post deleted meanwhile gets its message removed. */
+  private async persist(
+    postId: number,
+    channelId: string,
+    messageId: string,
+  ): Promise<void> {
+    const at = new Date();
+    if (await setRelay(this.db, postId, { channelId, messageId, at })) return;
+    this.logger.log(`Hub post ${postId} deleted before its relay landed`);
+    await this.unrelay(channelId, messageId);
   }
 
   /** 50001/50013/10003/10008 warn; anything else also goes to Sentry. */

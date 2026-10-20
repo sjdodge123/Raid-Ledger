@@ -193,20 +193,25 @@ export async function updatePostBody(
   return row;
 }
 
-/** Record where a post was relayed in Discord. */
+/**
+ * Record where a post was relayed in Discord; false when the post no longer
+ * exists (deleted while the send was in flight), so the caller can unrelay.
+ */
 export async function setRelay(
   db: Db,
   postId: number,
   relay: { channelId: string; messageId: string; at: Date },
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(hubPosts)
     .set({
       relayChannelId: relay.channelId,
       relayMessageId: relay.messageId,
       relayedAt: relay.at,
     })
-    .where(eq(hubPosts.id, postId));
+    .where(eq(hubPosts.id, postId))
+    .returning({ id: hubPosts.id });
+  return rows.length > 0;
 }
 
 /** Delete a post; returns its relay ids (both null if never relayed). */
