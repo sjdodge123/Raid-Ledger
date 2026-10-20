@@ -367,3 +367,63 @@ describe('AppleCalendarAdapter — withDiscovery (§2.3)', () => {
     expect(sent('PROPFIND').map((r) => r.url)).toEqual([FAKE_HOME_SET_URL]);
   });
 });
+
+describe('AppleCalendarAdapter — partial reads + deletes after a move (review r1)', () => {
+  it('a 403 on one calendar drops its ctag: the next run REPORTs again', async () => {
+    const a = setup();
+    const refused = {
+      status: 403,
+      text: '',
+      etag: null,
+      location: null,
+      retryAfter: null,
+    };
+    const spy = jest
+      .spyOn(appleHttp, 'caldavFetch')
+      .mockImplementation((req) =>
+        req.method === 'REPORT' && req.url.includes('/shared-ro/')
+          ? Promise.resolve(refused)
+          : server.handle(req),
+      );
+    const ids = ['home', 'shared-ro'];
+    const first = await a.fetchBusy(CREDS, RANGE, ids);
+    expect(first.unreadableCalendarIds).toEqual(['shared-ro']);
+    expect(first.cursor).not.toHaveProperty('c:shared-ro');
+    expect(first.cursor).toHaveProperty('c:home');
+    spy.mockImplementation(server.handle);
+    const mark = server.requests.length;
+    const again = await a.fetchBusy(CREDS, RANGE, ids, first.cursor);
+    expect(again.unchanged).toBeUndefined();
+    expect(sent('REPORT', mark)).toHaveLength(2);
+  });
+
+  const stale = {
+    ...CREDS,
+    homeSetUrl: `${FAKE_PARTITION_ORIGIN}/7654321/calendars/`,
+  };
+
+  it('deleteEvent on a moved home set rediscovers and deletes the real copy', async () => {
+    const a = setup();
+    const ref = await a.upsertEvent(CREDS, 'home', COPY, null);
+    expect(server.object(urlOf(ref))).not.toBeNull();
+    await a.deleteEvent(stale, ref);
+    expect(server.object(urlOf(ref))).toBeNull();
+    expect(persist).toHaveBeenCalledWith(CREDS);
+  });
+
+  it('deleteRaidLedgerCalendar on a moved home set deletes the real calendar', async () => {
+    const a = setup();
+    const id = await a.ensureRaidLedgerCalendar(CREDS, null);
+    expect(server.ctag(id)).not.toBeNull();
+    await a.deleteRaidLedgerCalendar(stale, id);
+    expect(server.ctag(id)).toBeNull();
+  });
+
+  it('a copy that is gone everywhere still deletes successfully', async () => {
+    const a = setup();
+    const ref = await a.upsertEvent(CREDS, 'home', COPY, null);
+    await a.deleteEvent(CREDS, ref);
+    await expect(a.deleteEvent(CREDS, ref)).resolves.toBeUndefined();
+    await expect(a.deleteEvent(stale, ref)).resolves.toBeUndefined();
+  });
+});

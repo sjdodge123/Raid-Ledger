@@ -86,9 +86,11 @@ export async function withDiscovery<T>(
 
 /** CalDAV-safe calendar / resource segment (D8). */
 const SEGMENT = /^[A-Za-z0-9._~%-]{1,200}$/;
+/** `%2e` is a dot to WHATWG URL resolution: `%2e%2e/` escapes the home set. */
+const ENCODED_DOT = /%2e/i;
 
 export const isSafeSegment = (s: string): boolean =>
-  SEGMENT.test(s) && s !== '.' && s !== '..';
+  SEGMENT.test(s) && !ENCODED_DOT.test(s) && s !== '.' && s !== '..';
 
 /** `<home>/<calendarId>/`; null when the id is not a safe segment. */
 export function collectionUrl(

@@ -142,9 +142,21 @@ export async function readCalendars(
   return out;
 }
 
+/** The cursor minus the ctags of calendars that were not actually read. */
+function readCursor(
+  cursor: Record<string, string>,
+  unread: string[],
+): Record<string, string> {
+  const out = { ...cursor };
+  for (const id of unread) delete out[ctagKey(id)];
+  return out;
+}
+
 /**
  * Every requested calendar refused (or refused + gone) → nothing was read:
  * fail transiently so the last good blocks stay (as `google.adapter.ts`).
+ * A partial read drops the unread calendars' ctags from the cursor, so the
+ * next run is never an unchanged hit and retries their REPORT.
  */
 export function toFetchBusyResult(
   calendarIds: string[],
@@ -160,7 +172,7 @@ export function toFetchBusyResult(
   }
   return {
     blocks: out.blocks,
-    cursor,
+    cursor: readCursor(cursor, [...refused, ...missing]),
     ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
     ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
   };

@@ -29,13 +29,33 @@ interface WallClock {
   second: number;
 }
 
-const formatters = new Map<string, Intl.DateTimeFormat | null>();
+/**
+ * LRU of resolved zones. TZIDs come from the user's own events, so the cache
+ * is bounded and an unknown zone (a miss) is never stored.
+ */
+export const FORMATTER_CACHE_LIMIT = 64;
+const formatters = new Map<string, Intl.DateTimeFormat>();
 
 function formatterFor(zone: string): Intl.DateTimeFormat | null {
-  if (formatters.has(zone)) return formatters.get(zone) ?? null;
-  let fmt: Intl.DateTimeFormat | null;
+  const hit = formatters.get(zone);
+  if (hit) {
+    formatters.delete(zone);
+    formatters.set(zone, hit);
+    return hit;
+  }
+  const fmt = newFormatter(zone);
+  if (!fmt) return null;
+  if (formatters.size >= FORMATTER_CACHE_LIMIT) {
+    const oldest = formatters.keys().next();
+    if (!oldest.done) formatters.delete(oldest.value);
+  }
+  formatters.set(zone, fmt);
+  return fmt;
+}
+
+function newFormatter(zone: string): Intl.DateTimeFormat | null {
   try {
-    fmt = new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat('en-US', {
       timeZone: zone,
       hourCycle: 'h23',
       year: 'numeric',
@@ -46,10 +66,8 @@ function formatterFor(zone: string): Intl.DateTimeFormat | null {
       second: 'numeric',
     });
   } catch {
-    fmt = null;
+    return null;
   }
-  formatters.set(zone, fmt);
-  return fmt;
 }
 
 /** The zone's offset (ms, local − UTC) at instant `ms`. */

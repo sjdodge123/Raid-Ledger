@@ -48,6 +48,7 @@ import {
   deleteCalendar,
   deleteCopy,
   ensureCalendar,
+  ignoreGone,
   objectUrl,
   putCopy,
 } from './apple-write.helpers';
@@ -173,8 +174,10 @@ export class AppleCalendarAdapter
   }
 
   deleteEvent(creds: CalendarCredentials, ref: CopyRef): Promise<void> {
-    return this.atHome(creds, (h) =>
-      deleteCopy(h.auth, objectUrl(h.homeSetUrl, ref), ref.etag),
+    return ignoreGone(
+      this.atHome(creds, (h) =>
+        deleteCopy(h.auth, objectUrl(h.homeSetUrl, ref), ref.etag),
+      ),
     );
   }
 
@@ -182,8 +185,10 @@ export class AppleCalendarAdapter
     creds: CalendarCredentials,
     calendarId: string,
   ): Promise<void> {
-    return this.atHome(creds, (h) =>
-      deleteCalendar(h.auth, h.homeSetUrl, calendarId),
+    return ignoreGone(
+      this.atHome(creds, (h) =>
+        deleteCalendar(h.auth, h.homeSetUrl, calendarId),
+      ),
     );
   }
 

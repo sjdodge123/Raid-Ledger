@@ -119,18 +119,26 @@ export async function putCopy(
   return retry.etag;
 }
 
-/** DELETE `url`; gone counts as success. */
-async function deleteIgnoringGone(
+/**
+ * DELETE `url`. A 404 is NOT swallowed here: it must reach `withDiscovery`,
+ * which rediscovers a moved home set and retries before the caller accepts
+ * "gone" via `ignoreGone`.
+ */
+async function deleteOnce(
   auth: CalDavAuth,
   url: string,
   ifMatch?: string,
 ): Promise<'ok' | 'conflict'> {
+  const res = await deleteObject(auth, url, ifMatch);
+  return res.status === 'ok' ? 'ok' : 'conflict';
+}
+
+/** Already gone (after any rediscovery retry) counts as a successful delete. */
+export async function ignoreGone(work: Promise<void>): Promise<void> {
   try {
-    const res = await deleteObject(auth, url, ifMatch);
-    return res.status === 'ok' ? 'ok' : 'conflict';
+    await work;
   } catch (err) {
-    if (err instanceof NotFoundError) return 'ok';
-    throw err;
+    if (!(err instanceof NotFoundError)) throw err;
   }
 }
 
@@ -140,15 +148,15 @@ export async function deleteCopy(
   url: string,
   etag: string | undefined,
 ): Promise<void> {
-  const first = await deleteIgnoringGone(auth, url, etag);
-  if (first === 'conflict') await deleteIgnoringGone(auth, url);
+  const first = await deleteOnce(auth, url, etag);
+  if (first === 'conflict') await deleteOnce(auth, url);
 }
 
-/** DELETE the dedicated collection; already gone → success. */
+/** DELETE the dedicated collection (404 → the caller's `ignoreGone`). */
 export async function deleteCalendar(
   auth: CalDavAuth,
   home: string,
   calendarId: string,
 ): Promise<void> {
-  await deleteIgnoringGone(auth, mustCollectionUrl(home, calendarId));
+  await deleteOnce(auth, mustCollectionUrl(home, calendarId));
 }

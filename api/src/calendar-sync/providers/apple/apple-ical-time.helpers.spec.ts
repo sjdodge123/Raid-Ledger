@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBusyFromIcs } from './apple-ical-parse.helpers';
-import { zonedToUtc } from './apple-ical-time.helpers';
+import { FORMATTER_CACHE_LIMIT, zonedToUtc } from './apple-ical-time.helpers';
 
 const fixture = (name: string): string =>
   readFileSync(join(__dirname, '__fixtures__', name), 'utf8').replace(
@@ -118,5 +118,36 @@ describe('zonedToUtc', () => {
 
   it('returns null for an unknown zone', () => {
     expect(zonedToUtc(wall, 'Nowhere/Land')).toBeNull();
+  });
+});
+
+describe('zone formatter cache (review r1)', () => {
+  const wall = {
+    year: 2026,
+    month: 11,
+    day: 3,
+    hour: 12,
+    minute: 0,
+    second: 0,
+  };
+  const zones = Intl.supportedValuesOf('timeZone');
+  afterEach(() => jest.restoreAllMocks());
+
+  it('never caches an unknown zone: each lookup tries again', () => {
+    const ctor = jest.spyOn(Intl, 'DateTimeFormat');
+    expect(zonedToUtc(wall, 'Not/AZone')).toBeNull();
+    expect(zonedToUtc(wall, 'Not/AZone')).toBeNull();
+    expect(ctor).toHaveBeenCalledTimes(2);
+  });
+
+  it(`keeps at most ${FORMATTER_CACHE_LIMIT} zones, evicting the least recent`, () => {
+    const used = zones.slice(0, FORMATTER_CACHE_LIMIT + 1);
+    expect(used).toHaveLength(FORMATTER_CACHE_LIMIT + 1);
+    for (const z of used) zonedToUtc(wall, z);
+    const ctor = jest.spyOn(Intl, 'DateTimeFormat');
+    zonedToUtc(wall, used[used.length - 1] ?? 'UTC');
+    expect(ctor).toHaveBeenCalledTimes(0);
+    zonedToUtc(wall, used[0] ?? 'UTC');
+    expect(ctor).toHaveBeenCalledTimes(1);
   });
 });
