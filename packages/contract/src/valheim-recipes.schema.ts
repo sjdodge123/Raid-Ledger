@@ -139,6 +139,8 @@ export const ValheimRecipePlanTargetSchema = z
     amount: z.number().int().min(1).max(10_000),
     /** 0 = craft from scratch; q0 ≥ 1 = upgrade from that quality. */
     fromQuality: z.number().int().min(0).max(10),
+    /** Which source to plan when an item and a piece share a prefab; item when absent. */
+    kind: z.enum(['item', 'piece']).optional(),
   })
   .strict();
 export type ValheimRecipePlanTarget = z.infer<

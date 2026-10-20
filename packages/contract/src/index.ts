@@ -1,253 +1,253 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const HealthCheckSchema = z.object({
-  status: z.string(),
-  timestamp: z.string(),
+    status: z.string(),
+    timestamp: z.string()
 });
 
 export type HealthCheckDto = z.infer<typeof HealthCheckSchema>;
 
 // Games / IGDB
-export * from "./games.schema.js";
+export * from './games.schema.js';
 
 // Game Registry (multi-game support)
-export * from "./game-registry.schema.js";
+export * from './game-registry.schema.js';
 
 // Events
-export * from "./events.schema.js";
-export * from "./event-report-link.schema.js";
+export * from './events.schema.js';
+export * from './event-report-link.schema.js';
 
 // Signups
-export * from "./signups.schema.js";
+export * from './signups.schema.js';
 
 // Characters
-export * from "./characters.schema.js";
+export * from './characters.schema.js';
 
 // Character saved instances (ROK-1743)
-export * from "./character-lockouts.schema.js";
+export * from './character-lockouts.schema.js';
 
 // Availability
-export * from "./availability.schema.js";
+export * from './availability.schema.js';
 
 // Roster Availability (heatmap)
-export * from "./roster-availability.schema.js";
+export * from './roster-availability.schema.js';
 
 // Taste Profile (ROK-948)
-export * from "./taste-profile.schema.js";
+export * from './taste-profile.schema.js';
 
 // Game Taste Vectors (ROK-1082)
-export * from "./game-taste.schema.js";
+export * from './game-taste.schema.js';
 
 // Roster Assignments (ROK-114)
-export * from "./roster.schema.js";
+export * from './roster.schema.js';
 
 // Public (anonymous-viewer) roster projections (ROK-1629)
-export * from "./roster-public.schema.js";
-export * from "./public-identity.schema.js";
+export * from './roster-public.schema.js';
+export * from './public-identity.schema.js';
 
 // System Status (ROK-175)
-export * from "./system.schema.js";
+export * from './system.schema.js';
 
 // Users (ROK-181)
-export * from "./users.schema.js";
+export * from './users.schema.js';
 
 // User Preferences (ROK-195)
-export * from "./preferences.schema.js";
+export * from './preferences.schema.js';
 
 // Game Time Templates (ROK-189)
-export * from "./game-time.schema.js";
+export * from './game-time.schema.js';
 // Calendar Sync connections, overview + admin kill switch (ROK-1591)
-export * from "./calendar-sync.schema.js";
-export * from "./calendar-sync-admin.schema.js";
+export * from './calendar-sync.schema.js';
+export * from './calendar-sync-admin.schema.js';
 
 // Admin (ROK-193)
-export * from "./admin.schema.js";
+export * from './admin.schema.js';
 
 // Event Templates
-export * from "./templates.schema.js";
+export * from './templates.schema.js';
 
 // Blizzard Instance Data
-export * from "./blizzard.schema.js";
+export * from './blizzard.schema.js';
 
 // Plugins (ROK-236)
-export * from "./plugins.schema.js";
+export * from './plugins.schema.js';
 // Pelican game-server panel plugin (ROK-121)
-export * from "./pelican.schema.js";
-export * from "./pelican-servers.schema.js";
+export * from './pelican.schema.js';
+export * from './pelican-servers.schema.js';
 
 // Game servers (ROK-268)
-export * from "./game-servers.schema.js";
+export * from './game-servers.schema.js';
 
 // Feedback (ROK-186)
-export * from "./feedback.schema.js";
+export * from './feedback.schema.js';
 
 // PUG Slots (ROK-262)
-export * from "./pug.schema.js";
+export * from './pug.schema.js';
 
 // Admin Onboarding Wizard (ROK-204)
-export * from "./onboarding.schema.js";
+export * from './onboarding.schema.js';
 
 // Version & Update Check (ROK-294)
-export * from "./version.schema.js";
+export * from './version.schema.js';
 
 // Discord Bot (ROK-117)
-export * from "./discord-bot.schema.js";
+export * from './discord-bot.schema.js';
 
 // Channel Bindings (ROK-348)
-export * from "./channel-bindings.schema.js";
+export * from './channel-bindings.schema.js';
 
 // Bot invite URL + LFG forum board settings (ROK-1471)
-export * from "./discord-bot-invite.schema.js";
-export * from "./weekly-digest-settings.schema.js";
+export * from './discord-bot-invite.schema.js';
+export * from './weekly-digest-settings.schema.js';
 
 // Read-only Discord thread mirror (ROK-1483)
-export * from "./discord-threads.schema.js";
+export * from './discord-threads.schema.js';
 
 // Auth (ROK-389)
-export * from "./auth.schema.js";
+export * from './auth.schema.js';
 
 // Backups
-export * from "./backup.schema.js";
+export * from './backup.schema.js';
 
 // Event Plans (ROK-392)
-export * from "./event-plans.schema.js";
+export * from './event-plans.schema.js';
 
 // Dungeon Quests (ROK-245)
-export * from "./dungeon-quests.schema.js";
+export * from './dungeon-quests.schema.js';
 // Character page quest tracking — WoW: Forever addon snapshot (ROK-1745)
-export * from "./character-quests.schema.js";
+export * from './character-quests.schema.js';
 
 // Boss Encounters & Loot (ROK-244)
-export * from "./boss-encounters.schema.js";
+export * from './boss-encounters.schema.js';
 
 // Quest Progress (ROK-246)
-export * from "./quest-progress.schema.js";
+export * from './quest-progress.schema.js';
 
 // Ad-Hoc Events (ROK-293)
-export * from "./ad-hoc-events.schema.js";
+export * from './ad-hoc-events.schema.js';
 
 // Voice Attendance (ROK-490)
-export * from "./voice-attendance.schema.js";
+export * from './voice-attendance.schema.js';
 
 // Event Analytics (ROK-491)
-export * from "./event-analytics.schema.js";
+export * from './event-analytics.schema.js';
 
 // Steam Integration (ROK-417)
-export * from "./steam.schema.js";
+export * from './steam.schema.js';
 
 // ITAD Integration (ROK-772)
-export * from "./itad.schema.js";
+export * from './itad.schema.js';
 
 // Container Logs (ROK-681)
-export * from "./logs.schema.js";
+export * from './logs.schema.js';
 
 // Event Series (ROK-429)
-export * from "./event-series.schema.js";
+export * from './event-series.schema.js';
 
 // AI Features (ROK-542)
-export * from "./ai.schema.js";
+export * from './ai.schema.js';
 
 // Community Lineup (ROK-933)
-export * from "./lineup.schema.js";
+export * from './lineup.schema.js';
 
 // Community Lineup Matches — Decided View (ROK-937)
-export * from "./lineup-matches.schema.js";
+export * from './lineup-matches.schema.js';
 
 // Voter-Cohort Lineup Memory (ROK-1309)
-export * from "./lineup-cohort-memory.schema.js";
+export * from './lineup-cohort-memory.schema.js';
 
 // Lineup Scheduling Poll (ROK-965)
-export * from "./lineup-scheduling.schema.js";
+export * from './lineup-scheduling.schema.js';
 
 // Community Lineup Participants roster (ROK-1346)
-export * from "./lineup-participants.schema.js";
+export * from './lineup-participants.schema.js';
 
 // Activity Log (ROK-930)
-export * from "./activity-log.schema.js";
+export * from './activity-log.schema.js';
 
 // Standalone Scheduling Poll (ROK-977)
-export * from "./standalone-poll.schema.js";
+export * from './standalone-poll.schema.js';
 
 // AI Nomination Suggestions (ROK-931)
-export * from "./lineup-ai-suggestions.schema.js";
+export * from './lineup-ai-suggestions.schema.js';
 
 // Dynamic Discovery Categories (ROK-567)
-export * from "./discovery-categories.schema.js";
+export * from './discovery-categories.schema.js';
 
 // Community Insights (ROK-1099)
-export * from "./community-insights.schema.js";
+export * from './community-insights.schema.js';
 
 // Community Lineup Realtime WS Events (ROK-1118)
-export * from "./lineups/index.js";
+export * from './lineups/index.js';
 
 // Games lookup by name (ROK-1295)
-export * from "./games-lookup-by-name.schema.js";
+export * from './games-lookup-by-name.schema.js';
 
 // LFG Intents (ROK-1451)
-export * from "./lfg.schema.js";
+export * from './lfg.schema.js';
 
 // Channel-binding copy shared by the /bind reply and the admin form (ROK-1462)
-export * from "./binding-copy.js";
+export * from './binding-copy.js';
 
 // LFG group sentence shared by the web chips and the Discord board title (ROK-1505)
-export * from "./lfg-copy.js";
+export * from './lfg-copy.js';
 
 // Lineup tie hold + readiness card (ROK-1374)
-export * from "./lineup-tie.schema.js";
+export * from './lineup-tie.schema.js';
 
 // Starred ballot — the single top pick (ROK-1474)
-export * from "./lineup-star.schema.js";
+export * from './lineup-star.schema.js';
 // Lineup → LFG bridge offers (ROK-1457)
-export * from "./lfg-bridge.schema.js";
+export * from './lfg-bridge.schema.js';
 
 // One slot order across web, Discord and lock-in (ROK-1548)
-export * from "./scheduling-slot-order.js";
+export * from './scheduling-slot-order.js';
 
 // Relay hub v1 wire shapes: envelope, instance lifecycle, crosswalk (ROK-1667)
-export * from "./relay/index.js";
+export * from './relay/index.js';
 // Game-name identity helpers shared by api and the relay hub (ROK-1668)
-export * from "./game-identity/index.js";
+export * from './game-identity/index.js';
 
 // WoW: Forever addon import string — payload envelope + import API (ROK-1724).
 // Keep AFTER characters/blizzard: these files import the Forever schemas back
 // through this barrel.
-export * from "./wow-addon-export.schema.js";
-export * from "./wow-addon-import.schema.js";
-export * from "./wow-forever-realm-rulesets.schema.js";
-export * from "./ledgerlink-json-schema.js";
+export * from './wow-addon-export.schema.js';
+export * from './wow-addon-import.schema.js';
+export * from './wow-forever-realm-rulesets.schema.js';
+export * from './ledgerlink-json-schema.js';
 
 // RL Valheim Link mod push messages — wire contract v1 (ROK-1829).
-export * from "./valheim-link-common.schema.js";
-export * from "./valheim-link-character.schema.js";
-export * from "./valheim-link-map.schema.js";
-export * from "./valheim-link-items.schema.js";
-export * from "./valheim-link-containers.schema.js";
-export * from "./valheim-link-recipes-processing.schema.js";
-export * from "./valheim-link-recipes.schema.js";
-export * from "./valheim-link-message.schema.js";
-export * from "./valheim-link-admin.schema.js";
-export * from "./valheim-armory.schema.js";
-export * from "./valheim-materials.schema.js";
-export * from "./valheim-recipes.schema.js";
+export * from './valheim-link-common.schema.js';
+export * from './valheim-link-character.schema.js';
+export * from './valheim-link-map.schema.js';
+export * from './valheim-link-items.schema.js';
+export * from './valheim-link-containers.schema.js';
+export * from './valheim-link-recipes-processing.schema.js';
+export * from './valheim-link-recipes.schema.js';
+export * from './valheim-link-message.schema.js';
+export * from './valheim-link-admin.schema.js';
+export * from './valheim-armory.schema.js';
+export * from './valheim-materials.schema.js';
+export * from './valheim-recipes.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
-export * from "./guilds.schema.js";
+export * from './guilds.schema.js';
 // Guild page S3 raids payload (ROK-1787).
-export * from "./guild-raids.schema.js";
+export * from './guild-raids.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
-export * from "./discord-join-post.schema.js";
+export * from './discord-join-post.schema.js';
 
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
-export * from "./guild-content.schema.js";
-export * from "./guild-discord.schema.js";
+export * from './guild-content.schema.js';
+export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
-export * from "./hub-onboarding.schema.js";
+export * from './hub-onboarding.schema.js';
 // Game-server community hub — join, Quick Play list, hide (ROK-1831).
-export * from "./hub-server.schema.js";
+export * from './hub-server.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
-export * from "./discord-game-role.schema.js";
+export * from './discord-game-role.schema.js';
 // Per-game notification mute — the game-page bell (ROK-1797).
-export * from "./game-notification-mutes.schema.js";
+export * from './game-notification-mutes.schema.js';
