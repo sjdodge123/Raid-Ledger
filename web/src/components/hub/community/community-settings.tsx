@@ -2,10 +2,6 @@
  * ROK-1870 §3.1 — what a community hub adds to the settings sheet: the blurb
  * (editors), the Banned list with Unban (editors), and the lifecycle row —
  * "Archive hub" for the Leader, "Restore hub" for staff only (§2.5).
- *
- * §2.3 has no blurb-edit route yet, so the blurb renders disabled with the
- * reason in its hint — the sheet's "never invent an endpoint" rule
- * (`settings-rows.tsx`).
  */
 import { useState, type JSX } from 'react';
 import { HUB_BLURB_MAX } from '@raid-ledger/contract';
@@ -15,14 +11,22 @@ import { Button } from '../../ui/button';
 import { Field } from '../../ui/field';
 import { Textarea } from '../../ui/textarea';
 import { SettingsSection } from '../settings/settings-rows';
-import { useHubBans, useHubStatus, useHubUnban } from './community-settings-api';
+import { useHubBans, useHubBlurb, useHubStatus, useHubUnban } from './community-settings-api';
 
-function BlurbSection({ blurb }: { blurb: string | null }): JSX.Element {
+function BlurbSection({ hubId, blurb }: { hubId: number; blurb: string | null }): JSX.Element {
+    const save = useHubBlurb(hubId);
+    const [draft, setDraft] = useState(blurb ?? '');
+    const next = draft.trim();
+    const dirty = next !== (blurb ?? '');
     return (
         <SettingsSection title="Description" testId="community-settings-blurb">
-            <Field label="Short description" hint="Editing the description isn’t available yet.">
-                <Textarea value={blurb ?? ''} maxLength={HUB_BLURB_MAX} showCount disabled readOnly rows={3} />
+            <Field label="Short description" hint="Shown on the hub page and in the hubs directory.">
+                <Textarea value={draft} maxLength={HUB_BLURB_MAX} showCount rows={3} onChange={(e) => setDraft(e.target.value)} />
             </Field>
+            <div>
+                <Button variant="secondary" size="sm" disabled={!dirty || save.isPending}
+                    onClick={() => save.mutate(next === '' ? null : next)}>Save description</Button>
+            </div>
         </SettingsSection>
     );
 }
@@ -93,7 +97,7 @@ export function CommunitySettingsSections(ctx: HubCtx): JSX.Element | null {
     const canEdit = ctx.page.viewer.canEdit;
     return (
         <>
-            {canEdit && <BlurbSection blurb={ctx.page.community.blurb} />}
+            {canEdit && <BlurbSection hubId={ctx.page.guild.id} blurb={ctx.page.community.blurb} />}
             {canEdit && <BannedSection hubId={ctx.page.guild.id} />}
             <LifecycleSection ctx={ctx} />
         </>

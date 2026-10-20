@@ -1,10 +1,11 @@
 /**
  * ROK-1870 §2.3 — the settings-sheet routes of a community hub: the Banned
  * list (`GET|DELETE /hubs/:id/bans[/:userId]`) and the lifecycle switch
- * (`PATCH /hubs/:id/status` — the Leader archives, staff restore).
+ * (`PATCH /hubs/:id/status` — the Leader archives, staff restore), and the
+ * blurb (`PATCH /hubs/:id`).
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
-import { HubBanListSchema, type HubBanList, type HubStatusUpdateDto } from '@raid-ledger/contract';
+import { HubBanListSchema, type HubBanList, type HubBlurbUpdateDto, type HubStatusUpdateDto } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { toast } from '../../../lib/toast';
 import { guildPageKey } from '../api/use-guild';
@@ -29,6 +30,19 @@ export function useHubUnban(hubId: number): UseMutationResult<unknown, Error, nu
         onSuccess: () => { toast.success('Unbanned'); },
         onError: (err) => { toast.error(err.message || 'Couldn’t lift the ban. Try again.'); },
         onSettled: () => qc.invalidateQueries({ queryKey: hubBansKey(hubId) }),
+    });
+}
+
+/** Save the hub's blurb (`PATCH /hubs/:id`, `null` clears it); the page refetches after. */
+export function useHubBlurb(hubId: number): UseMutationResult<unknown, Error, HubBlurbUpdateDto['blurb']> {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (blurb: HubBlurbUpdateDto['blurb']) => fetchApi(`/hubs/${hubId}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blurb }),
+        }),
+        onSuccess: () => { toast.success('Description saved'); },
+        onError: (err) => { toast.error(err.message || 'Couldn’t save the description. Try again.'); },
+        onSettled: () => qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
     });
 }
 

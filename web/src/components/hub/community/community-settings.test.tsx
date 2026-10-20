@@ -17,6 +17,7 @@ import type { HubCtx } from '../../../plugins/hub-module';
 import { communityHubModule } from './community-hub-module';
 import { CommunitySettingsSections } from './community-settings';
 import { HubSettingsSheet } from '../settings/settings-sheet';
+import { canOpenHubSettings } from '../settings/settings-access';
 import { http, HttpResponse } from 'msw';
 
 let userRole = 'member';
@@ -46,12 +47,17 @@ describe('community settings sections', () => {
         expect(communityHubModule.settingsSections).toBe(CommunitySettingsSections);
     });
 
-    it('shows the blurb editor, disabled with the reason while no edit route exists', () => {
-        renderSections(buildCommunityPage({ role: 'leader' }));
+    it('saves an edited blurb through PATCH /hubs/:id', async () => {
+        renderSections(buildCommunityPage({ role: 'officer' }));
         const box = screen.getByRole('textbox', { name: 'Short description' });
         expect(box).toHaveValue('Honour mode runs');
-        expect(box).toBeDisabled();
-        expect(screen.getByTestId('community-settings-blurb')).toHaveTextContent(/isn.t available yet/);
+        const saveBtn = screen.getByRole('button', { name: 'Save description' });
+        expect(saveBtn).toBeDisabled();
+        await userEvent.clear(box);
+        await userEvent.type(box, 'Tactician runs on Fridays');
+        await userEvent.click(saveBtn);
+        await waitFor(() => expect(communityHubBodies).toEqual([{ blurb: 'Tactician runs on Fridays' }]));
+        expect(communityHubCalls).toContain('PATCH /hubs/41');
     });
 
     it('lists banned users and unbans one', async () => {
@@ -88,6 +94,27 @@ describe('community settings sections', () => {
     it('does not offer Restore to a non-staff leader', () => {
         renderSections(buildCommunityPage({ role: 'leader', community: { status: 'archived' } }));
         expect(screen.queryByRole('button', { name: 'Restore hub' })).not.toBeInTheDocument();
+    });
+
+});
+
+describe('community settings in the sheet', () => {
+    it('opens the settings entry to a community officer, not a member; other kinds keep canManageEditors', () => {
+        expect(canOpenHubSettings(buildCommunityPage({ role: 'officer' }))).toBe(true);
+        expect(canOpenHubSettings(buildCommunityPage({ role: 'leader' }))).toBe(true);
+        expect(canOpenHubSettings(buildCommunityPage({ role: 'member' }))).toBe(false);
+        const wow: GuildPage = { ...buildCommunityPage({ role: 'officer' }) };
+        delete wow.community;
+        expect(canOpenHubSettings({ ...wow, guild: { ...wow.guild, kind: 'wow_guild' } })).toBe(false);
+    });
+
+    it('gives an officer the community sections only, not the Leader rows', async () => {
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'officer' })}>{(ctx) => (
+            <HubSettingsSheet ctx={ctx} module={communityHubModule} onClose={() => undefined} onChangeChannel={() => undefined} />
+        )}</WithCtx>);
+        expect(await screen.findByTestId('community-settings-banned')).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-settings-discord')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('guild-settings-editors')).not.toBeInTheDocument();
     });
 
     it('renders inside the hub settings sheet', async () => {

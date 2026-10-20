@@ -30,6 +30,7 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
+import { canOpenHubSettings } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 
@@ -156,7 +157,7 @@ interface FrameProps {
 function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
-    const canManage = ctx.page.viewer.canManageEditors;
+    const canManage = canOpenHubSettings(ctx.page);
     const s = useHubSettingsState(canManage);
     return (
         <HubSettingsProvider value={s.value}>

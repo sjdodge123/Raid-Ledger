@@ -10,7 +10,7 @@ const API = 'http://localhost:3000';
 /** Every membership request the handlers saw, as `METHOD path`. */
 export const communityHubCalls: string[] = [];
 
-/** JSON bodies of the settings writes (`PATCH /hubs/:id/status`), in order. */
+/** JSON bodies of the settings writes (`PATCH /hubs/:id` + `/status`), in order. */
 export const communityHubBodies: unknown[] = [];
 
 function record(request: Request): void {
@@ -31,6 +31,11 @@ export const communityHubHandlers = [
     http.post(`${API}/hubs/:id/leader`, ({ request }) => { record(request); return HttpResponse.json({ ok: true }); }),
     http.get(`${API}/hubs/:id/bans`, () => HttpResponse.json({ items: [BANNED_USER] })),
     http.delete(`${API}/hubs/:id/bans/:userId`, ({ request }) => { record(request); return new HttpResponse(null, { status: 204 }); }),
+    http.patch(`${API}/hubs/:id`, async ({ request }) => {
+        record(request);
+        communityHubBodies.push(await request.json());
+        return HttpResponse.json({ ok: true });
+    }),
     http.patch(`${API}/hubs/:id/status`, async ({ request }) => {
         record(request);
         communityHubBodies.push(await request.json());

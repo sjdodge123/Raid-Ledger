@@ -69,10 +69,10 @@ export interface HubSettingsSheetProps {
     onChangeChannel: () => void;
 }
 
-function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
-    const Extra = mod?.settingsSections;
+/** The Leader / admin rows (ROK-1830 S4) — an Officer who opens a community hub's sheet doesn't get them. */
+function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
     return (
-        <div className="flex flex-col gap-5" data-testid="guild-settings-sheet">
+        <>
             <DiscordSection guildId={ctx.page.guild.id} onChangeChannel={onChangeChannel} />
             <SettingsSection title="Page editors" blurb="Who can edit this guild’s page." testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
@@ -80,6 +80,15 @@ function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetP
             <SettingsSection title="Visibility" testId="guild-settings-visibility">
                 <HideHubRow page={ctx.page} />
             </SettingsSection>
+        </>
+    );
+}
+
+function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+    const Extra = mod?.settingsSections;
+    return (
+        <div className="flex flex-col gap-5" data-testid="guild-settings-sheet">
+            {ctx.page.viewer.canManageEditors && <LeaderSections ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />}
             {Extra && <Extra {...ctx} />}
         </div>
     );
