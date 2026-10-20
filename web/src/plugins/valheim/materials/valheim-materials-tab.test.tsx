@@ -404,6 +404,13 @@ describe('ValheimMaterialsTab', () => {
         const woodToggle = async () =>
             within(await sharedList()).getByRole('button', { name: /Wood/ });
 
+        it('phone: a totals row is left-aligned with a full-width label (ROK-1867)', async () => {
+            server.use(valheimMaterialsHandler(materialsFixture()));
+            renderTab();
+            const wood = await woodToggle();
+            expect(wood).toHaveClass('justify-start', 'text-left', '[&>[data-button-label]]:w-full');
+        });
+
         it('phone: a row click selects the item, refetches with prefab=, and Clear resets', async () => {
             const hits: string[] = [];
             server.use(
