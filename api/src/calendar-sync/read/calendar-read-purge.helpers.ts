@@ -17,6 +17,13 @@
  *
  * Each returns the distinct user ids touched so the caller can invalidate
  * the game-time cache.
+ *
+ * ROK-1598 D7 (STRICT): any path that deletes a connection's blocks while
+ * the connection lives on MUST clear its `sync_cursor` in the same
+ * transaction. A kept cursor lets Apple answer `unchanged`, and the sync
+ * then keeps a block set that is no longer there (busy time stays missing
+ * until a ctag or the window changes). The disconnect purge is exempt: its
+ * row is deleted by the `disconnect` job.
  */
 import { and, asc, eq, lt } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -74,6 +81,8 @@ export async function purgeAllCalendarReadData(db: Db): Promise<number[]> {
   const a = schema.gameTimeAbsences;
   const rows = await db.transaction(async (tx) => {
     await tx.select({ id: c.id }).from(c).orderBy(asc(c.id)).for('update');
+    // D7 header: the next sync must re-read, not answer `unchanged`.
+    await tx.update(c).set({ syncCursor: null });
     const blocks = await tx.delete(t).returning({ userId: t.userId });
     const absences = await tx
       .delete(a)

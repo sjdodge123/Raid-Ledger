@@ -86,6 +86,17 @@ describe('resolvePrimaryAlias', () => {
     );
   });
 
+  it('Apple: a dedicated calendar flagged primary (no home) → the default reads work', () => {
+    const noHome = [cal('raid-ledger-x', true), cal('work')];
+    const excluded = new Set(['raid-ledger-x']);
+    expect(resolvePrimaryAlias('apple', ['primary'], noHome, excluded)).toEqual(
+      ['work'],
+    );
+    expect(
+      resolvePrimaryAlias('apple', ['raid-ledger-x', 'work'], noHome, excluded),
+    ).toEqual(['work']);
+  });
+
   it('Google keeps the literal primary (the API resolves it)', () => {
     expect(resolvePrimaryAlias('google', ['primary', 'x'], listed)).toEqual([
       'primary',
@@ -160,5 +171,14 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
     const { provider, fetchBusy } = stub();
     await fetchWindow({ db, provider }, conn({ w: 3 }), window);
     expect(fetchBusy.mock.calls[0]?.slice(2)).toEqual([['home'], undefined]);
+  });
+
+  it('collections raid-ledger-x + work, no home → the default read fetches work', async () => {
+    const { provider, fetchBusy } = stub();
+    provider.listCalendars = () =>
+      Promise.resolve([cal('raid-ledger-x', true), cal('work')]);
+    const row = { ...conn(undefined), dedicatedCalendarId: 'raid-ledger-x' };
+    await fetchWindow({ db, provider }, row, window);
+    expect(fetchBusy.mock.calls[0]?.[2]).toEqual(['work']);
   });
 });

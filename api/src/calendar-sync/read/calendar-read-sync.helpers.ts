@@ -102,15 +102,24 @@ export function nextReadSyncAt(now: Date, random: () => number): Date {
   return new Date(now.getTime() + READ_SYNC_INTERVAL_MS + jitter);
 }
 
+/** R1: the dedicated calendar plus every listed Raid Ledger calendar. */
+export function readExclusions(
+  conn: Pick<ReadSyncConnection, 'dedicatedCalendarId'>,
+  calendars: readonly ProviderCalendar[],
+): Set<string> {
+  const excluded = new Set(
+    calendars.filter((c) => c.isRaidLedger).map((c) => c.id),
+  );
+  if (conn.dedicatedCalendarId) excluded.add(conn.dedicatedCalendarId);
+  return excluded;
+}
+
 /** R1: the calendars to fetch; the Raid Ledger calendar never appears. */
 export function selectReadCalendarIds(
   conn: Pick<ReadSyncConnection, 'readCalendarIds' | 'dedicatedCalendarId'>,
   calendars: readonly ProviderCalendar[],
 ): string[] {
-  const excluded = new Set(
-    calendars.filter((c) => c.isRaidLedger).map((c) => c.id),
-  );
-  if (conn.dedicatedCalendarId) excluded.add(conn.dedicatedCalendarId);
+  const excluded = readExclusions(conn, calendars);
   const wanted =
     conn.readCalendarIds.length > 0 ? conn.readCalendarIds : [PRIMARY_CALENDAR];
   return [...new Set(wanted)].filter((id) => !excluded.has(id));
@@ -150,7 +159,12 @@ export function fetchWindow(
   return withFreshCredentials(deps.db, conn, deps.provider, async (creds) => {
     const calendars = await deps.provider.listCalendars(creds);
     const wanted = selectReadCalendarIds(conn, calendars);
-    const ids = resolvePrimaryAlias(deps.provider.key, wanted, calendars);
+    const ids = resolvePrimaryAlias(
+      deps.provider.key,
+      wanted,
+      calendars,
+      readExclusions(conn, calendars),
+    );
     if (ids.length === 0) return { blocks: [] };
     // ROK-1598 D7: the stored cursor in, so Apple can answer `unchanged`.
     const cursor = storedCursor(conn.syncCursor);

@@ -29,18 +29,37 @@ export function storedCursor(raw: unknown): Record<string, string> | undefined {
 /** Providers whose calendars have no literal `primary` id. */
 const NO_PRIMARY_ALIAS: ReadonlySet<CalendarProviderKey> = new Set(['apple']);
 
-/** Swap `primary` for the listed primary calendar's id where needed. */
+/**
+ * Swap `primary` for the listed primary calendar's id where needed, then
+ * drop `excluded` (R1: the dedicated calendar). Apple flags a primary even
+ * with no `home` — the first collection by href, which can be the Raid
+ * Ledger calendar; the first eligible calendar by id reads instead.
+ */
 export function resolvePrimaryAlias(
   provider: CalendarProviderKey,
   ids: readonly string[],
   calendars: readonly ProviderCalendar[],
+  excluded: ReadonlySet<string> = new Set(),
 ): string[] {
   if (!NO_PRIMARY_ALIAS.has(provider)) return [...ids];
-  const primary = calendars.find((c) => c.primary && !c.isRaidLedger)?.id;
+  const primary = eligiblePrimary(calendars, excluded);
   const out = ids.flatMap((id) =>
     id === PRIMARY_ALIAS ? (primary ? [primary] : []) : [id],
   );
-  return [...new Set(out)];
+  return [...new Set(out)].filter((id) => !excluded.has(id));
+}
+
+function eligiblePrimary(
+  calendars: readonly ProviderCalendar[],
+  excluded: ReadonlySet<string>,
+): string | undefined {
+  const eligible = (c: ProviderCalendar) =>
+    !c.isRaidLedger && !excluded.has(c.id);
+  const flagged = calendars.find((c) => c.primary);
+  if (!flagged) return undefined;
+  if (eligible(flagged)) return flagged.id;
+  const rest = calendars.filter(eligible).map((c) => c.id);
+  return rest.sort((a, b) => a.localeCompare(b))[0];
 }
 
 /** `buildSyncedFields`' cursor part: written only when the provider sent one. */
