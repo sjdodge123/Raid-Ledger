@@ -101,8 +101,8 @@ function buttons(res: RenderedDm): RenderedButton[][] {
   return res.components.map((r) => (r.components ?? []).filter((b) => b.type === BUTTON_COMPONENT_TYPE));
 }
 
-/** The primary (last) row: "View group" → /guilds/<id>, then Adjust Notifications last. */
-function assertButtons(res: RenderedDm, guildId: number): void {
+/** The primary (last) row: "View group" → the post's deep link, then Adjust Notifications last. */
+function assertButtons(res: RenderedDm, guildId: number, postId: number): void {
   const rows = buttons(res);
   const primary = rows[rows.length - 1] ?? [];
   const labels = primary.map((b) => b.label ?? "");
@@ -111,13 +111,19 @@ function assertButtons(res: RenderedDm, guildId: number): void {
     fail(`expected the last button "${ADJUST_LABEL}" → settings row, got ${JSON.stringify(primary)}`);
   }
   const view = rows.flat().find((b) => b.label === VIEW_GROUP_LABEL);
-  if (!view?.url?.endsWith(`/guilds/${guildId}`)) {
-    fail(`expected a "${VIEW_GROUP_LABEL}" link to /guilds/${guildId}, got rows ${JSON.stringify(labels)}`);
+  const deepLink = `/guilds/${guildId}?post=${postId}#posts`;
+  if (!view?.url?.endsWith(deepLink)) {
+    fail(`expected a "${VIEW_GROUP_LABEL}" link to ${deepLink}, got ${JSON.stringify(view?.url)} in rows ${JSON.stringify(labels)}`);
   }
 }
 
 /** Render the stored notification through the real DM builder and check it. */
-async function assertDmEmbed(ctx: TestContext, n: HubNotification, guildId: number, name: string): Promise<void> {
+async function assertDmEmbed(
+  ctx: TestContext,
+  n: HubNotification,
+  ids: { guildId: number; postId: number },
+  name: string,
+): Promise<void> {
   const res = await ctx.api.post<RenderedDm>("/admin/test/render-dm-embed", {
     type: TYPE,
     title: n.title ?? "",
@@ -128,7 +134,7 @@ async function assertDmEmbed(ctx: TestContext, n: HubNotification, guildId: numb
   if (res.embed.title !== expected) {
     fail(`expected the DM title "${expected}", got "${res.embed.title}"`);
   }
-  assertButtons(res, guildId);
+  assertButtons(res, ids.guildId, ids.postId);
 }
 
 /** ROK-1868: the leader post is a hub post; returns the new post's id. */
@@ -159,7 +165,7 @@ async function leaderPostNotifiesMembers(ctx: TestContext): Promise<void> {
   if (n.payload?.url !== deepLink) {
     fail(`expected payload.url "${deepLink}", got ${JSON.stringify(n.payload?.url)}`);
   }
-  await assertDmEmbed(ctx, n, guildId, name);
+  await assertDmEmbed(ctx, n, { guildId, postId }, name);
 }
 
 export const hubNotificationsDmTests: SmokeTest[] = [
