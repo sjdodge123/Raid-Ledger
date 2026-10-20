@@ -20,7 +20,7 @@ export const DAY_MS = 86_400_000;
 /** How a floating time is placed: a parsed VTIMEZONE, an IANA name, or UTC. */
 export type FloatingZone = ICAL.Timezone | string | null;
 
-interface WallClock {
+export interface WallClock {
   year: number;
   month: number;
   day: number;
@@ -87,6 +87,21 @@ function offsetAt(fmt: Intl.DateTimeFormat, ms: number): number {
   return local - Math.floor(ms / 1000) * 1000;
 }
 
+/** UTC ms → the wall clock in IANA `zone`; null for an unknown zone. */
+export function utcToWall(ms: number, zone: string): WallClock | null {
+  const fmt = formatterFor(zone);
+  if (!fmt) return null;
+  const local = new Date(ms + offsetAt(fmt, ms));
+  return {
+    year: local.getUTCFullYear(),
+    month: local.getUTCMonth() + 1,
+    day: local.getUTCDate(),
+    hour: local.getUTCHours(),
+    minute: local.getUTCMinutes(),
+    second: local.getUTCSeconds(),
+  };
+}
+
 function wallMs(t: WallClock): number {
   return Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second);
 }
@@ -101,7 +116,7 @@ export function zonedToUtc(t: WallClock, zone: string): number | null {
   return Number.isFinite(second) ? second : null;
 }
 
-function isRealZone(zone: ICAL.Timezone | null | undefined): boolean {
+export function isRealZone(zone: ICAL.Timezone | null | undefined): boolean {
   return (
     zone !== null &&
     zone !== undefined &&

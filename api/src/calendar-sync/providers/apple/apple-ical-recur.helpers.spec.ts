@@ -119,3 +119,83 @@ describe('nominal DURATION days across the New York DST end (review r1)', () => 
     expect(ends(event(vtimezone ?? ''))).toEqual(expected);
   });
 });
+
+describe('IANA TZID without VTIMEZONE compares UNTIL / EXDATE as instants (Codex r2)', () => {
+  const series = (lines: string[]) =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:zone@icloud.test',
+      ...lines,
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ].join('\r\n');
+
+  it('daily 19:00 Asia/Tokyo with UNTIL=20261022T100000Z includes Oct 22', () => {
+    const ics = series([
+      'DTSTART;TZID=Asia/Tokyo:20261020T190000',
+      'DTEND;TZID=Asia/Tokyo:20261020T200000',
+      'RRULE:FREQ=DAILY;UNTIL=20261022T100000Z',
+    ]);
+    expect(starts(ics)).toEqual([
+      '2026-10-20T10:00:00.000Z',
+      '2026-10-21T10:00:00.000Z',
+      '2026-10-22T10:00:00.000Z',
+    ]);
+  });
+
+  it('a New York series drops the occurrence named by an equivalent UTC EXDATE', () => {
+    const ics = series([
+      'DTSTART;TZID=America/New_York:20261006T190000',
+      'DTEND;TZID=America/New_York:20261006T210000',
+      'RRULE:FREQ=WEEKLY;BYDAY=TU',
+      'EXDATE:20261027T230000Z',
+    ]);
+    expect(starts(ics)).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-11-04T00:00:00.000Z',
+      '2026-11-11T00:00:00.000Z',
+    ]);
+  });
+});
+
+describe('RDATE-only series include DTSTART (Codex r2)', () => {
+  const rdateOnly = (extra: string[]) =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:rdate@icloud.test',
+      'DTSTART:20261020T120000Z',
+      'DTEND:20261020T130000Z',
+      ...extra,
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ].join('\r\n');
+
+  it('DTSTART Oct 20 + RDATE Oct 22 → two blocks', () => {
+    expect(starts(rdateOnly(['RDATE:20261022T120000Z']))).toEqual([
+      '2026-10-20T12:00:00.000Z',
+      '2026-10-22T12:00:00.000Z',
+    ]);
+  });
+
+  it('an RDATE repeating DTSTART is not counted twice', () => {
+    const ics = rdateOnly(['RDATE:20261020T120000Z,20261022T120000Z']);
+    expect(starts(ics)).toEqual([
+      '2026-10-20T12:00:00.000Z',
+      '2026-10-22T12:00:00.000Z',
+    ]);
+  });
+
+  it('an EXDATE on DTSTART still removes it', () => {
+    const ics = rdateOnly([
+      'RDATE:20261022T120000Z',
+      'EXDATE:20261020T120000Z',
+    ]);
+    expect(starts(ics)).toEqual(['2026-10-22T12:00:00.000Z']);
+  });
+});

@@ -17,6 +17,10 @@
  * (RFC 5545 §3.3.6): it is added on the wall clock in that zone, and only
  * the hour/minute/second part as exact time.
  *
+ * An IANA TZID with no VTIMEZONE: UNTIL / EXDATE / RDATE are first moved
+ * onto the series' wall clock (`alignSeriesZone`). RDATE-only series also
+ * yield DTSTART, which ical.js's iterator leaves out.
+ *
  * Cap: MAX_SERIES_ITERATIONS iterator steps per series, counted from the
  * series' DTSTART (ical.js cannot start mid-series without breaking
  * INTERVAL / BYSETPOS phase). 20 000 covers a daily series ~54 years old or
@@ -25,6 +29,7 @@
  */
 import ICAL from 'ical.js';
 import type { BusyBlock, TimeRange } from '../calendar-provider.interface';
+import { alignSeriesZone } from './apple-ical-series-zone.helpers';
 import {
   DAY_MS,
   addDays,
@@ -250,23 +255,60 @@ function occurrenceBlock(
   return rangeBlock(d.item, d.startDate, d.endDate, ctx);
 }
 
+/** EXDATE names `t` (a DATE exdate matches its whole day). */
+function excludes(master: ICAL.Component, t: ICAL.Time): boolean {
+  return master.getAllProperties('exdate').some((prop) =>
+    prop.getValues().some((v: unknown) => {
+      if (!(v instanceof ICAL.Time)) return false;
+      return v.isDate ? dateOf(v) === dateOf(t) : v.compare(t) === 0;
+    }),
+  );
+}
+
+/**
+ * RDATE without RRULE: DTSTART is still the set's first instance
+ * (RFC 5545 §3.8.5.2) but ical.js's iterator omits it (Codex r2).
+ */
+function initialOccurrence(master: ICAL.Component): ICAL.Time | null {
+  if (master.hasProperty('rrule')) return null;
+  const t: unknown = master.getFirstPropertyValue('dtstart');
+  return t instanceof ICAL.Time && !excludes(master, t) ? t : null;
+}
+
+/** The iterator's times with `first` merged in order, deduplicated. */
+function* seriesTimes(
+  event: ICAL.Event,
+  first: ICAL.Time | null,
+): Generator<ICAL.Time> {
+  const it = event.iterator();
+  let pending = first;
+  for (;;) {
+    const t: ICAL.Time | null = it.next() ?? null;
+    if (pending && (!t || pending.compare(t) <= 0)) {
+      if (!t || pending.compare(t) < 0) yield pending;
+      pending = null;
+    }
+    if (!t) return;
+    yield t;
+  }
+}
+
 function iterateMaster(
   event: ICAL.Event,
   start: Start,
   ctx: SeriesContext,
 ): SeriesResult {
   const blocks: RawBlock[] = [];
-  const it = event.iterator();
-  for (let i = 0; i < MAX_SERIES_ITERATIONS; i++) {
-    const t = it.next();
-    if (!t) return { blocks, skipped: 0 };
+  let steps = 0;
+  for (const t of seriesTimes(event, initialOccurrence(event.component))) {
+    if (++steps > MAX_SERIES_ITERATIONS) return { blocks, skipped: 1 };
     const block = occurrenceBlock(event, t, start, ctx);
     if (block === 'skip') continue;
     if (!block) return { blocks, skipped: 1 };
     if (block.start >= ctx.range.end) return { blocks, skipped: 0 };
     if (overlaps(block, ctx.range)) blocks.push(block);
   }
-  return { blocks, skipped: 1 };
+  return { blocks, skipped: 0 };
 }
 
 function merge(results: SeriesResult[]): SeriesResult {
@@ -284,6 +326,7 @@ export function expandSeries(
 ): SeriesResult {
   const own = overrides.map((o) => singleOccurrence(o, ctx));
   if (!master) return merge(own);
+  alignSeriesZone(master, ctx.floating);
   const event = new ICAL.Event(master, {
     exceptions: overrides,
     strictExceptions: false,
