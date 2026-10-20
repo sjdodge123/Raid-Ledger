@@ -59,19 +59,28 @@ export function formatSeconds(seconds: number): string {
     return `${Math.round(seconds / 360) / 10} h`;
 }
 
+/** Known processor prefabs first; otherwise the processor type. */
 const PROCESSOR_LABEL: Record<string, string> = {
     smelter: 'Smelter',
     blastfurnace: 'Blast furnace',
-    kiln: 'Charcoal kiln',
+    charcoal_kiln: 'Charcoal kiln',
+    windmill: 'Windmill',
+    piece_spinningwheel: 'Spinning wheel',
+    fermenter: 'Fermenter',
+    incinerator: 'Obliterator',
+};
+const PROCESSOR_TYPE_LABEL: Record<string, string> = {
+    smelter: 'Smelter',
     fermenter: 'Fermenter',
     cooking: 'Cooking',
-    windmill: 'Windmill',
-    spinningwheel: 'Spinning wheel',
     incinerator: 'Obliterator',
 };
 
 function processChip(via: Extract<ValheimPlanVia, { type: 'process' }>): string {
-    const name = PROCESSOR_LABEL[via.processorType] ?? via.processor;
+    const name =
+        PROCESSOR_LABEL[via.processor] ??
+        PROCESSOR_TYPE_LABEL[via.processorType] ??
+        via.processor;
     return via.seconds === null ? name : `${name} · ${formatSeconds(via.seconds)}`;
 }
 
