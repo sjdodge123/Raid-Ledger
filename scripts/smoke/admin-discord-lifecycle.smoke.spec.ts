@@ -101,7 +101,7 @@ test.describe('Admin Discord — channel automation (ROK-1428)', () => {
         await openPage(page);
         await page.getByRole('button', { name: 'Preview changes' }).click();
         await expect(page.getByTestId('lifecycle-run-result')).toContainText(
-            /Would change — Created \d+ · Unarchived \d+ · Archived \d+/, { timeout: 15_000 },
+            /Would create \d+ · unarchive \d+ · archive \d+ · link \d+ hubs · defer \d+/, { timeout: 15_000 },
         );
     });
 
