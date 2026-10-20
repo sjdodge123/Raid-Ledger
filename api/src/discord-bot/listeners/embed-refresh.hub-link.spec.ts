@@ -1,0 +1,115 @@
+/**
+ * ROK-1872 (ROK-1428 §2.8): every card refresh path keeps the event's Hub
+ * button — running-late / roach-out re-renders, the signup listener and the
+ * event listener resolve the hub link exactly like the poster does.
+ */
+import { Logger } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { resolveEventHubLink } from '../channel-lifecycle/embed-hub-link.helpers';
+import {
+  updateChannelEmbeds as lateRefresh,
+  type RunningLateDeps,
+} from './running-late-interaction.handlers';
+import {
+  updateChannelEmbeds as roachRefresh,
+  type RoachOutDeps,
+} from './roach-out-interaction.handlers';
+import { DiscordEventListener } from './event.listener';
+import { SignupInteractionListener } from './signup-interaction.listener';
+import { createSignupInteractionTestModule } from './signup-interaction.spec-helpers';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { DiscordEmbedFactory } from '../services/discord-embed.factory';
+import { EmbedPosterService } from '../services/embed-poster.service';
+import { ChannelResolverService } from '../services/channel-resolver.service';
+import { SettingsService } from '../../settings/settings.service';
+import { ScheduledEventService } from '../services/scheduled-event.service';
+import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
+
+jest.mock('../channel-lifecycle/embed-hub-link.helpers', () => ({
+  ...jest.requireActual<object>('../channel-lifecycle/embed-hub-link.helpers'),
+  resolveEventHubLink: jest.fn(),
+}));
+
+const BASE = 'https://raid.example.com';
+const HUB = { url: `${BASE}/guilds/7`, label: 'Hub' as const };
+const resolve = jest.mocked(resolveEventHubLink);
+const RECORD = { channelId: 'c1', messageId: 'm1', embedState: 'posted' };
+
+const settings = {
+  getBranding: jest.fn().mockResolvedValue({ communityName: 'G' }),
+  getClientUrl: jest.fn().mockResolvedValue(BASE),
+  getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+};
+
+/** Partial handler deps: one embed record, a spy factory. */
+function handlerDeps(): { deps: unknown; build: jest.Mock } {
+  const build = jest.fn().mockReturnValue({ embed: {}, row: {} });
+  const where = jest.fn().mockResolvedValue([RECORD]);
+  const deps = {
+    db: { select: () => ({ from: () => ({ where }) }) },
+    clientService: { getGuildId: () => 'g1', editEmbed: jest.fn() },
+    eventsService: { buildEmbedEventData: jest.fn().mockResolvedValue({}) },
+    embedFactory: { buildEventEmbed: build },
+    settingsService: settings,
+    logger: new Logger('spec'),
+  };
+  return { deps, build };
+}
+
+function ctxOf(build: jest.Mock): unknown {
+  return build.mock.calls[0]?.[1];
+}
+
+describe('card refresh paths keep the hub link (ROK-1872)', () => {
+  const prevUrl = process.env.CLIENT_URL;
+  beforeAll(() => (process.env.CLIENT_URL = BASE));
+  afterAll(() => (process.env.CLIENT_URL = prevUrl));
+  beforeEach(() => resolve.mockReset().mockResolvedValue(HUB));
+
+  it('running-late re-render carries the Hub link', async () => {
+    const { deps, build } = handlerDeps();
+    await lateRefresh(deps as RunningLateDeps, 42);
+    expect(ctxOf(build)).toMatchObject({ clientUrl: BASE, hubLink: HUB });
+    expect(resolve).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      BASE,
+      expect.anything(),
+    );
+  });
+
+  it('roach-out re-render carries the Hub link', async () => {
+    const { deps, build } = handlerDeps();
+    await roachRefresh(deps as RoachOutDeps, 42);
+    expect(ctxOf(build)).toMatchObject({ clientUrl: BASE, hubLink: HUB });
+  });
+
+  it('signup listener context carries the Hub link', async () => {
+    const { module } = await createSignupInteractionTestModule();
+    const listener = module.get(SignupInteractionListener);
+    const ctx = await listener['buildEmbedContext'](42);
+    expect(ctx).toMatchObject({ clientUrl: BASE, hubLink: HUB });
+  });
+
+  it('event listener refresh context carries the Hub link', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        DiscordEventListener,
+        ...[DrizzleAsyncProvider, DiscordBotClientService, DiscordEmbedFactory]
+          .concat([EmbedPosterService, ChannelResolverService])
+          .concat([ScheduledEventService, EventLifecycleQueueService])
+          .map((provide) => ({ provide, useValue: {} })),
+        { provide: SettingsService, useValue: settings },
+      ],
+    }).compile();
+    const listener = module.get(DiscordEventListener);
+    expect(await listener['buildContext'](42)).toEqual({
+      communityName: 'G',
+      clientUrl: BASE,
+      timezone: 'UTC',
+      hubLink: HUB,
+    });
+    expect('hubLink' in (await listener['buildContext']())).toBe(false);
+  });
+});
