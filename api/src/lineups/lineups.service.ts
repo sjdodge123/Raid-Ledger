@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+  Optional,
+} from '@nestjs/common';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -100,6 +107,7 @@ export class LineupsService {
     private readonly embedSyncQueue: EmbedSyncQueueService,
     /** ROK-1473: carries the entered-scheduling hook (poll card post). */
     private readonly eventEmitter: EventEmitter2,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -187,6 +195,7 @@ export class LineupsService {
     // ROK-1316: votes change the voter set → debounced pre-gen refresh.
     await this.invalidateAiCache(lineupId);
     await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    this.nudge?.touch(gameId);
     return result;
   }
 

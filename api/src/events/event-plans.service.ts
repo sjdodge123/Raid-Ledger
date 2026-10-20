@@ -5,7 +5,9 @@ import {
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
@@ -68,6 +70,7 @@ export class EventPlansService {
     private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** Creates a new event plan and posts a Discord poll. */
@@ -90,6 +93,7 @@ export class EventPlansService {
       dto,
     );
     await this.schedulePollClose(plan.id, dto.pollDurationHours * 3600 * 1000);
+    this.nudge?.touch(dto.gameId);
     return toResponseDto(plan);
   }
 

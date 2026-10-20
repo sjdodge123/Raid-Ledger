@@ -8,7 +8,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ScheduleVoteSource,
@@ -82,6 +84,7 @@ export class SchedulingService {
     private readonly pollEmbed: SchedulingPollEmbedService,
     private readonly notifications: NotificationService,
     private readonly unanimous: SchedulingUnanimousService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /**
@@ -240,6 +243,7 @@ export class SchedulingService {
       return resolved;
     });
     this.fireVoteSideEffects(matchId);
+    this.nudge?.touch(match.gameId);
     return { voted: action.stance === 'yes', stance: action.stance };
   }
 

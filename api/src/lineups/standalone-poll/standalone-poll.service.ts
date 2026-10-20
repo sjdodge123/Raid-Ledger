@@ -10,7 +10,9 @@ import {
   NotFoundException,
   ConflictException,
   forwardRef,
+  Optional,
 } from '@nestjs/common';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   SchedulingPollResponseDto,
@@ -114,6 +116,7 @@ export class StandalonePollService {
     private readonly eventsService: EventsService,
     @Inject(forwardRef(() => EmbedSyncQueueService))
     private readonly embedSyncQueue: EmbedSyncQueueService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** List the active standalone polls the caller may see (ROK-1750). */
@@ -299,6 +302,7 @@ export class StandalonePollService {
       pickedIds,
       share.visibility,
     );
+    this.nudge?.touch(input.gameId);
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount, share);
   }
