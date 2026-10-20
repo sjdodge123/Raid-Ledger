@@ -81,8 +81,8 @@ function expandChildren(
     for (const c of list) expandItem(ctx, child(need, id, c.prefab, c.amount));
     return;
   }
-  // anyOneOf: the first alternative the ledger covers, else the first.
-  const pick = list.find((v) => ctx.b.peek(v.prefab) >= v.amount) ?? list[0];
+  // anyOneOf: the first alternative surplus + stock covers, else the first.
+  const pick = list.find((v) => ctx.b.supply(v.prefab) >= v.amount) ?? list[0];
   if (pick) {
     expandItem(ctx, child(need, id, pick.prefab, pick.amount, list.length - 1));
   }

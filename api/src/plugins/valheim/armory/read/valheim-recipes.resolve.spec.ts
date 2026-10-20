@@ -518,6 +518,26 @@ describe('resolvePlan — anyOneOf, cooking fuel, pieces', () => {
     expect(plan.nodes[0]?.via).toMatchObject({ anyOneOf: true });
   });
 
+  it('anyOneOf counts planned surplus: 19 spare Batch beats an uncovered Stone', () => {
+    const g = graphOf({
+      recipes: [
+        recipe('Recipe_Batch', 'Batch', [res('Sand', 1)], { amount: 20 }),
+        recipe('Recipe_Wall', 'Wall', [res('Stone', 4), res('Batch', 4)], {
+          anyOneOf: true,
+        }),
+      ],
+    });
+    const plan = resolvePlan(g, [item('Batch'), item('Wall')], new Map());
+    const wall = nodeOf(plan.nodes, 'Wall');
+    const picked = plan.nodes.filter((n) => n.parentId === wall.id);
+    expect(picked.map((n) => [n.prefab, n.quantity, n.short])).toEqual([
+      ['Batch', 4, 0],
+    ]);
+    expect(plan.shoppingList).toEqual([
+      { prefab: 'Sand', need: 1, have: 0, short: 1 },
+    ]);
+  });
+
   it('anyOneOf falls back to the first alternative when none is covered', () => {
     const plan = resolvePlan(feast, [item('Feast')], new Map([['Fish', 1]]));
     expect(shape(plan.nodes)).toEqual([

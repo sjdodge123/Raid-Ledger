@@ -235,9 +235,12 @@ export class PlanBuilder {
     return VALHEIM_PLAN_QUANTITY_MAX;
   }
 
-  /** What the ledger still holds of `prefab` (0 without stock). */
-  peek(prefab: string): number {
-    return this.ledger?.get(prefab) ?? 0;
+  /**
+   * What a netted need of `prefab` can draw on: planned surplus plus what the
+   * ledger still holds (0 stock without one) — the supply `takeFor` consults.
+   */
+  supply(prefab: string): number {
+    return (this.surplus.get(prefab) ?? 0) + (this.ledger?.get(prefab) ?? 0);
   }
 
   /** Records a planned craft's overshoot for later needs of `prefab`. */
