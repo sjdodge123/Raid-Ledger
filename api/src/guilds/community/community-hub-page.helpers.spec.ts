@@ -89,6 +89,12 @@ describe('ROK-1870 buildCommunityHubPage', () => {
     expect(page.viewer.canEdit).toBe(false);
   });
 
+  it('carries the blurb on both guild and community for the hub hero (verify FAIL 12)', () => {
+    const page = buildCommunityHubPage(input({ role: 'visitor', viewerId: 99 }));
+    expect(page.guild.blurb).toBe('Weekly co-op');
+    expect(page.community?.blurb).toBe('Weekly co-op');
+  });
+
   it('carries the users.id on community.userId; memberId stays the row id (BLOCKER)', () => {
     const page = buildCommunityHubPage(input({}));
     const rows = page.ranks[0]?.members ?? [];

@@ -61,6 +61,8 @@ interface HubHeroProps {
 
 export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroProps): JSX.Element {
     const line = mod?.heroNote ? mod.heroNote(ctx) : null;
+    // ROK-1870: a community hub's leader-edited blurb sits under the name (the settings copy promises it here).
+    const blurb = ctx.page.community?.blurb ?? null;
     // Core always has an Events tab now (ROK-1830 S3c), so the chip always has
     // somewhere to land; a module only redirects it (WoW → its Raids tab).
     const jumpTab = mod?.eventsJumpTab ?? 'events';
@@ -72,6 +74,7 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
                 <Crest name={ctx.page.guild.name} />
                 <div className="min-w-0">
                     <h1 className="mb-2 break-words text-2xl font-bold text-foreground sm:text-3xl">{ctx.page.guild.name}</h1>
+                    {blurb && <p className="mb-2 break-words text-sm text-secondary" data-testid="hub-hero-blurb">{blurb}</p>}
                     <HeroFacts ctx={ctx} module={mod} />
                 </div>
             </div>
