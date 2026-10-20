@@ -8,9 +8,10 @@
  */
 import * as bcrypt from 'bcrypt';
 import { count, eq } from 'drizzle-orm';
-import type {
-  AddonWho,
-  WowForeverRealmRulesetEntryDto,
+import {
+  AddonImportResultSchema,
+  type AddonWho,
+  type WowForeverRealmRulesetEntryDto,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
@@ -127,14 +128,15 @@ const storedRuleset = async (id: string) =>
   )[0].ruleset;
 
 const characterCount = async (): Promise<number> => {
-  const [row] = await testApp.db
-    .select({ n: count() })
-    .from(schema.characters);
+  const [row] = await testApp.db.select({ n: count() }).from(schema.characters);
   return Number(row?.n ?? 0);
 };
 
-const rulesetChanged = (body: { warnings?: { code: string }[] }) =>
-  (body.warnings ?? []).filter((w) => w.code === 'RULESET_CHANGED');
+/** Parses the body against the contract, then keeps `RULESET_CHANGED`. */
+const rulesetChanged = (body: unknown) =>
+  AddonImportResultSchema.parse(body).warnings.filter(
+    (w) => w.code === 'RULESET_CHANGED',
+  );
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -251,6 +253,9 @@ describe('create route — realm-map inference (ROK-1739 D5/D6)', () => {
     );
   });
 
+});
+
+describe('create route — no usable realm-map fallback (ROK-1739 D6)', () => {
   it('I13 no pick, mapped hardcore: preview reports it, apply → 422 RULESET_REQUIRED, nothing created', async () => {
     const token = await memberToken('newhardcore');
     const prev = await createRoute(token, exportFrom('Last Stand'));
@@ -278,6 +283,9 @@ describe('create route — realm-map inference (ROK-1739 D5/D6)', () => {
     expect(await characterCount()).toBe(0);
   });
 
+});
+
+describe('create route — update target (ROK-1739 D4)', () => {
   it('I15 an update target (own hand-made char) gets the opt-in RULESET_CHANGED, row unchanged without confirm', async () => {
     const token = await memberToken('newupdate');
     const id = await createChar(token);
@@ -285,7 +293,10 @@ describe('create route — realm-map inference (ROK-1739 D5/D6)', () => {
       dryRun: false,
     });
     expect(res.status).toBe(200);
-    expect(res.body.target).toMatchObject({ action: 'update', characterId: id });
+    expect(res.body.target).toMatchObject({
+      action: 'update',
+      characterId: id,
+    });
     expect(rulesetChanged(res.body)).toEqual([
       { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
     ]);
