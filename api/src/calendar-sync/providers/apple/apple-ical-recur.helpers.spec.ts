@@ -73,3 +73,49 @@ describe('iteration cap (T11)', () => {
     ]);
   });
 });
+
+describe('RECURRENCE-ID;RANGE=THISANDFUTURE (review r1)', () => {
+  it('moves the changed occurrence and every later one to the new times', () => {
+    const blocks = parse(fixture('daily-thisandfuture.ics')).blocks;
+    const rows = blocks
+      .map((b) => `${b.start.toISOString()}/${b.end.toISOString()}`)
+      .sort();
+    expect(rows).toEqual([
+      '2026-10-21T12:00:00.000Z/2026-10-21T13:00:00.000Z',
+      '2026-10-22T12:00:00.000Z/2026-10-22T13:00:00.000Z',
+      '2026-10-23T15:00:00.000Z/2026-10-23T17:00:00.000Z',
+      '2026-10-24T15:00:00.000Z/2026-10-24T17:00:00.000Z',
+      '2026-10-25T15:00:00.000Z/2026-10-25T17:00:00.000Z',
+    ]);
+  });
+});
+
+describe('nominal DURATION days across the New York DST end (review r1)', () => {
+  const vtimezone = /BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE\r\n/.exec(
+    fixture('weekly-ny.ics'),
+  )?.[0];
+  const event = (zone: string) =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      `${zone}BEGIN:VEVENT`,
+      'UID:p1d@icloud.test',
+      'DTSTART;TZID=America/New_York:20261031T120000',
+      'DURATION:P1D',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ].join('\r\n');
+  const ends = (ics: string) =>
+    parse(ics).blocks.map((b) => [b.start.toISOString(), b.end.toISOString()]);
+  const expected = [['2026-10-31T16:00:00.000Z', '2026-11-01T17:00:00.000Z']];
+
+  it('P1D from noon EDT ends at noon EST (17:00Z) — Intl path', () => {
+    expect(ends(event(''))).toEqual(expected);
+  });
+
+  it('P1D from noon EDT ends at noon EST (17:00Z) — VTIMEZONE path', () => {
+    expect(vtimezone).toBeDefined();
+    expect(ends(event(vtimezone ?? ''))).toEqual(expected);
+  });
+});

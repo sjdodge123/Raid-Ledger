@@ -7,9 +7,15 @@
  * judged on its OWN times — moved out of the window → excluded, moved into
  * it → included, `STATUS:CANCELLED` → that occurrence is gone.
  *
+ * A `RANGE=THISANDFUTURE` override also moves every later occurrence: those
+ * take the adjusted start/end ical.js reports for them (the override itself
+ * is still judged on its own times).
+ *
  * Occurrences are produced as wall-clock times in the series' TZID and only
  * then converted to UTC, so a weekly 19:00 New York event is 23:00Z before
- * the DST end and 00:00Z after it.
+ * the DST end and 00:00Z after it. A `DURATION`'s day/week part is nominal
+ * (RFC 5545 §3.3.6): it is added on the wall clock in that zone, and only
+ * the hour/minute/second part as exact time.
  *
  * Cap: MAX_SERIES_ITERATIONS iterator steps per series, counted from the
  * series' DTSTART (ical.js cannot start mid-series without breaking
@@ -43,9 +49,15 @@ export interface SeriesResult {
   skipped: number;
 }
 
+/** Timed: end = start + `days` on the wall clock, then + `exactMs`. */
 type Timing =
   | { allDay: true; days: number }
-  | { allDay: false; durationMs: number; tzid: string | null };
+  | { allDay: false; days: number; exactMs: number; tzid: string | null };
+
+interface DurationParts {
+  days: number;
+  exactMs: number;
+}
 
 interface Start {
   time: ICAL.Time;
@@ -70,6 +82,32 @@ function timeProp(
 function durationMsOf(vevent: ICAL.Component): number | null {
   const value = vevent.getFirstPropertyValue('duration');
   return value instanceof ICAL.Duration ? value.toSeconds() * 1000 : null;
+}
+
+/** DURATION split into its nominal day part and its exact time part. */
+function durationParts(vevent: ICAL.Component): DurationParts {
+  const d = vevent.getFirstPropertyValue('duration');
+  if (!(d instanceof ICAL.Duration)) return { days: 0, exactMs: 0 };
+  const sign = d.isNegative ? -1 : 1;
+  const seconds = d.hours * 3600 + d.minutes * 60 + d.seconds;
+  return {
+    days: sign * (d.weeks * 7 + d.days),
+    exactMs: sign * seconds * 1000,
+  };
+}
+
+/** The end instant of a timed occurrence starting at `t` (= `startMs`). */
+function endMsOf(
+  t: ICAL.Time,
+  startMs: number,
+  timing: Extract<Timing, { allDay: false }>,
+  floating: FloatingZone,
+): number | null {
+  if (timing.days === 0) return startMs + timing.exactMs;
+  const shifted = t.clone();
+  shifted.adjust(timing.days, 0, 0, 0);
+  const base = timeToMs(shifted, timing.tzid, floating);
+  return base === null ? null : base + timing.exactMs;
 }
 
 function allDayDays(vevent: ICAL.Component, start: ICAL.Time): number {
@@ -100,17 +138,15 @@ function readStart(
   const startMs = timeToMs(start.time, start.tzid, floating);
   if (startMs === null) return 'bad';
   const end = timeProp(vevent, 'dtend');
-  const endMs = end
-    ? timeToMs(end.time, end.tzid, floating)
-    : startMs + (durationMsOf(vevent) ?? 0);
+  const exactEnd = end ? timeToMs(end.time, end.tzid, floating) : 0;
+  if (exactEnd === null) return 'bad';
+  const parts = end
+    ? { days: 0, exactMs: exactEnd - startMs }
+    : durationParts(vevent);
+  const timing = { allDay: false as const, ...parts, tzid: start.tzid };
+  const endMs = endMsOf(start.time, startMs, timing, floating);
   if (endMs === null) return 'bad';
-  if (endMs <= startMs) return 'drop';
-  const timing = {
-    allDay: false as const,
-    durationMs: endMs - startMs,
-    tzid: start.tzid,
-  };
-  return { time: start.time, timing };
+  return endMs <= startMs ? 'drop' : { time: start.time, timing };
 }
 
 function blockAt(
@@ -130,11 +166,9 @@ function blockAt(
   }
   const startMs = timeToMs(t, timing.tzid, floating);
   if (startMs === null) return null;
-  return {
-    start: new Date(startMs),
-    end: new Date(startMs + timing.durationMs),
-    allDay: false,
-  };
+  const endMs = endMsOf(t, startMs, timing, floating);
+  if (endMs === null) return null;
+  return { start: new Date(startMs), end: new Date(endMs), allDay: false };
 }
 
 function overlaps(block: RawBlock, range: TimeRange): boolean {
@@ -155,6 +189,67 @@ function singleOccurrence(
   return { blocks: overlaps(block, ctx.range) ? [block] : [], skipped: 0 };
 }
 
+/**
+ * A later occurrence moved by a `RANGE=THISANDFUTURE` override: ical.js has
+ * already shifted its start/end by the override's change. 'skip' = not busy
+ * (or empty); null = unplaceable.
+ */
+function rangeBlock(
+  item: ICAL.Event,
+  startDate: ICAL.Time,
+  endDate: ICAL.Time,
+  ctx: SeriesContext,
+): RawBlock | null | 'skip' {
+  if (!ctx.isBusy(item.component)) return 'skip';
+  const tzid = timeProp(item.component, 'dtstart')?.tzid ?? null;
+  if (startDate.isDate) {
+    const days = allDayDays(item.component, item.startDate);
+    return days > 0
+      ? blockAt(startDate, { allDay: true, days }, ctx.floating)
+      : 'skip';
+  }
+  const startMs = timeToMs(startDate, tzid, ctx.floating);
+  const endMs = timeToMs(endDate, tzid, ctx.floating);
+  if (startMs === null || endMs === null) return null;
+  if (endMs <= startMs) return 'skip';
+  return { start: new Date(startMs), end: new Date(endMs), allDay: false };
+}
+
+interface Details {
+  item: ICAL.Event;
+  startDate: ICAL.Time;
+  endDate: ICAL.Time;
+}
+
+/** `getOccurrenceDetails`, narrowed (its typedef does not resolve for lint). */
+function detailsOf(event: ICAL.Event, t: ICAL.Time): Details | null {
+  const raw: unknown = event.getOccurrenceDetails(t);
+  if (typeof raw !== 'object' || raw === null) return null;
+  const item: unknown = 'item' in raw ? raw.item : null;
+  const startDate: unknown = 'startDate' in raw ? raw.startDate : null;
+  const endDate: unknown = 'endDate' in raw ? raw.endDate : null;
+  if (!(item instanceof ICAL.Event)) return null;
+  if (!(startDate instanceof ICAL.Time) || !(endDate instanceof ICAL.Time)) {
+    return null;
+  }
+  return { item, startDate, endDate };
+}
+
+/** One iterator step → its block; 'skip' = an override judges it instead. */
+function occurrenceBlock(
+  event: ICAL.Event,
+  t: ICAL.Time,
+  start: Start,
+  ctx: SeriesContext,
+): RawBlock | null | 'skip' {
+  const d = detailsOf(event, t);
+  if (!d) return null;
+  if (d.item === event) return blockAt(t, start.timing, ctx.floating);
+  const exact = d.item.recurrenceId?.toUnixTime() === t.toUnixTime();
+  if (exact || !d.item.modifiesFuture()) return 'skip';
+  return rangeBlock(d.item, d.startDate, d.endDate, ctx);
+}
+
 function iterateMaster(
   event: ICAL.Event,
   start: Start,
@@ -165,8 +260,8 @@ function iterateMaster(
   for (let i = 0; i < MAX_SERIES_ITERATIONS; i++) {
     const t = it.next();
     if (!t) return { blocks, skipped: 0 };
-    if (event.getOccurrenceDetails(t).item !== event) continue;
-    const block = blockAt(t, start.timing, ctx.floating);
+    const block = occurrenceBlock(event, t, start, ctx);
+    if (block === 'skip') continue;
     if (!block) return { blocks, skipped: 1 };
     if (block.start >= ctx.range.end) return { blocks, skipped: 0 };
     if (overlaps(block, ctx.range)) blocks.push(block);
