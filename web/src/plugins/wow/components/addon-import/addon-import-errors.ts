@@ -53,6 +53,20 @@ const COPY: Record<AddonImportErrorCode, Omit<AddonImportErrorCopy, 'action'>> =
     RULESET_REQUIRED: { title: 'Choose a ruleset', body: "The export doesn't say which ruleset this character plays on. Pick one above, then import." },
 };
 
+/**
+ * NOT_IN_GUILD covers two server refusals: the exporter is missing from the
+ * roster (api `addon-import-guild.apply.ts` `assertExporterInGuild`), or — ROK-1794
+ * "explicit grants only" — the guild already exists and the importer is neither
+ * staff nor a member an admin made a guild editor (`addon-import-guild.guard.ts`
+ * `NOT_AN_EDITOR_MESSAGE`). The contract has no sub-code, so the guard's
+ * paste-free message picks the editor copy.
+ */
+const NOT_AN_EDITOR: Omit<AddonImportErrorCopy, 'action'> = {
+    title: 'Ask an admin for editor rights',
+    body: 'Only an admin, or a member an admin has made a guild editor, can update this roster. Ask an admin to make you a guild editor, then import again.',
+};
+const NOT_AN_EDITOR_SIGNAL = /guild editor/i;
+
 const FALLBACK: AddonImportErrorCopy = {
     title: 'Import failed',
     body: 'Something went wrong while checking the string. Try again in a moment.',
@@ -81,6 +95,7 @@ export function addonImportErrorCopy(error: unknown, gameId?: number): AddonImpo
     if (error.code === 'NAME_MISMATCH' && error.addCharacter && gameId !== undefined) {
         return { ...copy, action: nameMismatchAction(error.addCharacter, gameId) };
     }
+    if (error.code === 'NOT_IN_GUILD' && NOT_AN_EDITOR_SIGNAL.test(error.message)) return NOT_AN_EDITOR;
     if (error.code === 'INVALID_PAYLOAD' && error.message.trim()) {
         // The server's INVALID_PAYLOAD message is the specific, actionable part
         // (a field path, the export-clock bound, a hardcore/name/GUID reject) and
