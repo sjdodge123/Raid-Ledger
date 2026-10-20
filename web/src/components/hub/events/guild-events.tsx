@@ -6,7 +6,8 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { GuildEventCardDto, GuildRaidsDto, GuildRecentEventDto } from '@raid-ledger/contract';
+import type { GuildEventCardDto, GuildKind, GuildRaidsDto, GuildRecentEventDto } from '@raid-ledger/contract';
+import { hubCopy } from '../hub-copy';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle, WidgetCard } from '../hub-bits';
 import { GuildMeter } from './guild-meter';
@@ -73,18 +74,19 @@ function RecentRow({ e }: { e: GuildRecentEventDto }): JSX.Element {
     );
 }
 
-function EventLists({ raids, compact }: { raids: GuildRaidsDto; compact: boolean }): JSX.Element {
+function EventLists({ raids, compact, kind }: { raids: GuildRaidsDto; compact: boolean; kind: GuildKind | undefined }): JSX.Element {
+    const copy = hubCopy(kind);
     const upcoming = compact ? raids.upcoming.slice(0, COMPACT_COUNT) : raids.upcoming;
     const recent = compact ? raids.recent.slice(0, COMPACT_COUNT) : raids.recent;
     return (
         <>
             <h4 className={SUBHEAD}>Upcoming</h4>
             {upcoming.length === 0
-                ? <QuietEmpty>No upcoming guild events. A guild editor can pick this guild when creating an event.</QuietEmpty>
+                ? <QuietEmpty>{copy.upcomingEmpty}</QuietEmpty>
                 : <ul aria-label="Upcoming guild events" className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} />)}</ul>}
             <h4 className={SUBHEAD}>Recent</h4>
             {recent.length === 0
-                ? <QuietEmpty>No guild events in the last 8 weeks.</QuietEmpty>
+                ? <QuietEmpty>{copy.recentEmpty}</QuietEmpty>
                 : <Card className="bg-panel py-1"><ul aria-label="Recent guild events">{recent.map((e) => <RecentRow key={e.id} e={e} />)}</ul></Card>}
         </>
     );
@@ -95,21 +97,23 @@ interface GuildEventsProps {
     compact?: boolean;
     /** Tab id the compact card's "All events" jumps to; no value = no jump link. */
     jumpTab?: string | null;
+    /** Hub kind, for the empty-state copy. */
+    kind?: GuildKind | undefined;
 }
 
-export function GuildEvents({ raids, compact = false, jumpTab = null }: GuildEventsProps): JSX.Element {
+export function GuildEvents({ raids, compact = false, jumpTab = null, kind }: GuildEventsProps): JSX.Element {
     if (compact) {
         const action = jumpTab === null ? undefined : <JumpLink testId="guild-all-events" href={`#${jumpTab}`}>All events</JumpLink>;
         return (
             <WidgetCard id="guild-events" title="Upcoming & recent events" action={action}>
-                <EventLists raids={raids} compact />
+                <EventLists raids={raids} compact kind={kind} />
             </WidgetCard>
         );
     }
     return (
         <section id="guild-events" data-testid="guild-events-full" className="scroll-mt-4">
             <SectionTitle title="Guild events" blurb="Raids and runs scheduled for this guild." />
-            <EventLists raids={raids} compact={false} />
+            <EventLists raids={raids} compact={false} kind={kind} />
         </section>
     );
 }

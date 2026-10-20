@@ -21,6 +21,8 @@ const mockLogout = vi.fn();
 const mockNavigate = vi.fn();
 
 vi.mock('../../hooks/use-auth', () => ({
+    // ROK-1870 D9: the core hub nav entries key their query by viewer.
+    useViewerCacheScope: () => 'viewer-1',
     useAuth: () => ({
         user: mockUser,
         isAuthenticated: true,
@@ -332,5 +334,26 @@ describe('MoreDrawer (admin user)', () => {
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(toggle);
         expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+});
+
+describe('MoreDrawer — the Hubs row (ROK-1870, operator ruling 2026-10-20)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('links to /hubs above the profile block and closes the drawer on tap', () => {
+        const { onClose } = renderDrawer();
+        const row = screen.getByTestId('drawer-hubs-link');
+        expect(row).toHaveAttribute('href', '/hubs');
+        expect(row).toHaveTextContent('Hubs');
+        const profile = screen.getByText(mockUser.username);
+        expect(row.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING, 'Hubs sits under "Your hubs", above the profile').toBeTruthy();
+        fireEvent.click(row);
+        // The drawer also closes on the route change the tap causes, so ≥1.
+        expect(onClose).toHaveBeenCalled();
+    });
+
+    it('marks the row current on /hubs', () => {
+        renderDrawer(true, '/hubs');
+        expect(screen.getByTestId('drawer-hubs-link')).toHaveAttribute('aria-current', 'page');
     });
 });

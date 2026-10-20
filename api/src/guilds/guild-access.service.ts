@@ -9,7 +9,12 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { findGuildKind, toGuildSummary } from './guild-core.queries';
+import {
+  findGuildKind,
+  findGuildVisibility,
+  toGuildSummary,
+  type GuildVisibility,
+} from './guild-core.queries';
 import { HubKindRegistry } from './hub-kind.registry';
 
 /** The caller as the JWT strategy puts it on `request.user`. */
@@ -31,6 +36,16 @@ export function ladderCanEdit(role: LadderRole): boolean {
 /** ROK-1830 D5-A: managing editors = Leader only (today's staff check). */
 export function ladderCanManageEditors(role: LadderRole): boolean {
   return role === 'leader';
+}
+
+/** ROK-1870 D14: an active, unhidden community hub shows visitors its Overview. */
+function isOpenCommunityHub(guild: GuildVisibility | null): boolean {
+  return (
+    guild !== null &&
+    guild.kind === 'game_community' &&
+    guild.status === 'active' &&
+    guild.hiddenAt === null
+  );
 }
 
 /** The page's `viewer` object, every boolean derived from the ladder role. */
@@ -94,6 +109,29 @@ export class GuildAccessService {
   canManageEditors(actor: GuildActor, guildId: number): Promise<boolean> {
     void guildId;
     return Promise.resolve(isStaff(actor));
+  }
+
+  /**
+   * ROK-1870 D14 / OQ-5 — the Overview widgets (leader post, Discord mirror):
+   * `canView`, or any signed-in caller on an active, unhidden community hub.
+   * Member rows stay member-only (`buildCommunityHubPage`).
+   */
+  async canReadOverview(actor: GuildActor, guildId: number): Promise<boolean> {
+    if (await this.canView(actor, guildId)) return true;
+    return isOpenCommunityHub(await findGuildVisibility(this.db, guildId));
+  }
+
+  /**
+   * The Discord channel binding: staff (`canManageEditors`) on every kind,
+   * plus a community hub's ladder Leader (ROK-1870 §2.5). Other kinds stay
+   * staff-only, so a WoW GM never rebinds a channel (ROK-1830 D5-A).
+   */
+  async canManageDiscord(actor: GuildActor, guildId: number): Promise<boolean> {
+    if (await this.canManageEditors(actor, guildId)) return true;
+    if ((await findGuildKind(this.db, guildId)) !== 'game_community') {
+      return false;
+    }
+    return ladderCanManageEditors(await this.resolveLadder(actor, guildId));
   }
 
   /** Groups the user belongs to across every live hub kind, by name. */

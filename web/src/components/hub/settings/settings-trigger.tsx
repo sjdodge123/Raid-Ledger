@@ -8,10 +8,11 @@ import type { JSX } from 'react';
 import { Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
 
-export function HubSettingsTrigger({ onOpen }: { onOpen: () => void }): JSX.Element {
+/** `label` comes from `hubCopy(kind).settingsTitle` — "Hub settings" on a community hub. */
+export function HubSettingsTrigger({ onOpen, label }: { onOpen: () => void; label: string }): JSX.Element {
     return (
         <Button variant="secondary" size="sm" onClick={onOpen} data-testid="guild-settings-trigger">
-            <Cog6ToothIcon className="h-4 w-4" aria-hidden="true" /> Guild settings
+            <Cog6ToothIcon className="h-4 w-4" aria-hidden="true" /> {label}
         </Button>
     );
 }

@@ -3,6 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Header } from './Header';
 
+vi.mock('./hub-nav/use-hub-nav-active', () => ({
+    useHubNavActive: (pathname: string) => ({ guild: false, hubs: pathname === '/hubs' }),
+}));
+
 // Mock all hooks that Header depends on
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({ user: null, isAuthenticated: false }),
@@ -76,6 +80,11 @@ describe('Header — nav aria-label (AC: Semantic landmarks added to layout)', (
         expect(screen.getByRole('link', { name: 'Games' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Players' })).toBeInTheDocument();
+    });
+
+    it('hides the members-only Hubs link from signed-out visitors (ROK-1870)', () => {
+        renderHeader();
+        expect(screen.queryByRole('link', { name: 'Hubs' })).not.toBeInTheDocument();
     });
 });
 

@@ -31,6 +31,8 @@ export const NOTIFICATION_TYPES = [
   'lfg_player_invite',
   'hub_leader_post',
   'hub_event_tagged',
+  'hub_proposal_submitted',
+  'hub_proposal_reviewed',
   'system',
 ] as const;
 
@@ -78,6 +80,9 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   // ROK-1832 D1: group notices follow the lfg_invite precedent.
   hub_leader_post: { inApp: true, push: false, discord: true },
   hub_event_tagged: { inApp: true, push: false, discord: true },
+  // ROK-1870: proposal submitted (staff only) / reviewed (the proposer).
+  hub_proposal_submitted: { inApp: true, push: false, discord: true },
+  hub_proposal_reviewed: { inApp: true, push: false, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 

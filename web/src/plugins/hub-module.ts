@@ -10,12 +10,15 @@
  */
 import type { ComponentType } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { CreateGuildEditorInput, GuildEditor, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import type { CreateGuildEditorInput, GuildEditor, GuildKind, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
 import { getHubModuleRegistrations } from './plugin-registry';
+import {
+    COMMUNITY_HUB_KIND, retryCommunityHubModule, useCommunityHubModule, useCommunityHubModuleError,
+} from '../components/hub/community/community-hub-module-loader';
 
-/** Mirrors the api `GUILD_KINDS` / `guilds.kind` column (ROK-1830 S1). */
-export type HubKind = 'wow_guild' | 'game_server';
+/** The api `GUILD_KINDS` / `guilds.kind` column (ROK-1830 S1; `game_community` since ROK-1870). */
+export type HubKind = GuildKind;
 
 /** One member of the hub, as the page payload carries it. */
 export type HubMemberRow = GuildMemberRow;
@@ -150,6 +153,18 @@ export interface HubModule {
     editorDelegation?: ComponentType<HubEditorDelegationCtx>;
     /** Sources of the core "Recommended mods" frame under the Resources tab's rules + links (WoW: its addon panel). Core wraps each in Suspense, so a `lazy` component is fine. */
     modSources?: readonly HubModSource[];
+    /**
+     * ROK-1870 — a per-row action menu on the Members tab (community hubs:
+     * remove / ban / promote / demote). Core appends it as a trailing,
+     * header-less column; the component decides per row whether to render.
+     */
+    memberActions?: ComponentType<{ row: HubMemberRow; ctx: HubCtx }>;
+    /**
+     * ROK-1870 — extra sections at the bottom of the settings sheet (community
+     * hubs: blurb, Banned list, Archive / Restore). The component gates its own
+     * rows on the viewer's role.
+     */
+    settingsSections?: ComponentType<HubCtx>;
 }
 
 export interface HubModuleRegistration {
@@ -157,9 +172,31 @@ export interface HubModuleRegistration {
     module: HubModule;
 }
 
-/** The module for this hub kind, or `undefined` while its owning plugin is inactive. */
+/**
+ * The module for this hub kind, or `undefined` while its owning plugin is
+ * inactive. `game_community` is core-owned (ROK-1870 A4): it returns once its
+ * lazy chunk has loaded (`useHubModulePending` is true until then).
+ */
 export function useHubModule(kind: string): HubModule | undefined {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
+    const community = useCommunityHubModule(kind === COMMUNITY_HUB_KIND);
+    if (kind === COMMUNITY_HUB_KIND) return community;
     const found = getHubModuleRegistrations().find((r) => r.module.kind === kind);
     return found && activeSlugs.has(found.pluginSlug) ? found.module : undefined;
 }
+
+/** True while this hub kind's module is still being fetched (only the lazy core `game_community` module ever is). */
+export function useHubModulePending(kind: string | undefined): boolean {
+    const wanted = kind === COMMUNITY_HUB_KIND;
+    const mod = useCommunityHubModule(wanted);
+    const error = useCommunityHubModuleError(wanted);
+    return wanted && mod === undefined && error === undefined;
+}
+
+/** The lazy core module's load failure, if any — the page shows it with a retry instead of a skeleton. */
+export function useHubModuleLoadError(kind: string | undefined): Error | undefined {
+    return useCommunityHubModuleError(kind === COMMUNITY_HUB_KIND);
+}
+
+/** Retry a failed lazy core-module load. */
+export const retryHubModuleLoad: () => void = retryCommunityHubModule;

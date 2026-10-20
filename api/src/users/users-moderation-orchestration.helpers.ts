@@ -20,6 +20,7 @@ import type { RefreshTokenService } from '../auth/refresh/refresh-token.service'
 import type { SignupsRosterService } from '../events/signups-roster.service';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
+import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import {
   insertAdminAction,
   type InsertAdminActionInput,
@@ -97,6 +98,21 @@ async function revokeTokens(
   } catch (err: unknown) {
     deps.logger.warn(
       `ROK-313: refresh revoke for user ${userId} failed: ${msg(err)}`,
+    );
+  }
+}
+
+/** ROK-1870: a ban deactivates, so the user's hubs stop counting them (M11).
+ * Best-effort — never throws; the lockout already happened. */
+async function recountHubs(
+  deps: ModerationDeps,
+  userId: number,
+): Promise<void> {
+  try {
+    await refreshUserHubCounts(deps.db, userId);
+  } catch (err: unknown) {
+    deps.logger.warn(
+      `ROK-1870: hub recount for user ${userId} failed: ${msg(err)}`,
     );
   }
 }
@@ -257,6 +273,7 @@ export async function runBan(
   if (!row) return { success: true, message: 'User is already banned.' };
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);
+  await recountHubs(deps, row.id);
   const dataWiped = await applyBanDataChanges(deps, input, row);
   // Discord kick before the audit so metadata records the ACTUAL outcome.
   const discordKicked = await maybeKickFromDiscord(

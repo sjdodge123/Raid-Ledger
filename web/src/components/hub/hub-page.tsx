@@ -16,7 +16,7 @@ import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
 import { httpStatusOf } from '../../lib/api/api-error';
-import { type HubCtx, type HubModSource, type HubModule, useHubModule } from '../../plugins/hub-module';
+import { type HubCtx, type HubModSource, type HubModule, useHubModule, useHubModuleLoadError, useHubModulePending, retryHubModuleLoad } from '../../plugins/hub-module';
 import { HubHero } from './hub-hero';
 import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
@@ -30,6 +30,8 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
+import { hubCopy } from './hub-copy';
+import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 
@@ -129,7 +131,7 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
 }
 
 /** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
-function useHubSettingsState(canManage: boolean) {
+function useHubSettingsState(canManage: boolean, canPick: boolean) {
     const [requested, setRequested] = useState<HubOverlay>('closed');
     const openPicker = useCallback(() => setRequested('picker'), []);
     const openSettings = useCallback(() => setRequested('settings'), []);
@@ -139,9 +141,10 @@ function useHubSettingsState(canManage: boolean) {
     // mid-session takes the open dialog off the screen in the same commit, and
     // nothing cascades. (The stale request is harmless — a re-promoted viewer
     // reopens from the trigger.)
-    const overlay: HubOverlay = canManage ? requested : 'closed';
+    const allowed = requested === 'picker' ? canPick : canManage;
+    const overlay: HubOverlay = allowed ? requested : 'closed';
     const value: HubSettingsValue = useMemo(
-        () => ({ openChannelPicker: canManage ? openPicker : null }), [canManage, openPicker]);
+        () => ({ openChannelPicker: canPick ? openPicker : null }), [canPick, openPicker]);
     return { overlay, openPicker, onClose, openSettings, value };
 }
 
@@ -156,8 +159,8 @@ interface FrameProps {
 function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
-    const canManage = ctx.page.viewer.canManageEditors;
-    const s = useHubSettingsState(canManage);
+    const canManage = canOpenHubSettings(ctx.page);
+    const s = useHubSettingsState(canManage, canUseHubChannelPicker(ctx.page));
     return (
         <HubSettingsProvider value={s.value}>
             <div className={PAGE}>
@@ -165,7 +168,7 @@ function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.El
                     action={canManage || hubBellVisible(ctx.page.viewer) ? (
                         <div className="flex items-center gap-2">
                             <HubNotifyBell page={ctx.page} />
-                            {canManage && <HubSettingsTrigger onOpen={s.openSettings} />}
+                            {canManage && <HubSettingsTrigger onOpen={s.openSettings} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
                         </div>
                     ) : null} />
                 <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
@@ -204,10 +207,14 @@ export function GuildPage(): JSX.Element {
     // the plugin list has settled — and drawing it would remount the frame when
     // the module arrives (see `HubResourceVisibility`).
     const pluginsHydrated = usePluginsHydrated();
+    // A community hub's module is its own lazy chunk — hold the skeleton until it lands.
+    const modulePending = useHubModulePending(query.data?.guild.kind);
+    const moduleError = useHubModuleLoadError(query.data?.guild.kind);
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-    if (!query.data || !pluginsHydrated) return <LoadingState />;
+    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
+    if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
 }

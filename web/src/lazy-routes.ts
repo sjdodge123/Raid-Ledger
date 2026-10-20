@@ -215,6 +215,14 @@ export const BackupsPanel = lazyWithRetry(() =>
 export const LogsPanel = lazyWithRetry(() =>
     import('./pages/admin/logs-panel').then((m) => ({ default: m.LogsPanel })),
 );
+/** ROK-1870 — Admin → Hubs queue. */
+export const HubsPanel = lazyWithRetry(() =>
+    import('./pages/admin/hubs-panel').then((m) => ({ default: m.HubsPanel })),
+);
+/** ROK-1870 — `/hubs` community hub directory (L5). */
+export const HubsDirectoryPage = lazyWithRetry(() =>
+    import('./pages/hubs-directory-page').then((m) => ({ default: m.HubsDirectoryPage })),
+);
 
 // -- Lazy loaded Discord admin pages --
 export const DiscordOverviewPage = lazyWithRetry(() =>

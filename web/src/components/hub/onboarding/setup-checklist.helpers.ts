@@ -53,6 +53,8 @@ const SERVER_COPY: Record<string, Pick<SetupStep, 'label' | 'description' | 'act
 
 /** Apply the per-kind step set and copy. */
 function forKind(steps: SetupStep[], kind: GuildKind | undefined): SetupStep[] {
+    // ROK-1870: a community hub's leader is its approved proposer — there is nobody to assign.
+    if (kind === 'game_community') return steps.filter((s) => s.id !== 'leader');
     if (kind !== 'game_server') return steps;
     return steps.filter((s) => !SERVER_DROPPED.has(s.id)).map((s) => ({ ...s, ...(SERVER_COPY[s.id] ?? {}) }));
 }

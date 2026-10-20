@@ -3450,6 +3450,10 @@ same day (#1278, #1279, #1280).
 
 - **[med]** `api/src/calendar-sync/write/calendar-write.processor.ts:42` (`concurrency: 2`) + the 5 s `-rerun` delay in `calendar-write.enqueue.helpers.ts` — a write job that runs longer than 5 s can overlap its own rerun; both see "no link" and both create a Google copy. Pre-existing (ROK-1596), not introduced by ROK-1857. Suggested: `concurrency: 1` per connection key (BullMQ group/limiter on `cal-write-{conn}`), or make the create path claim the link row first (insert-then-upsert) so the second creator becomes a PATCH.
 
+### 2026-10-20 — feat/rok-1870-community-hubs (surfaced during the ROK-1870 fleet verify plan `2026-10-20-2016-a401`, lane 3)
+
+- low `web/src/components/hub/community/community-member-menu.tsx` (desktop dropdown placement) — on the LAST member row the portalled Manage menu opens downward past the bottom of an 800px-tall window (menu bottom at ~829px) and the page cannot scroll further, so "Make leader" is unreachable without resizing. The table-clipping bug it replaced is fixed; this is placement only. Suggested: flip the dropdown upward when the viewport has no room below (the `Combobox`/notify-bell portal pattern already measures — reuse its placement helper), or cap the menu height with an internal scroll.
+- nit setup checklist copy on `game_community` hubs still says "guild" in a few lines (e.g. "Import your roster"-style strings inherited from the WoW copy); route the remaining strings through `hub-copy.ts`.
 ### 2026-10-20 — feat/rok-1598-apple-caldav (surfaced during review r1 fix round)
 
 - **nit** `api/src/calendar-sync/services/calendar-connect-password.helpers.ts:55-58` — find-then-upsert race: two concurrent Apple connects for the same account can both report `created`, so the first read sync is enqueued twice (it collapses on the fixed job id; harmless). Not fixed in ROK-1598. Suggested: return `(xmax = 0) AS inserted` from the upsert's `RETURNING` instead of the prior find.

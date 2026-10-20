@@ -34,6 +34,30 @@ export async function findGuildKind(
   return row?.kind ?? null;
 }
 
+/** The fields the visitor Overview read checks (ROK-1870 D14). */
+export interface GuildVisibility {
+  kind: GuildKind;
+  status: schema.GuildSelect['status'];
+  hiddenAt: Date | null;
+}
+
+/** The guild's kind/status/hidden stamp, or null when it does not exist. */
+export async function findGuildVisibility(
+  db: Db,
+  guildId: number,
+): Promise<GuildVisibility | null> {
+  const [row] = await db
+    .select({
+      kind: guilds.kind,
+      status: guilds.status,
+      hiddenAt: guilds.hiddenAt,
+    })
+    .from(guilds)
+    .where(eq(guilds.id, guildId))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Row shape → contract `GuildSummary` (ISO timestamps). */
 export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
   return {

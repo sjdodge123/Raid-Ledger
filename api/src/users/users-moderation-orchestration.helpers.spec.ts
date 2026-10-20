@@ -25,6 +25,7 @@ import * as shots from '../feedback/feedback-screenshot-user.helpers';
 import * as authCache from '../auth/auth-user-cache';
 import * as signupCancel from '../events/signup-cancel-batch.helpers';
 import { at } from '../common/testing/narrow';
+import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 
 jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
@@ -33,6 +34,9 @@ jest.mock('./users-moderation-game-roles.helpers');
 jest.mock('../feedback/feedback-screenshot-user.helpers');
 jest.mock('../auth/auth-user-cache');
 jest.mock('../events/signup-cancel-batch.helpers');
+jest.mock('../guilds/community/community-membership.queries', () => ({
+  refreshUserHubCounts: jest.fn(),
+}));
 
 const kickUserById = writes.kickUserById as jest.Mock;
 const unkickUserById = writes.unkickUserById as jest.Mock;
@@ -340,6 +344,40 @@ describe('runBan', () => {
     expect(cancelAll).not.toHaveBeenCalled();
     expect(wipeUserData).not.toHaveBeenCalled();
     expect(deps.discord.kickMember).not.toHaveBeenCalled();
+  });
+});
+
+describe('runBan community member counts (ROK-1870 Codex r4)', () => {
+  const input = {
+    userId: TARGET.id,
+    actorId: ACTOR,
+    wipeData: false,
+    kickFromDiscord: false,
+  };
+
+  it('a ban without a wipe recounts the hubs the user is a live member of', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    const deps = makeDeps();
+    await runBan(deps, input);
+    expect(refreshUserHubCounts).toHaveBeenCalledWith(deps.db, TARGET.id);
+    expect(at(banUserById.mock.invocationCallOrder, 0)).toBeLessThan(
+      at(jest.mocked(refreshUserHubCounts).mock.invocationCallOrder, 0),
+    );
+  });
+
+  it('a failed recount keeps the ban and does not throw', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    jest.mocked(refreshUserHubCounts).mockRejectedValueOnce(new Error('db'));
+    await expect(runBan(makeDeps(), input)).resolves.toEqual({
+      success: true,
+      message: 'Bob has been banned.',
+    });
+  });
+
+  it('a repeat ban (no row) does not recount', async () => {
+    banUserById.mockResolvedValue(undefined);
+    await runBan(makeDeps(), input);
+    expect(refreshUserHubCounts).not.toHaveBeenCalled();
   });
 });
 
