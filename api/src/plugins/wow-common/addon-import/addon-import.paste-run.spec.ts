@@ -8,7 +8,7 @@
 import type { AddonApplyContext } from './addon-import-apply.types';
 import type { AddonBindingResult } from './addon-import.binding';
 import type { DecodedAddonPaste } from './addon-import.decoder';
-import { applyChar } from './addon-import-char.apply';
+import { applyChar, previewChar } from './addon-import-char.apply';
 import { applyGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
 import { AddonImportError } from './addon-import.errors';
@@ -16,6 +16,7 @@ import {
   buildPasteResult,
   runPaste,
   shouldApplyBinding,
+  withPendingBindingStatus,
 } from './addon-import.paste-run';
 
 jest.mock('./addon-import-char.apply', () => ({
@@ -185,5 +186,41 @@ describe('buildPasteResult', () => {
     expect(
       shouldApplyBinding(await runPaste(CTX, paste('char', 'raid'), false)),
     ).toBe(false);
+  });
+});
+
+// ROK-1739 Codex r4 P2: an unchanged re-import after the realm was mapped.
+describe('withPendingBindingStatus', () => {
+  const PENDING: AddonBindingResult = {
+    ...BINDING,
+    warnings: [{ code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' }],
+  };
+  const statusOf = async (binding: AddonBindingResult, dryRun: boolean) => {
+    (previewChar as jest.Mock).mockResolvedValue({
+      status: 'noop',
+      summary: CHAR_SUMMARY,
+    });
+    (applyChar as jest.Mock).mockResolvedValue({
+      status: 'noop',
+      summary: CHAR_SUMMARY,
+    });
+    const runs = await runPaste(CTX, paste('char'), dryRun);
+    const res = buildPasteResult(
+      withPendingBindingStatus(runs, binding, dryRun),
+      binding,
+    );
+    return res.status;
+  };
+
+  it('a noop preview with a pending RULESET_CHANGED is applicable (preview)', async () => {
+    expect(await statusOf(PENDING, true)).toBe('preview');
+  });
+
+  it('stays noop when nothing — incl. the ruleset — would change', async () => {
+    expect(await statusOf(BINDING, true)).toBe('noop');
+  });
+
+  it('leaves the apply status alone', async () => {
+    expect(await statusOf(PENDING, false)).toBe('noop');
   });
 });

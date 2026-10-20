@@ -57,6 +57,27 @@ export function shouldApplyBinding(runs: PasteSectionRun[]): boolean {
 }
 
 /**
+ * ROK-1739 (Codex r4 P2) — a re-import of an already-imported export is a
+ * section `noop`, but a realm mapped since then makes the binding's
+ * `RULESET_CHANGED` a pending character-row change. On preview that noop
+ * becomes `preview` so the opt-in is actionable; with no pending change
+ * (incl. once the inferred ruleset is stored) it stays `noop`.
+ */
+export function withPendingBindingStatus(
+  runs: PasteSectionRun[],
+  binding: AddonBindingResult,
+  dryRun: boolean,
+): PasteSectionRun[] {
+  const pending = binding.warnings.some((w) => w.code === 'RULESET_CHANGED');
+  if (!dryRun || !pending) return runs;
+  return runs.map((r) =>
+    r.outcome.status === 'noop'
+      ? { ...r, outcome: { ...r.outcome, status: 'preview' } }
+      : r,
+  );
+}
+
+/**
  * The 200 body. One section → exactly the ROK-1724 body. Several → the
  * top level mirrors the first section, `STALE_EXPORT` when ANY section is
  * stale, plus one `sections` entry per section.

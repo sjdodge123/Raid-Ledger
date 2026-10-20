@@ -21,6 +21,7 @@ import {
   pasteSections,
   runPaste,
   shouldApplyBinding,
+  withPendingBindingStatus,
 } from './addon-import.paste-run';
 
 /**
@@ -141,7 +142,11 @@ export async function runForCharacter(
     const { gameId, region } = ctx;
     await lockImportScope(tx, { gameId, region, guid: binding.pinGuid, paste });
   }
-  const runs = await runPaste(ctx, paste, request.dryRun);
+  const runs = withPendingBindingStatus(
+    await runPaste(ctx, paste, request.dryRun),
+    binding,
+    request.dryRun,
+  );
   // Lead ruling: a stale export writes NOTHING — binding updates too
   // (a mixed paste skips them only when EVERY section is stale).
   if (!request.dryRun && shouldApplyBinding(runs)) {

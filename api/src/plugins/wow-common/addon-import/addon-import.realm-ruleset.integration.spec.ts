@@ -244,6 +244,41 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
     ]);
   });
 
+  it('I8c re-importing an already-imported string after its realm is mapped → preview (not noop) → confirmed apply writes pvp → noop', async () => {
+    const token = await memberToken('realmlater');
+    const id = await createChar(token);
+    const s = exportFrom('Silent Hollow');
+    const first = await perChar(token, id, s, { dryRun: false });
+    expect(first.body.status).toBe('applied');
+    expect(rulesetChanged(first.body)).toEqual([]);
+    const mapped: WowForeverRealmRulesetEntryDto[] = [
+      ...MAP,
+      { region: 'us', realmName: 'Silent Hollow', ruleset: 'pvp' },
+    ];
+    await testApp.app
+      .get(SettingsService)
+      .set(WOW_FOREVER_REALM_RULESETS_KEY, JSON.stringify({ entries: mapped }));
+    const preview = await perChar(token, id, s);
+    expect({
+      status: preview.body.status,
+      changed: rulesetChanged(preview.body),
+    }).toEqual({
+      status: 'preview',
+      changed: [{ code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' }],
+    });
+    const apply = await perChar(token, id, s, {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    expect(apply.status).toBe(200);
+    expect(await storedRuleset(id)).toBe('pvp');
+    const again = await perChar(token, id, s);
+    expect({
+      status: again.body.status,
+      changed: rulesetChanged(again.body),
+    }).toEqual({ status: 'noop', changed: [] });
+  });
+
   it('I9 unknown realm → no RULESET_CHANGED, no rulesetInference, row unchanged even when confirmed', async () => {
     const token = await memberToken('realmunknown');
     const id = await createChar(token);
