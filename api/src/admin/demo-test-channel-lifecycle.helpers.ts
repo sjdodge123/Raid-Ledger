@@ -208,7 +208,8 @@ async function agePolls(db: Db, gameId: number, d: number): Promise<void> {
     .where(eq(m.gameId, gameId));
   await db
     .update(sv)
-    .set({ createdAt: back(sv.createdAt, d) })
+    // `updatedAt` too: a stance flip stamps it and `pollSignal` takes the max.
+    .set({ createdAt: back(sv.createdAt, d), updatedAt: back(sv.updatedAt, d) })
     .where(inArray(sv.slotId, slots));
 }
 
@@ -223,7 +224,11 @@ async function ageGameActivity(
   const p = schema.eventPlans;
   await db
     .update(p)
-    .set({ createdAt: back(p.createdAt, d) })
+    // `pollStartedAt` too: `eventPlanSignal` takes GREATEST of both.
+    .set({
+      createdAt: back(p.createdAt, d),
+      pollStartedAt: back(p.pollStartedAt, d),
+    })
     .where(eq(p.gameId, gameId));
   const lv = schema.communityLineupVotes;
   await db

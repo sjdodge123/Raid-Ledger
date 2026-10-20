@@ -185,4 +185,14 @@ describe('ageBinding', () => {
     // binding + events + match + slot votes + plans + lineup votes
     expect(db.update).toHaveBeenCalledTimes(6);
   });
+
+  it('backdates every timestamp a signal reads (Codex r5: vote updatedAt, plan pollStartedAt)', async () => {
+    db.limit.mockResolvedValueOnce([{ id: 'b', gameId: 7 }]);
+    await ageBinding(asDb(db), { bindingId: 'b', daysAgo: 10 });
+    const setKeys = (db.set as jest.Mock).mock.calls.map((c: unknown[]) =>
+      Object.keys(c[0] as object).sort(),
+    );
+    expect(setKeys).toContainEqual(['createdAt', 'updatedAt']);
+    expect(setKeys).toContainEqual(['createdAt', 'pollStartedAt']);
+  });
 });
