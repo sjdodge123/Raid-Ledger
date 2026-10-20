@@ -54,6 +54,11 @@ export interface GameLifecycleActivityOptions {
   guildId?: string;
   /** Restrict to these games (per-game nudge). */
   gameIds?: readonly number[];
+  /**
+   * Admin `GET activity?all=true` (spec §2.3): every game, not only those
+   * with a signal or a candidate binding. Ignored when `gameIds` is set.
+   */
+  allGames?: boolean;
   /** HUB-HOLD SEAM (L11/M7): games an active community hub holds open. */
   hubHoldGameIds?: ReadonlySet<number>;
   /** HUB-LINK SEAM (L8): games with a hub whose channel is NULL. */

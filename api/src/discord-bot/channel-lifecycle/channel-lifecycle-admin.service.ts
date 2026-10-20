@@ -112,6 +112,7 @@ export class ChannelLifecycleAdminService {
     const rows = await selectGameLifecycleActivity(this.db, {
       now,
       windowDays: settings.recentActivityDays,
+      allGames: all,
       // Same hub-link input as `reconcile`, so the preview shows `link_hub`.
       hubNeedsLinkGameIds:
         (await this.hubLinker?.hubNeedsLinkGameIds?.()) ?? new Set<number>(),

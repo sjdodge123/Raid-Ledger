@@ -146,17 +146,17 @@ async function selectSuppressedGameIds(
   return new Set(rows.map((r) => r.gameId));
 }
 
-/** Name + slug for the candidate games. */
+/** Name + slug for the candidate games; `null` ids = every game (`allGames`). */
 async function selectGames(
   db: Db,
-  ids: number[],
+  ids: number[] | null,
 ): Promise<Array<{ id: number; name: string; slug: string }>> {
-  if (ids.length === 0) return [];
+  if (ids !== null && ids.length === 0) return [];
   const g = schema.games;
   return db
     .select({ id: g.id, name: g.name, slug: g.slug })
     .from(g)
-    .where(inArray(g.id, ids))
+    .where(ids === null ? undefined : inArray(g.id, ids))
     .orderBy(asc(g.name));
 }
 
@@ -197,7 +197,8 @@ function toRow(
 /**
  * Derives per-game lifecycle activity for the reconciler and the admin list.
  *
- * @returns one row per game with a signal in the window or a candidate binding
+ * @returns one row per game with a signal in the window or a candidate
+ *   binding — or per game, when `allGames` (and no `gameIds`) is set
  */
 export async function selectGameLifecycleActivity(
   db: Db,
@@ -216,7 +217,7 @@ export async function selectGameLifecycleActivity(
   const ids = [...new Set([...aggregates.keys(), ...bindings.keys()])].filter(
     (id) => !only || only.has(id),
   );
-  const games = await selectGames(db, ids);
+  const games = await selectGames(db, opts.allGames && !only ? null : ids);
   return games.map((game) =>
     toRow(game, aggregates.get(game.id) ?? [], opts, {
       suppressed: suppressed.has(game.id),

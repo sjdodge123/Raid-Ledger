@@ -306,6 +306,23 @@ describe('game lifecycle activity — polls, plans, lineup votes (D6–D10)', ()
   });
 });
 
+describe('game lifecycle activity — allGames (D15, admin ?all=true, Codex r3)', () => {
+  it('D15: a game with no signal and no binding appears only with allGames', async () => {
+    const g = await makeGame();
+    const opts = { now: new Date(), windowDays: 30 };
+    const quiet = await selectGameLifecycleActivity(testApp.db, opts);
+    expect(quiet.find((r) => r.gameId === g)).toBeUndefined();
+    const all = await selectGameLifecycleActivity(testApp.db, {
+      ...opts,
+      allGames: true,
+    });
+    expect(all.find((r) => r.gameId === g)).toMatchObject({
+      itemCount: 0,
+      binding: null,
+    });
+  });
+});
+
 describe('game lifecycle activity — candidate bindings (D12, D13)', () => {
   it('D12: a series-only binding is invisible — candidate binding is null', async () => {
     const g = await makeGame();
