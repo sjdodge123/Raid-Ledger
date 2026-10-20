@@ -9,7 +9,8 @@ import {
   ValheimRecipeCatalogResponseSchema,
   ValheimRecipePlanResponseSchema,
   ValheimRecipeTreeResponseSchema,
-  type ValheimCharacterMessage,
+  ValheimCharacterMessageSchema,
+  ValheimLinkMessageSchema,
   type ValheimPlanNode,
   type ValheimRecipePlanResponse,
   type ValheimRecipeTreeResponse,
@@ -92,7 +93,7 @@ async function makeServer(n: number): Promise<number> {
 
 /** Store (or replace) a message as ingest does, then drain it through the importer. */
 async function importMsg(serverId: number, msg: Msg): Promise<void> {
-  const row = valheimSnapshotRow(serverId, msg as never);
+  const row = valheimSnapshotRow(serverId, ValheimLinkMessageSchema.parse(msg));
   const S = schema.valheimLinkSnapshots;
   await testApp.db
     .insert(S)
@@ -158,9 +159,9 @@ const scanMsg = (containers: Msg[]): Msg => ({
 });
 
 async function claimProfile(playerId: string, by: number): Promise<void> {
-  const ch = loadValheimFixture(
-    'character-vanilla',
-  ) as unknown as ValheimCharacterMessage;
+  const ch = ValheimCharacterMessageSchema.parse(
+    loadValheimFixture('character-vanilla'),
+  );
   await testApp.db.insert(schema.valheimProfiles).values({
     pelicanServerId: server,
     steamId: `S_${playerId}`,
@@ -516,6 +517,10 @@ describe('plan (R5–R8, R13)', () => {
     const asMember = await plan(`${q}&includePersonal=true`, tokens.member);
     expect(asMember).toEqual(await plan(q, tokens.member));
     expect(haveOf(asMember, 'TinOre')).toBe(3);
+    // A site admin (no claimed character) nets their OWN private chests
+    // only — never the owner's 20 or the other player's 500.
+    const asAdmin = await plan(`${q}&includePersonal=true`, admin);
+    expect(haveOf(asAdmin, 'TinOre')).toBe(3);
   });
 
   it('includeVehicles=false drops cart stock', async () => {
@@ -536,10 +541,36 @@ describe('plan (R5–R8, R13)', () => {
     await importMsg(server, scanMsg([box({ items: [stack('Copper', 3)] })]));
     const r = await plan('targets=Bronze:1:1,Bronze:1:1');
     const coppers = r.nodes.filter((n) => n.prefab === 'Copper');
+    // have = the ledger stock available before each take: 3, then 1 left.
     expect(coppers.map((n) => [n.have, n.short])).toEqual([
-      [2, 0],
+      [3, 0],
       [1, 1],
     ]);
+  });
+
+  it('a newer same-version re-import replaces a warm cached graph', async () => {
+    const swordVia = async () =>
+      nodeOf(await plan('targets=SwordBronze:1:1'), 'SwordBronze').via.type;
+    expect(await swordVia()).toBe('recipe'); // warms the graph cache
+    expect((await catalogue()).entries.map((e) => e.prefab)).toContain(
+      'SwordBronze',
+    );
+    await importMsg(
+      server,
+      bronzeRecipes({
+        capturedAt: '2026-10-18T09:00:00Z',
+        recipes: [
+          recipeEntry('Recipe_Bronze', 'Bronze', [
+            recipeRes('Copper', 2),
+            recipeRes('Tin', 1),
+          ]),
+        ],
+      }),
+    );
+    expect(await swordVia()).toBe('gathered');
+    expect((await catalogue()).entries.map((e) => e.prefab)).not.toContain(
+      'SwordBronze',
+    );
   });
 
   it('R8 no scan: stock none, have/short null, need still priced', async () => {

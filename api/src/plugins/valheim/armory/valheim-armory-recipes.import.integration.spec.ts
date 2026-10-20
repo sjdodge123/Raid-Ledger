@@ -10,6 +10,7 @@ import { gzipSync } from 'node:zlib';
 import {
   VALHEIM_LINK_RECIPES_MAX,
   VALHEIM_LINK_RECIPES_MAX_BYTES,
+  ValheimLinkMessageSchema,
   ValheimLinkTokenIssuedSchema,
   ValheimRecipeCatalogResponseSchema,
 } from '@raid-ledger/contract';
@@ -103,7 +104,7 @@ function fixture(name: string, over: Msg = {}): Msg {
 
 /** Store a message as ingest does (replacing the key) without the route. */
 async function pushDirect(msg: Msg): Promise<void> {
-  const row = valheimSnapshotRow(server, msg as never);
+  const row = valheimSnapshotRow(server, ValheimLinkMessageSchema.parse(msg));
   await testApp.db
     .insert(S)
     .values(row)
