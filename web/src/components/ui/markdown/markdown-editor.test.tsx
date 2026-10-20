@@ -130,3 +130,19 @@ describe('MarkdownEditor — stored image syntax (ROK-1868 Codex P2)', () => {
         expect(shown(saved), 'the saved source must display exactly like the stored one').toBe(shown(md));
     });
 });
+
+describe('MarkdownEditor — multi-backtick code spans (Codex r3)', () => {
+    const CODE = 'a `<b>` &lt; c';
+
+    it('normalisation leaves a two-backtick code span verbatim', () => {
+        expect(normalizeEditorMarkdown('x ``a `<b>` &lt; c`` &lt;y')).toBe('x ``a `<b>` &lt; c`` \\<y');
+    });
+
+    it('inline code containing a backtick and &lt; survives a save unchanged', () => {
+        const { editor } = setup('');
+        editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: CODE, marks: [{ type: 'code' }] }] }] });
+        const saved = normalizeEditorMarkdown(editor.getMarkdown());
+        const code = render(<MarkdownBlock text={saved} />).container.querySelector('code');
+        expect(code?.textContent, `saved ${JSON.stringify(saved)} must keep the code text`).toBe(CODE);
+    });
+});

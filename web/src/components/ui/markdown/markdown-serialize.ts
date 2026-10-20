@@ -9,6 +9,8 @@
  * Code spans are emitted verbatim by TipTap and are left untouched.
  */
 const ENTITY = /&(lt|gt|amp);/g;
+/** A code span: an equal-length backtick run closes it (CommonMark), so ``a `b` c`` stays whole. */
+const CODE_SPAN = /((?<!`)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
 const LOOKS_LIKE_ENTITY = /^[A-Za-z#][A-Za-z0-9]*;/;
 
 /** Rewrite one non-code segment. */
@@ -28,7 +30,8 @@ function decodeSegment(segment: string): string {
  */
 export function normalizeEditorMarkdown(markdown: string): string {
     return markdown
-        .split(/(`[^`\n]*`)/)
-        .map((part: string, i: number): string => (i % 2 === 1 ? part : decodeSegment(part)))
+        .split(CODE_SPAN)
+        // split() with two groups yields [text, span, ticks, text, span, ticks, …].
+        .flatMap((part: string, i: number): string[] => (i % 3 === 2 ? [] : [i % 3 === 1 ? part : decodeSegment(part)]))
         .join('');
 }
