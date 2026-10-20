@@ -4,9 +4,10 @@
  * ≥1024px two columns (picker + list | tree); below, stacked with the list
  * after the tree. The list is kept per browser per server (D12).
  */
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type { ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 import { useNow } from '../../../hooks/use-now';
+import { MapError } from '../map/map-error';
 import { useValheimMaterials } from '../hooks/use-valheim-materials';
 import { useValheimRecipeCatalog, useValheimRecipePlan, useValheimRecipeTree } from '../hooks/use-valheim-recipes';
 import { loadPlannerTargets, savePlannerTargets } from './planner-storage';
@@ -76,11 +77,28 @@ function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogResponse
     return { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove, atCap };
 }
 
+type PlannerState = ReturnType<typeof usePlannerState>;
+
+/** The tree column: the active response, its error with a Retry, or the idle prompt. */
+function TreePane({ picked, plan, tree, names }: Pick<PlannerState, 'picked' | 'plan' | 'tree' | 'names'>): JSX.Element {
+    const active = picked !== null ? tree : plan;
+    const rootKinds = useMemo(
+        () => (picked !== null ? [picked.kind] : (plan.data?.targets.map((t) => t.kind) ?? [])),
+        [picked, plan.data],
+    );
+    const label = picked !== null ? `What ${picked.name} needs` : 'What your list needs';
+    if (active.data !== undefined)
+        return <RecipeTree key={label} nodes={active.data.nodes} truncated={active.data.truncated} names={names} label={label} rootKinds={rootKinds} />;
+    if (active.isError) {
+        const text = picked !== null ? `Couldn’t load what ${picked.name} needs.` : 'Couldn’t load your list’s plan.';
+        return <MapError text={text} onRetry={() => void active.refetch()} />;
+    }
+    return <p className="text-sm text-muted">Pick an item or piece to see what it takes.</p>;
+}
+
 function PlannerBody({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
     const { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove, atCap } =
         usePlannerState(serverId, catalog);
-    const shown = picked !== null ? tree.data : plan.data;
-    const label = picked !== null ? `What ${picked.name} needs` : 'What your list needs';
     return (
         <div className="space-y-4">
             <HeaderLine catalog={catalog} capturedAt={plan.data?.stock === 'scan' ? plan.data.capturedAt : null} />
@@ -91,11 +109,7 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
                 </div>
                 <div className="space-y-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
                     {picked === null && plan.data?.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
-                    {shown === undefined ? (
-                        <p className="text-sm text-muted">Pick an item or piece to see what it takes.</p>
-                    ) : (
-                        <RecipeTree key={label} nodes={shown.nodes} truncated={shown.truncated} names={names} label={label} />
-                    )}
+                    <TreePane picked={picked} plan={plan} tree={tree} names={names} />
                 </div>
                 <div className="lg:col-start-1 lg:row-start-2">
                     <ShoppingList targets={targets} plan={plan.data} names={names} onRemove={onRemove} />

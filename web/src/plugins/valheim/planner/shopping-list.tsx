@@ -26,7 +26,7 @@ function TargetList({ targets, names, onRemove }: Omit<Props, 'plan'>): JSX.Elem
     return (
         <ul aria-label="Planned items" className="space-y-1">
             {targets.map((t, i) => {
-                const name = names.nameOf(t.prefab);
+                const name = names.nameOf(t.prefab, t.kind);
                 return (
                     <li key={`${t.prefab}:${t.quality}`} className="flex items-center justify-between gap-2 text-sm text-foreground">
                         <span>
@@ -58,7 +58,7 @@ function Leaves({ plan, names }: { plan: ValheimRecipePlanResponse; names: Plann
             <tbody>
                 {plan.shoppingList.map((l) => (
                     <tr key={l.prefab} className="border-t border-edge text-foreground">
-                        <td className="py-1.5">{names.nameOf(l.prefab)}</td>
+                        <td className="py-1.5">{names.nameOf(l.prefab, 'item')}</td>
                         <td className="py-1.5 text-right tabular-nums">{formatAmount(l.need)}</td>
                         <td className="py-1.5 text-right tabular-nums">{formatAmount(l.have)}</td>
                         <td className="py-1.5 text-right tabular-nums">{formatAmount(l.short)}</td>
@@ -79,7 +79,7 @@ export function ShoppingList({ targets, plan, names, onRemove }: Props): JSX.Ele
                 {plan !== undefined && (
                     <span className="flex items-center gap-1 text-xs text-muted">
                         Copy list
-                        <CopyButton text={shoppingListText(plan.shoppingList, names.nameOf)} />
+                        <CopyButton text={shoppingListText(plan.shoppingList, (p) => names.nameOf(p, 'item'))} />
                     </span>
                 )}
             </div>
@@ -89,7 +89,7 @@ export function ShoppingList({ targets, plan, names, onRemove }: Props): JSX.Ele
                 <p className="text-xs text-muted">
                     Fuel (estimate):{' '}
                     {plan.fuelEstimates
-                        .map((f) => `${names.nameOf(f.prefab)} for ${formatSeconds(f.seconds)} of ${names.stationName(f.processor)}`)
+                        .map((f) => `${names.nameOf(f.prefab, 'item')} for ${formatSeconds(f.seconds)} of ${names.stationName(f.processor)}`)
                         .join(' · ')}
                 </p>
             )}

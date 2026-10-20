@@ -7,17 +7,35 @@ import { useMemo } from 'react';
 import type {
     ValheimCatalogEntry,
     ValheimMapBaseMap,
+    ValheimPlanNode,
     ValheimRecipeCatalogResponse,
 } from '@raid-ledger/contract';
+import type { PlannerKind } from './planner.helpers';
 import {
     useItemIconsFor,
     type ItemIconContext,
 } from '../character/use-item-icons';
 
+/** Lookups take the kind: an item and a piece may share a prefab. */
 export interface PlannerNames {
-    nameOf: (prefab: string) => string;
+    nameOf: (prefab: string, kind: PlannerKind) => string;
     stationName: (prefab: string) => string;
-    ctxFor: (prefab: string) => ItemIconContext;
+    ctxFor: (prefab: string, kind: PlannerKind) => ItemIconContext;
+}
+
+/**
+ * Root i is target i (the resolver pushes one root per target, in request
+ * order); every ingredient below a root is an item.
+ */
+export function rootKindOf(
+    nodes: readonly ValheimPlanNode[],
+    rootKinds: readonly (PlannerKind | undefined)[],
+): (node: ValheimPlanNode) => PlannerKind {
+    const byId = new Map<number, PlannerKind>();
+    for (const n of nodes) {
+        if (n.parentId === null) byId.set(n.id, rootKinds[byId.size] ?? 'item');
+    }
+    return (node) => byId.get(node.id) ?? 'item';
 }
 
 type Record_ = Record<string, ValheimCatalogEntry>;
@@ -64,9 +82,13 @@ export function usePlannerNames(
     const pieceCtx = useItemIconsFor({ serverId, items: pieces, atlas: catalog.recipeAtlas });
     return useMemo(
         () => ({
-            nameOf: (p) => pieces[p]?.name ?? allItems[p]?.name ?? p,
+            nameOf: (p, kind) =>
+                (kind === 'piece' ? (pieces[p] ?? allItems[p]) : (allItems[p] ?? pieces[p]))?.name ?? p,
             stationName: (p) => pieces[p]?.name ?? p,
-            ctxFor: (p) => (pieces[p] === undefined ? itemCtx : pieceCtx),
+            ctxFor: (p, kind) => {
+                const piece = kind === 'piece' ? pieces[p] !== undefined : allItems[p] === undefined && pieces[p] !== undefined;
+                return piece ? pieceCtx : itemCtx;
+            },
         }),
         [pieces, allItems, itemCtx, pieceCtx],
     );

@@ -10,11 +10,12 @@ import { StatusChip } from '../../../components/ui/status-chip';
 import { ItemIcon } from '../character/item-icon';
 import { resolveItem } from '../character/item-icon.helpers';
 import { HaveNeedBar } from './have-need-bar';
-import { formatAmount, viaChips } from './planner.helpers';
+import { formatAmount, viaChips, type PlannerKind } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
 
 interface RowProps {
     node: ValheimPlanNode;
+    kind: PlannerKind;
     names: PlannerNames;
     hasChildren: boolean;
     expanded: boolean;
@@ -61,9 +62,9 @@ function ViaChips({ node, names }: { node: ValheimPlanNode; names: PlannerNames 
     );
 }
 
-export function RecipeTreeRow({ node, names, hasChildren, expanded, onToggle }: RowProps): JSX.Element {
-    const name = names.nameOf(node.prefab);
-    const ctx = names.ctxFor(node.prefab);
+export function RecipeTreeRow({ node, kind, names, hasChildren, expanded, onToggle }: RowProps): JSX.Element {
+    const name = names.nameOf(node.prefab, kind);
+    const ctx = names.ctxFor(node.prefab, kind);
     const resolved = { ...resolveItem(node.prefab, ctx.items, ctx.atlas), label: name };
     return (
         <div className="flex items-start gap-2 py-1.5" data-testid="valheim-planner-row" data-prefab={node.prefab}>

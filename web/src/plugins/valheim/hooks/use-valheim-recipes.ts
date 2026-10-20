@@ -120,8 +120,9 @@ export function useValheimRecipePlan(
         queryFn: () =>
             fetchApi(recipesPath(serverId, '/plan', q), {}, ValheimRecipePlanResponseSchema),
         enabled: targets !== '',
+        // An emptied list keeps no placeholder: the deleted plan must not linger.
         placeholderData: (prev, prevQuery) =>
-            sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
+            targets === '' ? undefined : sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
     });
 }
