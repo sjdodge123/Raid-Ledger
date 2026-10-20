@@ -1,14 +1,15 @@
 /**
- * ROK-1785 — the two "add an editor" pickers from the prototype's
- * `EditorsPanel.tsx`: a whole rank, or one chosen member. Already-granted
- * ranks and members drop out of their picker.
+ * ROK-1785 — the "add an editor" picker from the prototype's `EditorsPanel.tsx`:
+ * one chosen member. Already-granted members drop out of it. ROK-1794
+ * "explicit grants only": the whole-rank picker is gone — a rank grant confers
+ * nothing, so existing ones show as inactive and new ones are not offered.
  */
 import { useState, type JSX } from 'react';
 import type { CreateGuildEditorInput, GuildEditor, GuildPage } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Select } from '../../../components/ui/select';
-import { delegableMembers, delegableRanks, rankLabel } from './wow-guild.helpers';
+import { delegableMembers, rankLabel } from './wow-guild.helpers';
 
 interface PickerProps {
     page: GuildPage;
@@ -37,17 +38,6 @@ function PickerRow({ label, testId, options, pending, onPick }: PickerRowProps):
             </Field>
             <Button variant="secondary" onClick={add} disabled={!pick || pending}>Add editor</Button>
         </div>
-    );
-}
-
-export function AddRankEditor({ page, editors, pending, onAdd }: PickerProps): JSX.Element {
-    const granted = new Set(editors.map((e) => e.rankIndex));
-    const options = delegableRanks(page)
-        .filter((r) => !granted.has(r.rankIndex))
-        .map((r) => ({ value: String(r.rankIndex), label: r.name }));
-    return (
-        <PickerRow label="Whole rank" testId="guild-editor-rank-select" options={options} pending={pending}
-            onPick={(v) => onAdd({ kind: 'rank', rankIndex: Number(v) })} />
     );
 }
 

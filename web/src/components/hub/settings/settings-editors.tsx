@@ -12,6 +12,7 @@ import type { GuildEditor } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../../plugins/hub-module';
 import { Button } from '../../ui/button';
 import { RoleBadge } from '../../ui/role-badge';
+import { StatusChip } from '../../ui/status-chip';
 import { useAddGuildEditor, useGuildEditors, useRemoveGuildEditor } from '../api/use-guild';
 import { hubCopy } from '../hub-copy';
 
@@ -29,12 +30,23 @@ function editorLabel(e: GuildEditor): string {
     return e.memberName ?? 'Unknown member';
 }
 
+/** ROK-1794 "explicit grants only": a rank grant is kept on the list but confers nothing. */
+const INACTIVE_LABEL = 'Inactive — re-grant by name';
+const INACTIVE_TITLE = 'Rank grants no longer give edit rights. Grant each editor by name.';
+
+const CHIP_TONE = {
+    active: 'border-success/30 bg-success/10 text-success',
+    inactive: 'border-edge bg-panel text-muted',
+} as const;
+
 function EditorChip({ editor, disabled, onRemove }: { editor: GuildEditor; disabled: boolean; onRemove: () => void }): JSX.Element {
     const label = editorLabel(editor);
+    const inactive = editor.kind === 'rank';
     return (
-        <li data-testid="guild-editor-chip"
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-success/30 bg-success/10 pl-3 text-sm font-medium text-success">
+        <li data-testid="guild-editor-chip" data-active={inactive ? 'false' : 'true'}
+            className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border pl-3 text-sm font-medium ${CHIP_TONE[inactive ? 'inactive' : 'active']}`}>
             {label}
+            {inactive && <StatusChip tone="neutral" title={INACTIVE_TITLE}>{INACTIVE_LABEL}</StatusChip>}
             <Button variant="ghost" iconOnly aria-label={`Remove ${label}`} onClick={onRemove} disabled={disabled}>
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
