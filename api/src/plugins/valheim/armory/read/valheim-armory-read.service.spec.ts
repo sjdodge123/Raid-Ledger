@@ -5,11 +5,13 @@
  */
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import type { GuildActor } from '../../../../guilds/guild-access.service';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 import { ValheimArmoryReadService } from './valheim-armory-read.service';
 
 const ORIGINAL = process.env.VALHEIM_LINK_BLOB_DIR;
 let storagePath: string | null;
+const MEMBER: GuildActor = { id: 2, role: 'member' };
 
 async function service(): Promise<ValheimArmoryReadService> {
   const mod = await Test.createTestingModule({
@@ -17,7 +19,10 @@ async function service(): Promise<ValheimArmoryReadService> {
       ValheimArmoryReadService,
       {
         provide: ValheimArmoryReadRepository,
-        useValue: { findBlobPath: () => Promise.resolve(storagePath) },
+        useValue: {
+          findBlobPath: () => Promise.resolve(storagePath),
+          findServerHub: () => Promise.resolve(null),
+        },
       },
     ],
   }).compile();
@@ -36,15 +41,15 @@ afterAll(() => {
 describe('ValheimArmoryReadService.blobPath', () => {
   it('resolves a stored path inside the blob root', async () => {
     storagePath = '7/abc.png';
-    expect(await (await service()).blobPath(7, 'abc')).toBe(
+    expect(await (await service()).blobPath(7, 'abc', MEMBER)).toBe(
       '/srv/vh-blobs/7/abc.png',
     );
   });
 
   it('404s a storage_path that escapes the blob root', async () => {
     storagePath = '../../etc/passwd';
-    await expect((await service()).blobPath(7, 'abc')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      (await service()).blobPath(7, 'abc', MEMBER),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
