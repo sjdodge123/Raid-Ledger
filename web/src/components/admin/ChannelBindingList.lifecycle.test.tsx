@@ -47,6 +47,25 @@ describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
         expect(within(auto).getByRole('button', { name: 'Pin #baldurs-gate-3' })).toBeDisabled();
     });
 
+    it('a rejected pin PATCH is consumed, never an unhandled rejection (Codex r5)', async () => {
+        // Rejected lazily (inside the call) so only the handler can be the one to catch it;
+        // a plain function, not vi.fn(): vi.fn attaches its own `then` to track settled results.
+        const calls: unknown[] = [];
+        const thenSpies: Array<ReturnType<typeof vi.fn>> = [];
+        const onUpdate = (...args: unknown[]) => {
+            calls.push(args);
+            const rejected = Promise.reject(new Error('Pin refused'));
+            const spy = vi.fn(rejected.then.bind(rejected));
+            thenSpies.push(spy);
+            return Object.assign(rejected, { then: spy });
+        };
+        render(<ChannelBindingList bindings={[AUTO]} onUpdate={onUpdate} onDelete={vi.fn()} isUpdating={false} isDeleting={false} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Pin #baldurs-gate-3' }));
+        expect(calls).toEqual([['auto', { pinned: true }]]);
+        expect(thenSpies.length).toBe(1);
+        expect(at(thenSpies, 0), 'the pin handler must attach a rejection handler').toHaveBeenCalled();
+    });
+
     it('a pin shows pending + its error on THAT row only', async () => {
         const AUTO2 = binding({ id: 'auto2', channelId: 'c3', channelName: 'elden-ring', lifecycleState: 'active', autoManaged: true, pinned: false });
         const onUpdate = vi.fn(() => new Promise<unknown>(() => {}));

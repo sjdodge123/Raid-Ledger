@@ -168,7 +168,14 @@ function useBindingEditor(
     // Read when the PATCH settles: the promise callback's closure holds the render-time editingId.
     const editingRef = useRef<string | null>(null);
     const changeEditing = (id: string | null) => { editingRef.current = id; setEditingId(id); onEditingChange?.(id); };
-    const handlePin = (id: string, pinned: boolean) => { setSavedId(id); setPinId(id); void onUpdate(id, { pinned }); };
+    // The page toasts + rethrows a rejected PATCH; the row's inline error comes from
+    // the mutation state, so the rejection is consumed here (Codex r5), like handleSave.
+    const handlePin = (id: string, pinned: boolean) => {
+        setSavedId(id);
+        setPinId(id);
+        const result: unknown = onUpdate(id, { pinned });
+        if (isThenable(result)) result.catch(() => {});
+    };
     const handleSave = (id: string, dto: UpdateChannelBindingDto) => {
         setSavedId(id);
         setPinId(null);
