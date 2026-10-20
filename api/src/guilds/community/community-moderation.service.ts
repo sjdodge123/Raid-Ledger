@@ -155,7 +155,11 @@ export class CommunityModerationService {
     await requireCommunityHub(this.db, hubId, true);
     const row = await findMembership(this.db, hubId, userId);
     if (row?.bannedAt == null) throw new NotFoundException(NOT_BANNED);
-    if (!mayModerate(await this.members.role(actor, hubId), row.role)) {
+    // Codex r4: a banned row is never live, so a stored `leader` is a former
+    // leader who left before a pre-ban — not the hub's Leader. Rank it as a
+    // plain member, or no one (staff included) could ever lift the ban.
+    const target = row.role === 'leader' ? 'member' : row.role;
+    if (!mayModerate(await this.members.role(actor, hubId), target)) {
       throw new ForbiddenException("You can't lift this ban");
     }
     if (!(await unban(this.db, hubId, userId))) {
