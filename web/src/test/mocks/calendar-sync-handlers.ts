@@ -9,6 +9,7 @@
  */
 import { http, HttpResponse } from 'msw';
 import {
+    AppleConnectInputSchema,
     UpdateAdminCalendarSyncSettingsSchema,
     UpdateCalendarConnectionSchema,
     UpdateCalendarReadSettingsSchema,
@@ -18,6 +19,7 @@ import {
     type ProviderCalendar,
     type UpdateAdminCalendarSyncSettings,
 } from '@raid-ledger/contract';
+import { buildAppleConnection } from '../factories/calendar-sync';
 
 const API_BASE = 'http://localhost:3000';
 export const CALENDAR_SYNC_SETTINGS_URL = `${API_BASE}/admin/settings/calendar-sync`;
@@ -72,6 +74,11 @@ export const EVENT_ICS_URL = `${API_BASE}/events/:id/ics`;
 export const PROVIDER_CALENDARS_URL = `${API_BASE}/users/me/calendars/:id/calendars`;
 export const CALENDAR_READ_SETTINGS_URL = `${API_BASE}/users/me/calendars/settings`;
 export const CALENDAR_SYNC_NOW_URL = `${API_BASE}/users/me/calendars/:id/sync`;
+/** Apple connect (ROK-1598 D10): app-specific password, 201 created / 200 reconnected. */
+export const APPLE_CONNECT_URL = `${API_BASE}/users/me/calendars/apple`;
+/** Passwords the Apple handler refuses: `…-fail` → 400 `apple_auth_failed`, `…-down` → 503 `apple_unavailable`. */
+export const APPLE_PASSWORD_FAIL = 'xxxx-xxxx-xxxx-fail';
+export const APPLE_PASSWORD_DOWN = 'xxxx-xxxx-xxxx-down';
 export const GOOGLE_CONSENT_URL_FIXTURE = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client';
 
 /** A healthy Google connection, as `GET /users/me/calendars` lists it. */
@@ -90,7 +97,7 @@ export const calendarConnectionFixture: CalendarConnection = {
 export function calendarsOverviewFixture(over: Partial<CalendarsOverview> = {}): CalendarsOverview {
     return {
         enabled: true,
-        providers: { google: { available: true }, microsoft: { available: false }, apple: { available: false } },
+        providers: { google: { available: true }, microsoft: { available: false }, apple: { available: true } },
         connections: [],
         readSettings: { mode: 'both', lookAheadWeeks: 4 },
         feed: null,
@@ -105,6 +112,7 @@ export const calendarsOverviewVariants = {
     notConfigured: calendarsOverviewFixture({
         providers: { google: { available: false }, microsoft: { available: false }, apple: { available: false } },
     }),
+    withApple: calendarsOverviewFixture({ connections: [buildAppleConnection()] }),
     withFeed: calendarsOverviewFixture({ feed: { url: CALENDAR_FEED_URL_FIXTURE } }),
     disabled: calendarsOverviewFixture({
         enabled: false,
@@ -129,9 +137,30 @@ export function userCalendarHandlers(overview: CalendarsOverview = calendarsOver
             const read = { ...calendarConnectionFixture.read, ...body.read };
             return HttpResponse.json({ ...calendarConnectionFixture, read, write });
         }),
+        appleConnectHandler(),
         ...calendarReadHandlers(),
     ];
 }
+
+/** `POST …/apple`: bad body → 400 `invalid_input`; the two sentinel passwords refuse; else 201 + an Apple connection. */
+export function appleConnectHandler() {
+    return http.post(APPLE_CONNECT_URL, async ({ request }) => {
+        const parsed = AppleConnectInputSchema.safeParse(await request.json());
+        if (!parsed.success) {
+            const fields = [...new Set(parsed.error.issues.map((i) => String(i.path[0])))];
+            return HttpResponse.json({ code: 'invalid_input', fields }, { status: 400 });
+        }
+        const { email, appPassword } = parsed.data;
+        if (appPassword === APPLE_PASSWORD_FAIL) return HttpResponse.json({ code: 'apple_auth_failed' }, { status: 400 });
+        if (appPassword === APPLE_PASSWORD_DOWN) return HttpResponse.json({ code: 'apple_unavailable' }, { status: 503 });
+        return HttpResponse.json(buildAppleConnection({ accountLabel: email.trim() }), { status: 201 });
+    });
+}
+
+/** The route throttle (D13): Nest's throttler body, no `code`. */
+export const appleConnectThrottledHandler = () => http.post(APPLE_CONNECT_URL, () => HttpResponse.json(
+    { statusCode: 429, message: 'ThrottlerException: Too Many Requests' }, { status: 429 },
+));
 
 /* ── Read sync (ROK-1595) ─────────────────────────────────────────────── */
 

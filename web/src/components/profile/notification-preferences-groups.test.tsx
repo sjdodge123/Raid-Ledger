@@ -27,6 +27,12 @@ describe('NotificationPreferencesSection — group rows', () => {
         expect(screen.getByText('Group events')).toBeInTheDocument();
     });
 
+    it('renders the ROK-1870 hub proposal rows', () => {
+        render(<MemoryRouter><NotificationPreferencesSection /></MemoryRouter>);
+        expect(screen.getByText('Hub proposals')).toBeInTheDocument();
+        expect(screen.getByText('Hub proposal decisions')).toBeInTheDocument();
+    });
+
     it('mounts the muted-groups list once, directly after the Group posts row', () => {
         render(<MemoryRouter><NotificationPreferencesSection /></MemoryRouter>);
         const stubs = screen.getAllByTestId('muted-groups-stub');

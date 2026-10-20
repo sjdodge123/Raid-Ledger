@@ -1,8 +1,8 @@
 /**
  * Member Calendar Sync hooks (ROK-1594): the Profile → Calendars overview,
- * the Google OAuth start (with a consent `intent`, ROK-1596), the write
- * settings PATCH (ROK-1596), disconnect, and one event's calendar copy + its
- * Undo (ROK-1596 S3).
+ * the Google OAuth start (with a consent `intent`, ROK-1596), the Apple
+ * app-specific-password connect (ROK-1598), the write settings PATCH
+ * (ROK-1596), disconnect, and one event's calendar copy + its Undo (ROK-1596 S3).
  *
  * Responses parse with the contract schemas (`.strict()`), so a server that
  * ever leaked a credential key fails the parse instead of reaching the page.
@@ -10,9 +10,14 @@
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+    AppleConnectErrorSchema,
+    CalendarConnectionSchema,
     CalendarsOverviewSchema,
     EventCalendarCopySchema,
     OAuthStartResponseSchema,
+    type AppleConnectErrorCode,
+    type AppleConnectInput,
+    type CalendarConnection,
     type CalendarOAuthIntent,
     type CalendarsOverview,
     type EventCalendarCopy,
@@ -66,6 +71,59 @@ export function useStartOAuth(intent: CalendarOAuthIntent = 'connect') {
 /** K1 "Connect": the plain sign-in. */
 export function useStartGoogleConnect() {
     return useStartOAuth('connect');
+}
+
+/** Why an Apple connect was refused: the server's code, the route throttle, or no answer at all. */
+export type AppleConnectFailure = AppleConnectErrorCode | 'throttled' | 'network';
+
+/** Rejection of {@link useConnectApple}; `failure` picks the inline copy. Never carries the input. */
+export class AppleConnectRequestError extends Error {
+    readonly failure: AppleConnectFailure;
+    constructor(failure: AppleConnectFailure) {
+        super(failure);
+        this.name = 'AppleConnectRequestError';
+        this.failure = failure;
+    }
+}
+
+/** Map a refused `POST …/apple` to its failure: 429 is the throttle, else the parsed `{ code }`. */
+export async function appleConnectFailureOf(res: Response): Promise<AppleConnectFailure> {
+    if (res.status === 429) return 'throttled';
+    const body: unknown = await res.json().catch(() => null);
+    const parsed = AppleConnectErrorSchema.safeParse(body);
+    if (parsed.success) return parsed.data.code;
+    return res.status >= 500 ? 'apple_unavailable' : 'network';
+}
+
+async function postAppleConnect(input: AppleConnectInput): Promise<CalendarConnection> {
+    let res: Response;
+    try {
+        res = await fetchWithAuth(`${BASE}/apple`, { method: 'POST', body: JSON.stringify(input) });
+    } catch {
+        throw new AppleConnectRequestError('network');
+    }
+    if (!res.ok) throw new AppleConnectRequestError(await appleConnectFailureOf(res));
+    // An unparseable 2xx is a broken answer, not a thrown ZodError the sheet cannot show.
+    const parsed = CalendarConnectionSchema.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new AppleConnectRequestError('network');
+    return parsed.data;
+}
+
+/**
+ * `POST /users/me/calendars/apple` (ROK-1598 D10): 201 created / 200 reconnected.
+ * `gcTime: 0` and the sheet's `reset()` on close/success keep the password out of
+ * the mutation cache's `variables` once the request settles.
+ */
+export function useConnectApple() {
+    const queryClient = useQueryClient();
+    return useMutation<CalendarConnection, AppleConnectRequestError, AppleConnectInput>({
+        mutationFn: postAppleConnect,
+        gcTime: 0,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] });
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+        },
+    });
 }
 
 export interface UpdateConnectionInput {

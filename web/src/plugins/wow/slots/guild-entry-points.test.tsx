@@ -13,8 +13,6 @@ import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { PluginSlot } from '../../plugin-slot';
-import { NavGuildLink } from './nav-guild-link';
-import { DrawerYourGuild } from './drawer-your-guild';
 import { PlayersGuildCard } from './players-guild-card';
 import { GameDetailGuilds } from './game-detail-guilds';
 import { CharacterGuildBadge } from './character-guild-badge';
@@ -53,57 +51,6 @@ async function expectEmpty(container: HTMLElement, path: string): Promise<void> 
 }
 
 beforeEach(() => { server.events.removeAllListeners(); });
-
-describe('NavGuildLink (nav:primary-links)', () => {
-    it('one guild → a "Guild" link to its page, active on that page', async () => {
-        serve(ONE);
-        renderWithProviders(<NavGuildLink pathname="/guilds/11" />);
-        const link = await screen.findByTestId('nav-guild-link');
-        expect(link).toHaveAttribute('href', '/guilds/11');
-        expect(link).toHaveTextContent('Guild');
-        expect(link.className).toContain('text-emerald-400');
-    });
-
-    it('two guilds → a menu listing both', async () => {
-        serve(TWO);
-        renderWithProviders(<NavGuildLink pathname="/players" />);
-        await userEvent.click(await screen.findByTestId('nav-guild-menu-trigger'));
-        const menu = screen.getByTestId('nav-guild-menu');
-        expect(menu).toHaveTextContent('Iron Vanguard');
-        expect(menu).toHaveTextContent('Dusk Wardens');
-        expect(screen.getAllByTestId('guild-entry-row').map((a) => a.getAttribute('href'))).toEqual(['/guilds/11', '/guilds/12']);
-    });
-
-    it('no guild → nothing', async () => {
-        serve([]);
-        const { container } = renderWithProviders(<NavGuildLink pathname="/" />);
-        await expectEmpty(container, '/guilds/mine');
-    });
-});
-
-describe('DrawerYourGuild (nav:drawer-top)', () => {
-    it('one guild → "Your guild"; tapping it closes the drawer', async () => {
-        serve(ONE);
-        const onClose = vi.fn();
-        renderWithProviders(<DrawerYourGuild onClose={onClose} />);
-        expect(await screen.findByTestId('drawer-your-guild')).toHaveTextContent('Your guild');
-        await userEvent.click(screen.getByTestId('guild-entry-row'));
-        expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('two guilds → "Your guilds" with both rows', async () => {
-        serve(TWO);
-        renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
-        expect(await screen.findByText('Your guilds')).toBeInTheDocument();
-        expect(screen.getAllByTestId('guild-entry-row')).toHaveLength(2);
-    });
-
-    it('no guild → nothing', async () => {
-        serve([]);
-        const { container } = renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
-        await expectEmpty(container, '/guilds/mine');
-    });
-});
 
 describe('PlayersGuildCard (players:header-cards)', () => {
     it('one guild → name, member count and "Open guild page"', async () => {
@@ -228,27 +175,19 @@ describe('CharacterGuildBadge (character-detail:header-badges)', () => {
 });
 
 describe('generic slots', () => {
-    it('the WoW plugin fills every new slot', async () => {
+    // ROK-1870 D9: the nav fillers are core now (`components/layout/hub-nav/`), not WoW slots.
+    it('the WoW plugin fills its slots', async () => {
         activateWowPlugin();
         serve(ONE);
-        renderWithProviders(<><PluginSlot name="nav:primary-links" context={{ pathname: '/' }} /><PluginSlot name="nav:drawer-top" context={{ onClose: vi.fn() }} /><PluginSlot name="players:header-cards" /><PluginSlot name="game-detail:sections" context={{ gameId: 7, gameSlug: 'wow' }} /></>);
-        for (const id of ['nav-guild-link', 'drawer-your-guild', 'players-guild-card', 'game-detail-guilds']) {
+        renderWithProviders(<><PluginSlot name="players:header-cards" /><PluginSlot name="game-detail:sections" context={{ gameId: 7, gameSlug: 'wow' }} /></>);
+        for (const id of ['players-guild-card', 'game-detail-guilds']) {
             expect(await screen.findByTestId(id)).toBeInTheDocument();
         }
     });
 
-    it('the drawer slot hands the host\'s onClose to "Your guild", so a tap closes the drawer', async () => {
-        activateWowPlugin();
-        serve(ONE);
-        const onClose = vi.fn();
-        renderWithProviders(<PluginSlot name="nav:drawer-top" context={{ onClose }} />);
-        await userEvent.click(await screen.findByTestId('guild-entry-row'));
-        expect(onClose, 'tapping a guild in the drawer must call the drawer\'s onClose').toHaveBeenCalledTimes(1);
-    });
-
     it.each([
         // Hidden below lg so the md (768) header matches main's (ROK-1785 verify flag).
-        ['components/layout/Header.tsx', '<span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
+        ['components/layout/Header.tsx', '<span className="hidden lg:contents"><NavGuildLink pathname={pathname} /><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
         ['components/layout/more-drawer.tsx', '<PluginSlot name="nav:drawer-top" context={{ onClose }} />'],
         ['pages/players-page.tsx', '<PluginSlot name="players:header-cards" />'],
         ['pages/game-detail-page.tsx', '<PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />'],

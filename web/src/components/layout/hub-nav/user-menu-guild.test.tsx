@@ -1,5 +1,5 @@
 /**
- * ROK-1785 entry E (tablet): the `user-menu:items` filler — one item per guild
+ * ROK-1785 entry E (tablet), core since ROK-1870 D9: the user-menu hub group — one item per guild
  * for members, 768–1023px only (hidden from lg), nothing for non-members.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -9,8 +9,6 @@ import { http, HttpResponse } from 'msw';
 import type { MyGuild } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { activateWowPlugin } from '../../../test/activate-wow-plugin';
-import { PluginSlot } from '../../plugin-slot';
 import { UserMenuGuild } from './user-menu-guild';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -62,12 +60,9 @@ describe('UserMenuGuild (user-menu:items)', () => {
         expect(container.innerHTML).toBe('');
     });
 
-    it('the WoW plugin fills user-menu:items and gets the host onClose', async () => {
-        activateWowPlugin();
-        serve([guild(11, 'Iron Vanguard')]);
-        const onClose = vi.fn();
-        renderWithProviders(<PluginSlot name="user-menu:items" context={{ onClose }} />);
-        await userEvent.click(await screen.findByTestId('user-menu-guild-item'));
-        expect(onClose).toHaveBeenCalledTimes(1);
+    it('a community hub shows with no plugin active (ROK-1870 D9)', async () => {
+        serve([{ ...guild(21, 'BG3 Crew'), kind: 'game_community', region: 'community', realmSlug: null }]);
+        renderWithProviders(<UserMenuGuild onClose={vi.fn()} />);
+        expect(await screen.findByRole('link', { name: 'BG3 Crew' })).toHaveAttribute('href', '/guilds/21');
     });
 });

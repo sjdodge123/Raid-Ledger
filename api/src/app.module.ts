@@ -23,6 +23,8 @@ import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
 import { GuildsCoreModule } from './guilds/guilds-core.module';
+import { CommunityProposalsModule } from './guilds/community/community-proposals.module';
+import { CommunityHubsModule } from './guilds/community/community-hubs.module';
 import { DiscordModule } from './plugins/discord';
 import { PelicanModule } from './plugins/pelican';
 import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
@@ -87,6 +89,9 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     NotificationModule,
     EnrichmentsModule,
     GuildsCoreModule,
+    // ROK-1870: before any `hubs` module so `hubs/proposals` wins over `hubs/:id`.
+    CommunityProposalsModule,
+    CommunityHubsModule,
     WowCommonModule,
     DiscordModule,
     RelayModule,

@@ -103,6 +103,11 @@ function buildListener(deps: {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
+jest.mock('../../guilds/community/community-membership.queries', () => ({
+  ...jest.requireActual('../../guilds/community/community-membership.queries'),
+  refreshUserHubCounts: jest.fn(),
+}));
+
 describe('GuildMemberAddListener (ROK-1260)', () => {
   let mockDb: MockDb;
   let mockUsers: ReturnType<typeof makeMockUsersService>;

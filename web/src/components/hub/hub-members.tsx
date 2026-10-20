@@ -8,15 +8,16 @@
  * stacked cards below it — exactly one is mounted, so a selector never
  * matches a hidden copy.
  */
-import { useState, type JSX } from 'react';
+import { createContext, useContext, useMemo, useState, type JSX } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
-import type { HubCtx, HubModule } from '../../plugins/hub-module';
+import type { HubCtx, HubMemberColumn, HubMemberRow, HubModule } from '../../plugins/hub-module';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { Checkbox } from '../ui/checkbox';
 import { SearchInput } from '../ui/search-input';
 import { Card, SectionTitle } from './hub-bits';
 import { HubMemberCards, HubMemberTable } from './hub-member-table';
+import { memberCountLabel } from '../layout/hub-nav/my-hubs-queries';
 import { bandMembers, filterMembers, groupingColumn, membersCountFor } from './hub-members.helpers';
 
 interface ToolsProps {
@@ -49,12 +50,47 @@ function emptyLine(mod: HubModule | undefined, page: GuildPage): string {
     return empty ?? 'No members yet.';
 }
 
+interface ActionsValue { ctx: HubCtx; Actions: NonNullable<HubModule['memberActions']> }
+
+/** Feeds the row-action cell without rebuilding the column (a new column would remount an open menu). */
+const MemberActionsContext = createContext<ActionsValue | null>(null);
+
+function MemberActionsCell({ row }: { row: HubMemberRow }): JSX.Element | null {
+    const value = useContext(MemberActionsContext);
+    if (value === null) return null;
+    return <value.Actions row={row} ctx={value.ctx} />;
+}
+
+const ACTIONS_COLUMN: HubMemberColumn = { id: 'actions', header: '', cell: MemberActionsCell };
+
+/** The module's columns plus its row-action column (ROK-1870 `memberActions`). */
+function useMemberColumns(mod: HubModule | undefined): readonly HubMemberColumn[] {
+    const hasActions = mod?.memberActions !== undefined;
+    const base = mod?.memberColumns;
+    return useMemo(() => (hasActions ? [...(base ?? []), ACTIONS_COLUMN] : base ?? []), [hasActions, base]);
+}
+
+/** Columns (with the row-action column, if any) plus the value the action cells read. */
+function useMemberActions(mod: HubModule | undefined, ctx: HubCtx): { columns: readonly HubMemberColumn[]; actionsValue: ActionsValue | null } {
+    const columns = useMemberColumns(mod);
+    const Actions = mod?.memberActions;
+    const actionsValue = useMemo(() => (Actions ? { ctx, Actions } : null), [Actions, ctx]);
+    return { columns, actionsValue };
+}
+
+/** The "no members" or "no match" line, when one applies. */
+function MembersStatusLine({ total, shown, query, empty }: { total: number; shown: number; query: string; empty: string }): JSX.Element | null {
+    if (total === 0) return <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-empty">{empty}</p>;
+    if (shown > 0) return null;
+    return <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>;
+}
+
 export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     const page: GuildPage = ctx.page;
     const [query, setQuery] = useState('');
     const [grouped, setGrouped] = useState(true);
     const isDesktop = useMediaQuery(DESKTOP_MQ);
-    const columns = mod?.memberColumns ?? [];
+    const { columns, actionsValue } = useMemberActions(mod, ctx);
     const allRows = mod?.memberRows(page) ?? [];
     const rows = filterMembers(allRows, query, mod?.memberSearch);
     const groupCol = groupingColumn(columns);
@@ -63,17 +99,18 @@ export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModul
     const List = isDesktop ? HubMemberTable : HubMemberCards;
     return (
         <section id="members" className="scroll-mt-4" data-testid="guild-members">
-            <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? `${page.guild.memberCount} members`} />
+            <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? memberCountLabel(page.guild.memberCount)} />
             <Card className="flex flex-col gap-3">
                 {Summary && <Summary {...ctx} />}
                 <MemberTools query={query} onQuery={setQuery} grouped={grouped} onGrouped={setGrouped}
                     groupLabel={groupCol?.header ?? null} />
                 <p className="text-xs text-muted" data-testid="guild-members-count">{membersCountFor(rows.length, allRows.length, page.guild.memberCount)}</p>
-                {allRows.length === 0 && <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-empty">{emptyLine(mod, page)}</p>}
-                {allRows.length > 0 && rows.length === 0 && (
-                    <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>
+                <MembersStatusLine total={allRows.length} shown={rows.length} query={query} empty={emptyLine(mod, page)} />
+                {rows.length > 0 && (
+                    <MemberActionsContext.Provider value={actionsValue}>
+                        <List bands={bands} columns={columns} rowClass={mod?.memberRowClass} />
+                    </MemberActionsContext.Provider>
                 )}
-                {rows.length > 0 && <List bands={bands} columns={columns} rowClass={mod?.memberRowClass} />}
             </Card>
         </section>
     );

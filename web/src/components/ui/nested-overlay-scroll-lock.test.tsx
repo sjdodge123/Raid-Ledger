@@ -21,6 +21,8 @@ vi.mock('../../hooks/use-auth', () => ({
     isAdmin: () => false,
     isOperatorOrAdmin: () => false,
     getAuthToken: () => 'mock-token',
+    // ROK-1870: the More drawer's "Your hubs" block (now core) scopes its query by viewer.
+    useViewerCacheScope: () => 1,
 }));
 vi.mock('../../stores/theme-store', () => ({
     useThemeStore: (selector: (s: Record<string, unknown>) => unknown) => selector({ themeMode: 'dark', cycleTheme: vi.fn() }),

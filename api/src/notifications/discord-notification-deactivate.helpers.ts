@@ -8,6 +8,7 @@ import { NotificationService } from './notification.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
 
 /**
@@ -183,6 +184,8 @@ export async function deactivateUserOrchestrated(
   // ROK-1275: drop the cached auth-user row so any in-flight JWT validates
   // against the fresh deactivated_at value, not the 30-second-stale cache.
   invalidateAuthUser(row.id);
+  // ROK-1870: the user's community hubs stop counting them (M11).
+  await refreshUserHubCounts(deps.db, row.id);
   // ROK-1353: revoke EVERY refresh family so a guild-leaver can't silently
   // re-mint a session — this is the primary deactivation path (guild leave).
   await revokeRefreshTokens(deps, row.id);

@@ -105,6 +105,12 @@ export class ApiClient {
     return parseJson<T>('POST', path, await this.request('POST', path, json));
   }
 
+  /** POST to a 204 No Content route: there is no body to parse. */
+  async postNoContent(path: string, body?: unknown): Promise<void> {
+    const json = body ? JSON.stringify(body) : undefined;
+    await this.request('POST', path, json);
+  }
+
   async put<T = unknown>(path: string, body: unknown): Promise<T> {
     const json = JSON.stringify(body);
     return parseJson<T>('PUT', path, await this.request('PUT', path, json));

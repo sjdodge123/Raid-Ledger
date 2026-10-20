@@ -96,6 +96,25 @@ export interface CalendarAccountProvider {
   disconnect(credentials: CalendarCredentials): Promise<void>;
 }
 
+/** ROK-1598 (D1): what a password-connected provider (Apple CalDAV) returns. */
+export interface PasswordConnectResult {
+  credentials: CalDavCredentials;
+  accountSubject: string;
+  accountLabel: string;
+}
+
+/**
+ * ROK-1598 (D1): a provider connected with an email + app-specific password
+ * instead of OAuth. Validation = provider discovery; a refusal throws a
+ * `ProviderAuthError`, an outage a `TransientError` (or `RateLimitError`).
+ */
+export interface CalendarPasswordCapability {
+  connectWithPassword(input: {
+    email: string;
+    appPassword: string;
+  }): Promise<PasswordConnectResult>;
+}
+
 /** Half-open instant range `[start, end)`. */
 export interface TimeRange {
   start: Date;

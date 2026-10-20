@@ -48,7 +48,8 @@ const VALID = '{"name":"café"}';
 /** `breakStream`: send `body`, then error the stream as undici does on a cut connection. */
 type Canned = { status?: number; body: string; breakStream?: boolean };
 
-function bodyOf(next: Canned): string | ReadableStream<Uint8Array> {
+function bodyOf(next: Canned): string | ReadableStream<Uint8Array> | null {
+  if (next.status === 204) return null;
   if (!next.breakStream) return next.body;
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -133,6 +134,18 @@ for (const method of ['post', 'put', 'patch'] as const) {
     );
   });
 }
+
+await test('postNoContent() resolves on a 204 with no body, sending once', async () => {
+  const calls = stubFetch([{ status: 204, body: '' }]);
+  await api.postNoContent('/admin/hubs/proposals/4/reject', { reason: 'x' });
+  assert.equal(calls.length, 1, `expected 1 fetch, got ${calls.length}`);
+});
+
+await test('postNoContent() still throws the verb error on an HTTP error status', async () => {
+  stubFetch([{ status: 500, body: '{"message":"boom"}' }]);
+  const err = await rejectionOf(api.postNoContent('/admin/hubs/proposals/4/reject'), 'postNoContent()');
+  assert.equal(messageOf(err), 'POST /admin/hubs/proposals/4/reject → 500: {"message":"boom"}');
+});
 
 /** A login response minting `token`. */
 function loginOk(token: string): Canned {

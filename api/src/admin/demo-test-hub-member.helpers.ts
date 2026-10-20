@@ -6,7 +6,7 @@
  *   - `wow_guild`: a character on the guild's game whose `addon_guid` matches
  *     a roster row stamped at the guild's latest snapshot.
  */
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
@@ -49,7 +49,11 @@ export async function findHubOr404(db: Db, guildId: number): Promise<HubRow> {
     .where(eq(g.id, guildId))
     .limit(1);
   if (!row) throw new NotFoundException(`Guild ${guildId} not found`);
-  return row;
+  // ROK-1870: community hubs have their own seed path (core membership table).
+  if (row.kind === 'game_community') {
+    throw new BadRequestException('Community hubs are not seeded here');
+  }
+  return { ...row, kind: row.kind };
 }
 
 /** 404 when the user does not exist. */

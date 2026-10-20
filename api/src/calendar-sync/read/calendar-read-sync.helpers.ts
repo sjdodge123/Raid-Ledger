@@ -27,6 +27,9 @@
  *   skipped, never pruned: the rest commit and `last_error_code` is set to
  *   `provider_error` so the user can tell a calendar is failing.
  * - A success never writes `status` (it is shared with the write side).
+ * - ROK-1598 D7: the stored `sync_cursor` goes into `fetchBusy` and the
+ *   returned one is saved; `unchanged: true` keeps the previous blocks (no
+ *   delete, no insert) while `last_synced_at` is still stamped.
  *
  * PRIVACY (§6.4.2): only instants and dates are written; no calendar id,
  * title or provider message is logged or stored.
@@ -43,6 +46,12 @@ import type { CalendarReadProvider } from '../providers/calendar-provider.regist
 import { deriveInstanceId } from '../providers/rl-copy-id.helpers';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
 import { lockUserDerive } from './calendar-away-guard.helpers';
+import {
+  cursorFields,
+  resolvePrimaryAlias,
+  storedCursor,
+  unchangedStillValid,
+} from './calendar-read-cursor.helpers';
 import {
   buildReadWindow,
   normalizeBusyBlocks,
@@ -61,6 +70,7 @@ export type ReadSyncConnection = Pick<
   | 'credentialsEncrypted'
   | 'readCalendarIds'
   | 'dedicatedCalendarId'
+  | 'syncCursor'
 >;
 
 /** D7: next sync 30 min out, ± 5 min jitter. */
@@ -93,15 +103,24 @@ export function nextReadSyncAt(now: Date, random: () => number): Date {
   return new Date(now.getTime() + READ_SYNC_INTERVAL_MS + jitter);
 }
 
+/** R1: the dedicated calendar plus every listed Raid Ledger calendar. */
+export function readExclusions(
+  conn: Pick<ReadSyncConnection, 'dedicatedCalendarId'>,
+  calendars: readonly ProviderCalendar[],
+): Set<string> {
+  const excluded = new Set(
+    calendars.filter((c) => c.isRaidLedger).map((c) => c.id),
+  );
+  if (conn.dedicatedCalendarId) excluded.add(conn.dedicatedCalendarId);
+  return excluded;
+}
+
 /** R1: the calendars to fetch; the Raid Ledger calendar never appears. */
 export function selectReadCalendarIds(
   conn: Pick<ReadSyncConnection, 'readCalendarIds' | 'dedicatedCalendarId'>,
   calendars: readonly ProviderCalendar[],
 ): string[] {
-  const excluded = new Set(
-    calendars.filter((c) => c.isRaidLedger).map((c) => c.id),
-  );
-  if (conn.dedicatedCalendarId) excluded.add(conn.dedicatedCalendarId);
+  const excluded = readExclusions(conn, calendars);
   const wanted =
     conn.readCalendarIds.length > 0 ? conn.readCalendarIds : [PRIMARY_CALENDAR];
   return [...new Set(wanted)].filter((id) => !excluded.has(id));
@@ -125,40 +144,64 @@ export function safeReadWindow(now: Date, timeZone: string): ReadWindow {
   }
 }
 
-function fetchWindow(
-  deps: ReadSyncDeps,
+/** Exported for the D7 cursor-wiring unit spec. */
+export function fetchWindow(
+  deps: {
+    db: Db;
+    provider: Pick<
+      CalendarReadProvider,
+      'key' | 'listCalendars' | 'fetchBusy' | 'refresh'
+    >;
+  },
   conn: ReadSyncConnection,
   window: ReadWindow,
 ): Promise<FetchBusyResult> {
   const range = { start: window.start, end: window.end };
   return withFreshCredentials(deps.db, conn, deps.provider, async (creds) => {
     const calendars = await deps.provider.listCalendars(creds);
-    const ids = selectReadCalendarIds(conn, calendars);
-    if (ids.length === 0) return { blocks: [] };
-    return deps.provider.fetchBusy(creds, range, ids);
+    const wanted = selectReadCalendarIds(conn, calendars);
+    const ids = resolvePrimaryAlias(
+      deps.provider.key,
+      wanted,
+      calendars,
+      readExclusions(conn, calendars),
+    );
+    // Codex r5: the empty replacement also empties the cursor, so a calendar
+    // that reappears with its old ctag is read in full, not `unchanged`.
+    if (ids.length === 0) return { blocks: [], cursor: {} };
+    // ROK-1598 D7: the stored cursor in, so Apple can answer `unchanged`.
+    const cursor = storedCursor(conn.syncCursor);
+    return deps.provider.fetchBusy(creds, range, ids, cursor);
   });
+}
+
+/** The locked row's current ids + cursor (Codex r7: cursor re-checked). */
+interface LockedRow {
+  readCalendarIds: string[];
+  syncCursor: unknown;
 }
 
 /**
  * Row lock: a disconnect / `needs_reconnect` / read-off since the fetch wins
- * over the sync. Returns the locked row's CURRENT `read_calendar_ids`.
+ * over the sync. Returns the locked row's CURRENT ids and cursor.
  */
 async function lockReadable(
   tx: ReadSyncTx,
   id: number,
-): Promise<{ readCalendarIds: string[] } | null> {
+): Promise<LockedRow | null> {
   const c = schema.calendarConnections;
   const [row] = await tx
     .select({
       status: c.status,
       readEnabled: c.readEnabled,
       readCalendarIds: c.readCalendarIds,
+      syncCursor: c.syncCursor,
     })
     .from(c)
     .where(eq(c.id, id))
     .for('update');
   if (!row || row.status !== 'active' || !row.readEnabled) return null;
-  return { readCalendarIds: row.readCalendarIds };
+  return { readCalendarIds: row.readCalendarIds, syncCursor: row.syncCursor };
 }
 
 /**
@@ -174,7 +217,7 @@ export async function lockForSync(
   tx: ReadSyncTx,
   conn: Pick<ReadSyncConnection, 'id' | 'userId'>,
   withDerive: boolean,
-): Promise<{ readCalendarIds: string[] } | null> {
+): Promise<LockedRow | null> {
   if (withDerive) await lockUserDerive(tx, conn.userId);
   return lockReadable(tx, conn.id);
 }
@@ -221,7 +264,10 @@ function pruneFields(locked: readonly string[], missing: readonly string[]) {
  */
 export function buildSyncedFields(
   locked: { readCalendarIds: string[] },
-  result: Pick<FetchBusyResult, 'missingCalendarIds' | 'unreadableCalendarIds'>,
+  result: Pick<
+    FetchBusyResult,
+    'missingCalendarIds' | 'unreadableCalendarIds' | 'cursor'
+  >,
   stamp: { now: Date; random: () => number },
 ) {
   const missing = result.missingCalendarIds ?? [];
@@ -232,6 +278,8 @@ export function buildSyncedFields(
     nextSyncAt: nextReadSyncAt(stamp.now, stamp.random),
     updatedAt: stamp.now,
     ...pruneFields(locked.readCalendarIds, missing),
+    // ROK-1598 D7: a provider cursor (Apple) is kept for the next run.
+    ...cursorFields(result.cursor),
   };
 }
 
@@ -260,13 +308,41 @@ async function windowFor(
   return safeReadWindow(now, tz);
 }
 
-/** §4.4.2 steps 3–8 for one connection. Provider errors propagate. */
-export async function runCalendarReadSync(
+interface Commit {
+  conn: ReadSyncConnection;
+  window: ReadWindow;
+  rows: NormalizedBusyBlock[] | null;
+  result: FetchBusyResult;
+  stamp: { now: Date; random: () => number };
+}
+
+/** `stale`: an `unchanged` answer to a cursor that moved since (Codex r7). */
+type Attempt = ReadSyncOutcome | 'stale';
+
+async function commitSync(
+  tx: ReadSyncTx,
+  deps: ReadSyncDeps,
+  k: Commit,
+): Promise<'written' | 'skipped' | 'stale'> {
+  const locked = await lockForSync(tx, k.conn, deps.afterBlocks !== undefined);
+  if (!locked) return 'skipped';
+  const sent = storedCursor(k.conn.syncCursor);
+  if (k.result.unchanged && !unchangedStillValid(sent, locked.syncCursor)) {
+    return 'stale';
+  }
+  if (deps.stillAllowed && !(await deps.stillAllowed())) return 'skipped';
+  if (k.rows) await replaceBlocks(tx, k.conn, k.window, k.rows);
+  if (deps.afterBlocks) await deps.afterBlocks(tx, k.conn.userId);
+  await markSynced(tx, k.conn, buildSyncedFields(locked, k.result, k.stamp));
+  return 'written';
+}
+
+async function syncOnce(
   deps: ReadSyncDeps,
   conn: ReadSyncConnection,
-): Promise<ReadSyncOutcome> {
-  const now = deps.now ? deps.now() : new Date();
-  const window = await windowFor(deps, conn, now);
+  window: ReadWindow,
+  now: Date,
+): Promise<Attempt> {
   const result = await fetchWindow(deps, conn, window);
   if (deps.stillAllowed && !(await deps.stillAllowed())) return 'skipped';
   const instanceId = deriveInstanceId(new URL(deps.clientUrl).host);
@@ -274,16 +350,23 @@ export async function runCalendarReadSync(
     ? null
     : normalizeBusyBlocks(result.blocks, { instanceId, window });
   const stamp = { now, random: deps.random ?? Math.random };
-  const written = await deps.db.transaction(async (tx) => {
-    const locked = await lockForSync(tx, conn, deps.afterBlocks !== undefined);
-    if (!locked) return false;
-    if (deps.stillAllowed && !(await deps.stillAllowed())) return false;
-    if (rows) await replaceBlocks(tx, conn, window, rows);
-    if (deps.afterBlocks) await deps.afterBlocks(tx, conn.userId);
-    await markSynced(tx, conn, buildSyncedFields(locked, result, stamp));
-    return true;
-  });
-  if (!written) return 'skipped';
+  const k: Commit = { conn, window, rows, result, stamp };
+  const done = await deps.db.transaction((tx) => commitSync(tx, deps, k));
+  if (done !== 'written') return done;
   if (deps.onCommitted) await deps.onCommitted(conn.userId);
   return rows ? 'synced' : 'unchanged';
+}
+
+/** §4.4.2 steps 3–8 for one connection. Provider errors propagate. */
+export async function runCalendarReadSync(
+  deps: ReadSyncDeps,
+  conn: ReadSyncConnection,
+): Promise<ReadSyncOutcome> {
+  const now = deps.now ? deps.now() : new Date();
+  const window = await windowFor(deps, conn, now);
+  const first = await syncOnce(deps, conn, window, now);
+  if (first !== 'stale') return first;
+  // Codex r7: the cursor moved under the fetch → one full read, no cursor.
+  const full = await syncOnce(deps, { ...conn, syncCursor: null }, window, now);
+  return full === 'stale' ? 'skipped' : full;
 }

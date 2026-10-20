@@ -180,4 +180,10 @@ describe('Guild Overview raid widgets + hero chip (ROK-1787)', () => {
         expect(text.split(start).length - 1, `start time "${start}" should appear once in "${text}"`).toBe(1);
         expect(text).toBe(`${dayLabel('2030-01-08T20:00:00.000Z')} · ${range}`);
     });
+
+    it('the hero count is singular at one member ("1 member")', async () => {
+        serve(emptyGuildRaids);
+        renderPage();
+        expect((await screen.findByTestId('guild-member-count')).textContent).toBe('1 member');
+    });
 });

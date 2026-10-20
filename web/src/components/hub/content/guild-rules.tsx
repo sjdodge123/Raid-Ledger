@@ -3,15 +3,18 @@
  * collapsible sections, each body rendered one item per line. Editors get an
  * inline editor (add / remove / reorder sections; title + multiline body).
  */
-import { useState, type JSX } from 'react';
+import { lazy, Suspense, useState, type JSX } from 'react';
 import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildRuleSection } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { ScrollCollapsible } from '../../ui/scroll-collapsible';
 import { WidgetCard } from '../hub-bits';
 import { ruleLines } from './guild-content.helpers';
-import { RulesEditor } from './guild-rules-editor';
 import { useUpdateGuildProfile } from '../api/use-guild-content';
+
+/** Editors only, opened on demand — its own chunk, out of the hub page bundle. */
+const RulesEditor = lazy(() => import('./guild-rules-editor').then((m) => ({ default: m.RulesEditor })));
+const EDITOR_FALLBACK = <div className="h-24 animate-pulse rounded-lg bg-panel" aria-busy="true" />;
 
 function RuleSection({ section, index }: { section: GuildRuleSection; index: number }): JSX.Element {
     return (
@@ -42,8 +45,8 @@ export function GuildRules({ guildId, rules, canEdit }: { guildId: number; rules
     return (
         <WidgetCard id="guild-rules" title="Guild rules & loot rules" action={action}>
             {editing && canEdit ? (
-                <RulesEditor initial={rules} saving={save.isPending} failed={!!save.error} onCancel={() => setEditing(false)}
-                    onSave={(next) => save.mutate({ rules: next }, { onSuccess: () => setEditing(false) })} />
+                <Suspense fallback={EDITOR_FALLBACK}><RulesEditor initial={rules} saving={save.isPending} failed={!!save.error} onCancel={() => setEditing(false)}
+                    onSave={(next) => save.mutate({ rules: next }, { onSuccess: () => setEditing(false) })} /></Suspense>
             ) : <RulesView rules={rules} canEdit={canEdit} />}
         </WidgetCard>
     );
