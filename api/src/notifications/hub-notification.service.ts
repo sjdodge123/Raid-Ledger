@@ -9,6 +9,7 @@ import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import {
   EVENT_NOTICE_TTL_SECONDS,
+  eventAnnounceKey,
   eventNoticeKey,
   sendClaimedEventNotice,
 } from './event-notice-plan.helpers';
@@ -153,9 +154,16 @@ export class HubNotificationService {
     );
   }
 
-  /** Announced by the create/publish path (marker) or the deferred-embed scheduler. */
+  /**
+   * Announced by the create/publish path (full marker), the scheduler's
+   * group-only send when no embed could post (Codex r8: group-only marker),
+   * or the deferred-embed scheduler (posted embed).
+   */
   private async isAnnounced(eventId: number): Promise<boolean> {
-    if (await this.dedup.isMarked(`game-alert:event:${eventId}`)) return true;
+    for (const groupOnly of [false, true]) {
+      const key = eventAnnounceKey(eventId, groupOnly);
+      if (await this.dedup.isMarked(key)) return true;
+    }
     return hasPostedEmbed(this.db, eventId);
   }
 

@@ -223,3 +223,18 @@ describe('HubNotificationService.notifyLateTag announce + prior-notice dedup (Co
     );
   });
 });
+
+describe('HubNotificationService.notifyLateTag group-only announcement (Codex r8)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('fans out a late tag when only the group-only announce marker is claimed', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, notifications, dedup } = setup();
+    dedup.isMarked.mockImplementation((key: string) =>
+      Promise.resolve(key === 'game-alert-group:event:9'),
+    );
+    await svc.notifyLateTag(9);
+    expect(dedup.isMarked).toHaveBeenCalledWith('game-alert-group:event:9');
+    expect(notifications.create).toHaveBeenCalledTimes(2);
+  });
+});
