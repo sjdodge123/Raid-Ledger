@@ -12,6 +12,7 @@ import {
 } from '@raid-ledger/contract';
 import { fetchApi } from '../lib/api/fetch-api';
 import { toast } from '../lib/toast';
+import { invalidateHubMembership } from '../components/hub/community/invalidate-hub-membership';
 import { requestHubJoin, withJoin } from './game-detail/hub-join';
 
 export type HubMembershipFilter = HubDirectoryQuery['membership'];
@@ -101,6 +102,6 @@ export function useJoinDirectoryHub(params: HubsDirectoryParams): UseMutationRes
             if (ctx?.previous) qc.setQueryData(key, ctx.previous);
             toast.error(err.message);
         },
-        onSettled: () => void qc.invalidateQueries({ queryKey: ['game-hubs'] }),
+        onSettled: (_res, _err, hubId) => invalidateHubMembership(qc, hubId),
     });
 }

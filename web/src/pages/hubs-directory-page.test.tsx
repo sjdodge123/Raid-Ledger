@@ -14,7 +14,8 @@ import { HubsDirectoryPage } from './hubs-directory-page';
 const API = 'http://localhost:3000';
 
 function LocationProbe(): JSX.Element {
-    return <output data-testid="location">{useLocation().search}</output>;
+    const { pathname, search } = useLocation();
+    return <output data-testid="location">{pathname + search}</output>;
 }
 
 function renderPage(entry = '/hubs'): void {
@@ -53,7 +54,7 @@ describe('HubsDirectoryPage', () => {
         const card = screen.getByTestId('hub-directory-card');
         expect(await within(card).findByText('Joined')).toBeInTheDocument();
         expect(within(card).getByText(/15 members/)).toBeInTheDocument();
-        expect(screen.getByTestId('location')).toHaveTextContent('');
+        expect(screen.getByTestId('location').textContent).toBe('/hubs');
     });
 
     it('loads the next cursor page on Load more', async () => {
@@ -79,6 +80,6 @@ describe('HubsDirectoryPage', () => {
         server.use(...communityHubHandlers({ directory: createMockHubDirectoryPage({ items: [] }) }));
         renderPage('/hubs?membership=joined');
         await userEvent.click(await screen.findByRole('button', { name: 'Clear filters' }));
-        await waitFor(() => expect(screen.getByTestId('location')).toBeEmptyDOMElement());
+        await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/hubs'));
     });
 });

@@ -4,14 +4,15 @@
  * resolving with every plugin off.
  */
 import type { JSX, ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within, renderHook } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useQuery } from '@tanstack/react-query';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { communityHubCalls, communityHubHandlers } from '../../../test/mocks/community-hub-handlers';
-import { buildCommunityPage } from '../../../test/factories/community-hub';
+import { buildCommunityMember, buildCommunityPage } from '../../../test/factories/community-hub';
+import { mockDesktop } from '../../../test/handlers/media';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { useHubModule, type HubCtx } from '../../../plugins/hub-module';
@@ -45,6 +46,7 @@ function rowOf(name: string): HTMLElement {
 }
 
 beforeEach(() => { communityHubCalls.length = 0; server.use(...communityHubHandlers); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe('community hub hero', () => {
     it('shows the "Community hub" chip and the leader', () => {
@@ -71,13 +73,24 @@ describe('community hub hero', () => {
     });
 
     it('W9: a leader with members gets the transfer prompt, not a DELETE', async () => {
+        selfId = 1;
         renderHero(buildCommunityPage({ role: 'leader' }));
         await userEvent.click(screen.getByTestId('community-hub-leave'));
         expect(screen.getByTestId('community-hub-transfer-prompt')).toBeInTheDocument();
         expect(communityHubCalls).toEqual([]);
     });
 
+    it('W9: staff (resolved to leader) who joined as a plain member leave after one confirm', async () => {
+        selfId = 3;
+        renderHero(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(screen.getByTestId('community-hub-leave'));
+        expect(screen.queryByTestId('community-hub-transfer-prompt')).toBeNull();
+        await userEvent.click(screen.getByTestId('community-hub-leave-yes'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['DELETE /hubs/41/join']));
+    });
+
     it('a member leaves after one confirm', async () => {
+        selfId = 3;
         renderHero(buildCommunityPage({ role: 'member' }));
         await userEvent.click(screen.getByTestId('community-hub-leave'));
         await userEvent.click(screen.getByTestId('community-hub-leave-yes'));
@@ -116,6 +129,52 @@ describe('community Members tab', () => {
         await userEvent.type(screen.getByLabelText('Reason (optional)'), 'spam');
         await userEvent.click(screen.getByTestId('community-ban-confirm'));
         await waitFor(() => expect(communityHubCalls).toContain('PUT /hubs/41/bans/2'));
+    });
+
+    it('staff get no menu on their own row (matched by user id, not the row id)', () => {
+        selfId = 3;
+        renderMembers(buildCommunityPage({ role: 'leader', members: [buildCommunityMember(1, 'Lead', 'leader'), buildCommunityMember(3, 'Mem', 'member'), buildCommunityMember(103, 'Clash', 'member')] }));
+        expect(within(rowOf('Mem')).queryByTestId('community-member-manage')).toBeNull();
+        expect(within(rowOf('Clash')).getByTestId('community-member-manage')).toBeInTheDocument();
+    });
+
+    it('desktop: the Manage dropdown takes arrow keys, and Esc closes it back to the trigger', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        const trigger = within(rowOf('Mem')).getByTestId('community-member-manage');
+        await userEvent.click(trigger);
+        const menu = screen.getByRole('menu', { name: 'Manage Mem' });
+        expect(screen.getByTestId('community-member-remove')).toHaveFocus();
+        await userEvent.keyboard('{ArrowDown}');
+        expect(screen.getByTestId('community-member-ban')).toHaveFocus();
+        await userEvent.keyboard('{End}');
+        expect(screen.getByTestId('community-member-make-leader')).toHaveFocus();
+        await userEvent.keyboard('{ArrowDown}');
+        expect(screen.getByTestId('community-member-remove')).toHaveFocus();
+        await userEvent.keyboard('{Escape}');
+        expect(menu).not.toBeVisible();
+        expect(trigger).toHaveFocus();
+    });
+
+    it('desktop: an outside click closes the Manage dropdown', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        const menu = screen.getByRole('menu', { name: 'Manage Mem' });
+        await userEvent.click(document.body);
+        expect(menu).not.toBeVisible();
+    });
+
+    it('phone: Manage opens a bottom sheet with the same actions', async () => {
+        selfId = 1;
+        mockDesktop(false);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        const sheet = await screen.findByRole('dialog', { name: 'Manage Mem' });
+        await userEvent.click(within(sheet).getByTestId('community-member-remove'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['DELETE /hubs/41/members/3']));
     });
 
     it('a visitor sees the Join invite when the list is empty', () => {

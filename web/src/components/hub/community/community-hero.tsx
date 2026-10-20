@@ -11,6 +11,7 @@ import { Button } from '../../ui/button';
 import { StatusChip } from '../../ui/status-chip';
 import { joinBlockedCopy, leaveNeedsTransfer } from './community-access';
 import { useCommunityJoin } from './community-hub-api';
+import { useAuth } from '../../../hooks/use-auth';
 
 const STATUS_LABEL = { proposed: 'Proposed', archived: 'Archived' } as const;
 
@@ -53,6 +54,7 @@ type LeaveStep = 'idle' | 'confirm' | 'transfer';
 export function CommunityJoinPill({ page }: HubCtx): JSX.Element | null {
     const join = useCommunityJoin(page.guild.id);
     const [step, setStep] = useState<LeaveStep>('idle');
+    const { user } = useAuth();
     const c = page.community;
     if (c === undefined) return null;
     if (!c.viewerJoined) {
@@ -69,6 +71,6 @@ export function CommunityJoinPill({ page }: HubCtx): JSX.Element | null {
     if (step === 'confirm') return <LeaveConfirm onCancel={() => setStep('idle')} onLeave={() => { setStep('idle'); join.mutate(false); }} />;
     return (
         <Button variant="secondary" size="sm" data-testid="community-hub-leave"
-            onClick={() => setStep(leaveNeedsTransfer(page) ? 'transfer' : 'confirm')}>Joined ✓ · Leave</Button>
+            onClick={() => setStep(leaveNeedsTransfer(page, user?.id ?? null) ? 'transfer' : 'confirm')}>Joined ✓ · Leave</Button>
     );
 }

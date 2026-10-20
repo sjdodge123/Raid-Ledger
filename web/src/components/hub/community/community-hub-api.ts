@@ -1,16 +1,16 @@
 /**
  * ROK-1870 §2.3 — the community hub's membership routes (`/hubs/:id/…`).
- * Every write refetches the hub page (and the viewer's nav hubs on Join /
- * Leave) so the hero, the Members tab and the nav agree with the server.
+ * Every write refetches every surface that shows membership
+ * (`invalidateHubMembership`) so the hero, the Members tab, the nav, the game
+ * card and the directory agree with the server.
  */
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { CommunityHubJoinResponseSchema, type CommunityHubJoinResponse } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { toast } from '../../../lib/toast';
-import { guildPageKey } from '../api/use-guild';
+import { invalidateHubMembership } from './invalidate-hub-membership';
 
 const base = (hubId: number): string => `/hubs/${hubId}`;
-const MY_HUBS_KEY = ['plugins', 'wow', 'guilds', 'mine'] as const;
 
 /** POST joins, DELETE leaves; both idempotent server-side. */
 export function setCommunityJoined(hubId: number, joined: boolean): Promise<CommunityHubJoinResponse> {
@@ -19,12 +19,7 @@ export function setCommunityJoined(hubId: number, joined: boolean): Promise<Comm
 
 function useRefresh(hubId: number): () => Promise<void> {
     const qc = useQueryClient();
-    return async () => {
-        await Promise.all([
-            qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
-            qc.invalidateQueries({ queryKey: MY_HUBS_KEY }),
-        ]);
-    };
+    return () => invalidateHubMembership(qc, hubId);
 }
 
 /** Join (`true`) or Leave (`false`) this hub. */

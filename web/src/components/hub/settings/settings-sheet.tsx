@@ -69,17 +69,24 @@ export interface HubSettingsSheetProps {
     onChangeChannel: () => void;
 }
 
-/** The Leader / admin rows (ROK-1830 S4) — an Officer who opens a community hub's sheet doesn't get them. */
+/**
+ * The Leader / admin rows (ROK-1830 S4) — an Officer who opens a community
+ * hub's sheet doesn't get them. A community hub keeps Discord only: page
+ * editors mean nothing for that kind (D6) and Archive replaces hiding (A7).
+ */
 function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+    const isCommunity = ctx.page.community !== undefined;
     return (
         <>
             <DiscordSection guildId={ctx.page.guild.id} onChangeChannel={onChangeChannel} />
+            {!isCommunity && <>
             <SettingsSection title="Page editors" blurb="Who can edit this guild’s page." testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
             </SettingsSection>
             <SettingsSection title="Visibility" testId="guild-settings-visibility">
                 <HideHubRow page={ctx.page} />
             </SettingsSection>
+            </>}
         </>
     );
 }

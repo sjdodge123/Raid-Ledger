@@ -128,4 +128,18 @@ describe('community settings in the sheet', () => {
         expect(await screen.findByTestId('community-settings-banned')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Archive hub' })).toBeInTheDocument();
     });
+
+    it('gives a community leader Discord but no Page editors or Visibility hide (Archive replaces hiding)', async () => {
+        server.use(
+            http.get('http://localhost:3000/guilds/41/discord', () => HttpResponse.json({ state: 'unset' })),
+            http.get('http://localhost:3000/guilds/41/editors', () => HttpResponse.json({ editors: [] })),
+        );
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'leader' })}>{(ctx) => (
+            <HubSettingsSheet ctx={ctx} module={communityHubModule} onClose={() => undefined} onChangeChannel={() => undefined} />
+        )}</WithCtx>);
+        expect(await screen.findByTestId('community-settings-banned')).toBeInTheDocument();
+        expect(screen.getByTestId('guild-settings-discord')).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-settings-editors')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('guild-settings-visibility')).not.toBeInTheDocument();
+    });
 });

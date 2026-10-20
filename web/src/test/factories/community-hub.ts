@@ -4,11 +4,15 @@
  */
 import type { GuildMemberRow, GuildPage, GuildPageCommunity, LadderRole } from '@raid-ledger/contract';
 
-/** One community member row; `memberId` is the member's user id. */
+/**
+ * One community member row. `memberId` is the membership row id and is kept
+ * DIFFERENT from `community.userId` (the id every `/hubs/:id/members/:userId`
+ * route takes), so a spec that sends the wrong one fails.
+ */
 export function buildCommunityMember(userId: number, name: string, role: 'leader' | 'officer' | 'member'): GuildMemberRow {
     return {
-        memberId: userId, name, class: null, level: null, rankIndex: null, rankName: null, effectiveRole: null,
-        characterId: null, isMain: false, community: { role, joinedAt: '2026-10-01T12:00:00.000Z' },
+        memberId: userId + 100, name, class: null, level: null, rankIndex: null, rankName: null, effectiveRole: null,
+        characterId: null, isMain: false, community: { userId, role, joinedAt: '2026-10-01T12:00:00.000Z' },
     };
 }
 

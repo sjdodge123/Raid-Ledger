@@ -14,6 +14,7 @@ import {
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api/fetch-api';
 import { toast } from '../../lib/toast';
+import { invalidateHubMembership } from '../../components/hub/community/invalidate-hub-membership';
 import { requestHubJoin, withJoin } from './hub-join';
 
 /** Query key for one game's community hubs card. */
@@ -54,7 +55,7 @@ export function useJoinGameHub(gameId: number): UseMutationResult<CommunityHubJo
             if (ctx?.previous) qc.setQueryData(key, ctx.previous);
             toast.error(err.message);
         },
-        onSettled: () => void qc.invalidateQueries({ queryKey: key }),
+        onSettled: (_res, _err, hubId) => invalidateHubMembership(qc, hubId),
     });
 }
 
