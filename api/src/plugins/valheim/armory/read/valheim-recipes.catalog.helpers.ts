@@ -113,3 +113,39 @@ export function catalogueStations(graph: RecipeGraph): ValheimRecipeStation[] {
       icon: s.icon,
     }));
 }
+
+/** What one prefab's sources consume: recipe/piece resources, process inputs + fuel. */
+function inputsOf(graph: RecipeGraph, prefab: string): string[] {
+  const out: string[] = [];
+  for (const r of graph.recipesByResult.get(prefab) ?? []) {
+    for (const res of r.resources) out.push(res.prefab);
+  }
+  for (const p of graph.processesByOutput.get(prefab) ?? []) {
+    for (const i of p.inputs) out.push(i.prefab);
+    const fuel = graph.processors.get(p.processor)?.fuel;
+    if (fuel) out.push(fuel);
+  }
+  for (const res of graph.pieces.get(prefab)?.resources ?? []) {
+    out.push(res.prefab);
+  }
+  return out;
+}
+
+/**
+ * Every prefab a walk from `roots` can reach — a superset of the prefabs a
+ * resolved tree/plan references, so ONE catalogue read serves both the
+ * targets' `maxQuality` and the nodes' names/icons. Sorted.
+ */
+export function reachablePrefabs(
+  graph: RecipeGraph,
+  roots: readonly string[],
+): string[] {
+  const seen = new Set<string>();
+  const todo = [...roots];
+  for (let p = todo.pop(); p !== undefined; p = todo.pop()) {
+    if (seen.has(p)) continue;
+    seen.add(p);
+    todo.push(...inputsOf(graph, p));
+  }
+  return [...seen].sort();
+}

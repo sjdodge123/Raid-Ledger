@@ -80,14 +80,16 @@ export const RECIPE_GRAPH_CACHE_SIZE = 8;
 
 export function recipeGraphCacheKey(
   setId: number | string,
-  sourceSnapshotId: number | string,
+  revision: number | string,
 ): string {
-  return `${setId}:${sourceSnapshotId}`;
+  return `${setId}:${revision}`;
 }
 
 /**
- * LRU keyed `${setId}:${sourceSnapshotId}` — a re-import changes the
- * snapshot id, so a stale graph is never served; it just ages out.
+ * LRU keyed `${setId}:${revision}`. The service passes the set's
+ * `imported_at` (ms) as the revision: `upsertRecipeSet` bumps it on EVERY
+ * write — a same-gameVersion re-export or an equal-`capturedAt` rewrite
+ * keeps the set id — so a stale graph is never served; it just ages out.
  */
 export class RecipeGraphCache {
   private readonly entries = new Map<string, RecipeGraph>();
@@ -100,9 +102,9 @@ export class RecipeGraphCache {
 
   get(
     setId: number | string,
-    sourceSnapshotId: number | string,
+    revision: number | string,
   ): RecipeGraph | undefined {
-    const key = recipeGraphCacheKey(setId, sourceSnapshotId);
+    const key = recipeGraphCacheKey(setId, revision);
     const hit = this.entries.get(key);
     if (!hit) return undefined;
     this.entries.delete(key);
@@ -112,10 +114,10 @@ export class RecipeGraphCache {
 
   set(
     setId: number | string,
-    sourceSnapshotId: number | string,
+    revision: number | string,
     graph: RecipeGraph,
   ): void {
-    const key = recipeGraphCacheKey(setId, sourceSnapshotId);
+    const key = recipeGraphCacheKey(setId, revision);
     this.entries.delete(key);
     this.entries.set(key, graph);
     while (this.entries.size > this.capacity) {
@@ -128,13 +130,13 @@ export class RecipeGraphCache {
   /** Cached graph, else load the rows, build, cache. */
   async getOrLoad(
     setId: number | string,
-    sourceSnapshotId: number | string,
+    revision: number | string,
     load: () => Promise<RecipeGraphRows>,
   ): Promise<RecipeGraph> {
-    const hit = this.get(setId, sourceSnapshotId);
+    const hit = this.get(setId, revision);
     if (hit) return hit;
     const graph = buildRecipeGraph(await load());
-    this.set(setId, sourceSnapshotId, graph);
+    this.set(setId, revision, graph);
     return graph;
   }
 }

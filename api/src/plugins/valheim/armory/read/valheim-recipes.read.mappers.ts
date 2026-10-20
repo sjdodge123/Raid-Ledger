@@ -17,10 +17,10 @@ import type { ValheimContainerScan } from '../../../../drizzle/schema';
 import type { RecipeGraph } from './valheim-recipes.graph';
 import type { MaterialsTotalRow } from './valheim-materials.mappers';
 import {
+  ownPersonalSql,
   sharedSql,
   toMaterialsViewer,
   vehicleSql,
-  visibleSql,
 } from './valheim-materials.privacy';
 import type { RecipesReader } from './valheim-recipes.read.repository';
 
@@ -66,23 +66,35 @@ export function parseIncludePersonal(raw: unknown): boolean {
   throw new BadRequestException('Invalid includePersonal');
 }
 
+function parseKind(raw: string | undefined): RecipeKind | undefined {
+  if (raw === undefined || raw === 'item' || raw === 'piece') return raw;
+  throw new BadRequestException('Invalid targets');
+}
+
+/** `prefab:q:n[:fromQ[:kind]]`; fromQ ≥ 1 must be below q (else 400). */
 function parseTarget(part: string): ValheimRecipePlanTarget {
   const bits = part.split(':');
-  if (bits.length < 3 || bits.length > 4) {
+  if (bits.length < 3 || bits.length > 5) {
     throw new BadRequestException('Invalid targets');
   }
-  const [prefab, q, n, from] = bits;
+  const [prefab, q, n, from, rawKind] = bits;
+  const kind = parseKind(rawKind);
   const parsed = ValheimRecipePlanTargetSchema.safeParse({
     prefab,
     quality: toInt(q),
     amount: toInt(n),
     fromQuality: from === undefined ? 0 : toInt(from),
+    ...(kind ? { kind } : {}),
   });
   if (!parsed.success) throw new BadRequestException('Invalid targets');
-  return parsed.data;
+  const t = parsed.data;
+  if (t.fromQuality >= 1 && t.fromQuality >= t.quality) {
+    throw new BadRequestException('Invalid targets');
+  }
+  return t;
 }
 
-/** `targets=<prefab>:<q>:<n>[:<fromQ>],…` — 1..MAX targets, else 400. */
+/** `targets=<prefab>:<q>:<n>[:<fromQ>[:<kind>]],…` — 1..MAX targets, else 400. */
 export function parsePlanTargets(raw: unknown): ValheimRecipePlanTarget[] {
   if (typeof raw !== 'string' || raw.length === 0) {
     throw new BadRequestException('Invalid targets');
@@ -125,13 +137,17 @@ export interface PlanStockOptions {
   includeVehicles: boolean;
 }
 
-/** D7: shared chests, plus the viewer's own personal ones when asked. */
+/**
+ * D7: shared chests, plus the viewer's OWN personal ones when asked — own
+ * only, admins included (`ownPersonalSql`; the Materials tab's admin
+ * oversight does not apply to a plan).
+ */
 export function stockScope(
   user: AuthenticatedUser,
   opts: PlanStockOptions,
 ): SQL {
   const visible = opts.includePersonal
-    ? visibleSql(toMaterialsViewer(user))
+    ? sql`(${sharedSql} OR ${ownPersonalSql(toMaterialsViewer(user))})`
     : sharedSql;
   return sql`(${visible} AND ${vehicleSql(opts.includeVehicles)})`;
 }
@@ -150,15 +166,18 @@ export async function loadStock(
   return { scan, stock: toStockMap(await r.materials.totals(scan.id, scope)) };
 }
 
-/** Each target's quality clamped to its item's `maxQuality` (spec §2.5). */
+/**
+ * Each target's quality clamped to its item's `maxQuality` (spec §2.5), and
+ * `fromQuality` clamped below it (q1 → craft from scratch).
+ */
 export function clampTargets(
   targets: readonly ValheimRecipePlanTarget[],
   maxQuality: (prefab: string) => number,
 ): ValheimRecipePlanTarget[] {
-  return targets.map((t) => ({
-    ...t,
-    quality: Math.min(t.quality, maxQuality(t.prefab)),
-  }));
+  return targets.map((t) => {
+    const quality = Math.min(t.quality, maxQuality(t.prefab));
+    return { ...t, quality, fromQuality: Math.min(t.fromQuality, quality - 1) };
+  });
 }
 
 /** No recipes snapshot yet. */

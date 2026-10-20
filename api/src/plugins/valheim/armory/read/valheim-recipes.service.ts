@@ -27,6 +27,7 @@ import {
   catalogueStations,
   maxQualityLookup,
   producedPrefabs,
+  reachablePrefabs,
 } from './valheim-recipes.catalog.helpers';
 import { RecipeGraphCache, type RecipeGraph } from './valheim-recipes.graph';
 import { toRecipeGraphRows } from './valheim-recipes.graph-rows';
@@ -105,7 +106,7 @@ export class ValheimRecipesService {
       if (!set || !graph || !hasTreeTarget(graph, prefab, kind)) {
         throw new NotFoundException(RECIPE_NOT_FOUND);
       }
-      const maxQ = await this.maxQuality(r, set, graph, [prefab]);
+      const { cat, maxQ } = await this.catalogFor(r, set, graph, [prefab]);
       const q = kind === 'piece' ? 1 : Math.min(quality, maxQ(prefab));
       const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
       const res = resolveTree(
@@ -114,7 +115,12 @@ export class ValheimRecipesService {
         null,
         { maxQuality: maxQ },
       );
-      return this.treeBody(r, set, { prefab, quality: q }, res);
+      return {
+        target: { prefab, quality: q },
+        ...pickTree(res),
+        ...nodeCatalog(res, cat),
+        recipeAtlas: await r.recipeAtlas(set),
+      };
     });
     return ValheimRecipeTreeResponseSchema.parse(body);
   }
@@ -144,10 +150,10 @@ export class ValheimRecipesService {
     const graph = await this.graph(r, set);
     const { scan, stock } = await loadStock(r, set.pelicanServerId, scope);
     const ids = targets.map((t) => t.prefab);
-    const maxQ = await this.maxQuality(r, set, graph, ids);
+    const { cat, maxQ } = await this.catalogFor(r, set, graph, ids);
     const planned = clampTargets(targets, maxQ);
     const res = resolvePlan(graph, planned, stock, { maxQuality: maxQ });
-    const { items, atlas } = await this.nodeCatalog(r, set, res);
+    const { items, itemAtlas } = nodeCatalog(res, cat);
     return {
       targets: planned,
       ...pickTree(res),
@@ -156,61 +162,46 @@ export class ValheimRecipesService {
       shoppingList: res.shoppingList,
       fuelEstimates: res.fuelEstimates,
       items,
-      itemAtlas: atlas,
+      itemAtlas,
       recipeAtlas: await r.recipeAtlas(set),
     };
   }
 
-  private async treeBody(
-    r: RecipesReader,
-    set: ValheimRecipeSetRow,
-    target: { prefab: string; quality: number },
-    res: ResolveResult,
-  ) {
-    const { items, atlas } = await this.nodeCatalog(r, set, res);
-    return {
-      target,
-      ...pickTree(res),
-      items,
-      itemAtlas: atlas,
-      recipeAtlas: await r.recipeAtlas(set),
-    };
-  }
-
-  /** Catalogue subset for every prefab the plan's nodes reference. */
-  private async nodeCatalog(
-    r: RecipesReader,
-    set: ValheimRecipeSetRow,
-    res: ResolveResult,
-  ) {
-    const prefabs = [...new Set(res.nodes.map((n) => n.prefab))].sort();
-    const { pelicanServerId: id, gameVersion } = set;
-    const cat = await r.materials.findCatalog(id, gameVersion, prefabs);
-    return projectCatalog(prefabs, cat);
-  }
-
+  /** D5: keyed on `imported_at`, which every re-import bumps. */
   private graph(r: RecipesReader, set: ValheimRecipeSetRow) {
-    const snapshot = set.sourceSnapshotId ?? 'none';
-    return this.graphs.getOrLoad(set.id, snapshot, async () =>
+    return this.graphs.getOrLoad(set.id, set.importedAt.getTime(), async () =>
       toRecipeGraphRows(await r.loadRows(set.id)),
     );
   }
 
-  /** The items-catalogue `maxQuality` for `prefabs` (D6 catalogue choice). */
-  private async maxQuality(
+  /**
+   * ONE items-catalogue read (D6 choice) for everything reachable from
+   * `roots`: the targets' `maxQuality` and, after resolving, the nodes'
+   * names + icons.
+   */
+  private async catalogFor(
     r: RecipesReader,
     set: ValheimRecipeSetRow,
     graph: RecipeGraph,
-    prefabs: string[],
-  ): Promise<(prefab: string) => number> {
-    const unique = [...new Set(prefabs)].sort();
+    roots: string[],
+  ) {
     const cat = await r.materials.findCatalog(
       set.pelicanServerId,
       set.gameVersion,
-      unique,
+      reachablePrefabs(graph, roots),
     );
-    return maxQualityLookup(graph, cat?.items ?? null);
+    return { cat, maxQ: maxQualityLookup(graph, cat?.items ?? null) };
   }
+}
+
+/** Catalogue subset for every prefab the resolved nodes reference. */
+function nodeCatalog(
+  res: ResolveResult,
+  cat: Parameters<typeof projectCatalog>[1],
+) {
+  const prefabs = [...new Set(res.nodes.map((n) => n.prefab))].sort();
+  const { items, atlas } = projectCatalog(prefabs, cat);
+  return { items, itemAtlas: atlas };
 }
 
 function pickTree(res: ResolveResult) {

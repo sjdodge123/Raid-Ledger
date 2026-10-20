@@ -35,10 +35,8 @@ export function stationAt(recipe: ValheimRecipe, q: number): string | null {
   return recipe.station ?? (q > 1 ? recipe.repairStation : null);
 }
 
-export interface ResolveTarget extends ValheimRecipePlanTarget {
-  /** Omitted → `piece` when only a piece builds the prefab, else `item`. */
-  kind?: 'item' | 'piece';
-}
+/** `kind` omitted → `piece` when only a piece builds the prefab, else `item`. */
+export type ResolveTarget = ValheimRecipePlanTarget;
 
 export interface ResolveOptions {
   /** Items-catalogue `m_maxQuality`; the target quality is clamped to it. Default 1. */
@@ -228,20 +226,20 @@ export class PlanBuilder {
     return this.ledger?.get(prefab) ?? 0;
   }
 
-  /** Takes `min(stock, need)` from the ledger; null without stock. */
-  take(prefab: string, need: number): number | null {
-    if (!this.ledger) return null;
-    const left = this.ledger.get(prefab) ?? 0;
-    const have = Math.min(left, need);
-    this.ledger.set(prefab, left - have);
-    return have;
-  }
-
-  /** `net` false (upgrade / quality > 1 target): nothing taken, have 0. */
+  /**
+   * `have` = what the ledger holds of `prefab` BEFORE this take (the stock
+   * available to this node); the ledger loses `min(have, need)`; `short` =
+   * `max(0, need − have)`. `net` false (upgrade / quality > 1 target):
+   * nothing taken, have 0. No ledger (`/tree`): have/short null.
+   */
   takeFor(prefab: string, need: number, net: boolean): Taken {
-    const have = net ? this.take(prefab, need) : this.ledger ? 0 : null;
-    const rest = need - (have ?? 0);
-    return { have, rest, short: have === null ? null : rest };
+    if (!this.ledger) return { have: null, rest: need, short: null };
+    if (!net) return { have: 0, rest: need, short: need };
+    const available = this.ledger.get(prefab) ?? 0;
+    const used = Math.min(available, need);
+    this.ledger.set(prefab, available - used);
+    const rest = need - used;
+    return { have: available, rest, short: rest };
   }
 
   push(node: NodeInput): number {
@@ -259,23 +257,31 @@ export class PlanBuilder {
     else this.fuelEstimates.push({ prefab, processor, seconds });
   }
 
-  /** Σ over gathered / cycle / fuel LEAVES, first-seen order. */
+  /**
+   * Σ over gathered / cycle / fuel LEAVES, first-seen order; when truncated,
+   * also a crafted node whose children were all cut (else it would vanish
+   * from the list). `have` = stock available at the prefab's first leaf;
+   * `short` sums each leaf's shortfall (= max(0, need − have)).
+   */
   shoppingList(): ShoppingLine[] {
     const lines = new Map<string, ShoppingLine>();
     for (const n of this.nodes) {
-      if (this.parents.has(n.id) || !isLeafVia(n)) continue;
+      if (this.parents.has(n.id) || !this.listsAsLeaf(n)) continue;
       const line = lines.get(n.prefab) ?? {
         prefab: n.prefab,
         need: 0,
-        have: this.hasStock ? 0 : null,
+        have: this.hasStock ? (n.have ?? 0) : null,
         short: this.hasStock ? 0 : null,
       };
       line.need += n.quantity;
-      if (line.have !== null) line.have += n.have ?? 0;
       if (line.short !== null) line.short += n.short ?? 0;
       lines.set(n.prefab, line);
     }
     return [...lines.values()];
+  }
+
+  private listsAsLeaf(n: ValheimPlanNode): boolean {
+    return isLeafVia(n) || (this.truncated && n.crafts > 0);
   }
 }
 

@@ -62,6 +62,7 @@ const fromExcluded = (cols: Record<string, { name: string }>) =>
 /**
  * D4 upsert. Equal `captured_at` rewrites identical data (idempotent, as
  * `upsertCatalog`); returns null when the stored set is strictly newer.
+ * Every accepted write bumps `imported_at` — the graph-cache revision.
  */
 export async function upsertRecipeSet(
   tx: ValheimLinkTx,
@@ -72,7 +73,13 @@ export async function upsertRecipeSet(
     .values(values)
     .onConflictDoUpdate({
       target: [sets.pelicanServerId, sets.gameVersion],
-      set: { ...fromExcluded(SET_COLUMNS), importedAt: sql`now()` },
+      set: {
+        ...fromExcluded(SET_COLUMNS),
+        // Strictly increasing on every write (≥ 1 ms): the read side keys
+        // its graph cache on it, so even an equal-`capturedAt` rewrite
+        // inside the same millisecond must change it (ROK-1854 review).
+        importedAt: sql`GREATEST(now(), ${sets.importedAt} + interval '1 millisecond')`,
+      },
       setWhere: sql`${sets.capturedAt} <= excluded.captured_at`,
     })
     .returning();
