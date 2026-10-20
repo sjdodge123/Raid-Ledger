@@ -4,11 +4,13 @@
  * (D6) with "Read the full post"; editors edit inline or open the composer
  * above it (D9, no overlay). A 403 (members-first visitor) renders nothing.
  */
-import { useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX, type MouseEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildKind, HubPost } from '@raid-ledger/contract';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { Button } from '../../ui/button';
+import { FOCUS_RING } from '../../ui/form-classes';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { JumpLink } from '../card-bits';
 import { hubCopy, type HubCopy } from '../hub-copy';
@@ -32,6 +34,28 @@ function PostSkeleton(): JSX.Element {
     );
 }
 
+/**
+ * In-app jump to the Posts tab's copy of the post: the router carries `?post=`
+ * (no document reload), then the hash write fires `hashchange` for `useHashTab`.
+ * A modified click (new tab/window) keeps the browser default.
+ */
+function ReadFullLink({ postId }: { postId: number }): JSX.Element {
+    const navigate = useNavigate();
+    const search = `?post=${postId}`;
+    const onClick = (e: MouseEvent<HTMLAnchorElement>): void => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate({ search });
+        window.location.hash = 'posts';
+    };
+    return (
+        <Link to={{ search, hash: '#posts' }} onClick={onClick}
+            className={`mb-2 inline-block rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}>
+            Read the full post
+        </Link>
+    );
+}
+
 function LatestPost({ post, guildId, previous }: { post: HubPost; guildId: number; previous: string }): JSX.Element {
     const bodyRef = useRef<HTMLDivElement>(null);
     const clamped = useOverflow(bodyRef, [post.body]);
@@ -41,7 +65,7 @@ function LatestPost({ post, guildId, previous }: { post: HubPost; guildId: numbe
             <div ref={bodyRef} className="mb-2 max-h-[15rem] overflow-hidden">
                 <MarkdownBlock text={post.body} className="text-sm text-secondary" testId="guild-gm-post-body" />
             </div>
-            {clamped && <a href={`?post=${post.id}#posts`} className="mb-2 inline-block text-sm font-medium text-success hover:underline">Read the full post</a>}
+            {clamped && <ReadFullLink postId={post.id} />}
             <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
                 <PostByline post={post} testId="guild-gm-post-byline" />
                 {hasPrevious && <JumpLink testId="hub-posts-previous" href="#posts">{previous}</JumpLink>}
@@ -80,13 +104,15 @@ function Notice({ notice }: { notice: PostNotice | null }): JSX.Element {
 
 interface CardBodyProps {
     state: 'pending' | 'error' | 'ready'; post: HubPost | null; guildId: number; canEdit: boolean;
+    /** The post captured when Edit was pressed — a refetch bringing a newer post must not retarget the draft (Codex P1). */
+    editing: HubPost | null;
     mode: Mode; copy: HubCopy; onCompose: () => void; onDone: () => void;
 }
 
-function CardBody({ state, post, guildId, canEdit, mode, copy, onCompose, onDone }: CardBodyProps): JSX.Element | null {
+function CardBody({ state, post, guildId, canEdit, editing, mode, copy, onCompose, onDone }: CardBodyProps): JSX.Element | null {
     if (state === 'pending') return <PostSkeleton />;
     if (state === 'error') return <p role="alert" className="text-sm text-danger" data-testid="guild-gm-post-error">Couldn’t load the guild post. Try again later.</p>;
-    if (canEdit && mode === 'edit' && post) return <PostEditor guildId={guildId} post={post} onDone={onDone} />;
+    if (canEdit && mode === 'edit' && editing) return <PostEditor key={editing.id} guildId={guildId} post={editing} onDone={onDone} />;
     if (post) return <LatestPost post={post} guildId={guildId} previous={copy.previousPosts} />;
     return mode === 'compose' ? null : <EmptyPost canEdit={canEdit} copy={copy} onCompose={onCompose} />;
 }
@@ -96,18 +122,34 @@ function ComposeSlot(props: PostComposerProps): JSX.Element {
     return <div className="mb-4 border-b border-edge pb-4"><PostComposer {...props} /></div>;
 }
 
+interface CardState {
+    mode: Mode; editing: HubPost | null; notice: PostNotice | null;
+    setNotice: (n: PostNotice | null) => void; compose: () => void; edit: (post: HubPost) => void; done: () => void;
+}
+
+/** Card mode + the edit target, captured once when editing starts. */
+function useCardState(): CardState {
+    const [mode, setMode] = useState<Mode>('read');
+    const [editing, setEditing] = useState<HubPost | null>(null);
+    const [notice, setNotice] = useState<PostNotice | null>(null);
+    return {
+        mode, editing, notice, setNotice,
+        compose: () => { setNotice(null); setMode('compose'); },
+        edit: (post) => { setEditing(post); setMode('edit'); },
+        done: () => { setEditing(null); setMode('read'); },
+    };
+}
+
 export interface LatestPostCardProps { guildId: number; canEdit: boolean; isLeader: boolean; kind?: GuildKind | undefined }
 
 /** The newest post (or the empty state) with editor actions and the relay notice. */
 export function LatestPostCard({ guildId, canEdit, isLeader, kind }: LatestPostCardProps): JSX.Element | null {
-    const [mode, setMode] = useState<Mode>('read');
-    const [notice, setNotice] = useState<PostNotice | null>(null);
+    const { mode, editing, notice, setNotice, compose, edit, done } = useCardState();
     const profile = useGuildProfile(guildId);
     const copy = hubCopy(kind);
     if (httpStatusOf(profile.error) === 403) return null;
     const post = profile.data?.latestPost ?? null;
     const ready = !profile.isPending && !profile.isError;
-    const compose = (): void => { setNotice(null); setMode('compose'); };
     return (
         <section id="gm-post" aria-labelledby="gm-post-title" className="scroll-mt-4 md:col-span-2" data-testid="guild-gm-post">
             <Card className="h-full border-l-4 border-l-success">
@@ -116,15 +158,15 @@ export function LatestPostCard({ guildId, canEdit, isLeader, kind }: LatestPostC
                         <Pill tone="success">{copy.leaderPostPill}</Pill>
                         <h2 id="gm-post-title" className="sr-only">{copy.leaderPostHeading}</h2>
                     </div>
-                    {canEdit && ready && mode === 'read' && <Actions hasPost={!!post} onEdit={() => setMode('edit')} onCompose={compose} />}
+                    {canEdit && ready && mode === 'read' && <Actions hasPost={!!post} onEdit={() => { if (post) edit(post); }} onCompose={compose} />}
                 </div>
                 <Notice notice={notice} />
                 {canEdit && mode === 'compose' && (
-                    <ComposeSlot guildId={guildId} kind={kind} isLeader={isLeader} onCancel={() => setMode('read')}
-                        onPosted={(res, channel) => { setNotice(relayOutcomeNotice(res.relayOutcome, channel)); setMode('read'); }} />
+                    <ComposeSlot guildId={guildId} kind={kind} isLeader={isLeader} onCancel={done}
+                        onPosted={(res, channel) => { setNotice(relayOutcomeNotice(res.relayOutcome, channel)); done(); }} />
                 )}
                 <CardBody state={profile.isPending ? 'pending' : profile.isError ? 'error' : 'ready'} post={post} guildId={guildId}
-                    canEdit={canEdit} mode={mode} copy={copy} onCompose={compose} onDone={() => setMode('read')} />
+                    canEdit={canEdit} editing={editing} mode={mode} copy={copy} onCompose={compose} onDone={done} />
             </Card>
         </section>
     );

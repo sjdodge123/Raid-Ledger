@@ -6,7 +6,9 @@ import { http, HttpResponse } from 'msw';
 import type { GuildProfile, HubPost } from '@raid-ledger/contract';
 import type { MarkdownEditorProps } from '../../ui/markdown/lazy-markdown-editor';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
+import type { JSX } from 'react';
+import { useLocation } from 'react-router-dom';
 import { buildHubPost } from '../../../test/factories/hub-posts';
 import { LatestPostCard } from './latest-post-card';
 
@@ -74,5 +76,49 @@ describe('LatestPostCard', () => {
         const status = await screen.findByRole('status');
         await waitFor(() => expect(status).toHaveTextContent('couldn’t be sent to Discord'));
         expect(status).toHaveClass('text-warning');
+    });
+});
+
+function LocationProbe(): JSX.Element {
+    const loc = useLocation();
+    return <output data-testid="probe">{loc.search}</output>;
+}
+
+describe('LatestPostCard — review fixes (ROK-1868)', () => {
+    it('keeps editing the post it opened when a refetch brings a newer one (Codex P1)', async () => {
+        let latest = buildHubPost({ id: 4, body: 'Old plan' });
+        const patched: string[] = [];
+        server.use(
+            http.get(`${CORE}/profile`, () => HttpResponse.json({ guildId: 7, gmPost: null, latestPost: latest, rules: [], links: [] })),
+            http.get(`${CORE}/posts`, () => HttpResponse.json({ posts: [], nextCursor: null })),
+            http.patch(`${CORE}/posts/:id`, ({ params }) => { patched.push(String(params['id'])); return HttpResponse.json(buildHubPost({ id: 4 })); }),
+        );
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<LatestPostCard guildId={7} canEdit isLeader />, { queryClient });
+        await userEvent.click(await screen.findByTestId('hub-post-edit'));
+        await userEvent.type(screen.getByTestId('hub-post-edit-body'), ' moved');
+        latest = buildHubPost({ id: 9, body: 'Someone else' });
+        await queryClient.refetchQueries();
+        expect(screen.getByTestId('hub-post-edit-body'), 'the draft must survive the refetch').toHaveValue('Old plan moved');
+        await userEvent.click(screen.getByTestId('hub-post-save'));
+        await waitFor(() => expect(patched, 'Save must PATCH the post the editor opened, not the newer one').toEqual(['4']));
+    });
+
+    it('"Read the full post" navigates in-app to ?post=<id>#posts with a focus ring', async () => {
+        const proto = HTMLElement.prototype;
+        const scroll = Object.getOwnPropertyDescriptor(proto, 'scrollHeight');
+        Object.defineProperty(proto, 'scrollHeight', { configurable: true, get: () => 999 });
+        try {
+            withPosts(buildHubPost({ id: 5 }), 1);
+            renderWithProviders(<><LatestPostCard guildId={7} canEdit={false} isLeader={false} /><LocationProbe /></>);
+            const link = await screen.findByRole('link', { name: 'Read the full post' });
+            expect(link.className, 'the link carries the standard focus ring').toContain('focus-visible:');
+            await userEvent.click(link);
+            expect(screen.getByTestId('probe'), 'the router (not a document reload) carries ?post=').toHaveTextContent('?post=5');
+            expect(window.location.hash).toBe('#posts');
+        } finally {
+            if (scroll) Object.defineProperty(proto, 'scrollHeight', scroll);
+            window.location.hash = '';
+        }
     });
 });
