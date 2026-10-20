@@ -12,6 +12,7 @@ import { SteamIcon } from '../components/icons/SteamIcon';
 import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
+import { CommunityHubsSection } from './game-detail/community-hubs-section';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
@@ -96,7 +97,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </div>
             )}
-            <CoopSupportAndActivity game={game} gameId={gameId} />
+            <CoopSupportAndActivity game={game} gameId={gameId} isAuthenticated={isAuthenticated} />
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />
             <GameTasteSection gameId={gameId} />
@@ -109,12 +110,13 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
  * section renders nothing for games Co-Optimus has never been asked about.
  * Plugin sections (`game-detail:sections`, ROK-1785) render first.
  */
-function CoopSupportAndActivity({ game, gameId }: {
-    game: NonNullable<ReturnType<typeof useGameDetail>['data']>; gameId: number | undefined;
+function CoopSupportAndActivity({ game, gameId, isAuthenticated }: {
+    game: NonNullable<ReturnType<typeof useGameDetail>['data']>; gameId: number | undefined; isAuthenticated: boolean;
 }): JSX.Element {
     return (
         <>
             {gameId && <PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />}
+            {gameId && isAuthenticated && <CommunityHubsSection gameId={gameId} gameName={game.name} />}
             <CoopFeaturesSection game={game} />
             {gameId && <CommunityActivitySection gameId={gameId} />}
         </>
