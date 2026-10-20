@@ -34,8 +34,7 @@ function setup(opts: { dbDemo?: boolean; knownIds?: number[] } = {}) {
   const magic = new MagicLinkService(
     jwt as unknown as MagicCtor[0],
     users as unknown as MagicCtor[1],
-    { isBlocked: jest.fn() } as unknown as MagicCtor[2],
-    db as unknown as MagicCtor[3],
+    db as unknown as MagicCtor[2],
   );
   const generateLink = jest.spyOn(magic, 'generateLink');
   const settings = {
