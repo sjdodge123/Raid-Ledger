@@ -129,6 +129,16 @@ describe('community settings in the sheet', () => {
         expect(screen.getByRole('button', { name: 'Archive hub' })).toBeInTheDocument();
     });
 
+    it('Codex P2: a community leader gets the same Discord channel controls as a server-hub leader', async () => {
+        server.use(http.get('http://localhost:3000/guilds/41/discord', () => HttpResponse.json({ state: 'unset' })));
+        const onChangeChannel = vi.fn();
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'leader' })}>{(ctx) => (
+            <HubSettingsSheet ctx={ctx} module={communityHubModule} onClose={() => undefined} onChangeChannel={onChangeChannel} />
+        )}</WithCtx>);
+        await userEvent.click(await screen.findByTestId('guild-settings-choose-channel'));
+        expect(onChangeChannel).toHaveBeenCalledTimes(1);
+    });
+
     it('gives a community leader Discord but no Page editors or Visibility hide (Archive replaces hiding)', async () => {
         server.use(
             http.get('http://localhost:3000/guilds/41/discord', () => HttpResponse.json({ state: 'unset' })),

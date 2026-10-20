@@ -15,7 +15,7 @@ import { buildCommunityMember, buildCommunityPage } from '../../../test/factorie
 import { mockDesktop } from '../../../test/handlers/media';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { usePluginStore } from '../../../stores/plugin-store';
-import { useHubModule, type HubCtx } from '../../../plugins/hub-module';
+import { useHubModule, type CoreWidgetId, type HubCtx } from '../../../plugins/hub-module';
 import { HubMembers } from '../hub-members';
 import { communityHubModule } from './community-hub-module';
 import { CommunityJoinPill, CommunityKindPill } from './community-hero';
@@ -184,6 +184,17 @@ describe('community Members tab', () => {
 });
 
 describe('W11: useHubModule', () => {
+    it('Codex P2: a signed-in visitor (not yet joined) is shown every core Overview widget', () => {
+        const ids: readonly CoreWidgetId[] = ['gm-post', 'discord', 'schedule', 'events', 'attendance'];
+        const seen: (boolean | undefined)[] = [];
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'visitor', community: { viewerJoined: false } })}>{(ctx) => {
+            seen.push(...ids.map((id) => communityHubModule.coreWidgetVisible?.(id, ctx)));
+            return null;
+        }}</WithCtx>);
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every((v) => v === true)).toBe(true);
+    });
+
     it('returns the core community module with every plugin off', () => {
         usePluginStore.setState({ activeSlugs: new Set<string>() });
         const { result } = renderHook(() => useHubModule('game_community'));
