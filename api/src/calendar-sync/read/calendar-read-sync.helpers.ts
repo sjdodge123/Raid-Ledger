@@ -50,6 +50,7 @@ import {
   cursorFields,
   resolvePrimaryAlias,
   storedCursor,
+  unchangedStillValid,
 } from './calendar-read-cursor.helpers';
 import {
   buildReadWindow,
@@ -174,26 +175,33 @@ export function fetchWindow(
   });
 }
 
+/** The locked row's current ids + cursor (Codex r7: cursor re-checked). */
+interface LockedRow {
+  readCalendarIds: string[];
+  syncCursor: unknown;
+}
+
 /**
  * Row lock: a disconnect / `needs_reconnect` / read-off since the fetch wins
- * over the sync. Returns the locked row's CURRENT `read_calendar_ids`.
+ * over the sync. Returns the locked row's CURRENT ids and cursor.
  */
 async function lockReadable(
   tx: ReadSyncTx,
   id: number,
-): Promise<{ readCalendarIds: string[] } | null> {
+): Promise<LockedRow | null> {
   const c = schema.calendarConnections;
   const [row] = await tx
     .select({
       status: c.status,
       readEnabled: c.readEnabled,
       readCalendarIds: c.readCalendarIds,
+      syncCursor: c.syncCursor,
     })
     .from(c)
     .where(eq(c.id, id))
     .for('update');
   if (!row || row.status !== 'active' || !row.readEnabled) return null;
-  return { readCalendarIds: row.readCalendarIds };
+  return { readCalendarIds: row.readCalendarIds, syncCursor: row.syncCursor };
 }
 
 /**
@@ -209,7 +217,7 @@ export async function lockForSync(
   tx: ReadSyncTx,
   conn: Pick<ReadSyncConnection, 'id' | 'userId'>,
   withDerive: boolean,
-): Promise<{ readCalendarIds: string[] } | null> {
+): Promise<LockedRow | null> {
   if (withDerive) await lockUserDerive(tx, conn.userId);
   return lockReadable(tx, conn.id);
 }
@@ -300,13 +308,41 @@ async function windowFor(
   return safeReadWindow(now, tz);
 }
 
-/** §4.4.2 steps 3–8 for one connection. Provider errors propagate. */
-export async function runCalendarReadSync(
+interface Commit {
+  conn: ReadSyncConnection;
+  window: ReadWindow;
+  rows: NormalizedBusyBlock[] | null;
+  result: FetchBusyResult;
+  stamp: { now: Date; random: () => number };
+}
+
+/** `stale`: an `unchanged` answer to a cursor that moved since (Codex r7). */
+type Attempt = ReadSyncOutcome | 'stale';
+
+async function commitSync(
+  tx: ReadSyncTx,
+  deps: ReadSyncDeps,
+  k: Commit,
+): Promise<'written' | 'skipped' | 'stale'> {
+  const locked = await lockForSync(tx, k.conn, deps.afterBlocks !== undefined);
+  if (!locked) return 'skipped';
+  const sent = storedCursor(k.conn.syncCursor);
+  if (k.result.unchanged && !unchangedStillValid(sent, locked.syncCursor)) {
+    return 'stale';
+  }
+  if (deps.stillAllowed && !(await deps.stillAllowed())) return 'skipped';
+  if (k.rows) await replaceBlocks(tx, k.conn, k.window, k.rows);
+  if (deps.afterBlocks) await deps.afterBlocks(tx, k.conn.userId);
+  await markSynced(tx, k.conn, buildSyncedFields(locked, k.result, k.stamp));
+  return 'written';
+}
+
+async function syncOnce(
   deps: ReadSyncDeps,
   conn: ReadSyncConnection,
-): Promise<ReadSyncOutcome> {
-  const now = deps.now ? deps.now() : new Date();
-  const window = await windowFor(deps, conn, now);
+  window: ReadWindow,
+  now: Date,
+): Promise<Attempt> {
   const result = await fetchWindow(deps, conn, window);
   if (deps.stillAllowed && !(await deps.stillAllowed())) return 'skipped';
   const instanceId = deriveInstanceId(new URL(deps.clientUrl).host);
@@ -314,16 +350,23 @@ export async function runCalendarReadSync(
     ? null
     : normalizeBusyBlocks(result.blocks, { instanceId, window });
   const stamp = { now, random: deps.random ?? Math.random };
-  const written = await deps.db.transaction(async (tx) => {
-    const locked = await lockForSync(tx, conn, deps.afterBlocks !== undefined);
-    if (!locked) return false;
-    if (deps.stillAllowed && !(await deps.stillAllowed())) return false;
-    if (rows) await replaceBlocks(tx, conn, window, rows);
-    if (deps.afterBlocks) await deps.afterBlocks(tx, conn.userId);
-    await markSynced(tx, conn, buildSyncedFields(locked, result, stamp));
-    return true;
-  });
-  if (!written) return 'skipped';
+  const k: Commit = { conn, window, rows, result, stamp };
+  const done = await deps.db.transaction((tx) => commitSync(tx, deps, k));
+  if (done !== 'written') return done;
   if (deps.onCommitted) await deps.onCommitted(conn.userId);
   return rows ? 'synced' : 'unchanged';
+}
+
+/** §4.4.2 steps 3–8 for one connection. Provider errors propagate. */
+export async function runCalendarReadSync(
+  deps: ReadSyncDeps,
+  conn: ReadSyncConnection,
+): Promise<ReadSyncOutcome> {
+  const now = deps.now ? deps.now() : new Date();
+  const window = await windowFor(deps, conn, now);
+  const first = await syncOnce(deps, conn, window, now);
+  if (first !== 'stale') return first;
+  // Codex r7: the cursor moved under the fetch → one full read, no cursor.
+  const full = await syncOnce(deps, { ...conn, syncCursor: null }, window, now);
+  return full === 'stale' ? 'skipped' : full;
 }

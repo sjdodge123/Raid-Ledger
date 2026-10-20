@@ -19,6 +19,7 @@ import {
   resolvePrimaryAlias,
   withEligiblePrimary,
   storedCursor,
+  unchangedStillValid,
 } from './calendar-read-cursor.helpers';
 import { buildSyncedFields, fetchWindow } from './calendar-read-sync.helpers';
 import { toProviderCalendars } from '../providers/apple/apple-read.helpers';
@@ -229,5 +230,27 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
     const row = { ...conn(undefined), dedicatedCalendarId: 'raid-ledger-x' };
     await fetchWindow({ db, provider }, row, window);
     expect(fetchBusy.mock.calls[0]?.[2]).toEqual(['work']);
+  });
+});
+
+describe('unchangedStillValid — re-checked under the commit lock (Codex r7)', () => {
+  it('honours `unchanged` when the locked cursor is the one sent (key order aside)', () => {
+    const reordered = { 'c:home': '7', w: CURSOR.w };
+    expect(unchangedStillValid(CURSOR, reordered)).toBe(true);
+  });
+
+  it('a purge cleared the cursor mid-fetch → not valid (full re-read)', () => {
+    expect(unchangedStillValid(CURSOR, null)).toBe(false);
+  });
+
+  it('another sync advanced the cursor mid-fetch → not valid', () => {
+    expect(unchangedStillValid(CURSOR, { ...CURSOR, 'c:home': '8' })).toBe(
+      false,
+    );
+    expect(unchangedStillValid(CURSOR, { w: CURSOR.w })).toBe(false);
+  });
+
+  it('no cursor was sent → never valid', () => {
+    expect(unchangedStillValid(undefined, CURSOR)).toBe(false);
   });
 });

@@ -84,3 +84,22 @@ export function cursorFields(cursor: Record<string, string> | undefined): {
 } {
   return cursor ? { syncCursor: cursor } : {};
 }
+
+/**
+ * Codex r7: an `unchanged` answer is only true of the cursor it was asked
+ * against. Under the commit lock the row's cursor must still be that one —
+ * a kill-switch purge clears it (and the blocks), another sync advances it;
+ * either way the blocks `unchanged` vouches for may be gone.
+ */
+export function unchangedStillValid(
+  sent: Record<string, string> | undefined,
+  lockedRaw: unknown,
+): boolean {
+  const locked = storedCursor(lockedRaw);
+  if (!sent || !locked) return false;
+  const keys = Object.keys(sent);
+  return (
+    keys.length === Object.keys(locked).length &&
+    keys.every((k) => locked[k] === sent[k])
+  );
+}
