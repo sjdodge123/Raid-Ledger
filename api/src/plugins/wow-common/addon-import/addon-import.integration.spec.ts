@@ -18,7 +18,7 @@ import {
 import { nonEmpty } from '../../../common/testing/narrow';
 import type { NoNetworkWowheadDeps } from '../../../common/testing/wowhead-no-network';
 import { WOWHEAD_RESOLVER_DEPS } from '../wowhead-item/wow-item-meta.resolve';
-import { corroborateRoster } from './testing/corroborate-roster';
+import { grantMemberEditor } from './testing/grant-member-editor';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -466,7 +466,7 @@ describe('addon import — guild', () => {
     });
     expect(await rowCount(schema.guilds)).toBe(1);
     expect(await rowCount(schema.guildMembers)).toBe(40);
-    await corroborateRoster(testApp.db); // a second member's import (ROK-1794)
+    await grantMemberEditor(testApp.db); // staff made the importer an editor (ROK-1794)
 
     const { members } = fixtureJson<GuildFixture>('guild-1-page').payload.data;
     const newer = buildGuildPayload(members as never);

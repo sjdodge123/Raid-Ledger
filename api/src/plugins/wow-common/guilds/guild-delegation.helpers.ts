@@ -52,7 +52,7 @@ function linkingCharacter(rows: LinkedMemberRow[]) {
  * character created, or repinned onto the member's GUID, afterwards gets no
  * delegation (AC5) — staff re-grant to confirm the new link.
  */
-async function hasConfirmedMemberGrant(
+export async function hasConfirmedMemberGrant(
   db: Db,
   guildId: number,
   rows: LinkedMemberRow[],

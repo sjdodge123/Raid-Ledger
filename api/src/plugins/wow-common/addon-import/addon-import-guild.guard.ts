@@ -1,21 +1,25 @@
 import { Logger } from '@nestjs/common';
-import { and, eq, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { AddonGuildExport } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
+import { hasConfirmedMemberGrant } from '../guilds/guild-delegation.helpers';
+import {
+  findLinkedMemberRows,
+  inLatestSnapshot,
+} from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
 import { fromUnix, type AddonApplyContext } from './addon-import-apply.types';
 
 /**
  * SECURITY (ROK-1794, 2026-10-18 review) — guild exports are unsigned, so
- * the roster a snapshot carries proves nothing about who sent it. An existing
- * guild's roster is replaced only by staff or by an importer whose character
- * is already a live member of the STORED roster, and never wholesale.
+ * the roster a snapshot carries proves nothing about who sent it. After a
+ * guild's first import its roster is replaced only by staff or by the holder
+ * of an explicit, staff-made member grant ("explicit grants only", operator
+ * ruling 2026-10-19), and never wholesale.
  */
 
-const { guilds, guildMembers, guildEditors, characters, users, activityLog } =
-  schema;
+const { guilds, guildMembers, guildEditors, users, activityLog } = schema;
 const logger = new Logger('AddonImportGuildGuard');
 
 /** A snapshot dropping at least this many live members… */
@@ -29,8 +33,8 @@ export const MASS_REMOVAL_SHARE = 0.25;
 export const REMOVAL_WINDOW_HOURS = 24;
 const WINDOW = sql.raw(`interval '${REMOVAL_WINDOW_HOURS} hours'`);
 
-export const NOT_A_MEMBER_MESSAGE =
-  'Only a current member of this guild can update its roster.';
+export const NOT_AN_EDITOR_MESSAGE =
+  'Only an admin, or a member an admin has made a guild editor, can update this roster.';
 export const ROSTER_HELD_MESSAGE =
   'This roster would remove many members, or a member with editor rights, at once — ask an admin to import it.';
 
@@ -87,41 +91,20 @@ export async function lockGuildImport(
 }
 
 /**
- * ROK-1794 Codex P1 — a roster row the importer's OWN upload introduced
- * proves nothing (they may have claimed its GUID with a forged character
- * export too). It counts only once corroborated: introduced by someone else
- * (or before introducers were recorded), carried by another user's import
- * since, or holding a staff-made member grant.
+ * ROK-1794 "explicit grants only" (operator ruling 2026-10-19): being on the
+ * stored roster proves nothing — the importer may have claimed that GUID with
+ * a forged character export. Only a staff-made `kind='member'` grant on a
+ * CONFIRMED link counts (the linking character existed at grant time and has
+ * claimed no GUID since). That includes the guild's own creator. Rank grants
+ * never count here: their `rank_index` is self-reported by unsigned exports.
  */
-const corroboratedFor = (userId: number) =>
-  or(
-    isNull(guildMembers.introducedByUserId),
-    ne(guildMembers.introducedByUserId, userId),
-    isNotNull(guildMembers.corroboratedAt),
-    isNotNull(guildEditors.id),
-  );
-
-/** The importing character's STORED GUID is a live, corroborated row. */
-async function importerIsLiveMember(
+export async function importerHoldsMemberGrant(
   ctx: AddonApplyContext,
   guildId: number,
 ): Promise<boolean> {
-  const rows = await ctx.tx
-    .select({ id: guildMembers.id })
-    .from(guildMembers)
-    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .innerJoin(characters, eq(characters.addonGuid, guildMembers.guid))
-    .leftJoin(guildEditors, eq(guildEditors.guildMemberId, guildMembers.id))
-    .where(
-      and(
-        eq(characters.id, ctx.characterId),
-        eq(guildMembers.guildId, guildId),
-        inLatestSnapshot(),
-        corroboratedFor(ctx.userId),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
+  const rows = await findLinkedMemberRows(ctx.tx, ctx.userId, guildId);
+  if (rows.length === 0) return false;
+  return hasConfirmedMemberGrant(ctx.tx, guildId, rows);
 }
 
 /** Live roster GUIDs, each flagged when it holds a member-kind grant. */
@@ -212,8 +195,9 @@ async function assertNoWholesaleChange(
 
 /**
  * Gate a snapshot of an EXISTING guild (a brand-new guild has no roster to
- * protect). Staff pass; anyone else must be a live member, and a fresh
- * snapshot may not drop members wholesale. `fresh` = not stale (a stale
+ * protect). Staff pass; anyone else must hold a confirmed member grant
+ * (`importerHoldsMemberGrant`), and a fresh snapshot may not change the
+ * roster wholesale. `fresh` = not stale (a stale
  * snapshot writes nothing, so only membership is checked). Returns the
  * members this snapshot removes and adds (0/0 for staff — they never count).
  */
@@ -224,8 +208,8 @@ export async function assertMayReplaceRoster(
   fresh: boolean,
 ): Promise<RosterDelta> {
   if (await importerIsStaff(ctx)) return NO_DELTA;
-  if (!(await importerIsLiveMember(ctx, guildId))) {
-    throw new AddonImportError('NOT_IN_GUILD', NOT_A_MEMBER_MESSAGE);
+  if (!(await importerHoldsMemberGrant(ctx, guildId))) {
+    throw new AddonImportError('NOT_IN_GUILD', NOT_AN_EDITOR_MESSAGE);
   }
   return fresh ? assertNoWholesaleChange(ctx, guildId, payload) : NO_DELTA;
 }

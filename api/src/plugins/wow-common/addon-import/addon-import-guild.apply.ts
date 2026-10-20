@@ -31,7 +31,12 @@ import {
 export type AddonGuildSummary = z.infer<typeof AddonGuildImportSummarySchema>;
 type GuildOutcome = AddonSectionOutcome<AddonGuildSummary>;
 
-/** The exporter must appear in the roster they export. */
+/**
+ * Shape check only: the exporter must appear in the roster they export. It
+ * authorises nothing — being listed (by your own upload) earns no right to
+ * update an existing guild; `assertMayReplaceRoster` gates that (staff or an
+ * explicit member grant, ROK-1794). A brand-new guild needs only this.
+ */
 export function assertExporterInGuild(payload: AddonGuildExport): void {
   const guid = payload.who.guid;
   if (!payload.data.members.some((m) => m.guid === guid)) {
@@ -85,8 +90,6 @@ export function memberValues(
     source: 'addon_import',
     lastSeenAt: seenAt,
     capturedByUserId: ctx.userId,
-    // Insert-only (not in the conflict set): who first introduced the row.
-    introducedByUserId: ctx.userId,
     updatedAt: new Date(),
   };
 }
@@ -126,7 +129,7 @@ type StoredGuild = Awaited<ReturnType<typeof loadGuild>>;
 
 /**
  * ROK-1794 AC2/AC4: an existing guild's roster is only replaced by staff or
- * a live member, never wholesale. Returns whether the snapshot is stale and
+ * a member-grant holder, never wholesale. Returns whether the snapshot is stale and
  * the members it removes and adds (audited for the rolling window). The
  * guild-creating import counts 0/0: it is the window's baseline.
  */
@@ -227,17 +230,10 @@ const EXCLUDED_MEMBER_COLUMNS = [
 const camel = (c: string) =>
   c.replace(/_(\w)/g, (_m, ch: string) => ch.toUpperCase());
 
-/**
- * `SET col = excluded.col` for every mutable member column, plus ROK-1794
- * corroboration: the first import by a user other than the row's introducer
- * stamps `corroborated_at` (`excluded.introduced_by_user_id` = this importer).
- */
-const memberConflictSet = {
-  ...Object.fromEntries(
-    EXCLUDED_MEMBER_COLUMNS.map((c) => [camel(c), sql.raw(`excluded.${c}`)]),
-  ),
-  corroboratedAt: sql`CASE WHEN ${guildMembers.corroboratedAt} IS NULL AND ${guildMembers.introducedByUserId} IS DISTINCT FROM excluded.introduced_by_user_id THEN now() ELSE ${guildMembers.corroboratedAt} END`,
-};
+/** `SET col = excluded.col` for every mutable member column. */
+const memberConflictSet = Object.fromEntries(
+  EXCLUDED_MEMBER_COLUMNS.map((c) => [camel(c), sql.raw(`excluded.${c}`)]),
+);
 
 /** Upsert members by (guild_id, guid); returns how many were inserted. */
 async function upsertMembers(
