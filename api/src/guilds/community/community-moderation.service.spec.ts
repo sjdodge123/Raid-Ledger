@@ -280,7 +280,7 @@ describe('banUser (M22)', () => {
       ConflictException,
     );
     expect(order).toEqual(['lock', 'read']);
-    expect(mq.findMembership).toHaveBeenCalledWith({}, 7, 3);
+    expect(mq.findMembership).toHaveBeenCalledWith(TX, 7, 3);
     expect(mq.ban).not.toHaveBeenCalled();
     expect(rolledBack).toBe(true);
   });
