@@ -181,9 +181,11 @@ function makeService(h: Harness): ChannelLifecycleService {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.mocked(ops.ensureCategory).mockImplementation((_g, o) =>
-    Promise.resolve({ id: o.id ?? 'new', name: o.name, created: false }),
-  );
+  jest
+    .mocked(ops.ensureCategory)
+    .mockImplementation((_g, o) =>
+      Promise.resolve({ id: o.id ?? 'new', name: o.name, created: false }),
+    );
   jest.mocked(ops.categorySeriesIds).mockReturnValue(new Set());
   jest.mocked(ops.categoryHasRoom).mockResolvedValue(true);
 });
