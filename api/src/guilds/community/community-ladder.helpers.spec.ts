@@ -38,12 +38,18 @@ describe('community status changes (ROK-1870 M14)', () => {
 describe('viewerStateOf', () => {
   it('maps a membership row to the directory viewer state', () => {
     expect(viewerStateOf(null)).toBe('not-member');
-    expect(viewerStateOf({ role: 'officer', leftAt: null, bannedAt: null })).toBe('officer');
+    expect(
+      viewerStateOf({ role: 'officer', leftAt: null, bannedAt: null }),
+    ).toBe('officer');
     expect(
       viewerStateOf({ role: 'member', leftAt: new Date(), bannedAt: null }),
     ).toBe('not-member');
     expect(
-      viewerStateOf({ role: 'member', leftAt: new Date(), bannedAt: new Date() }),
+      viewerStateOf({
+        role: 'member',
+        leftAt: new Date(),
+        bannedAt: new Date(),
+      }),
     ).toBe('banned');
   });
 });
