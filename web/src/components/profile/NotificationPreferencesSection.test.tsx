@@ -6,6 +6,7 @@ import * as useNotificationsHook from '../../hooks/use-notifications';
 
 // ROK-1797: the muted-games list has its own spec; the hash hook needs a router.
 vi.mock('./muted-games-list', () => ({ MutedGamesList: () => null }));
+vi.mock('./muted-groups-list', () => ({ MutedGroupsList: () => null }));
 
 function renderSection() {
     return render(<MemoryRouter><NotificationPreferencesSection /></MemoryRouter>);

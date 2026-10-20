@@ -47,6 +47,8 @@ export const notifications = pgTable(
         'post_event_followup',
         'lfg_invite',
         'lfg_player_invite',
+        'hub_leader_post',
+        'hub_event_tagged',
         'system',
       ],
     }).notNull(),

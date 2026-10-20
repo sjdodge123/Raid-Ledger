@@ -24,3 +24,8 @@ export function gameInterestQueryKey(gameId: number | undefined, viewer: ViewerS
 export function gameMutesQueryKey(viewer: ViewerScope) {
     return ['notifications', 'game-mutes', viewer] as const;
 }
+
+/** The viewer's muted-groups list (`GET /notifications/hub-mutes`, ROK-1832). */
+export function hubMutesQueryKey(viewer: ViewerScope) {
+    return ['notifications', 'hub-mutes', viewer] as const;
+}

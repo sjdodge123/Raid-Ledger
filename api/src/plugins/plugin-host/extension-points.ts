@@ -282,6 +282,11 @@ export interface HubKindAdapter {
     actor: { id: number; role: UserRole },
     groupId: number,
   ): Promise<LadderRole>;
+  /**
+   * ROK-1832 D8: every user who is a live member of the group — the set form
+   * of `isMember`, so group-scoped fan-out can never drift from the gate.
+   */
+  memberUserIds(groupId: number): Promise<number[]>;
   /** Ids of the groups of this kind the user is a live member of. */
   memberGroupIds(userId: number): Promise<number[]>;
   /** Rank index → rank name for rank-based editor grants (empty if none). */

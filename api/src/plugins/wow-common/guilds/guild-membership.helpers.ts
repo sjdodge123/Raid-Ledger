@@ -90,14 +90,31 @@ export async function findLinkedMemberRows(
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .innerJoin(characters, characterLink())
     .innerJoin(users, eq(users.id, characters.userId))
-    .where(
-      and(
-        eq(characters.userId, userId),
-        isNull(users.deactivatedAt),
-        inLatestSnapshot(),
-        scope,
-      ),
-    );
+    .where(and(eq(characters.userId, userId), liveLinkedMember(), scope));
+}
+
+/** SQL predicate shared by every linked-member read: active + latest snapshot. */
+function liveLinkedMember(): SQL | undefined {
+  return and(isNull(users.deactivatedAt), inLatestSnapshot());
+}
+
+/**
+ * ROK-1832 D8: every user with a live linked member row in the guild — the
+ * set form of `findLinkedMemberRows(db, userId, guildId)` (same joins, same
+ * predicate), so a group fan-out matches the membership gate exactly.
+ */
+export async function findLinkedMemberUserIds(
+  db: Db,
+  guildId: number,
+): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ userId: characters.userId })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .innerJoin(characters, characterLink())
+    .innerJoin(users, eq(users.id, characters.userId))
+    .where(and(eq(guilds.id, guildId), liveLinkedMember()));
+  return rows.map((r) => r.userId);
 }
 
 /** ROK-1794 (review): a live linked row of a granted member, with its owner. */

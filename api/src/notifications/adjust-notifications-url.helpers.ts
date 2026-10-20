@@ -46,6 +46,8 @@ const ADJUST_TARGET: Record<NotificationType, AdjustTarget> = {
   post_event_followup: 'settings',
   lfg_invite: 'game',
   lfg_player_invite: 'settings',
+  hub_leader_post: 'settings',
+  hub_event_tagged: 'settings',
   system: 'settings',
 };
 

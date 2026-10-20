@@ -248,3 +248,4 @@ export * from './hub-server.schema.js';
 export * from './discord-game-role.schema.js';
 // Per-game notification mute — the game-page bell (ROK-1797).
 export * from './game-notification-mutes.schema.js';
+export * from './hub-notification-mutes.schema.js';

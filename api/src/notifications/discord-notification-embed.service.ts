@@ -180,6 +180,7 @@ export class DiscordNotificationEmbedService {
       'new_event',
       'event_cancelled',
       'subscribed_game',
+      'hub_event_tagged',
       'recruitment_reminder',
       'role_gap_alert',
     ];

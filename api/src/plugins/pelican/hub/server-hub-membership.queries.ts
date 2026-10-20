@@ -102,6 +102,22 @@ export async function isServerHubMemberRow(
   return rows.length > 0;
 }
 
+/**
+ * ROK-1832 D8: every user who is a member of this server hub right now — the
+ * set form of `isServerHubMemberRow` (same table, same L-2 predicate).
+ */
+export async function serverHubMemberUserIds(
+  db: Executor,
+  guildId: number,
+  now: Date,
+): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ userId: m.userId })
+    .from(m)
+    .where(and(eq(m.guildId, guildId), serverHubMemberPredicate(now)));
+  return rows.map((r) => r.userId);
+}
+
 /** Visible server hubs the user is a member of. */
 export async function memberServerHubIds(
   db: Executor,
