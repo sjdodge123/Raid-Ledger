@@ -12,18 +12,22 @@ const c = schema.valheimContainers;
 /** Who is reading, reduced to what the predicate needs. */
 export interface MaterialsViewer {
   id: number;
-  /** `users.role = 'admin'` (D6, not operator) and NOT impersonated. */
+  /**
+   * `users.role` is `admin` or `operator` (ROK-1858: operators see personal
+   * chests like admins — operator ruling 2026-10-20) and NOT impersonated.
+   */
   isAdmin: boolean;
   /** An impersonated session sees no personal chests at all. */
   impersonated: boolean;
 }
 
-/** The JWT user → viewer (an impersonating admin is never `isAdmin`). */
+/** The JWT user → viewer (an impersonating admin/operator is never `isAdmin`). */
 export function toMaterialsViewer(user: AuthenticatedUser): MaterialsViewer {
   const impersonated = user.impersonatedBy !== null;
   return {
     id: user.id,
-    isAdmin: user.role === 'admin' && !impersonated,
+    isAdmin:
+      (user.role === 'admin' || user.role === 'operator') && !impersonated,
     impersonated,
   };
 }
@@ -32,7 +36,7 @@ export function toMaterialsViewer(user: AuthenticatedUser): MaterialsViewer {
 export const sharedSql: SQL = sql`${c.privacy} <> 'private'`;
 
 /**
- * Private chests this viewer may see: admins all of them; an impersonated
+ * Private chests this viewer may see: admins and operators all of them; an impersonated
  * session none; otherwise only chests whose creator is a character the
  * viewer has claimed on THAT server — auto/admin claims, or a manual claim
  * whose Steam id is the viewer's own verified one — and never a playerId
