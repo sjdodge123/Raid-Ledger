@@ -153,7 +153,11 @@ export async function listProposals(
 export async function activateProposal(
   db: DbOrTx,
   id: number,
-  patch: { reviewedBy: number; name?: string; blurb?: string },
+  patch: {
+    reviewedBy: number;
+    name?: string | undefined;
+    blurb?: string | undefined;
+  },
 ): Promise<schema.GuildSelect> {
   const now = new Date();
   const [row] = await db
@@ -180,7 +184,8 @@ export async function deleteProposal(
   id: number,
   proposedBy?: number,
 ): Promise<boolean> {
-  const own = proposedBy === undefined ? undefined : eq(g.proposedBy, proposedBy);
+  const own =
+    proposedBy === undefined ? undefined : eq(g.proposedBy, proposedBy);
   const rows = await db
     .delete(g)
     .where(proposalWhere(and(eq(g.id, id), own)))
