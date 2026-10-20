@@ -84,10 +84,10 @@ async function putOnce(
   url: string,
   ics: string,
   cond: PutConditions,
-): Promise<string | null | 'conflict'> {
+): Promise<{ etag: string | null } | null> {
   const res = await putObject(auth, url, ics, cond);
-  if (res.status === 'precondition_failed') return 'conflict';
-  return res.etag ?? (await getEtag(auth, url));
+  if (res.status === 'precondition_failed') return null;
+  return { etag: res.etag ?? (await getEtag(auth, url)) };
 }
 
 /**
@@ -106,8 +106,8 @@ export async function putCopy(
       ? { ifMatch: existing.etag }
       : {}
     : { ifNoneMatch: '*' };
-  const etag = await putOnce(auth, url, ics, first);
-  if (etag !== 'conflict') return etag;
+  const done = await putOnce(auth, url, ics, first);
+  if (done) return done.etag;
   const current = await getEtag(auth, url);
   const retry = await putOnce(
     auth,
@@ -115,8 +115,8 @@ export async function putCopy(
     ics,
     current ? { ifMatch: current } : {},
   );
-  if (retry === 'conflict') throw new TransientError('etag_conflict');
-  return retry;
+  if (!retry) throw new TransientError('etag_conflict');
+  return retry.etag;
 }
 
 /** DELETE `url`; gone counts as success. */

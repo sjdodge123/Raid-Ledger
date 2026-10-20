@@ -15,7 +15,8 @@
  * DTSTART/DTEND (an RRULE master is returned whole when it starts before the
  * range end, as iCloud does). PUT/DELETE honour `If-Match` and
  * `If-None-Match: *` (412), and every write bumps the object etag and the
- * collection ctag. MKCALENDAR on an existing id → 405. Unknown → 404.
+ * collection ctag. MKCALENDAR on an existing id → 405; DELETE on a
+ * collection drops it. Unknown → 404.
  *
  * Hooks: `failNext`, `redirectTo` (one hostile/other redirect), `seedEvent`,
  * `seedIcs`, `addCalendar`, `removeCalendar`, `editObject` (a user edit),
@@ -261,6 +262,10 @@ export class FakeCalDavServer {
       return reply(201);
     }
     if (!cal) return reply(404);
+    if (req.method === 'DELETE') {
+      this.calendars.delete(id);
+      return reply(204);
+    }
     if (req.method === 'REPORT') return this.query(cal, id, req.body ?? '');
     return multistatus([
       entry(`${HOME_PATH}${id}/`, `<cs:getctag>${cal.ctag}</cs:getctag>`),

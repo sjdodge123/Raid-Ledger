@@ -21,6 +21,7 @@ import {
   CALENDAR_FAKE_PROVIDER,
   CalendarProviderRegistry,
 } from './providers/calendar-provider.registry';
+import { AppleCalendarAdapter } from './providers/apple/apple.adapter';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
 import { CalendarReadCron } from './read/calendar-read.cron';
@@ -53,6 +54,7 @@ const fakeProvider = {
  * the DEMO_MODE seed endpoint. ROK-1596: the write queue. ROK-1593: the
  * read queue + cron (`UsersModule` for `GameTimeService` cache invalidation).
  * ROK-1599: the ICS subscribe feed (owner routes + public `cal/u/:file`).
+ * ROK-1598: the Apple iCloud CalDAV adapter.
  */
 @Module({
   imports: [
@@ -78,6 +80,7 @@ const fakeProvider = {
   providers: [
     CalendarSyncEnabledGuard,
     GoogleCalendarAdapter,
+    AppleCalendarAdapter,
     CalendarProviderRegistry,
     fakeProvider,
     CalendarWriteProcessor,
