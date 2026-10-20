@@ -1,5 +1,5 @@
 /**
- * ROK-1870 L3 §2.7 M1–M15 — the community hub membership + directory routes
+ * ROK-1870 L3 §2.7 M1–M21 — the community hub membership + directory routes
  * against a real database. Fleet-only (needs the integration Postgres);
  * follows `guilds/hub.controller.integration.spec.ts`. Every case builds its
  * own users + hubs with unique names, so cases never share state.
@@ -386,6 +386,56 @@ describe('core hub surfaces (M9–M11)', () => {
       .where(eq(schema.users.id, a.id));
     const res = await call('post', `/hubs/${hub}/join`, b.token);
     expect(res.body.memberCount).toBe(2);
+  });
+});
+
+describe('Overview widgets + Discord controls (M20–M21)', () => {
+  it('M20: a visitor reads the profile + Discord mirror, not the member rows; proposed stays 404', async () => {
+    const [leader, mem, visitor] = [
+      await mkUser(),
+      await mkUser(),
+      await mkUser(),
+    ];
+    const hub = await mkHub(leader, [mem]);
+    const profile = await call('get', `/guilds/${hub}/profile`, visitor.token);
+    expect(profile.status).toBe(200);
+    const mirror = await call('get', `/guilds/${hub}/discord`, visitor.token);
+    expect(mirror.status).toBe(200);
+    expect(mirror.body).toEqual({ state: 'unset' });
+    const page = await call('get', `/guilds/${hub}`, visitor.token);
+    expect(page.body.ranks[0].members).toEqual([]);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ status: 'proposed' })
+      .where(eq(schema.guilds.id, hub));
+    for (const path of ['profile', 'discord']) {
+      const res = await call('get', `/guilds/${hub}/${path}`, visitor.token);
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it('M21: the community leader manages the Discord channel; officer + member 403', async () => {
+    const [leader, officer, mem] = [
+      await mkUser(),
+      await mkUser(),
+      await mkUser(),
+    ];
+    const hub = await mkHub(leader, [officer, mem]);
+    await testApp.db
+      .update(schema.hubCommunityMembers)
+      .set({ role: 'officer' })
+      .where(
+        and(
+          eq(schema.hubCommunityMembers.guildId, hub),
+          eq(schema.hubCommunityMembers.userId, officer.id),
+        ),
+      );
+    const clear = (token: string) =>
+      call('delete', `/guilds/${hub}/discord/channel`, token);
+    expect((await clear(officer.token)).status).toBe(403);
+    expect((await clear(mem.token)).status).toBe(403);
+    expect((await clear(leader.token)).status).toBe(204);
+    expect((await clear(adminToken)).status).toBe(204);
   });
 });
 
