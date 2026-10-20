@@ -13,8 +13,12 @@ import type { HubEditorDelegationCtx } from '../../hub-module';
 import { AddMemberEditor } from './editor-forms';
 import { gmIsEditor } from './wow-guild.helpers';
 
-/** Rank 0 is not an implicit editor: staff grant the GM explicitly (api `GM_RANK_IMPLIES_EDIT`). */
-const GM_HINT = 'Add your Guild Master as an editor.';
+/**
+ * Rank 0 is not an implicit editor: staff grant the GM explicitly (api
+ * `GM_RANK_IMPLIES_EDIT`) — by name, after checking the linked account the
+ * picker shows, never because a row holds rank 0 (ROK-1794 review).
+ */
+const GM_HINT = "Grant the Guild Master by name once you've confirmed the linked account is theirs.";
 
 /** ROK-1794: kept rank grants are inactive — only a grant by name gives edit (and re-import) rights. */
 const RANK_NOTE = 'Rank grants no longer give edit rights. Grant each editor by name.';

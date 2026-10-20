@@ -4,6 +4,7 @@
  * `web/src/components/hub/hub-tabs.ts` (core).
  */
 import type { CharacterRole, GuildEditor, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
+import { updatedLabel as dateLabel } from '../../../components/hub/content/guild-content.helpers';
 
 /** Role label + the existing role colour class (`web/src/index.css` `.role-*`). */
 export const ROLE_META: Record<CharacterRole, { label: string; cls: string }> = {
@@ -42,4 +43,24 @@ export function delegableMembers(page: GuildPage): GuildMemberRow[] {
 export function gmIsEditor(page: GuildPage, editors: readonly GuildEditor[]): boolean {
     const gmIds = new Set(page.ranks.filter((r) => r.rankIndex === 0).flatMap((r) => r.members.map((m) => m.memberId)));
     return editors.some((e) => e.kind === 'member' && e.guildMemberId !== null && gmIds.has(e.guildMemberId));
+}
+
+/**
+ * ROK-1794 (review): no Raid Ledger account owns the row, so a member grant on
+ * it could never confer rights — the picker shows it but will not grant it.
+ */
+export function isUnlinkedRow(m: GuildMemberRow): boolean {
+    return !m.linkedAccount && m.characterId === null;
+}
+
+/**
+ * The editor picker's option text, naming the linked RL account (staff-only
+ * `linkedAccount`) so a grant is never made on the roster name alone:
+ * "Aldren — Guild Master · linked to aldren since 14 Oct 2026". A non-staff
+ * viewer gets no `linkedAccount`, so a linked row keeps the plain name + rank.
+ */
+export function memberOptionLabel(m: GuildMemberRow): string {
+    const base = `${m.name} — ${rankLabel(m)}`;
+    if (m.linkedAccount) return `${base} · linked to ${m.linkedAccount.username} since ${dateLabel(m.linkedAccount.linkedSince)}`;
+    return isUnlinkedRow(m) ? `${base} · not linked to an account` : base;
 }

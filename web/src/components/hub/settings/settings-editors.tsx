@@ -31,22 +31,39 @@ function editorLabel(e: GuildEditor): string {
 }
 
 /** ROK-1794 "explicit grants only": a rank grant is kept on the list but confers nothing. */
-const INACTIVE_LABEL = 'Inactive — re-grant by name';
-const INACTIVE_TITLE = 'Rank grants no longer give edit rights. Grant each editor by name.';
+const RANK_INACTIVE = {
+    label: 'Inactive — re-grant by name',
+    title: 'Rank grants no longer give edit rights. Grant each editor by name.',
+} as const;
+
+const MEMBER_INACTIVE_TITLE =
+    'This grant gives no edit rights: the row had no confirmed account link when it was granted. Remove it and grant again once the linked account is confirmed.';
 
 const CHIP_TONE = {
     active: 'border-success/30 bg-success/10 text-success',
     inactive: 'border-edge bg-panel text-muted',
 } as const;
 
+/**
+ * Why a grant confers nothing, or null when it does. A member grant is inactive
+ * only on an explicit `effective: false` (ROK-1794 review) — a hub kind that
+ * omits `effective` is unknown, not inactive, and keeps today's active look.
+ */
+function inactiveCopy(e: GuildEditor): { label: string; title: string } | null {
+    if (e.kind === 'rank') return RANK_INACTIVE;
+    if (e.effective !== false) return null;
+    const label = e.linkedUsername ? `Inactive — linked to ${e.linkedUsername} after the grant` : 'Inactive — not linked';
+    return { label, title: MEMBER_INACTIVE_TITLE };
+}
+
 function EditorChip({ editor, disabled, onRemove }: { editor: GuildEditor; disabled: boolean; onRemove: () => void }): JSX.Element {
     const label = editorLabel(editor);
-    const inactive = editor.kind === 'rank';
+    const inactive = inactiveCopy(editor);
     return (
         <li data-testid="guild-editor-chip" data-active={inactive ? 'false' : 'true'}
-            className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border pl-3 text-sm font-medium ${CHIP_TONE[inactive ? 'inactive' : 'active']}`}>
+            className={`inline-flex min-h-[44px] max-w-full items-center gap-2 rounded-full border pl-3 text-sm font-medium ${CHIP_TONE[inactive ? 'inactive' : 'active']}`}>
             {label}
-            {inactive && <StatusChip tone="neutral" title={INACTIVE_TITLE}>{INACTIVE_LABEL}</StatusChip>}
+            {inactive && <StatusChip tone="neutral" title={inactive.title} className="whitespace-normal">{inactive.label}</StatusChip>}
             <Button variant="ghost" iconOnly aria-label={`Remove ${label}`} onClick={onRemove} disabled={disabled}>
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
