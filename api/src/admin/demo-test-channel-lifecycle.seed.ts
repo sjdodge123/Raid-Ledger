@@ -114,6 +114,20 @@ function gameBindingWhere(guildId: string, gameId: number) {
   );
 }
 
+/** The channel id of the binding matching `where`, if any. */
+async function existingChannelId(
+  db: Db,
+  where: ReturnType<typeof gameBindingWhere>,
+): Promise<string | null> {
+  const cb = schema.channelBindings;
+  const [row] = await db
+    .select({ channelId: cb.channelId })
+    .from(cb)
+    .where(where)
+    .limit(1);
+  return row?.channelId ?? null;
+}
+
 /**
  * The game's non-series announcements binding: 'none' deletes it; otherwise
  * `bind()` (reusing the existing channel id, else a fake snowflake) then the
@@ -131,12 +145,7 @@ export async function seedBinding(
     await db.delete(cb).where(where);
     return null;
   }
-  const [existing] = await db
-    .select({ channelId: cb.channelId })
-    .from(cb)
-    .where(where)
-    .limit(1);
-  const channelId = existing?.channelId ?? fakeSnowflake();
+  const channelId = (await existingChannelId(db, where)) ?? fakeSnowflake();
   const { binding } = await bindings.bind(
     ref.guildId,
     channelId,
@@ -173,8 +182,8 @@ export async function seedSuppression(
     });
 }
 
-/** A visible game_server hub on the game whose profile has no channel. */
-export async function seedServerHubWithoutChannel(
+/** The game's game_server hub, inserted when absent. */
+async function findOrInsertServerHub(
   db: Db,
   game: { id: number; name: string },
 ): Promise<number> {
@@ -184,21 +193,27 @@ export async function seedServerHubWithoutChannel(
     .from(g)
     .where(and(eq(g.gameId, game.id), eq(g.kind, 'game_server')))
     .limit(1);
+  if (found) return found.id;
   const name = `${game.name} Server`.slice(0, 64);
-  const [inserted] = found
-    ? [found]
-    : await db
-        .insert(g)
-        .values({
-          gameId: game.id,
-          kind: 'game_server',
-          region: 'us',
-          name,
-          nameKey: name.toLowerCase(),
-          source: 'pelican',
-        })
-        .returning({ id: g.id });
-  const hubId = defined(inserted, 'lifecycle hub').id;
+  const values = {
+    gameId: game.id,
+    kind: 'game_server' as const,
+    region: 'us',
+    name,
+    nameKey: name.toLowerCase(),
+    source: 'pelican',
+  };
+  const [row] = await db.insert(g).values(values).returning({ id: g.id });
+  return defined(row, 'lifecycle hub').id;
+}
+
+/** A visible game_server hub on the game whose profile has no channel. */
+export async function seedServerHubWithoutChannel(
+  db: Db,
+  game: { id: number; name: string },
+): Promise<number> {
+  const hubId = await findOrInsertServerHub(db, game);
+  const g = schema.guilds;
   await db.update(g).set({ hiddenAt: null }).where(eq(g.id, hubId));
   const p = schema.guildProfiles;
   const blank = { discordChannelId: null, discordChannelSource: null };

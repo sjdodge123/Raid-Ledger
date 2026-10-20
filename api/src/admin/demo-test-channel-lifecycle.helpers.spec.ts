@@ -22,6 +22,9 @@ jest.mock('../igdb/igdb-name-dedup.helpers', () => ({
 
 const findGame = jest.mocked(findGameByNormalizedName);
 const NOW = new Date('2026-10-20T12:00:00Z');
+type Db = Parameters<typeof ensureSeedGame>[0];
+/** The project's drizzle-mock convention: one cast at the seam. */
+const asDb = (m: MockDb): Db => m as unknown as Db;
 
 let db: MockDb;
 beforeEach(() => {
@@ -124,7 +127,7 @@ describe('ensureSeedGame', () => {
       steamAppId: null,
       itadGameId: null,
     });
-    const game = await ensureSeedGame(db, 'Lifecycle Demo Game');
+    const game = await ensureSeedGame(asDb(db), 'Lifecycle Demo Game');
     expect(game).toEqual({ id: 7, name: 'Lifecycle Demo Game' });
     expect(db.insert).not.toHaveBeenCalled();
     expect(db.execute).toHaveBeenCalled(); // advisory lock taken
@@ -133,7 +136,7 @@ describe('ensureSeedGame', () => {
   it('inserts inside the name lock when no game matches', async () => {
     findGame.mockResolvedValue(null);
     db.returning.mockResolvedValueOnce([{ id: 9, name: 'New Game' }]);
-    const game = await ensureSeedGame(db, 'New Game');
+    const game = await ensureSeedGame(asDb(db), 'New Game');
     expect(game).toEqual({ id: 9, name: 'New Game' });
     expect(db.values).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'New Game', igdbId: null }),
@@ -145,7 +148,7 @@ describe('seedEvents', () => {
   it('inserts scheduled events then ad-hoc ones, returning every id', async () => {
     db.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }]);
     const ids = await seedEvents(
-      db,
+      asDb(db),
       { gameId: 7, creatorId: 4, now: NOW },
       2,
       1,
@@ -161,7 +164,7 @@ describe('seedEvents', () => {
 
   it('writes nothing when no events are asked for', async () => {
     expect(
-      await seedEvents(db, { gameId: 7, creatorId: 4, now: NOW }, 0, 0),
+      await seedEvents(asDb(db), { gameId: 7, creatorId: 4, now: NOW }, 0, 0),
     ).toEqual([]);
     expect(db.insert).not.toHaveBeenCalled();
   });
@@ -171,13 +174,13 @@ describe('ageBinding', () => {
   it('404s an unknown binding', async () => {
     db.limit.mockResolvedValueOnce([]);
     await expect(
-      ageBinding(db, { bindingId: 'b', daysAgo: 10 }),
+      ageBinding(asDb(db), { bindingId: 'b', daysAgo: 10 }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('shifts the binding and its game activity back', async () => {
     db.limit.mockResolvedValueOnce([{ id: 'b', gameId: 7 }]);
-    const r = await ageBinding(db, { bindingId: 'b', daysAgo: 10 });
+    const r = await ageBinding(asDb(db), { bindingId: 'b', daysAgo: 10 });
     expect(r).toEqual({ bindingId: 'b', gameId: 7, shiftedDays: 10 });
     // binding + events + match + slot votes + plans + lineup votes
     expect(db.update).toHaveBeenCalledTimes(6);

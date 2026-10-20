@@ -108,9 +108,7 @@ export class DemoTestChannelLifecycleController {
   /** Shift a binding + its game's activity `daysAgo` days into the past. */
   @Post('age-binding')
   @HttpCode(HttpStatus.OK)
-  async ageBinding(
-    @Body() body: unknown,
-  ): Promise<{
+  async ageBinding(@Body() body: unknown): Promise<{
     bindingId: string;
     gameId: number | null;
     shiftedDays: number;

@@ -180,13 +180,9 @@ export async function ageBinding(
   return { bindingId: row.id, gameId: row.gameId, shiftedDays: d };
 }
 
-/** Shift events, polls (+ their votes), event plans and lineup votes back. */
-async function ageGameActivity(
-  db: Db,
-  gameId: number,
-  d: number,
-): Promise<void> {
-  const { events: e, communityLineupMatches: m } = schema;
+/** Shift the game's events' tsrange back `d` days. */
+async function ageEvents(db: Db, gameId: number, d: number): Promise<void> {
+  const e = schema.events;
   const iv = sql`make_interval(days => ${d})`;
   await db
     .update(e)
@@ -194,20 +190,36 @@ async function ageGameActivity(
       duration: sql`tsrange(lower(${e.duration}) - ${iv}, upper(${e.duration}) - ${iv})`,
     })
     .where(eq(e.gameId, gameId));
+}
+
+/** Shift the game's poll matches and their slot votes back `d` days. */
+async function agePolls(db: Db, gameId: number, d: number): Promise<void> {
+  const m = schema.communityLineupMatches;
+  const slot = schema.communityLineupScheduleSlots;
+  const sv = schema.communityLineupScheduleVotes;
   await db
     .update(m)
     .set({ createdAt: back(m.createdAt, d) })
     .where(eq(m.gameId, gameId));
   const slots = db
-    .select({ id: schema.communityLineupScheduleSlots.id })
-    .from(schema.communityLineupScheduleSlots)
-    .innerJoin(m, eq(m.id, schema.communityLineupScheduleSlots.matchId))
+    .select({ id: slot.id })
+    .from(slot)
+    .innerJoin(m, eq(m.id, slot.matchId))
     .where(eq(m.gameId, gameId));
-  const sv = schema.communityLineupScheduleVotes;
   await db
     .update(sv)
     .set({ createdAt: back(sv.createdAt, d) })
     .where(inArray(sv.slotId, slots));
+}
+
+/** Shift events, polls (+ their votes), event plans and lineup votes back. */
+async function ageGameActivity(
+  db: Db,
+  gameId: number,
+  d: number,
+): Promise<void> {
+  await ageEvents(db, gameId, d);
+  await agePolls(db, gameId, d);
   const p = schema.eventPlans;
   await db
     .update(p)
