@@ -6,6 +6,7 @@
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { ValheimMaterialsResponse } from '@raid-ledger/contract';
+import { useNow } from '../../../hooks/use-now';
 import { useItemIconsFor } from '../character/use-item-icons';
 import {
     useValheimContainers,
@@ -35,8 +36,8 @@ function ScanLine({
 }: {
     data: ValheimMaterialsResponse;
 }): JSX.Element | null {
-    // Read once per mount: the tab remounts on navigation and refetches on focus.
-    const [now] = useState(() => Date.now());
+    // Ticks while the tab stays open: the shared QueryClient never refetches on focus (Codex r3).
+    const now = useNow();
     if (data.capturedAt === null) return null;
     return (
         <p

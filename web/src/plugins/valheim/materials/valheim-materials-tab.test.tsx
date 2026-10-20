@@ -1,6 +1,6 @@
 /** ROK-1853 — the hub Materials tab: totals, search, vehicles toggle, personal, empty, warnings, drill-down. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
@@ -61,6 +61,22 @@ describe('ValheimMaterialsTab', () => {
             screen.getByTestId('valheim-materials-scan-age'),
         ).toHaveTextContent('Scanned 7 min ago');
         expect(hits[0]).toBe('?includeVehicles=true');
+    });
+
+    it('the scan age keeps ageing while the tab stays open (Codex r3)', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            server.use(valheimMaterialsHandler(materialsFixture({}, 0)));
+            renderTab();
+            const age = await screen.findByTestId('valheim-materials-scan-age');
+            expect(age).toHaveTextContent('Scanned just now');
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
+            expect(age).toHaveTextContent('Scanned 1 min ago');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('search narrows the rows by name', async () => {
