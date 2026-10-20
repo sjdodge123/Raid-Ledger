@@ -11,6 +11,7 @@ import { Button } from '../../ui/button';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { Pill } from '../hub-bits';
 import { DeletePostConfirm } from './delete-post-confirm';
+import { postDeepLink } from './hub-post.helpers';
 import { PostByline } from './post-byline';
 import { PostEditor } from './post-editor';
 import { useOverflow } from './use-overflow';
@@ -21,11 +22,6 @@ export interface PostItemProps {
     canEdit: boolean;
     /** The `?post=<id>` target: opens expanded, ringed, and scrolls into view once. */
     highlighted?: boolean;
-}
-
-/** `${origin}/guilds/<id>?post=<postId>#posts` — the same shape the server links to. */
-export function postDeepLink(guildId: number, postId: number): string {
-    return `${window.location.origin}/guilds/${guildId}?post=${postId}#posts`;
 }
 
 function RelayBadge({ post }: { post: HubPost }): JSX.Element | null {

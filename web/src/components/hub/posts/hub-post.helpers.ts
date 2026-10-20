@@ -73,6 +73,11 @@ export function postIdFromSearch(search: string): number | null {
     return id > 0 ? id : null;
 }
 
+/** `${origin}/guilds/<id>?post=<postId>#posts` — the same shape the server links to. */
+export function postDeepLink(guildId: number, postId: number): string {
+    return `${window.location.origin}/guilds/${guildId}?post=${postId}#posts`;
+}
+
 /** Pre-submit check — the contract's subset message, the D20 length message, or null. */
 export function bodyError(markdown: string): string | null {
     const violation = findHubPostMarkdownViolation(markdown);
