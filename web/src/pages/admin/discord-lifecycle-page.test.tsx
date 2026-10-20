@@ -32,13 +32,13 @@ function trackPatch(): void {
 beforeEach(() => { calls = []; useBot(true); });
 
 describe('DiscordLifecyclePage (ROK-1433)', () => {
-    it('W1: enabling with no archive category notes the find-or-create and PATCHes {enabled:true}', async () => {
+    it('W1: with no archive category the find-or-create note shows before saving; enabling PATCHes {enabled:true}', async () => {
         trackPatch();
         renderWithProviders(<DiscordLifecyclePage />);
         const toggle = await screen.findByRole('switch', { name: 'Create and archive game channels automatically' });
         await waitFor(() => expect(toggle).toBeEnabled());
+        expect(screen.getByText(/will create an ‘Archived’ category/)).toBeInTheDocument();
         await userEvent.click(toggle);
-        expect(await screen.findByText(/will create an ‘Archived’ category/)).toBeInTheDocument();
         await waitFor(() => expect(calls).toEqual([expect.objectContaining({ body: { enabled: true } })]));
     });
 
@@ -105,7 +105,9 @@ describe('DiscordLifecyclePage thresholds + run (ROK-1433)', () => {
         expect(runs).toEqual(['true']);
         await userEvent.click(screen.getByRole('button', { name: 'Run in Discord' }));
         await waitFor(() => expect(runs).toEqual(['true', 'false']));
-        expect(await screen.findByText(/Created 2 · Unarchived 0 · Archived 1/)).toBeInTheDocument();
+        // The dry run reads "Would create 2 …", so this only matches the REAL run's summary.
+        expect(await screen.findByText(/^Created 2 · Unarchived 0 · Archived 1/)).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 
     it('W5: a 409 says a reconcile is already running', async () => {

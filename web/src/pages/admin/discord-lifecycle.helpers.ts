@@ -2,7 +2,9 @@
  * ROK-1428 (L7) — pure helpers for the channel-lifecycle admin page.
  */
 import { formatDistanceToNow } from 'date-fns';
-import type { GameActivitySignalKind, GameLifecycleActivityDto, LifecycleAction, ReconcileResultDto } from '@raid-ledger/contract';
+import type {
+    GameActivitySignalKind, GameLifecycleActivityDto, LifecycleAction, ReconcileResultDto, UpdateChannelLifecycleSettingsDto,
+} from '@raid-ledger/contract';
 import type { StatusChipTone } from '../../components/ui/status-chip';
 
 const SIGNAL_LABELS: Record<GameActivitySignalKind, string> = {
@@ -28,12 +30,53 @@ export function actionChip(row: GameLifecycleActivityDto): { tone: StatusChipTon
     return ACTION_CHIPS[row.action];
 }
 
-export type BindingStateLabel = 'active' | 'archived' | 'manual';
+/** The Next-action label alone (run result rows). */
+export function actionLabel(action: LifecycleAction): string {
+    return ACTION_CHIPS[action].label;
+}
 
-/** `manual` for a hand-made binding; otherwise the lifecycle state. */
+type ReconcileOutcome = ReconcileResultDto['items'][number]['outcome'];
+const OUTCOME_LABELS: Record<ReconcileOutcome, string> = { done: 'done', planned: 'planned', failed: 'failed', deferred: 'deferred to the next run' };
+
+/** Human copy for one run row's outcome. */
+export function outcomeLabel(outcome: ReconcileOutcome): string {
+    return OUTCOME_LABELS[outcome];
+}
+
+export type BindingStateLabel = 'Active' | 'Archived' | 'Manual';
+
+/** `Manual` for a hand-made binding; otherwise the title-cased lifecycle state. */
 export function bindingState(binding: GameLifecycleActivityDto['binding']): BindingStateLabel | null {
     if (!binding) return null;
-    return binding.autoManaged ? binding.lifecycleState : 'manual';
+    if (!binding.autoManaged) return 'Manual';
+    return binding.lifecycleState === 'archived' ? 'Archived' : 'Active';
+}
+
+/** How far a query has got — drives the §4.5 loading / error / empty states. */
+export type LoadState = 'loading' | 'error' | 'ready';
+
+/** Map a TanStack query's flags onto a `LoadState`. */
+export function loadState(q: { isPending: boolean; isError: boolean }): LoadState {
+    if (q.isError) return 'error';
+    return q.isPending ? 'loading' : 'ready';
+}
+
+type SettingsKey = keyof UpdateChannelLifecycleSettingsDto;
+
+/** Which settings keys each section saves — routes a PATCH error to its own section. */
+export const SECTION_KEYS: Record<'automation' | 'categories' | 'thresholds', readonly SettingsKey[]> = {
+    automation: ['enabled'],
+    categories: ['gamesCategoryId', 'archiveCategoryId', 'hideOnArchive'],
+    thresholds: ['recentActivityDays', 'createThreshold', 'maxChangesPerTick'],
+};
+
+/** The PATCH error message when the failed patch touched one of `keys`. */
+export function sectionError(
+    error: Error | null, patch: UpdateChannelLifecycleSettingsDto | undefined, keys: readonly SettingsKey[],
+): string | undefined {
+    if (!error || !patch) return undefined;
+    const touched = keys.some((k) => k in patch);
+    return touched ? error.message : undefined;
 }
 
 /** A whole number inside [min, max], or an error string. */
@@ -55,10 +98,23 @@ export function confirmCopy(r: ReconcileResultDto): string {
     return `Create ${r.created}, archive ${r.archived}, unarchive ${r.unarchived} channels in Discord?`;
 }
 
-/** One-line result summary. */
+/** Channels a run would create, archive or unarchive. */
+export function plannedChanges(r: ReconcileResultDto): number {
+    return r.created + r.archived + r.unarchived;
+}
+
+/** Ask to confirm only a dry run that can go ahead and would change something. */
+export function needsConfirm(r: ReconcileResultDto): boolean {
+    return !r.stoppedReason && plannedChanges(r) > 0;
+}
+
+/** One-line result summary: future tense for a dry run, past for a real one. */
 export function resultSummary(r: ReconcileResultDto): string {
-    const head = r.dryRun ? 'Would change — ' : '';
-    return `${head}Created ${r.created} · Unarchived ${r.unarchived} · Archived ${r.archived} · Hubs linked ${r.linkedHubs} · Failed ${r.failed} · Deferred ${r.deferred}`;
+    if (r.dryRun) {
+        if (!r.stoppedReason && plannedChanges(r) === 0 && r.linkedHubs === 0) return 'Nothing to change — every game channel is up to date.';
+        return `Would create ${r.created} · unarchive ${r.unarchived} · archive ${r.archived} · link ${r.linkedHubs} hubs · defer ${r.deferred}`;
+    }
+    return `Created ${r.created} · Unarchived ${r.unarchived} · Archived ${r.archived} · Hubs linked ${r.linkedHubs} · Failed ${r.failed} · Deferred ${r.deferred}`;
 }
 
 const STOP_COPY: Record<NonNullable<ReconcileResultDto['stoppedReason']>, string> = {

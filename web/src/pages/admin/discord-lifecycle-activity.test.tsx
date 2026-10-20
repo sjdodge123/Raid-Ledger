@@ -9,13 +9,14 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { buildLifecycleActivity, buildReconcileResult } from '../../test/mocks/channel-lifecycle-handlers';
-import { ActivitySection } from './discord-lifecycle-activity';
+import { ActivitySection, SuppressionsSection } from './discord-lifecycle-activity';
 import { RunConfirm } from './discord-lifecycle-run';
 
 const media = vi.hoisted(() => ({ desktop: true }));
 vi.mock('../../hooks/use-media-query', () => ({ useMediaQuery: () => media.desktop }));
 
 const BINDINGS = 'http://localhost:3000/admin/discord/bindings';
+const SUPPRESSIONS = 'http://localhost:3000/admin/discord/lifecycle/suppressions';
 const AUTO = { id: '00000000-0000-4000-8000-000000000001', channelId: '5', lifecycleState: 'active' as const, autoManaged: true, pinned: false };
 const ROWS = [
     buildLifecycleActivity({ gameId: 1, gameName: 'Alpha', action: 'create', reason: '2 items',
@@ -44,11 +45,11 @@ describe('ActivitySection (ROK-1433 W4)', () => {
         expect(within(rowFor('Bravo')).getByText('Unarchive')).toHaveAttribute('data-tone', 'success');
         expect(within(rowFor('Charlie')).getByText('Archive')).toHaveAttribute('data-tone', 'warning');
         expect(within(rowFor('Delta')).getByText('No change')).toHaveAttribute('data-tone', 'neutral');
-        expect(within(rowFor('Delta')).getByText('manual')).toBeInTheDocument();
-        expect(within(rowFor('Delta')).queryByRole('button', { name: 'Pin' })).not.toBeInTheDocument();
+        expect(within(rowFor('Delta')).getByText('Manual')).toBeInTheDocument();
+        expect(within(rowFor('Delta')).queryByRole('button', { name: /^Pin/ })).not.toBeInTheDocument();
         expect(within(rowFor('Echo')).getByText('Suppressed')).toHaveAttribute('data-tone', 'neutral');
-        expect(screen.getAllByRole('button', { name: 'Recreate' })).toHaveLength(1);
-        expect(within(rowFor('Echo')).getByRole('button', { name: 'Recreate' })).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /^Recreate/ })).toHaveLength(1);
+        expect(within(rowFor('Echo')).getByRole('button', { name: 'Recreate channel for Echo' })).toBeInTheDocument();
     });
 
     it('shows the empty state', () => {
@@ -63,7 +64,9 @@ describe('ActivitySection (ROK-1433 W4)', () => {
             return HttpResponse.json({ message: 'Only Raid Ledger-managed channels can be pinned' }, { status: 400 });
         }));
         renderWithProviders(<ActivitySection items={ROWS} windowDays={30} />);
-        await userEvent.click(within(rowFor('Charlie')).getByRole('button', { name: 'Pin' }));
+        const pin = within(rowFor('Charlie')).getByRole('button', { name: 'Pin channel for Charlie' });
+        expect(pin).toHaveAttribute('aria-pressed', 'false');
+        await userEvent.click(pin);
         await waitFor(() => expect(bodies).toEqual([{ pinned: true }]));
         expect(await within(rowFor('Charlie')).findByText('Only Raid Ledger-managed channels can be pinned')).toBeInTheDocument();
     });
@@ -75,8 +78,35 @@ describe('ActivitySection (ROK-1433 W4)', () => {
             return new HttpResponse(null, { status: 204 });
         }));
         renderWithProviders(<ActivitySection items={ROWS} windowDays={30} />);
-        await userEvent.click(within(rowFor('Echo')).getByRole('button', { name: 'Recreate' }));
+        await userEvent.click(within(rowFor('Echo')).getByRole('button', { name: 'Recreate channel for Echo' }));
         await waitFor(() => expect(urls).toEqual(['/admin/discord/lifecycle/suppressions/5']));
+    });
+});
+
+describe('Activity / suppressions review fixes', () => {
+    it('a failed Recreate shows the server message', async () => {
+        server.use(http.delete(`${SUPPRESSIONS}/:gameId`, () => HttpResponse.json({ message: 'Recreate refused' }, { status: 400 })));
+        renderWithProviders(<ActivitySection items={ROWS} windowDays={30} />);
+        await userEvent.click(within(rowFor('Echo')).getByRole('button', { name: 'Recreate channel for Echo' }));
+        expect(await within(rowFor('Echo')).findByText('Recreate refused')).toBeInTheDocument();
+    });
+
+    it('SuppressionsSection Recreate DELETEs that game and shows a refusal', async () => {
+        const urls: string[] = [];
+        server.use(http.delete(`${SUPPRESSIONS}/:gameId`, ({ request }) => {
+            urls.push(new URL(request.url).pathname);
+            return HttpResponse.json({ message: 'Recreate refused' }, { status: 400 });
+        }));
+        renderWithProviders(<SuppressionsSection items={[{ gameId: 8, gameName: 'Foxtrot', reason: 'deleted', createdAt: '2026-10-01T00:00:00.000Z' }]} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Recreate channel for Foxtrot' }));
+        await waitFor(() => expect(urls).toEqual(['/admin/discord/lifecycle/suppressions/8']));
+        expect(await screen.findByText('Recreate refused')).toBeInTheDocument();
+    });
+
+    it('the desktop table is labelled and its headers are column-scoped', () => {
+        renderWithProviders(<ActivitySection items={ROWS} windowDays={30} />);
+        const table = screen.getByRole('table', { name: 'Game channel activity' });
+        expect(within(table).getAllByRole('columnheader').every((th) => th.getAttribute('scope') === 'col')).toBe(true);
     });
 });
 
@@ -88,5 +118,10 @@ describe('RunConfirm (ROK-1433 W6)', () => {
         expect(within(dialog).getByText('Create 2, archive 1, unarchive 0 channels in Discord?')).toBeInTheDocument();
         if (desktop) expect(dialog).toHaveAttribute('aria-labelledby');
         else expect(dialog).toHaveAttribute('aria-label', 'Run channel automation');
+    });
+
+    it('renders a run error inside the dialog', () => {
+        renderWithProviders(<RunConfirm plan={buildReconcileResult({ created: 1 })} running={false} error="A reconcile is already running" onConfirm={vi.fn()} onClose={vi.fn()} />);
+        expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent('A reconcile is already running');
     });
 });

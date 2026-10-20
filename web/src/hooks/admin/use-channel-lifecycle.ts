@@ -14,6 +14,10 @@ import { fetchApi } from '../../lib/api-client';
 const BASE = '/admin/discord/lifecycle';
 export const LIFECYCLE_KEY = ['admin', 'discord', 'lifecycle'] as const;
 const BINDINGS_KEY = ['admin', 'discord', 'bindings'];
+/** The activity preview — the bindings page invalidates it after a pin / edit / delete. */
+export const LIFECYCLE_ACTIVITY_KEY = [...LIFECYCLE_KEY, 'activity'] as const;
+/** The global 5-minute `staleTime` would show a stale Pin/Unpin label; always refetch on mount. */
+const LIVE = { staleTime: 0 } as const;
 
 /** Lifecycle settings (GET settings). */
 export function useLifecycleSettings(): UseQueryResult<ChannelLifecycleSettingsDto> {
@@ -22,12 +26,12 @@ export function useLifecycleSettings(): UseQueryResult<ChannelLifecycleSettingsD
 
 /** Per-game activity + planned action (GET activity). */
 export function useLifecycleActivity(): UseQueryResult<GameLifecycleActivityListDto> {
-    return useQuery({ queryKey: [...LIFECYCLE_KEY, 'activity'], queryFn: () => fetchApi<GameLifecycleActivityListDto>(`${BASE}/activity`) });
+    return useQuery({ queryKey: LIFECYCLE_ACTIVITY_KEY, queryFn: () => fetchApi<GameLifecycleActivityListDto>(`${BASE}/activity`), ...LIVE });
 }
 
 /** Games the reconciler will not recreate (GET suppressions). */
 export function useLifecycleSuppressions(): UseQueryResult<LifecycleSuppressionListDto> {
-    return useQuery({ queryKey: [...LIFECYCLE_KEY, 'suppressions'], queryFn: () => fetchApi<LifecycleSuppressionListDto>(`${BASE}/suppressions`) });
+    return useQuery({ queryKey: [...LIFECYCLE_KEY, 'suppressions'], queryFn: () => fetchApi<LifecycleSuppressionListDto>(`${BASE}/suppressions`), ...LIVE });
 }
 
 /** Discord categories the bot can see (shared with ephemeral voice). */
@@ -47,9 +51,11 @@ export function useLifecycleBotOnline(): { online: boolean; loading: boolean } {
     return { online: q.data?.connected === true, loading: q.isPending };
 }
 
+/** Refetch settings, activity and suppressions — not the bot / categories queries. */
 function useInvalidateLifecycle(): () => Promise<void> {
     const qc = useQueryClient();
-    return () => qc.invalidateQueries({ queryKey: LIFECYCLE_KEY });
+    return () => Promise.all(['settings', 'activity', 'suppressions'].map((k) =>
+        qc.invalidateQueries({ queryKey: [...LIFECYCLE_KEY, k] }))).then(() => undefined);
 }
 
 /** PATCH settings; the server resolves categories when `enabled` flips on. */
@@ -67,9 +73,14 @@ export function useUpdateLifecycleSettings(): UseMutationResult<ChannelLifecycle
 /** POST reconcile — `dryRun` plans only; a real run refreshes everything. */
 export function useReconcile(): UseMutationResult<ReconcileResultDto, Error, boolean> {
     const invalidate = useInvalidateLifecycle();
+    const qc = useQueryClient();
     return useMutation({
         mutationFn: (dryRun) => fetchApi<ReconcileResultDto>(`${BASE}/reconcile?dryRun=${String(dryRun)}`, { method: 'POST' }),
-        onSuccess: (result) => { if (!result.dryRun) void invalidate(); },
+        onSuccess: (result) => {
+            if (result.dryRun) return;
+            void invalidate();
+            void qc.invalidateQueries({ queryKey: BINDINGS_KEY });
+        },
     });
 }
 
@@ -87,6 +98,6 @@ export function usePinBinding(): UseMutationResult<{ data: ChannelBindingDto }, 
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, pinned }) => fetchApi<{ data: ChannelBindingDto }>(`/admin/discord/bindings/${id}`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),
-        onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: LIFECYCLE_KEY }), qc.invalidateQueries({ queryKey: BINDINGS_KEY })]).then(() => undefined),
+        onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: LIFECYCLE_ACTIVITY_KEY }), qc.invalidateQueries({ queryKey: BINDINGS_KEY })]).then(() => undefined),
     });
 }

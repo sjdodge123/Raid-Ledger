@@ -11,11 +11,11 @@ import { Modal } from '../../components/ui/modal';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useReconcile } from '../../hooks/admin/use-channel-lifecycle';
-import { confirmCopy, relativeTime, resultSummary, stopCopy } from './discord-lifecycle.helpers';
+import { actionLabel, confirmCopy, needsConfirm, outcomeLabel, relativeTime, resultSummary, stopCopy } from './discord-lifecycle.helpers';
 
-/** Confirm the planned counts before touching Discord. */
-export function RunConfirm({ plan, running, onConfirm, onClose }: {
-    plan: ReconcileResultDto; running: boolean; onConfirm: () => void; onClose: () => void;
+/** Confirm the planned counts before touching Discord; a failed run's message shows here. */
+export function RunConfirm({ plan, running, error, onConfirm, onClose }: {
+    plan: ReconcileResultDto; running: boolean; error?: string | undefined; onConfirm: () => void; onClose: () => void;
 }): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const footer = (
@@ -25,7 +25,12 @@ export function RunConfirm({ plan, running, onConfirm, onClose }: {
         </>
     );
     const shared = { isOpen: true, onClose, title: 'Run channel automation', footer };
-    const body = <p className="text-sm text-foreground" data-testid="lifecycle-run-confirm">{confirmCopy(plan)}</p>;
+    const body = (
+        <div className="space-y-3">
+            <p className="text-sm text-foreground" data-testid="lifecycle-run-confirm">{confirmCopy(plan)}</p>
+            {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        </div>
+    );
     if (isDesktop) return <Modal {...shared}>{body}</Modal>;
     return <BottomSheet {...shared}>{body}</BottomSheet>;
 }
@@ -40,7 +45,7 @@ export function ReconcileSummary({ result }: { result: ReconcileResultDto }): JS
             {result.items.length > 0 && (
                 <ul className="text-sm text-muted space-y-1">
                     {result.items.map((i) => (
-                        <li key={`${i.gameId}-${i.action}`}>{i.gameName}: {i.action} — {i.outcome}{i.detail ? ` (${i.detail})` : ''}</li>
+                        <li key={`${i.gameId}-${i.action}`}>{i.gameName}: {actionLabel(i.action)} — {outcomeLabel(i.outcome)}{i.detail ? ` (${i.detail})` : ''}</li>
                     ))}
                 </ul>
             )}
@@ -48,30 +53,43 @@ export function ReconcileSummary({ result }: { result: ReconcileResultDto }): JS
     );
 }
 
+/** "Last run …" always; the last error underneath as a warning (spec §2.13). */
 function LastRunLine({ lastRunAt, lastRunError }: { lastRunAt: string | null; lastRunError: string | null }): JSX.Element {
-    if (lastRunError) {
-        return <p role="alert" className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{lastRunError}</p>;
-    }
-    return <p className="text-sm text-muted">{lastRunAt ? `Last run ${relativeTime(lastRunAt)}` : 'Not run yet'}</p>;
+    return (
+        <div className="space-y-2">
+            <p className="text-sm text-muted">{lastRunAt ? `Last run ${relativeTime(lastRunAt)}` : 'Not run yet'}</p>
+            {lastRunError && <p role="alert" className="text-sm text-warning bg-warning/10 border border-warning/30 rounded-lg px-3 py-2">{lastRunError}</p>}
+        </div>
+    );
 }
 
-function useRunFlow() {
+interface RunFlow {
+    reconcile: ReturnType<typeof useReconcile>; result: ReconcileResultDto | null; confirming: boolean;
+    preview: () => void; runNow: () => void; confirm: () => void; close: () => void;
+}
+
+/** Preview / Run now / confirm state; the confirm opens only when the plan can and would change something. */
+function useRunFlow(): RunFlow {
     const reconcile = useReconcile();
     const [result, setResult] = useState<ReconcileResultDto | null>(null);
     const [confirming, setConfirming] = useState(false);
-    const run = (dryRun: boolean, then?: () => void): void => {
-        reconcile.mutate(dryRun, { onSuccess: (r) => { setResult(r); then?.(); } });
+    const run = (dryRun: boolean, then?: (r: ReconcileResultDto) => void): void => {
+        reconcile.mutate(dryRun, { onSuccess: (r) => { setResult(r); then?.(r); } });
     };
-    const preview = (): void => run(true);
-    const runNow = (): void => run(true, () => setConfirming(true));
-    const confirm = (): void => run(false, () => setConfirming(false));
-    return { reconcile, result, confirming, setConfirming, preview, runNow, confirm };
+    return {
+        reconcile, result, confirming,
+        preview: () => run(true),
+        runNow: () => run(true, (r) => setConfirming(needsConfirm(r))),
+        confirm: () => run(false, () => setConfirming(false)),
+        close: () => { setConfirming(false); reconcile.reset(); },
+    };
 }
 
 /** Section 5 — the preview / run buttons, the last-run line and the latest result. */
 export function RunSection({ lastRunAt, lastRunError }: { lastRunAt: string | null; lastRunError: string | null }): JSX.Element {
     const flow = useRunFlow();
     const busy = flow.reconcile.isPending;
+    const error = flow.reconcile.error?.message;
     return (
         <section className="bg-surface rounded-xl border border-edge p-6 space-y-3" aria-label="Run">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -82,10 +100,10 @@ export function RunSection({ lastRunAt, lastRunError }: { lastRunAt: string | nu
                 </div>
             </div>
             <LastRunLine lastRunAt={lastRunAt} lastRunError={lastRunError} />
-            {flow.reconcile.error && <p role="alert" className="text-sm text-danger">{flow.reconcile.error.message}</p>}
+            {error && !flow.confirming && <p role="alert" className="text-sm text-danger">{error}</p>}
             {flow.result && <ReconcileSummary result={flow.result} />}
             {flow.confirming && flow.result && (
-                <RunConfirm plan={flow.result} running={busy} onConfirm={flow.confirm} onClose={() => flow.setConfirming(false)} />
+                <RunConfirm plan={flow.result} running={busy} error={error} onConfirm={flow.confirm} onClose={flow.close} />
             )}
         </section>
     );

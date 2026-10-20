@@ -9,12 +9,19 @@ import type { ChannelBindingDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { StatusChip } from '../ui/status-chip';
 
-interface LifecycleCellProps {
-    binding: ChannelBindingDto;
+/** The pin toggle's wiring, scoped by the list to the row that pinned last. */
+export interface LifecyclePinState {
     /** Called with the NEW pinned value. */
     onPin: (id: string, pinned: boolean) => void;
-    pending: boolean;
+    /** This row's pin PATCH is in flight. */
+    loading: boolean;
+    /** Another PATCH is in flight (one at a time). */
+    locked: boolean;
+    /** This row's rejected pin. */
+    error?: string | null | undefined;
 }
+
+interface LifecycleCellProps { binding: ChannelBindingDto; pin: LifecyclePinState }
 
 function stateLabel(binding: ChannelBindingDto): string {
     if (binding.lifecycleState !== 'archived') return 'Active';
@@ -22,10 +29,11 @@ function stateLabel(binding: ChannelBindingDto): string {
 }
 
 /** Lifecycle chip + Managed badge + pin toggle, or null for a manual binding. */
-export function ChannelBindingLifecycleCell({ binding, onPin, pending }: LifecycleCellProps): JSX.Element | null {
+export function ChannelBindingLifecycleCell({ binding, pin }: LifecycleCellProps): JSX.Element | null {
     if (!binding.autoManaged) return null;
     const archived = binding.lifecycleState === 'archived';
     const pinned = binding.pinned === true;
+    const verb = pinned ? 'Unpin' : 'Pin';
     return (
         <div className="flex flex-wrap items-center gap-2 mt-1" data-testid="binding-lifecycle-cell">
             <StatusChip tone={archived ? 'neutral' : 'success'} title={archived ? 'Archived by Raid Ledger' : 'Active'}>
@@ -33,11 +41,13 @@ export function ChannelBindingLifecycleCell({ binding, onPin, pending }: Lifecyc
             </StatusChip>
             <StatusChip tone="neutral" title="Created and archived by Raid Ledger">Managed</StatusChip>
             {pinned && <StatusChip tone="neutral" title="Never archived or unarchived automatically">Pinned</StatusChip>}
-            <Button size="sm" variant="ghost" disabled={pending}
+            <Button size="sm" variant="ghost" loading={pin.loading} disabled={pin.locked}
+                aria-pressed={pinned} aria-label={`${verb} #${binding.channelName ?? binding.channelId}`}
                 title="Pinned channels are never archived or unarchived automatically"
-                onClick={() => onPin(binding.id, !pinned)}>
-                {pinned ? 'Unpin' : 'Pin'}
+                onClick={() => pin.onPin(binding.id, !pinned)}>
+                {verb}
             </Button>
+            {pin.error && <span role="alert" className="text-xs text-danger">{pin.error}</span>}
         </div>
     );
 }

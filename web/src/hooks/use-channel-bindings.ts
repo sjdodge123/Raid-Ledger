@@ -6,12 +6,17 @@ import type {
   CreateChannelBindingDto,
   UpdateChannelBindingDto,
 } from '@raid-ledger/contract';
+import { LIFECYCLE_ACTIVITY_KEY } from './admin/use-channel-lifecycle';
 
 const QUERY_KEY = ['admin', 'discord', 'bindings'];
 
 function useBindingMutations() {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  // ROK-1428: a pin / edit / delete also changes the lifecycle preview's binding column.
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: LIFECYCLE_ACTIVITY_KEY }),
+  ]);
 
   const createBinding = useMutation<{ data: ChannelBindingDto }, Error, CreateChannelBindingDto>({
     mutationFn: (dto) => fetchApi('/admin/discord/bindings', { method: 'POST', body: JSON.stringify(dto) }),

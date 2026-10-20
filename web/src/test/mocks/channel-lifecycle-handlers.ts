@@ -4,6 +4,7 @@
  * specs override per case with `server.use()`.
  */
 import { http, HttpResponse } from 'msw';
+import { UpdateChannelLifecycleSettingsSchema } from '@raid-ledger/contract';
 import type {
     ChannelLifecycleSettingsDto, GameLifecycleActivityDto, GameLifecycleActivityListDto,
     LifecycleSuppressionListDto, ReconcileResultDto,
@@ -47,10 +48,15 @@ const NO_SUPPRESSIONS: LifecycleSuppressionListDto = { items: [] };
 
 export const channelLifecycleHandlers = [
     http.get(`${LIFECYCLE_API}/settings`, () => HttpResponse.json(buildLifecycleSettings())),
-    http.patch(`${LIFECYCLE_API}/settings`, async ({ request }) =>
-        HttpResponse.json(buildLifecycleSettings((await request.json()) as Partial<ChannelLifecycleSettingsDto>))),
+    http.patch(`${LIFECYCLE_API}/settings`, async ({ request }) => {
+        // Mirror the API's `.strict()` contract: an unknown key or bad value is a 400.
+        const parsed = UpdateChannelLifecycleSettingsSchema.safeParse(await request.json());
+        if (!parsed.success) return HttpResponse.json({ message: 'Invalid settings' }, { status: 400 });
+        return HttpResponse.json({ ...buildLifecycleSettings(), ...parsed.data });
+    }),
     http.get(`${LIFECYCLE_API}/activity`, () => HttpResponse.json(buildActivityList([]))),
-    http.post(`${LIFECYCLE_API}/reconcile`, () => HttpResponse.json(buildReconcileResult())),
+    http.post(`${LIFECYCLE_API}/reconcile`, ({ request }) =>
+        HttpResponse.json(buildReconcileResult({ dryRun: new URL(request.url).searchParams.get('dryRun') !== 'false' }))),
     http.get(`${LIFECYCLE_API}/suppressions`, () => HttpResponse.json(NO_SUPPRESSIONS)),
     http.delete(`${LIFECYCLE_API}/suppressions/:gameId`, () => new HttpResponse(null, { status: 204 })),
     http.get(CATEGORIES_API, () => HttpResponse.json([])),

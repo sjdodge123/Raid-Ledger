@@ -97,10 +97,11 @@ export function buildDiscordNavItems(
     if (botConnected) {
         items.push(
             { to: '/admin/settings/discord/channels', label: 'Channels' },
-            { to: '/admin/settings/discord/lifecycle', label: 'Channel automation' },
-            { to: '/admin/settings/discord/features', label: 'Features' },
         );
     }
+    // ROK-1428: always reachable — automation must be switchable OFF while the bot is down.
+    items.push({ to: '/admin/settings/discord/lifecycle', label: 'Channel automation' });
+    if (botConnected) items.push({ to: '/admin/settings/discord/features', label: 'Features' });
 
     return items;
 }

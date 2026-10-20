@@ -30,20 +30,34 @@ describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
     it('shows the cell on the auto row only', () => {
         const { auto, manual } = renderList();
         expect(within(auto).getByTestId('binding-lifecycle-cell')).toBeInTheDocument();
-        expect(within(auto).getByText(/^Archived/)).toHaveAttribute('data-tone', 'neutral');
+        expect(within(auto).getByText(/^Archived [A-Z][a-z]{2} \d{1,2}$/)).toHaveAttribute('data-tone', 'neutral');
         expect(within(auto).getByText('Managed')).toBeInTheDocument();
         expect(within(manual).queryByTestId('binding-lifecycle-cell')).not.toBeInTheDocument();
-        expect(within(manual).queryByRole('button', { name: 'Pin' })).not.toBeInTheDocument();
+        expect(within(manual).queryByRole('button', { name: 'Pin #baldurs-gate-3' })).not.toBeInTheDocument();
     });
 
     it('Pin calls onUpdate with {pinned:true}', async () => {
         const { auto, onUpdate } = renderList();
-        await userEvent.click(within(auto).getByRole('button', { name: 'Pin' }));
+        await userEvent.click(within(auto).getByRole('button', { name: 'Pin #baldurs-gate-3' }));
         expect(onUpdate).toHaveBeenCalledWith('auto', { pinned: true });
     });
 
     it('the toggle is disabled while a PATCH is pending', () => {
         const { auto } = renderList(vi.fn(), true);
-        expect(within(auto).getByRole('button', { name: 'Pin' })).toBeDisabled();
+        expect(within(auto).getByRole('button', { name: 'Pin #baldurs-gate-3' })).toBeDisabled();
+    });
+
+    it('a pin shows pending + its error on THAT row only', async () => {
+        const AUTO2 = binding({ id: 'auto2', channelId: 'c3', channelName: 'elden-ring', lifecycleState: 'active', autoManaged: true, pinned: false });
+        const onUpdate = vi.fn(() => new Promise<unknown>(() => {}));
+        const props = { onUpdate, onDelete: vi.fn(), isDeleting: false };
+        const { rerender } = render(<ChannelBindingList bindings={[AUTO, AUTO2]} isUpdating={false} {...props} />);
+        const rows = (): HTMLElement[] => screen.getAllByTestId('channel-binding-row');
+        await userEvent.click(within(at(rows(), 1)).getByRole('button', { name: 'Pin #elden-ring' }));
+        rerender(<ChannelBindingList bindings={[AUTO, AUTO2]} isUpdating updateError="Pin refused" {...props} />);
+        expect(within(at(rows(), 1)).getByRole('button', { name: 'Pin #elden-ring' })).toHaveAttribute('aria-busy', 'true');
+        expect(within(at(rows(), 0)).getByRole('button', { name: 'Pin #baldurs-gate-3' })).not.toHaveAttribute('aria-busy');
+        expect(within(at(rows(), 1)).getByText('Pin refused')).toBeInTheDocument();
+        expect(screen.getAllByText('Pin refused')).toHaveLength(1);
     });
 });
