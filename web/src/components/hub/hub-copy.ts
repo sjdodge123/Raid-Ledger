@@ -14,6 +14,12 @@ export interface HubCopy {
     scheduleEmpty: string;
     attendanceEmpty: string;
     editorsEmpty: string;
+    /** ROK-1868 — leader posts. */
+    postsTab: string;
+    previousPosts: string;
+    composerLabel: string;
+    composerHint: string;
+    postRemoved: string;
 }
 
 const WOW_COPY: HubCopy = {
@@ -24,6 +30,11 @@ const WOW_COPY: HubCopy = {
     scheduleEmpty: 'No recurring raids yet. A guild editor can pick this guild when creating a repeating event.',
     attendanceEmpty: "No attendance recorded yet. It fills in once a guild raid's attendance is taken.",
     editorsEmpty: 'No one yet. Add a rank or a member below — start with your Guild Master.',
+    postsTab: 'Posts',
+    previousPosts: 'Previous posts',
+    composerLabel: 'New post',
+    composerHint: 'Members see this at the top of the guild page.',
+    postRemoved: 'This post was removed.',
 };
 
 const SERVER_COPY: HubCopy = {
@@ -34,6 +45,11 @@ const SERVER_COPY: HubCopy = {
     scheduleEmpty: 'No sessions scheduled yet.',
     attendanceEmpty: "No attendance recorded yet. It fills in once a session's attendance is taken.",
     editorsEmpty: 'No one yet — start with your server leader.',
+    postsTab: 'Posts',
+    previousPosts: 'Previous posts',
+    composerLabel: 'New post',
+    composerHint: 'Members see this at the top of the server page.',
+    postRemoved: 'This post was removed.',
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = { wow_guild: WOW_COPY, game_server: SERVER_COPY };

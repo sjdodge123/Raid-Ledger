@@ -14,6 +14,7 @@ import { calendarSyncHandlers } from './calendar-sync-handlers';
 import { pelicanHandlers } from './pelican-handlers';
 import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
+import { hubPostsHandlers } from './hub-posts-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
 import { hubNotificationMuteHandlers } from './hub-notification-mute-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
@@ -32,6 +33,7 @@ export const handlers = [
     ...guildRaidsHandlers,
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
+    ...hubPostsHandlers,
     ...guildDiscordHandlers,
     // Per-group notification mute (ROK-1832) — echo writes, no muted groups.
     ...hubNotificationMuteHandlers,
