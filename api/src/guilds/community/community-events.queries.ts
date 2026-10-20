@@ -28,6 +28,13 @@ const at = (d: Date): SQL => sql`${d.toISOString()}::timestamp`;
 const ends = sql`upper(${events.duration})`;
 const starts = sql`lower(${events.duration})`;
 
+/** `count(*)` of the outer event's signups matching `where` (raw SQL). */
+const signupCount = (where: SQL): SQL<number> =>
+  sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and ${where})`;
+
+const LIVE = sql.raw(`s.status in ('signed_up', 'tentative')`);
+const SIGNED = sql.raw(`s.status in ('signed_up', 'tentative', 'departed')`);
+
 function hubEvents(guildId: number): SQL | undefined {
   return and(
     eq(events.guildId, guildId),
@@ -48,7 +55,7 @@ async function loadUpcoming(
       title: events.title,
       duration: events.duration,
       maxAttendees: events.maxAttendees,
-      signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ('signed_up', 'tentative'))`,
+      signupCount: signupCount(LIVE),
       viewerStatus: sql<
         string | null
       >`(select s.status from ${eventSignups} s where s.event_id = ${outerEventId} and s.user_id = ${viewerId} limit 1)`,
@@ -57,18 +64,28 @@ async function loadUpcoming(
     .where(and(hubEvents(guildId), sql`${ends} > ${at(now)}`))
     .orderBy(asc(starts))
     .limit(HUB_EVENTS_LIMIT);
-  return rows.map((r) => {
-    const status = GuildViewerStatusSchema.safeParse(r.viewerStatus);
-    return {
-      id: r.id,
-      title: r.title,
-      startTime: r.duration[0].toISOString(),
-      endTime: r.duration[1].toISOString(),
-      signupCount: r.signupCount,
-      needed: r.maxAttendees,
-      viewerStatus: status.success ? status.data : null,
-    };
-  });
+  return rows.map(toEventCard);
+}
+
+/** One upcoming row → the contract card. */
+function toEventCard(r: {
+  id: number;
+  title: string;
+  duration: [Date, Date];
+  maxAttendees: number | null;
+  signupCount: number;
+  viewerStatus: string | null;
+}): GuildEventCardDto {
+  const status = GuildViewerStatusSchema.safeParse(r.viewerStatus);
+  return {
+    id: r.id,
+    title: r.title,
+    startTime: r.duration[0].toISOString(),
+    endTime: r.duration[1].toISOString(),
+    signupCount: r.signupCount,
+    needed: r.maxAttendees,
+    viewerStatus: status.success ? status.data : null,
+  };
 }
 
 async function loadRecent(
@@ -82,9 +99,9 @@ async function loadRecent(
       id: events.id,
       title: events.title,
       duration: events.duration,
-      signedUp: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ('signed_up', 'tentative', 'departed'))`,
-      attended: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.attendance_status = 'attended')`,
-      recorded: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.attendance_status is not null)`,
+      signedUp: signupCount(SIGNED),
+      attended: signupCount(sql.raw(`s.attendance_status = 'attended'`)),
+      recorded: signupCount(sql.raw(`s.attendance_status is not null`)),
     })
     .from(events)
     .where(

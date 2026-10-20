@@ -1,6 +1,9 @@
 import { and, eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { refreshMemberCount, type DbOrTx } from './community-membership.queries';
+import {
+  refreshMemberCount,
+  type DbOrTx,
+} from './community-membership.queries';
 
 /**
  * ROK-1870 review — the community-hub part of a user wipe (ban+wipe and hard

@@ -345,8 +345,12 @@ describe('review fixes (M16–M19)', () => {
     expect((await hubRow(hub)).memberCount).toBe(1);
   });
 
-  it('M19: an officer cannot lift the leader\'s ban on an officer', async () => {
-    const [leader, off, off2] = [await mkUser(), await mkUser(), await mkUser()];
+  it("M19: an officer cannot lift the leader's ban on an officer", async () => {
+    const [leader, off, off2] = [
+      await mkUser(),
+      await mkUser(),
+      await mkUser(),
+    ];
     const hub = await mkHub(leader, [off, off2]);
     for (const o of [off, off2])
       await call('patch', `/hubs/${hub}/members/${o.id}/role`, leader.token, {

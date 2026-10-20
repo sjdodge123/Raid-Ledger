@@ -1,23 +1,14 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import type { AdminHubEntry } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { DbOrTx } from './community-membership.queries';
 
 /**
- * ROK-1870 L2b — `GET /admin/hubs?status=`. No contract schema yet (Lead
- * adds `AdminHubEntry`); `leader` is null when the live Leader is gone or
+ * ROK-1870 L2b — `GET /admin/hubs?status=`, typed by the contract
+ * `AdminHubEntry`; `leader` is null when the live Leader is gone or
  * deactivated (OQ-7 `leaderless`).
  */
-export interface AdminHubEntry {
-  id: number;
-  gameId: number;
-  gameName: string;
-  name: string;
-  blurb: string | null;
-  status: 'active' | 'archived';
-  memberCount: number;
-  leader: { userId: number; username: string } | null;
-  createdAt: string;
-}
+export type { AdminHubEntry };
 
 const g = schema.guilds;
 const m = schema.hubCommunityMembers;

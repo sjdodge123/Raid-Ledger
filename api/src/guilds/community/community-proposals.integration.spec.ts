@@ -21,6 +21,7 @@ import { nonEmpty } from '../../common/testing/narrow';
 import { signTestAccessToken } from '../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import * as schema from '../../drizzle/schema';
+import { wipeUserData } from '../../users/users-delete.helpers';
 import { PROPOSAL_ERRORS } from './community-proposals.service';
 
 type UserRow = typeof schema.users.$inferSelect;
@@ -470,5 +471,25 @@ describe('concurrent review', () => {
     expect(
       await noticesFor(proposer.user.id, 'hub_proposal_reviewed'),
     ).toHaveLength(1);
+  });
+});
+
+describe('user wipe', () => {
+  it('P13 wiping a proposer deletes their pending proposal and frees the name', async () => {
+    const proposer = await seedUser('p13-proposer');
+    const other = await seedUser('p13-other');
+    const res = await propose(proposer, { gameId: gameG(), name: 'P13 Crew' });
+    expect(res.status).toBe(201);
+    await testApp.db.transaction((tx) =>
+      wipeUserData(tx, proposer.user.id, other.user.id),
+    );
+    const gone = await testApp.db
+      .select({ id: schema.guilds.id })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, Number(res.body.id)));
+    expect(gone).toEqual([]);
+    expect(
+      (await propose(other, { gameId: gameG(), name: 'P13 Crew' })).status,
+    ).toBe(201);
   });
 });
