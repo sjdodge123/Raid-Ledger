@@ -36,7 +36,12 @@ export const valheimMaterialsKeys = {
             vehicles,
             'containers',
         ] as const,
-    container: (scope: Scope, serverId: number, vehicles: boolean, key: string) =>
+    container: (
+        scope: Scope,
+        serverId: number,
+        vehicles: boolean,
+        key: string,
+    ) =>
         [
             ...valheimMaterialsKeys.all,
             scope,

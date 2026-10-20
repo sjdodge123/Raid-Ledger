@@ -7,7 +7,9 @@ import type { HubCtx } from '../../hub-module';
 import { ValheimMaterialsTab } from '../materials/valheim-materials-tab';
 
 /** Renders nothing when the hub is not mapped to a Pelican server. */
-export default function ValheimMaterialsHubTab({ page }: HubCtx): JSX.Element | null {
+export default function ValheimMaterialsHubTab({
+    page,
+}: HubCtx): JSX.Element | null {
     const serverId = page.server?.pelicanServerId;
     if (serverId === undefined) return null;
     return <ValheimMaterialsTab serverId={serverId} />;

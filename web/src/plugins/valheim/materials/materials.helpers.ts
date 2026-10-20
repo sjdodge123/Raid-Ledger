@@ -62,12 +62,23 @@ export function groupTotals(
         let row = byPrefab.get(t.prefab);
         if (row === undefined) {
             const r = resolveItem(t.prefab, items, atlas);
-            row = { prefab: t.prefab, label: r.label, category: r.category, total: 0, chests: 0, qualities: [] };
+            row = {
+                prefab: t.prefab,
+                label: r.label,
+                category: r.category,
+                total: 0,
+                chests: 0,
+                qualities: [],
+            };
             byPrefab.set(t.prefab, row);
         }
         row.total += t.total;
         row.chests = Math.max(row.chests, t.chests);
-        row.qualities.push({ quality: t.quality, total: t.total, chests: t.chests });
+        row.qualities.push({
+            quality: t.quality,
+            total: t.total,
+            chests: t.chests,
+        });
     }
     for (const row of byPrefab.values())
         row.qualities.sort((a, b) => a.quality - b.quality);
@@ -137,7 +148,10 @@ export function formatCoords(x: number, z: number): string {
 
 /** "Scanned 7 min ago" from the scan's `capturedAt`. */
 export function scanAgeLabel(capturedAt: string, now: number): string {
-    const mins = Math.max(0, Math.floor((now - Date.parse(capturedAt)) / 60_000));
+    const mins = Math.max(
+        0,
+        Math.floor((now - Date.parse(capturedAt)) / 60_000),
+    );
     if (mins < 1) return 'Scanned just now';
     if (mins < 60) return `Scanned ${mins} min ago`;
     const hours = Math.floor(mins / 60);
@@ -156,14 +170,22 @@ export interface WarningCounts {
 export function warningLines(w: WarningCounts): string[] {
     const lines: string[] = [];
     const chests = (n: number) => `${n} ${n === 1 ? 'chest' : 'chests'}`;
-    if (w.unreadable > 0) lines.push(`${chests(w.unreadable)} could not be read`);
-    if (w.omittedEntries > 0) lines.push('Some chests had too many items to list');
-    if (w.omittedShared > 0) lines.push(`${chests(w.omittedShared)} were not scanned`);
+    if (w.unreadable > 0)
+        lines.push(`${chests(w.unreadable)} could not be read`);
+    if (w.omittedEntries > 0)
+        lines.push('Some chests had too many items to list');
+    if (w.omittedShared > 0)
+        lines.push(
+            `${chests(w.omittedShared)} ${w.omittedShared === 1 ? 'was' : 'were'} not scanned`,
+        );
     return lines;
 }
 
 /** Same column flips direction; a new column starts A→Z for names, most-first for counts. */
-export function nextSort(current: MaterialSort, key: MaterialSortKey): MaterialSort {
+export function nextSort(
+    current: MaterialSort,
+    key: MaterialSortKey,
+): MaterialSort {
     if (current.key === key)
         return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };
     return { key, dir: key === 'name' ? 'asc' : 'desc' };
