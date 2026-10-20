@@ -395,7 +395,7 @@ describe('P24–P25 — accepted bodies', () => {
 });
 
 describe('create throttle — 10/min per user', () => {
-  it('a user\'s first 10 creates → 201, the 11th → 429; a second editor on the same IP is not blocked', async () => {
+  it("a user's first 10 creates → 201, the 11th → 429; a second editor on the same IP is not blocked", async () => {
     const g = await newHub(ctx);
     const statuses: number[] = [];
     for (let i = 0; i < 11; i += 1) {
