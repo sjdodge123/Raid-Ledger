@@ -217,6 +217,21 @@ export async function swapLeader(
   return (await setRole(tx, guildId, toUserId, 'leader')) !== null;
 }
 
+/**
+ * Recount every hub the user is a live member of — run when the account's
+ * activation flips (deactivate / reactivate), which changes M11's count.
+ */
+export async function refreshUserHubCounts(
+  db: DbOrTx,
+  userId: number,
+): Promise<void> {
+  const rows = await db
+    .select({ guildId: m.guildId })
+    .from(m)
+    .where(and(eq(m.userId, userId), liveMemberPredicate()));
+  for (const { guildId } of rows) await refreshMemberCount(db, guildId);
+}
+
 /** Recount live members on active accounts into `guilds.member_count` (M11). */
 export async function refreshMemberCount(
   db: DbOrTx,
