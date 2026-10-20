@@ -1,8 +1,4 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 
 /** D12: proposal POSTs allowed per user per window (lifted when THROTTLE_DISABLED, as every tier). */

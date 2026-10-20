@@ -90,7 +90,9 @@ describe('ROK-1870 buildCommunityHubPage', () => {
   });
 
   it('carries the blurb on both guild and community for the hub hero (verify FAIL 12)', () => {
-    const page = buildCommunityHubPage(input({ role: 'visitor', viewerId: 99 }));
+    const page = buildCommunityHubPage(
+      input({ role: 'visitor', viewerId: 99 }),
+    );
     expect(page.guild.blurb).toBe('Weekly co-op');
     expect(page.community?.blurb).toBe('Weekly co-op');
   });
