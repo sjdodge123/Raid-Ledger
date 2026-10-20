@@ -14,9 +14,11 @@ import type { ValheimLinkTx } from '../../link/valheim-link-token-lock';
 import { findLatestContainerScan } from '../valheim-containers.repository';
 import type { ArmoryCatalogReadRow } from './valheim-armory-catalog.helpers';
 import { atlasReady, itemsSubset } from './valheim-armory-read.repository';
-import type {
-  MaterialsContainerRow,
-  MaterialsTotalRow,
+import {
+  toCountsRow,
+  type MaterialsContainerRow,
+  type MaterialsCountsRow,
+  type MaterialsTotalRow,
 } from './valheim-materials.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -28,12 +30,7 @@ const cat = schema.valheimItemCatalogs;
 /** A visibility fragment (shared, personal or both) + the vehicle term. */
 export type ContainerScope = SQL;
 
-/** Counts over one scope's containers (warnings, chest count). */
-export interface MaterialsCountsRow {
-  chestCount: number;
-  unreadable: number;
-  omittedEntries: number;
-}
+export type { MaterialsCountsRow } from './valheim-materials.mappers';
 
 /** One container (internal `id` kept for the stacks query) + its stacks. */
 export interface MaterialsContainerDetailRow {
@@ -111,15 +108,17 @@ export class MaterialsReader {
     scanId: number,
     scope: ContainerScope,
   ): Promise<MaterialsCountsRow> {
+    // Kept as bigint (postgres.js hands back a string): 4096 chests ×
+    // 1e8 omitted entries overflows int4, so no `::int` cast (Codex r1).
     const [row] = await this.db
       .select({
-        chestCount: sql<number>`count(*)::int`,
-        unreadable: sql<number>`count(*) FILTER (WHERE ${c.unreadable})::int`,
-        omittedEntries: sql<number>`coalesce(sum(${c.omittedEntries}), 0)::int`,
+        chestCount: sql<string>`count(*)`,
+        unreadable: sql<string>`count(*) FILTER (WHERE ${c.unreadable})`,
+        omittedEntries: sql<string>`coalesce(sum(${c.omittedEntries}), 0)::bigint`,
       })
       .from(c)
       .where(and(eq(c.scanId, scanId), scope));
-    return row ?? { chestCount: 0, unreadable: 0, omittedEntries: 0 };
+    return toCountsRow(row);
   }
 
   /** The scope's containers, sorted `prefab, x, z, y` (then key). */

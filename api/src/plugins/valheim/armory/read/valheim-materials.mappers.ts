@@ -64,11 +64,39 @@ export function toVisibility(
   return privacy === 'private' ? 'personal' : 'shared';
 }
 
-/** Postgres count/sum → number (≤ 5e13 by the caps, safe as a double). */
+/**
+ * Postgres count/sum → number. Safe as a double by the caps: stack totals
+ * ≤ 4096 × 256 × 1e9 ≈ 1e15, omitted entries ≤ 4096 × 1e8 ≈ 4e11.
+ */
 export function toCount(value: string | number): number {
   const n = Number(value);
   if (!Number.isSafeInteger(n)) throw new Error(`unsafe count: ${value}`);
   return n;
+}
+
+/** Counts over one scope's containers (warnings, chest count). */
+export interface MaterialsCountsRow {
+  chestCount: number;
+  unreadable: number;
+  omittedEntries: number;
+}
+
+/** The counts query's bigint strings → numbers; no row → all zero. */
+export function toCountsRow(
+  row:
+    | {
+        chestCount: string | number;
+        unreadable: string | number;
+        omittedEntries: string | number;
+      }
+    | undefined,
+): MaterialsCountsRow {
+  if (!row) return { chestCount: 0, unreadable: 0, omittedEntries: 0 };
+  return {
+    chestCount: toCount(row.chestCount),
+    unreadable: toCount(row.unreadable),
+    omittedEntries: toCount(row.omittedEntries),
+  };
 }
 
 export function toMaterialStack(row: MaterialsTotalRow): ValheimMaterialStack {

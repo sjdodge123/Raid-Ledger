@@ -528,6 +528,18 @@ describe('golden fixtures', () => {
     const noVehicles = await materials(tokens.member, '?includeVehicles=false');
     expect(totalsOf(noVehicles.shared)).toContain('Wood:1=57/2');
   });
+
+  it('omittedEntries summed past the int4 range: 200 with the exact total (Codex r1)', async () => {
+    const containers = Array.from({ length: 22 }, (_, i) =>
+      box({ x: i, omittedEntries: 100_000_000 }),
+    );
+    await importMsg(server, world({ containers }));
+    const res = await get(`${base(server)}/materials`, tokens.member);
+    expect({ status: res.status }).toEqual({ status: 200 });
+    const body = ValheimMaterialsResponseSchema.parse(res.body);
+    expect(body.shared.warnings.omittedEntries).toBe(2_200_000_000);
+    expect(body.shared.chestCount).toBe(22);
+  });
 });
 
 describe('hub + scan states (R14/R15/R16/R18/R19)', () => {
