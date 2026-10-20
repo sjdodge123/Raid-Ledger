@@ -46,7 +46,16 @@ export interface AddonBindingOptions {
   /** Preview (`true`) never raises `GUID_CONFIRM_REQUIRED`. */
   dryRun: boolean;
   confirm?:
-    | { updateRuleset?: boolean | undefined; repinGuid?: boolean | undefined }
+    | {
+        updateRuleset?: boolean | undefined;
+        /**
+         * ROK-1739 (Codex r2 P2) — the ruleset the preview showed. When set,
+         * `updateRuleset` authorises only that value; a realm-map edit between
+         * preview and apply re-warns instead of writing. Absent = legacy.
+         */
+        updateRulesetTo?: WowForeverRuleset | undefined;
+        repinGuid?: boolean | undefined;
+      }
     | undefined;
   /**
    * ROK-1739 — the admin realm map's ruleset, consulted only when the
@@ -134,7 +143,8 @@ function guidOutcome(
 /**
  * Ruleset: precedence is the export's `who.ruleset` → the realm map's
  * `inferredRuleset` (ROK-1739) → no change (the addon could not tell). A
- * differing one warns; it is written only with `updateRuleset`.
+ * differing one warns; it is written only with `updateRuleset` — and, when
+ * the client sent the previewed `updateRulesetTo`, only if it still matches.
  */
 function rulesetOutcome(
   who: AddonWho,
@@ -149,7 +159,11 @@ function rulesetOutcome(
     from: character.ruleset,
     to: incoming,
   });
-  if (opts.confirm?.updateRuleset) result.setRuleset = incoming;
+  if (!opts.confirm?.updateRuleset) return;
+  const approved = opts.confirm.updateRulesetTo;
+  if (approved === undefined || approved === incoming) {
+    result.setRuleset = incoming;
+  }
 }
 
 /**

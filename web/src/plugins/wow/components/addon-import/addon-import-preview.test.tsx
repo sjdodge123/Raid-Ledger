@@ -50,7 +50,7 @@ describe('AddonImportPreview', () => {
         expect(screen.getByTestId('addon-import-warning')).toHaveTextContent('on a PvP realm, not Normal');
         await userEvent.click(box);
         await userEvent.click(importButton());
-        expect(onImport).toHaveBeenCalledWith({ updateRuleset: true });
+        expect(onImport).toHaveBeenCalledWith({ updateRuleset: true, updateRulesetTo: 'pvp' });
     });
 
     it('says a noop preview has nothing new and disables Import', () => {
@@ -81,7 +81,7 @@ describe('AddonImportPreview — realm-inferred RULESET_CHANGED (ROK-1739 §6.2)
         );
         await userEvent.click(screen.getByRole('checkbox', { name: 'Update ruleset to PvP' }));
         await userEvent.click(importButton());
-        expect(onImport).toHaveBeenCalledWith({ updateRuleset: true });
+        expect(onImport).toHaveBeenCalledWith({ updateRuleset: true, updateRulesetTo: 'pvp' });
     });
 
     it("credits Blizzard's realm data for a blizzard-sourced inference", () => {

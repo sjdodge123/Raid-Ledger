@@ -3,7 +3,8 @@
  *
  * Summary + class/level diff + provenance, then each warning as a `warning`
  * status banner (design-system §4.7). `RULESET_CHANGED` carries an optional
- * "Update ruleset" checkbox (→ `confirm.updateRuleset`); `GUID_CHANGED`
+ * "Update ruleset" checkbox (→ `confirm.updateRuleset` + the previewed
+ * `updateRulesetTo`); `GUID_CHANGED`
  * carries a REQUIRED one (→ `confirm.repinGuid`) — `canApplyAddonImport`
  * keeps Import disabled until it is ticked. `noop` / `stale` previews have
  * nothing to apply.
@@ -15,6 +16,7 @@
 import type { JSX, ReactNode } from 'react';
 import {
     WOW_FOREVER_RULESET_LABELS,
+    WowForeverRulesetSchema,
     type AddonImportResultDto,
     type AddonImportRulesetInferenceDto,
     type AddonImportTargetDto,
@@ -71,6 +73,19 @@ function rulesetWarningTitle(warning: AddonImportWarning, inference: AddonImport
     return `The export says this character is on a ${to} realm, not ${from}.`;
 }
 
+/**
+ * ROK-1739 (Codex r2 P2): ticking the box approves the previewed `to`, sent as
+ * `updateRulesetTo` so the apply refuses a value the realm map changed to since.
+ */
+function withRulesetConfirm(confirm: AddonImportConfirm, checked: boolean, to: unknown): AddonImportConfirm {
+    const approved = WowForeverRulesetSchema.safeParse(to);
+    return {
+        ...(confirm.repinGuid !== undefined ? { repinGuid: confirm.repinGuid } : {}),
+        updateRuleset: checked,
+        ...(checked && approved.success ? { updateRulesetTo: approved.data } : {}),
+    };
+}
+
 function RulesetWarning({ warning, inference, confirm, onConfirmChange }: RulesetWarningProps): JSX.Element {
     const to = rulesetLabel(warning.to);
     return (
@@ -79,7 +94,7 @@ function RulesetWarning({ warning, inference, confirm, onConfirmChange }: Rulese
             <Checkbox
                 label={`Update ruleset to ${to}`}
                 checked={confirm.updateRuleset === true}
-                onChange={(e) => onConfirmChange({ ...confirm, updateRuleset: e.target.checked })}
+                onChange={(e) => onConfirmChange(withRulesetConfirm(confirm, e.target.checked, warning.to))}
             />
         </WarningBanner>
     );

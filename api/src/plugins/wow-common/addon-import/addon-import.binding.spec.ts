@@ -245,6 +245,36 @@ describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
       { code: 'RULESET_CHANGED', from: 'normal', to: 'roleplaying' },
     ]);
   });
+
+  it('B5 confirmed updateRulesetTo equal to the fresh inference → written', () => {
+    const opts = inferred({
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBe('pvp');
+  });
+
+  it('B6 realm map changed since preview (approved pvp, now hardcore) → re-warns, nothing written', () => {
+    const opts = inferred({
+      inferredRuleset: 'hardcore',
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBeUndefined();
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'hardcore' },
+    ]);
+    expect(codes(r)).toEqual([]);
+  });
+
+  it('B7 no updateRulesetTo (older client) → legacy write of the fresh value', () => {
+    const opts = inferred({
+      inferredRuleset: 'hardcore',
+      confirm: { updateRuleset: true },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBe('hardcore');
+  });
 });
 
 describe('bindToCharacter — GUID', () => {

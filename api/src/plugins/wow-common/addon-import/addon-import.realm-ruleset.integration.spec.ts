@@ -193,6 +193,34 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
     expect(await storedRuleset(id)).toBe('pvp');
   });
 
+  it('I8b realm map edited between preview and apply → approved pvp is not swapped for hardcore; re-warns', async () => {
+    const token = await memberToken('realmdrift');
+    const id = await createChar(token);
+    const s = exportFrom('Bloodmoon');
+    const preview = await perChar(token, id, s);
+    expect(rulesetChanged(preview.body)).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
+    ]);
+    const drifted: WowForeverRealmRulesetEntryDto[] = [
+      { region: 'us', realmName: 'Bloodmoon', ruleset: 'hardcore' },
+    ];
+    await testApp.app
+      .get(SettingsService)
+      .set(
+        WOW_FOREVER_REALM_RULESETS_KEY,
+        JSON.stringify({ entries: drifted }),
+      );
+    const res = await perChar(token, id, s, {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    expect(res.status).toBe(200);
+    expect(rulesetChanged(res.body)).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'hardcore' },
+    ]);
+    expect(await storedRuleset(id)).toBe('normal');
+  });
+
   it('I9 unknown realm → no RULESET_CHANGED, no rulesetInference, row unchanged even when confirmed', async () => {
     const token = await memberToken('realmunknown');
     const id = await createChar(token);
