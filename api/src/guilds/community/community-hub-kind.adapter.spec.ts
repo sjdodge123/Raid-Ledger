@@ -79,9 +79,9 @@ describe('ROK-1870 CommunityHubKindAdapter', () => {
   });
 
   it('raids 404s a missing hub, else reads the hub-tagged events', async () => {
-    jest.mocked(loadCommunityHubEvents).mockResolvedValue(
-      EMPTY_COMMUNITY_HUB_RAIDS,
-    );
+    jest
+      .mocked(loadCommunityHubEvents)
+      .mockResolvedValue(EMPTY_COMMUNITY_HUB_RAIDS);
     db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 7 }]);
     await expect(adapter.raids({ id: 1, role: 'member' }, 7)).rejects.toThrow(
       'Guild not found',
