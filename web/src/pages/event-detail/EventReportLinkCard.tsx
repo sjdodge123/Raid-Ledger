@@ -13,7 +13,6 @@ import {
     normalizeEventReportUrl,
     reportLinkSiteName,
     EVENT_REPORT_HOSTS,
-    EVENT_REPORT_URL_MAX,
     type EventResponseDto,
 } from '@raid-ledger/contract';
 import { Button } from '../../components/ui/button';
@@ -60,18 +59,35 @@ function reportLinkErrorMessage(err: unknown): string {
     return err instanceof Error ? err.message : 'Could not save the report link';
 }
 
+/** `true` when a stored value still passes the write-side allow-list, so it is safe to render as a link. */
+function isLinkable(url: string): boolean {
+    return eventReportUrlProblem(url) === null;
+}
+
+function ReportLinkAnchor({ url }: { url: string }): JSX.Element {
+    return (
+        <div className="flex min-w-0 flex-col">
+            <a href={url} target="_blank" rel="noopener noreferrer" data-testid="event-report-link"
+                className="inline-flex min-h-[44px] items-center gap-1 self-start text-sm font-medium text-success">
+                {reportLinkLabel(url)}<ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            </a>
+            <span className="break-all text-xs text-muted">{reportLinkDisplay(url)}</span>
+        </div>
+    );
+}
+
+/**
+ * Defence in depth: a stored value that fails the allow-list (legacy row, direct DB write)
+ * never becomes an anchor — a manager sees Edit / Remove without the link instead.
+ */
 function ReportLinkView({ url, editable, removing, onEdit, onRemove }: {
     url: string; editable: boolean; removing: boolean; onEdit: () => void; onRemove: () => void;
 }): JSX.Element {
     return (
         <div className="flex flex-col gap-3">
-            <div className="flex min-w-0 flex-col">
-                <a href={url} target="_blank" rel="noopener noreferrer" data-testid="event-report-link"
-                    className="inline-flex min-h-[44px] items-center gap-1 self-start text-sm font-medium text-success">
-                    {reportLinkLabel(url)}<ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                </a>
-                <span className="break-all text-xs text-muted">{reportLinkDisplay(url)}</span>
-            </div>
+            {isLinkable(url)
+                ? <ReportLinkAnchor url={url} />
+                : <p className="text-sm text-muted">The saved report link is not a valid report link. Edit or remove it.</p>}
             {editable && (
                 <div className={ACTION_ROW}>
                     <Button variant="secondary" size="sm" onClick={onEdit}>Edit</Button>
@@ -93,6 +109,10 @@ function ReportLinkEmpty({ onAdd }: { onAdd: () => void }): JSX.Element {
     );
 }
 
+/**
+ * No `maxLength` on the input: the browser would silently truncate a long paste into a URL
+ * that still validates and saves broken; `eventReportUrlProblem` says "too long" instead.
+ */
 function ReportLinkEditor({ initial, pending, onSave, onCancel }: {
     initial: string; pending: boolean; onSave: (url: string) => Promise<string | null>; onCancel: () => void;
 }): JSX.Element {
@@ -113,7 +133,7 @@ function ReportLinkEditor({ initial, pending, onSave, onCancel }: {
     return (
         <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
             <Field label="Report link" hint={`${SITE_NAMES} report URL`} {...(error ? { error } : {})}>
-                <Input type="url" inputMode="url" fieldSize="md" maxLength={EVENT_REPORT_URL_MAX} value={value}
+                <Input type="url" inputMode="url" fieldSize="md" value={value}
                     placeholder="https://www.warcraftlogs.com/reports/…" onChange={(e) => setValue(e.target.value)} />
             </Field>
             <div className={ACTION_ROW}>
@@ -149,7 +169,7 @@ export function EventReportLinkCard({ event, canManage, isCancelled }: {
     const reportUrl = event.reportUrl ?? null;
     const editable = canManage && !isCancelled;
     const actions = useReportLinkActions(event.id);
-    if (reportUrl === null && !editable) return null;
+    if (!editable && (reportUrl === null || !isLinkable(reportUrl))) return null;
     return (
         <section className="bg-surface rounded-xl border border-edge p-4 mb-6" data-testid="event-report-link-card" aria-labelledby="event-report-link-title">
             <h2 id="event-report-link-title" className="mb-3 text-lg font-semibold text-foreground">Logs</h2>

@@ -76,9 +76,21 @@ describe('EventReportLinkCard', () => {
         expectNoManageButtons();
     });
 
-    it('W1b: falls back to the URL host when the site is not a known log site', () => {
-        renderCard('https://logs.example.com/r/9');
-        expect(screen.getByRole('link', { name: 'View report on logs.example.com' })).toBeInTheDocument();
+    it('W1b: a stored value outside the allow-list renders no anchor (and no card) for a read-only viewer', () => {
+        for (const stored of ['javascript:alert(1)', 'https://logs.example.com/r/9']) {
+            const { unmount } = renderCard(stored);
+            expect(screen.queryByRole('link'), `"${stored}" must not render as a link`).toBeNull();
+            expect(screen.queryByTestId('event-report-link-card')).toBeNull();
+            unmount();
+        }
+    });
+
+    it('W1c: a manager sees Edit / Remove but no anchor for a stored value outside the allow-list', () => {
+        renderCard('javascript:alert(1)', { canManage: true });
+        expect(screen.queryByRole('link')).toBeNull();
+        expect(screen.getByText('The saved report link is not a valid report link. Edit or remove it.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
     });
 
     it('W2: renders nothing for a non-manager when no link is set', () => {
@@ -98,6 +110,21 @@ describe('EventReportLinkCard', () => {
         renderCard(null, { canManage: true });
         await openEditorAndType('https://evil.com/x');
         expect(await screen.findByRole('alert')).toHaveTextContent('Only Warcraft Logs and foreverlogs.gg report links are accepted');
+        expect(bodies).toEqual([]);
+    });
+
+    it('W4b: a pasted URL over the limit is kept whole, shows "too long" and sends no PATCH', async () => {
+        const bodies = capturePatches();
+        const tooLong = `https://www.warcraftlogs.com/reports/${'a'.repeat(480)}`;
+        renderCard(null, { canManage: true });
+        const user = userEvent.setup();
+        await user.click(screen.getByRole('button', { name: 'Add report link' }));
+        const input = screen.getByLabelText('Report link');
+        await user.click(input);
+        await user.paste(tooLong);
+        expect(input).toHaveValue(tooLong);
+        await user.click(screen.getByRole('button', { name: 'Save' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Report link is too long');
         expect(bodies).toEqual([]);
     });
 
