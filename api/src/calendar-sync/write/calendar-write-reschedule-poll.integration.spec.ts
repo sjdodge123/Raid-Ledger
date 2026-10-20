@@ -326,6 +326,11 @@ function copiesIn(calendarId: string) {
   return fake.store.copiesIn(calendarId);
 }
 
+/** Copies the fake CREATED since the spy began: upserts with no existing ref. */
+function freshCreates(upsert: { mock: { calls: unknown[][] } }): number {
+  return upsert.mock.calls.filter((c) => c[3] === null).length;
+}
+
 /** Member signed up with a synced copy, then the poll opened. */
 async function seedUnderPoll(m: Member) {
   const event = await newEvent();
@@ -365,8 +370,7 @@ describe('ROK-1857 — a Google copy across a rescheduling poll lifecycle', () =
     // Two UPDATED emits (reschedule + complete) → one creation, no extras.
     const created = outcomesFor(m, mark).filter((o) => o.result === 'created');
     expect(created).toHaveLength(1);
-    const fresh = upsert.mock.calls.filter((c) => c[3] === null);
-    expect(fresh).toHaveLength(1);
+    expect(freshCreates(upsert)).toBe(1);
   });
 
   it('3. aborting the lineup restores the copy at the ORIGINAL time', async () => {
@@ -390,12 +394,56 @@ describe('ROK-1857 — a Google copy across a rescheduling poll lifecycle', () =
   });
 });
 
+describe('ROK-1857 — closing on the same slot, and polls back to back', () => {
+  it('2a. closing on the SAME slot creates one fresh copy at the original time', async () => {
+    const m = await member();
+    const { event, before, poll } = await seedUnderPoll(m);
+    const upsert = jest.spyOn(fake, 'upsertEvent');
+    await step(async () => {
+      expect((await completeRequest(poll.matchId)).status).toBe(200);
+    });
+    const after = await copyOf(m, event.id);
+    expect(after.copy.start.getTime()).toBe(event.start.getTime());
+    expect(after.copy.id).not.toBe(before.copy.id);
+    expect(copiesIn(after.link.calendarId)).toHaveLength(1);
+    expect(freshCreates(upsert)).toBe(1);
+  });
+
+  it('2b. two polls back to back leave ONE copy at the second time', async () => {
+    const m = await member();
+    const event = await newEvent();
+    await signUp(event.id, m);
+    const del = jest.spyOn(fake, 'deleteEvent');
+    const upsert = jest.spyOn(fake, 'upsertEvent');
+    const first = await openPoll(event.id);
+    const startA = new Date(Date.now() + 7 * DAY_MS);
+    await lockInAtNewTime(event.id, first.matchId, startA);
+    const afterA = await copyOf(m, event.id);
+    expect(afterA.copy.start.getTime()).toBe(startA.getTime());
+    expect(freshCreates(upsert)).toBe(1);
+    const second = await openPoll(event.id);
+    expect(await linkFor(m, event.id)).toBeNull();
+    const startB = new Date(Date.now() + 14 * DAY_MS);
+    await lockInAtNewTime(event.id, second.matchId, startB);
+    const afterB = await copyOf(m, event.id);
+    expect(afterB.copy.start.getTime()).toBe(startB.getTime());
+    expect(afterB.copy.id).not.toBe(afterA.copy.id);
+    expect(copiesIn(afterB.link.calendarId)).toHaveLength(1);
+    expect(freshCreates(upsert)).toBe(2); // exactly one creation per close
+    expect(del).toHaveBeenCalledTimes(2); // one delete per open
+  });
+});
+
 describe('ROK-1857 — cases where nothing may be restored or moved', () => {
   it.each(['abort', 'close'] as const)(
     '5. event cancelled during the poll → nothing restored on %s',
     async (ending) => {
       const m = await member();
+      const del = jest.spyOn(fake, 'deleteEvent');
       const { event, before, poll } = await seedUnderPoll(m);
+      // The L1 rule removed the copy at OPEN, before the cancel ran.
+      expect(del).toHaveBeenCalledTimes(1);
+      expect(await linkFor(m, event.id)).toBeNull();
       const upsert = jest.spyOn(fake, 'upsertEvent');
       await step(async () => {
         const res = await testApp.request
@@ -410,6 +458,7 @@ describe('ROK-1857 — cases where nothing may be restored or moved', () => {
           expect((await completeRequest(poll.matchId)).status).toBe(200);
         }, 0); // complete skips the re-emit for a cancelled event
       expect(upsert).not.toHaveBeenCalled();
+      expect(del).toHaveBeenCalledTimes(1); // nothing left for the cancel
       expect(copiesIn(before.link.calendarId)).toEqual([]);
       expect(await linkFor(m, event.id)).toBeNull();
     },
@@ -446,12 +495,20 @@ describe('ROK-1857 — members who must not get a fresh copy', () => {
     await signUp(event.id, stale);
     await signUp(event.id, control);
     const before = await copyOf(stale, event.id);
+    const controlBefore = await copyOf(control, event.id);
     await testApp.db
       .update(schema.calendarConnections)
       .set({ status: 'needs_reconnect' })
       .where(eq(schema.calendarConnections.id, stale.connectionId));
+    const del = jest.spyOn(fake, 'deleteEvent');
     const poll = await openPoll(event.id);
+    // Frozen reasons win over `rescheduling`: only the control's copy goes.
+    expect(del.mock.calls.map((c) => c[1].providerEventId)).toEqual([
+      controlBefore.copy.id,
+    ]);
     expect(await linkFor(control, event.id)).toBeNull();
+    expect(await linkFor(stale, event.id)).not.toBeNull();
+    expect(fake.store.getCopy(before.copy.id)).toEqual(before.copy);
     const newStart = new Date(Date.now() + 7 * DAY_MS);
     await lockInAtNewTime(event.id, poll.matchId, newStart);
     expect((await copyOf(control, event.id)).copy.start.getTime()).toBe(
@@ -462,7 +519,7 @@ describe('ROK-1857 — members who must not get a fresh copy', () => {
     expect(after.link.providerEventId).toBe(before.link.providerEventId);
   });
 
-  it('8. a member who un-signs during the poll gets no copy on close', async () => {
+  it('9. a member who un-signs during the poll gets no copy on close', async () => {
     const [leaver, control] = [await member(), await member()];
     const event = await newEvent();
     await signUp(event.id, leaver);
@@ -482,5 +539,27 @@ describe('ROK-1857 — members who must not get a fresh copy', () => {
     );
     expect(copiesIn(link.calendarId)).toEqual([]);
     expect(await linkFor(leaver, event.id)).toBeNull();
+  });
+});
+
+describe('ROK-1857 — a member with "send my events" off', () => {
+  it('8. sending turned off during the poll → no copy on close; the control gets one', async () => {
+    const [quiet, control] = [await member(), await member()];
+    const event = await newEvent();
+    await signUp(event.id, quiet);
+    await signUp(event.id, control);
+    const { link } = await copyOf(quiet, event.id);
+    const poll = await openPoll(event.id);
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ writeEnabled: false })
+      .where(eq(schema.calendarConnections.id, quiet.connectionId));
+    const newStart = new Date(Date.now() + 7 * DAY_MS);
+    await lockInAtNewTime(event.id, poll.matchId, newStart);
+    expect((await copyOf(control, event.id)).copy.start.getTime()).toBe(
+      newStart.getTime(),
+    );
+    expect(copiesIn(link.calendarId)).toEqual([]);
+    expect(await linkFor(quiet, event.id)).toBeNull();
   });
 });
