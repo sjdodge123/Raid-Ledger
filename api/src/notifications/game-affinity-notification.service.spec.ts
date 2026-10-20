@@ -283,7 +283,11 @@ describe('GameAffinityNotificationService — follow-up attendees (ROK-1371)', (
       Promise.resolve(rows.map(asCreated)),
     );
     await runFollowupFanout(
-      { db: fanoutDb(h.claimed), notificationService: { createMany } },
+      {
+        db: fanoutDb(h.claimed),
+        notificationService: { createMany },
+        noticeDedup: { releaseKeys: jest.fn() },
+      },
       50,
       { eventId: 1 },
       99,

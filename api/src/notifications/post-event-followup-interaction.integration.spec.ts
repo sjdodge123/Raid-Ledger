@@ -23,6 +23,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { NotificationService } from './notification.service';
+import { NotificationDedupService } from './notification-dedup.service';
 import { PostEventFollowupPromptService } from './post-event-followup-prompt.service';
 import { runFollowupFanout } from './post-event-followup-fanout.helpers';
 import { PostEventFollowupInteractionListener } from '../discord-bot/listeners/post-event-followup-interaction.listener';
@@ -169,6 +170,11 @@ function pollResponse(
     visibility: 'public',
     shareToken: null,
   };
+}
+
+/** The app's real dedup service (Codex r10: releases clear DB + Redis). */
+function noticeDedup(testApp: TestApp): NotificationDedupService {
+  return testApp.app.get(NotificationDedupService);
 }
 
 /** Build handler deps with real DB + jest mocks for the external collaborators. */
@@ -605,7 +611,11 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       const createMany = jest.fn().mockResolvedValue([]);
 
       await runFollowupFanout(
-        { db: testApp.db, notificationService: { createMany } },
+        {
+          db: testApp.db,
+          notificationService: { createMany },
+          noticeDedup: noticeDedup(testApp),
+        },
         ev.id,
         { eventId: 4242 },
         creator.id,
@@ -636,6 +646,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       const deps = {
         db: testApp.db,
         notificationService: { createMany } as never,
+        noticeDedup: noticeDedup(testApp),
       };
 
       await runFollowupFanout(
@@ -663,7 +674,11 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       const createMany = jest.fn().mockResolvedValue([]);
 
       await runFollowupFanout(
-        { db: testApp.db, notificationService: { createMany } },
+        {
+          db: testApp.db,
+          notificationService: { createMany },
+          noticeDedup: noticeDedup(testApp),
+        },
         ev.id,
         { eventId: 4242 },
         creator.id + 9999,
@@ -681,7 +696,11 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       const createMany = jest.fn().mockResolvedValue([]);
 
       await runFollowupFanout(
-        { db: testApp.db, notificationService: { createMany } },
+        {
+          db: testApp.db,
+          notificationService: { createMany },
+          noticeDedup: noticeDedup(testApp),
+        },
         ev.id,
         { eventId: 4242 },
         creator.id,
@@ -698,7 +717,11 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
 
       await expect(
         runFollowupFanout(
-          { db: testApp.db, notificationService: { createMany } },
+          {
+            db: testApp.db,
+            notificationService: { createMany },
+            noticeDedup: noticeDedup(testApp),
+          },
           ev.id,
           { eventId: 4242 },
           creator.id,
@@ -717,7 +740,11 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       const notificationService = testApp.app.get(NotificationService);
 
       await runFollowupFanout(
-        { db: testApp.db, notificationService },
+        {
+          db: testApp.db,
+          notificationService,
+          noticeDedup: noticeDedup(testApp),
+        },
         ev.id,
         { eventId: 4242 },
         creator.id,

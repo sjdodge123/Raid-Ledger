@@ -83,6 +83,23 @@ export class NotificationDedupService {
   }
 
   /**
+   * ROK-1832 (Codex r10): `releaseKey` for a batch. Clears both stores, in the
+   * same DB-then-Redis order, so a claim a concurrent `checkAndMarkSent`
+   * cached in Redis is not left behind once its row is gone.
+   *
+   * @param dedupKeys - The keys to un-claim; a no-op when empty.
+   */
+  async releaseKeys(dedupKeys: readonly string[]): Promise<void> {
+    if (dedupKeys.length === 0) return;
+    const keys = dedupKeys.map((k) => sql`${k}`);
+    await this.db.execute(sql`
+      DELETE FROM notification_dedup
+      WHERE dedup_key IN (${sql.join(keys, sql`, `)})
+    `);
+    await this.redis.del(...dedupKeys);
+  }
+
+  /**
    * Delete all expired dedup rows from the database.
    * Rows with null expires_at are permanent and never cleaned up.
    */

@@ -9,9 +9,11 @@ import type { SQL } from 'drizzle-orm';
 import { runFollowupFanout } from './post-event-followup-fanout.helpers';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 import {
+  EVENT_NOTICE_TTL_SECONDS,
   eventNoticeKey,
   sendClaimedEventNotice,
 } from './event-notice-plan.helpers';
+import { NotificationDedupService } from './notification-dedup.service';
 import type { FollowupFanoutDeps } from './post-event-followup-fanout.helpers';
 import type {
   CreateNotificationInput,
@@ -42,10 +44,34 @@ function dedupOver(held: Set<string>) {
   };
 }
 
+type DedupCtor = ConstructorParameters<typeof NotificationDedupService>;
+
+/** A fake Redis: `cache` holds the keys a dedup check has cached. */
+function fakeRedis(cache: Map<string, string>): DedupCtor[1] {
+  const redis = {
+    get: (k: string) => Promise.resolve(cache.get(k) ?? null),
+    set: (k: string, v: string) => Promise.resolve(cache.set(k, v) && 'OK'),
+    del: (...ks: string[]) =>
+      Promise.resolve(ks.filter((k) => cache.delete(k)).length),
+  };
+  return redis as unknown as DedupCtor[1];
+}
+
 /** A fake `notification_dedup` table: `held` is the set of claimed keys. */
-function setup(held: Set<string> = new Set()) {
+function setup(
+  held: Set<string> = new Set(),
+  cache: Map<string, string> = new Map(),
+) {
   const execute = jest.fn((q: SQL) => {
     const { sql: text, params } = dialect.sqlToQuery(q);
+    if (text.includes('SELECT id FROM notification_dedup')) {
+      return Promise.resolve(held.has(String(params[0])) ? [{ id: 1 }] : []);
+    }
+    const sweep = text.includes('expires_at < NOW()');
+    if (sweep && text.includes('DELETE FROM notification_dedup')) {
+      // attemptInsert's stale-row sweep: nothing in the fake ever expires.
+      return Promise.resolve([]);
+    }
     if (text.includes('SET attendees_notified_at = now()')) {
       return Promise.resolve([{ id: 1 }]);
     }
@@ -68,10 +94,12 @@ function setup(held: Set<string> = new Set()) {
     Promise.resolve(inputs.map(asCreated)),
   );
   const db = { execute } as unknown as FollowupFanoutDeps['db'];
+  const dedup = new NotificationDedupService(db, fakeRedis(cache));
   return {
     execute,
     createMany,
-    deps: { db, notificationService: { createMany } },
+    dedup,
+    deps: { db, notificationService: { createMany }, noticeDedup: dedup },
   };
 }
 
@@ -172,5 +200,54 @@ describe('runFollowupFanout — claims kept only for notified recipients (Codex 
       true,
     );
     expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runFollowupFanout — released claims leave no Redis cache (Codex r10)', () => {
+  beforeEach(() => recipients.mockResolvedValue([11, 22]));
+
+  /** A group notice that meets user 22's pending claim caches it in Redis. */
+  function groupNoticeDuringSend(s: ReturnType<typeof setup>, key: string) {
+    return async (): Promise<void> => {
+      expect(
+        await s.dedup.checkAndMarkSent(key, EVENT_NOTICE_TTL_SECONDS),
+      ).toBe(true);
+    };
+  }
+
+  it('an opted-out recipient released after the send is not left cached', async () => {
+    const cache = new Map<string, string>();
+    const s = setup(new Set(), cache);
+    const key = eventNoticeKey(55, 22);
+    const meetClaim = groupNoticeDuringSend(s, key);
+    s.createMany.mockImplementation(
+      async (inputs: CreateNotificationInput[]) => {
+        await meetClaim();
+        return inputs.filter((i) => i.userId !== 22).map(asCreated);
+      },
+    );
+    await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
+    expect(cache.has(key)).toBe(false);
+    expect(await s.dedup.checkAndMarkSent(key, EVENT_NOTICE_TTL_SECONDS)).toBe(
+      false,
+    );
+  });
+
+  it('a failed send releases every claim from Redis as well as the table', async () => {
+    const cache = new Map<string, string>();
+    const s = setup(new Set(), cache);
+    const key = eventNoticeKey(55, 22);
+    const meetClaim = groupNoticeDuringSend(s, key);
+    s.createMany.mockImplementation(async () => {
+      await meetClaim();
+      throw new Error('boom');
+    });
+    await expect(
+      runFollowupFanout(s.deps, 10, { eventId: 55 }, 9),
+    ).rejects.toThrow('boom');
+    expect(cache.has(key)).toBe(false);
+    expect(await s.dedup.checkAndMarkSent(key, EVENT_NOTICE_TTL_SECONDS)).toBe(
+      false,
+    );
   });
 });

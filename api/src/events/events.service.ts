@@ -21,6 +21,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
+import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
 import {
@@ -67,6 +68,7 @@ export class EventsService {
     private readonly eventEmitter: EventEmitter2,
     private readonly activityLog: ActivityLogService,
     private readonly settingsService: SettingsService,
+    private readonly notificationDedup: NotificationDedupService,
   ) {}
 
   /** Creates a single or recurring event. */
@@ -350,6 +352,7 @@ export class EventsService {
       findOne: (id: number) => this.findOne(id),
       // ROK-1371: post-create follow-up fan-out (NotificationService already injected).
       notificationService: this.notificationService,
+      noticeDedup: this.notificationDedup,
     };
   }
 }

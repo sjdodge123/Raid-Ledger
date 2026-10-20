@@ -5,6 +5,7 @@ import { EventsService } from './events.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
+import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
@@ -66,6 +67,10 @@ async function setupEach() {
       {
         provide: NotificationService,
         useValue: { create: jest.fn() },
+      },
+      {
+        provide: NotificationDedupService,
+        useValue: { releaseKeys: jest.fn() },
       },
       {
         provide: SettingsService,

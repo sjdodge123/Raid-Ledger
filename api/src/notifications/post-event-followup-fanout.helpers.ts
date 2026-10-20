@@ -3,6 +3,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
 import type { NotificationService } from './notification.service';
+import type { NotificationDedupService } from './notification-dedup.service';
 import type {
   CreateNotificationInput,
   NotificationDto,
@@ -21,10 +22,28 @@ export interface FollowupFanoutDeps {
   notificationService: Pick<NotificationService, 'createMany'>;
 }
 
+/** Releases per-user notice claims from BOTH dedup stores (Codex r10). */
+export type FollowupNoticeDedup = Pick<NotificationDedupService, 'releaseKeys'>;
+
+/** Event-path deps: its notice claims are released through the dedup service. */
+export interface FollowupEventFanoutDeps extends FollowupFanoutDeps {
+  noticeDedup: FollowupNoticeDedup;
+}
+
+type FollowupPollPayload = {
+  lineupId: number;
+  matchId: number;
+  subtype: 'post_event_poll';
+};
+
 /** Discriminated payload — event path carries a new eventId, poll path a match. */
-export type FollowupFanoutPayload =
-  | { eventId: number }
-  | { lineupId: number; matchId: number; subtype: 'post_event_poll' };
+export type FollowupFanoutPayload = { eventId: number } | FollowupPollPayload;
+
+/**
+ * The event path's per-user notice scope. The poll path has no follow-up
+ * event yet (ROK-1422) and so takes no notice claims.
+ */
+type NoticeScope = { eventId: number; dedup: FollowupNoticeDedup } | null;
 
 /** Ended event row needed for the tampering guard + DM copy. */
 type EndedEvent = {
@@ -138,26 +157,48 @@ export function buildInputs(
  * @param payload - Event-path `{eventId}` or poll-path `{lineupId,matchId,subtype}`.
  * @param actingCreatorId - The acting organizer; must equal the ended event's creator.
  */
-export async function runFollowupFanout(
+export function runFollowupFanout(
+  deps: FollowupEventFanoutDeps,
+  endedEventId: number,
+  payload: { eventId: number },
+  actingCreatorId: number,
+): Promise<void>;
+export function runFollowupFanout(
   deps: FollowupFanoutDeps,
+  endedEventId: number,
+  payload: FollowupPollPayload,
+  actingCreatorId: number,
+): Promise<void>;
+export async function runFollowupFanout(
+  deps: FollowupFanoutDeps & Partial<FollowupEventFanoutDeps>,
   endedEventId: number,
   payload: FollowupFanoutPayload,
   actingCreatorId: number,
 ): Promise<void> {
   const { db } = deps;
+  const scope = noticeScope(deps, payload);
   if (!(await claimFanout(db, endedEventId))) return;
   const ended = await loadEndedEvent(db, endedEventId);
   if (!ended || ended.creator_id !== actingCreatorId) {
     await releaseFanout(db, endedEventId);
     return;
   }
-  await dispatchFollowupInvites(
-    deps,
-    endedEventId,
-    ended.title,
-    payload,
+  await dispatchFollowupInvites(deps, endedEventId, ended.title, payload, {
     actingCreatorId,
-  );
+    scope,
+  });
+}
+
+/** Resolve the notice scope up front, before any claim is taken. */
+function noticeScope(
+  deps: Partial<FollowupEventFanoutDeps>,
+  payload: FollowupFanoutPayload,
+): NoticeScope {
+  if (!('eventId' in payload)) return null;
+  if (!deps.noticeDedup) {
+    throw new Error('Follow-up event fan-out requires noticeDedup');
+  }
+  return { eventId: payload.eventId, dedup: deps.noticeDedup };
 }
 
 /**
@@ -171,11 +212,8 @@ async function dispatchFollowupInvites(
   endedEventId: number,
   endedTitle: string,
   payload: FollowupFanoutPayload,
-  actingCreatorId: number,
+  { actingCreatorId, scope }: { actingCreatorId: number; scope: NoticeScope },
 ): Promise<void> {
-  // Event path carries the new follow-up event's id; the poll path has no
-  // event yet (ROK-1422) and so no per-user notice claims.
-  const eventId = 'eventId' in payload ? payload.eventId : null;
   const claimed: number[] = [];
   let created: NotificationDto[];
   try {
@@ -184,29 +222,25 @@ async function dispatchFollowupInvites(
       endedEventId,
       actingCreatorId,
     );
-    claimed.push(...(await claimForEvent(deps.db, eventId, recipients)));
-    const sendTo = eventId !== null ? claimed : recipients;
+    claimed.push(...(await claimForEvent(deps.db, scope, recipients)));
+    const sendTo = scope !== null ? claimed : recipients;
     created = await sendInvites(deps, sendTo, endedTitle, payload);
   } catch (err) {
-    await rollbackFollowup(deps.db, endedEventId, eventId, claimed);
+    await rollbackFollowup(deps.db, endedEventId, scope, claimed);
     throw err;
   }
-  if (eventId === null) return;
-  await releaseFollowupEventNotices(
-    deps.db,
-    eventId,
-    unnotified(claimed, created),
-  );
+  if (scope === null) return;
+  await releaseFollowupEventNotices(scope, unnotified(claimed, created));
 }
 
 /** Event path: claim the recipients' notices; the poll path claims none. */
 function claimForEvent(
   db: Db,
-  eventId: number | null,
+  scope: NoticeScope,
   recipients: number[],
 ): Promise<number[]> {
-  if (eventId === null) return Promise.resolve([]);
-  return claimFollowupEventNotices(db, eventId, recipients);
+  if (scope === null) return Promise.resolve([]);
+  return claimFollowupEventNotices(db, scope.eventId, recipients);
 }
 
 /** Create the DMs; the event path appends its start time (ROK-1422). */
@@ -229,13 +263,11 @@ async function sendInvites(
 async function rollbackFollowup(
   db: Db,
   endedEventId: number,
-  eventId: number | null,
+  scope: NoticeScope,
   claimed: readonly number[],
 ): Promise<void> {
   await releaseFanout(db, endedEventId);
-  if (eventId !== null) {
-    await releaseFollowupEventNotices(db, eventId, claimed);
-  }
+  if (scope !== null) await releaseFollowupEventNotices(scope, claimed);
 }
 
 /**
@@ -286,16 +318,18 @@ async function claimFollowupEventNotices(
   return ids.filter((id) => keys.has(eventNoticeKey(eventId, id)));
 }
 
-/** Give back notice claims that produced no notification. */
+/**
+ * Give back notice claims that produced no notification. Goes through
+ * `NotificationDedupService` (Codex r10): a concurrent group notice that met
+ * the pending claim cached it in Redis, and a DB-only delete would leave that
+ * cache suppressing the user for the key's whole TTL.
+ */
 async function releaseFollowupEventNotices(
-  db: Db,
-  eventId: number,
+  scope: { eventId: number; dedup: FollowupNoticeDedup },
   userIds: readonly number[],
 ): Promise<void> {
   if (userIds.length === 0) return;
-  const keys = userIds.map((id) => sql`${eventNoticeKey(eventId, id)}`);
-  await db.execute(sql`
-    DELETE FROM notification_dedup
-    WHERE dedup_key IN (${sql.join(keys, sql`, `)})
-  `);
+  await scope.dedup.releaseKeys(
+    userIds.map((id) => eventNoticeKey(scope.eventId, id)),
+  );
 }
