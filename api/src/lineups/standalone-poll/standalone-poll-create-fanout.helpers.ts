@@ -14,6 +14,7 @@ import type { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-e
 import type { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import type { CreatePollInput, PollGame } from './standalone-poll.service';
 import { resolveCreateFanout } from './standalone-poll-share.helpers';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
 const noop = (): void => {};
@@ -24,6 +25,8 @@ export interface CreateFanoutDeps {
     'notifyInterestedUsers' | 'notifyPickedMembers'
   >;
   pollEmbed: Pick<SchedulingPollEmbedService, 'firePostInitialEmbed'>;
+  /** ROK-1431: channel-lifecycle activity nudge (absent in narrow test graphs). */
+  nudge?: Pick<GameActivityNudge, 'touch'> | undefined;
 }
 
 /** Fire-and-forget: the create-time DMs + channel card a poll may send. */
@@ -35,6 +38,7 @@ export function fireCreateFanout(
   pickedIds: number[],
   visibility: StandalonePollVisibility,
 ): void {
+  GameActivityNudge.safeTouch(deps.nudge, game.id);
   const fanout = resolveCreateFanout(visibility);
   if (fanout.interestBroadcast) {
     void deps.notifications

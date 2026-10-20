@@ -93,7 +93,7 @@ export class EventPlansService {
       dto,
     );
     await this.schedulePollClose(plan.id, dto.pollDurationHours * 3600 * 1000);
-    this.nudge?.touch(dto.gameId);
+    GameActivityNudge.safeTouch(this.nudge, dto.gameId);
     return toResponseDto(plan);
   }
 

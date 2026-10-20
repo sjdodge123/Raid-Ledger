@@ -295,6 +295,7 @@ export class StandalonePollService {
       {
         notifications: this.notifications,
         pollEmbed: this.schedulingPollEmbed,
+        nudge: this.nudge,
       },
       game,
       { lineupId: lineup.id, matchId: match.id, creatorId: userId },
@@ -302,7 +303,6 @@ export class StandalonePollService {
       pickedIds,
       share.visibility,
     );
-    this.nudge?.touch(input.gameId);
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount, share);
   }

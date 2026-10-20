@@ -10,6 +10,9 @@ export const CHANNEL_LIFECYCLE_NUDGE_QUEUE = 'channel-lifecycle-nudge';
 /** Debounce window: a vote storm on one game collapses into one job. */
 export const NUDGE_DELAY_MS = 60_000;
 
+/** Logger for the static hook entry point (no instance at the call site). */
+const hookLogger = new Logger('GameActivityNudge');
+
 /** Payload of one nudge job. */
 export interface GameActivityNudgeJobData {
   gameId: number;
@@ -51,6 +54,25 @@ export class GameActivityNudge {
         }`,
       );
     });
+  }
+
+  /**
+   * Hook-site entry point: nudge when a producer is wired, and contain even a
+   * synchronous throw so a nudge can never fail the caller's write (§2.6).
+   */
+  static safeTouch(
+    nudge: Pick<GameActivityNudge, 'touch'> | undefined,
+    gameId: number | null | undefined,
+  ): void {
+    try {
+      nudge?.touch(gameId);
+    } catch (err: unknown) {
+      hookLogger.warn(
+        `Channel lifecycle nudge hook threw: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**

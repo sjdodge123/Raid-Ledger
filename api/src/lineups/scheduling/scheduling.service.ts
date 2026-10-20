@@ -243,7 +243,7 @@ export class SchedulingService {
       return resolved;
     });
     this.fireVoteSideEffects(matchId);
-    this.nudge?.touch(match.gameId);
+    GameActivityNudge.safeTouch(this.nudge, match.gameId);
     return { voted: action.stance === 'yes', stance: action.stance };
   }
 
