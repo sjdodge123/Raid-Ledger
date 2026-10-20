@@ -13,7 +13,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Throttle } from '@nestjs/throttler';
 import {
   CreateHubProposalSchema,
   type HubProposal,
@@ -22,9 +21,7 @@ import {
 import type { AuthenticatedRequest } from '../../auth/types';
 import { CommunityProposalsService } from './community-proposals.service';
 import { parseBody } from './community-proposals.body';
-
-/** D12: 5 proposal POSTs per hour (lifted when THROTTLE_DISABLED, as every tier). */
-const PROPOSE_LIMIT = process.env.THROTTLE_DISABLED === 'true' ? 999_999 : 5;
+import { ProposalThrottleGuard } from './proposal-throttle.guard';
 
 /**
  * ROK-1870 — `hubs/proposals`. Registered BEFORE the `hubs` controller so the
@@ -36,7 +33,8 @@ export class CommunityProposalsController {
   constructor(private readonly proposals: CommunityProposalsService) {}
 
   @Post()
-  @Throttle({ default: { ttl: 3_600_000, limit: PROPOSE_LIMIT } })
+  /** D12: 5 proposals per hour PER USER — the global per-IP tier would share one bucket behind the proxy. */
+  @UseGuards(ProposalThrottleGuard)
   propose(
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
