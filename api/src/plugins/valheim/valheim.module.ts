@@ -31,6 +31,9 @@ import { ValheimSteamLinkListener } from './armory/identity/valheim-steam-link.l
 import { ValheimArmoryReadController } from './armory/read/valheim-armory-read.controller';
 import { ValheimArmoryReadRepository } from './armory/read/valheim-armory-read.repository';
 import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.service';
+import { ValheimMaterialsController } from './armory/read/valheim-materials.controller';
+import { ValheimMaterialsRepository } from './armory/read/valheim-materials.repository';
+import { ValheimMaterialsService } from './armory/read/valheim-materials.service';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -47,6 +50,7 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
     ValheimLinkBlobController,
     ValheimArmoryClaimsController,
     ValheimArmoryReadController,
+    ValheimMaterialsController,
     ValheimArmoryBlobController,
     ValheimArmoryMapBytesController,
   ],
@@ -74,6 +78,8 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
     // ROK-1835 L4 member/admin reads.
     ValheimArmoryReadRepository,
     ValheimArmoryReadService,
+    ValheimMaterialsRepository,
+    ValheimMaterialsService,
     ValheimArmoryMapBytesService,
     {
       provide: VALHEIM_PROFILE_UPSERTED_HOOK,

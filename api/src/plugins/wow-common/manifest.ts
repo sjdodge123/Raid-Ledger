@@ -1,6 +1,7 @@
 import type { PluginManifest } from '../plugin-host/plugin-manifest.interface';
 import {
   WOW_FOREVER_PROBE_SETTING_KEYS,
+  WOW_FOREVER_REALM_RULESET_SETTING_KEYS,
   WOW_FOREVER_SETTING_KEYS,
 } from './forever.settings';
 
@@ -28,6 +29,7 @@ export const WOW_COMMON_MANIFEST: PluginManifest = {
     'blizzard_client_secret',
     ...WOW_FOREVER_SETTING_KEYS,
     ...WOW_FOREVER_PROBE_SETTING_KEYS,
+    ...WOW_FOREVER_REALM_RULESET_SETTING_KEYS,
   ],
   integrations: [
     {

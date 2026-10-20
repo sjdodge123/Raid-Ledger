@@ -87,7 +87,9 @@ export type ValheimExploredBitmap = z.infer<typeof ValheimExploredBitmapSchema>;
  */
 export const ValheimPinTypeSchema = z.string().regex(/^[A-Za-z0-9_]{1,32}$/);
 
-const worldCoord = z.number().min(-VALHEIM_LINK_WORLD_COORD_MAX).max(VALHEIM_LINK_WORLD_COORD_MAX);
+/** A world coordinate in metres, |v| ≤ `VALHEIM_LINK_WORLD_COORD_MAX` (shared with `containers`, ROK-1853). */
+export const ValheimWorldCoordSchema = z.number().min(-VALHEIM_LINK_WORLD_COORD_MAX).max(VALHEIM_LINK_WORLD_COORD_MAX);
+const worldCoord = ValheimWorldCoordSchema;
 
 export const ValheimMapPinSchema = z.object({
     type: ValheimPinTypeSchema,

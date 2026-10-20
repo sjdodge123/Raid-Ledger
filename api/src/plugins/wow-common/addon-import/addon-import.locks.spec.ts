@@ -118,7 +118,7 @@ describe('lockImportScope', () => {
 describe('both apply routes lock GUID → guild before anything runs', () => {
   it('existing-character route (runForCharacter, apply)', async () => {
     const { events, tx } = recorder();
-    const binding = { errors: [], pinGuid: GUID } as never;
+    const binding = { errors: [], warnings: [], pinGuid: GUID } as never;
     const request = { dryRun: false, confirm: undefined };
     await runForCharacter(tx, 1, character, guildPaste(), binding, request);
     expect(events).toEqual([GUID_KEY, GUILD_KEY, 'sections']);
@@ -126,7 +126,7 @@ describe('both apply routes lock GUID → guild before anything runs', () => {
 
   it('existing-character route takes no lock on a preview', async () => {
     const { events, tx } = recorder();
-    const binding = { errors: [], pinGuid: GUID } as never;
+    const binding = { errors: [], warnings: [], pinGuid: GUID } as never;
     const request = { dryRun: true, confirm: undefined };
     await runForCharacter(tx, 1, character, guildPaste(), binding, request);
     expect(events).toEqual(['sections']);

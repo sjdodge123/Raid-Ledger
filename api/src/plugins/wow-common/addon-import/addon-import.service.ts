@@ -25,6 +25,7 @@ import {
 import {
   parseImportRequest,
   rawFacts,
+  withRulesetInference,
   type AttemptFacts,
 } from './addon-import.service.helpers';
 import {
@@ -33,6 +34,7 @@ import {
   runForCharacter,
   type LoadedCharacter,
 } from './addon-import.run';
+import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { flagIfRosterHeld } from './addon-import-guild.flag';
@@ -55,6 +57,7 @@ export class AddonImportService {
     private readonly characters: CharactersService,
     private readonly audit: AddonImportAuditService,
     private readonly itemMeta: WowItemMetaService,
+    private readonly realmRulesets: ForeverRealmRulesetsService,
   ) {}
 
   async importString(
@@ -101,10 +104,15 @@ export class AddonImportService {
     const paste = decodeImportPaste(request.importString);
     recordPasteFacts(facts, paste);
     const character = await loadImportCharacter(this.db, characterId);
+    // ROK-1739: export ruleset → realm map → unchanged; never auto-written.
+    const inference = await this.realmRulesets.inferForPaste(paste);
     // Codex P2: bind EVERY section (the decoder also requires one exporter);
     // any section's reject rejects the whole paste before anything runs.
-    const binding = bindPaste(paste, character, request);
-    const res = await this.run(userId, character, paste, binding, request);
+    const binding = bindPaste(paste, character, request, inference?.ruleset);
+    const res = withRulesetInference(
+      await this.run(userId, character, paste, binding, request),
+      inference,
+    );
     // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
     if (!request.dryRun) {
       enqueueAppliedGear(this.itemMeta, paste, res, this.logger);

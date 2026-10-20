@@ -4,6 +4,7 @@ import {
   type AddonExportSection,
   type AddonImportRequestDto,
   type AddonImportResultDto,
+  type AddonImportRulesetInferenceDto,
 } from '@raid-ledger/contract';
 import type { z } from 'zod';
 import { handleValidationError } from '../../../common/validation.util';
@@ -135,4 +136,15 @@ export function buildResult(
     diff: binding.diff,
     summary: outcome.summary,
   } as AddonImportResultDto;
+}
+
+/**
+ * ROK-1739 D7 — the realm-map inference rides on the preview AND apply
+ * result only; it is never persisted.
+ */
+export function withRulesetInference<T extends AddonImportResultDto>(
+  res: T,
+  inference: AddonImportRulesetInferenceDto | null | undefined,
+): T {
+  return inference ? { ...res, rulesetInference: inference } : res;
 }
