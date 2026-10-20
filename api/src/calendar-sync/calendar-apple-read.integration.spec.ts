@@ -47,6 +47,10 @@ import { purgeAllCalendarReadData } from './read/calendar-read-purge.helpers';
 import { CalendarReadProcessor } from './read/calendar-read.processor';
 import { upsertCalendarConnection } from './services/calendar-connect.helpers';
 import {
+  persistLocationsOnRow,
+  upsertPasswordConnection,
+} from './services/calendar-connect-password.helpers';
+import {
   decryptCalendarCredentials,
   encryptCalendarCredentials,
 } from './services/calendar-credentials.helpers';
@@ -366,6 +370,40 @@ describe('Apple read sync', () => {
     expect(blocks.map((b) => [b.startsAt, b.endsAt])).toEqual([
       [tomorrowAt(19), tomorrowAt(21)],
     ]);
+  });
+});
+
+describe('Apple rediscovery persister vs a concurrent reconnect (Codex r2)', () => {
+  it('a reconnect with a new password between the read and the write keeps the new password', async () => {
+    const m = await appleMember();
+    const snapshot = await connection(m.connectionId);
+    const stored = decryptCalendarCredentials(snapshot.credentialsEncrypted);
+    if (stored.kind !== 'caldav') throw new Error('not caldav credentials');
+    const NEW_PASSWORD = 'wxyz-wxyz-wxyz-wxyz';
+    await upsertPasswordConnection(testApp.db, {
+      userId: m.userId,
+      provider: 'apple',
+      result: {
+        accountSubject: stored.username,
+        accountLabel: stored.username,
+        credentials: { ...stored, appPassword: NEW_PASSWORD },
+      },
+    });
+
+    await persistLocationsOnRow(testApp.db, snapshot, {
+      ...stored,
+      homeSetUrl: STALE_HOME_SET_URL,
+    });
+
+    const after = decryptCalendarCredentials(
+      (await connection(m.connectionId)).credentialsEncrypted,
+    );
+    expect({
+      appPasswordAfterPersist:
+        'appPassword' in after ? after.appPassword : null,
+    }).toEqual({
+      appPasswordAfterPersist: NEW_PASSWORD,
+    });
   });
 });
 

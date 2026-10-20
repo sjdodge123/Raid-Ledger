@@ -70,7 +70,13 @@ function withLocations(
   };
 }
 
-async function rewriteRow(
+/**
+ * Write the rediscovered locations onto ONE row, compare-and-swap on the
+ * encrypted value read (Codex r2): a reconnect that stored a new password
+ * after the read wins — this update then matches no row and is dropped (the
+ * reconnect ran its own discovery). Exported for the integration spec.
+ */
+export async function persistLocationsOnRow(
   db: Db,
   row: { id: number; credentialsEncrypted: string },
   next: CalDavCredentials,
@@ -90,14 +96,20 @@ async function rewriteRow(
       ),
       updatedAt: new Date(),
     })
-    .where(eq(calendarConnections.id, row.id));
+    .where(
+      and(
+        eq(calendarConnections.id, row.id),
+        eq(calendarConnections.credentialsEncrypted, row.credentialsEncrypted),
+      ),
+    );
 }
 
 /**
  * The `CALDAV_CREDENTIAL_PERSISTER` binding: the adapter does not know the
  * row, so every Apple row stored under the login's subject gets the
  * rediscovered `principalUrl` / `homeSetUrl` (a partition move is per Apple
- * account, whoever connected it).
+ * account, whoever connected it). Each row is swapped on its own read value
+ * (`persistLocationsOnRow`), so no row's newer password is overwritten.
  */
 export function createCalDavCredentialPersister(
   db: Db,
@@ -115,6 +127,6 @@ export function createCalDavCredentialPersister(
           eq(calendarConnections.accountSubject, caldavSubject(next.username)),
         ),
       );
-    for (const row of rows) await rewriteRow(db, row, next);
+    for (const row of rows) await persistLocationsOnRow(db, row, next);
   };
 }
