@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HUB_POST_BODY_MAX, HubPostSchema } from './hub-posts.schema.js';
 
 /**
  * ROK-1786 (S2 of ROK-1781): guild page content — the GM post, rules, links
@@ -10,7 +11,8 @@ import { z } from 'zod';
 const id = z.number().int().positive();
 const isoDate = z.iso.datetime({ offset: true });
 
-export const GUILD_GM_POST_MAX = 4000;
+/** The legacy GM post cap — the same 4000 source chars as a hub post (ROK-1868). */
+export const GUILD_GM_POST_MAX = HUB_POST_BODY_MAX;
 export const GUILD_RULES_MAX_SECTIONS = 20;
 export const GUILD_RULE_TITLE_MAX = 80;
 export const GUILD_RULE_BODY_MAX = 2000;
@@ -77,7 +79,10 @@ export type GuildGmPost = z.infer<typeof GuildGmPostSchema>;
 export const GuildProfileSchema = z
   .object({
     guildId: id,
+    /** Derived from `latestPost` since ROK-1868; kept for older clients. */
     gmPost: GuildGmPostSchema.nullable(),
+    /** The newest hub post (ROK-1868); absent from servers that predate it. */
+    latestPost: HubPostSchema.nullable().optional(),
     rules: GuildRulesSchema,
     links: GuildLinkGroupsSchema,
   })
@@ -87,6 +92,8 @@ export type GuildProfile = z.infer<typeof GuildProfileSchema>;
 /**
  * `PATCH /plugins/wow/guilds/:id/profile` — only the keys sent change.
  * `gmPost: null` (or blank) clears the post; `[]` clears rules / links.
+ * `gmPost` is DEPRECATED since ROK-1868: the server answers 400 and points at
+ * `POST /guilds/:id/posts`. The key stays in the shape for older clients.
  */
 export const UpdateGuildProfileSchema = z
   .object({

@@ -240,6 +240,8 @@ export * from './discord-join-post.schema.js';
 
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';
+export * from './hub-posts.schema.js';
+export * from './hub-post-markdown.js';
 export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
