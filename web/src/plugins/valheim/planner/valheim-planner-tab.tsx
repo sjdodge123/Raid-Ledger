@@ -12,8 +12,9 @@ import { useValheimRecipeCatalog, useValheimRecipePlan, useValheimRecipeTree } f
 import { loadPlannerTargets, savePlannerTargets } from './planner-storage';
 import { PlannerTargetPicker } from './planner-target-picker';
 import {
+    addPlannerTarget,
     DEFAULT_PLANNER_FILTERS,
-    PLANNER_AMOUNT_MAX,
+    PLANNER_TARGETS_MAX,
     PLANNER_NO_SET_COPY,
     PLANNER_NO_STOCK_COPY,
     serializeTargets,
@@ -27,11 +28,8 @@ import { usePlannerNames } from './use-planner-names';
 
 type Entry = ValheimRecipeCatalogEntry;
 
-function addTarget(list: readonly PlannerTarget[], e: Entry, quality: number, amount: number): PlannerTarget[] {
-    const q = e.kind === 'piece' ? 1 : quality;
-    const i = list.findIndex((t) => t.prefab === e.prefab && t.quality === q);
-    if (i < 0) return [...list, { prefab: e.prefab, kind: e.kind, quality: q, amount }];
-    return list.map((t, j) => (j === i ? { ...t, amount: Math.min(PLANNER_AMOUNT_MAX, t.amount + amount) } : t));
+function addTarget(list: readonly PlannerTarget[], e: Entry, quality: number, amount: number): PlannerTarget[] | null {
+    return addPlannerTarget(list, { prefab: e.prefab, kind: e.kind, quality: e.kind === 'piece' ? 1 : quality, amount });
 }
 
 function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
@@ -68,15 +66,18 @@ function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogResponse
     };
     const onAdd = (amount: number): void => {
         if (picked === null) return;
-        setTargets(addTarget(targets, picked, quality, amount));
+        const next = addTarget(targets, picked, quality, amount);
+        if (next === null) return; // at the cap: never persist an over-cap list
+        setTargets(next);
         setPicked(null);
     };
     const onRemove = (i: number): void => setTargets(targets.filter((_, j) => j !== i));
-    return { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove };
+    const atCap = targets.length >= PLANNER_TARGETS_MAX;
+    return { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove, atCap };
 }
 
 function PlannerBody({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
-    const { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove } =
+    const { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove, atCap } =
         usePlannerState(serverId, catalog);
     const shown = picked !== null ? tree.data : plan.data;
     const label = picked !== null ? `What ${picked.name} needs` : 'What your list needs';
@@ -86,7 +87,7 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
             <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2">
                 <div className="lg:col-start-1 lg:row-start-1">
                     <PlannerTargetPicker entries={catalog.entries} filters={filters} onFilters={setFilters} hasPersonal={hasPersonal}
-                        picked={picked} onPick={onPick} quality={quality} onQuality={setQuality} onAdd={onAdd} />
+                        picked={picked} onPick={onPick} quality={quality} onQuality={setQuality} onAdd={onAdd} atCap={atCap} />
                 </div>
                 <div className="space-y-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
                     {picked === null && plan.data?.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
@@ -119,5 +120,7 @@ export function ValheimPlannerTab({ serverId }: { serverId: number }): JSX.Eleme
                 <p className="text-sm text-muted">{PLANNER_NO_SET_COPY}</p>
             </div>
         );
-    return <PlannerBody serverId={serverId} catalog={q.data} />;
+    // Keyed by server: moving between two cached hubs remounts the body, so
+    // one server's list never shows (or saves) under another's.
+    return <PlannerBody key={serverId} serverId={serverId} catalog={q.data} />;
 }

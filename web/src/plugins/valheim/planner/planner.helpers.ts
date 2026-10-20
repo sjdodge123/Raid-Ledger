@@ -4,7 +4,7 @@
  * chips, and (de)serialise the stored shopping list behind a schema guard.
  */
 import { z } from 'zod';
-import type { ValheimPlanNode, ValheimPlanVia } from '@raid-ledger/contract';
+import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanVia } from '@raid-ledger/contract';
 
 export type PlannerKind = 'item' | 'piece';
 
@@ -62,9 +62,29 @@ export function foldNodes(nodes: readonly ValheimPlanNode[]): PlanTreeNode[] {
     return roots;
 }
 
-/** `prefab:quality:amount` joined by commas — the plan route's `targets=`. */
+/** `prefab:quality:amount:0:kind` joined by commas — the plan route's `targets=` (kind kept end to end). */
 export function serializeTargets(targets: readonly PlannerTarget[]): string {
-    return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}`).join(',');
+    return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}:0:${t.kind}`).join(',');
+}
+
+/** The plan route's target cap — the list never grows past it. */
+export const PLANNER_TARGETS_MAX = VALHEIM_PLAN_TARGETS_MAX;
+
+/**
+ * Adds `add` to the list: the same prefab + kind + quality merges amounts
+ * (capped); a new target past PLANNER_TARGETS_MAX returns null (refused).
+ */
+export function addPlannerTarget(list: readonly PlannerTarget[], add: PlannerTarget): PlannerTarget[] | null {
+    const i = list.findIndex((t) => t.prefab === add.prefab && t.kind === add.kind && t.quality === add.quality);
+    if (i >= 0) return list.map((t, j) => (j === i ? { ...t, amount: Math.min(PLANNER_AMOUNT_MAX, t.amount + add.amount) } : t));
+    return list.length >= PLANNER_TARGETS_MAX ? null : [...list, add];
+}
+
+const PLANNER_KINDS: readonly string[] = ['both', 'item', 'piece'];
+
+/** Narrows a Select value to the kind filter. */
+export function isPlannerKindFilter(v: string): v is PlannerFilters['kind'] {
+    return PLANNER_KINDS.includes(v);
 }
 
 /** `null` (no chest scan) renders as an em dash. */
@@ -151,7 +171,7 @@ const StoredTargetsSchema = z
             amount: z.number().int().min(1).max(PLANNER_AMOUNT_MAX),
         }),
     )
-    .max(50);
+    .max(VALHEIM_PLAN_TARGETS_MAX);
 
 /** Anything unparseable or off-schema reads as an empty list. */
 export function parseStoredTargets(raw: string | null): PlannerTarget[] {

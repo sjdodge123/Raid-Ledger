@@ -16,6 +16,7 @@ import {
     DEFAULT_PLANNER_FILTERS,
     PLANNER_AMOUNT_MAX,
     type PlannerFilters,
+    PLANNER_TARGETS_MAX,
 } from './planner.helpers';
 import { PlannerFilterControls } from './planner-filters';
 
@@ -31,6 +32,8 @@ interface PickerProps {
     quality: number;
     onQuality: (q: number) => void;
     onAdd: (amount: number) => void;
+    /** The list is at PLANNER_TARGETS_MAX: adding is refused. */
+    atCap: boolean;
 }
 
 function narrow(entries: readonly Entry[], f: PlannerFilters, text: string): Entry[] {
@@ -58,7 +61,7 @@ function Funnel(props: PickerProps & { isOpen: boolean; setOpen: (o: boolean) =>
     );
 }
 
-function AmountRow({ picked, quality, onQuality, onAdd }: Pick<PickerProps, 'picked' | 'quality' | 'onQuality' | 'onAdd'>): JSX.Element {
+function AmountRow({ picked, quality, onQuality, onAdd, atCap }: Pick<PickerProps, 'picked' | 'quality' | 'onQuality' | 'onAdd' | 'atCap'>): JSX.Element {
     const [amount, setAmount] = useState('1');
     const n = Number(amount);
     const valid = Number.isInteger(n) && n >= 1 && n <= PLANNER_AMOUNT_MAX;
@@ -74,9 +77,14 @@ function AmountRow({ picked, quality, onQuality, onAdd }: Pick<PickerProps, 'pic
                 </Select>
             )}
             <Input aria-label="Amount" type="number" min={1} max={PLANNER_AMOUNT_MAX} value={amount} invalid={!valid} onChange={(e) => setAmount(e.target.value)} className="w-24" />
-            <Button variant="primary" disabled={picked === null || !valid} onClick={() => onAdd(n)}>
+            <Button variant="primary" disabled={picked === null || !valid || atCap} onClick={() => onAdd(n)}>
                 Add to list
             </Button>
+            {atCap && (
+                <p role="status" className="w-full text-xs text-muted">
+                    Your list holds up to {PLANNER_TARGETS_MAX} targets — remove one to add another.
+                </p>
+            )}
         </div>
     );
 }

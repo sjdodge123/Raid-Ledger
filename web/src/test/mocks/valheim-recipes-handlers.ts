@@ -130,11 +130,12 @@ export function recipePlanFixture(targets: ValheimRecipePlanTarget[], stock: Sto
     };
 }
 
-/** `targets=prefab:q:n[:fromQ],…` → typed targets. */
+/** `targets=prefab:q:n[:fromQ[:kind]],…` → typed targets (kind kept when sent). */
 export function parseTargetsParam(raw: string): ValheimRecipePlanTarget[] {
     return raw.split(',').filter(Boolean).map((t) => {
-        const [prefab = '', q = '1', n = '1', from = '0'] = t.split(':');
-        return { prefab, quality: Number(q), amount: Number(n), fromQuality: Number(from) };
+        const [prefab = '', q = '1', n = '1', from = '0', kind] = t.split(':');
+        const target = { prefab, quality: Number(q), amount: Number(n), fromQuality: Number(from) };
+        return kind === 'item' || kind === 'piece' ? { ...target, kind } : target;
     });
 }
 

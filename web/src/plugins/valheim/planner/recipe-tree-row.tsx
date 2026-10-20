@@ -66,7 +66,7 @@ export function RecipeTreeRow({ node, names, hasChildren, expanded, onToggle }: 
     const ctx = names.ctxFor(node.prefab);
     const resolved = { ...resolveItem(node.prefab, ctx.items, ctx.atlas), label: name };
     return (
-        <div className="flex items-start gap-2 py-1.5" data-testid="valheim-planner-row">
+        <div className="flex items-start gap-2 py-1.5" data-testid="valheim-planner-row" data-prefab={node.prefab}>
             {hasChildren ? (
                 <Disclosure name={name} expanded={expanded} onToggle={onToggle} />
             ) : (

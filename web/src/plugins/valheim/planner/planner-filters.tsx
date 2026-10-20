@@ -6,7 +6,7 @@
 import type { JSX } from 'react';
 import { Select } from '../../../components/ui/select';
 import { Switch } from '../../../components/ui/switch';
-import type { PlannerFilters } from './planner.helpers';
+import { isPlannerKindFilter, type PlannerFilters } from './planner.helpers';
 
 function SwitchRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }): JSX.Element {
     return (
@@ -30,7 +30,10 @@ function NarrowSelects({ filters, categories, onChange }: Omit<ControlsProps, 'h
             <Select
                 aria-label="Kind"
                 value={filters.kind}
-                onChange={(e) => onChange({ ...filters, kind: e.target.value as PlannerFilters['kind'] })}
+                onChange={(e) => {
+                    const v = e.target.value;
+                    if (isPlannerKindFilter(v)) onChange({ ...filters, kind: v });
+                }}
             >
                 <option value="both">Items and pieces</option>
                 <option value="item">Items</option>
