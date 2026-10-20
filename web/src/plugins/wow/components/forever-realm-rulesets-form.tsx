@@ -39,7 +39,7 @@ function RowList({ rows, errors, onChange, onRemove, disabled }: {
     return (
         <div>
             <div aria-hidden="true" className={`hidden lg:grid mb-1 text-xs font-medium text-muted ${REALM_ROW_GRID}`}>
-                <span>Region</span><span>Realm name</span><span>Ruleset</span><span className="w-11" />
+                <span>Region</span><span>Ruleset</span><span className="w-11" /><span>Realm name</span>
             </div>
             <ul className="space-y-4 lg:space-y-2">
                 {rows.map((row, i) => (
