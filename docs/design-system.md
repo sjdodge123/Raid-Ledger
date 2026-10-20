@@ -367,6 +367,8 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 |---|---|---|
 | `use-body-scroll-lock.ts` → a ref-counted body scroll lock (ROK-1640, PR #1314) | `web/src/hooks/` | Any modal/sheet that locks background scroll; ref-counted so nested/stacked sheets don't unlock each other early. `Modal` and `BottomSheet` already use it |
 | `use-dirty-close-guard.ts` → `useDirtyCloseGuard(isDirty, onClose)` (ROK-1640, shared by ROK-1655) | `web/src/hooks/` | Any overlay that edits data. Returns `{ requestClose, confirming, keep, discard, reset }`: pass it as `closeGuard` to `Modal` / `BottomSheet` and wire an explicit Cancel to `requestClose` (§4.4). A one-macrotask latch stops the Escape that closed the confirm from re-opening it. `Modal` / `BottomSheet` call `reset` (via `useResetGuardOnClose`) when they close by another route or unmount, so the next open never starts mid-confirm |
+| `use-now.ts` → `useNow(intervalMs = 60_000)` (ROK-1853) | `web/src/hooks/` | Relative-time labels that must keep ageing while a view stays mounted ("scanned 7 min ago"). `useNowTick` only ticks toward a future instant; use this for past timestamps. |
+| `useEscapeLayer` (existing) — a nested overlay (the Valheim item popover inside the chest Modal, `plugins/valheim/character/item-detail.tsx`) registers its own layer instead of a document keydown listener, so one Escape closes the topmost overlay only (ROK-1853). | — | Any overlay opened inside another overlay. |
 
 Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
 / `toast.error(...)` from `sonner` directly.
