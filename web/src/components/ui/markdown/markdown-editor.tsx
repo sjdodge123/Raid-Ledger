@@ -80,7 +80,8 @@ export default function MarkdownEditor(props: MarkdownEditorProps): JSX.Element 
     const countId = `${useId()}-count`;
     const [linkOpen, setLinkOpen] = useState(false);
     const raw = useA11y(props, countId);
-    const attrs = useMemo(() => raw, [JSON.stringify(raw)]); // eslint-disable-line react-hooks/exhaustive-deps
+    const attrsKey = JSON.stringify(raw);
+    const attrs = useMemo(() => JSON.parse(attrsKey) as Record<string, string>, [attrsKey]);
     const editor = useMarkdownEditor(props, attrs, () => setLinkOpen(true));
     const over = props.value.length > props.maxLength;
     return (

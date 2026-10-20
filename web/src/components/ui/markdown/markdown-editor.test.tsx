@@ -65,9 +65,8 @@ describe('MarkdownEditor (V10)', () => {
         fireEvent.change(input, { target: { value: 'javascript:x' } });
         fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
         expect(screen.getByText(/Links must start with https:\/\//)).toBeInTheDocument();
-        fireEvent.change(input, { target: { value: 'example.com' } });
+        fireEvent.change(screen.getByLabelText('Link address'), { target: { value: 'example.com' } });
         fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-        console.log('DBG', editor.getHTML(), JSON.stringify(editor.state.selection));
         expect(last()).toBe('[raid](https://example.com)');
     });
 
