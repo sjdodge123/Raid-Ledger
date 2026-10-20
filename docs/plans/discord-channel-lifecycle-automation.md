@@ -131,7 +131,7 @@ Layer-level detail (files, turn budgets, test matrices) lives in the spec. The m
 ### M2 (ROK-1430): Activity derivation + decision core
 - **Workspace(s):** api
 - **Scope:** `game_lifecycle_activity` with the event, poll, event-plan and lineup-vote signals (the hub signal is a registry slot left for M7); the pure `decideGame()` function.
-- **AC:** each signal is counted per item, not per vote; a single poll never reaches the create threshold; cancelled and ad-hoc events are excluded; upcoming events count; series bindings and non-game bindings never appear as candidates.
+- **AC:** each signal is counted per item, not per vote; a single poll never reaches the create threshold; cancelled events are excluded; ad-hoc (voice-presence) events COUNT (operator ruling 2026-10-20 — the 2-item create threshold is the guard against one-off lobbies); upcoming events count; series bindings and non-game bindings never appear as candidates.
 - **Complexity:** M · **Dependencies:** M1
 
 ### M3 (ROK-1431): Discord ops + reconciliation loop
@@ -188,7 +188,8 @@ Resolved by operator decision (2026-10-20): four activity signals (events, polls
 
 Still open (recommendations in the spec):
 
-- [ ] Ad-hoc (voice-presence) events as a signal — recommend **exclude**.
+- [x] Ad-hoc (voice-presence) events as a signal — **operator ruling 2026-10-20: INCLUDED** (an ad-hoc event is one `event` item like any other; the create threshold of 2 items in the window keeps a single spontaneous lobby from creating a channel).
+- [x] **Active community hub (hold)** — operator ruling 2026-10-20, definition: a community hub is *active*, and holds its game's channel open, while (a) its status is `active` (approved, not archived) AND (b) it has had hub activity inside the lifecycle window (30 days): its approval, a leader post, a member join, or an event tagged to it. A hub with none of those for 30 days is *dormant*: it stops holding the channel (the channel then follows the normal signals) and its page shows the leader a "Quiet since <date>" note; archiving the hub releases the hold at once.
 - [ ] Does an active community hub hold its channel open forever? — recommend **yes**, while the hub is active.
 - [ ] Auto-link WoW guild hubs too? — recommend **no** (community + server hubs only).
 - [ ] Rename the channel when the game is renamed? — recommend **no auto-rename** in v1.
