@@ -69,14 +69,27 @@ function useMemberColumns(mod: HubModule | undefined): readonly HubMemberColumn[
     return useMemo(() => (hasActions ? [...(base ?? []), ACTIONS_COLUMN] : base ?? []), [hasActions, base]);
 }
 
+/** Columns (with the row-action column, if any) plus the value the action cells read. */
+function useMemberActions(mod: HubModule | undefined, ctx: HubCtx): { columns: readonly HubMemberColumn[]; actionsValue: ActionsValue | null } {
+    const columns = useMemberColumns(mod);
+    const Actions = mod?.memberActions;
+    const actionsValue = useMemo(() => (Actions ? { ctx, Actions } : null), [Actions, ctx]);
+    return { columns, actionsValue };
+}
+
+/** The "no members" or "no match" line, when one applies. */
+function MembersStatusLine({ total, shown, query, empty }: { total: number; shown: number; query: string; empty: string }): JSX.Element | null {
+    if (total === 0) return <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-empty">{empty}</p>;
+    if (shown > 0) return null;
+    return <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>;
+}
+
 export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     const page: GuildPage = ctx.page;
     const [query, setQuery] = useState('');
     const [grouped, setGrouped] = useState(true);
     const isDesktop = useMediaQuery(DESKTOP_MQ);
-    const columns = useMemberColumns(mod);
-    const Actions = mod?.memberActions;
-    const actionsValue = useMemo(() => (Actions ? { ctx, Actions } : null), [Actions, ctx]);
+    const { columns, actionsValue } = useMemberActions(mod, ctx);
     const allRows = mod?.memberRows(page) ?? [];
     const rows = filterMembers(allRows, query, mod?.memberSearch);
     const groupCol = groupingColumn(columns);
@@ -91,10 +104,7 @@ export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModul
                 <MemberTools query={query} onQuery={setQuery} grouped={grouped} onGrouped={setGrouped}
                     groupLabel={groupCol?.header ?? null} />
                 <p className="text-xs text-muted" data-testid="guild-members-count">{membersCountFor(rows.length, allRows.length, page.guild.memberCount)}</p>
-                {allRows.length === 0 && <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-empty">{emptyLine(mod, page)}</p>}
-                {allRows.length > 0 && rows.length === 0 && (
-                    <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>
-                )}
+                <MembersStatusLine total={allRows.length} shown={rows.length} query={query} empty={emptyLine(mod, page)} />
                 {rows.length > 0 && (
                     <MemberActionsContext.Provider value={actionsValue}>
                         <List bands={bands} columns={columns} rowClass={mod?.memberRowClass} />
