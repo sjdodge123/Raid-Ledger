@@ -19,7 +19,10 @@
  *
  * An IANA TZID with no VTIMEZONE: UNTIL / EXDATE / RDATE are first moved
  * onto the series' wall clock (`alignSeriesZone`). RDATE-only series also
- * yield DTSTART, which ical.js's iterator leaves out.
+ * yield DTSTART, which ical.js's iterator leaves out. Codex r3: period
+ * RDATEs keep their own end (`normalizePeriodRdates`); a TRANSPARENT /
+ * cancelled master still expands when a busy THISANDFUTURE override takes
+ * over its later occurrences (TRANSP / STATUS judged per occurrence).
  *
  * Cap: MAX_SERIES_ITERATIONS iterator steps per series, counted from the
  * series' DTSTART (ical.js cannot start mid-series without breaking
@@ -29,6 +32,10 @@
  */
 import ICAL from 'ical.js';
 import type { BusyBlock, TimeRange } from '../calendar-provider.interface';
+import {
+  normalizePeriodRdates,
+  type PeriodEnds,
+} from './apple-ical-rdate-period.helpers';
 import { alignSeriesZone } from './apple-ical-series-zone.helpers';
 import {
   DAY_MS,
@@ -67,6 +74,8 @@ interface DurationParts {
 interface Start {
   time: ICAL.Time;
   timing: Timing;
+  /** Period RDATE occurrences: start ms → their own end ms. */
+  periodEnds: PeriodEnds;
 }
 
 function tzidOf(prop: ICAL.Property): string | null {
@@ -131,13 +140,14 @@ function allDayDays(vevent: ICAL.Component, start: ICAL.Time): number {
 function readStart(
   vevent: ICAL.Component,
   floating: FloatingZone,
+  periodEnds: PeriodEnds = new Map(),
 ): Start | 'bad' | 'drop' {
   const start = timeProp(vevent, 'dtstart');
   if (!start) return 'bad';
   if (start.time.isDate) {
     const days = allDayDays(vevent, start.time);
     return days > 0
-      ? { time: start.time, timing: { allDay: true, days } }
+      ? { time: start.time, timing: { allDay: true, days }, periodEnds }
       : 'drop';
   }
   const startMs = timeToMs(start.time, start.tzid, floating);
@@ -151,7 +161,7 @@ function readStart(
   const timing = { allDay: false as const, ...parts, tzid: start.tzid };
   const endMs = endMsOf(start.time, startMs, timing, floating);
   if (endMs === null) return 'bad';
-  return endMs <= startMs ? 'drop' : { time: start.time, timing };
+  return endMs <= startMs ? 'drop' : { time: start.time, timing, periodEnds };
 }
 
 function blockAt(
@@ -240,6 +250,19 @@ function detailsOf(event: ICAL.Event, t: ICAL.Time): Details | null {
   return { item, startDate, endDate };
 }
 
+/** A master-owned step: not busy → 'skip'; a period RDATE keeps its end. */
+function masterBlock(
+  event: ICAL.Event,
+  t: ICAL.Time,
+  start: Start,
+  ctx: SeriesContext,
+): RawBlock | null | 'skip' {
+  if (!ctx.isBusy(event.component)) return 'skip';
+  const block = blockAt(t, start.timing, ctx.floating);
+  const periodEnd = block && start.periodEnds.get(block.start.getTime());
+  return block && periodEnd ? { ...block, end: new Date(periodEnd) } : block;
+}
+
 /** One iterator step → its block; 'skip' = an override judges it instead. */
 function occurrenceBlock(
   event: ICAL.Event,
@@ -249,7 +272,7 @@ function occurrenceBlock(
 ): RawBlock | null | 'skip' {
   const d = detailsOf(event, t);
   if (!d) return null;
-  if (d.item === event) return blockAt(t, start.timing, ctx.floating);
+  if (d.item === event) return masterBlock(event, t, start, ctx);
   const exact = d.item.recurrenceId?.toUnixTime() === t.toUnixTime();
   if (exact || !d.item.modifiesFuture()) return 'skip';
   return rangeBlock(d.item, d.startDate, d.endDate, ctx);
@@ -318,6 +341,17 @@ function merge(results: SeriesResult[]): SeriesResult {
   };
 }
 
+/** A busy RANGE=THISANDFUTURE override (it re-times later occurrences). */
+function busyFuture(override: ICAL.Component, ctx: SeriesContext): boolean {
+  const prop = override.getFirstProperty('recurrence-id');
+  const range = prop?.getParameter('range');
+  return (
+    typeof range === 'string' &&
+    range.toUpperCase() === 'THISANDFUTURE' &&
+    ctx.isBusy(override)
+  );
+}
+
 /** One UID group: the master (when present) plus its overrides. */
 export function expandSeries(
   master: ICAL.Component | null,
@@ -326,15 +360,18 @@ export function expandSeries(
 ): SeriesResult {
   const own = overrides.map((o) => singleOccurrence(o, ctx));
   if (!master) return merge(own);
-  alignSeriesZone(master, ctx.floating);
+  const periodEnds = normalizePeriodRdates(master, ctx.floating);
+  alignSeriesZone(master, ctx.floating, overrides);
   const event = new ICAL.Event(master, {
     exceptions: overrides,
     strictExceptions: false,
   });
   if (!event.isRecurring())
     return merge([singleOccurrence(master, ctx), ...own]);
-  if (!ctx.isBusy(master)) return merge(own);
-  const start = readStart(master, ctx.floating);
+  if (!ctx.isBusy(master) && !overrides.some((o) => busyFuture(o, ctx))) {
+    return merge(own);
+  }
+  const start = readStart(master, ctx.floating, periodEnds);
   if (start === 'bad') return merge([{ blocks: [], skipped: 1 }, ...own]);
   if (start === 'drop') return merge(own);
   return merge([iterateMaster(event, start, ctx), ...own]);

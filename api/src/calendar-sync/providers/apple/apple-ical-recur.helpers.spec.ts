@@ -199,3 +199,49 @@ describe('RDATE-only series include DTSTART (Codex r2)', () => {
     expect(starts(ics)).toEqual(['2026-10-22T12:00:00.000Z']);
   });
 });
+
+const rows = (ics: string) =>
+  parse(ics)
+    .blocks.map((b) => `${b.start.toISOString()}/${b.end.toISOString()}`)
+    .sort();
+
+describe('RDATE;VALUE=PERIOD (Codex r3)', () => {
+  it('keeps DTSTART and gives each period occurrence its own end', () => {
+    const result = parse(fixture('period-rdate.ics'));
+    expect(result.skipped).toBe(0);
+    expect(rows(fixture('period-rdate.ics'))).toEqual([
+      '2026-10-21T12:00:00.000Z/2026-10-21T13:00:00.000Z',
+      '2026-10-22T12:00:00.000Z/2026-10-22T15:00:00.000Z',
+      '2026-10-23T12:00:00.000Z/2026-10-23T12:30:00.000Z',
+    ]);
+  });
+});
+
+describe('transparent master + opaque THISANDFUTURE override (Codex r3)', () => {
+  it('a four-day transparent series made opaque from day two → three busy blocks', () => {
+    expect(rows(fixture('transparent-thisandfuture.ics'))).toEqual([
+      '2026-10-22T12:00:00.000Z/2026-10-22T13:00:00.000Z',
+      '2026-10-23T12:00:00.000Z/2026-10-23T13:00:00.000Z',
+      '2026-10-24T12:00:00.000Z/2026-10-24T13:00:00.000Z',
+    ]);
+  });
+
+  it('a transparent master with no busy override still yields nothing', () => {
+    const ics = fixture('transparent-thisandfuture.ics').replace(
+      'TRANSP:OPAQUE',
+      'TRANSP:TRANSPARENT',
+    );
+    expect(rows(ics)).toEqual([]);
+  });
+});
+
+describe('bare IANA series: THISANDFUTURE shift on the series wall clock (Codex r3)', () => {
+  it('weekly 19:00 New York moved to 22:00Z on Oct 27 → Nov 3 at 23:00Z (after DST)', () => {
+    expect(rows(fixture('weekly-ny-bare-thisandfuture.ics'))).toEqual([
+      '2026-10-20T23:00:00.000Z/2026-10-21T01:00:00.000Z',
+      '2026-10-27T22:00:00.000Z/2026-10-28T00:00:00.000Z',
+      '2026-11-03T23:00:00.000Z/2026-11-04T01:00:00.000Z',
+      '2026-11-10T23:00:00.000Z/2026-11-11T01:00:00.000Z',
+    ]);
+  });
+});

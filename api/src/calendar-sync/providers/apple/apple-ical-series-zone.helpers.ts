@@ -10,6 +10,13 @@
  * series' own wall clock, so ical.js compares like with like; the
  * occurrences it returns are converted to instants afterwards as before
  * (`timeToMs` with the series' TZID). Mutates the per-parse master in place.
+ *
+ * Codex r3: the overrides' RECURRENCE-ID / DTSTART / DTEND get the same
+ * treatment (value moved onto the series' wall clock, TZID set to the series
+ * zone, instant unchanged), so ical.js matches an override to its occurrence
+ * and computes a THISANDFUTURE shift wall clock to wall clock — a weekly
+ * 19:00 New York series moved to 22:00Z on Oct 27 is 23:00Z on Nov 3.
+ * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
 import {
@@ -88,10 +95,25 @@ function alignUntil(master: ICAL.Component, target: Target): void {
   }
 }
 
-/** Rewrite UNTIL / EXDATE / RDATE onto the series' wall clock (see header). */
+const OVERRIDE_TIMES = ['recurrence-id', 'dtstart', 'dtend'] as const;
+
+function alignOverride(override: ICAL.Component, target: Target): void {
+  for (const name of OVERRIDE_TIMES) {
+    const prop = override.getFirstProperty(name);
+    const value = prop?.getFirstValue();
+    if (!prop || !(value instanceof ICAL.Time) || value.isDate) continue;
+    const wall = toSeriesWall(value, tzidOf(prop), target);
+    if (wall === value) continue;
+    prop.setValue(wall);
+    prop.setParameter('tzid', target.zone);
+  }
+}
+
+/** Rewrite UNTIL / EXDATE / RDATE + override times onto the series' clock. */
 export function alignSeriesZone(
   master: ICAL.Component,
   floating: FloatingZone,
+  overrides: readonly ICAL.Component[] = [],
 ): void {
   const zone = unresolvedSeriesZone(master);
   if (zone === null) return;
@@ -99,4 +121,5 @@ export function alignSeriesZone(
   alignUntil(master, target);
   alignDates(master, 'exdate', target);
   alignDates(master, 'rdate', target);
+  for (const o of overrides) alignOverride(o, target);
 }
