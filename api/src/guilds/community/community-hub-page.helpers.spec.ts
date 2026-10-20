@@ -89,6 +89,16 @@ describe('ROK-1870 buildCommunityHubPage', () => {
     expect(page.viewer.canEdit).toBe(false);
   });
 
+  it('carries the users.id on community.userId; memberId stays the row id (BLOCKER)', () => {
+    const page = buildCommunityHubPage(input({}));
+    const rows = page.ranks[0]?.members ?? [];
+    expect(rows.map((r) => [r.memberId, r.community?.userId])).toEqual([
+      [10, 1],
+      [12, 3],
+      [11, 2],
+    ]);
+  });
+
   it('names the live leader with a public avatar url', () => {
     const page = buildCommunityHubPage(input({}));
     expect(page.community?.leader).toEqual({

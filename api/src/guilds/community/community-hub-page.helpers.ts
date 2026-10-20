@@ -8,6 +8,7 @@ import type {
 } from '@raid-ledger/contract';
 import { publicAvatarUrl } from '../../common/public-avatar-url.helpers';
 import { viewerAccess } from '../guild-access.service';
+import type { CommunityRole } from './community-membership.queries';
 
 /** ROK-1870 L2a — the pure `game_community` hub page builder. */
 
@@ -15,7 +16,7 @@ import { viewerAccess } from '../guild-access.service';
 export interface CommunityMemberRecord {
   memberId: number;
   userId: number;
-  role: 'leader' | 'officer' | 'member';
+  role: CommunityRole;
   joinedAt: Date;
   leftAt: Date | null;
   bannedAt: Date | null;
@@ -44,6 +45,7 @@ export function isLiveRecord(r: CommunityMemberRecord): boolean {
   return r.leftAt === null && r.bannedAt === null && r.deactivatedAt === null;
 }
 
+/** `memberId` = the membership row id; `community.userId` = `users.id`. */
 function toRow(r: CommunityMemberRecord): GuildMemberRow {
   return {
     memberId: r.memberId,
@@ -55,7 +57,11 @@ function toRow(r: CommunityMemberRecord): GuildMemberRow {
     effectiveRole: null,
     characterId: null,
     isMain: false,
-    community: { role: r.role, joinedAt: r.joinedAt.toISOString() },
+    community: {
+      userId: r.userId,
+      role: r.role,
+      joinedAt: r.joinedAt.toISOString(),
+    },
   };
 }
 
