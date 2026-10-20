@@ -21,6 +21,8 @@ import { isDesktop } from "./helpers";
 const FIXTURE = "/admin/test/valheim/armory/seed-containers";
 const WORLD_UID = "1234567890123";
 const SLOTS = 16;
+/** `containers-private`'s private chest, as the chest list labels it. */
+const PRIVATE_CHEST_AT = "x 5, z 5";
 
 interface ContainersFixture {
   serverId: number;
@@ -193,8 +195,24 @@ test.describe("Valheim hub — Materials personal section per viewer (ROK-1853)"
       const memberPage = await memberContext.newPage();
       await signInContextAs(memberContext, f.memberUserId);
       await openMaterials(memberPage, f, wide);
-      await expect(totalRows(totals(memberPage, wide), wide).first()).toBeVisible();
+      const memberShared = totals(memberPage, wide);
+      await expect(totalRows(memberShared, wide).first()).toBeVisible();
       await expect(personalHeading(memberPage)).toHaveCount(0);
+      // The private chest (x 5, z 5, 999 Coins) never reaches a member: not in
+      // the shared totals, not in the chest list (review M6).
+      await expect(
+        totalRows(memberShared, wide).filter({ hasText: "Wood" }),
+      ).toContainText("156");
+      await expect(
+        totalRows(memberShared, wide).filter({ hasText: "999" }),
+      ).toHaveCount(0);
+      const memberChests = memberPage.getByRole("list", { name: "Chests" });
+      await expect(
+        memberChests.getByRole("button").filter({ hasText: "x 9, z 9" }),
+      ).toHaveCount(1);
+      await expect(
+        memberChests.getByRole("button").filter({ hasText: PRIVATE_CHEST_AT }),
+      ).toHaveCount(0);
     } finally {
       await memberContext.close();
     }
