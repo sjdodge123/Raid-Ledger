@@ -25,7 +25,17 @@ export function buildSignupButtons(
       .setLabel('Decline')
       .setStyle(ButtonStyle.Danger),
   );
-  const baseUrl = clientUrl || process.env.CLIENT_URL;
+  appendLinkButtons(row, eventId, clientUrl || process.env.CLIENT_URL, hubLink);
+  return row;
+}
+
+/** `View Event` (when a base URL is known), then `Hub` (when one resolved). */
+function appendLinkButtons(
+  row: ActionRowBuilder<ButtonBuilder>,
+  eventId: number,
+  baseUrl: string | undefined,
+  hubLink: HubLink | null | undefined,
+): void {
   if (baseUrl) {
     row.addComponents(
       new ButtonBuilder()
@@ -36,5 +46,4 @@ export function buildSignupButtons(
   }
   const hub = hubLinkButton(hubLink);
   if (hub) row.addComponents(hub);
-  return row;
 }
