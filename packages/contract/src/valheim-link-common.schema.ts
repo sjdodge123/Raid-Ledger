@@ -20,12 +20,14 @@ export const VALHEIM_LINK_SCHEMA_VERSION = 1;
 // array full, every string at max length, free text of control characters
 // that JSON escapes to 6 bytes), so the array caps always bind first.
 
-/** Request-body cap for a `character` message (UTF-8 JSON); worst case ≈ 1.9 MB. */
+/** Request-body cap for a `character` message (UTF-8 JSON); worst case ≈ 1.87 MB. */
 export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 2_097_152;
-/** Request-body cap for a `map` message (inline bitmaps); worst case ≈ 7.0 MB. */
+/** Request-body cap for a `map` message (inline bitmaps); worst case ≈ 7.03 MB. */
 export const VALHEIM_LINK_MAP_MAX_BYTES = 8_388_608;
-/** Request-body cap for an `items` message; worst case ≈ 9.4 MB. */
-export const VALHEIM_LINK_ITEMS_MAX_BYTES = 10_485_760;
+/** Request-body cap for an `items` message; worst case ≈ 11.05 MB (file icons with blob refs, ROK-1855). */
+export const VALHEIM_LINK_ITEMS_MAX_BYTES = 12_582_912;
+/** Request-body cap for a `containers` message; worst case ≈ 8.51 MB (ROK-1853, largest-message spec). */
+export const VALHEIM_LINK_CONTAINERS_MAX_BYTES = 10_485_760;
 /** Recommended cap for one binary upload (base-map PNG or icon atlas). */
 export const VALHEIM_LINK_BINARY_MAX_BYTES = 16_777_216;
 
@@ -42,6 +44,11 @@ export const VALHEIM_LINK_TROPHIES_MAX = 1024;
 export const VALHEIM_LINK_KNOWN_MAX = 8192;
 export const VALHEIM_LINK_PINS_MAX = 2000;
 export const VALHEIM_LINK_ITEM_EXPORT_MAX = 10_000;
+/** `containers` (ROK-1853): containers per message, items per container, items summed over the message, slots per container. */
+export const VALHEIM_LINK_CONTAINERS_MAX = 4096;
+export const VALHEIM_LINK_CONTAINER_ITEMS_MAX = 256;
+export const VALHEIM_LINK_CONTAINER_ENTRIES_MAX = 50_000;
+export const VALHEIM_LINK_CONTAINER_SLOTS_MAX = 4096;
 
 // ---------- primitives ----------
 

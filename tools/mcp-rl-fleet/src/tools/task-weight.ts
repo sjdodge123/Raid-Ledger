@@ -9,8 +9,13 @@
 // This module is the single source of truth for which MCP invocations are
 // heavy BY DEFAULT. An explicit `weight` param on the tool always wins.
 
-/** Admission weight understood by orchestrator/bin/task-start. */
-export type TaskWeight = 'heavy' | 'light';
+/**
+ * Admission weight understood by orchestrator/bin/task-start. ROK-1793 S2:
+ * `medium` (RL_MEDIUM_TASK_MIN_FREE_MB, 2560) is the borrowed-slot Playwright
+ * child of a parallel gate; nothing in the MCP derives it by default.
+ */
+export const TASK_WEIGHTS = ['heavy', 'medium', 'light'] as const;
+export type TaskWeight = (typeof TASK_WEIGHTS)[number];
 
 /**
  * Commands that spawn a test framework, a full CI pipeline, or a docker build.

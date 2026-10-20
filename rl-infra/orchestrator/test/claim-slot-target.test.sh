@@ -179,6 +179,64 @@ test_claim_wait_bad_slot_bails() {
     assert_eq "$err" "invalid_slot" "claim-wait must surface invalid_slot from the inner claim"
 }
 
+# A hard error on a RE-POLL (not just the first claim) must surface at once,
+# not be swallowed until the timeout. Stubbed inotifywait/timeout make each
+# wake immediate; the stub corrupts queue.json so the re-poll errors.
+test_claim_wait_repoll_error_surfaces() {
+    CURRENT_TEST_NAME="claim-wait surfaces a re-poll error immediately (exit 2, no timeout)"
+    _seed_claims busy busy
+    export RL_AGENT_ID="cw-repoll"
+    local stub="$RL_STATE_DIR/stubbin"
+    mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nprintf garbage > "$RL_STATE_DIR/queue.json"\nexit 0\n' > "$stub/inotifywait"
+    printf '#!/usr/bin/env bash\nshift\nexec "$@"\n' > "$stub/timeout"
+    chmod +x "$stub/inotifywait" "$stub/timeout"
+    local out exit_code=0
+    out=$(PATH="$stub:$PATH" bash "$BIN_DIR/claim-wait" --branch feat-cw --timeout 5 2>/dev/null) || exit_code=$?
+    assert_exit_code "$exit_code" "2" "re-poll error exits 2"
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "queue_corrupt" "re-poll error JSON surfaced"
+    assert_eq "$(jq -r '.wait_timed_out // empty' <<<"$out" 2>/dev/null)" "" "not reported as a timeout"
+}
+
+# Codex r1 P2 — a branch_required refusal carries .slot; claim-wait must not
+# read that as a grant (exit 0 with nothing acquired).
+test_claim_wait_branch_required_not_a_grant() {
+    CURRENT_TEST_NAME="claim-wait without --branch on a slot holding claimable envs → exit 2 branch_required"
+    _seed_claims free free
+    export RL_AGENT_ID="cw-nobranch"
+    echo '[{"slug":"e1","slot":1,"claimable_by_next":true,"created_for_branch":"feat-x"}]' > "$RL_STATE_DIR/env-registry.json"
+    local out exit_code=0
+    out=$(bash "$BIN_DIR/claim-wait" --slot 1 --timeout 5 2>/dev/null) || exit_code=$?
+    assert_exit_code "$exit_code" "2" "refusal is not a grant"
+    assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "branch_required" "refusal surfaced"
+    assert_eq "$(_slot_claimed 1)" "false" "slot not acquired"
+}
+
+# ROK-1793 S2 — a slot borrowed by a parallel gate (claims row agent
+# borrow-<P>, borrowed_for) is busy: `claim --slot N` enqueues instead of
+# granting it, a bare claim never picks it, and `status` shows it BUSY with
+# agent borrow-<P>.
+test_borrowed_slot_not_claimable() {
+    CURRENT_TEST_NAME="borrowed slot is busy: not claimable, status shows agent borrow-<P>"
+    _seed_claims busy free
+    local t; t=$(date -u +%FT%TZ)
+    jq --arg t "$t" '(.[] | select(.slot == 2)) |= (.claimed = true | .agent_id = "borrow-parentxyz1"
+        | .branch = "feat-1" | .started_at = $t | .last_heartbeat = $t
+        | .borrowed_for = "parentxyz1" | .borrowed_by = "holder-1")' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+    export RL_AGENT_ID="wants-borrowed"
+    local out exit_code=0
+    out=$(bash "$BIN_DIR/claim" --branch feat-x --slot 2 2>&1) || exit_code=$?
+    assert_exit_code "$exit_code" "0" "claim --slot on a borrowed slot enqueues (exit 0)"
+    assert_eq "$(echo "$out" | jq -r '.enqueued // false' 2>/dev/null)" "true" "borrowed slot is NOT granted"
+    assert_eq "$(jq -r '.[] | select(.slot == 2) | .agent_id' "$RL_STATE_DIR/claims.json")" "borrow-parentxyz1" "borrow row untouched"
+    # docker shim: no envs/runners, so status reads only claims.json.
+    local shim="$RL_STATE_DIR/shim"; mkdir -p "$shim"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$shim/docker"; chmod +x "$shim/docker"
+    local st; st=$(PATH="$shim:$PATH" bash "$BIN_DIR/status" 2>/dev/null | jq -r '.slots[] | select(.slot == 2) | "\(.claimed) \(.agent_id)"' 2>/dev/null)
+    assert_eq "$st" "true borrow-parentxyz1" "status shows the borrowed slot busy with agent borrow-<P>"
+}
+
 run_test "slot-targets-requested-free" test_slot_targets_requested_free_slot
 run_test "slot-enqueues-on-requested-busy" test_slot_enqueues_on_requested_when_busy_not_other_free
 run_test "slot-out-of-range-errors" test_slot_out_of_range_errors
@@ -188,5 +246,22 @@ run_test "slot-zero-padded-grants" test_slot_zero_padded_grants
 run_test "slot-zero-padded-enqueues-canonical" test_slot_zero_padded_enqueues_canonical
 run_test "claim-wait-forwards-slot-grant" test_claim_wait_forwards_slot_grant
 run_test "claim-wait-bad-slot-bails" test_claim_wait_bad_slot_bails
+
+run_test "claim-wait-repoll-error-surfaces" test_claim_wait_repoll_error_surfaces
+run_test "claim-wait-branch-required-not-grant" test_claim_wait_branch_required_not_a_grant
+
+test_claim_clears_stale_borrow_fields() {
+    CURRENT_TEST_NAME="claim of a free row carrying stale borrowed_for/borrowed_by drops them"
+    _seed_claims busy free
+    jq '(.[] | select(.slot == 2)) |= (.borrowed_for = "parentold1" | .borrowed_by = "holder-1")' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+    export RL_AGENT_ID="fresh-agent"
+    bash "$BIN_DIR/claim" --branch feat-x --slot 2 >/dev/null 2>&1 || true
+    assert_eq "$(jq -c '.[] | select(.slot == 2) | {agent_id, borrowed_for, borrowed_by}' "$RL_STATE_DIR/claims.json")" \
+        '{"agent_id":"fresh-agent","borrowed_for":null,"borrowed_by":null}' "granted row carries no borrow fields"
+}
+
+run_test "claim-clears-stale-borrow-fields" test_claim_clears_stale_borrow_fields
+run_test "borrowed-slot-not-claimable" test_borrowed_slot_not_claimable
 
 print_test_summary

@@ -54,12 +54,15 @@ function toMode(props: AddonImportDialogProps): AddonImportMode {
 
 type Flow = AddonImportFlow;
 
+// Preview step: the apply's error, else a failed "Preview again" (Codex r5 P2) — the stale message is reset first.
+
 function StepBody({ flow, gameId }: { flow: Flow; gameId?: number | undefined }) {
     if (flow.step === 'result' && flow.applied) return <AddonImportResult result={flow.applied} />;
     if (flow.step === 'preview' && flow.checked) {
         return (
             <AddonImportPreview
-                result={flow.checked.result} confirm={flow.confirm} onConfirmChange={flow.setConfirm} error={flow.apply.error} gameId={gameId}
+                result={flow.checked.result} confirm={flow.confirm} onConfirmChange={flow.setConfirm} error={flow.apply.error ?? flow.preview.error} gameId={gameId}
+                onPreviewAgain={flow.previewAgain} previewing={flow.preview.isPending}
                 target={flow.checked.target} ruleset={flow.ruleset} onRulesetChange={flow.setRuleset}
             />
         );

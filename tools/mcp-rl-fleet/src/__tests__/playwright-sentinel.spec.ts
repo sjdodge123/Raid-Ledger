@@ -30,6 +30,7 @@ import {
   lookupTaskSurfaceHash,
   playwrightPassed,
   recordTaskSha,
+  resolveGateTier,
   SENTINEL_PREFIX,
 } from '../playwright-sentinel.js';
 import type { ExecuteStatusReturn } from '../tools/task-schemas.js';
@@ -342,5 +343,29 @@ describe('evaluateSentinel — unresolved surface (ROK-1566)', () => {
     expect(result?.surface_hash).toBeNull();
     expect(result?.surface_error).toMatch(/surface-hash\.sh/);
     expect(sentinelFiles()).toEqual([]);
+  });
+});
+
+// ROK-1793 S2 review P1 — the ROK-1533 "Playwright PASS wins over a later FAIL"
+// rule assumed serial tiers; a split parent's child A runs alongside child B.
+describe('split parent: a child-A FAIL beside a child-B Playwright PASS', () => {
+  const tail = (build: string, discord: string): string =>
+    [
+      '========== Summary ==========',
+      `Build (all workspaces)          ${build} — child abc a slot 1`,
+      'TypeScript (all)                PASS — child abc a slot 1',
+      'Lint (all)                      PASS — child abc a slot 1',
+      'Playwright (desktop + mobile)   PASS — child abc b slot 2',
+      `Discord smoke (companion bot)   ${discord} — child abc c slot 1`,
+      '[parallel] merged: 5 rows from 3 children',
+    ].join('\n');
+  const children = [{ task_id: 'abcdef12345a', role: 'a' as const, slot: 1, borrowed: false }];
+  it('earns no tier', () => {
+    const st = status({ mcp_runtime_status: 'failed', children, log_tail: tail('FAIL', 'PASS') });
+    expect(resolveGateTier(st)).toBeNull();
+  });
+  it('still earns playwright when only Discord failed', () => {
+    const st = status({ mcp_runtime_status: 'failed', children, log_tail: tail('PASS', 'FAIL') });
+    expect(resolveGateTier(st)).toBe('playwright');
   });
 });

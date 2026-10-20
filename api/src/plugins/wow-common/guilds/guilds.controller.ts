@@ -32,6 +32,7 @@ import {
 } from '../../plugin-host/plugin-active.guard';
 import { WOW_COMMON_MANIFEST } from '../manifest';
 import { GuildEditorsService } from '../../../guilds/guild-editors.service';
+import { HubService } from '../../../guilds/hub.service';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 
@@ -51,6 +52,7 @@ export class GuildsController {
     private readonly pages: GuildPageService,
     private readonly editors: GuildEditorsService,
     private readonly raidsSvc: GuildRaidsService,
+    private readonly hubs: HubService,
   ) {}
 
   @Get()
@@ -81,13 +83,15 @@ export class GuildsController {
     return this.pages.byCharacter(req.user, characterId);
   }
 
+  /** ROK-1832: same viewer mute flag as core `guilds/:id` (alias parity). */
   @Get(':id')
   @UseGuards(jwt, HubVisibleGuard)
-  page(
+  async page(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildPage> {
-    return this.pages.page(req.user, id);
+    const page = await this.pages.page(req.user, id);
+    return this.hubs.withViewerMute(req.user, id, page);
   }
 
   /** ROK-1787 — Raids tab + Overview widgets (members + staff). */

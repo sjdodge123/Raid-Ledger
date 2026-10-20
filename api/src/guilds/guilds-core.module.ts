@@ -13,6 +13,7 @@ import { HubOnboardingService } from './hub-onboarding.service';
 import { HubKindRegistry } from './hub-kind.registry';
 import { HubEventTagger } from './hub-event-tagger';
 import { HubMineController } from './hub-mine.controller';
+import { HubNotificationMuteController } from './hub-notification-mute.controller';
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
 import { HubVisibleGuard } from './hub-visible.guard';
@@ -36,6 +37,7 @@ import {
     HubOnboardingController,
     HubMineController,
     HubController,
+    HubNotificationMuteController,
     GuildDiscordController,
   ],
   providers: [
@@ -60,6 +62,7 @@ import {
     GuildProfileService,
     HubKindRegistry,
     HubOnboardingService,
+    HubService,
     HubVisibleGuard,
   ],
 })

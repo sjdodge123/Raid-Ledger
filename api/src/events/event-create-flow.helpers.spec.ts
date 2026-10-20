@@ -42,6 +42,7 @@ function makeDeps() {
     ),
     findOne: jest.fn((id: number) => Promise.resolve({ id } as never)),
     notificationService: { createMany: jest.fn() },
+    noticeDedup: { releaseKeys: jest.fn() },
   };
 }
 

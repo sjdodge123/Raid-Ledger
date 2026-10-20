@@ -12,6 +12,7 @@ import type * as schema from '../../../drizzle/schema';
 import type { CharactersService } from '../../../characters/characters.service';
 import { RULESET_IDENTITY_INDEX } from '../../../characters/characters-unique-keys.helpers';
 import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
+import type { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import type { AddonImportAuditService } from './addon-import.audit';
 import { HARDCORE_CREATE_MESSAGE } from './addon-import-create.helpers';
 import { NIL_CHARACTER_ID } from './addon-import-create.apply';
@@ -105,11 +106,13 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
     recordSections: jest.fn().mockResolvedValue(undefined),
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
+  const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
   const service = new AddonImportCreateService(
     db as unknown as PostgresJsDatabase<typeof schema>,
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
     itemMeta as unknown as WowItemMetaService,
+    realmRulesets as unknown as ForeverRealmRulesetsService,
   );
   return { service, tx, characters, audit, itemMeta };
 }

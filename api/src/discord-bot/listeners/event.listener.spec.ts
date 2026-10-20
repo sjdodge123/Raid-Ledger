@@ -12,6 +12,12 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_STATES } from '../discord-bot.constants';
 import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { announceGroupForEvent } from '../services/embed-scheduler-announce.helpers';
+
+jest.mock('../services/embed-scheduler-announce.helpers', () => ({
+  announceGroupForEvent: jest.fn().mockResolvedValue(undefined),
+}));
+const announceGroup = jest.mocked(announceGroupForEvent);
 
 let testModule: TestingModule;
 let listener: DiscordEventListener;
@@ -317,6 +323,23 @@ function eventCreatedTests() {
 }
 
 function eventUpdatedTests() {
+  it('ROK-1832: announces the group after posting the first embed on update', async () => {
+    announceGroup.mockClear();
+    await listener.handleEventUpdated(mockPayload);
+    expect(announceGroup).toHaveBeenCalledTimes(1);
+    expect(announceGroup).toHaveBeenCalledWith(expect.anything(), 42);
+  });
+
+  it('ROK-1832: no group announce when the update post fails or is skipped', async () => {
+    announceGroup.mockClear();
+    embedPoster.postEmbed.mockResolvedValueOnce(false);
+    await listener.handleEventUpdated(mockPayload);
+    mockDb.select.mockReturnValue(createSelectChainWithRecord(mockRecord));
+    mockDb.update.mockReturnValue(createUpdateChain());
+    await listener.handleEventUpdated(mockPayload);
+    expect(announceGroup).not.toHaveBeenCalled();
+  });
+
   it('should skip when bot is not connected', async () => {
     clientService.isConnected.mockReturnValue(false);
     await listener.handleEventUpdated(mockPayload);

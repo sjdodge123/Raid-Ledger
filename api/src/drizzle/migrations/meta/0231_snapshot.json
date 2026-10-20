@@ -1,5 +1,5 @@
 {
-  "id": "43b85071-cd99-45fc-acc4-16dfd2757c20",
+  "id": "5209f1e5-d272-4286-a4d3-79f24965c0c4",
   "prevId": "e4d68d84-1be4-4437-9284-bbd0ee186f13",
   "version": "7",
   "dialect": "postgresql",
@@ -74,13 +74,6 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
-        },
-        "token_version": {
-          "name": "token_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "guild_member_seen_at": {
           "name": "guild_member_seen_at",
@@ -438,6 +431,12 @@
         "guild_id": {
           "name": "guild_id",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "report_url": {
+          "name": "report_url",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

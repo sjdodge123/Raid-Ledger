@@ -11,6 +11,7 @@
  * thin wrapper over this orchestrator.
  */
 import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -45,6 +46,8 @@ export interface AbortDeps {
   logger: Logger;
   /** ROK-1370: heals RESCHEDULING embeds when an abort clears linked polls. */
   embedSyncQueue?: EmbedSyncQueueService;
+  /** ROK-1857: carries RESCHEDULE_CLEARED for each cleared event (calendar copies). */
+  eventEmitter?: EventEmitter2;
 }
 
 /**
@@ -146,7 +149,7 @@ export async function runLineupAbort(
     id,
     { status: 'archived' },
     lineup,
-    healClearedEventEmbeds(deps.embedSyncQueue, deps.logger),
+    healClearedEventEmbeds(deps.embedSyncQueue, deps.logger, deps.eventEmitter),
   );
   const trimmedReason = reason?.trim() || null;
   await finalizeAbort(deps, lineup, trimmedReason, actorId);

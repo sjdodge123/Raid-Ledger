@@ -17,7 +17,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { evaluateSentinel, recordTaskSha, SENTINEL_PREFIX } from '../playwright-sentinel.js';
+import {
+  evaluateSentinel,
+  recordTaskSha,
+  resolveGateTier,
+  SENTINEL_PREFIX,
+} from '../playwright-sentinel.js';
 import { playwrightRowStatus } from '../gate-summary.js';
 import type { ExecuteStatusReturn } from '../tools/task-schemas.js';
 
@@ -235,5 +240,80 @@ describe('evaluateSentinel — static tier (ROK-1565)', () => {
     );
 
     expect(result?.gate_verified).toBe(false);
+  });
+});
+
+// ROK-1793 S2 — the merged table _gate_merge.sh prints at the end of a parallel
+// parent's log: canonical rows whose NOTE carries the owning child.
+const MERGED_CHILDREN = [
+  { task_id: 'f6e5d4c3b2a1a', role: 'a' as const, slot: 1, borrowed: false },
+  { task_id: 'f6e5d4c3b2a1b', role: 'b' as const, slot: 2, borrowed: true },
+];
+function mergedTail(playwright: string, marker = true): string {
+  const row = (n: string, st: string, c: string): string => `${n.padEnd(30)}  ${st} — child f6e5d4c3b2a1${c}`;
+  return [
+    'Lint (all): PASS',
+    'Playwright (desktop + mobile): PASS',
+    '========== Summary ==========',
+    `${'Check'.padEnd(30)}  Result`,
+    row('Build (all workspaces)', 'PASS', 'a slot 1'),
+    row('TypeScript (all)', 'PASS', 'a slot 1'),
+    row('Lint (all)', 'PASS', 'a slot 1'),
+    row('Playwright (desktop + mobile)', playwright, 'b slot 2'),
+    '',
+    marker ? '[parallel] merged: 4 rows from 2 children' : '',
+  ].join('\n');
+}
+
+describe('resolveGateTier — merged parallel table (ROK-1793 S2)', () => {
+  it('earns the static tier from merged rows whose notes name the child', () => {
+    const st = status({ children: MERGED_CHILDREN, log_tail: mergedTail('SKIPPED') });
+    expect(resolveGateTier(st)).toBe('static');
+  });
+  it('earns the playwright tier from the merged Playwright row', () => {
+    expect(resolveGateTier(status({ children: MERGED_CHILDREN, log_tail: mergedTail('PASS') }))).toBe('playwright');
+  });
+  it('earns nothing from a parent without the merged block (relayed raw PASS lines only)', () => {
+    const raw = status({ children: MERGED_CHILDREN, log_tail: 'Build (all workspaces): PASS\nTypeScript (all): PASS\nLint (all): PASS\nPlaywright (desktop + mobile): PASS\n' });
+    expect(resolveGateTier(raw)).toBeNull();
+    expect(resolveGateTier(status({ parallel: { mode: 'parallel', borrowed_slot: 2 }, log_tail: mergedTail('PASS', false) }))).toBeNull();
+  });
+});
+
+// ROK-1793 S2 review P1 — a split parent's children run CONCURRENTLY, so child
+// B's Playwright PASS says nothing about child A's Build/TypeScript/Lint/unit/
+// integration rows. The ROK-1533 "a later tier failed" exception assumed serial
+// order (where `--fleet` stops before Playwright); only Discord keeps it here.
+function splitTail(a: string, unit: string, pw: string, discord = 'PASS'): string {
+  const row = (n: string, st: string, c: string): string => `${n.padEnd(30)}  ${st} — child f6e5d4c3b2a1${c}`;
+  return [
+    '========== Summary ==========',
+    row('Build (all workspaces)', a, 'a slot 1'),
+    row('TypeScript (all)', 'PASS', 'a slot 1'),
+    row('Lint (all)', 'PASS', 'a slot 1'),
+    row('Unit tests (api)', unit, 'a slot 1'),
+    row('Playwright (desktop + mobile)', pw, 'b slot 2'),
+    row('Discord smoke (companion bot)', discord, 'c slot 1'),
+    '[parallel] merged: 6 rows from 3 children',
+  ].join('\n');
+}
+
+describe('resolveGateTier — split parent needs every non-Discord row clean (ROK-1793 S2 P1)', () => {
+  const split = (tail: string, rt: 'succeeded' | 'failed' = 'failed'): ReturnType<typeof status> =>
+    status({ children: MERGED_CHILDREN, mcp_runtime_status: rt, log_tail: tail });
+  it('A FAIL (Build) + B PASS -> null', () => {
+    expect(resolveGateTier(split(splitTail('FAIL', 'PASS', 'PASS')))).toBeNull();
+  });
+  it('A FAIL (unit) + B PASS -> null', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'FAIL', 'PASS')))).toBeNull();
+  });
+  it('A PASS + B PASS -> playwright', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'PASS', 'PASS'), 'succeeded'))).toBe('playwright');
+  });
+  it('A PASS + B FAIL -> null', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'PASS', 'FAIL')))).toBeNull();
+  });
+  it('Discord-only FAIL keeps the ROK-1533 behaviour -> playwright', () => {
+    expect(resolveGateTier(split(splitTail('PASS', 'PASS', 'PASS', 'FAIL')))).toBe('playwright');
   });
 });

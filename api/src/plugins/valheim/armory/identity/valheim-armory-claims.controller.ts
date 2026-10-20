@@ -44,13 +44,18 @@ export class ValheimArmoryClaimsController {
     private readonly reads: ValheimArmoryReadService,
   ) {}
 
-  /** POST — claim an unclaimed character; 200 + summary, 409 `already_claimed`. */
+  /**
+   * POST — claim an unclaimed character; 200 + summary, 409 `already_claimed`,
+   * 404 `Guild not found` for non-staff while its hub is hidden (ROK-1856).
+   */
   @Post('plugins/valheim/armory/characters/:id/claim')
   @HttpCode(200)
   async claim(
     @Param('id', armoryIdPipe) id: number,
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimCharacterSummary> {
+    // ROK-1856: a hidden hub's characters are not claimable by non-staff.
+    await this.reads.assertCharacterVisible(id, req.user);
     await this.claims.claim(id, req.user.id);
     return this.reads.summary(id);
   }

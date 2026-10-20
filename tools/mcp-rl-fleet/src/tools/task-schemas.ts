@@ -37,6 +37,23 @@ export const isoDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/, 'must be ISO-8601 datetime');
 
+// ROK-1793 S2 — a parallel gate parent's children (recorded by gate-fanout)
+// and how it ran: split across a borrowed slot, or the serial fallback.
+export const TaskChildSchema = z.object({
+  task_id: taskIdSchema,
+  role: z.enum(['a', 'b', 'c']),
+  slot: z.number().int(),
+  borrowed: z.boolean(),
+  /** The child's terminal status, recorded by gate-fanout when P ends. */
+  status: z.string().optional(),
+  /** The child's script_exit_code (null when it never exited). */
+  exit: z.number().int().nullable().optional(),
+});
+export const ParallelInfoSchema = z.object({
+  mode: z.enum(['parallel', 'serial_fallback']),
+  borrowed_slot: z.number().int().nullable(),
+});
+
 export const TaskStatusResultSchema = z.object({
   ok: z.boolean(),
   task_id: taskIdSchema,
@@ -57,6 +74,8 @@ export const TaskStatusResultSchema = z.object({
   last_line: z.string().nullable().optional(),
   current_step: z.string().nullable().optional(),
   progress_hint: z.string().nullable().optional(),
+  children: z.array(TaskChildSchema).optional(),
+  parallel: ParallelInfoSchema.optional(),
   error: z.string().optional(),
   message: z.string().optional(),
 });

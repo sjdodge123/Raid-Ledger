@@ -39,9 +39,18 @@ run_claim() {
     "$CLAIM_BIN" "${args[@]+"${args[@]}"}"
 }
 
+# A response is a grant only when ok:true carries a .slot (and any `granted`
+# field is not false). Refusals such as branch_required also carry .slot, so
+# .slot alone is never enough (Codex fleet-claim r1).
+_granted_slot() {
+    jq -r 'if .ok == true and .slot != null
+              and ((has("granted") | not) or (.granted == true or .granted == "true"))
+           then .slot else empty end' <<<"$1" 2>/dev/null || echo ""
+}
+
 # Step 1 — single-shot claim. If granted, return immediately.
 FIRST=$(run_claim 2>/dev/null || true)
-GRANTED_SLOT=$(jq -r '.slot // empty' <<<"$FIRST" 2>/dev/null || echo "")
+GRANTED_SLOT=$(_granted_slot "$FIRST")
 if [[ -n "$GRANTED_SLOT" ]]; then
     echo "$FIRST"
     exit 0
@@ -83,10 +92,17 @@ while true; do
     # below). The claim binary is idempotent + correctly handles "head of
     # queue" → "holds the slot" via the precondition mutate.
     LAST_RESULT=$(run_claim 2>/dev/null || true)
-    GRANTED_SLOT=$(jq -r '.slot // empty' <<<"$LAST_RESULT" 2>/dev/null || echo "")
+    GRANTED_SLOT=$(_granted_slot "$LAST_RESULT")
     if [[ -n "$GRANTED_SLOT" ]]; then
         echo "$LAST_RESULT"
         exit 0
+    fi
+    # A hard error on a re-poll (e.g. branch_required, queue_corrupt) never
+    # resolves by waiting — surface it now instead of at the timeout.
+    POLL_ERR=$(jq -r 'if (.ok == false) and (.error != null) then .error else empty end' <<<"$LAST_RESULT" 2>/dev/null || echo "")
+    if [[ -n "$POLL_ERR" ]]; then
+        echo "$LAST_RESULT"
+        exit 2
     fi
 done
 

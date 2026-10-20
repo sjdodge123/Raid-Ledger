@@ -6,6 +6,7 @@ import type {
   GuildEditorKind,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import type { HubEditorStatus } from '../plugins/plugin-host/extension-points';
 
 /** ROK-1785 — `guild_editors` reads/writes (access is checked by the caller). */
 
@@ -28,10 +29,14 @@ function toKind(kind: string): GuildEditorKind {
   return kind === 'member' ? 'member' : 'rank';
 }
 
-/** Raw row + rank-name lookup → contract `GuildEditor`. */
+/**
+ * Raw row + rank-name lookup (+ the hub kind's ROK-1794 grant status, when
+ * it reports one) → contract `GuildEditor`.
+ */
 export function toGuildEditor(
   row: RawEditorRow,
   rankNames: Map<number, string | null>,
+  status?: HubEditorStatus,
 ): GuildEditor {
   return {
     id: row.id,
@@ -44,6 +49,9 @@ export function toGuildEditor(
     memberName: row.memberName,
     grantedBy: row.grantedBy,
     createdAt: row.createdAt.toISOString(),
+    ...(status
+      ? { effective: status.effective, linkedUsername: status.linkedUsername }
+      : {}),
   };
 }
 

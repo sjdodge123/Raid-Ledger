@@ -47,6 +47,8 @@ const RULING_TABLE: ReadonlyArray<[NotificationType, EmbedState]> = [
   // ROK-1471: the LFG invite DM announces a group that just formed.
   ['lfg_invite', 'announcing'],
   ['lfg_player_invite', 'announcing'],
+  ['hub_leader_post', 'done'],
+  ['hub_event_tagged', 'announcing'],
   ['user_deactivated_discord', 'done'],
   ['user_reactivated_discord', 'done'],
   ['post_event_followup', 'done'],

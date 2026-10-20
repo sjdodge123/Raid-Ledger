@@ -11,7 +11,6 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import type { GuildEditor, GuildMemberRow, GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
-import { at } from '../../test/defined';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { GuildPage } from './hub-page';
@@ -162,15 +161,22 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
         renderPage();
         await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
-        expect(await within(panel).findByTestId('guild-editor-chip')).toHaveTextContent('Rank: Raider');
-        expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent('Add your Guild Master as an editor.');
+        const chip = await within(panel).findByTestId('guild-editor-chip');
+        expect(chip).toHaveTextContent('Rank: Raider');
+        expect(chip, 'a kept rank grant confers nothing (ROK-1794 explicit grants only)').toHaveTextContent('Inactive — re-grant by name');
+        expect(chip).toHaveAttribute('data-active', 'false');
+        expect(within(panel).getByTestId('guild-editors-rank-note')).toHaveTextContent('Rank grants no longer give edit rights.');
+        expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent("Grant the Guild Master by name once you've confirmed the linked account is theirs.");
+        expect(within(panel).queryByTestId('guild-editor-rank-select'), 'no new whole-rank grants').toBeNull();
+        expect(within(panel).queryByText('Whole rank')).toBeNull();
         const memberSelect = within(panel).getByTestId('guild-editor-member-select');
         expect(within(memberSelect).getByRole('option', { name: /Grimtusk/ }), 'the GM must be grantable as a member').toHaveValue('1');
-        const rankOptions = within(within(panel).getByTestId('guild-editor-rank-select')).getAllByRole('option');
-        expect(rankOptions.map((o) => o.textContent)).toEqual(['Pick one…']);
-        await userEvent.selectOptions(within(panel).getByTestId('guild-editor-member-select'), '3');
-        await userEvent.click(at(within(panel).getAllByRole('button', { name: 'Add editor' }), 1));
-        await waitFor(() => expect(posts).toEqual([{ kind: 'member', guildMemberId: 3 }]));
+        const unlinked = within(memberSelect).getByRole('option', { name: /Nolinkadin/ });
+        expect(unlinked).toHaveTextContent('Nolinkadin — Raider · not linked to an account');
+        expect(unlinked, 'a row no RL account owns can never be granted (ROK-1794 review)').toBeDisabled();
+        await userEvent.selectOptions(memberSelect, '2');
+        await userEvent.click(within(panel).getByRole('button', { name: 'Add editor' }));
+        await waitFor(() => expect(posts).toEqual([{ kind: 'member', guildMemberId: 2 }]));
     });
 
     it('drops the "add your Guild Master" hint once the GM (rank 0) holds a member grant', async () => {
@@ -180,7 +186,28 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
         await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
         await waitFor(() => expect(within(panel).getAllByTestId('guild-editor-chip')).toHaveLength(2));
+        expect(within(panel).getAllByTestId('guild-editor-chip').map((c) => c.getAttribute('data-active'))).toEqual(['false', 'true']);
         expect(within(panel).queryByTestId('guild-editors-gm-hint'), 'the GM is already an editor, so the hint must hide').toBeNull();
+    });
+
+    it('keeps the "add your Guild Master" hint when only a rank grant covers rank 0 — rank grants are inactive (ROK-1794)', async () => {
+        const gmRankGrant: GuildEditor = { ...RANK_EDITOR, id: 14, rankIndex: 0, rankName: 'Guild Master' };
+        serve(makePage(true), 200, [gmRankGrant]);
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        const panel = await screen.findByTestId('guild-editors-panel');
+        expect(await within(panel).findByTestId('guild-editor-chip')).toHaveTextContent('Inactive — re-grant by name');
+        expect(within(panel).getByTestId('guild-editors-gm-hint'), 'a rank-0 rank grant must not count as the GM being an editor').toHaveTextContent("Grant the Guild Master by name once you've confirmed the linked account is theirs.");
+    });
+
+    it('hides the rank-grant note when no rank grant is on the list', async () => {
+        const memberGrant: GuildEditor = { ...RANK_EDITOR, id: 15, kind: 'member', rankIndex: null, rankName: null, guildMemberId: 2, memberName: 'Stormcall' };
+        serve(makePage(true), 200, [memberGrant]);
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        const panel = await screen.findByTestId('guild-editors-panel');
+        expect(await within(panel).findByTestId('guild-editor-chip')).toHaveAttribute('data-active', 'true');
+        expect(within(panel).queryByTestId('guild-editors-rank-note')).toBeNull();
     });
 
 });
@@ -221,5 +248,24 @@ describe('GuildPage — a demotion closes the Leader-only overlays (ROK-1830 r1)
             screen.queryByTestId('guild-discord-picker-body'),
             'a demoted viewer must not keep the Leader-only picker open',
         ).toBeNull());
+    });
+});
+
+describe('GuildPage — group notification bell (ROK-1832)', () => {
+    it('puts the bell in the hero for a member, before the Leader settings trigger', async () => {
+        const page = makePage(true);
+        serve({ ...page, viewer: { ...page.viewer, notificationsMuted: false } });
+        renderPage();
+        const bell = await screen.findByTestId('hub-notify-bell');
+        expect(bell).toHaveAttribute('aria-label', 'Notifications for Iron Vanguard: on');
+        const settings = within(screen.getByTestId('guild-hero')).getByTestId('guild-settings-trigger');
+        expect(bell.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('shows no bell when the page carries no mute for the viewer (staff non-member)', async () => {
+        serve(makePage(true));
+        renderPage();
+        await screen.findByTestId('guild-hero');
+        expect(screen.queryByTestId('hub-notify-bell')).not.toBeInTheDocument();
     });
 });

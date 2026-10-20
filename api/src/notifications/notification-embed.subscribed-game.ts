@@ -32,6 +32,21 @@ export function applySubscribedGameEmbed(
   if (thumbnail) embed.setThumbnail(thumbnail);
 }
 
+/**
+ * ROK-1832 §6: a group-tagged event reuses the game-affinity layout plus a
+ * "Tagged to <Group>" line, so the DM says why the reader got it.
+ */
+export function applyHubEventTaggedEmbed(
+  embed: EmbedBuilder,
+  payload: Record<string, unknown>,
+): void {
+  applySubscribedGameEmbed(embed, payload);
+  if (typeof payload.guildName !== 'string' || payload.guildName === '') return;
+  const tagged = `🛡️ Tagged to **${payload.guildName}**`;
+  const current = embed.data.description;
+  embed.setDescription(current ? `${current}\n${tagged}` : tagged);
+}
+
 function computeDurationSuffix(start: unknown, end: unknown): string {
   if (!start || !end) return '';
   const ms = new Date(toStr(end)).getTime() - new Date(toStr(start)).getTime();

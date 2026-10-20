@@ -10,7 +10,10 @@ import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
 import type { NotificationService } from '../notifications/notification.service';
-import { runFollowupFanout } from '../notifications/post-event-followup-fanout.helpers';
+import {
+  runFollowupFanout,
+  type FollowupNoticeDedup,
+} from '../notifications/post-event-followup-fanout.helpers';
 import {
   insertRecurringEvents,
   insertSingleEvent,
@@ -29,6 +32,8 @@ interface CreateFlowDeps {
   findOne: (id: number) => Promise<EventResponseDto>;
   /** ROK-1371: reaches `createMany` for the post-create follow-up fan-out. */
   notificationService: Pick<NotificationService, 'createMany'>;
+  /** ROK-1832 (Codex r10): releases the fan-out's per-user notice claims. */
+  noticeDedup: FollowupNoticeDedup;
 }
 
 /**
@@ -46,7 +51,11 @@ function maybeTriggerFollowupFanout(
   const endedEventId = dto.followupForEventId;
   if (endedEventId == null) return;
   void runFollowupFanout(
-    { db: deps.db, notificationService: deps.notificationService },
+    {
+      db: deps.db,
+      notificationService: deps.notificationService,
+      noticeDedup: deps.noticeDedup,
+    },
     endedEventId,
     { eventId: newEventId },
     creatorId,

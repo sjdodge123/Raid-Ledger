@@ -11,6 +11,7 @@ import { TestResultBanner } from '../../../components/admin/admin-form-helpers';
 import { getPluginBadge } from '../../plugin-registry';
 import { IntegrationFormActions } from '../../../components/admin/integration-form-actions';
 import { ForeverSettingsSection } from '../components/forever-settings-section';
+import { ForeverRealmRulesetsSection } from '../components/forever-realm-rulesets-form';
 
 async function handleSave(
     e: React.FormEvent, clientId: string, clientSecret: string,
@@ -112,6 +113,8 @@ export function BlizzardIntegrationSlot({ pluginSlug }: { pluginSlug?: string })
                 savePending={updateBlizzard.isPending} testPending={testBlizzard.isPending} clearPending={clearBlizzard.isPending} />
             {/* ROK-1717: Forever prefix + Armory flag — only once Blizzard credentials exist. */}
             {blizzardStatus.data?.configured && <ForeverSettingsSection />}
+            {/* ROK-1739: the realm → ruleset map needs no Blizzard credentials — outside the gate. */}
+            <ForeverRealmRulesetsSection />
         </IntegrationCard>
     );
 }

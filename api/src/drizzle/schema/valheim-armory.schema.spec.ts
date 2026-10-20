@@ -90,6 +90,7 @@ describe('valheim_profiles schema', () => {
   it('indexes every FK and the steam-link lookup', () => {
     expect(indexNames(config)).toEqual([
       'valheim_profiles_claimed_by_idx',
+      'valheim_profiles_server_player_idx',
       'valheim_profiles_source_snapshot_idx',
       'valheim_profiles_steam_id_idx',
     ]);

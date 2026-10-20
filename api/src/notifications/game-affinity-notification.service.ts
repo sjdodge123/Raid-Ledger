@@ -4,7 +4,22 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
+import { HubNotificationService } from './hub-notification.service';
+import {
+  loadGroupNoticeContext,
+  sendEventNotices,
+  type GroupNoticeContext,
+} from './event-notice-dispatch.helpers';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
+import {
+  findEventGuildId,
+  findPriorEventNoticeUserIds,
+} from './hub-notification.queries';
+import {
+  EVENT_NOTICE_TTL_SECONDS,
+  eventAnnounceKey,
+  eventNoticeKey,
+} from './event-notice-plan.helpers';
 import {
   findAbsentUserIds,
   findGameAffinityRecipients,
@@ -16,8 +31,9 @@ const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
 export interface GameAffinityNotificationInput {
   eventId: number;
   eventTitle: string;
-  gameName: string;
-  gameId: number;
+  /** Null for a game-less event; only the group path (D6a) can then send. */
+  gameName: string | null;
+  gameId: number | null;
   startTime: string;
   endTime: string;
   creatorId: number;
@@ -35,6 +51,17 @@ export interface GameAffinityNotificationInput {
    * DM, so they are subtracted from this affinity broadcast to avoid a double DM.
    */
   followupForEventId?: number | null;
+  /**
+   * ROK-1832 (Codex r4): skip users who already hold a game, group or
+   * follow-up notice row for this event (and claim their per-user key). Set
+   * by the deferred announce, which can run long after the follow-up DMs.
+   */
+  excludePriorNoticeHolders?: boolean;
+  /**
+   * ROK-1832 (Codex r7): the scheduler's group-only send. It claims a separate
+   * event-level key so a not-yet-run full announcement is not starved.
+   */
+  groupOnly?: boolean;
 }
 
 /**
@@ -51,6 +78,7 @@ export class GameAffinityNotificationService {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
+    private readonly hubNotifications: HubNotificationService,
   ) {}
 
   /**
@@ -60,7 +88,15 @@ export class GameAffinityNotificationService {
   async notifyGameAffinity(
     input: GameAffinityNotificationInput,
   ): Promise<void> {
-    const dedupKey = `game-alert:event:${input.eventId}`;
+    const dedupKey = eventAnnounceKey(input.eventId, input.groupOnly === true);
+    if (await this.hasNoAudienceSource(input)) {
+      // Mark it announced anyway: a later group tag (D6b) keys on this mark.
+      await this.dedupService.checkAndMarkSent(
+        dedupKey,
+        GAME_ALERT_TTL_SECONDS,
+      );
+      return;
+    }
     const alreadySent = await this.dedupService.checkAndMarkSent(
       dedupKey,
       GAME_ALERT_TTL_SECONDS,
@@ -71,41 +107,104 @@ export class GameAffinityNotificationService {
       );
       return;
     }
-    let recipientIds = await this.findRecipients(input.gameId, input.creatorId);
-    if (recipientIds.length === 0) {
-      this.logger.debug(
-        `No game affinity recipients for event ${input.eventId} (game ${input.gameId})`,
-      );
-      return;
-    }
-    recipientIds = await this.excludeAbsentUsers(recipientIds, input);
-    recipientIds = await this.excludeFollowupRecipients(recipientIds, input);
-    if (recipientIds.length === 0) return;
-    await this.dispatchAffinityNotifications(input, recipientIds);
+    const followupIds = await this.followupExclusions(input);
+    const plan = await this.collectRecipients(input, followupIds);
+    if (!plan) return;
+    await this.dispatchAffinityNotifications(
+      input,
+      plan.affinityIds,
+      plan.group,
+    );
+  }
+
+  /** A game-less event with no group tag has nobody to notify now. */
+  private async hasNoAudienceSource(
+    input: GameAffinityNotificationInput,
+  ): Promise<boolean> {
+    if (input.gameId !== null) return false;
+    return (await findEventGuildId(this.db, input.eventId)) === null;
   }
 
   /**
-   * ROK-1371: exclude the ended event's attendees when this event is a
-   * post-event follow-up — they already receive the targeted quick-sign-up DM,
-   * so the affinity broadcast would be a duplicate. No-op for normal events
-   * (`followupForEventId` unset).
+   * ROK-1832 D6a: game-affinity ∪ group recipients (guild read at send time),
+   * minus absences and follow-up attendees. Null when nobody is left.
    */
-  private async excludeFollowupRecipients(
+  private async collectRecipients(
+    input: GameAffinityNotificationInput,
+    followupIds: ReadonlySet<number>,
+  ): Promise<{
+    affinityIds: number[];
+    group: GroupNoticeContext | null;
+  } | null> {
+    const affinity = await this.findRecipients(input.gameId, input.creatorId);
+    const group = await loadGroupNoticeContext(
+      this.db,
+      this.hubNotifications,
+      input.eventId,
+      input.creatorId,
+    );
+    const all = [...new Set([...affinity, ...(group?.groupIds ?? [])])];
+    const kept = new Set(await this.excludeRecipients(all, input, followupIds));
+    if (kept.size === 0) {
+      this.logger.debug(
+        `No event-notice recipients for event ${input.eventId}`,
+      );
+      return null;
+    }
+    const keep = (ids: number[]): number[] => ids.filter((id) => kept.has(id));
+    const scoped = group && { ...group, groupIds: keep(group.groupIds) };
+    return { affinityIds: keep(affinity), group: scoped };
+  }
+
+  /** ROK-503 absences + ROK-1371 follow-up attendees, for both sources. */
+  private async excludeRecipients(
     recipientIds: number[],
     input: GameAffinityNotificationInput,
+    followupIds: ReadonlySet<number>,
   ): Promise<number[]> {
-    if (input.followupForEventId == null || recipientIds.length === 0) {
-      return recipientIds;
-    }
-    const followupIds = new Set(
-      await resolvePostEventFollowupRecipients(
-        this.db,
-        input.followupForEventId,
-        input.creatorId,
+    if (recipientIds.length === 0) return [];
+    const present = await this.excludeAbsentUsers(recipientIds, input);
+    const fresh = present.filter((id) => !followupIds.has(id));
+    return input.excludePriorNoticeHolders
+      ? this.withoutPriorNotice(input.eventId, fresh)
+      : fresh;
+  }
+
+  /** Drop prior notice holders and claim their per-user key (Codex r4). */
+  private async withoutPriorNotice(
+    eventId: number,
+    ids: number[],
+  ): Promise<number[]> {
+    const prior = await findPriorEventNoticeUserIds(this.db, eventId, ids);
+    await Promise.allSettled(
+      [...prior].map((id) =>
+        this.dedupService.checkAndMarkSent(
+          eventNoticeKey(eventId, id),
+          EVENT_NOTICE_TTL_SECONDS,
+        ),
       ),
     );
-    if (followupIds.size === 0) return recipientIds;
-    return recipientIds.filter((id) => !followupIds.has(id));
+    return ids.filter((id) => !prior.has(id));
+  }
+
+  /**
+   * ROK-1371: the ended event's attendees when this event is a post-event
+   * follow-up — they already receive the targeted quick-sign-up DM, so a
+   * broadcast would be a duplicate. A plain exclusion set: their per-user
+   * notice keys belong to the follow-up fan-out, the path that actually sends
+   * to them (Codex r9 — claiming here could starve that send). Empty for a
+   * normal event (`followupForEventId` unset).
+   */
+  private async followupExclusions(
+    input: GameAffinityNotificationInput,
+  ): Promise<Set<number>> {
+    if (input.followupForEventId == null) return new Set();
+    const ids = await resolvePostEventFollowupRecipients(
+      this.db,
+      input.followupForEventId,
+      input.creatorId,
+    );
+    return new Set(ids);
   }
 
   /** Exclude users with active absences covering the event date. */
@@ -126,27 +225,30 @@ export class GameAffinityNotificationService {
     return recipientIds;
   }
 
-  /** Build and dispatch notifications to all recipients. */
+  /**
+   * ROK-1832 D4/D5: one notice per (user, event) — the group copy for group
+   * members, the game copy for the rest — each behind its per-user claim.
+   */
   private async dispatchAffinityNotifications(
     input: GameAffinityNotificationInput,
-    recipientIds: number[],
+    affinityIds: number[],
+    group: GroupNoticeContext | null,
   ): Promise<void> {
     const payload = await this.buildAffinityPayload(input);
-    const results = await Promise.allSettled(
-      recipientIds.map((userId) =>
-        this.notificationService.create({
-          userId,
-          type: 'subscribed_game',
-          title: input.eventTitle,
-          message: `Based on your interest in ${input.gameName}`,
-          payload,
-        }),
-      ),
+    const results = await sendEventNotices(
+      { notifications: this.notificationService, dedup: this.dedupService },
+      {
+        eventId: input.eventId,
+        title: input.eventTitle,
+        gameName: input.gameName ?? 'this game',
+        payload,
+      },
+      affinityIds,
+      group,
     );
-    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.filter((r) => r.status === 'rejected').length;
     this.logger.log(
-      `Game affinity notifications for event ${input.eventId}: ${succeeded} sent, ${failed} failed (${recipientIds.length} recipients)`,
+      `Event notices for event ${input.eventId}: ${results.length - failed} settled, ${failed} failed`,
     );
   }
 
@@ -176,13 +278,15 @@ export class GameAffinityNotificationService {
   }
 
   /**
-   * Find users with affinity for a game, excluding the event creator.
+   * Find users with affinity for a game, excluding the event creator
+   * (none for a game-less event).
    * Union of: users who hearted the game + users who signed up for past events of that game.
    */
   private async findRecipients(
-    gameId: number,
+    gameId: number | null,
     creatorId: number,
   ): Promise<number[]> {
+    if (gameId === null) return [];
     return findGameAffinityRecipients(this.db, gameId, {
       excludeUserId: creatorId,
     });

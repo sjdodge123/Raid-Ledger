@@ -34,6 +34,7 @@ import { DemoTestIntentTokenController } from './demo-test-intent-token.controll
 import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
 import { DemoTestGuildController } from './demo-test-guild.controller';
 import { DemoTestGuildDiscordController } from './demo-test-guild-discord.controller';
+import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
 import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
 import { DemoTestJoinPostController } from './demo-test-join-post.controller';
@@ -141,6 +142,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestBrowserSessionController,
     DemoTestGuildController,
     DemoTestGuildDiscordController,
+    DemoTestHubMemberController,
     DemoTestGameRolesController,
     DemoTestJoinPostController,
     AiChatTestController,

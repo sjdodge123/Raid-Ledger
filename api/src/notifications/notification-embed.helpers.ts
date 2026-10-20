@@ -9,7 +9,10 @@ import type {
   EmbedState,
 } from '../discord-bot/embeds/embed-chrome.helpers';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
-import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
+import {
+  applyHubEventTaggedEmbed,
+  applySubscribedGameEmbed,
+} from './notification-embed.subscribed-game';
 import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 
@@ -56,6 +59,9 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   lfg_invite: 'announcing',
   // ROK-1455: a player-sent invite to a group — same announcing register.
   lfg_player_invite: 'announcing',
+  // ROK-1832: a leader post is news; a group-tagged event announces.
+  hub_leader_post: 'done',
+  hub_event_tagged: 'announcing',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -119,6 +125,8 @@ export function getEmojiForType(type: NotificationType): string {
     community_lineup: '🎯',
     lfg_invite: '👥',
     lfg_player_invite: '✉️',
+    hub_leader_post: '📣',
+    hub_event_tagged: '🛡️',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -147,6 +155,8 @@ export function getTypeLabel(type: NotificationType): string {
     community_lineup: 'Community Lineup',
     lfg_invite: 'LFG Group Forming',
     lfg_player_invite: 'LFG Invite',
+    hub_leader_post: 'Group Post',
+    hub_event_tagged: 'Group Event',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';
@@ -212,6 +222,16 @@ const TYPE_FIELD_DEFS: Partial<
   },
 };
 
+/** Types whose DM replaces the description with a structured layout. */
+const STRUCTURED_EMBEDS: Partial<
+  Record<NotificationType, (e: DmEmbed, p: Record<string, unknown>) => void>
+> = {
+  subscribed_game: applySubscribedGameEmbed,
+  hub_event_tagged: applyHubEventTaggedEmbed,
+  lfg_invite: applyLfgInviteEmbed,
+  lfg_player_invite: applyLfgPlayerInviteEmbed,
+};
+
 /**
  * Add type-specific fields to a notification embed.
  *
@@ -225,16 +245,9 @@ export function addTypeSpecificFields(
   payload?: Record<string, unknown>,
 ): void {
   if (!payload) return;
-  if (type === 'subscribed_game') {
-    applySubscribedGameEmbed(embed, payload);
-    return;
-  }
-  if (type === 'lfg_invite') {
-    applyLfgInviteEmbed(embed, payload);
-    return;
-  }
-  if (type === 'lfg_player_invite') {
-    applyLfgPlayerInviteEmbed(embed, payload);
+  const structured = STRUCTURED_EMBEDS[type];
+  if (structured) {
+    structured(embed, payload);
     return;
   }
   const thumbnail =

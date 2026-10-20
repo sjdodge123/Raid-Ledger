@@ -25,6 +25,7 @@ import {
 import {
   parseImportRequest,
   rawFacts,
+  withRulesetInference,
   type AttemptFacts,
 } from './addon-import.service.helpers';
 import {
@@ -33,8 +34,10 @@ import {
   runForCharacter,
   type LoadedCharacter,
 } from './addon-import.run';
+import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
+import { flagIfRosterHeld } from './addon-import-guild.flag';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -54,6 +57,7 @@ export class AddonImportService {
     private readonly characters: CharactersService,
     private readonly audit: AddonImportAuditService,
     private readonly itemMeta: WowItemMetaService,
+    private readonly realmRulesets: ForeverRealmRulesetsService,
   ) {}
 
   async importString(
@@ -74,6 +78,9 @@ export class AddonImportService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) result = err.code;
+      // ROK-1794 AC4: the tx rolled back — flag a held roster to staff
+      // (apply only — a preview flags no one).
+      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await this.finish(userId, characterId, facts, result, perSection);
@@ -97,10 +104,15 @@ export class AddonImportService {
     const paste = decodeImportPaste(request.importString);
     recordPasteFacts(facts, paste);
     const character = await loadImportCharacter(this.db, characterId);
+    // ROK-1739: export ruleset → realm map → unchanged; never auto-written.
+    const inference = await this.realmRulesets.inferForPaste(paste);
     // Codex P2: bind EVERY section (the decoder also requires one exporter);
     // any section's reject rejects the whole paste before anything runs.
-    const binding = bindPaste(paste, character, request);
-    const res = await this.run(userId, character, paste, binding, request);
+    const binding = bindPaste(paste, character, request, inference?.ruleset);
+    const res = withRulesetInference(
+      await this.run(userId, character, paste, binding, request),
+      inference,
+    );
     // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
     if (!request.dryRun) {
       enqueueAppliedGear(this.itemMeta, paste, res, this.logger);

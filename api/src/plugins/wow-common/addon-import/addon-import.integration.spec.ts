@@ -18,6 +18,7 @@ import {
 import { nonEmpty } from '../../../common/testing/narrow';
 import type { NoNetworkWowheadDeps } from '../../../common/testing/wowhead-no-network';
 import { WOWHEAD_RESOLVER_DEPS } from '../wowhead-item/wow-item-meta.resolve';
+import { grantMemberEditor } from './testing/grant-member-editor';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -465,6 +466,7 @@ describe('addon import — guild', () => {
     });
     expect(await rowCount(schema.guilds)).toBe(1);
     expect(await rowCount(schema.guildMembers)).toBe(40);
+    await grantMemberEditor(testApp.db); // staff made the importer an editor (ROK-1794)
 
     const { members } = fixtureJson<GuildFixture>('guild-1-page').payload.data;
     const newer = buildGuildPayload(members as never);
@@ -501,6 +503,10 @@ describe('addon import — guild', () => {
       status: 'applied',
       summary: { members: 600, pages: 3 },
     });
+    // A live member adding 1,400 GUIDs to a 600-member roster is held for
+    // staff (ROK-1794 review r2), so the 2,000-member paging check runs on a
+    // fresh guild.
+    await testApp.db.delete(schema.guilds);
     const eight = await post(token, id, fixture('guild-8-pages-2000-members'));
     expect(eight.status).toBe(200);
     expect(eight.body.summary).toMatchObject({ members: 2000, pages: 8 });

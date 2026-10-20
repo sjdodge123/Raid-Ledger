@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   GuildKind,
@@ -10,6 +9,8 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type {
+  HubEditorGrant,
+  HubEditorStatus,
   HubKindAdapter,
   HubMineRank,
 } from '../../plugin-host/extension-points';
@@ -17,9 +18,12 @@ import { isStaff, type GuildActor } from '../../../guilds/guild-access.service';
 import { WOW_COMMON_MANIFEST } from '../manifest';
 import {
   findLinkedMemberRows,
+  findLinkedMemberUserIds,
   isLiveMemberOf,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
+import { hasDelegation } from './guild-delegation.helpers';
+import { editorGrantStatus } from './guild-editor-status.helpers';
 import { rankNamesInSnapshot } from './guild-queries.helpers';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
@@ -80,17 +84,23 @@ export class WowHubKindAdapter implements HubKindAdapter {
   }
 
   /**
-   * Until ROK-1794: staff ⇒ leader; an explicit `guild_editors` grant (rank
-   * or member) ⇒ officer — the GM counts only while `GM_RANK_IMPLIES_EDIT` is
-   * on; any other live linked member ⇒ member; everyone else ⇒ visitor.
+   * Until ROK-1794 verifies ownership: staff ⇒ leader; a staff-confirmed
+   * member grant ⇒ officer (rank grants and the GM count only behind their
+   * flags — `guild-delegation.helpers.ts`); any other live linked member ⇒
+   * member; everyone else ⇒ visitor.
    */
   async resolveLadder(actor: GuildActor, guildId: number): Promise<LadderRole> {
     if (isStaff(actor)) return 'leader';
     const rows = await findLinkedMemberRows(this.db, actor.id, guildId);
     if (rows.length === 0) return 'visitor';
     if (GM_RANK_IMPLIES_EDIT && rows.some(isGuildMaster)) return 'officer';
-    const delegated = await this.hasDelegation(guildId, rows);
+    const delegated = await hasDelegation(this.db, guildId, rows);
     return delegated ? 'officer' : 'member';
+  }
+
+  /** ROK-1832 D8: distinct owners of the guild's live linked member rows. */
+  memberUserIds(guildId: number): Promise<number[]> {
+    return findLinkedMemberUserIds(this.db, guildId);
   }
 
   async memberGroupIds(userId: number): Promise<number[]> {
@@ -106,24 +116,12 @@ export class WowHubKindAdapter implements HubKindAdapter {
     return isLiveMemberOf(this.db, guildId, memberId);
   }
 
-  private async hasDelegation(
+  /** ROK-1794 (review): whether each grant confers rights, and to whom. */
+  editorStatus(
     guildId: number,
-    rows: LinkedMemberRow[],
-  ): Promise<boolean> {
-    const { guildEditors: ge } = schema;
-    const ranks = rows.flatMap((r) =>
-      r.rankIndex === null ? [] : [r.rankIndex],
-    );
-    const memberIds = rows.map((r) => r.memberId);
-    const target = or(
-      ranks.length > 0 ? inArray(ge.rankIndex, ranks) : undefined,
-      inArray(ge.guildMemberId, memberIds),
-    );
-    const grants = await this.db
-      .select({ id: ge.id })
-      .from(ge)
-      .where(and(eq(ge.guildId, guildId), target));
-    return grants.length > 0;
+    grants: HubEditorGrant[],
+  ): Promise<Map<number, HubEditorStatus>> {
+    return editorGrantStatus(this.db, guildId, grants);
   }
 }
 
