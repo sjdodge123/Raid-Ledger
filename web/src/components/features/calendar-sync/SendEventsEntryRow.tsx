@@ -8,11 +8,12 @@ import { Link } from 'react-router-dom';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { CalendarConnection } from '@raid-ledger/contract';
 import { CALENDAR_ROW, sendEventsPath } from './calendar-sync-row';
-import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
+import { PROVIDER_CALENDAR_NAME, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 
-function entrySub(write: CalendarConnection['write']): string {
+function entrySub({ provider, write }: CalendarConnection): string {
     if (!write.enabled) return S.entrySub.off;
-    return write.target === 'primary' ? S.entrySub.primary : S.entrySub.dedicated;
+    const calendar = PROVIDER_CALENDAR_NAME[provider];
+    return write.target === 'primary' ? S.entrySub.primary(calendar) : S.entrySub.dedicated(calendar);
 }
 
 export function SendEventsEntryRow({ connection }: { connection: CalendarConnection }): JSX.Element {
@@ -21,7 +22,7 @@ export function SendEventsEntryRow({ connection }: { connection: CalendarConnect
             className={`${CALENDAR_ROW} justify-between transition-colors hover:bg-overlay/40`}>
             <span className="min-w-0">
                 <span className="block text-base text-foreground">{S.switchLabel}</span>
-                <span className="block truncate text-xs text-muted">{entrySub(connection.write)}</span>
+                <span className="block truncate text-xs text-muted">{entrySub(connection)}</span>
             </span>
             <ChevronRightIcon className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
         </Link>
