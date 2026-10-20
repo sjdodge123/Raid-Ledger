@@ -22,6 +22,7 @@ import {
   type BindingUpdatePatch,
 } from './channel-bindings-invariant.helpers';
 import { announceBindingChange } from './channel-binding-events';
+import { gameAnnouncementPrecedence } from './channel-binding-precedence';
 import {
   selectBindingsWithGameNames,
   type BindingWithGameName,
@@ -259,17 +260,28 @@ export class ChannelBindingsService {
     return row?.channelId ?? null;
   }
 
-  /** Game-specific text binding (event routing). */
+  /**
+   * Game-specific text binding (event routing). Same precedence as the
+   * lifecycle reconcile (manual over auto, oldest, id) — Codex r6 P2.
+   */
   async getChannelForGame(
     guildId: string,
     gameId: number,
   ): Promise<string | null> {
     const cb = schema.channelBindings;
-    return this.findChannel(
-      eq(cb.guildId, guildId),
-      eq(cb.gameId, gameId),
-      eq(cb.bindingPurpose, 'game-announcements'),
-    );
+    const [row] = await this.db
+      .select({ channelId: cb.channelId })
+      .from(cb)
+      .where(
+        and(
+          eq(cb.guildId, guildId),
+          eq(cb.gameId, gameId),
+          eq(cb.bindingPurpose, 'game-announcements'),
+        ),
+      )
+      .orderBy(...gameAnnouncementPrecedence())
+      .limit(1);
+    return row?.channelId ?? null;
   }
 
   /** ROK-1766: the game's Quick Play Announcements channel (oldest row wins). */

@@ -4,6 +4,7 @@ import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CHANNEL_BINDING_EVENTS } from './channel-binding-events';
+import { gameAnnouncementPrecedence } from './channel-binding-precedence';
 
 // ─── Mock DB chain ──────────────────────────────────────────────────────────
 
@@ -210,10 +211,22 @@ describe('ChannelBindingsService', () => {
   describe('gameExists', () => {
     function mockSelectChain(resolvedRows: any[]) {
       const limitMock = jest.fn().mockResolvedValue(resolvedRows);
-      const whereMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const orderByMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const whereMock = jest
+        .fn()
+        .mockReturnValue({ limit: limitMock, orderBy: orderByMock });
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
+      return { orderByMock };
     }
+
+    // ROK-1428 Codex r6 P2: a manual binding can coexist with an auto one;
+    // routing must apply the reconcile's precedence, not an unordered LIMIT 1.
+    it('orders candidates manual-first, oldest, then id (shared precedence)', async () => {
+      const { orderByMock } = mockSelectChain([{ channelId: 'manual-1' }]);
+      await service.getChannelForGame('guild-123', 42);
+      expect(orderByMock).toHaveBeenCalledWith(...gameAnnouncementPrecedence());
+    });
 
     it('should return true when the game exists', async () => {
       mockSelectChain([{ id: 42 }]);
@@ -251,10 +264,22 @@ describe('ChannelBindingsService', () => {
   describe('getChannelForGame', () => {
     function mockSelectChain(resolvedRows: any[]) {
       const limitMock = jest.fn().mockResolvedValue(resolvedRows);
-      const whereMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const orderByMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const whereMock = jest
+        .fn()
+        .mockReturnValue({ limit: limitMock, orderBy: orderByMock });
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
+      return { orderByMock };
     }
+
+    // ROK-1428 Codex r6 P2: a manual binding can coexist with an auto one;
+    // routing must apply the reconcile's precedence, not an unordered LIMIT 1.
+    it('orders candidates manual-first, oldest, then id (shared precedence)', async () => {
+      const { orderByMock } = mockSelectChain([{ channelId: 'manual-1' }]);
+      await service.getChannelForGame('guild-123', 42);
+      expect(orderByMock).toHaveBeenCalledWith(...gameAnnouncementPrecedence());
+    });
 
     it('should return channel ID when a game binding exists', async () => {
       mockSelectChain([{ channelId: 'channel-789' }]);

@@ -12,6 +12,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { GameActivitySignalKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { gameAnnouncementPrecedence } from '../services/channel-binding-precedence';
 import {
   SIGNAL_REGISTRY,
   type GameActivitySignal,
@@ -110,7 +111,7 @@ const BINDING_COLUMNS = {
   archivedOverwrites: cb.archivedOverwrites,
 };
 
-/** Candidate bindings by game: manual rows win over auto rows, then oldest first. */
+/** Candidate bindings by game — the shared routing precedence (manual, oldest, id). */
 async function selectCandidateBindings(
   db: Db,
   guildId: string | undefined,
@@ -126,7 +127,7 @@ async function selectCandidateBindings(
         guildId === undefined ? undefined : eq(cb.guildId, guildId),
       ),
     )
-    .orderBy(asc(cb.autoManaged), asc(cb.createdAt));
+    .orderBy(...gameAnnouncementPrecedence());
   const out = new Map<number, LifecycleCandidateBinding>();
   for (const { gameId, ...binding } of rows) {
     if (gameId !== null && !out.has(gameId)) out.set(gameId, binding);
