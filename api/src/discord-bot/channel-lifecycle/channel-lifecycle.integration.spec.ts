@@ -21,7 +21,10 @@ import {
 } from './channel-lifecycle.errors';
 import { ChannelLifecycleScheduler } from './channel-lifecycle.scheduler';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
-import { deleteSuppression } from './channel-lifecycle.store';
+import {
+  deleteSuppression,
+  RECONCILE_LEASE_KEY,
+} from './channel-lifecycle.store';
 
 const GUILD = 'rok1431-guild';
 const DAY = 86_400_000;
@@ -331,10 +334,17 @@ it('R13: concurrent reconciles → one result, one ConflictException', async () 
     expect(await Promise.race([inside, firstSettled])).toBe('locked');
     const secondResult = await svc.reconcile(live).catch((e: unknown) => e);
     expect(secondResult).toBeInstanceOf(ConflictException);
+    // The single-flight is the Redis lease (SET NX PX), held while running.
+    expect(t.redisMock.store.has(RECONCILE_LEASE_KEY)).toBe(true);
   } finally {
     release();
   }
+  expect(await firstSettled).toBe('settled');
   await first;
+  // Released by token on completion → the next reconcile is not locked out.
+  expect(t.redisMock.store.has(RECONCILE_LEASE_KEY)).toBe(false);
+  const third = await svc.reconcile(live).catch((e: unknown) => e);
+  expect(third).not.toBeInstanceOf(ConflictException);
 });
 
 it('R14: disabled → the cron tick runs nothing', async () => {
