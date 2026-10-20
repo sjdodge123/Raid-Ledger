@@ -42,11 +42,14 @@ interface RlStatusResponse {
  * Resolve the slot the calling agent holds via `rl status --json` (a pure read).
  * Prefer the slot whose claimed_by matches agentId; else fall back to the first
  * claimed slot (covers test mocks + future claimed_by shape changes).
+ * `exact: true` (ROK-1793 S2 parallel gate) disables that fallback: the caller
+ * must own the slot, or an unclaimed agent would copy someone else's workspace.
  */
 export async function resolveSlot(
   sshUser: string,
   sshHost: string,
   agentId: string,
+  opts: { exact?: boolean } = {},
 ): Promise<number | null> {
   try {
     const { stdout } = await execFileP(
@@ -65,6 +68,7 @@ export async function resolveSlot(
     const slots = parsed.slots ?? [];
     const match = slots.find((s) => s.claimed_by === agentId);
     if (match) return match.slot;
+    if (opts.exact) return null;
     const claimed = slots.find((s) => s.claimed_by);
     return claimed ? claimed.slot : null;
   } catch {

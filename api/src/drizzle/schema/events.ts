@@ -142,6 +142,9 @@ export const events = pgTable(
     guildId: integer('guild_id').references(() => guilds.id, {
       onDelete: 'set null',
     }),
+    /** ROK-1725: organiser-pasted log report URL (Warcraft Logs /
+     *  foreverlogs.gg). Per occurrence; never fetched server-side. */
+    reportUrl: text('report_url'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

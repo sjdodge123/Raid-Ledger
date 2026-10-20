@@ -27,6 +27,10 @@
 RL_MEMINFO_PATH="${RL_MEMINFO_PATH:-/proc/meminfo}"
 RL_ADMISSION_FILE="${RL_ADMISSION_FILE:-${RL_STATE_DIR}/admission.json}"
 RL_HEAVY_TASK_MIN_FREE_MB="${RL_HEAVY_TASK_MIN_FREE_MB:-5120}"
+# ROK-1793 S2 — `medium` weight (a Playwright-only gate child): same gate,
+# smaller floor. Each reservation records its `mb`; a legacy entry without one
+# counts as the heavy floor.
+RL_MEDIUM_TASK_MIN_FREE_MB="${RL_MEDIUM_TASK_MIN_FREE_MB:-2560}"
 RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS="${RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS:-1800}"
 RL_HEAVY_TASK_POLL_SECONDS="${RL_HEAVY_TASK_POLL_SECONDS:-10}"
 RL_HEAVY_TASK_SETTLE_SECONDS="${RL_HEAVY_TASK_SETTLE_SECONDS:-90}"
@@ -113,8 +117,13 @@ admission::snapshot() {
 # about to consume. Each admit inside RL_HEAVY_TASK_SETTLE_SECONDS therefore
 # reserves one floor's worth of the reading — without it, two waiters wake on
 # the same poll tick and both admit into the same 6 GiB (thundering herd).
+# admission::need_mb_for <weight> — the free-memory floor for a gated weight.
+admission::need_mb_for() {
+    if [[ "$1" == "medium" ]]; then echo "$RL_MEDIUM_TASK_MIN_FREE_MB"; else echo "$RL_HEAVY_TASK_MIN_FREE_MB"; fi
+}
+
 admission::_try_admit() {
-    local key="$1" task_id="$2" avail="$3"
+    local key="$1" task_id="$2" avail="$3" need="${4:-$RL_HEAVY_TASK_MIN_FREE_MB}"
     local now ts
     now=$(date +%s)
     ts=$(date -u +%FT%TZ)
@@ -123,12 +132,14 @@ admission::_try_admit() {
         --argjson now "$now" --argjson avail "$avail" \
         --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
         --argjson settle "$RL_HEAVY_TASK_SETTLE_SECONDS" \
+        --argjson need "$need" \
         'def recent: [ (.heavy_running // [])[]
-             | select(($now - (.admitted_epoch // 0)) < $settle) ] | length;
-         if ($avail - (recent * $floor)) >= $floor
+             | select(($now - (.admitted_epoch // 0)) < $settle)
+             | (.mb // $floor) ] | add // 0;
+         if ($avail - recent) >= $need
          then {
              heavy_running: ((.heavy_running // [])
-                 + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now}]),
+                 + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now, mb: $need}]),
              heavy_waiting: [ (.heavy_waiting // [])[] | select(.key != $k) ]
          }
          else . end'
@@ -151,15 +162,16 @@ admission::_mark_waiting() {
 # Unconditional register — used when MemAvailable is unreadable (fail open) so
 # the counters still reflect what is running.
 admission::_register_running() {
-    local key="$1" task_id="$2"
+    local key="$1" task_id="$2" need="${3:-$RL_HEAVY_TASK_MIN_FREE_MB}"
     local now ts
     now=$(date +%s)
     ts=$(date -u +%FT%TZ)
     state::mutate "$RL_ADMISSION_FILE" \
         --arg k "$key" --arg t "$task_id" --arg ts "$ts" --argjson now "$now" \
+        --argjson need "$need" \
         '{
             heavy_running: ((.heavy_running // [])
-                + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now}]),
+                + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now, mb: $need}]),
             heavy_waiting: [ (.heavy_waiting // [])[] | select(.key != $k) ]
         }' 2>/dev/null || true
 }
@@ -211,10 +223,10 @@ admission::json_status_terminal() {
 # one poll interval instead of being noticed only after admission — otherwise
 # freed memory would start a command nobody is waiting for any more.
 #
-# admission::acquire <key> <task_id> [log_path] [abort_cmd]
+# admission::acquire <key> <task_id> [log_path] [abort_cmd] [need_mb]
 admission::acquire() {
     local key="$1" task_id="$2" log_path="${3:-}" abort_cmd="${4:-}"
-    local floor="$RL_HEAVY_TASK_MIN_FREE_MB"
+    local floor="${5:-$RL_HEAVY_TASK_MIN_FREE_MB}"
     local poll="$RL_HEAVY_TASK_POLL_SECONDS"
     local deadline=$(( $(date +%s) + RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS ))
     admission::ensure_file
@@ -230,10 +242,10 @@ admission::acquire() {
         if [[ -z "$avail" ]]; then
             admission::_log "$log_path" \
                 "[admission] MemAvailable unreadable at $RL_MEMINFO_PATH — admitted ungated"
-            admission::_register_running "$key" "$task_id"
+            admission::_register_running "$key" "$task_id" "$floor"
             return 0
         fi
-        if admission::_try_admit "$key" "$task_id" "$avail"; then
+        if admission::_try_admit "$key" "$task_id" "$avail" "$floor"; then
             admission::_log "$log_path" \
                 "[admission] admitted: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)"
             return 0

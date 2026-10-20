@@ -136,10 +136,103 @@ test_lease_advance_skips_when_already_claimed() {
     assert_eq "$q_len" "1" "queue must still contain waiter (not popped before grant)"
 }
 
+# 2026-10-19 incident — a claim with an empty branch destroyed the PINNED
+# env valheim-mod. Seed slot 1 with one claimable env + a fresh queue head.
+_seed_slot1_env_and_head() {
+    local head_branch="$1" env_branch="$2" pinned="$3"
+    local now
+    now=$(date -u +%FT%TZ)
+    _seed_free_slot_with_queue "$(jq -n --arg t "$now" --arg b "$head_branch" '
+        [{agent_id:"queue-head", branch:$b, requested_at:$t, preempt:false, last_heartbeat:$t}]')"
+    jq -n --arg t "$now" --arg b "$env_branch" --argjson p "$pinned" '
+        [{slug:"slot1-env", slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t,
+          public_domain:"x.lan", pinned:$p, claimable_by_next:true, created_for_branch:$b}]
+    ' > "$RL_STATE_DIR/env-registry.json"
+}
+
+test_lease_advance_pinned_mismatch_preserved() {
+    CURRENT_TEST_NAME="pinned + branch mismatch → preserved, not destroyed, grant proceeds"
+    _seed_slot1_env_and_head "feat-other" "feat-pinned" true
+    local out
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.granted // empty' <<<"$out" 2>/dev/null)" "true" "grant still proceeds"
+    assert_eq "$(jq -c '.preserved_pinned' <<<"$out" 2>/dev/null)" '["slot1-env"]' "preserved_pinned lists the pinned env"
+    assert_eq "$(jq -c '.destroyed_envs' <<<"$out" 2>/dev/null)" '[]' "pinned env is not reported destroyed"
+    assert_eq "$(jq -c '[.[] | {slug, slot, claimable_by_next}]' "$RL_STATE_DIR/env-registry.json")" \
+        '[{"slug":"slot1-env","slot":1,"claimable_by_next":true}]' "env row intact and still claimable_by_next"
+    assert_eq "$(grep -c 'destroy_skipped_pinned' "$RL_STATE_DIR/audit.log" 2>/dev/null || echo 0)" "1" "audit line destroy_skipped_pinned"
+}
+
+test_lease_advance_pinned_match_inherited() {
+    CURRENT_TEST_NAME="pinned + branch match → inherited as today"
+    _seed_slot1_env_and_head "feat-pinned" "feat-pinned" true
+    local out
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.inherited_envs[0].slug // empty' <<<"$out" 2>/dev/null)" "slot1-env" "pinned matching env inherited"
+    assert_eq "$(jq -c '.preserved_pinned' <<<"$out" 2>/dev/null)" '[]' "nothing preserved on a match"
+}
+
+test_lease_advance_unpinned_mismatch_destroyed() {
+    CURRENT_TEST_NAME="unpinned + branch mismatch → destroyed as today"
+    _seed_slot1_env_and_head "feat-other" "feat-old" false
+    local out
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -c '.destroyed_envs' <<<"$out" 2>/dev/null)" '["slot1-env"]' "unpinned mismatch destroyed"
+    assert_eq "$(jq 'length' "$RL_STATE_DIR/env-registry.json")" "0" "registry row removed"
+}
+
+# Fleet-claim fix R2 — a branchless head must not block the queue: it is
+# DROPPED (audited) and the next waiter is granted.
+test_lease_advance_empty_branch_head_dropped() {
+    CURRENT_TEST_NAME="empty / unknown head branch + claimable envs → head dropped, next waiter granted"
+    local hb out now
+    for hb in "" "unknown"; do
+        now=$(date -u +%FT%TZ)
+        _seed_slot1_env_and_head "" "feat-old" false
+        jq -n --arg t "$now" --arg b "$hb" '
+            [{agent_id:"queue-head", branch:$b, requested_at:$t, preempt:false, last_heartbeat:$t},
+             {agent_id:"next-waiter", branch:"feat-old", requested_at:$t, preempt:false, last_heartbeat:$t}]' \
+            > "$RL_STATE_DIR/lease-queue/1.json"
+        : > "$RL_STATE_DIR/audit.log"
+        out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>/dev/null) || true
+        assert_eq "$(jq -r '.granted // empty' <<<"$out" 2>/dev/null)" "true" "head '$hb': next waiter granted"
+        assert_eq "$(jq -r '.[] | select(.slot==1) | .agent_id' "$RL_STATE_DIR/claims.json")" "next-waiter" "head '$hb': slot held by next waiter"
+        assert_eq "$(jq '[.[] | select(.agent_id=="queue-head")] | length' "$RL_STATE_DIR/lease-queue/1.json")" "0" "head '$hb': dropped from queue"
+        assert_eq "$(jq 'length' "$RL_STATE_DIR/env-registry.json")" "1" "head '$hb': matching env kept (inherited)"
+        assert_eq "$(grep -c 'head_dropped_branch_required' "$RL_STATE_DIR/audit.log" 2>/dev/null || echo 0)" "1" "head '$hb': audit line"
+    done
+}
+
+test_lease_advance_only_empty_head_dropped_no_grant() {
+    CURRENT_TEST_NAME="sole empty-branch head + claimable envs → dropped, no grant, env intact"
+    _seed_slot1_env_and_head "" "feat-old" false
+    local out
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.granted // empty' <<<"$out" 2>/dev/null)" "false" "nothing granted"
+    assert_eq "$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json")" "false" "slot not granted"
+    assert_eq "$(jq 'length' "$RL_STATE_DIR/lease-queue/1.json")" "0" "head dropped"
+    assert_eq "$(jq 'length' "$RL_STATE_DIR/env-registry.json")" "1" "env not destroyed"
+}
+
+test_lease_advance_empty_branch_ok_without_envs() {
+    CURRENT_TEST_NAME="empty head branch + no envs on slot → granted"
+    _seed_slot1_env_and_head "" "feat-old" false
+    echo "[]" > "$RL_STATE_DIR/env-registry.json"
+    local out
+    out=$(bash "$BIN_DIR/lease-advance" --slot 1 2>/dev/null) || true
+    assert_eq "$(jq -r '.granted // empty' <<<"$out" 2>/dev/null)" "true" "empty branch on an env-less slot is fine"
+}
+
 run_test "binary-exists" test_lease_advance_binary_exists
 run_test "empty-queue-noop" test_lease_advance_empty_queue_noop
 run_test "grants-head" test_lease_advance_grants_head
 run_test "ac10-evicts-stale-head" test_lease_advance_evicts_stale_head
 run_test "race-skip-claimed" test_lease_advance_skips_when_already_claimed
+run_test "pinned-mismatch-preserved" test_lease_advance_pinned_mismatch_preserved
+run_test "pinned-match-inherited" test_lease_advance_pinned_match_inherited
+run_test "unpinned-mismatch-destroyed" test_lease_advance_unpinned_mismatch_destroyed
+run_test "empty-branch-head-dropped" test_lease_advance_empty_branch_head_dropped
+run_test "only-empty-head-dropped" test_lease_advance_only_empty_head_dropped_no_grant
+run_test "empty-branch-ok-without-envs" test_lease_advance_empty_branch_ok_without_envs
 
 print_test_summary

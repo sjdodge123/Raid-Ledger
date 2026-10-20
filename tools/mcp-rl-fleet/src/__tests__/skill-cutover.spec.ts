@@ -96,8 +96,11 @@ describe('M5b skill cutover — rl_claim queue semantic in all callsites', () =>
       'rl-infra/cli/',
       'tools/mcp-rl-fleet/',
     ]).filter((line) => {
-      // Exclude the test file itself, which intentionally contains the phrase.
-      return !line.includes('skill-cutover.spec.ts');
+      // Production callsites only: test files (this one included) name
+      // rl_claim to exercise it, not to document the claim contract for
+      // agents, so `__tests__/` dirs and `*.spec.ts` / `*.test.ts` are out.
+      const file = line.split(':', 1)[0] ?? '';
+      return !/(^|\/)__tests__\/|\.(spec|test)\.ts$/.test(file);
     });
     const offenders = lines.filter((line) => {
       const lc = line.toLowerCase();
