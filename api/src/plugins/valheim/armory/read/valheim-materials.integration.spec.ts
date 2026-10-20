@@ -506,8 +506,11 @@ describe('golden fixtures', () => {
 
   it('containers-basic: every chest shared, totals present', async () => {
     await importMsg(server, loadValheimFixture('containers-basic'));
+    // Chests hold 50 + 7 Wood; the cart (a vehicle, counted by default) holds 99 more.
     const r = await materials(tokens.member);
-    expect(totalsOf(r.shared)).toContain('Wood:1=57/2');
+    expect(totalsOf(r.shared)).toContain('Wood:1=156/3');
+    const noVehicles = await materials(tokens.member, '?includeVehicles=false');
+    expect(totalsOf(noVehicles.shared)).toContain('Wood:1=57/2');
   });
 });
 
