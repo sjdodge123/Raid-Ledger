@@ -23,12 +23,16 @@ export function normalizeLinkInput(raw: string): string | null {
     return isSafeMarkdownHref(withScheme) ? withScheme : null;
 }
 
-function applyLink(editor: Editor, href: string): void {
-    if (editor.state.selection.empty && !editor.isActive('link')) {
-        editor.chain().focus().insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] }).run();
+interface Range { from: number; to: number }
+
+/** Apply to the selection captured when the row opened (the input took focus since). */
+function applyLink(editor: Editor, href: string, range: Range): void {
+    const chain = editor.chain().focus().setTextSelection(range);
+    if (range.from === range.to && !editor.isActive('link')) {
+        chain.insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] }).run();
         return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+    chain.extendMarkRange('link').setLink({ href }).run();
 }
 
 /** The inline link editor for {@link MarkdownEditor}. */
@@ -36,15 +40,16 @@ export function MarkdownLinkRow({ editor, onClose }: { editor: Editor; onClose: 
     const current = editor.getAttributes('link')['href'];
     const [value, setValue] = useState<string>(typeof current === 'string' ? current : '');
     const [error, setError] = useState<string | undefined>(undefined);
+    const [range] = useState<Range>(() => ({ from: editor.state.selection.from, to: editor.state.selection.to }));
     const close = (): void => { onClose(); editor.commands.focus(); };
     const submit = (ev: FormEvent): void => {
         ev.preventDefault();
         const href = normalizeLinkInput(value);
         if (!href) { setError(HUB_POST_MARKDOWN_MESSAGES['unsafe-link']); return; }
-        applyLink(editor, href);
+        applyLink(editor, href, range);
         onClose();
     };
-    const remove = (): void => { editor.chain().focus().extendMarkRange('link').unsetLink().run(); onClose(); };
+    const remove = (): void => { editor.chain().focus().setTextSelection(range).extendMarkRange('link').unsetLink().run(); onClose(); };
     const onKeyDown = (ev: KeyboardEvent): void => { if (ev.key === 'Escape') { ev.preventDefault(); close(); } };
     return (
         <form onSubmit={submit} onKeyDown={onKeyDown} className="flex flex-wrap items-end gap-2 px-2 py-2 border-b border-edge" data-testid="md-link-row">
