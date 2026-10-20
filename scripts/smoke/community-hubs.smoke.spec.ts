@@ -3,7 +3,9 @@
  *
  * Every test re-seeds through the DEMO_MODE fixture
  * `POST /admin/test/community-hubs/seed {gameId}` (§2.6): on its game it
- * deletes the previous seed's hubs and recreates "Seed Crew" (leader + officer
+ * resets its own fixture (seed-named hubs, hubs proposed/led by a seed user,
+ * their members, bans and notices; seed users are reused, never recreated, and
+ * their Discord DMs muted) and recreates "Seed Crew" (leader + officer
  * + 4 members + a ban), "Seed Solo" (its leader only), "Seed Hopefuls"
  * (`proposed` by `demo-member`) and "Seed Old Guard" (archived). The projects
  * run in parallel, so each one seeds a DIFFERENT configured game (the seed
@@ -168,7 +170,8 @@ test.describe('community hubs — member', () => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
         await withdrawAll(jwt);
-        const name = `Smoke Hub ${testInfo.project.name} ${Date.now().toString(36)}`;
+        // Unique per project AND per run, so a stale row from an earlier run never clashes (D11).
+        const name = `Smoke Hub ${testInfo.project.name} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         const card = await openGamePage(page, seed.gameId);
 
         await card.getByRole('button', { name: 'Start a community hub' }).click();
@@ -334,20 +337,24 @@ test.describe('community hubs — admin', () => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
         const queue = (await apiGet(admin, '/admin/hubs/proposals')) as {
-            items?: Array<{ id: number; gameName: string; proposedBy: { userId: number } }>;
+            items?: Array<{ id: number; name: string; gameName: string; proposedBy: { userId: number } }>;
         } | null;
         const proposal = must(queue?.items?.find((p) => p.id === seed.proposalId), 'the seeded proposal in the queue');
+        // The seed owns the name (it resets its own fixture per game), so read it
+        // off the queue instead of hardcoding it.
+        const hubName = proposal.name;
+        expect(hubName, 'the seeded proposal has a name').not.toBe('');
 
         await page.goto(ADMIN_HUBS_PATH);
         // Exact-text scoping: a substring `hasText` on the game name can match a
-        // parallel project's "Seed Hopefuls" on a game whose name contains this one.
+        // parallel project's same-named proposal on a game whose name contains this one.
         const row = page
             .getByRole('listitem')
-            .filter({ has: page.getByText('Seed Hopefuls', { exact: true }) })
+            .filter({ has: page.getByText(hubName, { exact: true }) })
             .filter({ has: page.getByText(proposal.gameName, { exact: true }) });
         await expect(row, 'the seeded proposal is in the Pending queue (exactly once)').toHaveCount(1, { timeout: 20_000 });
         await row.getByRole('button', { name: 'Approve', exact: true }).click();
-        const dialog = page.getByRole('dialog', { name: 'Approve “Seed Hopefuls”' });
+        const dialog = page.getByRole('dialog', { name: `Approve “${hubName}”` });
         await expect(dialog).toBeVisible();
         await dialog.getByRole('button', { name: 'Approve hub' }).click();
         await expect(dialog, 'the dialog closes only on a successful approval').toBeHidden({ timeout: 20_000 });
@@ -365,7 +372,7 @@ test.describe('community hubs — admin', () => {
 
         await page.goto('/calendar');
         await page.getByRole('button', { name: 'Notifications' }).first().click();
-        await expect(page.getByText('Your hub "Seed Hopefuls" is live').first(), 'the bell lists the approval').toBeVisible({
+        await expect(page.getByText(`Your hub "${hubName}" is live`).first(), 'the bell lists the approval').toBeVisible({
             timeout: 15_000,
         });
     });
