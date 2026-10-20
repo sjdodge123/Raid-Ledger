@@ -31,6 +31,12 @@ export interface MaterialsCountsRow {
   omittedEntries: number;
 }
 
+/** One container (internal `id` kept for the stacks query) + its stacks. */
+export interface MaterialsContainerDetailRow {
+  summary: MaterialsContainerRow;
+  stacks: Array<{ prefab: string; quality: number; stack: number }>;
+}
+
 /** A catalogue row plus whether it is the scan's own game version (D8). */
 export type MaterialsCatalogRow = ArmoryCatalogReadRow & { exact: boolean };
 
@@ -106,11 +112,7 @@ export class ValheimMaterialsRepository {
   }
 
   /** One container by public key within the scope, with its stacks. */
-  async findContainer(
-    scanId: number,
-    key: string,
-    scope: ContainerScope,
-  ) {
+  async findContainer(scanId: number, key: string, scope: ContainerScope) {
     const [row] = await this.db
       .select({ ...summaryCols, id: c.id })
       .from(c)
@@ -122,8 +124,8 @@ export class ValheimMaterialsRepository {
       .from(st)
       .where(eq(st.containerId, row.id))
       .orderBy(asc(st.prefab), asc(st.quality));
-    const { id: _id, ...summary } = row;
-    return { summary: summary satisfies MaterialsContainerRow, stacks };
+    // `toContainerSummary` copies named fields only: `id` never leaves.
+    return { summary: row, stacks };
   }
 
   /**
