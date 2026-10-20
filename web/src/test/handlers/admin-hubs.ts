@@ -47,14 +47,20 @@ async function record(store: AdminHubsStore, request: Request): Promise<unknown>
 
 const page = (items: AdminHubEntry[]) => ({ items, nextCursor: null, total: items.length });
 
-/** Handlers backed by `store`; mutations record their body and update the store. */
-export function adminHubsHandlers(store: AdminHubsStore): HttpHandler[] {
+function readHandlers(store: AdminHubsStore): HttpHandler[] {
     return [
         http.get(`${API}/admin/hubs/proposals`, () => HttpResponse.json({ items: store.proposals })),
         http.get(`${API}/admin/hubs`, ({ request }) => {
             const status = new URL(request.url).searchParams.get('status');
             return HttpResponse.json(page(status === 'archived' ? store.archived : store.active));
         }),
+    ];
+}
+
+/** Handlers backed by `store`; mutations record their body and update the store. */
+export function adminHubsHandlers(store: AdminHubsStore): HttpHandler[] {
+    return [
+        ...readHandlers(store),
         http.post(`${API}/admin/hubs/proposals/:id/approve`, async ({ request, params }) => {
             await record(store, request);
             store.proposals = store.proposals.filter((p) => String(p.id) !== params.id);

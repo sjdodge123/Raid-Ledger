@@ -10,6 +10,10 @@ import { useAdminCreateHub } from './use-admin-hubs';
 import { GamePicker, UserPicker, type PickedOption } from './hubs-panel-pickers';
 import { DialogFooter } from './hubs-panel-dialogs';
 
+function isComplete(game: PickedOption | null, leader: PickedOption | null, name: string, blurb: string): boolean {
+    return !!game && !!leader && name.trim().length >= HUB_NAME_MIN && blurb.trim().length > 0;
+}
+
 /** The create-hub form in a Modal. */
 export function CreateHubDialog({ onClose }: { onClose: () => void }): JSX.Element {
     const [game, setGame] = useState<PickedOption | null>(null);
@@ -21,10 +25,9 @@ export function CreateHubDialog({ onClose }: { onClose: () => void }): JSX.Eleme
         if (!game || !leader) return;
         create.mutate({ gameId: game.id, leaderUserId: leader.id, name: name.trim(), blurb: blurb.trim() }, { onSuccess: onClose });
     };
-    const valid = !!game && !!leader && name.trim().length >= HUB_NAME_MIN && blurb.trim().length > 0;
     const footer = (
         <DialogFooter error={create.error?.message ?? null} onCancel={onClose}>
-            <Button variant="primary" disabled={!valid} loading={create.isPending} onClick={submit}>Create</Button>
+            <Button variant="primary" disabled={!isComplete(game, leader, name, blurb)} loading={create.isPending} onClick={submit}>Create</Button>
         </DialogFooter>
     );
     return (
