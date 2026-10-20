@@ -155,6 +155,16 @@ describe('transferLeader', () => {
     expect(mq.swapLeader).not.toHaveBeenCalled();
   });
 
+  it('commits a clean swap', async () => {
+    jest.mocked(mq.swapLeader).mockResolvedValue(true);
+    await expect(svc.transferLeader(leader, 7, 3)).resolves.toEqual({
+      leaderUserId: 3,
+    });
+    expect(rolledBack).toBe(false);
+  });
+});
+
+describe('transferLeader — under the hub lock (Codex r3)', () => {
   it('rechecks the caller under the hub lock — a Leader demoted by a racing transfer is refused (403)', async () => {
     jest.mocked(reads.liveCommunityRole).mockResolvedValue('officer');
     jest.mocked(mq.swapLeader).mockResolvedValue(true);
@@ -182,14 +192,6 @@ describe('transferLeader', () => {
       svc.transferLeader({ id: 99, role: 'admin' }, 7, 3),
     ).resolves.toEqual({ leaderUserId: 3 });
     expect(reads.liveCommunityRole).not.toHaveBeenCalled();
-  });
-
-  it('commits a clean swap', async () => {
-    jest.mocked(mq.swapLeader).mockResolvedValue(true);
-    await expect(svc.transferLeader(leader, 7, 3)).resolves.toEqual({
-      leaderUserId: 3,
-    });
-    expect(rolledBack).toBe(false);
   });
 });
 

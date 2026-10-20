@@ -25,6 +25,7 @@ import {
   requireCommunityHub,
   restoreHub,
 } from './community-hub.lookup';
+import { liveCommunityRole } from './community-hub.reads';
 import { mayChangeStatus, mayModerate } from './community-ladder.helpers';
 import {
   ban,
@@ -173,21 +174,40 @@ export class CommunityModerationService {
   ): Promise<{ leaderUserId: number }> {
     await requireCommunityHub(this.db, hubId, true);
     await this.members.assertLeader(actor, hubId);
-    const target = await this.members.liveTarget(hubId, userId);
-    if (target.role === 'leader')
-      throw new ConflictException('Already the leader');
     const user = await findProposalUser(this.db, userId);
     if (user === null || user.deactivatedAt !== null)
       throw new ConflictException('That user is no longer active');
     await conflictOnUnique(
       () =>
-        this.db.transaction(async (tx) => {
-          if (!(await swapLeader(tx, hubId, userId)))
-            throw new NotFoundException(NOT_MEMBER);
-        }),
+        this.db.transaction((tx) =>
+          this.swapUnderLock(tx, actor, hubId, userId),
+        ),
       'Leadership changed meanwhile — reload and try again',
     );
     return { leaderUserId: userId };
+  }
+
+  /**
+   * Codex r3: lock the hub row FIRST, then re-read the caller's and the
+   * target's roles on `tx` — a racing transfer that already demoted the
+   * caller is refused. Only `tx` is used under the lock (no pool reads).
+   */
+  private async swapUnderLock(
+    tx: DbOrTx,
+    actor: GuildActor,
+    hubId: number,
+    userId: number,
+  ): Promise<void> {
+    await lockHubRow(tx, hubId);
+    const role = isStaff(actor)
+      ? 'leader'
+      : await liveCommunityRole(tx, hubId, actor.id);
+    if (role !== 'leader') throw new ForbiddenException(LEADER_ONLY);
+    const target = await this.members.liveTarget(hubId, userId, tx);
+    if (target.role === 'leader')
+      throw new ConflictException('Already the leader');
+    if (!(await swapLeader(tx, hubId, userId)))
+      throw new NotFoundException(NOT_MEMBER);
   }
 
   /**

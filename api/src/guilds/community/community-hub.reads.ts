@@ -1,7 +1,10 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { liveMemberPredicate } from './community-membership.queries';
+import {
+  liveMemberPredicate,
+  type DbOrTx,
+} from './community-membership.queries';
 import type { CommunityMemberRecord } from './community-hub-page.helpers';
 import type { DiscordGuildMemberFields } from './discord-guild-member.helpers';
 
@@ -23,7 +26,7 @@ function liveInActiveHub() {
 
 /** The viewer's live role in an active hub, or null. */
 export async function liveCommunityRole(
-  db: Db,
+  db: DbOrTx,
   guildId: number,
   userId: number,
 ): Promise<CommunityMemberRecord['role'] | null> {

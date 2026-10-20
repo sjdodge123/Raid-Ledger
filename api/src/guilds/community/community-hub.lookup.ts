@@ -9,6 +9,7 @@ import * as schema from '../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
 import { isInDiscordGuild } from './discord-guild-member.helpers';
 import { loadDiscordFields } from './community-hub.reads';
+import { conflictOnUnique } from './community-db-errors';
 import {
   liveMemberPredicate,
   type DbOrTx,
@@ -98,25 +99,34 @@ async function hasRestoreClash(
   return clash !== undefined;
 }
 
+/** D11 copy for a restore whose name an active hub now holds. */
+export const RESTORE_NAME_CLASH =
+  'A hub with that name already exists for this game';
+
 /** Restore an archived hub; 409 when an active hub now holds its name (D11). */
 export async function restoreHub(
   db: DbOrTx,
   hub: schema.GuildSelect,
 ): Promise<void> {
   if (await hasRestoreClash(db, hub)) {
-    throw new ConflictException(
-      'A hub with that name already exists for this game',
-    );
+    throw new ConflictException(RESTORE_NAME_CLASH);
   }
-  await db
-    .update(g)
-    .set({
-      status: 'active',
-      archivedAt: null,
-      archivedReason: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(g.id, hub.id));
+  // A concurrent restore can pass the pre-check too; the partial unique index
+  // then rejects this UPDATE — surface it as the same 409 (Codex r3). Nothing
+  // runs after the failed statement, so a poisoned tx is never reused.
+  await conflictOnUnique(
+    () =>
+      db
+        .update(g)
+        .set({
+          status: 'active',
+          archivedAt: null,
+          archivedReason: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(g.id, hub.id)),
+    RESTORE_NAME_CLASH,
+  );
 }
 
 /** A2: 403 unless the user is in the community Discord (staff bypass). */
