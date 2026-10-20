@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { DiscordBotModule } from '../discord-bot.module';
+import { ChannelLifecycleAdminController } from './channel-lifecycle-admin.controller';
+import { ChannelLifecycleAdminService } from './channel-lifecycle-admin.service';
 import { ChannelLifecycleScheduler } from './channel-lifecycle.scheduler';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
 import {
@@ -15,8 +17,10 @@ import {
  */
 @Module({
   imports: [forwardRef(() => DiscordBotModule), SettingsModule, CronJobModule],
+  controllers: [ChannelLifecycleAdminController],
   providers: [
     ChannelLifecycleService,
+    ChannelLifecycleAdminService,
     ChannelLifecycleScheduler,
     { provide: CHANNEL_LIFECYCLE_HUB_LINKER, useValue: NOOP_HUB_LINKER },
   ],

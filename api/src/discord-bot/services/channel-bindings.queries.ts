@@ -24,6 +24,10 @@ export async function selectBindingsWithGameNames(
       config: b.config,
       createdAt: b.createdAt,
       updatedAt: b.updatedAt,
+      lifecycleState: b.lifecycleState,
+      autoManaged: b.autoManaged,
+      pinned: b.pinned,
+      archivedAt: b.archivedAt,
       gameName: schema.games.name,
     })
     .from(b)

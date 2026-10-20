@@ -77,6 +77,8 @@ export interface BindingUpdatePatch {
   gameIdProvided?: boolean;
   /** The provided game; null clears it. Ignored unless `gameIdProvided`. */
   gameId?: number | null;
+  /** ROK-1432: pin an auto-managed binding (never archived). */
+  pinned?: boolean | undefined;
 }
 
 /** Resolve the post-write gameId: the patched value when provided, else current. */
@@ -120,11 +122,16 @@ export function assertResolvedUpdateTriple(
  * PATCH supplied them. Kept out of the service to hold it under the 300 cap.
  */
 export function buildBindingUpdateSet(
-  existing: { config: ChannelBindingConfig | null; bindingPurpose: string },
+  existing: {
+    config: ChannelBindingConfig | null;
+    bindingPurpose: string;
+    autoManaged?: boolean;
+  },
   patchConfig: Partial<ChannelBindingConfig>,
   bindingPurpose: BindingPurpose | undefined,
   patch: BindingUpdatePatch,
 ): Partial<typeof schema.channelBindings.$inferInsert> {
+  assertPinnable(existing, patch);
   const resolvedPurpose =
     bindingPurpose ?? (existing.bindingPurpose as BindingPurpose);
   return {
@@ -135,7 +142,30 @@ export function buildBindingUpdateSet(
     updatedAt: new Date(),
     ...(bindingPurpose && { bindingPurpose }),
     ...(patch.gameIdProvided && { gameId: patch.gameId ?? null }),
+    ...(patch.pinned !== undefined && { pinned: patch.pinned }),
   };
+}
+
+/** ROK-1428 lifecycle columns (optional: absent on hand-built fixtures). */
+export interface BindingLifecycleColumns {
+  lifecycleState?: string;
+  autoManaged?: boolean;
+  pinned?: boolean;
+  archivedAt?: Date | null;
+}
+
+/** 400 text for `pinned` on a manual binding (ROK-1432). */
+export const PIN_MANUAL_REFUSED =
+  'Only Raid Ledger-managed channels can be pinned';
+
+/** ROK-1432: `pinned` is only meaningful on an auto-managed binding. */
+export function assertPinnable(
+  existing: { autoManaged?: boolean | undefined },
+  patch: BindingUpdatePatch,
+): void {
+  if (patch.pinned !== undefined && existing.autoManaged !== true) {
+    throw new BadRequestException(PIN_MANUAL_REFUSED);
+  }
 }
 
 /** Moved out of ChannelBindingsService purely to free lines under the 300 cap. */

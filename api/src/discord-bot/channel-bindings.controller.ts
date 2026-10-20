@@ -138,6 +138,7 @@ export class ChannelBindingsController {
       config: b.config,
       createdAt: b.createdAt.toISOString(),
       updatedAt: b.updatedAt.toISOString(),
+      ...lifecycleFields(b),
     }));
 
     return { data };
@@ -205,13 +206,15 @@ export class ChannelBindingsController {
    */
   private async resolveUpdateGameId(dto: {
     gameId?: number | null | undefined;
-  }): Promise<[] | [{ gameIdProvided: boolean; gameId: number | null }]> {
-    if (dto.gameId === undefined) return [];
+    pinned?: boolean | undefined;
+  }): Promise<[] | [UpdatePatch]> {
+    const pin = dto.pinned === undefined ? {} : { pinned: dto.pinned };
+    if (dto.gameId === undefined) return dto.pinned === undefined ? [] : [pin];
     if (dto.gameId != null) {
       const exists = await this.channelBindingsService.gameExists(dto.gameId);
       if (!exists) throw new NotFoundException('Game not found');
     }
-    return [{ gameIdProvided: true, gameId: dto.gameId }];
+    return [{ gameIdProvided: true, gameId: dto.gameId, ...pin }];
   }
 
   @Delete(':id')
@@ -229,18 +232,49 @@ export class ChannelBindingsController {
 }
 
 /** Map a binding DB record to the API DTO shape. */
-function toBindingDto(result: {
-  id: string;
-  guildId: string;
-  channelId: string;
-  channelType: string;
-  bindingPurpose: string;
-  gameId: number | null;
-  recurrenceGroupId: string | null;
-  config: unknown;
-  createdAt: Date;
-  updatedAt: Date;
-}): ChannelBindingDto {
+type UpdatePatch = {
+  gameIdProvided?: boolean;
+  gameId?: number | null;
+  pinned?: boolean;
+};
+
+/** The ROK-1428 lifecycle columns a binding row carries. */
+type LifecycleColumns = {
+  lifecycleState?: string;
+  autoManaged?: boolean;
+  pinned?: boolean;
+  archivedAt?: Date | null;
+};
+
+/** ROK-1432 (A7): the four lifecycle fields on every binding DTO. */
+function lifecycleFields(
+  b: LifecycleColumns,
+): Pick<
+  ChannelBindingDto,
+  'lifecycleState' | 'autoManaged' | 'pinned' | 'archivedAt'
+> {
+  return {
+    lifecycleState: b.lifecycleState === 'archived' ? 'archived' : 'active',
+    autoManaged: b.autoManaged ?? false,
+    pinned: b.pinned ?? false,
+    archivedAt: b.archivedAt?.toISOString() ?? null,
+  };
+}
+
+function toBindingDto(
+  result: {
+    id: string;
+    guildId: string;
+    channelId: string;
+    channelType: string;
+    bindingPurpose: string;
+    gameId: number | null;
+    recurrenceGroupId: string | null;
+    config: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+  } & LifecycleColumns,
+): ChannelBindingDto {
   return {
     id: result.id,
     guildId: result.guildId,
@@ -253,5 +287,6 @@ function toBindingDto(result: {
     config: result.config as ChannelBindingDto['config'],
     createdAt: result.createdAt.toISOString(),
     updatedAt: result.updatedAt.toISOString(),
+    ...lifecycleFields(result),
   };
 }

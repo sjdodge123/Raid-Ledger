@@ -13,6 +13,7 @@ import {
   mappingConflicts,
 } from './channel-bindings-uniqueness.helpers';
 import {
+  type BindingLifecycleColumns,
   assertResolvedUpdateTriple,
   assertUpsertTriple,
   buildBindingUpdateSet,
@@ -33,7 +34,7 @@ import type {
 import { defined } from '../../common/defined.helpers';
 import { suppressUnboundAutoBindings } from '../channel-lifecycle/channel-lifecycle.store';
 
-export interface BindingRecord {
+export interface BindingRecord extends BindingLifecycleColumns {
   id: string;
   guildId: string;
   channelId: string;
@@ -349,7 +350,7 @@ export class ChannelBindingsService {
     id: string,
     config: Partial<ChannelBindingConfig>,
     bindingPurpose?: BindingPurpose,
-    gameIdPatch?: { gameIdProvided: boolean; gameId: number | null },
+    gameIdPatch?: Omit<BindingUpdatePatch, 'bindingPurpose'>,
   ): Promise<BindingRecord | null> {
     const existing = await this.getBindingById(id);
     if (!existing) return null;
