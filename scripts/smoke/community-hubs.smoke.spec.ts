@@ -15,7 +15,7 @@
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
@@ -118,6 +118,25 @@ async function openGamePage(page: Page, gameId: number): Promise<Locator> {
 /** The hub's member-table row for `username`. */
 function memberRow(page: Page, username: string): Locator {
     return page.getByTestId('guild-member-row').filter({ hasText: username });
+}
+
+/**
+ * Open `username`'s Manage menu and pick `actionTestId` (e.g.
+ * `community-member-make-officer`). From 1024px the menu is a `role="menu"`
+ * dropdown inside the row; below it the same rows render in a `BottomSheet`
+ * portal, so they are NOT descendants of the row. Both shells wrap the rows in
+ * a `role="menu"` named "Manage <name>" and only one is open at a time, so the
+ * action is located in the open menu wherever it renders (community-member-menu.tsx).
+ */
+async function memberAction(page: Page, username: string, actionTestId: string): Promise<void> {
+    const trigger = memberRow(page, username).getByTestId('community-member-manage');
+    await expect(trigger, `${username}'s Manage trigger is enabled`).toBeEnabled({ timeout: 15_000 });
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const menu = page.getByRole('menu', { name: /^Manage / });
+    await expect(menu, `the Manage menu for ${username} is open`).toHaveCount(1);
+    await menu.getByTestId(actionTestId).click();
+    await expect(menu, 'picking an action closes the menu / sheet').toHaveCount(0);
 }
 
 /** The seed's usernames for `memberUserIds` (demo-test-community-hubs.controller `CREW`). */
@@ -266,8 +285,10 @@ test.describe('community hubs — leader', () => {
         const row = memberRow(page, target);
         await expect(row).toHaveCount(1, { timeout: 20_000 });
 
-        await row.getByTestId('community-member-manage').click();
-        await row.getByTestId('community-member-make-officer').click();
+        await memberAction(page, target, 'community-member-make-officer');
+        await expect(row.getByTestId('community-member-role'), 'the promotion refetches the row').toHaveText(/officer/i, {
+            timeout: 15_000,
+        });
         await page.reload();
         await expect(memberRow(page, target).getByTestId('community-member-role'), 'the promotion survives a reload').toHaveText(
             /officer/i,
@@ -275,8 +296,7 @@ test.describe('community hubs — leader', () => {
         );
 
         const before = must(await hubEntry(admin, seed.gameId, seed.hubIds.crew), 'crew entry').memberCount;
-        await memberRow(page, target).getByTestId('community-member-manage').click();
-        await memberRow(page, target).getByTestId('community-member-remove').click();
+        await memberAction(page, target, 'community-member-remove');
         await expect.poll(async () => (await hubEntry(admin, seed.gameId, seed.hubIds.crew))?.memberCount, {
             message: 'the removal must reach the API',
         }).toBe(before - 1);
@@ -319,20 +339,29 @@ test.describe('community hubs — admin', () => {
         const proposal = must(queue?.items?.find((p) => p.id === seed.proposalId), 'the seeded proposal in the queue');
 
         await page.goto(ADMIN_HUBS_PATH);
-        const row = page.locator('li').filter({ hasText: 'Seed Hopefuls' }).filter({ hasText: proposal.gameName });
-        await expect(row.first(), 'the seeded proposal is in the Pending queue').toBeVisible({ timeout: 20_000 });
-        await row.first().getByRole('button', { name: 'Approve' }).click();
-        await page.getByRole('button', { name: 'Approve hub' }).click();
-        await expect.poll(async () => {
+        // Exact-text scoping: a substring `hasText` on the game name can match a
+        // parallel project's "Seed Hopefuls" on a game whose name contains this one.
+        const row = page
+            .getByRole('listitem')
+            .filter({ has: page.getByText('Seed Hopefuls', { exact: true }) })
+            .filter({ has: page.getByText(proposal.gameName, { exact: true }) });
+        await expect(row, 'the seeded proposal is in the Pending queue (exactly once)').toHaveCount(1, { timeout: 20_000 });
+        await row.getByRole('button', { name: 'Approve', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Approve “Seed Hopefuls”' });
+        await expect(dialog).toBeVisible();
+        await dialog.getByRole('button', { name: 'Approve hub' }).click();
+        await expect(dialog, 'the dialog closes only on a successful approval').toBeHidden({ timeout: 20_000 });
+        await pollForCondition(async () => {
             const list = (await apiGet(admin, '/admin/hubs/proposals')) as { items?: Array<{ id: number }> } | null;
-            return (list?.items ?? []).map((p) => p.id);
-        }, { message: 'the approval must leave the queue' }).not.toContain(seed.proposalId);
+            const ids = (list?.items ?? []).map((p) => p.id);
+            return ids.includes(seed.proposalId) ? null : { ids };
+        }, { timeoutMs: 30_000, description: `proposal ${seed.proposalId} leaves GET /admin/hubs/proposals` });
 
         const proposerJwt = await signInOnboardedMember(page, proposal.proposedBy.userId);
-        await expect.poll(async () => {
+        await pollForCondition(async () => {
             const rows = ((await apiGet(proposerJwt, '/notifications?limit=50')) ?? []) as NotificationRow[];
-            return rows.some((n) => n.type === 'hub_proposal_reviewed' && n.payload?.guildId === seed.proposalId);
-        }, { message: 'the proposer must get hub_proposal_reviewed for this hub' }).toBe(true);
+            return rows.find((n) => n.type === 'hub_proposal_reviewed' && n.payload?.guildId === seed.proposalId) ?? null;
+        }, { timeoutMs: 30_000, description: `hub_proposal_reviewed for hub ${seed.proposalId} reaches the proposer` });
 
         await page.goto('/calendar');
         await page.getByRole('button', { name: 'Notifications' }).first().click();
