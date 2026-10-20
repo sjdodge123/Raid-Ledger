@@ -168,10 +168,29 @@ test_claim_grant_populates_expires_at() {
     assert_eq "$extends_count" "0" "fresh claim has extends_count=0"
 }
 
+# Fleet-claim fix R2 — an empty (or `unknown`) branch must never enqueue: a
+# branchless queue head would block every waiter behind it on any slot.
+test_claim_empty_branch_never_enqueues() {
+    CURRENT_TEST_NAME="empty / unknown branch never enqueues (targeted or not) → branch_required"
+    _busy_both_slots
+    export RL_AGENT_ID="nobranch-waiter"
+    local out queued
+    for args in "" "--branch unknown" "--slot 2" "--branch unknown --slot 2"; do
+        # shellcheck disable=SC2086
+        out=$(bash "$BIN_DIR/claim" $args 2>/dev/null) || true
+        assert_eq "$(jq -r '.error // empty' <<<"$out" 2>/dev/null)" "branch_required" "claim '$args' refused"
+        queued=$(cat "$RL_STATE_DIR"/lease-queue/*.json 2>/dev/null \
+            | jq -s '[.[][]? | select(.agent_id == "nobranch-waiter")] | length')
+        assert_eq "${queued:-0}" "0" "claim '$args' wrote no lease-queue entry"
+        assert_eq "$(jq '[.[]? | select(.agent_id == "nobranch-waiter")] | length' "$RL_STATE_DIR/queue.json" 2>/dev/null || echo 0)" "0" "claim '$args' wrote no legacy queue entry"
+    done
+}
+
 run_test "ac1-enqueues-when-busy" test_claim_enqueues_when_all_busy
 run_test "ac1-queue-ahead-shape" test_claim_returns_queue_ahead
 run_test "ac1-writes-lease-queue-file" test_claim_writes_lease_queue_file
 run_test "ac14-no-409-in-claim" test_claim_source_has_no_409
 run_test "ac6-expires-at-on-grant" test_claim_grant_populates_expires_at
 
+run_test "empty-branch-never-enqueues" test_claim_empty_branch_never_enqueues
 print_test_summary

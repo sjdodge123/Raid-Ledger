@@ -129,6 +129,10 @@ case "$1" in
         ;;
     ps)
         # MAX_ENVS_PER_SLOT counting path — return empty (no existing envs).
+        # ES_RACE_REGISTRY: this call runs AFTER the foreign-env guard and
+        # BEFORE the takeover commit, so a test can swap the registry here to
+        # simulate another writer racing the takeover.
+        if [[ -n "${ES_RACE_REGISTRY:-}" ]]; then cp "$ES_RACE_REGISTRY" "$RL_ENVS_FILE"; fi
         printf '\n'
         exit 0
         ;;
@@ -150,7 +154,7 @@ es_teardown() {
     unset RL_ENVS_FILE RL_CLAIMS_FILE RL_AUDIT_LOG RL_TRAEFIK_CONF_D \
           RL_OPERATOR ES_STUB_DIR \
           ES_APP_EXISTS ES_PG_EXISTS ES_RUNNING_IMAGE_ID ES_CURRENT_IMAGE_ID \
-          ES_APP_SLOT ES_IMAGE_INSPECT_OK ES_PULL_OK ES_RUN_FAILS_ON 2>/dev/null || true
+          ES_APP_SLOT ES_IMAGE_INSPECT_OK ES_PULL_OK ES_RUN_FAILS_ON ES_RACE_REGISTRY 2>/dev/null || true
 }
 
 # Run env-spin for the given slug, capturing stdout into ES_OUT and exit into
@@ -424,4 +428,160 @@ run_test "ac6.5-trap-cleanup-after-pg"          test_trap_cleanup_after_pg
 run_test "ac6.6a-unclaimed-slot-reclaim"        test_unclaimed_slot_reclaim_positive
 run_test "ac6.6b-claimed-slot-refuses"          test_claimed_slot_still_refuses
 
+
+# Codex r2 P2 — redeploying another branch's env on this slot is refused
+# unless --takeover re-stamps provenance to the acting branch + agent.
+_seed_same_slot_row() {
+    local owner="$1" pinned="$2"
+    jq -n --arg o "$owner" --argjson p "$pinned" \
+        '[{slug:"owned", slot:1, image:"x", ttl:"24h", created_at:"2026-06-07T00:00:00Z", last_touched:"2026-06-07T00:00:00Z",
+           public_domain:"", pinned:$p, claimable_by_next:true, created_for_branch:$o}]' > "$RL_ENVS_FILE"
+    export ES_APP_EXISTS="true" ES_PG_EXISTS="true" ES_APP_SLOT="1"
+}
+
+test_foreign_env_spin_refused() {
+    CURRENT_TEST_NAME="env-spin onto another branch's env on this slot is refused"
+    es_setup
+    _seed_same_slot_row "feat-a" true
+    run_env_spin owned
+    assert_exit_code "$ES_RC" "1" "foreign env spin must refuse"
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "error code"
+    assert_contains "$(jq -r '.message' <<<"$ES_OUT" 2>/dev/null)" "feat-a" "message names the owning branch"
+    assert_eq "$(jq -r '.[0].created_for_branch' "$RL_ENVS_FILE")" "feat-a" "provenance untouched on refusal"
+    assert_contains "$(cat "$RL_AUDIT_LOG" 2>/dev/null)" "env_spin_refused_foreign_env" "audit records the refusal"
+    es_teardown
+}
+
+test_foreign_unpinned_env_spin_refused() {
+    CURRENT_TEST_NAME="env-spin onto an UNPINNED foreign env on this slot is refused too (provenance, not pin)"
+    es_setup
+    _seed_same_slot_row "feat-a" false
+    run_env_spin owned
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "unpinned foreign refused"
+    es_teardown
+}
+
+test_foreign_env_spin_takeover_restamps() {
+    CURRENT_TEST_NAME="env-spin --takeover re-stamps provenance to the acting branch + agent"
+    es_setup
+    _seed_same_slot_row "feat-a" true
+    run_env_spin owned --takeover
+    assert_neq "$(jq -r '.error // "none"' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "takeover not refused"
+    assert_eq "$(jq -r '.[0] | "\(.created_for_branch) \(.created_by_agent) \(.claimable_by_next)"' "$RL_ENVS_FILE")" \
+        "fix/rok-1357 es-agent false" "row re-stamped to acting branch + agent"
+    es_teardown
+}
+
+test_own_branch_env_spin_allowed() {
+    CURRENT_TEST_NAME="env-spin onto this branch's own env is not refused"
+    es_setup
+    _seed_same_slot_row "fix/rok-1357" false
+    run_env_spin owned
+    assert_neq "$(jq -r '.error // "none"' <<<"$ES_OUT" 2>/dev/null)" "env_spin_refused_foreign_env" "own env allowed"
+    es_teardown
+}
+
+# Codex r3 P2 — a --takeover that a later preflight check refuses (here: the
+# pinned env lives on another STILL-CLAIMED slot → slug_owned_by_other_slot)
+# must leave the registry row byte-identical. Re-stamping before that check
+# handed the row to the caller even though the spin was refused.
+test_refused_takeover_leaves_row_untouched() {
+    CURRENT_TEST_NAME="refused --takeover (other slot still claimed) leaves the registry row byte-identical"
+    es_setup
+    cat > "$RL_CLAIMS_FILE" <<JSON
+[
+  {"slot": 1, "claimed": true, "agent_id": "es-agent",    "branch": "fix/rok-1357"},
+  {"slot": 2, "claimed": true, "agent_id": "other-agent", "branch": "feat/other"}
+]
+JSON
+    jq -n '[{slug:"pinned-other", slot:2, image:"x", ttl:"24h", created_at:"2026-06-07T00:00:00Z",
+             last_touched:"2026-06-07T00:00:00Z", public_domain:"", pinned:true, claimable_by_next:true,
+             created_for_branch:"feat/other", created_by_agent:"other-agent"}]' > "$RL_ENVS_FILE"
+    export ES_APP_EXISTS="true" ES_PG_EXISTS="true" ES_APP_SLOT="2"
+    local before
+    before=$(cat "$RL_ENVS_FILE")
+    run_env_spin pinned-other --takeover
+    assert_exit_code "$ES_RC" "1" "takeover onto a still-claimed slot's env must refuse"
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "slug_owned_by_other_slot" "refused by the slug-ownership check"
+    assert_eq "$(cat "$RL_ENVS_FILE")" "$before" "refused takeover must leave the registry row byte-identical"
+    assert_eq "$(grep -c env_spin_takeover_foreign_env "$RL_AUDIT_LOG" 2>/dev/null || true)" "0" "no takeover audited on refusal"
+    es_teardown
+}
+
+# Opus review P3 #1 — a --takeover refused by image_not_found (a check that
+# touches no container) must leave the stale pinned foreign row byte-identical:
+# committing before it left the row stamped to the caller, claimable_by_next
+# false, for an env that was never spun.
+test_takeover_missing_image_leaves_row_untouched() {
+    CURRENT_TEST_NAME="--takeover refused by image_not_found leaves a stale pinned foreign row byte-identical"
+    es_setup
+    _seed_same_slot_row "feat-a" true
+    export ES_APP_EXISTS="false" ES_PG_EXISTS="false" ES_IMAGE_INSPECT_OK="false" ES_PULL_OK="false"
+    local before
+    before=$(cat "$RL_ENVS_FILE")
+    run_env_spin owned --takeover --image rl-missing:nope
+    assert_exit_code "$ES_RC" "1" "takeover with a missing image must refuse"
+    assert_eq "$(jq -r '.error' <<<"$ES_OUT" 2>/dev/null)" "image_not_found" "refused by the image check"
+    assert_eq "$(cat "$RL_ENVS_FILE")" "$before" "image_not_found takeover must leave the registry row byte-identical"
+    assert_eq "$(grep -c env_spin_takeover_foreign_env "$RL_AUDIT_LOG" 2>/dev/null || true)" "0" "no takeover audited on refusal"
+    es_teardown
+}
+
+# Opus review P3 #2 — the unclaimed-slot reclaim deletes the stamp before the
+# takeover commits; the empty owner it leaves must still be taken over.
+test_takeover_with_unclaimed_slot_reclaim() {
+    CURRENT_TEST_NAME="--takeover combined with the unclaimed-slot reclaim succeeds and stamps the caller"
+    es_setup
+    jq -n '[{slug:"stranded", slot:2, image:"x", ttl:"24h", created_at:"2026-06-07T00:00:00Z",
+             last_touched:"2026-06-07T00:00:00Z", public_domain:"", pinned:true, claimable_by_next:true,
+             created_for_branch:"feat-a", created_by_agent:"other-agent"}]' > "$RL_ENVS_FILE"
+    export ES_APP_EXISTS="true" ES_PG_EXISTS="true" ES_APP_SLOT="2"
+    export ES_RUNNING_IMAGE_ID="sha256:SAME" ES_CURRENT_IMAGE_ID="sha256:SAME"
+    run_env_spin stranded --takeover
+    assert_exit_code "$ES_RC" "0" "takeover + reclaim must proceed"
+    assert_eq "$(jq -r '.error // "none"' <<<"$ES_OUT" 2>/dev/null)" "none" "not refused (no env_spin_takeover_raced)"
+    assert_eq "$(jq -r '[.[] | select(.slug == "stranded")] | length' "$RL_ENVS_FILE")" "1" "exactly one row"
+    assert_eq "$(jq -r '.[] | select(.slug == "stranded") | "\(.created_for_branch) \(.created_by_agent) \(.claimable_by_next) \(.slot)"' "$RL_ENVS_FILE")" \
+        "fix/rok-1357 es-agent false 1" "row stamped to the caller and moved to its slot"
+    assert_eq "$(grep -c env_spin_takeover_foreign_env "$RL_AUDIT_LOG" 2>/dev/null || true)" "1" "takeover audited once"
+    es_teardown
+}
+
+# Opus review P3 #2 — the row changes hands between the guard and the commit
+# (the docker-ps stub swaps the registry in that window). The takeover must
+# refuse as env_spin_takeover_raced, write nothing, and audit no takeover —
+# including when the env was DESTROYED (the swap matches nothing and the
+# owner reads back "", which the old `-n` check let through unstamped).
+_raced_takeover_case() {
+    local label="$1" raced_filter="$2" now_owner="$3"
+    es_setup
+    _seed_same_slot_row "feat-a" true
+    jq "$raced_filter" "$RL_ENVS_FILE" > "$RL_STATE_DIR/raced-registry.json"
+    export ES_RACE_REGISTRY="$RL_STATE_DIR/raced-registry.json"
+    run_env_spin owned --takeover
+    assert_exit_code "$ES_RC" "1" "$label: raced takeover must refuse"
+    assert_eq "$(jq -r '.error // "none"' <<<"$ES_OUT" 2>/dev/null)" "env_spin_takeover_raced" "$label: error code"
+    assert_eq "$(jq -r '.now_owned_by_branch' <<<"$ES_OUT" 2>/dev/null)" "$now_owner" "$label: reports the owner it read back"
+    assert_eq "$(cat "$RL_ENVS_FILE")" "$(cat "$RL_STATE_DIR/raced-registry.json")" "$label: registry left exactly as the racer wrote it"
+    assert_eq "$(grep -c env_spin_takeover_foreign_env "$RL_AUDIT_LOG" 2>/dev/null || true)" "0" "$label: no takeover audited"
+    es_teardown
+}
+test_takeover_raced_restamped() {
+    CURRENT_TEST_NAME="--takeover raced by a re-stamp to a third branch refuses as env_spin_takeover_raced"
+    _raced_takeover_case "restamped" 'map(.created_for_branch = "feat-c" | .created_by_agent = "agent-c")' "feat-c"
+}
+test_takeover_raced_destroyed() {
+    CURRENT_TEST_NAME="--takeover raced by the env being destroyed refuses as env_spin_takeover_raced"
+    _raced_takeover_case "destroyed" '[]' ""
+}
+
+run_test "foreign-env-spin-refused"            test_foreign_env_spin_refused
+run_test "foreign-unpinned-env-spin-refused"   test_foreign_unpinned_env_spin_refused
+run_test "foreign-env-spin-takeover-restamps"  test_foreign_env_spin_takeover_restamps
+run_test "own-branch-env-spin-allowed"         test_own_branch_env_spin_allowed
+run_test "refused-takeover-row-untouched"      test_refused_takeover_leaves_row_untouched
+run_test "takeover-missing-image-row-untouched" test_takeover_missing_image_leaves_row_untouched
+run_test "takeover-with-unclaimed-reclaim"     test_takeover_with_unclaimed_slot_reclaim
+run_test "takeover-raced-restamped"            test_takeover_raced_restamped
+run_test "takeover-raced-destroyed"            test_takeover_raced_destroyed
 print_test_summary
