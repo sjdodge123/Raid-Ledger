@@ -48,6 +48,8 @@ const ADJUST_TARGET: Record<NotificationType, AdjustTarget> = {
   lfg_player_invite: 'settings',
   hub_leader_post: 'settings',
   hub_event_tagged: 'settings',
+  hub_proposal_submitted: 'settings',
+  hub_proposal_reviewed: 'settings',
   system: 'settings',
 };
 
