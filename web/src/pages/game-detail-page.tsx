@@ -15,7 +15,7 @@ import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { LazyCommunityHubsSection } from './game-detail/community-hubs-section-lazy';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
-import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
+import { LazyGameTasteSection } from './game-detail/taste-vector/game-taste-section-lazy';
 import { GameBanner } from './game-detail/GameBanner';
 import { PluginSlot } from '../plugins';
 import { LfgToggleButton } from './game-detail/lfg-toggle-button';
@@ -100,7 +100,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
             <CoopSupportAndActivity game={game} gameId={gameId} isAuthenticated={isAuthenticated} />
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />
-            <GameTasteSection gameId={gameId} />
+            <LazyGameTasteSection gameId={gameId} />
         </div>
     );
 }
