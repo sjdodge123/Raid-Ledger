@@ -36,7 +36,12 @@ import {
   normalizePeriodRdates,
   type PeriodEnds,
 } from './apple-ical-rdate-period.helpers';
+import {
+  isThisAndFuture,
+  maxBackwardShiftMs,
+} from './apple-ical-range-shift.helpers';
 import { alignSeriesZone } from './apple-ical-series-zone.helpers';
+import { masterTimes } from './apple-ical-series-times.helpers';
 import {
   DAY_MS,
   addDays,
@@ -161,7 +166,9 @@ function readStart(
   const timing = { allDay: false as const, ...parts, tzid: start.tzid };
   const endMs = endMsOf(start.time, startMs, timing, floating);
   if (endMs === null) return 'bad';
-  return endMs <= startMs ? 'drop' : { time: start.time, timing, periodEnds };
+  // Codex r4: an empty master still expands its positive period RDATEs.
+  const empty = endMs <= startMs && periodEnds.size === 0;
+  return empty ? 'drop' : { time: start.time, timing, periodEnds };
 }
 
 function blockAt(
@@ -278,58 +285,42 @@ function occurrenceBlock(
   return rangeBlock(d.item, d.startDate, d.endDate, ctx);
 }
 
-/** EXDATE names `t` (a DATE exdate matches its whole day). */
-function excludes(master: ICAL.Component, t: ICAL.Time): boolean {
-  return master.getAllProperties('exdate').some((prop) =>
-    prop.getValues().some((v: unknown) => {
-      if (!(v instanceof ICAL.Time)) return false;
-      return v.isDate ? dateOf(v) === dateOf(t) : v.compare(t) === 0;
-    }),
-  );
+/** `t`'s unshifted start is past the window by more than `backMs`. */
+function pastWindow(
+  t: ICAL.Time,
+  start: Start,
+  ctx: SeriesContext,
+  backMs: number,
+): boolean {
+  const own = blockAt(t, start.timing, ctx.floating);
+  return !own || own.start.getTime() >= ctx.range.end.getTime() + backMs;
 }
 
 /**
- * RDATE without RRULE: DTSTART is still the set's first instance
- * (RFC 5545 §3.8.5.2) but ical.js's iterator omits it (Codex r2).
+ * `backMs`: a later THISANDFUTURE override may pull occurrences back into
+ * the window (Codex r4), so an out-of-window block ends the walk only once
+ * no pending shift can. Zero-length occurrences are never busy.
  */
-function initialOccurrence(master: ICAL.Component): ICAL.Time | null {
-  if (master.hasProperty('rrule')) return null;
-  const t: unknown = master.getFirstPropertyValue('dtstart');
-  return t instanceof ICAL.Time && !excludes(master, t) ? t : null;
-}
-
-/** The iterator's times with `first` merged in order, deduplicated. */
-function* seriesTimes(
-  event: ICAL.Event,
-  first: ICAL.Time | null,
-): Generator<ICAL.Time> {
-  const it = event.iterator();
-  let pending = first;
-  for (;;) {
-    const t: ICAL.Time | null = it.next() ?? null;
-    if (pending && (!t || pending.compare(t) <= 0)) {
-      if (!t || pending.compare(t) < 0) yield pending;
-      pending = null;
-    }
-    if (!t) return;
-    yield t;
-  }
-}
-
 function iterateMaster(
   event: ICAL.Event,
   start: Start,
   ctx: SeriesContext,
+  backMs: number,
 ): SeriesResult {
   const blocks: RawBlock[] = [];
   let steps = 0;
-  for (const t of seriesTimes(event, initialOccurrence(event.component))) {
+  for (const t of masterTimes(event)) {
     if (++steps > MAX_SERIES_ITERATIONS) return { blocks, skipped: 1 };
     const block = occurrenceBlock(event, t, start, ctx);
     if (block === 'skip') continue;
     if (!block) return { blocks, skipped: 1 };
-    if (block.start >= ctx.range.end) return { blocks, skipped: 0 };
-    if (overlaps(block, ctx.range)) blocks.push(block);
+    if (block.start >= ctx.range.end) {
+      if (pastWindow(t, start, ctx, backMs)) return { blocks, skipped: 0 };
+      continue;
+    }
+    if (block.end > block.start && overlaps(block, ctx.range)) {
+      blocks.push(block);
+    }
   }
   return { blocks, skipped: 0 };
 }
@@ -339,17 +330,6 @@ function merge(results: SeriesResult[]): SeriesResult {
     blocks: results.flatMap((r) => r.blocks),
     skipped: results.reduce((n, r) => n + r.skipped, 0),
   };
-}
-
-/** A busy RANGE=THISANDFUTURE override (it re-times later occurrences). */
-function busyFuture(override: ICAL.Component, ctx: SeriesContext): boolean {
-  const prop = override.getFirstProperty('recurrence-id');
-  const range = prop?.getParameter('range');
-  return (
-    typeof range === 'string' &&
-    range.toUpperCase() === 'THISANDFUTURE' &&
-    ctx.isBusy(override)
-  );
 }
 
 /** One UID group: the master (when present) plus its overrides. */
@@ -368,11 +348,15 @@ export function expandSeries(
   });
   if (!event.isRecurring())
     return merge([singleOccurrence(master, ctx), ...own]);
-  if (!ctx.isBusy(master) && !overrides.some((o) => busyFuture(o, ctx))) {
+  if (
+    !ctx.isBusy(master) &&
+    !overrides.some((o) => isThisAndFuture(o) && ctx.isBusy(o))
+  ) {
     return merge(own);
   }
   const start = readStart(master, ctx.floating, periodEnds);
   if (start === 'bad') return merge([{ blocks: [], skipped: 1 }, ...own]);
   if (start === 'drop') return merge(own);
-  return merge([iterateMaster(event, start, ctx), ...own]);
+  const backMs = maxBackwardShiftMs(overrides, ctx.floating);
+  return merge([iterateMaster(event, start, ctx, backMs), ...own]);
 }

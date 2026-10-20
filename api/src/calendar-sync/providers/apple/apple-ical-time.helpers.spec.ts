@@ -119,6 +119,22 @@ describe('zonedToUtc', () => {
   it('returns null for an unknown zone', () => {
     expect(zonedToUtc(wall, 'Nowhere/Land')).toBeNull();
   });
+
+  const at = (day: number, month: number) =>
+    new Date(
+      zonedToUtc(
+        { ...wall, month, day, hour: 2, minute: 30 },
+        'Europe/Berlin',
+      ) ?? 0,
+    ).toISOString();
+
+  it('resolves a repeated fall-back wall time to its FIRST occurrence (Codex r4)', () => {
+    expect(at(25, 10)).toBe('2026-10-25T00:30:00.000Z');
+  });
+
+  it('places a skipped spring-forward wall time with the pre-gap offset (Codex r4)', () => {
+    expect(at(29, 3)).toBe('2026-03-29T01:30:00.000Z');
+  });
 });
 
 describe('zone formatter cache (review r1)', () => {

@@ -245,3 +245,24 @@ describe('bare IANA series: THISANDFUTURE shift on the series wall clock (Codex 
     ]);
   });
 });
+
+describe('THISANDFUTURE override moving occurrences backward (Codex r4)', () => {
+  it('a five-day series from Nov 18 with Nov 19 moved to Nov 1 → Nov 1–4 in a window ending Nov 17', () => {
+    expect(rows(fixture('backward-thisandfuture.ics'))).toEqual([
+      '2026-11-01T12:00:00.000Z/2026-11-01T13:00:00.000Z',
+      '2026-11-02T12:00:00.000Z/2026-11-02T13:00:00.000Z',
+      '2026-11-03T12:00:00.000Z/2026-11-03T13:00:00.000Z',
+      '2026-11-04T12:00:00.000Z/2026-11-04T13:00:00.000Z',
+    ]);
+  });
+});
+
+describe('zero-duration master with period RDATEs (Codex r4)', () => {
+  it('skips the empty Oct 20 DTSTART but keeps the Oct 22 12:00–15:00 period', () => {
+    const result = parse(fixture('zero-duration-period-rdate.ics'));
+    expect(result.skipped).toBe(0);
+    expect(rows(fixture('zero-duration-period-rdate.ics'))).toEqual([
+      '2026-10-22T12:00:00.000Z/2026-10-22T15:00:00.000Z',
+    ]);
+  });
+});

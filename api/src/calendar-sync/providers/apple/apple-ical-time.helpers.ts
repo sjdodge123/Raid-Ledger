@@ -106,14 +106,24 @@ function wallMs(t: WallClock): number {
   return Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second);
 }
 
-/** Wall-clock time in IANA `zone` → UTC ms; null for an unknown zone. */
+/**
+ * Wall-clock time in IANA `zone` → UTC ms; null for an unknown zone.
+ * Codex r4, RFC 5545 §3.3.5: a wall time the fall-back repeats is its FIRST
+ * occurrence (Berlin 2026-10-25 02:30 → 00:30Z, not 01:30Z). One the
+ * spring-forward gap skips uses the offset in force before the gap (Berlin
+ * 2026-03-29 02:30 → 01:30Z, i.e. 03:30 CEST) — unchanged behaviour.
+ */
 export function zonedToUtc(t: WallClock, zone: string): number | null {
   const fmt = formatterFor(zone);
   if (!fmt) return null;
   const guess = wallMs(t);
-  const first = guess - offsetAt(fmt, guess);
-  const second = guess - offsetAt(fmt, first);
-  return Number.isFinite(second) ? second : null;
+  if (!Number.isFinite(guess)) return null;
+  const before = offsetAt(fmt, guess - DAY_MS);
+  const after = offsetAt(fmt, guess + DAY_MS);
+  const real = [guess - before, guess - after].filter(
+    (ms) => ms + offsetAt(fmt, ms) === guess,
+  );
+  return real.length > 0 ? Math.min(...real) : guess - before;
 }
 
 export function isRealZone(zone: ICAL.Timezone | null | undefined): boolean {
