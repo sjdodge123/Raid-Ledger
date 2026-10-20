@@ -53,28 +53,27 @@ describe('ROK-1823 token-version helpers', () => {
 });
 
 describe('ROK-1823 revokeAllAndBumpTx', () => {
-  it('locks, revokes the refresh rows, then bumps — all on the SAME tx', async () => {
+  it('bumps first, then locks and revokes the refresh rows — all on the SAME tx', async () => {
     const tx = createDrizzleMock();
     tx.where
+      .mockReturnValueOnce(tx) // bumpTokenVersion: chain continues to .returning
       .mockReturnValueOnce(Promise.resolve([])) // lockUserFamilies: no live family
       .mockReturnValueOnce(Promise.resolve(undefined)); // revokeActiveRows
     tx.returning.mockResolvedValueOnce([{ tokenVersion: 2 }]);
     await expect(revokeAllAndBumpTx(asDb(tx), 9)).resolves.toBe(2);
     expect(tx.selectDistinct).toHaveBeenCalledTimes(1);
     expect(tx.update.mock.calls.map(([table]) => table)).toEqual([
-      schema.refreshTokens,
       schema.users,
+      schema.refreshTokens,
     ]);
-    expect(tx.set).toHaveBeenLastCalledWith({
+    expect(tx.set).toHaveBeenNthCalledWith(1, {
       tokenVersion: NEXT_TOKEN_VERSION,
     });
   });
 
   it('propagates a failed bump so the caller transaction rolls back', async () => {
     const tx = createDrizzleMock();
-    tx.where
-      .mockReturnValueOnce(Promise.resolve([]))
-      .mockReturnValueOnce(Promise.resolve(undefined));
+    tx.where.mockReturnValueOnce(tx); // bumpTokenVersion runs first and fails
     tx.returning.mockResolvedValueOnce([]);
     await expect(revokeAllAndBumpTx(asDb(tx), 9)).rejects.toThrow(
       'user 9 not found',
