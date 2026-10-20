@@ -48,8 +48,10 @@ export function MarkdownLinkRow({ editor, onClose }: { editor: Editor; onClose: 
     };
     const remove = (): void => { editor.chain().extendMarkRange('link').unsetLink().run(); close(); };
     const onKeyDown = (ev: KeyboardEvent): void => { if (ev.key === 'Escape') { ev.preventDefault(); close(); } };
+    // noValidate: a type="url" input fails constraint validation on a bare
+    // `example.com`, which would block submit before it can gain `https://`.
     return (
-        <form onSubmit={submit} onKeyDown={onKeyDown} className="flex flex-wrap items-end gap-2 px-2 py-2 border-b border-edge" data-testid="md-link-row">
+        <form noValidate onSubmit={submit} onKeyDown={onKeyDown} className="flex flex-wrap items-end gap-2 px-2 py-2 border-b border-edge" data-testid="md-link-row">
             <Field label="Link address" error={error} className="flex-1 min-w-[12rem]">
                 <Input type="url" inputMode="url" autoFocus value={value} onChange={(e) => { setValue(e.target.value); setError(undefined); }} />
             </Field>
