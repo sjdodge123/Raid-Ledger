@@ -310,3 +310,18 @@ describe('GuildPage — Posts tab (ROK-1868 V6)', () => {
         expect(await within(tab).findByText('Raid night is Thursday.')).toBeInTheDocument();
     });
 });
+
+describe('GuildPage — deep link to a deleted last post (ROK-1868 AC3)', () => {
+    it('?post=<id>#posts shows "This post was removed." on a hub with no posts left', async () => {
+        window.location.hash = '#posts';
+        serve(makePage());
+        server.use(
+            http.get(`${BASE}/profile`, () => HttpResponse.json({ guildId: 7, gmPost: null, latestPost: null, rules: [], links: [] })),
+            http.get(`${BASE}/posts`, () => HttpResponse.json({ posts: [], nextCursor: null })),
+            http.get(`${BASE}/posts/99`, () => HttpResponse.json({ message: 'gone' }, { status: 404 })),
+        );
+        renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7?post=99#posts'] });
+        await waitFor(() => expect(screen.queryByTestId('hub-post-removed')?.textContent ?? null,
+            'a ?post= link on an empty hub must reach the removed notice, not fall back to Overview').toBe('This post was removed.'), { timeout: 3000 });
+    });
+});

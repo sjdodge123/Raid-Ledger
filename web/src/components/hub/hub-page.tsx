@@ -10,7 +10,7 @@
  * A 403 (not a member) is a friendly empty state.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
@@ -21,6 +21,7 @@ import { HubHero } from './hub-hero';
 import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
+import { postIdFromSearch } from './posts/hub-post.helpers';
 import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';
@@ -158,7 +159,7 @@ interface FrameProps {
     ctx: HubCtx;
     module: HubModule | undefined;
     showResources: boolean;
-    /** ROK-1868 A5 — the Posts tab shows once the hub has a post. */
+    /** ROK-1868 A5 — the Posts tab shows once the hub has a post, or for a `?post=` deep link. */
     hasPosts: boolean;
     mods: ModsState;
 }
@@ -191,6 +192,8 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     const raids = useGuildRaids(page.guild.id);
     const mod = useHubModule(page.guild.kind);
     const profile = useGuildProfile(page.guild.id);
+    // A `?post=` link resolves even when no post is left, so a deleted last post says so (AC3).
+    const linkedPost = postIdFromSearch(useLocation().search);
     const coreResources = resourcesVisible(page.viewer.canEdit, profile.data);
     const sources = mod?.modSources ?? NO_SECTIONS;
     const ctx: HubCtx = { page, raids };
@@ -202,7 +205,7 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
                 "Recommend mods" step — `anyVisible` is false forever there, so
                 the checklist could otherwise never finish. */}
             {(anyVisible) => <HubFrame ctx={ctx} module={mod} showResources={coreResources || anyVisible}
-                hasPosts={!!profile.data?.latestPost}
+                hasPosts={!!profile.data?.latestPost || linkedPost !== null}
                 mods={{ hasSources: sources.length > 0, configured: anyVisible }} />}
         </HubResourceVisibility>
     );
