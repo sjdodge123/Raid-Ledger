@@ -15,6 +15,7 @@ import {
     CALENDAR_CONNECTION_URL, GOOGLE_CONSENT_URL_FIXTURE, GOOGLE_OAUTH_START_URL, calendarConnectionFixture,
 } from '../../../test/mocks/calendar-sync-handlers';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
+import { buildAppleConnection } from '../../../test/factories/calendar-sync';
 import { SendEventsSettings } from './SendEventsSettings';
 import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 
@@ -158,5 +159,28 @@ describe('SendEventsSettings — K4/K5 layout', () => {
         expect(screen.getAllByRole('switch')).toHaveLength(1);
         expect(screen.queryByText(/tentative/i)).toBeNull();
         expect(screen.queryByRole('checkbox')).toBeNull();
+    });
+});
+
+describe('SendEventsSettings — Apple iCloud (ROK-1598 A9/Q3)', () => {
+    function renderApple(desktop: boolean) {
+        setDesktop(desktop);
+        return render(
+            <QueryClientProvider client={createTestQueryClient()}>
+                <SendEventsSettings connection={buildAppleConnection({ write: { enabled: true, target: 'dedicated' } })} />
+            </QueryClientProvider>,
+        );
+    }
+
+    it.each([false, true])('offers the dedicated calendar only — "My main calendar" is hidden, not disabled (desktop=%s)', (desktop) => {
+        renderApple(desktop);
+        const radios = screen.getAllByRole('radio');
+        expect(radios.map((r) => r.getAttribute('value'))).toEqual(['dedicated']);
+        expect(screen.queryByText(S.primary)).toBeNull();
+    });
+
+    it('desktop helper names Apple Calendar, not Google', () => {
+        renderApple(true);
+        expect(screen.getByTestId('send-events-helper')).toHaveTextContent('To Apple Calendar');
     });
 });
