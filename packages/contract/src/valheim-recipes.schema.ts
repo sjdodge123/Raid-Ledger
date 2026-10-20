@@ -17,7 +17,7 @@ import { ValheimProcessorTypeSchema } from "./valheim-link-recipes-processing.sc
 /** Nodes per tree/plan response; `truncated` says the walk stopped here. */
 export const VALHEIM_PLAN_NODES_MAX = 2000;
 /** Targets per plan request. */
-export const VALHEIM_PLAN_TARGETS_MAX = 50;
+export const VALHEIM_PLAN_TARGETS_MAX = 20;
 
 const count = z.number().int().min(0);
 const quality = z.number().int().min(1).max(10);
