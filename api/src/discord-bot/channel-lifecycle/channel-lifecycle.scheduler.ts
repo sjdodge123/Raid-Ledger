@@ -47,11 +47,20 @@ export class ChannelLifecycleScheduler {
   }
 
   /**
-   * Admin "Reconcile now" (L6). Dry run by default (spec §2.3).
+   * Admin "Reconcile now" (L6). Dry run by default (spec §2.3). `gameIds`
+   * (DEMO_MODE-only at the route) restricts the run to those games, through
+   * the same lock as every other run.
    *
    * @throws ConflictException when a reconcile is already running
    */
-  reconcileNow(dryRun = true): Promise<ReconcileResultDto> {
-    return this.lifecycle.reconcile({ dryRun, trigger: 'manual' });
+  reconcileNow(
+    dryRun = true,
+    gameIds?: readonly number[],
+  ): Promise<ReconcileResultDto> {
+    return this.lifecycle.reconcile({
+      dryRun,
+      trigger: 'manual',
+      ...(gameIds ? { gameIds } : {}),
+    });
   }
 }

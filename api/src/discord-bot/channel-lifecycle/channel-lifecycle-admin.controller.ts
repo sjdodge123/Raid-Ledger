@@ -21,7 +21,9 @@ import type {
   ReconcileResultDto,
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../../auth/admin.guard';
+import { DemoModeGuard } from '../../admin/demo-mode.guard';
 import { parseDemoBody } from '../../admin/demo-test.utils';
+import { SettingsService } from '../../settings/settings.service';
 import { ChannelLifecycleAdminService } from './channel-lifecycle-admin.service';
 import { ChannelLifecycleScheduler } from './channel-lifecycle.scheduler';
 
@@ -34,6 +36,16 @@ function boolQuery(raw: unknown, fallback: boolean): boolean {
   return value === undefined ? fallback : value === 'true';
 }
 
+/** Postgres `integer` ceiling — a larger id can never match a game. */
+const MAX_INT4 = 2_147_483_647;
+
+/** `?gameIds=1,2,3` — comma-separated positive ints, no blanks. */
+const GameIdsQuerySchema = z
+  .string()
+  .regex(/^\d+(,\d+)*$/, 'must be comma-separated positive integers')
+  .transform((raw) => raw.split(',').map(Number))
+  .pipe(z.array(z.number().int().positive().max(MAX_INT4)).min(1));
+
 /**
  * ROK-1432 — admin routes for channel lifecycle automation (spec ROK-1428
  * §2.3). Every route is `jwt + AdminGuard`.
@@ -44,6 +56,7 @@ export class ChannelLifecycleAdminController {
   constructor(
     private readonly admin: ChannelLifecycleAdminService,
     private readonly scheduler: ChannelLifecycleScheduler,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Current lifecycle settings. */
@@ -65,11 +78,21 @@ export class ChannelLifecycleAdminController {
     return this.admin.activity(boolQuery(all, false));
   }
 
-  /** Run a reconcile now (dry run by default); 409 while one is running. */
+  /**
+   * Run a reconcile now (dry run by default); 409 while one is running.
+   * `?gameIds=1,2` limits the run to those games — DEMO_MODE only (403
+   * otherwise, 400 when malformed), so a fleet env can do a live run on its
+   * seeded games without touching every demo game in a shared guild.
+   */
   @Post('reconcile')
   @HttpCode(HttpStatus.OK)
-  reconcile(@Query('dryRun') dryRun: unknown): Promise<ReconcileResultDto> {
-    return this.scheduler.reconcileNow(boolQuery(dryRun, true));
+  async reconcile(
+    @Query('dryRun') dryRun: unknown,
+    @Query('gameIds') gameIds: unknown,
+  ): Promise<ReconcileResultDto> {
+    const dry = boolQuery(dryRun, true);
+    const ids = await this.demoGameIds(gameIds);
+    return this.scheduler.reconcileNow(dry, ids);
   }
 
   /** Games whose managed channel was hand-deleted or unbound. */
@@ -85,5 +108,16 @@ export class ChannelLifecycleAdminController {
     @Param('gameId', ParseIntPipe) gameId: number,
   ): Promise<void> {
     return this.admin.clearSuppression(gameId);
+  }
+
+  /**
+   * The `gameIds` filter, or undefined when absent. Present ⇒ the same
+   * DEMO_MODE gate (env + DB setting, same 403) as every `/admin/test/*`
+   * route, then a strict parse (400).
+   */
+  private async demoGameIds(raw: unknown): Promise<number[] | undefined> {
+    if (raw === undefined) return undefined;
+    await new DemoModeGuard(this.settings).canActivate();
+    return parseDemoBody(GameIdsQuerySchema, raw);
   }
 }
