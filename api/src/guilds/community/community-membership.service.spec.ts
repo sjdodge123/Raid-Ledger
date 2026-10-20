@@ -131,9 +131,9 @@ describe('role-sensitive writes serialise with transfers (M22)', () => {
 
   it('setRole reads the target under the hub lock — never demotes the new leader', async () => {
     adapter.resolveLadder.mockResolvedValue('leader');
-    await expect(
-      svc.setRole(actor, 7, 3, { role: 'member' }),
-    ).rejects.toThrow(ConflictException);
+    await expect(svc.setRole(actor, 7, 3, { role: 'member' })).rejects.toThrow(
+      ConflictException,
+    );
     expect(order).toEqual(['begin', 'lock', 'read']);
     expect(mq.setRole).not.toHaveBeenCalled();
   });

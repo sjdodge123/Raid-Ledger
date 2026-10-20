@@ -221,9 +221,7 @@ describe('setStatus copy', () => {
     expect(set).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'active' }),
     );
-    expect(Object.keys(set.mock.calls[0]?.[0] ?? {})).not.toContain(
-      'hiddenAt',
-    );
+    expect(Object.keys(set.mock.calls[0]?.[0] ?? {})).not.toContain('hiddenAt');
   });
 });
 
