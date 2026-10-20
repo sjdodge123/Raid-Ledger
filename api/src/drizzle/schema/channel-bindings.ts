@@ -3,14 +3,49 @@ import {
   uuid,
   varchar,
   integer,
+  boolean,
   jsonb,
   timestamp,
   uniqueIndex,
   index,
+  check,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { ChannelBindingConfig } from '@raid-ledger/contract';
+import type {
+  BindingLifecycleState,
+  ChannelBindingConfig,
+} from '@raid-ledger/contract';
 import { games } from './games';
+
+/** Columns the ROK-1429 lifecycle constraints reference. */
+interface LifecycleColumns {
+  guildId: AnyPgColumn;
+  gameId: AnyPgColumn;
+  recurrenceGroupId: AnyPgColumn;
+  lifecycleState: AnyPgColumn;
+  autoManaged: AnyPgColumn;
+}
+
+/**
+ * ROK-1429: lifecycle state CHECK, the rule that only an auto-managed row can
+ * be archived, and the reconciler's partial lookup index.
+ */
+function lifecycleConstraints(table: LifecycleColumns) {
+  return [
+    check(
+      'channel_bindings_lifecycle_state_check',
+      sql`${table.lifecycleState} IN ('active', 'archived')`,
+    ),
+    check(
+      'channel_bindings_archived_auto_check',
+      sql`${table.lifecycleState} = 'active' OR ${table.autoManaged}`,
+    ),
+    index('idx_channel_bindings_lifecycle')
+      .on(table.guildId, table.gameId, table.lifecycleState)
+      .where(sql`${table.autoManaged} AND ${table.recurrenceGroupId} IS NULL`),
+  ];
+}
 
 /**
  * Channel Bindings - Maps Discord channels to games/behaviors.
@@ -35,6 +70,18 @@ export const channelBindings = pgTable(
     /** ROK-435: Optional recurrence group ID to bind a specific event series to this channel. */
     recurrenceGroupId: uuid('recurrence_group_id'),
     config: jsonb('config').default({}).$type<ChannelBindingConfig>(),
+    /** ROK-1429: 'active' | 'archived' — only an auto-managed binding archives. */
+    lifecycleState: varchar('lifecycle_state', { length: 10 })
+      .$type<BindingLifecycleState>()
+      .default('active')
+      .notNull(),
+    /** ROK-1429: created by the lifecycle reconciler (manual bindings are never touched). */
+    autoManaged: boolean('auto_managed').default(false).notNull(),
+    /** ROK-1429: an admin pin keeps the channel active regardless of activity. */
+    pinned: boolean('pinned').default(false).notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /** ROK-1429 (D6): the category the channel sat in before archive, for unarchive. */
+    restoreParentId: varchar('restore_parent_id', { length: 32 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -72,5 +119,6 @@ export const channelBindings = pgTable(
       .where(
         sql`${table.recurrenceGroupId} IS NULL AND ${table.gameId} IS NULL`,
       ),
+    ...lifecycleConstraints(table),
   ],
 );
