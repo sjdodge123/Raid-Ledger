@@ -4,6 +4,7 @@
  * id, `creatorPlayerId` or a SteamID (design §3.2).
  */
 import { BadRequestException } from '@nestjs/common';
+import { ValheimPrefabIdSchema } from '@raid-ledger/contract';
 import type {
   ValheimContainerSummary,
   ValheimMaterialStack,
@@ -48,6 +49,14 @@ export function parseIncludeVehicles(raw: unknown): boolean {
 export function parseContainerKey(raw: string): string {
   if (!KEY_RE.test(raw)) throw new BadRequestException('Invalid key');
   return raw;
+}
+
+/** Codex r2: `?prefab=` (item → chests drill-down) — absent → null, malformed → 400. */
+export function parsePrefabFilter(raw: unknown): string | null {
+  if (raw === undefined) return null;
+  const parsed = ValheimPrefabIdSchema.safeParse(raw);
+  if (!parsed.success) throw new BadRequestException('Invalid prefab');
+  return parsed.data;
 }
 
 /** ISO at minute precision — the scan age carries no finer side channel. */

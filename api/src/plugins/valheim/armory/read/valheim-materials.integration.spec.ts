@@ -353,6 +353,37 @@ describe('containers list + detail (R2/R3/R11/R17)', () => {
     });
   });
 
+  it('?prefab= lists only the visible chests holding it (Codex r2)', async () => {
+    expect(await listKeys(tokens.member, '?prefab=Wood')).toEqual([
+      'piece_chest@0:shared',
+      'piece_chest@1:shared',
+    ]);
+    expect(await listKeys(tokens.owner, '?prefab=Wood')).toEqual([
+      'piece_chest@0:shared',
+      'piece_chest@1:shared',
+      'piece_chest_private@5:personal',
+    ]);
+    // Only another player's private chest holds Silver: hidden from a member.
+    expect(await listKeys(tokens.member, '?prefab=Silver')).toEqual([]);
+    expect(await listKeys(admin, '?prefab=Silver')).toEqual([
+      'piece_chest_private@5:personal',
+    ]);
+    expect(await listKeys(tokens.member, '?prefab=Iron')).toEqual([
+      'Cart@9:shared',
+    ]);
+    expect(
+      await listKeys(tokens.member, '?prefab=Iron&includeVehicles=false'),
+    ).toEqual([]);
+  });
+
+  it('a malformed ?prefab= is a 400 (Codex r2)', async () => {
+    const res = await get(`${base(server)}/containers?prefab=no%20way`, admin);
+    expect({ status: res.status, body: res.body as unknown }).toMatchObject({
+      status: 400,
+      body: { statusCode: 400, message: 'Invalid prefab' },
+    });
+  });
+
   it('R11 two creators at one spot: each owner sees only theirs', async () => {
     const otherId = await makeUser('other');
     await profile(server, OTHER_PID, 'S_OTHER', {

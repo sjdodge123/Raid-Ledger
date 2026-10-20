@@ -107,23 +107,28 @@ export class ValheimMaterialsService {
     };
   }
 
-  /** `GET …/servers/:serverId/containers` — shared ∪ personal-visible. */
+  /**
+   * `GET …/servers/:serverId/containers` — shared ∪ personal-visible;
+   * `holding` (a prefab) keeps only the chests holding that item.
+   */
   async containers(
     serverId: number,
     user: AuthenticatedUser,
     includeVehicles: boolean,
+    holding: string | null = null,
   ): Promise<ValheimContainerListResponse> {
     await this.assertHub(serverId, user);
+    const scope = this.scope(user, includeVehicles);
     return this.repo.read((r) =>
-      this.containersIn(r, serverId, user, includeVehicles),
+      this.containersIn(r, serverId, scope, holding),
     );
   }
 
   private async containersIn(
     r: MaterialsReader,
     serverId: number,
-    user: AuthenticatedUser,
-    includeVehicles: boolean,
+    scope: SQL,
+    holding: string | null,
   ): Promise<ValheimContainerListResponse> {
     const scan = await r.latestScan(serverId);
     if (!scan) {
@@ -135,8 +140,7 @@ export class ValheimMaterialsService {
         atlas: null,
       };
     }
-    const scope = this.scope(user, includeVehicles);
-    const rows = await r.listContainers(scan.id, scope);
+    const rows = await r.listContainers(scan.id, scope, holding);
     const prefabs = distinctPrefabs(rows);
     const catalog = await r.findCatalog(serverId, scan.gameVersion, prefabs);
     return {

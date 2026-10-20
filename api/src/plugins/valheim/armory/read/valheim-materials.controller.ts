@@ -23,6 +23,7 @@ import { armoryIdPipe } from '../valheim-armory-id.pipe';
 import {
   parseContainerKey,
   parseIncludeVehicles,
+  parsePrefabFilter,
 } from './valheim-materials.mappers';
 import { ValheimMaterialsService } from './valheim-materials.service';
 
@@ -53,16 +54,18 @@ export class ValheimMaterialsController {
     return this.materials.materials(serverId, req.user, vehicles);
   }
 
-  /** GET — visible chests with positions, sorted prefab, x, z, y. */
+  /** GET — visible chests with positions, sorted prefab, x, z, y; `?prefab=` keeps those holding it. */
   @Get(`${BASE}/containers`)
   @Header('Cache-Control', NO_STORE)
   list(
     @Param('serverId', armoryIdPipe) serverId: number,
     @Query('includeVehicles') includeVehicles: unknown,
+    @Query('prefab') prefab: unknown,
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimContainerListResponse> {
     const vehicles = parseIncludeVehicles(includeVehicles);
-    return this.materials.containers(serverId, req.user, vehicles);
+    const holding = parsePrefabFilter(prefab);
+    return this.materials.containers(serverId, req.user, vehicles, holding);
   }
 
   /** GET — one chest's stacks by its opaque key (D7). */

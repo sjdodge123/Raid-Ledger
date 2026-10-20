@@ -121,15 +121,24 @@ export class MaterialsReader {
     return toCountsRow(row);
   }
 
-  /** The scope's containers, sorted `prefab, x, z, y` (then key). */
+  /**
+   * The scope's containers, sorted `prefab, x, z, y` (then key); with
+   * `holding`, only those with a stack of that prefab (same scope — Codex r2).
+   */
   listContainers(
     scanId: number,
     scope: ContainerScope,
+    holding: string | null,
   ): Promise<MaterialsContainerRow[]> {
+    const holds =
+      holding === null
+        ? undefined
+        : sql`EXISTS (SELECT 1 FROM ${st} s
+            WHERE s.container_id = ${c.id} AND s.prefab = ${holding})`;
     return this.db
       .select(summaryCols)
       .from(c)
-      .where(and(eq(c.scanId, scanId), scope))
+      .where(and(eq(c.scanId, scanId), scope, holds))
       .orderBy(asc(c.prefab), asc(c.x), asc(c.z), asc(c.y), asc(c.publicKey));
   }
 

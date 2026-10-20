@@ -1,5 +1,9 @@
 /** ROK-1853 Codex r1 — the counts converter keeps bigint aggregates exact. */
-import { toCount, toCountsRow } from './valheim-materials.mappers';
+import {
+  parsePrefabFilter,
+  toCount,
+  toCountsRow,
+} from './valheim-materials.mappers';
 
 describe('toCountsRow', () => {
   it('converts bigint strings above the int4 range exactly', () => {
@@ -37,5 +41,20 @@ describe('toCount', () => {
     expect(() => toCount('9007199254740993')).toThrow(
       'unsafe count: 9007199254740993',
     );
+  });
+});
+
+describe('parsePrefabFilter (Codex r2 drill-down)', () => {
+  it('absent → null; a prefab id passes through', () => {
+    expect(parsePrefabFilter(undefined)).toBeNull();
+    expect(parsePrefabFilter('SwordIron')).toBe('SwordIron');
+  });
+
+  it('a malformed or repeated value is a 400', () => {
+    expect(() => parsePrefabFilter('no way')).toThrow('Invalid prefab');
+    expect(() => parsePrefabFilter(['Wood', 'Stone'])).toThrow(
+      'Invalid prefab',
+    );
+    expect(() => parsePrefabFilter('')).toThrow('Invalid prefab');
   });
 });
