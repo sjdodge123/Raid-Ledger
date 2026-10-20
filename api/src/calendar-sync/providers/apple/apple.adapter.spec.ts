@@ -111,6 +111,42 @@ describeCalendarWriteConformance(() => {
   };
 }, 'AppleCalendarAdapter');
 
+const DAY = 86_400_000;
+interface CursorCase {
+  name: string;
+  ids: string[];
+  range: { start: Date; end: Date };
+  change: () => void;
+}
+const CASES: CursorCase[] = [
+  {
+    name: 'home ctag bumped',
+    ids: ['home'],
+    range: RANGE,
+    change: () => {
+      server.seedEvent('home', {
+        start: COPY.start,
+        end: COPY.end,
+        busy: true,
+      });
+    },
+  },
+  {
+    name: 'range moved a day',
+    ids: ['home'],
+    range: {
+      start: new Date(RANGE.start.getTime() + DAY),
+      end: new Date(RANGE.end.getTime() + DAY),
+    },
+    change: () => undefined,
+  },
+  {
+    name: 'calendar id added',
+    ids: ['home', 'shared-ro'],
+    range: RANGE,
+    change: () => undefined,
+  },
+];
 describe('AppleCalendarAdapter.fetchBusy — ctag cursor (D7)', () => {
   it('T17: nothing changed → unchanged, no REPORT, cursor returned', async () => {
     const a = setup();
@@ -132,42 +168,6 @@ describe('AppleCalendarAdapter.fetchBusy — ctag cursor (D7)', () => {
     expect(sent('REPORT', mark)).toHaveLength(0);
   });
 
-  const DAY = 86_400_000;
-  interface CursorCase {
-    name: string;
-    ids: string[];
-    range: { start: Date; end: Date };
-    change: () => void;
-  }
-  const CASES: CursorCase[] = [
-    {
-      name: 'home ctag bumped',
-      ids: ['home'],
-      range: RANGE,
-      change: () => {
-        server.seedEvent('home', {
-          start: COPY.start,
-          end: COPY.end,
-          busy: true,
-        });
-      },
-    },
-    {
-      name: 'range moved a day',
-      ids: ['home'],
-      range: {
-        start: new Date(RANGE.start.getTime() + DAY),
-        end: new Date(RANGE.end.getTime() + DAY),
-      },
-      change: () => undefined,
-    },
-    {
-      name: 'calendar id added',
-      ids: ['home', 'shared-ro'],
-      range: RANGE,
-      change: () => undefined,
-    },
-  ];
   it.each(CASES)(
     'T18: $name → full REPORT of every requested calendar, new cursor',
     async ({ ids, range, change }) => {
@@ -207,7 +207,9 @@ describe('AppleCalendarAdapter — errors and 412 rules', () => {
     expect(sent('PUT', mark).map((r) => r.ifMatch)).toEqual([ref.etag, edited]);
     expect(next.etag).toBe(server.object(urlOf(ref))?.etag);
   });
+});
 
+describe('AppleCalendarAdapter — D6 conditional writes', () => {
   it('a second 412 on update is TransientError(etag_conflict)', async () => {
     const a = setup();
     const ref = await a.upsertEvent(CREDS, 'home', COPY, null);
@@ -233,7 +235,9 @@ describe('AppleCalendarAdapter — errors and 412 rules', () => {
     expect(server.object(urlOf(ref))).toBeNull();
     expect(sent('DELETE').map((r) => r.ifMatch)).toEqual([ref.etag, null]);
   });
+});
 
+describe('AppleCalendarAdapter — dedicated calendar + OAuth refusal', () => {
   it('a refused MKCALENDAR is ProviderRequestError(mkcalendar_refused)', async () => {
     const a = setup();
     answer('MKCALENDAR', 403);
@@ -326,10 +330,15 @@ describe('AppleCalendarAdapter — picker, connect, discovery', () => {
       err instanceof Error ? `${err.message} ${err.stack ?? ''}` : '';
     expect(text).not.toMatch(/someone@icloud\.example|wrong-pass-zzzz/i);
   });
+});
 
+describe('AppleCalendarAdapter — withDiscovery (§2.3)', () => {
   it('no stored home set → discovers, persists, then lists', async () => {
     const a = setup();
-    const { homeSetUrl: _h, principalUrl: _p, ...bare } = CREDS;
+    const bare: CalDavCredentials = {
+      kind: 'caldav',
+      ...FAKE_CALDAV_CREDENTIALS,
+    };
     const rows = await a.listCalendars(bare);
     expect(rows.map((r) => r.id)).toEqual(['home', 'shared-ro']);
     expect(persist).toHaveBeenCalledWith({ ...CREDS });
