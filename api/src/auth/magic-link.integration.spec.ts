@@ -25,7 +25,8 @@ import {
 import { signPurposeJwt } from './purpose-jwt.helpers';
 import { REFRESH_COOKIE_NAME } from './refresh/refresh-cookie.helpers';
 import { hashToken } from './single-use-token.helpers';
-import { TokenBlocklistService } from './token-blocklist.service';
+import { invalidateAuthUser } from './auth-user-cache';
+import { bumpTokenVersion } from './token-version.helpers';
 
 /** 15-minute sign options under the legacy `JWT_SECRET` key. */
 function jwtSecretSignOptions(): JwtSignOptions {
@@ -286,10 +287,11 @@ describe('POST /auth/redeem-magic-link — user-state gates (AC6)', () => {
     expect(await isConsumed(token)).toBe(true);
   });
 
-  it('a user blocklisted at the token iat → 401, and the token is consumed', async () => {
-    const user = await createMember('blocked-user');
+  it('a token-version bump after mint → 401, and the token is consumed', async () => {
+    const user = await createMember('bumped-user');
     const token = await mintToken(user.id);
-    await testApp.app.get(TokenBlocklistService).blockUser(user.id);
+    await bumpTokenVersion(testApp.db, user.id);
+    invalidateAuthUser(user.id);
 
     const res = await redeem(token);
 

@@ -2,15 +2,15 @@
  * Regression: cross-suite in-memory state is cleared by truncateAllTables.
  *
  * ROK-1059 — full-suite local runs were flaking with 401 on authenticated
- * POSTs issued right after `loginAsAdmin`. Root cause: `jwt_block:<userId>`
- * entries written by earlier files (via `TokenBlocklistService.blockUser`
- * during role changes / deletes) stayed in the module-level mock Redis
- * store. When the fresh admin's id collided with one of those stale keys,
- * `JwtStrategy.validate` rejected the just-issued token.
+ * POSTs issued right after `loginAsAdmin`. Root cause: per-user revocation
+ * state written by earlier files (role changes / deletes) outlived the
+ * truncate and rejected the freshly re-seeded admin's token. ROK-1823 moved
+ * that state from a Redis blocklist to `users.token_version`, read through
+ * the in-process auth-user cache.
  *
- * `truncateAllTables` must now clear both the auth-user cache and the
- * `jwt_block:*` keys from the mock Redis store — the one authoritative
- * "reset module state" entry point between suites.
+ * `truncateAllTables` must clear the auth-user cache — the one authoritative
+ * "reset module state" entry point between suites — so a version an earlier
+ * suite bumped (and cached) cannot reject the next suite's fresh login.
  */
 import { getTestApp, type TestApp } from './test-app';
 import { truncateAllTables, loginAsAdmin } from './integration-helpers';
@@ -18,7 +18,7 @@ import {
   getCachedAuthUser,
   setCachedAuthUser,
 } from '../../auth/auth-user-cache';
-import { TokenBlocklistService } from '../../auth/token-blocklist.service';
+import { bumpTokenVersion } from '../../auth/token-version.helpers';
 import { _isKeyCached, getEncryptionKey } from '../../settings/encryption.util';
 import {
   _cooldownsSize,
@@ -31,23 +31,26 @@ import {
 import { _inFlightRefreshesSize, _setInFlightRefresh } from '../swr-cache';
 
 function describeOriginalResets(testAppRef: { current: TestApp }) {
-  it('clears jwt_block:* keys so a fresh admin token is accepted after truncate', async () => {
+  it('a token version an earlier suite bumped does not reject a fresh admin login after truncate', async () => {
     const testApp = testAppRef.current;
-    const blocklist = testApp.app.get(TokenBlocklistService);
-    // Simulate an earlier suite blocking the currently-seeded admin.
-    await blocklist.blockUser(testApp.seed.adminUser.id);
-    const storeBefore = testApp.redisMock.store;
-    expect(
-      [...storeBefore.keys()].some((k) => k.startsWith('jwt_block:')),
-    ).toBe(true);
+    const adminId = testApp.seed.adminUser.id;
+    // Simulate an earlier suite revoking the seeded admin, and a request
+    // that cached the bumped row before the suite ended.
+    const bumped = await bumpTokenVersion(testApp.db, adminId);
+    setCachedAuthUser(adminId, {
+      role: 'admin',
+      discordId: null,
+      deactivatedAt: null,
+      kickedAt: null,
+      bannedAt: null,
+      banReason: null,
+      tokenVersion: bumped,
+    });
 
     // Truncate + re-seed — this is what every suite's afterEach does.
     testApp.seed = await truncateAllTables(testApp.db);
 
-    const storeAfter = testApp.redisMock.store;
-    expect(
-      [...storeAfter.keys()].filter((k) => k.startsWith('jwt_block:')),
-    ).toEqual([]);
+    expect(getCachedAuthUser(adminId)).toBeNull();
 
     // The canonical failure mode: login + authenticated request must 200,
     // not 401, right after truncate.
