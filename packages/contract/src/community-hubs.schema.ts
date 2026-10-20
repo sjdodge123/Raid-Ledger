@@ -158,6 +158,25 @@ export const GameHubsSchema = z
   .strict();
 export type GameHubs = z.infer<typeof GameHubsSchema>;
 
+/** `GET /admin/hubs?status=` — one row of the admin list; `leader: null` = leaderless (OQ-7). */
+export const AdminHubEntrySchema = z
+  .object({
+    id,
+    gameId: id,
+    gameName: z.string(),
+    name: z.string(),
+    blurb: z.string().nullable(),
+    status: z.enum(['active', 'archived']),
+    memberCount: z.number().int().nonnegative(),
+    leader: z.object({ userId: id, username: z.string() }).strict().nullable(),
+    createdAt: isoDate,
+  })
+  .strict();
+export type AdminHubEntry = z.infer<typeof AdminHubEntrySchema>;
+
+export const AdminHubListSchema = z.object({ items: z.array(AdminHubEntrySchema) }).strict();
+export type AdminHubList = z.infer<typeof AdminHubListSchema>;
+
 export const CommunityHubJoinResponseSchema = z
   .object({ joined: z.boolean(), memberCount: z.number().int().nonnegative() })
   .strict();
