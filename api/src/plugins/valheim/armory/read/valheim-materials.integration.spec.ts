@@ -307,9 +307,17 @@ describe('materials visibility (R1/R2/R4/R5/R6/R12)', () => {
   });
 
   it.each(['operator', 'impersonated'] as const)(
-    'R5/R6 %s: no personal block, private chest detail 404',
+    'R5/R6 %s: no personal block, shared-only list, private chest detail 404',
     async (who) => {
       expect((await materials(tokens[who])).personal).toBeNull();
+      // Review M3: the LIST is the view a role check would leak through.
+      const list = await listKeys(tokens[who]);
+      expect(list).toEqual([
+        'Cart@9:shared',
+        'piece_chest@0:shared',
+        'piece_chest@1:shared',
+      ]);
+      expect(list.filter((k) => k.endsWith(':personal'))).toEqual([]);
       const key = await keyOf(OWNER_PID, 'piece_chest_private');
       const res = await get(`${base(server)}/containers/${key}`, tokens[who]);
       expect(res.status).toBe(404);
@@ -335,6 +343,14 @@ describe('containers list + detail (R2/R3/R11/R17)', () => {
       'piece_chest_private@5:personal',
     ]);
     expect((await listKeys(admin)).length).toBe(6);
+  });
+
+  it('a malformed :key is a 400 with the usual JSON body (review M4)', async () => {
+    const res = await get(`${base(server)}/containers/not-a-key`, admin);
+    expect({ status: res.status, body: res.body as unknown }).toMatchObject({
+      status: 400,
+      body: { statusCode: 400, message: 'Invalid key' },
+    });
   });
 
   it('R11 two creators at one spot: each owner sees only theirs', async () => {
@@ -536,6 +552,25 @@ describe('hub + scan states (R14/R15/R16/R18/R19)', () => {
         (await get(`${base(server)}${path}`, tokens.operator)).status,
       ).toBe(200);
     }
+  });
+
+  it('R14 hidden hub: a VALID chest key still 404s HUB_NOT_FOUND (hub check first)', async () => {
+    await importMsg(server, world());
+    // The x:1 group chest — the only OTHER_PID piece_chest, shared.
+    const key = await keyOf(OTHER_PID, 'piece_chest');
+    const path = `${base(server)}/containers/${key}`;
+    expect((await get(path, tokens.member)).status).toBe(200);
+    const hide = await testApp.request
+      .patch(`/guilds/${hubId}/hidden`)
+      .set(auth(admin))
+      .send({ hidden: true });
+    expect(hide.status).toBe(200);
+    const res = await get(path, tokens.member);
+    expect({ status: res.status, body: res.body as unknown }).toMatchObject({
+      status: 404,
+      body: { message: HUB_NOT_FOUND },
+    });
+    expect((await get(path, admin)).status).toBe(200);
   });
 
   it('R15 a server with no hub: 404 on all three', async () => {
