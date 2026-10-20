@@ -90,10 +90,22 @@ async function makeServer(n: number): Promise<number> {
   return row.id;
 }
 
-/** Store a message as ingest does, then drain it through the importer. */
+/** Store (or replace) a message as ingest does, then drain it through the importer. */
 async function importMsg(serverId: number, msg: Msg): Promise<void> {
   const row = valheimSnapshotRow(serverId, msg as never);
-  await testApp.db.insert(schema.valheimLinkSnapshots).values(row);
+  const S = schema.valheimLinkSnapshots;
+  await testApp.db
+    .insert(S)
+    .values(row)
+    .onConflictDoUpdate({
+      target: [S.pelicanServerId, S.kind, S.snapshotKey],
+      set: {
+        capturedAt: row.capturedAt,
+        payload: row.payload,
+        blobRefs: row.blobRefs,
+        status: 'pending',
+      },
+    });
   await testApp.app.get(ValheimArmoryImportService).drainOnce();
 }
 
