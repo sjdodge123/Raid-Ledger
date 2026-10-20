@@ -65,7 +65,9 @@ describe('ROK-1823 revokeAllAndBumpTx', () => {
       schema.refreshTokens,
       schema.users,
     ]);
-    expect(tx.set).toHaveBeenLastCalledWith({ tokenVersion: NEXT_TOKEN_VERSION });
+    expect(tx.set).toHaveBeenLastCalledWith({
+      tokenVersion: NEXT_TOKEN_VERSION,
+    });
   });
 
   it('propagates a failed bump so the caller transaction rolls back', async () => {

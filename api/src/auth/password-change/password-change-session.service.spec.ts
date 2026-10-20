@@ -98,31 +98,33 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
     // TokenBlocklistService.isBlocked rejects `iat <= blockedAt`.
     expect(iat).toBe((t.blockedAt() ?? Number.NaN) + 1);
   });
+});
 
-  describe('ROK-1823 token version', () => {
-    it('revokeAllSessions returns the version the revoke bumped to', async () => {
-      const t = build();
-      await expect(t.service.revokeAllSessions(42)).resolves.toBe(BUMPED);
-    });
+describe('ROK-1823 PasswordChangeSessionService token version', () => {
+  afterEach(() => jest.restoreAllMocks());
 
-    it('still returns the bumped version when the legacy blocklist write fails', async () => {
-      jest.spyOn(Logger.prototype, 'error').mockImplementation();
-      const t = build(false);
-      await expect(t.service.revokeAllSessions(42)).resolves.toBe(BUMPED);
-    });
+  it('revokeAllSessions returns the version the revoke bumped to', async () => {
+    const t = build();
+    await expect(t.service.revokeAllSessions(42)).resolves.toBe(BUMPED);
+  });
 
-    it('issueSession signs the version it is handed as the tv claim', async () => {
-      const t = build();
-      const tv = await t.service.revokeAllSessions(CALLER.id);
-      const { accessToken } = await t.service.issueSession(CALLER, null, tv);
-      expect(t.jwt.decode<{ tv?: number }>(accessToken).tv).toBe(BUMPED);
-    });
+  it('still returns the bumped version when the legacy blocklist write fails', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const t = build(false);
+    await expect(t.service.revokeAllSessions(42)).resolves.toBe(BUMPED);
+  });
 
-    it('a failed revoke+bump throws and blocklists nothing', async () => {
-      const t = build();
-      t.refresh.revokeAllAndBump.mockRejectedValueOnce(new Error('tx failed'));
-      await expect(t.service.revokeAllSessions(42)).rejects.toThrow('tx failed');
-      expect(t.blocklist.blockUser).not.toHaveBeenCalled();
-    });
+  it('issueSession signs the version it is handed as the tv claim', async () => {
+    const t = build();
+    const tv = await t.service.revokeAllSessions(CALLER.id);
+    const { accessToken } = await t.service.issueSession(CALLER, null, tv);
+    expect(t.jwt.decode<{ tv?: number }>(accessToken).tv).toBe(BUMPED);
+  });
+
+  it('a failed revoke+bump throws and blocklists nothing', async () => {
+    const t = build();
+    t.refresh.revokeAllAndBump.mockRejectedValueOnce(new Error('tx failed'));
+    await expect(t.service.revokeAllSessions(42)).rejects.toThrow('tx failed');
+    expect(t.blocklist.blockUser).not.toHaveBeenCalled();
   });
 });

@@ -209,11 +209,7 @@ export class OnboardingController {
     this.logger.log(
       `Admin user ${req.user.username} changed password via onboarding`,
     );
-    const accessToken = await this.reissueCallerSession(
-      req,
-      res,
-      tokenVersion,
-    );
+    const accessToken = await this.reissueCallerSession(req, res, tokenVersion);
     return {
       success: true,
       message: 'Password changed successfully',

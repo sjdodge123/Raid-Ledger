@@ -20,23 +20,35 @@ export const NEXT_TOKEN_VERSION = sql<number>`${schema.users.tokenVersion} + 1`;
  * no such user exists — a revoke that silently touched nothing is a bug.
  * Callers invalidate the auth-user cache AFTER the commit.
  */
-export async function bumpTokenVersion(db: Db, userId: number): Promise<number> {
+export async function bumpTokenVersion(
+  db: Db,
+  userId: number,
+): Promise<number> {
   const [row] = await db
     .update(schema.users)
     .set({ tokenVersion: NEXT_TOKEN_VERSION })
     .where(eq(schema.users.id, userId))
     .returning({ tokenVersion: schema.users.tokenVersion });
-  if (!row) throw new Error(`ROK-1823: cannot bump token version: user ${userId} not found`);
+  if (!row)
+    throw new Error(
+      `ROK-1823: cannot bump token version: user ${userId} not found`,
+    );
   return row.tokenVersion;
 }
 
 /** Read `userId`'s current version. Throws when no such user exists. */
-export async function readTokenVersion(db: Db, userId: number): Promise<number> {
+export async function readTokenVersion(
+  db: Db,
+  userId: number,
+): Promise<number> {
   const [row] = await db
     .select({ tokenVersion: schema.users.tokenVersion })
     .from(schema.users)
     .where(eq(schema.users.id, userId))
     .limit(1);
-  if (!row) throw new Error(`ROK-1823: cannot read token version: user ${userId} not found`);
+  if (!row)
+    throw new Error(
+      `ROK-1823: cannot read token version: user ${userId} not found`,
+    );
   return row.tokenVersion;
 }

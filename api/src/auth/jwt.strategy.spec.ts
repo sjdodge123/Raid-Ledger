@@ -176,28 +176,6 @@ describe('JwtStrategy — ban/kick per-request lockout (ROK-313)', () => {
     expect(result).toMatchObject({ id: 1, role: 'member' });
   });
 
-  it('ROK-1823: loadAuthUser selects token_version and caches it', async () => {
-    mockDbReturns({ ...mockUser, tokenVersion: 3 });
-    await strategy.validate(buildPayload());
-    expect(mockDb.select).toHaveBeenCalledWith(
-      expect.objectContaining({ tokenVersion: schema.users.tokenVersion }),
-    );
-    expect(getCachedAuthUser(1)?.tokenVersion).toBe(3);
-  });
-
-  it('ROK-1823: a row loaded across an invalidation is used once, never cached', async () => {
-    const limit = jest.fn(() => {
-      invalidateAuthUser(1); // a token-version bump commits mid-load
-      return Promise.resolve([mockUser]);
-    });
-    const where = jest.fn().mockReturnValue({ limit });
-    mockDb.select = jest.fn().mockReturnValue({ from: () => ({ where }) });
-    await expect(strategy.validate(buildPayload())).resolves.toMatchObject({
-      id: 1,
-    });
-    expect(getCachedAuthUser(1)).toBeNull();
-  });
-
   it('rejects a banned user served from the auth cache (cache-hit path)', async () => {
     setCachedAuthUser(1, {
       role: 'member',
@@ -340,5 +318,31 @@ describe('JwtStrategy — impersonator checks on impersonation tokens (ROK-1754)
     await strategy.validate(buildPayload());
     expect(mockBlocklist.isBlocked).toHaveBeenCalledTimes(1);
     expect(mockDb.select).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('JwtStrategy — token version in the auth-user cache (ROK-1823)', () => {
+  beforeEach(() => setupModule());
+
+  it('ROK-1823: loadAuthUser selects token_version and caches it', async () => {
+    mockDbReturns({ ...mockUser, tokenVersion: 3 });
+    await strategy.validate(buildPayload());
+    expect(mockDb.select).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenVersion: schema.users.tokenVersion }),
+    );
+    expect(getCachedAuthUser(1)?.tokenVersion).toBe(3);
+  });
+
+  it('ROK-1823: a row loaded across an invalidation is used once, never cached', async () => {
+    const limit = jest.fn(() => {
+      invalidateAuthUser(1); // a token-version bump commits mid-load
+      return Promise.resolve([mockUser]);
+    });
+    const where = jest.fn().mockReturnValue({ limit });
+    mockDb.select = jest.fn().mockReturnValue({ from: () => ({ where }) });
+    await expect(strategy.validate(buildPayload())).resolves.toMatchObject({
+      id: 1,
+    });
+    expect(getCachedAuthUser(1)).toBeNull();
   });
 });

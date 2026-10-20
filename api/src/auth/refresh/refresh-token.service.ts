@@ -297,14 +297,25 @@ export class RefreshTokenService {
       );
       return this.mintSibling(existing);
     }
+    await this.revokeReusedFamily(existing);
+    return null;
+  }
+
+  /**
+   * Theft: revoke the whole family, then revoke every access token the user
+   * holds — the legacy blocklist floor AND (ROK-1823 D7) a token-version
+   * bump, which also kills the access tokens of the user's other families.
+   */
+  private async revokeReusedFamily(
+    existing: Pick<ParentRow, 'userId' | 'familyId'>,
+  ): Promise<void> {
     this.logger.warn(
       `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
     );
     await this.revokeFamily(existing.familyId);
     await this.blocklist.blockUser(existing.userId);
-    await bumpTokenVersion(this.db, existing.userId); // ROK-1823 D7
+    await bumpTokenVersion(this.db, existing.userId);
     invalidateAuthUser(existing.userId);
-    return null;
   }
 
   /**
