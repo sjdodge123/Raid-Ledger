@@ -201,11 +201,11 @@ describe('gates', () => {
   it('a failing run record rejects promptly instead of hanging (R13)', async () => {
     selectRows.mockResolvedValue([]);
     const boom = new Error('Failed query: insert into "app_settings"');
-    settings.recordChannelLifecycleRun
-      .mockRejectedValueOnce(boom)
-      .mockRejectedValueOnce(boom);
+    // Recorded once, after the tx settled — no second (error) record (fix r4).
+    settings.recordChannelLifecycleRun.mockRejectedValueOnce(boom);
     await expect(makeService().reconcile(live)).rejects.toBe(boom);
     expect(store.withReconcileLock).toHaveBeenCalledTimes(1);
+    expect(settings.recordChannelLifecycleRun).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -546,5 +546,77 @@ describe('review fixes — nudge ticks', () => {
     expect(res.stoppedReason).toBe('permissions');
     expect(Sentry.captureMessage).not.toHaveBeenCalled();
     expect(settings.recordChannelLifecycleRun).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('settings stay off the lock tx (fix r4)', () => {
+  const events: string[] = [];
+  const track =
+    (name: string, value?: string) => (): Promise<string | undefined> => {
+      events.push(name);
+      return Promise.resolve(value);
+    };
+  beforeEach(() => {
+    events.length = 0;
+    settings.getChannelLifecycleSettings.mockImplementationOnce(() => {
+      events.push('get');
+      return Promise.resolve({
+        ...SETTINGS,
+        gamesCategoryId: null,
+        archiveCategoryId: null,
+      });
+    });
+    settings.getClientUrl.mockImplementation(track('url', 'https://rl.test'));
+    settings.setChannelLifecycleSettings.mockImplementation(track('set'));
+    settings.recordChannelLifecycleRun.mockImplementation(track('record'));
+    jest
+      .mocked(store.withReconcileLock)
+      .mockImplementationOnce(async (db, fn) => {
+        events.push('lock:start');
+        try {
+          return { acquired: true, value: await fn(db) };
+        } finally {
+          events.push('lock:settled');
+        }
+      });
+  });
+  afterEach(() => {
+    settings.getClientUrl.mockResolvedValue('https://rl.test');
+    settings.setChannelLifecycleSettings.mockResolvedValue(undefined);
+    settings.recordChannelLifecycleRun.mockResolvedValue(undefined);
+  });
+
+  it('success: category ids + run record are written after the tx settles', async () => {
+    await makeService().reconcile(live);
+    expect(events).toEqual([
+      'get',
+      'url',
+      'lock:start',
+      'lock:settled',
+      'set',
+      'record',
+    ]);
+    expect(settings.recordChannelLifecycleRun).toHaveBeenCalledWith(
+      expect.objectContaining({ error: null }),
+    );
+  });
+  it('throwing tick: the error is recorded after the tx rolls back', async () => {
+    selectRows.mockRejectedValueOnce(new Error('db down'));
+    await expect(makeService().reconcile(live)).rejects.toThrow('db down');
+    expect(events).toEqual([
+      'get',
+      'url',
+      'lock:start',
+      'lock:settled',
+      'set',
+      'record',
+    ]);
+    expect(settings.recordChannelLifecycleRun).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'db down' }),
+    );
+  });
+  it('dry run: no settings call under the lock and no write after it', async () => {
+    await makeService().reconcile({ dryRun: true, trigger: 'manual' });
+    expect(events).toEqual(['get', 'url', 'lock:start', 'lock:settled']);
   });
 });

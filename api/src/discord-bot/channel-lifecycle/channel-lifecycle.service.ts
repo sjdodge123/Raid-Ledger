@@ -28,7 +28,11 @@ import {
   PERMISSION_ERROR_TEXT,
   runErrorText,
 } from './channel-lifecycle.run';
-import { withReconcileLock, type LifecycleDb } from './channel-lifecycle.store';
+import {
+  withReconcileLock,
+  type LifecycleDb,
+  type LockedRun,
+} from './channel-lifecycle.store';
 import {
   CHANNEL_LIFECYCLE_HUB_LINKER,
   NOOP_HUB_LINKER,
@@ -41,6 +45,17 @@ import {
   selectGameLifecycleActivity,
   type GameLifecycleActivityRow,
 } from './game-activity.queries';
+
+/** One tick's inputs + what the locked section leaves for the post-tx writes. */
+interface LockedTick {
+  guild: Guild;
+  settings: ChannelLifecycleSettingsDto;
+  opts: ReconcileOptions;
+  clientUrl: string;
+  now: Date;
+  /** Set by a live tick once resolved; persisted after the tx settles. */
+  categories: ReconcileCategories | null;
+}
 
 /**
  * ROK-1431 — the channel-lifecycle reconciler (spec ROK-1428 §2.5): gates,
@@ -66,7 +81,10 @@ export class ChannelLifecycleService {
   }
 
   /**
-   * Run one reconcile tick.
+   * Run one reconcile tick. Every `SettingsService` call (the snapshot, the
+   * client URL, the category ids, the run record) happens OUTSIDE the lock's
+   * transaction (fix r4): they go through the pool, and a pooled query while
+   * the tx holds a connection deadlocks a `DB_POOL_MAX=1` pool.
    *
    * @throws ConflictException when another reconcile holds the lock (→ 409)
    */
@@ -77,49 +95,59 @@ export class ChannelLifecycleService {
     if (!this.client.isConnected() || !guild) {
       return emptyResult(opts.dryRun, 'offline');
     }
-    const run = await withReconcileLock(this.db, (tx) =>
-      this.runLocked(tx, guild, settings, opts),
-    );
+    const clientUrl = await this.settings.getClientUrl();
+    const tick: LockedTick = {
+      guild,
+      settings,
+      opts,
+      clientUrl,
+      now: new Date(),
+      categories: null,
+    };
+    const run = await this.runUnderLock(tick);
     if (!run.acquired) {
       throw new ConflictException('A reconcile is already running');
     }
-    return run.value;
+    return this.record(tick.now, opts, run.value);
   }
 
-  /** Plan + (unless dry) execute and record, under the lock — DB work on `tx`. */
+  /** The locked section, then (tx settled) the category-id write; a failure is handled after the rollback. */
+  private async runUnderLock(
+    tick: LockedTick,
+  ): Promise<LockedRun<ReconcileResultDto>> {
+    let run: LockedRun<ReconcileResultDto>;
+    try {
+      run = await withReconcileLock(this.db, (tx) => this.runLocked(tx, tick));
+    } catch (err) {
+      await this.persistCategories(tick.settings, tick.categories);
+      return { acquired: true, value: await this.handleTickError(tick, err) };
+    }
+    await this.persistCategories(tick.settings, tick.categories);
+    return run;
+  }
+
+  /** Plan + (unless dry) execute, under the lock — DB work on `tx`, no settings call. */
   private async runLocked(
     tx: LifecycleDb,
-    guild: Guild,
-    settings: ChannelLifecycleSettingsDto,
-    opts: ReconcileOptions,
+    tick: LockedTick,
   ): Promise<ReconcileResultDto> {
-    const now = new Date();
-    try {
-      const categories = opts.dryRun
-        ? {
-            gamesId: settings.gamesCategoryId,
-            archiveId: settings.archiveCategoryId,
-          }
-        : await this.resolveCategories(guild, settings);
-      if (!categories) {
-        return await this.record(
-          now,
-          opts,
-          emptyResult(false, 'no-archive-category'),
-        );
-      }
-      const rows = await this.selectRows(tx, guild, settings, opts, now);
-      const plan = planReconcile(rows, settings);
-      if (opts.dryRun) return plannedResult(plan);
-      const ctx = await this.context(tx, guild, settings, categories, now);
-      const result = await executePlan(ctx, plan);
-      if (result.stoppedReason === 'permissions') {
-        this.reportPermission(settings, opts);
-      }
-      return await this.record(now, opts, result);
-    } catch (err) {
-      return this.handleTickError(now, settings, opts, err);
+    const { guild, settings, opts, now } = tick;
+    const categories = opts.dryRun
+      ? {
+          gamesId: settings.gamesCategoryId,
+          archiveId: settings.archiveCategoryId,
+        }
+      : await this.resolveCategories(guild, settings);
+    if (!categories) return emptyResult(false, 'no-archive-category');
+    if (!opts.dryRun) tick.categories = categories;
+    const rows = await this.selectRows(tx, guild, settings, opts, now);
+    const plan = planReconcile(rows, settings);
+    if (opts.dryRun) return plannedResult(plan);
+    const result = await executePlan(this.context(tx, tick, categories), plan);
+    if (result.stoppedReason === 'permissions') {
+      this.reportPermission(settings, opts);
     }
+    return result;
   }
 
   /** The activity rows for this tick (scoped to the bot's guild). */
@@ -142,14 +170,12 @@ export class ChannelLifecycleService {
   }
 
   /** The executor context for a live tick. */
-  private async context(
+  private context(
     db: LifecycleDb,
-    guild: Guild,
-    settings: ChannelLifecycleSettingsDto,
+    tick: LockedTick,
     categories: ReconcileCategories,
-    now: Date,
-  ): Promise<ApplyContext> {
-    const clientUrl = await this.settings.getClientUrl();
+  ): ApplyContext {
+    const { guild, settings, clientUrl, now } = tick;
     const { bindings, hubLinker } = this;
     return {
       guild,
@@ -163,12 +189,13 @@ export class ChannelLifecycleService {
     };
   }
 
-  /** Persist found-or-created category ids when they changed (OQ-6). */
+  /** Persist found-or-created category ids when they changed (OQ-6) — after the tx. */
   private async persistCategories(
     settings: ChannelLifecycleSettingsDto,
-    gamesId: string | null,
-    archiveId: string,
+    categories: ReconcileCategories | null,
   ): Promise<void> {
+    if (!categories) return;
+    const { gamesId, archiveId } = categories;
     if (
       gamesId === settings.gamesCategoryId &&
       archiveId === settings.archiveCategoryId
@@ -180,16 +207,18 @@ export class ChannelLifecycleService {
     });
   }
 
-  /** A permission error before the loop stops the tick; anything else is recorded + rethrown. */
+  /**
+   * After the rollback: a permission error stops the tick (recorded by the
+   * caller); anything else is recorded + rethrown.
+   */
   private async handleTickError(
-    now: Date,
-    settings: ChannelLifecycleSettingsDto,
-    opts: ReconcileOptions,
+    tick: LockedTick,
     err: unknown,
   ): Promise<ReconcileResultDto> {
+    const { now, settings, opts } = tick;
     if (err instanceof LifecyclePermissionError && !opts.dryRun) {
       this.reportPermission(settings, opts);
-      return this.record(now, opts, emptyResult(false, 'permissions'));
+      return emptyResult(false, 'permissions');
     }
     const message = err instanceof Error ? err.message : String(err);
     this.logger.error(`Reconcile (${opts.trigger}) failed: ${message}`);
@@ -222,9 +251,7 @@ export class ChannelLifecycleService {
       LIFECYCLE_DEFAULTS.archiveCategoryName,
     );
     if (!archive) return null;
-    const gamesId = games?.id ?? null;
-    await this.persistCategories(settings, gamesId, archive.id);
-    return { gamesId, archiveId: archive.id };
+    return { gamesId: games?.id ?? null, archiveId: archive.id };
   }
 
   /**
@@ -247,13 +274,15 @@ export class ChannelLifecycleService {
   /**
    * Write `lastRunAt` (+ error text, or clear it on a clean run). A clean
    * nudge tick writes nothing: a single-game run must not clear a banner the
-   * daily run recorded (only cron/manual ticks clear it).
+   * daily run recorded (only cron/manual ticks clear it). A dry run writes
+   * nothing. Runs after the lock's tx has settled.
    */
   private async record(
     now: Date,
     opts: ReconcileOptions,
     result: ReconcileResultDto,
   ): Promise<ReconcileResultDto> {
+    if (opts.dryRun) return result;
     const error = runErrorText(result);
     if (opts.trigger === 'nudge' && error === null) return result;
     await this.settings.recordChannelLifecycleRun({ at: now, error });
