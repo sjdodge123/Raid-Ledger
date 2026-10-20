@@ -111,7 +111,9 @@ export class ValheimArmoryImportService {
   ): Promise<Applied> {
     if (msg.kind === 'character') return this.applyCharacter(tx, snap, msg);
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
-    return this.applyItems(tx, snap, msg);
+    if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
+    // ROK-1854 L2 replaces this with the recipes importer.
+    return Promise.resolve(UNSUPPORTED_RECIPES);
   }
 
   private async applyCharacter(
@@ -161,3 +163,7 @@ export class ValheimArmoryImportService {
 
 const IMPORTED: Applied = { status: 'imported', detail: null };
 const STALE: Applied = { status: 'skipped_stale', detail: null };
+const UNSUPPORTED_RECIPES: Applied = {
+  status: 'failed',
+  detail: 'unsupported:recipes',
+};

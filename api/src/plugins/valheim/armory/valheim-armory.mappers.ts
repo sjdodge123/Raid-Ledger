@@ -51,7 +51,7 @@ function issueDetail(error: z.ZodError): string {
 
 /** Whether the row's key columns equal the payload identity. */
 function keyMatches(snap: ArmorySnapshot, msg: ValheimLinkMessage): boolean {
-  if (msg.kind === 'items') {
+  if (msg.kind === 'items' || msg.kind === 'recipes') {
     return snap.steamId === null && snap.playerId === null;
   }
   const c = msg.character;
