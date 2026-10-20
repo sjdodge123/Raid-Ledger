@@ -26,7 +26,9 @@ const idPipe = armoryIdPipe;
 /**
  * ROK-1835 L4 armory reads. Members: any signed-in user (signed-out → 401;
  * the JWT strategy refuses deactivated accounts). Member responses never
- * carry a SteamID64; the admin list is the only route that does.
+ * carry a SteamID64; the admin list is the only route that does. A hidden
+ * hub (ROK-1856, L-5) hides its characters from non-staff: 404 on the keyed
+ * routes, dropped from the list.
  */
 @Controller()
 @UseGuards(AuthGuard('jwt'), PluginActiveGuard)
@@ -36,8 +38,11 @@ export class ValheimArmoryReadController {
 
   /** GET — characters sorted by name; `serverId`, `page`, `pageSize` ≤100. */
   @Get('plugins/valheim/armory/characters')
-  list(@Query() query: unknown): Promise<ValheimCharacterListResponse> {
-    return this.reads.list(parseArmoryListQuery(query));
+  list(
+    @Query() query: unknown,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimCharacterListResponse> {
+    return this.reads.list(parseArmoryListQuery(query), req.user);
   }
 
   /** GET — one character's sheet, map refs and the server's hub id. */
@@ -54,8 +59,9 @@ export class ValheimArmoryReadController {
   map(
     @Param('id', idPipe) id: number,
     @Param('mapId', idPipe) mapId: number,
+    @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimMapMeta> {
-    return this.reads.map(id, mapId);
+    return this.reads.map(id, mapId, req.user);
   }
 
   /** GET (admin) — owner-management list incl. `steamId64`; `unclaimed=true`. */
