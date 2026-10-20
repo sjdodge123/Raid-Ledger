@@ -74,6 +74,10 @@ export const AdminCreateHubSchema = z
   .strict();
 export type AdminCreateHubDto = z.infer<typeof AdminCreateHubSchema>;
 
+/** `PATCH /hubs/:id` — leader/officer edits the blurb (name changes stay admin-only via approve/create). */
+export const HubBlurbUpdateSchema = z.object({ blurb: BlurbSchema.nullable() }).strict();
+export type HubBlurbUpdateDto = z.infer<typeof HubBlurbUpdateSchema>;
+
 export const HubLeaderTransferSchema = z.object({ userId: id }).strict();
 export type HubLeaderTransferDto = z.infer<typeof HubLeaderTransferSchema>;
 
