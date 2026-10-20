@@ -216,9 +216,20 @@ function singleOccurrence(
   return { blocks: overlaps(block, ctx.range) ? [block] : [], skipped: 0 };
 }
 
+/** The override's own timed span (DTEND exact, DURATION nominal days). */
+function overrideTiming(
+  vevent: ICAL.Component,
+  floating: FloatingZone,
+): Extract<Timing, { allDay: false }> | null {
+  const own = readStart(vevent, floating, new Map(), true);
+  return typeof own === 'object' && !own.timing.allDay ? own.timing : null;
+}
+
 /**
  * A later occurrence moved by a `RANGE=THISANDFUTURE` override: ical.js has
- * already shifted its start/end by the override's change. 'skip' = not busy
+ * already shifted its start by the override's change. Codex r6: its end is
+ * the override's own span added like `endMsOf` (ical.js adds it on the wall
+ * clock, so a PT24H crossing a DST change gained an hour). 'skip' = not busy
  * (or empty); null = unplaceable.
  */
 function rangeBlock(
@@ -236,8 +247,12 @@ function rangeBlock(
       : 'skip';
   }
   const startMs = timeToMs(startDate, tzid, ctx.floating);
-  const endMs = timeToMs(endDate, tzid, ctx.floating);
-  if (startMs === null || endMs === null) return null;
+  if (startMs === null) return null;
+  const timing = overrideTiming(item.component, ctx.floating);
+  const endMs = timing
+    ? endMsOf(startDate, startMs, timing, ctx.floating)
+    : timeToMs(endDate, tzid, ctx.floating);
+  if (endMs === null) return null;
   if (endMs <= startMs) return 'skip';
   return { start: new Date(startMs), end: new Date(endMs), allDay: false };
 }
