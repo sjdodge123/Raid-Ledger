@@ -21,13 +21,27 @@ import { games } from './games';
 /** An overwrite bit's tri-state before archive changed it. */
 export type OverwritePriorState = 'allow' | 'deny' | 'inherit';
 
-/** One overwrite bit an archive changed, with the state to restore. */
-export interface ArchivedOverwriteChange {
-  /** `everyone` = the `@everyone` role overwrite; `bot` = the bot's member overwrite. */
-  target: 'everyone' | 'bot';
-  flag: 'SendMessages' | 'ViewChannel';
-  prior: OverwritePriorState;
-}
+/** The two bits an archive locks. */
+type ArchivedOverwriteFlag = 'SendMessages' | 'ViewChannel';
+
+/**
+ * One overwrite bit an archive changed, with the state to restore.
+ * `everyone` = the `@everyone` role overwrite; `bot` = the bot's member
+ * overwrite; `role` / `member` (Codex r3) = any other overwrite whose explicit
+ * Allow the archive turned into a Deny, keyed by its snowflake `id`.
+ */
+export type ArchivedOverwriteChange =
+  | {
+      target: 'everyone' | 'bot';
+      flag: ArchivedOverwriteFlag;
+      prior: OverwritePriorState;
+    }
+  | {
+      target: 'role' | 'member';
+      id: string;
+      flag: ArchivedOverwriteFlag;
+      prior: OverwritePriorState;
+    };
 
 /**
  * ROK-1428 D6, v1 (pre Codex r2): booleans for the bits an archive ADDED;

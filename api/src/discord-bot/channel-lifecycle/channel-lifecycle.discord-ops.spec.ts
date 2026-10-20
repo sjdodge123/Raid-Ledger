@@ -489,6 +489,13 @@ const SEEDS: [string, Seed][] = [
   ],
   ['a bot Send deny', (po) => po.edit(BOT, { SendMessages: false }, member)],
   [
+    'a Members role Send allow + a member View/Send allow (Codex r3)',
+    async (po) => {
+      await po.edit('role-m', { SendMessages: true, ViewChannel: true }, role);
+      await po.edit('user-x', { SendMessages: true }, member);
+    },
+  ],
+  [
     'private channel + unrelated bits',
     async (po) => {
       await po.edit(GUILD, { ViewChannel: false, AddReactions: false }, role);
@@ -541,6 +548,26 @@ describe('archive → unarchive is an exact inverse (Codex r2 P1/P2)', () => {
       added: res.added,
     });
     expect(snapshot(ch)).toEqual({ [GUILD]: [SEND, 0n] });
+  });
+
+  it('denies a role/member Send allow while archived, restores it after (Codex r3 P2)', async () => {
+    const { guild, ch } = setup();
+    await ch.permissionOverwrites.edit('role-m', { SendMessages: true }, role);
+    const res = await archiveChannel(guild as never, 'ch-1', {
+      categoryId: 'a',
+      hide: false,
+    });
+    expect(snapshot(ch)['role-m']).toEqual([0n, SEND]);
+    expect(res.added).toMatchObject({
+      changes: expect.arrayContaining([
+        { target: 'role', id: 'role-m', flag: 'SendMessages', prior: 'allow' },
+      ]),
+    });
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'g',
+      added: res.added,
+    });
+    expect(snapshot(ch)['role-m']).toEqual([SEND, 0n]);
   });
 
   it('a v1 boolean record still clears exactly its bits', async () => {

@@ -1,7 +1,8 @@
 /**
  * ROK-1428 D6 (Codex r2): archive's permission-overwrite plan and its exact
- * inverse. Archive denies `@everyone` SendMessages (+ ViewChannel when hiding)
- * and gives the bot's member overwrite an explicit allow for the same bits, so
+ * inverse. Archive denies `@everyone` SendMessages (+ ViewChannel when hiding),
+ * turns any other role/member Allow for those bits into a Deny (Codex r3), and
+ * gives the bot's member overwrite an explicit allow for the same bits, so
  * the bot can still post (and see) while the channel is archived. Every bit it
  * changes is recorded with its PRIOR tri-state, and a restore writes those
  * priors back — a prior explicit Allow/Deny returns instead of being cleared.
@@ -22,16 +23,30 @@ import type {
 type Target = ArchivedOverwriteChange['target'];
 type LockFlag = ArchivedOverwriteChange['flag'];
 
-/** The snowflakes the two targets resolve to. */
+/** The snowflakes the two fixed targets resolve to. */
 export interface OverwriteIds {
   everyoneId: string;
   botId: string;
 }
 
-/** Archive's state per target: `@everyone` denied, the bot explicitly allowed. */
+/** One overwrite's changes, in write order. */
+interface Group {
+  id: string;
+  type: OverwriteType;
+  isBot: boolean;
+  changes: ArchivedOverwriteChange[];
+}
+
+/**
+ * Archive's state per target: `@everyone` denied, the bot explicitly allowed,
+ * and every other role/member Allow for a locked bit turned into a Deny — an
+ * explicit Allow on a "Members" role would otherwise beat the `@everyone` deny.
+ */
 const ARCHIVED: Record<Target, OverwritePriorState> = {
   everyone: 'deny',
   bot: 'allow',
+  role: 'deny',
+  member: 'deny',
 };
 
 /** A null record = archived before the record existed: only the send lock. */
@@ -39,10 +54,17 @@ const LEGACY_CHANGES: ArchivedOverwriteChange[] = [
   { target: 'everyone', flag: 'SendMessages', prior: 'inherit' },
 ];
 
-const idOf = (ids: OverwriteIds, t: Target): string =>
-  t === 'everyone' ? ids.everyoneId : ids.botId;
-const typeOf = (t: Target): OverwriteType =>
-  t === 'everyone' ? OverwriteType.Role : OverwriteType.Member;
+/** The overwrite id + type a change applies to. */
+function keyOf(
+  ids: OverwriteIds,
+  c: ArchivedOverwriteChange,
+): { id: string; type: OverwriteType } {
+  if (c.target === 'everyone')
+    return { id: ids.everyoneId, type: OverwriteType.Role };
+  if (c.target === 'bot') return { id: ids.botId, type: OverwriteType.Member };
+  const type = c.target === 'role' ? OverwriteType.Role : OverwriteType.Member;
+  return { id: c.id, type };
+}
 const toValue = (s: OverwritePriorState): boolean | null =>
   s === 'allow' ? true : s === 'deny' ? false : null;
 
@@ -55,6 +77,24 @@ function stateOf(
   if (ow === undefined) return 'inherit';
   if ((ow.allow.bitfield & bit) !== 0n) return 'allow';
   return (ow.deny.bitfield & bit) !== 0n ? 'deny' : 'inherit';
+}
+
+/** Changes for every role/member overwrite (not `@everyone`, not the bot) that Allows a locked bit. */
+function planOthers(
+  po: PermissionOverwriteManager,
+  ids: OverwriteIds,
+  flags: LockFlag[],
+): ArchivedOverwriteChange[] {
+  const out: ArchivedOverwriteChange[] = [];
+  for (const ow of po.cache.values()) {
+    if (ow.id === ids.everyoneId || ow.id === ids.botId) continue;
+    const target = ow.type === OverwriteType.Role ? 'role' : 'member';
+    for (const flag of flags) {
+      if (stateOf(ow, flag) === 'allow')
+        out.push({ target, id: ow.id, flag, prior: 'allow' });
+    }
+  }
+  return out;
 }
 
 /**
@@ -72,13 +112,13 @@ export function planArchive(
     : ['SendMessages'];
   const changes: ArchivedOverwriteChange[] = [];
   for (const target of ['bot', 'everyone'] as const) {
-    const ow = po.cache.get(idOf(ids, target));
+    const ow = po.cache.get(target === 'bot' ? ids.botId : ids.everyoneId);
     for (const flag of flags) {
       const prior = stateOf(ow, flag);
       if (prior !== ARCHIVED[target]) changes.push({ target, flag, prior });
     }
   }
-  return changes;
+  return [...changes, ...planOthers(po, ids, flags)];
 }
 
 /** Normalise a stored record (v2, v1 booleans, or null) to its change list. */
@@ -97,16 +137,33 @@ export function toChanges(
   return out;
 }
 
-/** `{flag: value}` for one target's changes, or null when it has none. */
+/** Group changes by overwrite, first-appearance order. */
+function groupsOf(
+  ids: OverwriteIds,
+  changes: ArchivedOverwriteChange[],
+): Group[] {
+  const out = new Map<string, Group>();
+  for (const c of changes) {
+    const { id, type } = keyOf(ids, c);
+    const g = out.get(id) ?? {
+      id,
+      type,
+      isBot: c.target === 'bot',
+      changes: [],
+    };
+    g.changes.push(c);
+    out.set(id, g);
+  }
+  return [...out.values()];
+}
+
+/** `{flag: value}` for one overwrite's changes. */
 function optionsFor(
   changes: ArchivedOverwriteChange[],
-  target: Target,
   pick: (c: ArchivedOverwriteChange) => OverwritePriorState,
-): PermissionOverwriteOptions | null {
-  const mine = changes.filter((c) => c.target === target);
-  if (mine.length === 0) return null;
+): PermissionOverwriteOptions {
   const opts: PermissionOverwriteOptions = {};
-  for (const c of mine) opts[c.flag] = toValue(pick(c));
+  for (const c of changes) opts[c.flag] = toValue(pick(c));
   return opts;
 }
 
@@ -116,9 +173,14 @@ export async function writeLock(
   ids: OverwriteIds,
   changes: ArchivedOverwriteChange[],
 ): Promise<void> {
-  for (const target of ['bot', 'everyone'] as const) {
-    const opts = optionsFor(changes, target, (c) => ARCHIVED[c.target]);
-    if (opts) await po.edit(idOf(ids, target), opts, { type: typeOf(target) });
+  const groups = groupsOf(ids, changes);
+  const ordered = [
+    ...groups.filter((g) => g.isBot),
+    ...groups.filter((g) => !g.isBot),
+  ];
+  for (const g of ordered) {
+    const opts = optionsFor(g.changes, (c) => ARCHIVED[c.target]);
+    await po.edit(g.id, opts, { type: g.type });
   }
 }
 
@@ -137,37 +199,39 @@ function leavesEmpty(
   return allow === 0n && deny === 0n;
 }
 
-/** Restore one target's priors; an overwrite left empty is deleted. */
-async function restoreTarget(
+/** Restore one overwrite's priors; an overwrite left empty is deleted. */
+async function restoreGroup(
   po: PermissionOverwriteManager,
-  ids: OverwriteIds,
-  target: Target,
-  changes: ArchivedOverwriteChange[],
+  g: Group,
 ): Promise<void> {
-  const opts = optionsFor(changes, target, (c) => c.prior);
-  if (!opts) return;
-  const id = idOf(ids, target);
-  const mine = changes.filter((c) => c.target === target);
-  const ow = po.cache.get(id);
+  const ow = po.cache.get(g.id);
   if (ow === undefined) {
-    if (mine.every((c) => c.prior === 'inherit')) return;
-  } else if (leavesEmpty(ow, mine)) {
-    await po.delete(id);
+    if (g.changes.every((c) => c.prior === 'inherit')) return;
+  } else if (leavesEmpty(ow, g.changes)) {
+    await po.delete(g.id);
     return;
   }
-  await po.edit(id, opts, { type: typeOf(target) });
+  await po.edit(
+    g.id,
+    optionsFor(g.changes, (c) => c.prior),
+    { type: g.type },
+  );
 }
 
 /**
  * Write each changed bit's prior state back. `po` must be a FRESH read (the
- * gateway cache may predate the archive's writes). `@everyone` first, so the
- * bot keeps access until the channel is open again.
+ * gateway cache may predate the archive's writes). The bot last, so it keeps
+ * access until the channel is open again.
  */
 export async function restorePriors(
   po: PermissionOverwriteManager,
   ids: OverwriteIds,
   changes: ArchivedOverwriteChange[],
 ): Promise<void> {
-  await restoreTarget(po, ids, 'everyone', changes);
-  await restoreTarget(po, ids, 'bot', changes);
+  const groups = groupsOf(ids, changes);
+  const ordered = [
+    ...groups.filter((g) => !g.isBot),
+    ...groups.filter((g) => g.isBot),
+  ];
+  for (const g of ordered) await restoreGroup(po, g);
 }
