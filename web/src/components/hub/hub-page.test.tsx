@@ -166,14 +166,17 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
         expect(chip, 'a kept rank grant confers nothing (ROK-1794 explicit grants only)').toHaveTextContent('Inactive — re-grant by name');
         expect(chip).toHaveAttribute('data-active', 'false');
         expect(within(panel).getByTestId('guild-editors-rank-note')).toHaveTextContent('Rank grants no longer give edit rights.');
-        expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent('Add your Guild Master as an editor.');
+        expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent('Grant the Guild Master by name once you've confirmed the linked account is theirs.');
         expect(within(panel).queryByTestId('guild-editor-rank-select'), 'no new whole-rank grants').toBeNull();
         expect(within(panel).queryByText('Whole rank')).toBeNull();
         const memberSelect = within(panel).getByTestId('guild-editor-member-select');
         expect(within(memberSelect).getByRole('option', { name: /Grimtusk/ }), 'the GM must be grantable as a member').toHaveValue('1');
-        await userEvent.selectOptions(memberSelect, '3');
+        const unlinked = within(memberSelect).getByRole('option', { name: /Nolinkadin/ });
+        expect(unlinked).toHaveTextContent('Nolinkadin — Raider · not linked to an account');
+        expect(unlinked, 'a row no RL account owns can never be granted (ROK-1794 review)').toBeDisabled();
+        await userEvent.selectOptions(memberSelect, '2');
         await userEvent.click(within(panel).getByRole('button', { name: 'Add editor' }));
-        await waitFor(() => expect(posts).toEqual([{ kind: 'member', guildMemberId: 3 }]));
+        await waitFor(() => expect(posts).toEqual([{ kind: 'member', guildMemberId: 2 }]));
     });
 
     it('drops the "add your Guild Master" hint once the GM (rank 0) holds a member grant', async () => {
@@ -194,7 +197,7 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
         await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
         expect(await within(panel).findByTestId('guild-editor-chip')).toHaveTextContent('Inactive — re-grant by name');
-        expect(within(panel).getByTestId('guild-editors-gm-hint'), 'a rank-0 rank grant must not count as the GM being an editor').toHaveTextContent('Add your Guild Master as an editor.');
+        expect(within(panel).getByTestId('guild-editors-gm-hint'), 'a rank-0 rank grant must not count as the GM being an editor').toHaveTextContent('Grant the Guild Master by name once you've confirmed the linked account is theirs.');
     });
 
     it('hides the rank-grant note when no rank grant is on the list', async () => {
