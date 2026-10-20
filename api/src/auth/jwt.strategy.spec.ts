@@ -337,7 +337,7 @@ describe('JwtStrategy — token version in the auth-user cache (ROK-1823)', () =
 
   it('ROK-1823: loadAuthUser selects token_version and caches it', async () => {
     mockDbReturns({ ...mockUser, tokenVersion: 3 });
-    await strategy.validate(buildPayload());
+    await strategy.validate(buildPayload({ tv: 3 }));
     expect(mockDb.select).toHaveBeenCalledWith(
       expect.objectContaining({ tokenVersion: schema.users.tokenVersion }),
     );
