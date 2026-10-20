@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import {
   clearAuthUserCache,
@@ -13,7 +12,6 @@ import { KICK_COOLDOWN_MS } from './auth-status.helpers';
 import * as schema from '../drizzle/schema';
 
 let strategy: JwtStrategy;
-let mockBlocklist: { isBlocked: jest.Mock };
 let mockDb: { select: jest.Mock };
 
 const mockUser = {
@@ -39,16 +37,13 @@ function buildPayload(overrides: Record<string, unknown> = {}) {
     sub: 1,
     username: 'testuser',
     iat: 1700000000,
+    tv: 0,
     ...overrides,
   };
 }
 
 async function setupModule(): Promise<void> {
   clearAuthUserCache();
-
-  mockBlocklist = {
-    isBlocked: jest.fn().mockResolvedValue(false),
-  };
 
   // Fluent chain: db.select().from().where().limit()
   const mockLimit = jest.fn().mockResolvedValue([mockUser]);
@@ -63,7 +58,6 @@ async function setupModule(): Promise<void> {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       JwtStrategy,
-      { provide: TokenBlocklistService, useValue: mockBlocklist },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
     ],
   }).compile();
@@ -80,52 +74,57 @@ describe('JwtStrategy rejects magic-link tokens (ROK-1366 AC5/D2)', () => {
     ).rejects.toThrow(
       new UnauthorizedException('Magic-link tokens are not session tokens'),
     );
-    expect(mockBlocklist.isBlocked).not.toHaveBeenCalled();
     expect(mockDb.select).not.toHaveBeenCalled();
   });
 });
 
-describe('JwtStrategy — blocklist integration', () => {
+describe('JwtStrategy — token version claim (ROK-1823 U1)', () => {
   beforeEach(() => setupModule());
 
-  it('should allow a valid, non-blocked token', async () => {
-    const result = await strategy.validate(buildPayload());
+  const REVOKED = new UnauthorizedException('Token has been revoked');
 
+  it('accepts tv equal to the cached version and reports it on the user', async () => {
+    mockDbReturns({ ...mockUser, tokenVersion: 2 });
+    const result = await strategy.validate(buildPayload({ tv: 2 }));
     expect(result).toMatchObject({
       id: 1,
       username: 'testuser',
-      role: expect.any(String),
+      tokenVersion: 2,
     });
-    expect(mockBlocklist.isBlocked).toHaveBeenCalledWith(1, 1700000000);
   });
 
-  it('should reject a blocked token with UnauthorizedException', async () => {
-    mockBlocklist.isBlocked.mockResolvedValue(true);
-
-    await expect(strategy.validate(buildPayload())).rejects.toThrow(
-      UnauthorizedException,
-    );
-    await expect(strategy.validate(buildPayload())).rejects.toThrow(
-      'Token has been revoked',
+  it('rejects a stale tv (minted before a bump) with 401 "Token has been revoked"', async () => {
+    mockDbReturns({ ...mockUser, tokenVersion: 2 });
+    await expect(strategy.validate(buildPayload({ tv: 1 }))).rejects.toThrow(
+      REVOKED,
     );
   });
 
-  it('should check blocklist before database lookup', async () => {
-    mockBlocklist.isBlocked.mockResolvedValue(true);
-
-    await expect(strategy.validate(buildPayload())).rejects.toThrow(
-      UnauthorizedException,
+  it('rejects a tv AHEAD of the row (version rolled back) — exact match, fails closed', async () => {
+    mockDbReturns({ ...mockUser, tokenVersion: 2 });
+    await expect(strategy.validate(buildPayload({ tv: 3 }))).rejects.toThrow(
+      REVOKED,
     );
+  });
 
-    // DB select should not have been called since blocklist rejected first
+  it('compares against the cached row on a cache hit, without a DB read', async () => {
+    setCachedAuthUser(1, { ...mockUser, role: 'member', tokenVersion: 5 });
+    await expect(strategy.validate(buildPayload({ tv: 4 }))).rejects.toThrow(
+      REVOKED,
+    );
     expect(mockDb.select).not.toHaveBeenCalled();
   });
 
-  it('should pass sub and iat to isBlocked', async () => {
-    const payload = buildPayload({ sub: 99, iat: 1700005000 });
-    await strategy.validate(payload);
-
-    expect(mockBlocklist.isBlocked).toHaveBeenCalledWith(99, 1700005000);
+  it.each([
+    ['missing (minted before ROK-1823)', undefined],
+    ['negative', -1],
+    ['a float', 1.5],
+    ['a numeric string', '2'],
+  ])('rejects a tv that is %s before any lookup', async (_label, tv) => {
+    await expect(strategy.validate(buildPayload({ tv }))).rejects.toThrow(
+      REVOKED,
+    );
+    expect(mockDb.select).not.toHaveBeenCalled();
   });
 
   it('should still throw when user no longer exists in DB', async () => {
@@ -210,7 +209,6 @@ describe('JwtStrategy — non-integer sub is a 401 before any lookup (ROK-1764)'
     await expect(strategy.validate(buildPayload({ sub }))).rejects.toThrow(
       new UnauthorizedException('Invalid session token'),
     );
-    expect(mockBlocklist.isBlocked).not.toHaveBeenCalled();
     expect(mockDb.select).not.toHaveBeenCalled();
   });
 
@@ -252,7 +250,9 @@ describe('JwtStrategy — deactivated per-request lockout (ROK-1753)', () => {
     mockDbReturns({ ...mockUser, deactivatedAt: new Date() });
     // ROK-1754: the impersonator (id 9) is looked up too — an active admin.
     setCachedAuthUser(9, { ...mockUser, role: 'admin' });
-    const result = await strategy.validate(buildPayload({ impersonatedBy: 9 }));
+    const result = await strategy.validate(
+      buildPayload({ impersonatedBy: 9, itv: 0 }),
+    );
     expect(result).toMatchObject({ id: 1, impersonatedBy: 9 });
   });
 
@@ -272,7 +272,8 @@ describe('JwtStrategy — impersonator checks on impersonation tokens (ROK-1754)
   beforeEach(setupModule);
 
   const ADMIN_ID = 9;
-  const impersonation = () => buildPayload({ impersonatedBy: ADMIN_ID });
+  const impersonation = (over: Record<string, unknown> = {}) =>
+    buildPayload({ impersonatedBy: ADMIN_ID, itv: 0, ...over });
   const seedAdmin = (over: Record<string, unknown> = {}) =>
     setCachedAuthUser(ADMIN_ID, { ...mockUser, role: 'admin', ...over });
 
@@ -280,17 +281,28 @@ describe('JwtStrategy — impersonator checks on impersonation tokens (ROK-1754)
     seedAdmin({ role: 'operator' });
     const result = await strategy.validate(impersonation());
     expect(result).toMatchObject({ id: 1, impersonatedBy: ADMIN_ID });
-    expect(mockBlocklist.isBlocked).toHaveBeenCalledWith(ADMIN_ID, 1700000000);
   });
 
-  it('rejects when the impersonator is blocklisted (e.g. role change)', async () => {
+  it('rejects a stale itv (impersonator bumped, e.g. role change) — ROK-1823 U1', async () => {
+    seedAdmin({ tokenVersion: 4 });
+    await expect(strategy.validate(impersonation({ itv: 3 }))).rejects.toThrow(
+      new UnauthorizedException('Token has been revoked'),
+    );
+  });
+
+  it('accepts an itv equal to the impersonator version — ROK-1823 U1', async () => {
+    seedAdmin({ tokenVersion: 4 });
+    await expect(
+      strategy.validate(impersonation({ itv: 4 })),
+    ).resolves.toMatchObject({ id: 1, impersonatedBy: ADMIN_ID });
+  });
+
+  it('rejects impersonatedBy without an itv before any lookup — ROK-1823 U1', async () => {
     seedAdmin();
-    mockBlocklist.isBlocked.mockImplementation((id: number) =>
-      Promise.resolve(id === ADMIN_ID),
-    );
-    await expect(strategy.validate(impersonation())).rejects.toThrow(
-      'Token has been revoked',
-    );
+    await expect(
+      strategy.validate(impersonation({ itv: undefined })),
+    ).rejects.toThrow(new UnauthorizedException('Token has been revoked'));
+    expect(mockDb.select).not.toHaveBeenCalled();
   });
 
   it('rejects when the impersonator is banned', async () => {
@@ -316,7 +328,6 @@ describe('JwtStrategy — impersonator checks on impersonation tokens (ROK-1754)
 
   it('does not look the impersonator up for an ordinary token', async () => {
     await strategy.validate(buildPayload());
-    expect(mockBlocklist.isBlocked).toHaveBeenCalledTimes(1);
     expect(mockDb.select).toHaveBeenCalledTimes(1);
   });
 });

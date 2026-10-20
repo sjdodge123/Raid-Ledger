@@ -3,7 +3,6 @@ import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MagicLinkService } from './magic-link.service';
 import { UsersService } from '../users/users.service';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { derivePurposeSecret } from './purpose-jwt.helpers';
@@ -13,7 +12,6 @@ const SECRET = 'magic-spec-secret';
 const jwt = new JwtService({ secret: SECRET });
 let service: MagicLinkService;
 let findById: jest.Mock;
-let isBlocked: jest.Mock;
 let db: MockDb;
 
 const member = {
@@ -23,12 +21,12 @@ const member = {
   bannedAt: null as Date | null,
   banReason: null as string | null,
   kickedAt: null as Date | null,
+  tokenVersion: 2,
 };
 
 beforeEach(async () => {
   process.env.JWT_SECRET = SECRET;
   findById = jest.fn().mockResolvedValue(member);
-  isBlocked = jest.fn().mockResolvedValue(false);
   db = createDrizzleMock();
   db.returning.mockResolvedValue([{ id: 1 }]);
   const module: TestingModule = await Test.createTestingModule({
@@ -36,7 +34,6 @@ beforeEach(async () => {
       MagicLinkService,
       { provide: JwtService, useValue: jwt },
       { provide: UsersService, useValue: { findById } },
-      { provide: TokenBlocklistService, useValue: { isBlocked } },
       { provide: DrizzleAsyncProvider, useValue: db },
     ],
   }).compile();
@@ -66,7 +63,7 @@ async function redeemError(token: string): Promise<UnauthorizedException> {
 }
 
 describe('MagicLinkService.generateLink (ROK-1366 AC1)', () => {
-  it('signs only {sub, magicLink} plus a random jti, with a 15-minute expiry', async () => {
+  it('signs only {sub, magicLink, tv} plus a random jti, with a 15-minute expiry', async () => {
     const decoded = jwt.decode<Record<string, number>>(await mintToken());
     expect(Object.keys(decoded).sort()).toEqual([
       'exp',
@@ -74,8 +71,10 @@ describe('MagicLinkService.generateLink (ROK-1366 AC1)', () => {
       'jti',
       'magicLink',
       'sub',
+      'tv',
     ]);
     expect(decoded.sub).toBe(1);
+    expect(decoded.tv).toBe(2); // ROK-1823 U6: the user's version at mint
     expect(decoded.magicLink).toBe(true);
     expect((decoded.exp ?? 0) - (decoded.iat ?? 0)).toBe(15 * 60);
   });
@@ -189,12 +188,28 @@ describe('MagicLinkService.redeem — user checks after consuming (AC6)', () => 
     findById.mockResolvedValueOnce({ ...member, kickedAt: new Date() });
     await redeemError(token);
   });
+});
 
-  it('401s a token blocklisted at its iat', async () => {
+describe('MagicLinkService.redeem — token version (ROK-1823 U6)', () => {
+  it('401s a link minted before a bump (stale tv), after consuming', async () => {
     const token = await mintToken();
-    isBlocked.mockResolvedValueOnce(true);
-    await redeemError(token);
-    const { iat } = jwt.decode<{ iat: number }>(token);
-    expect(isBlocked).toHaveBeenCalledWith(1, iat);
+    findById.mockResolvedValueOnce({ ...member, tokenVersion: 3 });
+    const err = await redeemError(token);
+    expect(err.message).toBe('Invalid or expired sign-in link');
+    expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(token) });
+  });
+
+  it('401s a link with no tv claim, after consuming', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const token = signMagicPurpose({ sub: 1, magicLink: true, iat: now });
+    const err = await redeemError(token);
+    expect(err.message).toBe('Invalid or expired sign-in link');
+    expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(token) });
+  });
+
+  it('redeems a link whose tv still equals the user version', async () => {
+    await expect(service.redeem(await mintToken())).resolves.toMatchObject({
+      id: 1,
+    });
   });
 });

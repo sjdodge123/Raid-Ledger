@@ -5,7 +5,6 @@ import type { UserRole } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { UsersService } from '../users/users.service';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { assertKickCooldownOrClear } from './auth-status.helpers';
 import { signPurposeJwt, verifyPurposeJwt } from './purpose-jwt.helpers';
 import { consumeTokenOnce } from './single-use-token.helpers';
@@ -17,7 +16,8 @@ interface MagicLinkPayload {
   sub: number;
   magicLink: true;
   iat: number;
-  /** ROK-1823 D11: the user's token version at mint (redeem compares, L2b). */
+  /** ROK-1823 D11: the user's token version at mint. Optional in the shape so
+   * a claimless link is still CONSUMED before `redeem` refuses it. */
   tv?: number;
 }
 
@@ -45,8 +45,6 @@ export class MagicLinkService {
   constructor(
     @Inject(JwtService) private jwtService: JwtService,
     @Inject(UsersService) private usersService: UsersService,
-    @Inject(TokenBlocklistService)
-    private tokenBlocklist: TokenBlocklistService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -75,18 +73,17 @@ export class MagicLinkService {
 
   /**
    * Exchange a link token for its user, exactly once. D6: the token is
-   * consumed BEFORE any user check, so a replay is always a 401. Deactivated
-   * users are not refused here — like Discord login, NotDeactivatedGuard
-   * gates them per route.
+   * consumed BEFORE any user check, so a replay is always a 401. ROK-1823
+   * D11: a link whose `tv` is missing or no longer the user's version (minted
+   * before a password/role change) is refused. Deactivated users are not
+   * refused here — like Discord login, NotDeactivatedGuard gates them per route.
    */
   async redeem(token: string): Promise<MagicLinkUser> {
     const payload = this.verify(token);
     if (!(await consumeTokenOnce(this.db, token))) throw invalidLink();
     const user = await this.usersService.findById(payload.sub);
     if (!user || user.bannedAt) throw invalidLink();
-    if (await this.tokenBlocklist.isBlocked(user.id, payload.iat)) {
-      throw invalidLink();
-    }
+    if (payload.tv !== user.tokenVersion) throw invalidLink();
     await assertKickCooldownOrClear(this.db, user).catch(() => {
       throw invalidLink();
     });
