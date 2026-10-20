@@ -27,6 +27,9 @@
  *   skipped, never pruned: the rest commit and `last_error_code` is set to
  *   `provider_error` so the user can tell a calendar is failing.
  * - A success never writes `status` (it is shared with the write side).
+ * - ROK-1598 D7: the stored `sync_cursor` goes into `fetchBusy` and the
+ *   returned one is saved; `unchanged: true` keeps the previous blocks (no
+ *   delete, no insert) while `last_synced_at` is still stamped.
  *
  * PRIVACY (§6.4.2): only instants and dates are written; no calendar id,
  * title or provider message is logged or stored.
@@ -43,6 +46,11 @@ import type { CalendarReadProvider } from '../providers/calendar-provider.regist
 import { deriveInstanceId } from '../providers/rl-copy-id.helpers';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
 import { lockUserDerive } from './calendar-away-guard.helpers';
+import {
+  cursorFields,
+  resolvePrimaryAlias,
+  storedCursor,
+} from './calendar-read-cursor.helpers';
 import {
   buildReadWindow,
   normalizeBusyBlocks,
@@ -61,6 +69,7 @@ export type ReadSyncConnection = Pick<
   | 'credentialsEncrypted'
   | 'readCalendarIds'
   | 'dedicatedCalendarId'
+  | 'syncCursor'
 >;
 
 /** D7: next sync 30 min out, ± 5 min jitter. */
@@ -133,9 +142,12 @@ function fetchWindow(
   const range = { start: window.start, end: window.end };
   return withFreshCredentials(deps.db, conn, deps.provider, async (creds) => {
     const calendars = await deps.provider.listCalendars(creds);
-    const ids = selectReadCalendarIds(conn, calendars);
+    const wanted = selectReadCalendarIds(conn, calendars);
+    const ids = resolvePrimaryAlias(deps.provider.key, wanted, calendars);
     if (ids.length === 0) return { blocks: [] };
-    return deps.provider.fetchBusy(creds, range, ids);
+    // ROK-1598 D7: the stored cursor in, so Apple can answer `unchanged`.
+    const cursor = storedCursor(conn.syncCursor);
+    return deps.provider.fetchBusy(creds, range, ids, cursor);
   });
 }
 
@@ -221,7 +233,10 @@ function pruneFields(locked: readonly string[], missing: readonly string[]) {
  */
 export function buildSyncedFields(
   locked: { readCalendarIds: string[] },
-  result: Pick<FetchBusyResult, 'missingCalendarIds' | 'unreadableCalendarIds'>,
+  result: Pick<
+    FetchBusyResult,
+    'missingCalendarIds' | 'unreadableCalendarIds' | 'cursor'
+  >,
   stamp: { now: Date; random: () => number },
 ) {
   const missing = result.missingCalendarIds ?? [];
@@ -232,6 +247,8 @@ export function buildSyncedFields(
     nextSyncAt: nextReadSyncAt(stamp.now, stamp.random),
     updatedAt: stamp.now,
     ...pruneFields(locked.readCalendarIds, missing),
+    // ROK-1598 D7: a provider cursor (Apple) is kept for the next run.
+    ...cursorFields(result.cursor),
   };
 }
 

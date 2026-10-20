@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
-import { DrizzleModule } from '../drizzle/drizzle.module';
+import { DrizzleAsyncProvider, DrizzleModule } from '../drizzle/drizzle.module';
 import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
 import { UsersModule } from '../users/users.module';
@@ -21,7 +21,12 @@ import {
   CALENDAR_FAKE_PROVIDER,
   CalendarProviderRegistry,
 } from './providers/calendar-provider.registry';
-import { AppleCalendarAdapter } from './providers/apple/apple.adapter';
+import {
+  AppleCalendarAdapter,
+  CALDAV_CREDENTIAL_PERSISTER,
+} from './providers/apple/apple.adapter';
+import { CalendarAppleController } from './controllers/calendar-apple.controller';
+import { createCalDavCredentialPersister } from './services/calendar-connect-password.helpers';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
 import { CalendarReadCron } from './read/calendar-read.cron';
@@ -49,6 +54,16 @@ const fakeProvider = {
 };
 
 /**
+ * ROK-1598 (spec §2.3, L4): rediscovered CalDAV locations (a partition move)
+ * are written back into the Apple rows' encrypted credentials.
+ */
+const caldavPersister = {
+  provide: CALDAV_CREDENTIAL_PERSISTER,
+  inject: [DrizzleAsyncProvider],
+  useFactory: createCalDavCredentialPersister,
+};
+
+/**
  * Calendar Sync (epic ROK-669). ROK-1591: overview, admin settings, kill
  * switch. ROK-1592: Google OAuth connect/disconnect, provider registry and
  * the DEMO_MODE seed endpoint. ROK-1596: the write queue. ROK-1593: the
@@ -73,6 +88,7 @@ const fakeProvider = {
     CalendarFeedPublicController,
     CalendarConnectionsController,
     CalendarOAuthController,
+    CalendarAppleController,
     CalendarDemoSeedController,
     CalendarSyncAdminController,
     EventCalendarController,
@@ -80,6 +96,7 @@ const fakeProvider = {
   providers: [
     CalendarSyncEnabledGuard,
     GoogleCalendarAdapter,
+    caldavPersister,
     AppleCalendarAdapter,
     CalendarProviderRegistry,
     fakeProvider,
