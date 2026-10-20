@@ -33,7 +33,7 @@ const formatters = new Map<string, Intl.DateTimeFormat | null>();
 
 function formatterFor(zone: string): Intl.DateTimeFormat | null {
   if (formatters.has(zone)) return formatters.get(zone) ?? null;
-  let fmt: Intl.DateTimeFormat | null = null;
+  let fmt: Intl.DateTimeFormat | null;
   try {
     fmt = new Intl.DateTimeFormat('en-US', {
       timeZone: zone,
@@ -144,11 +144,17 @@ export function resolveFloatingZone(raw: string | null): FloatingZone {
   if (!value.includes('BEGIN:VTIMEZONE')) {
     return formatterFor(value) ? value : null;
   }
+  const root = parseIcsRoot(value);
+  const vtz =
+    root?.name === 'vtimezone' ? root : root?.getFirstSubcomponent('vtimezone');
+  return vtz ? new ICAL.Timezone(vtz) : null;
+}
+
+/** One iCalendar text → its root component; null when it does not parse. */
+export function parseIcsRoot(text: string): ICAL.Component | null {
   try {
-    const root = new ICAL.Component(ICAL.parse(value));
-    const vtz =
-      root.name === 'vtimezone' ? root : root.getFirstSubcomponent('vtimezone');
-    return vtz ? new ICAL.Timezone(vtz) : null;
+    const jcal: unknown = ICAL.parse(text);
+    return Array.isArray(jcal) ? new ICAL.Component(jcal) : null;
   } catch {
     return null;
   }

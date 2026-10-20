@@ -23,7 +23,7 @@ import {
   decodeCopyId,
   deriveInstanceId,
 } from '../rl-copy-id.helpers';
-import { resolveFloatingZone } from './apple-ical-time.helpers';
+import { parseIcsRoot, resolveFloatingZone } from './apple-ical-time.helpers';
 import { expandSeries, type SeriesContext } from './apple-ical-recur.helpers';
 
 export interface IcsParseContext {
@@ -127,12 +127,8 @@ function splitCalendars(ics: string): string[] {
 }
 
 function parseCalendar(text: string, ctx: SeriesContext): IcsParseResult {
-  let root: ICAL.Component;
-  try {
-    root = new ICAL.Component(ICAL.parse(text));
-  } catch {
-    return { blocks: [], skipped: 1 };
-  }
+  const root = parseIcsRoot(text);
+  if (!root) return { blocks: [], skipped: 1 };
   const results = groupByUid(root.getAllSubcomponents('vevent')).map((s) =>
     parseSeries(s, ctx),
   );
