@@ -3,7 +3,11 @@
  * deep link and the row → `HubPost` mapping. No DB, no Nest services.
  */
 import { BadRequestException } from '@nestjs/common';
-import type { HubPost, HubPostPerson, HubPostRelay } from '@raid-ledger/contract';
+import type {
+  HubPost,
+  HubPostPerson,
+  HubPostRelay,
+} from '@raid-ledger/contract';
 import type { HubPostSelect } from '../../drizzle/schema/hub-posts';
 
 /** Keyset position: `(created_at DESC, id DESC)`. */

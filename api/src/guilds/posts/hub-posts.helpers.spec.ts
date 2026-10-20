@@ -56,11 +56,17 @@ describe('encodeCursor / decodeCursor', () => {
   it.each([
     ['garbage', 'not-a-cursor!!'],
     ['empty', ''],
-    ['no separator', Buffer.from('2026-10-20T00:00:00.000Z').toString('base64url')],
+    [
+      'no separator',
+      Buffer.from('2026-10-20T00:00:00.000Z').toString('base64url'),
+    ],
     ['bad date', Buffer.from('yesterday|4').toString('base64url')],
     ['bad id', Buffer.from(`${AT.toISOString()}|x4`).toString('base64url')],
     ['zero id', Buffer.from(`${AT.toISOString()}|0`).toString('base64url')],
-    ['extra part', Buffer.from(`${AT.toISOString()}|4|5`).toString('base64url')],
+    [
+      'extra part',
+      Buffer.from(`${AT.toISOString()}|4|5`).toString('base64url'),
+    ],
   ])('rejects a %s cursor with 400', (_label, cursor) => {
     expect(() => decodeCursor(cursor)).toThrow(BadRequestException);
   });
@@ -82,7 +88,11 @@ describe('postDeepLink', () => {
 
 describe('personAvatarUrl', () => {
   it('prefers the custom upload', () => {
-    const p = person({ customAvatarUrl: 'https://x/a.png', avatar: 'h', discordId: '9' });
+    const p = person({
+      customAvatarUrl: 'https://x/a.png',
+      avatar: 'h',
+      discordId: '9',
+    });
     expect(personAvatarUrl(p)).toBe('https://x/a.png');
   });
 
@@ -93,7 +103,9 @@ describe('personAvatarUrl', () => {
   });
 
   it('passes an absolute avatar through and is null without one', () => {
-    expect(personAvatarUrl(person({ avatar: 'https://y/b.png' }))).toBe('https://y/b.png');
+    expect(personAvatarUrl(person({ avatar: 'https://y/b.png' }))).toBe(
+      'https://y/b.png',
+    );
     expect(personAvatarUrl(person({ avatar: 'abc' }))).toBeNull();
     expect(personAvatarUrl(person())).toBeNull();
   });
@@ -101,7 +113,11 @@ describe('personAvatarUrl', () => {
 
 describe('toHubPost', () => {
   it('maps an unedited, unrelayed post to a contract-valid shape', () => {
-    const out = toHubPost(post(), { author: person({ displayName: 'Thrall' }), editor: null }, null);
+    const out = toHubPost(
+      post(),
+      { author: person({ displayName: 'Thrall' }), editor: null },
+      null,
+    );
     expect(HubPostSchema.parse(out)).toEqual(out);
     expect(out).toMatchObject({
       id: 3,
@@ -120,34 +136,60 @@ describe('toHubPost', () => {
   });
 
   it('gives an all-null author once the author is wiped', () => {
-    const out = toHubPost(post({ authorId: null }), { author: null, editor: null }, null);
-    expect(out.author).toEqual({ userId: null, displayName: null, avatarUrl: null });
+    const out = toHubPost(
+      post({ authorId: null }),
+      { author: null, editor: null },
+      null,
+    );
+    expect(out.author).toEqual({
+      userId: null,
+      displayName: null,
+      avatarUrl: null,
+    });
   });
+});
 
+describe('toHubPost edit + relay', () => {
   it('marks an edited post with its editor', () => {
     const out = toHubPost(
       post({ updatedBy: 12 }),
       { author: person(), editor: person({ userId: 12, username: 'jaina' }) },
       null,
     );
-    expect(out.editedBy).toEqual({ userId: 12, displayName: 'jaina', avatarUrl: null });
+    expect(out.editedBy).toEqual({
+      userId: 12,
+      displayName: 'jaina',
+      avatarUrl: null,
+    });
   });
 
   it('has no edited marker while updated_by is null (never edited or editor wiped)', () => {
     const at = new Date(AT.getTime() + 60_000);
-    const out = toHubPost(post({ updatedAt: at }), { author: person(), editor: null }, null);
+    const out = toHubPost(
+      post({ updatedAt: at }),
+      { author: person(), editor: null },
+      null,
+    );
     expect(out.editedBy).toBeNull();
   });
 
   it('builds the Discord message url when the bot guild is known', () => {
-    const relayed = post({ relayChannelId: '100', relayMessageId: '200', relayedAt: AT });
+    const relayed = post({
+      relayChannelId: '100',
+      relayMessageId: '200',
+      relayedAt: AT,
+    });
     const known = toHubPost(relayed, { author: person(), editor: null }, '50');
     expect(known.relay).toEqual({
       channelId: '100',
       messageUrl: 'https://discord.com/channels/50/100/200',
       relayedAt: AT.toISOString(),
     });
-    const unknown = toHubPost(relayed, { author: person(), editor: null }, null);
+    const unknown = toHubPost(
+      relayed,
+      { author: person(), editor: null },
+      null,
+    );
     expect(unknown.relay?.messageUrl).toBeNull();
     expect(HubPostSchema.parse(known)).toEqual(known);
   });
