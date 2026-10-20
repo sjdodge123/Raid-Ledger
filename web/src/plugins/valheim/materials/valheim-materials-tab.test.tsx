@@ -16,9 +16,13 @@ import {
     valheimContainerHandler,
     valheimContainersHandler,
     valheimMaterialsHandler,
+    VALHEIM_CONTAINER_URL,
 } from '../../../test/mocks/valheim-materials-handlers';
 import { Z_INDEX } from '../../../lib/z-index';
-import { MATERIALS_EMPTY_COPY } from './materials.helpers';
+import {
+    CHEST_NOT_FOUND_COPY,
+    MATERIALS_EMPTY_COPY,
+} from './materials.helpers';
 import { ValheimMaterialsTab } from './valheim-materials-tab';
 
 const media = vi.hoisted(() => ({ desktop: false }));
@@ -186,6 +190,36 @@ describe('ValheimMaterialsTab', () => {
             within(contents).getByRole('button', { name: /Iron sword/ }),
         ).toBeInTheDocument();
     });
+
+    it.each([
+        [404, CHEST_NOT_FOUND_COPY],
+        [500, 'Couldn’t load this chest.'],
+    ])(
+        'a refetch refused with %i hides the cached stacks (Codex r5)',
+        async (status, copy) => {
+            server.use(valheimMaterialsHandler(materialsFixture()));
+            const { queryClient } = renderTab();
+            const chests = await screen.findByRole('list', { name: 'Chests' });
+            await userEvent.click(
+                within(chests).getByRole('button', { name: /Wood chest/ }),
+            );
+            await screen.findByRole('list', { name: 'Chest contents' });
+            server.use(
+                http.get(VALHEIM_CONTAINER_URL, () =>
+                    HttpResponse.json({ message: 'refused' }, { status }),
+                ),
+            );
+            await act(() =>
+                queryClient.invalidateQueries({
+                    predicate: (q) => q.queryKey.includes('container'),
+                }),
+            );
+            expect(await screen.findByRole('alert')).toHaveTextContent(copy);
+            expect(
+                screen.queryByRole('list', { name: 'Chest contents' }),
+            ).toBeNull();
+        },
+    );
 
     it('phone: no chest selected → no sheet is mounted (Codex r3)', async () => {
         server.use(valheimMaterialsHandler(materialsFixture()));

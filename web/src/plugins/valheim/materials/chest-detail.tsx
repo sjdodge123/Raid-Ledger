@@ -12,7 +12,11 @@ import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { ItemTile } from '../character/item-tile';
 import type { ItemIconContext } from '../character/use-item-icons';
 import { useValheimContainer } from '../hooks/use-valheim-materials';
-import { chestLabel, formatCoords } from './materials.helpers';
+import {
+    CHEST_NOT_FOUND_COPY,
+    chestLabel,
+    formatCoords,
+} from './materials.helpers';
 
 interface ChestDetailProps {
     serverId: number;
@@ -83,20 +87,35 @@ function ChestBody({
                     {chest.slots} slots
                 </p>
             )}
-            {q.isPending && (
-                <p className="text-sm text-muted">Loading chest…</p>
-            )}
-            {q.isError && (
-                <p
-                    role="alert"
-                    className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger"
-                >
-                    Couldn’t load this chest.
-                </p>
-            )}
-            {q.data !== undefined && <Contents detail={q.data} ctx={ctx} />}
+            <ChestState q={q} ctx={ctx} />
         </div>
     );
+}
+
+/**
+ * The refusal is checked BEFORE the data: TanStack keeps the last good `data`
+ * through a failed refetch, so a chest that is gone or no longer visible must
+ * never render its cached stacks (Codex r5).
+ */
+function ChestState({
+    q,
+    ctx,
+}: {
+    q: ReturnType<typeof useValheimContainer>;
+    ctx: ItemIconContext;
+}): JSX.Element {
+    if (q.isPending)
+        return <p className="text-sm text-muted">Loading chest…</p>;
+    if (q.isError || q.data === null)
+        return (
+            <p
+                role="alert"
+                className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger"
+            >
+                {q.isError ? 'Couldn’t load this chest.' : CHEST_NOT_FOUND_COPY}
+            </p>
+        );
+    return <Contents detail={q.data} ctx={ctx} />;
 }
 
 export function ChestDetail(props: ChestDetailProps): JSX.Element | null {

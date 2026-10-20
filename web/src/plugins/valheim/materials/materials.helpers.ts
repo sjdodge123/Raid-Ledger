@@ -22,6 +22,10 @@ export const DEFAULT_MATERIALS_FILTERS: MaterialsFilters = {
     includeVehicles: true,
 };
 
+/** A chest the server now refuses (404): removed, made personal, or its hub hidden. */
+export const CHEST_NOT_FOUND_COPY =
+    'This chest is no longer visible to you. It may have been removed or made personal.';
+
 export const MATERIALS_EMPTY_COPY =
     'No chest data yet. The server sends it every 10 minutes; the first arrives a few minutes after it starts.';
 

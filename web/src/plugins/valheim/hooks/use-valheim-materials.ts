@@ -14,6 +14,7 @@ import {
     type ValheimMaterialsResponse,
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
+import { httpStatusOf } from '../../../lib/api/api-error';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { encodePathSegment } from '../../../lib/api/path-segment';
 import { VALHEIM_ARMORY_PATH } from '../lib/valheim-armory-api';
@@ -129,12 +130,16 @@ export function useValheimContainers(
     });
 }
 
-/** `GET …/servers/:id/containers/:key` — one chest's stacks; idle while `key` is null. */
+/**
+ * `GET …/servers/:id/containers/:key` — one chest's stacks; idle while `key` is null.
+ * A 404 (deleted, made personal, hub hidden) resolves to `null` so it REPLACES
+ * any cached stacks instead of leaving them beside an error (Codex r5).
+ */
 export function useValheimContainer(
     serverId: number,
     includeVehicles: boolean,
     key: string | null,
-): UseQueryResult<ValheimContainerDetail> {
+): UseQueryResult<ValheimContainerDetail | null> {
     const scope = useViewerCacheScope();
     return useQuery({
         queryKey: valheimMaterialsKeys.container(
@@ -152,7 +157,10 @@ export function useValheimContainer(
                 ),
                 {},
                 ValheimContainerDetailSchema,
-            ),
+            ).catch((err: unknown) => {
+                if (httpStatusOf(err) === 404) return null;
+                throw err;
+            }),
         enabled: key !== null,
         retry: false,
     });
