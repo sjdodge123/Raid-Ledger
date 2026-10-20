@@ -1455,9 +1455,11 @@ body {
    quest-log input/select/textarea rules further down (fill, edge border, gold focus,
    danger border when aria-invalid), which this rule's !important border would
    otherwise override. The exclusion sits in :where() so it adds no specificity, and
-   later equal-weight rules such as .rounded-xl still win by source order. */
-[data-variant="quest-log"] .bg-panel\/50:where(:not(input, select, textarea)),
-[data-variant="quest-log"] [class*="bg-panel"]:where(:not(input, select, textarea)) {
+   later equal-weight rules such as .rounded-xl still win by source order. The
+   MarkdownEditor frame (div[data-md-editor], ROK-1868) is a control too: its
+   contenteditable child cannot carry the frame, so the div does. */
+[data-variant="quest-log"] .bg-panel\/50:where(:not(input, select, textarea, [data-md-editor])),
+[data-variant="quest-log"] [class*="bg-panel"]:where(:not(input, select, textarea, [data-md-editor])) {
     background:
         radial-gradient(ellipse at 40% 30%, rgba(200, 170, 110, 0.10) 0%, transparent 55%),
         repeating-linear-gradient(0deg,
