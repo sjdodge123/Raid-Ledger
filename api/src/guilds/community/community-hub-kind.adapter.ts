@@ -11,6 +11,7 @@ import * as schema from '../../drizzle/schema';
 import type { HubKindAdapter } from '../../plugins/plugin-host/extension-points';
 import { isStaff, type GuildActor } from '../guild-access.service';
 import { findGuild, hubSummaryFor } from '../guild-core.queries';
+import { loadCommunityHubEvents } from './community-events.queries';
 import { buildCommunityHubPage } from './community-hub-page.helpers';
 import {
   communityMemberUserIds,
@@ -24,7 +25,7 @@ import { isInDiscordGuild } from './discord-guild-member.helpers';
 /** ROK-1870: core registers the kind under this slug (no owner plugin, A4). */
 export const COMMUNITY_HUB_PLUGIN_SLUG = 'core';
 
-/** v1: community hubs have no raid roster; the Events tab lands later. */
+/** The no-roster raids shape (schedule/composition/attendance stay empty). */
 export const EMPTY_COMMUNITY_HUB_RAIDS: GuildRaidsDto = {
   upcoming: [],
   recent: [],
@@ -96,10 +97,11 @@ export class CommunityHubKindAdapter implements HubKindAdapter {
     });
   }
 
-  async raids(_actor: GuildActor, guildId: number): Promise<GuildRaidsDto> {
+  /** ROK-1870 L3: events tagged to the hub (`events.guild_id`). */
+  async raids(actor: GuildActor, guildId: number): Promise<GuildRaidsDto> {
     if (!(await findGuild(this.db, guildId))) {
       throw new NotFoundException('Guild not found');
     }
-    return EMPTY_COMMUNITY_HUB_RAIDS;
+    return loadCommunityHubEvents(this.db, guildId, actor.id);
   }
 }

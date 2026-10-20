@@ -13,6 +13,11 @@ import {
   CommunityHubKindAdapter,
   EMPTY_COMMUNITY_HUB_RAIDS,
 } from './community-hub-kind.adapter';
+import { loadCommunityHubEvents } from './community-events.queries';
+
+jest.mock('./community-events.queries', () => ({
+  loadCommunityHubEvents: jest.fn(),
+}));
 
 let db: MockDb;
 let adapter: CommunityHubKindAdapter;
@@ -73,7 +78,10 @@ describe('ROK-1870 CommunityHubKindAdapter', () => {
     await expect(adapter.isLiveMember()).resolves.toBe(false);
   });
 
-  it('raids 404s a missing hub and is empty otherwise', async () => {
+  it('raids 404s a missing hub, else reads the hub-tagged events', async () => {
+    jest.mocked(loadCommunityHubEvents).mockResolvedValue(
+      EMPTY_COMMUNITY_HUB_RAIDS,
+    );
     db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 7 }]);
     await expect(adapter.raids({ id: 1, role: 'member' }, 7)).rejects.toThrow(
       'Guild not found',
@@ -81,5 +89,6 @@ describe('ROK-1870 CommunityHubKindAdapter', () => {
     await expect(adapter.raids({ id: 1, role: 'member' }, 7)).resolves.toEqual(
       EMPTY_COMMUNITY_HUB_RAIDS,
     );
+    expect(loadCommunityHubEvents).toHaveBeenCalledWith(db, 7, 1);
   });
 });

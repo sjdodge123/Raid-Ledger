@@ -182,7 +182,7 @@ export async function swapLeader(
   return (await setRole(tx, guildId, toUserId, 'leader')) !== null;
 }
 
-/** Recount live members into `guilds.member_count`; returns the count. */
+/** Recount live members on active accounts into `guilds.member_count` (M11). */
 export async function refreshMemberCount(
   db: DbOrTx,
   guildId: number,
@@ -191,7 +191,7 @@ export async function refreshMemberCount(
   const [row] = await db
     .update(g)
     .set({
-      memberCount: sql`(SELECT count(*)::int FROM ${m} WHERE ${m.guildId} = ${guildId} AND ${liveMemberPredicate()})`,
+      memberCount: sql`(SELECT count(*)::int FROM ${m} JOIN ${schema.users} ON ${schema.users.id} = ${m.userId} WHERE ${m.guildId} = ${guildId} AND ${liveMemberPredicate()} AND ${schema.users.deactivatedAt} IS NULL)`,
       updatedAt: new Date(),
     })
     .where(eq(g.id, guildId))
