@@ -6,8 +6,8 @@
  *   keeps a 1-row textarea a real touch target.
  * - Every native attribute passes through (`value`, `onChange`, `rows`,
  *   `maxLength`, `name`, `disabled`), and the ref is forwarded.
- * - `showCount` + `maxLength` renders a `n/max` counter (`text-xs text-dim`)
- *   under the box, always, and adds it to `aria-describedby`. It is NOT live:
+ * - `showCount` + `maxLength` renders the shared `CharCounter` (`n/max`,
+ *   `text-xs text-dim`) under the box, always, and adds it to `aria-describedby`. It is NOT live:
  *   a separate `sr-only` polite region says "N characters left" only near the
  *   limit (the last 10% of `maxLength`, at most 20 characters).
  * - `fieldSize` (`md` default / `lg` / `sm`) swaps the padding, as on `Input`.
@@ -20,6 +20,7 @@ import {
 } from 'react';
 import { FIELD_FRAME_BASE, FIELD_PAD, type FieldSize } from './form-classes';
 import { useFieldControlProps } from './field-context';
+import { CharCounter } from './char-counter';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
     invalid?: boolean;
@@ -27,12 +28,6 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
     showCount?: boolean;
     resize?: 'none' | 'y';
     fieldSize?: FieldSize;
-}
-
-/** "N characters left" once within the last 10% of the limit (capped at 20); else silent. */
-function nearLimitText(length: number, max: number): string {
-    const left = max - length;
-    return left <= Math.min(20, Math.ceil(max * 0.1)) ? `${left} characters left` : '';
 }
 
 /** Current length: the controlled value when there is one, else what the user typed. */
@@ -63,10 +58,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     return (
         <div className="w-full">
             {box}
-            <p id={countId} data-testid="textarea-count" className="mt-1 text-right text-xs text-dim">
-                {length}/{maxLength}
-            </p>
-            <span data-testid="textarea-count-live" aria-live="polite" className="sr-only">{nearLimitText(length, maxLength)}</span>
+            <CharCounter id={countId} length={length} max={maxLength} testId="textarea-count" />
         </div>
     );
 });
