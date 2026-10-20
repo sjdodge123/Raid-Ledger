@@ -18,11 +18,22 @@ import type {
 } from '@raid-ledger/contract';
 import { games } from './games';
 
+/** An overwrite bit's tri-state before archive changed it. */
+export type OverwritePriorState = 'allow' | 'deny' | 'inherit';
+
+/** One overwrite bit an archive changed, with the state to restore. */
+export interface ArchivedOverwriteChange {
+  /** `everyone` = the `@everyone` role overwrite; `bot` = the bot's member overwrite. */
+  target: 'everyone' | 'bot';
+  flag: 'SendMessages' | 'ViewChannel';
+  prior: OverwritePriorState;
+}
+
 /**
- * ROK-1428 D6: the overwrite bits an archive actually ADDED (a bit that was
- * already set before archive is false), so unarchive clears only those.
+ * ROK-1428 D6, v1 (pre Codex r2): booleans for the bits an archive ADDED;
+ * unarchive resets each to inherit. Still read for rows written before v2.
  */
-export interface ArchivedOverwrites {
+export interface ArchivedOverwritesV1 {
   /** `@everyone` SendMessages deny. */
   everyoneSend: boolean;
   /** `@everyone` ViewChannel deny (hideOnArchive). */
@@ -30,6 +41,14 @@ export interface ArchivedOverwrites {
   /** The bot's member ViewChannel allow (granted with the hide). */
   botView: boolean;
 }
+
+/** v2: every bit the archive changed with its prior state — unarchive restores exactly these. */
+export interface ArchivedOverwritesV2 {
+  changes: ArchivedOverwriteChange[];
+}
+
+/** The `archived_overwrites` record (v2 written; v1 still read). */
+export type ArchivedOverwrites = ArchivedOverwritesV1 | ArchivedOverwritesV2;
 
 /** Columns the ROK-1429 lifecycle constraints reference. */
 interface LifecycleColumns {
@@ -96,8 +115,9 @@ export const channelBindings = pgTable(
     /** ROK-1429 (D6): the category the channel sat in before archive, for unarchive. */
     restoreParentId: varchar('restore_parent_id', { length: 32 }),
     /** ROK-1428 D6: the bits archive added; null when not archived. */
-    archivedOverwrites:
-      jsonb('archived_overwrites').$type<ArchivedOverwrites>(),
+    archivedOverwrites: jsonb(
+      'archived_overwrites',
+    ).$type<ArchivedOverwrites>(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

@@ -125,15 +125,23 @@ function isLifecycleText(
   );
 }
 
-/** Cache-then-fetch a managed text channel; gone/non-text → ChannelGoneError. */
+/**
+ * Cache-then-fetch a managed text channel; gone/non-text → ChannelGoneError.
+ * `fresh` skips the gateway cache and force-fetches from the API (overwrite
+ * edits do not update the cache, so a restore must read the API's state).
+ */
 export async function resolveTextChannel(
   guild: Guild,
   channelId: string,
+  opts: { fresh?: boolean } = {},
 ): Promise<LifecycleTextChannel> {
+  const cached = opts.fresh ? undefined : guild.channels.cache.get(channelId);
   const channel =
-    guild.channels.cache.get(channelId) ??
+    cached ??
     (await lifecycleCall('fetch', channelId, () =>
-      guild.channels.fetch(channelId),
+      opts.fresh
+        ? guild.channels.fetch(channelId, { force: true })
+        : guild.channels.fetch(channelId),
     ));
   if (!isLifecycleText(channel)) throw new ChannelGoneError(channelId);
   return channel;

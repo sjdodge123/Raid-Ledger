@@ -218,10 +218,16 @@ describe('archiveChannel', () => {
     expect(res).toEqual({
       previousParentId: 'games-cat',
       restoreParentId: 'games-cat',
-      added: { everyoneSend: true, everyoneView: false, botView: false },
+      added: {
+        changes: [
+          { target: 'bot', flag: 'SendMessages', prior: 'inherit' },
+          { target: 'everyone', flag: 'SendMessages', prior: 'inherit' },
+        ],
+      },
     });
     expect(snapshot(ch)).toEqual({
       [GUILD]: [0n, PermissionFlagsBits.SendMessages],
+      [BOT]: [PermissionFlagsBits.SendMessages, 0n],
     });
     expect(guild.channels.edit).toHaveBeenCalledWith('ch-1', {
       parent: 'arch-cat',
@@ -229,7 +235,7 @@ describe('archiveChannel', () => {
     });
   });
 
-  it('also denies ViewChannel when hide, keeping the bot able to see it', async () => {
+  it('also denies ViewChannel when hide, keeping the bot able to see + post (r2 P1)', async () => {
     const { guild, ch } = setup();
     await archiveChannel(guild as never, 'ch-1', {
       categoryId: 'arch-cat',
@@ -240,7 +246,10 @@ describe('archiveChannel', () => {
         0n,
         PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel,
       ],
-      [BOT]: [PermissionFlagsBits.ViewChannel, 0n],
+      [BOT]: [
+        PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel,
+        0n,
+      ],
     });
   });
 
@@ -252,13 +261,14 @@ describe('archiveChannel', () => {
       categoryId: 'arch-cat',
       hide: false,
     });
-    expect(guild.channels.fetch).toHaveBeenCalledWith('ch-1');
+    expect(guild.channels.fetch).toHaveBeenCalledWith('ch-1', { force: true });
     expect(guild.channels.edit).toHaveBeenCalledWith('ch-1', {
       parent: 'arch-cat',
       lockPermissions: false,
     });
     expect(snapshot(ch)).toEqual({
       [GUILD]: [0n, PermissionFlagsBits.SendMessages],
+      [BOT]: [PermissionFlagsBits.SendMessages, 0n],
     });
   });
 });
@@ -298,7 +308,7 @@ describe('archiveChannel — Discord errors', () => {
 });
 
 describe('unarchiveChannel', () => {
-  it('moves back to parentId and never writes an explicit Allow', async () => {
+  it('moves back to parentId and writes no Allow when no prior Allow was recorded', async () => {
     const { guild, ch } = setup();
     const { added } = await archiveChannel(guild as never, 'ch-1', {
       categoryId: 'arch-cat',
@@ -375,9 +385,10 @@ describe('archive → unarchive keeps admin-made privacy (review MAJOR 1)', () =
       hide: true,
     });
     expect(res.added).toEqual({
-      everyoneSend: true,
-      everyoneView: false,
-      botView: false,
+      changes: [
+        { target: 'bot', flag: 'SendMessages', prior: 'inherit' },
+        { target: 'everyone', flag: 'SendMessages', prior: 'inherit' },
+      ],
     });
     await unarchiveChannel(guild as never, 'ch-1', {
       parentId: 'games-cat',
@@ -459,6 +470,110 @@ describe('archive failure safety (review MAJOR 2)', () => {
         added: { everyoneSend: true, everyoneView: false, botView: false },
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+type Seed = (po: FakeChannel['permissionOverwrites']) => Promise<void>;
+const role = { type: OverwriteType.Role };
+const member = { type: OverwriteType.Member };
+const SEEDS: [string, Seed][] = [
+  ['no overwrites', () => Promise.resolve()],
+  [
+    '@everyone explicit Send allow',
+    (po) => po.edit(GUILD, { SendMessages: true }, role),
+  ],
+  [
+    '@everyone explicit View allow',
+    (po) => po.edit(GUILD, { ViewChannel: true }, role),
+  ],
+  ['a bot Send deny', (po) => po.edit(BOT, { SendMessages: false }, member)],
+  [
+    'private channel + unrelated bits',
+    async (po) => {
+      await po.edit(GUILD, { ViewChannel: false, AddReactions: false }, role);
+      await po.edit(BOT, { ViewChannel: true, EmbedLinks: true }, member);
+    },
+  ],
+];
+
+describe('archive → unarchive is an exact inverse (Codex r2 P1/P2)', () => {
+  it.each(
+    SEEDS.flatMap(([n, seed]) =>
+      [true, false].map((h) => [n, h, seed] as const),
+    ),
+  )(
+    '%s, hide=%s: restores the overwrite map exactly',
+    async (_name, hide, seed) => {
+      const { guild, ch } = setup();
+      await seed(ch.permissionOverwrites);
+      const before = snapshot(ch);
+      const res = await archiveChannel(guild as never, 'ch-1', {
+        categoryId: 'a',
+        hide,
+      });
+      const locked = snapshot(ch);
+      const want = hide ? SEND | VIEW : SEND;
+      expect((locked[GUILD]?.[1] ?? 0n) & want).toBe(want);
+      expect((locked[BOT]?.[0] ?? 0n) & want).toBe(want);
+      await unarchiveChannel(guild as never, 'ch-1', {
+        parentId: 'g',
+        added: res.added,
+      });
+      expect(snapshot(ch)).toEqual(before);
+    },
+  );
+
+  it('restores a prior explicit @everyone Send allow instead of clearing it', async () => {
+    const { guild, ch } = setup();
+    await ch.permissionOverwrites.edit(GUILD, { SendMessages: true }, role);
+    const res = await archiveChannel(guild as never, 'ch-1', {
+      categoryId: 'a',
+      hide: false,
+    });
+    expect(res.added).toMatchObject({
+      changes: expect.arrayContaining([
+        { target: 'everyone', flag: 'SendMessages', prior: 'allow' },
+      ]),
+    });
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'g',
+      added: res.added,
+    });
+    expect(snapshot(ch)).toEqual({ [GUILD]: [SEND, 0n] });
+  });
+
+  it('a v1 boolean record still clears exactly its bits', async () => {
+    const { guild, ch } = setup();
+    await ch.permissionOverwrites.edit(
+      GUILD,
+      { SendMessages: false, ViewChannel: false },
+      role,
+    );
+    await ch.permissionOverwrites.edit(BOT, { ViewChannel: true }, member);
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'g',
+      added: { everyoneSend: true, everyoneView: true, botView: true },
+    });
+    expect(snapshot(ch)).toEqual({});
+  });
+});
+
+describe('archive rollback reads fresh overwrite state (Codex r2 P2)', () => {
+  it('re-fetches the channel (force) and undoes writes the stale cache never saw', async () => {
+    const { guild, ch } = setup();
+    // The API-side copy the lock writes land on; the rollback must read it.
+    const api = makeChannel('ch-1', { parentId: 'games-cat' });
+    guild.channels.fetch.mockResolvedValueOnce(ch).mockResolvedValueOnce(api);
+    await api.permissionOverwrites.edit(GUILD, { SendMessages: false }, role);
+    await api.permissionOverwrites.edit(BOT, { SendMessages: true }, member);
+    guild.channels.edit.mockRejectedValueOnce(new Error('move failed'));
+    await expect(
+      archiveChannel(guild as never, 'ch-1', { categoryId: 'a', hide: false }),
+    ).rejects.toThrow('move failed');
+    expect(guild.channels.fetch).toHaveBeenLastCalledWith('ch-1', {
+      force: true,
+    });
+    expect(snapshot(api)).toEqual({});
   });
 });
 
