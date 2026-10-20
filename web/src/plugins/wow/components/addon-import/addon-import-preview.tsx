@@ -131,7 +131,7 @@ function TargetSection({ target, ruleset, onRulesetChange, inference }: TargetSe
     const pick = needsRulesetPick(target) && onRulesetChange;
     return (
         <>
-            <AddonImportTargetBanner target={target} inference={inference} />
+            <AddonImportTargetBanner target={target} inference={inference} pick={ruleset} />
             {pick && <AddonImportRulesetPicker value={ruleset ?? null} onChange={pick} hint={rulesetPickerHint(inference)} />}
         </>
     );

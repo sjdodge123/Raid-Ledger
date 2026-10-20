@@ -115,6 +115,7 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
         expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Import' }), 'the disabled Import says why').toHaveAccessibleDescription(/Pick one to import\./);
         await user.click(picker.getByRole('radio', { name: 'PvP' }));
+        expect(screen.getByTestId('addon-import-target'), 'the target line names the pick').toHaveTextContent('Creates Ana · US · PvP · Level 60 Paladin');
         expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Import' })).not.toHaveAccessibleDescription();
         await user.click(screen.getByRole('button', { name: 'Import' }));
@@ -174,6 +175,9 @@ describe('AddonImportDialog create mode — realm-inferred ruleset (ROK-1739 §6
         await pasteAndCheck(user);
         await user.click(screen.getByRole('radio', { name: 'Normal' }));
         expect(screen.getByRole('radio', { name: 'Normal' })).toBeChecked();
+        const banner = screen.getByTestId('addon-import-target');
+        expect(banner, 'the target line follows the override, not the inference').toHaveTextContent('Creates Ana · US · Normal · Level 60 Paladin');
+        expect(banner).not.toHaveTextContent('inferred from');
         await user.click(screen.getByRole('button', { name: 'Import' }));
         await waitFor(() => expect(bodies).toHaveLength(2));
         expect(bodies[1]).toMatchObject({ dryRun: false, ruleset: 'normal' });
