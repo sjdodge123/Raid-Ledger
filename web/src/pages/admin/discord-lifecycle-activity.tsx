@@ -114,7 +114,7 @@ function ActivityCards({ items, pin, recreate }: RowsProps): JSX.Element {
                 <li key={row.gameId} className="rounded-lg border border-edge bg-panel/50 p-3 space-y-2" data-testid="lifecycle-activity-row">
                     <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-foreground">{row.gameName}</span>
-                        <span className="text-xs text-muted">{row.itemCount} items · {relativeTime(row.lastActivityAt)}</span>
+                        <span className="text-xs text-muted">{row.itemCount} {row.itemCount === 1 ? 'item' : 'items'} · {relativeTime(row.lastActivityAt)}</span>
                     </div>
                     <Signals row={row} /><ChannelCell row={row} pin={pin} /><ActionCell row={row} recreate={recreate} />
                 </li>
