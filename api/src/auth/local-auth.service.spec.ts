@@ -124,7 +124,12 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
 });
 
 describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)', () => {
-  const admin = { id: 1, username: 'admin', role: 'admin' as const };
+  const admin = {
+    id: 1,
+    username: 'admin',
+    role: 'admin' as const,
+    tokenVersion: 0,
+  };
 
   it('rejects impersonating a banned account', async () => {
     const db = makeDb([[baseUser({ bannedAt: new Date() })]]);

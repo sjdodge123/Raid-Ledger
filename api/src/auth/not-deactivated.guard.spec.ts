@@ -19,6 +19,7 @@ function buildUser(
     discordId: null,
     deactivatedAt: null,
     impersonatedBy: null,
+    tokenVersion: 0,
     ...overrides,
   };
 }
