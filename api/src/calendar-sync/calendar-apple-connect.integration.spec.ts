@@ -219,13 +219,23 @@ describe('POST /users/me/calendars/apple — connect', () => {
       })
       .where(eq(conns.id, id));
     await readQueue.drain(true);
+    // iCloud treats the Apple ID case-insensitively; the fake compares it
+    // exactly, so it accepts the upper-cased login for the reconnect.
+    server = new FakeCalDavServer({
+      username: EMAIL.toUpperCase(),
+      appPassword: PASSWORD,
+    });
+    jest.spyOn(appleHttp, 'caldavFetch').mockImplementation(server.handle);
 
     const res = await connect(token, {
       email: EMAIL.toUpperCase(),
       appPassword: PASSWORD,
     });
 
-    expect(res.status).toBe(200);
+    expect({ status: res.status, body: res.body }).toMatchObject({
+      status: 200,
+      body: { id },
+    });
     expect(res.body).toMatchObject({
       id,
       status: 'active',
