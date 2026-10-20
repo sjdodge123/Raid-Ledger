@@ -12,12 +12,24 @@ import { WowRegionSchema } from './characters.schema.js';
 export const WOW_FOREVER_REALM_RULESETS_MAX = 500;
 
 /**
- * Canonical realm-name key: NFKC, trimmed, inner whitespace collapsed,
+ * Apostrophe look-alikes NFKC leaves alone (curly quotes from iPad/macOS smart
+ * punctuation, the modifier letter, backtick, acute) — `GetRealmName()` sends a
+ * straight `'`, so "Kel’Thuzad" typed by an admin must key like "Kel'Thuzad".
+ */
+const REALM_APOSTROPHES = /[\u2018\u2019\u02BC\u0060\u00B4]/g;
+
+/**
+ * Canonical realm-name key: NFKC, apostrophe look-alikes → `'`, trimmed, inner whitespace collapsed,
  * lowercased. The one definition shared by the API lookup and the web
  * duplicate check.
  */
 export function normalizeRealmName(name: string): string {
-    return name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+    return name
+        .normalize('NFKC')
+        .replace(REALM_APOSTROPHES, "'")
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
 }
 
 export const WowForeverRealmRulesetEntrySchema = z
