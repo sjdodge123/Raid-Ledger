@@ -39,3 +39,15 @@ describe('WowForeverRealmRulesetsSchema', () => {
         expect(result.success).toBe(true);
     });
 });
+
+describe('normalizeRealmName — apostrophe look-alikes (Codex r1 P3)', () => {
+    it('keys every supported look-alike like the straight apostrophe the addon sends', () => {
+        const straight = normalizeRealmName("Kel'Thuzad");
+        expect(straight).toBe("kel'thuzad");
+        // U+00B4 is decomposed by NFKC into a space + combining accent, so the
+        // look-alike replacement must run before normalisation.
+        for (const variant of ['Kel´Thuzad', 'Kel’Thuzad', 'Kel‘Thuzad', 'KelʼThuzad', 'Kel`Thuzad']) {
+            expect(normalizeRealmName(variant)).toBe(straight);
+        }
+    });
+});
