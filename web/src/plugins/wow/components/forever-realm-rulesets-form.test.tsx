@@ -38,15 +38,15 @@ beforeEach(() => {
 const saveButton = () => screen.getByRole('button', { name: /save realm rulesets/i });
 
 describe('ForeverRealmRulesetsSection (ROK-1739)', () => {
-    it('keeps the focus order equal to the visual order — region, name, ruleset, remove — with no order-* reshuffle (WCAG 2.4.3)', async () => {
+    it('keeps the focus order equal to the visual order — region, ruleset, remove, name — with no order-* reshuffle (WCAG 2.4.3, ROK-1864)', async () => {
         serve();
         renderWithProviders(<ForeverRealmRulesetsSection />);
         const name = await screen.findByRole('textbox', { name: 'Realm name, row 1' });
         const row = name.closest('div.grid');
         if (!(row instanceof HTMLElement)) throw new Error('the realm name sits outside a row grid');
         const expected = [
-            screen.getByRole('combobox', { name: 'Region, row 1' }), name,
-            screen.getByRole('combobox', { name: 'Ruleset, row 1' }), screen.getByRole('button', { name: 'Remove Bloodmoon' }),
+            screen.getByRole('combobox', { name: 'Region, row 1' }), screen.getByRole('combobox', { name: 'Ruleset, row 1' }),
+            screen.getByRole('button', { name: 'Remove Bloodmoon' }), name,
         ];
         expect(Array.from(row.querySelectorAll('select, input, button')), 'tab order follows the DOM').toEqual(expected);
         const reordered = Array.from(row.querySelectorAll('*')).map((el) => el.getAttribute('class') ?? '').filter((c) => /(^|[\s:])order-/.test(c));
