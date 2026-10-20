@@ -80,6 +80,8 @@ const members = {
 };
 let rolledBack = false;
 const db = {
+  select: jest.fn(),
+  update: jest.fn(),
   transaction: async (fn: (tx: object) => Promise<unknown>) => {
     try {
       return await fn({});
@@ -190,5 +192,36 @@ describe('setStatus copy', () => {
     await expect(
       svc.setStatus(officer, 7, { status: 'archived' }),
     ).rejects.toThrow('Guild leader access required');
+  });
+
+  it('a non-staff leader of a hidden hub cannot archive it (404)', async () => {
+    const hidden = { ...HUB, hiddenAt: AT };
+    jest.mocked(lookup.requireCommunityHub).mockResolvedValue(hidden);
+    jest
+      .mocked(mq.findMembership)
+      .mockResolvedValue(memberRow({ role: 'leader' }));
+    await expect(
+      svc.setStatus(leader, 7, { status: 'archived' }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('a staff restore of a hidden hub never clears hidden_at', async () => {
+    const hub = { ...HUB, status: 'archived' as const, hiddenAt: AT };
+    jest.mocked(lookup.requireCommunityHub).mockResolvedValue(hub);
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    const limit = jest.fn().mockResolvedValue([]);
+    db.select.mockReturnValue({ from: () => ({ where: () => ({ limit }) }) });
+    const where = jest.fn().mockResolvedValue(undefined);
+    const set = jest.fn().mockReturnValue({ where });
+    db.update.mockReturnValue({ set });
+    await expect(
+      svc.setStatus({ id: 9, role: 'admin' }, 7, { status: 'active' }),
+    ).resolves.toEqual({ status: 'active' });
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'active' }),
+    );
+    expect(Object.keys(set.mock.calls[0]?.[0] ?? {})).not.toContain(
+      'hiddenAt',
+    );
   });
 });

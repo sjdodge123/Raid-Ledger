@@ -178,6 +178,8 @@ export class CommunityModerationService {
   /**
    * PATCH /hubs/:id/status — a Leader archives; only staff restore (M14). A
    * leader of an archived hub is refused upstream by `CommunityLeaderGuard`.
+   * A hidden hub is a 404 to non-staff (this route skips `HubVisibleGuard`);
+   * archive/restore never touch `hidden_at`.
    */
   async setStatus(
     actor: GuildActor,
@@ -187,7 +189,8 @@ export class CommunityModerationService {
     const hub = await requireCommunityHub(this.db, hubId, false);
     const staff = isStaff(actor);
     const row = await findMembership(this.db, hubId, actor.id);
-    if (hub.status === 'proposed' || (!staff && !isLive(row))) {
+    const refused = !isLive(row) || hub.hiddenAt !== null;
+    if (hub.status === 'proposed' || (!staff && refused)) {
       throw new NotFoundException(HUB_NOT_FOUND);
     }
     const role = staff ? 'leader' : (row?.role ?? 'visitor');
