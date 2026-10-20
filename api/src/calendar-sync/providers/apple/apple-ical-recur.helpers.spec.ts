@@ -527,8 +527,9 @@ describe('recurrence work is bounded before ical.js iterates (Codex r8)', () => 
   );
 
   it('stops a huge-COUNT series with no in-window occurrence at the cap, never past it', () => {
+    // The bound is the iteration count, not the wall clock: under coverage
+    // instrumentation the spy's own bookkeeping took 1.5 s on a CI runner.
     const next = jest.spyOn(ICAL.RecurExpansion.prototype, 'next');
-    const started = Date.now();
     const result = parse(
       costlySeries(
         '20250101T000000Z',
@@ -536,8 +537,8 @@ describe('recurrence work is bounded before ical.js iterates (Codex r8)', () => 
         'FREQ=SECONDLY;COUNT=100000000',
       ),
     );
-    expect(Date.now() - started).toBeLessThan(1_000);
     expect(result.skipped).toBe(1);
+    expect(next.mock.calls.length).toBeGreaterThan(0);
     expect(next.mock.calls.length).toBeLessThanOrEqual(MAX_SERIES_ITERATIONS);
   });
 
