@@ -23,6 +23,8 @@
  * Codex r9: a FLOATING master (no `Z`, no TZID) whose occurrences the
  * collection's `calendar-timezone` places gets the same rewrite onto its
  * floating wall clock in that zone; with no collection zone it is untouched.
+ * Codex r11: an embedded-zone master's EXDATE / RDATE in another IANA zone
+ * with no VTIMEZONE → its UTC instant (it was left floating).
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -33,6 +35,7 @@ import {
   type FloatingZone,
   type WallClock,
 } from './apple-ical-time.helpers';
+import { vtzWallTime } from './apple-ical-vtimezone-offset.helpers';
 
 interface Target {
   /** The DTSTART's TZID; null = a floating master (Codex r9). */
@@ -98,7 +101,7 @@ function toSeriesWall(
  * rules (its TZID may be unknown to Intl, or its rules differ from tzdata).
  */
 function inRealZone(ms: number, zone: ICAL.Timezone): ICAL.Time {
-  return ICAL.Time.fromJSDate(new Date(ms), true).convertToZone(zone);
+  return vtzWallTime(ms, zone);
 }
 
 /** An instant → the series' wall clock: its TZID, else the collection zone. */
@@ -237,6 +240,9 @@ export function alignSeriesZone(
   if (target.real) {
     // ical.js compares UNTIL / EXDATE / RDATE as instants in a real zone;
     // only the THISANDFUTURE shift needs both ends on the series' clock.
+    // Codex r11: one naming another IANA zone with no VTIMEZONE is floating
+    // in ical.js, so it becomes its UTC instant first.
+    alignToUtc(master, floating);
     for (const o of overrides) alignOverride(o, target);
     return;
   }
