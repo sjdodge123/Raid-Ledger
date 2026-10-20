@@ -3421,3 +3421,7 @@ same day (#1278, #1279, #1280).
 
 - **[med]** `api/src/plugins/valheim/armory/valheim-armory-containers.import.ts:111` — every 10-minute "always sent" containers scan deletes and re-inserts the world's containers and up to 50 000 stacks, burning serial ids and leaving autovacuum work on the NAS. Correct, but wasteful at scale. Suggested: store a payload hash on `valheim_container_scans` and skip the rewrite when it is unchanged; consider `bigserial` for `valheim_container_stacks.id`.
 - **[nit]** `web/src/plugins/valheim/materials/` — `ChestList` renders every chest unpaged, and the list waits for `/materials` before fetching `/containers`. Fine at ~100 chests; revisit with real worlds (ROK-1853 review NIT).
+
+### 2026-10-20 — feat/rok-1853-containers (surfaced during Codex r2 fix lane)
+
+- **nit** `web/src/plugins/valheim/hooks/use-valheim-link-tokens.ts` — `npx prettier --check` (from `web/`) reports "Code style issues found in the above file. Run Prettier with --write to fix." The file is byte-identical to `origin/main` (last touched by ROK-1833 #1671), so it is not this branch's change. Suggested: `npx prettier --write` it in the next PR that touches the Valheim link-token panel.
