@@ -5,9 +5,10 @@
  * prefix, so each tab's list (`['admin-hubs', tab]`) refetches.
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
-import type {
-    AdminCreateHubDto, ApproveHubProposalDto, GuildSummary, HubDirectoryEntry,
-    HubProposalList, HubStatusUpdateDto,
+import {
+    AdminHubListSchema,
+    type AdminCreateHubDto, type AdminHubList, type ApproveHubProposalDto, type GuildSummary,
+    type HubProposalList, type HubStatusUpdateDto,
 } from '@raid-ledger/contract';
 import { getAuthToken } from '../../hooks/use-auth';
 import { adminFetch } from '../../hooks/admin/admin-fetch';
@@ -15,14 +16,8 @@ import { adminFetch } from '../../hooks/admin/admin-fetch';
 export type AdminHubTab = 'pending' | 'active' | 'archived';
 export const ADMIN_HUBS_KEY = 'admin-hubs';
 
-/** `GET /admin/hubs` row — a directory entry plus the admin-only `leaderless` flag. */
-export type AdminHubEntry = HubDirectoryEntry & { leaderless?: boolean; createdAt?: string };
-
-export interface AdminHubPage {
-    items: AdminHubEntry[];
-    nextCursor: string | null;
-    total: number;
-}
+/** `GET /admin/hubs` row — the contract's `AdminHubEntry` (`leader: null` = leaderless). */
+export type { AdminHubEntry } from '@raid-ledger/contract';
 
 const post = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) });
 
@@ -36,10 +31,10 @@ export function useAdminHubProposals(): UseQueryResult<HubProposalList> {
 }
 
 /** Active or archived community hubs. */
-export function useAdminHubList(status: 'active' | 'archived'): UseQueryResult<AdminHubPage> {
-    return useQuery<AdminHubPage>({
+export function useAdminHubList(status: 'active' | 'archived'): UseQueryResult<AdminHubList> {
+    return useQuery<AdminHubList>({
         queryKey: [ADMIN_HUBS_KEY, status],
-        queryFn: () => adminFetch(`/admin/hubs?status=${status}`, undefined, 'Failed to load hubs'),
+        queryFn: async () => AdminHubListSchema.parse(await adminFetch<unknown>(`/admin/hubs?status=${status}`, undefined, 'Failed to load hubs')),
         enabled: !!getAuthToken(),
     });
 }

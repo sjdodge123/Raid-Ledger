@@ -65,15 +65,15 @@ export interface ActiveRowProps {
 
 /** An active hub: leader (or a "No leader" warning), members, actions. */
 export function ActiveHubRow({ hub, onTransfer, onArchive, busy }: ActiveRowProps): JSX.Element {
-    const leader = hub.leaderless || !hub.leaderName
+    const leader = hub.leader === null
         ? <span className="font-medium text-warning">No leader</span>
-        : <span>Leader: {hub.leaderName}</span>;
+        : <span>Leader: {hub.leader.username}</span>;
     const meta = (
         <>
             <span>{hub.gameName}</span>
             {leader}
             <span>{hub.memberCount} {hub.memberCount === 1 ? 'member' : 'members'}</span>
-            {hub.createdAt ? <span>Created {relative(hub.createdAt)}</span> : null}
+            <span>Created {relative(hub.createdAt)}</span>
         </>
     );
     return (

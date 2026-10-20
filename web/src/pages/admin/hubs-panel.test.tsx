@@ -21,7 +21,7 @@ beforeEach(() => {
     setAuthToken('test-token');
     store = makeAdminHubsStore({
         proposals: [makeHubProposal(), makeHubProposal({ id: 2, name: 'Night Owls', proposedBy: { userId: 8, username: 'Astarion', avatarUrl: null } })],
-        active: [makeAdminHub(), makeAdminHub({ id: 101, name: 'Orphans', leaderName: null, leaderless: true })],
+        active: [makeAdminHub(), makeAdminHub({ id: 101, name: 'Orphans', leader: null })],
         archived: [makeAdminHub({ id: 102, name: 'Old Crew' })],
     });
     server.use(...adminHubsHandlers(store));

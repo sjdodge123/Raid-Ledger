@@ -3,8 +3,7 @@
  * mutable so a test can watch a rejected/approved proposal leave the list.
  */
 import { http, HttpResponse, type HttpHandler } from 'msw';
-import type { HubProposal } from '@raid-ledger/contract';
-import type { AdminHubEntry } from '../../pages/admin/use-admin-hubs';
+import type { AdminHubEntry, HubProposal } from '@raid-ledger/contract';
 
 const API = 'http://localhost:3000';
 
@@ -21,9 +20,8 @@ export function makeHubProposal(over: Partial<HubProposal> = {}): HubProposal {
 /** An active community hub row as `GET /admin/hubs` returns it. */
 export function makeAdminHub(over: Partial<AdminHubEntry> = {}): AdminHubEntry {
     return {
-        id: 100, gameId: 10, gameName: "Baldur's Gate 3", gameIconUrl: null,
-        name: 'Tav Party', blurb: null, memberCount: 4, leaderName: 'Karlach',
-        viewer: 'not-member', leaderless: false, ...over,
+        id: 100, gameId: 10, gameName: "Baldur's Gate 3", name: 'Tav Party', blurb: null, status: 'active',
+        memberCount: 4, leader: { userId: 8, username: 'Karlach' }, createdAt: '2026-10-01T12:00:00.000Z', ...over,
     };
 }
 
@@ -45,7 +43,7 @@ async function record(store: AdminHubsStore, request: Request): Promise<unknown>
     return body;
 }
 
-const page = (items: AdminHubEntry[]) => ({ items, nextCursor: null, total: items.length });
+const page = (items: AdminHubEntry[]): { items: AdminHubEntry[] } => ({ items });
 
 function readHandlers(store: AdminHubsStore): HttpHandler[] {
     return [
