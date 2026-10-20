@@ -11,6 +11,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 
 export interface PopupPosition { top: number; left: number; width: number }
 
+/** Which popup edge lines up with the anchor's matching edge. */
+export type PopupAlign = 'start' | 'end';
+
 const GAP_PX = 4;
 
 function samePos(a: PopupPosition | null, b: PopupPosition): boolean {
@@ -24,8 +27,14 @@ function containingOrigin(el: HTMLElement | null): { x: number; y: number } {
     return { x: r.left - (parseFloat(el.style.left) || 0), y: r.top - (parseFloat(el.style.top) || 0) };
 }
 
+/** The popup's `left`: the anchor's left edge, or (for `end`) its right edge minus the popup's width. */
+function alignedLeft(anchor: DOMRect, popup: HTMLElement | null, align: PopupAlign): number {
+    if (align === 'start') return anchor.left;
+    return anchor.right - (popup?.getBoundingClientRect().width ?? 0);
+}
+
 function usePopupPosition(
-    anchorRef: RefObject<HTMLElement | null>, popupRef: RefObject<HTMLElement | null>, open: boolean,
+    anchorRef: RefObject<HTMLElement | null>, popupRef: RefObject<HTMLElement | null>, open: boolean, align: PopupAlign,
 ): PopupPosition | null {
     const [pos, setPos] = useState<PopupPosition | null>(null);
     useLayoutEffect(() => {
@@ -34,7 +43,7 @@ function usePopupPosition(
             const r = anchorRef.current?.getBoundingClientRect();
             if (!r) return;
             const o = containingOrigin(popupRef.current);
-            const next = { top: r.bottom + GAP_PX - o.y, left: r.left - o.x, width: r.width };
+            const next = { top: r.bottom + GAP_PX - o.y, left: alignedLeft(r, popupRef.current, align) - o.x, width: r.width };
             setPos((prev) => (samePos(prev, next) ? prev : next));
         };
         measure();
@@ -44,7 +53,7 @@ function usePopupPosition(
             window.removeEventListener('scroll', measure, true);
             window.removeEventListener('resize', measure);
         };
-    }, [open, anchorRef, popupRef]);
+    }, [open, anchorRef, popupRef, align]);
     return pos;
 }
 
@@ -63,15 +72,20 @@ function useOutsidePress(refs: RefObject<HTMLElement | null>[], open: boolean, o
     }, [open]);
 }
 
-/** Position the popup under `anchorRef`; call `onOutside` on a press outside both. */
+/**
+ * Position the popup under `anchorRef`; call `onOutside` on a press outside both.
+ * `align: 'end'` lines the popup's right edge up with the anchor's (measured, not
+ * a CSS transform, which `containingOrigin` would read back and cancel).
+ */
 export function useAnchoredPopup(
     anchorRef: RefObject<HTMLElement | null>,
     popupRef: RefObject<HTMLElement | null>,
     open: boolean,
     onOutside: () => void,
+    align: PopupAlign = 'start',
 ): PopupPosition | null {
     useOutsidePress([anchorRef, popupRef], open, onOutside);
-    return usePopupPosition(anchorRef, popupRef, open);
+    return usePopupPosition(anchorRef, popupRef, open, align);
 }
 
 /** Keep the active option visible inside the scrolling listbox. */

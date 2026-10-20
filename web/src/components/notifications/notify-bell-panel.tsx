@@ -1,35 +1,41 @@
 /**
- * The game page's notification panel (ROK-1797): the body shared by the
- * desktop popover and the phone `BottomSheet`, plus the popover shell.
+ * The notification bell's panel (ROK-1797, generalised by ROK-1832): the body
+ * shared by the desktop popover and the phone `BottomSheet`, plus the popover
+ * shell. Subject-agnostic — the game and group bells pass their own copy.
  */
 import { useEffect, useId, useRef, type JSX, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Switch } from '../../components/ui/switch';
-import { useAnchoredPopup } from '../../components/ui/use-anchored-popup';
-
-export const NOTIFICATION_SETTINGS_HREF = '/profile/notifications#notif-subscribed_game';
+import { Switch } from '../ui/switch';
+import { useAnchoredPopup, type PopupAlign } from '../ui/use-anchored-popup';
 
 export interface NotifyPanelState {
-    gameName: string;
+    /** What the bell is for — "Valheim", "Iron Vanguard". */
+    subjectName: string;
     muted: boolean;
     disabled: boolean;
     onMutedChange: (muted: boolean) => void;
+    /** The one-line explanation under the Switch. */
+    mutedHint: string;
+    /** "All notification settings →" target (a `#notif-<type>` anchor). */
+    settingsHref: string;
+    /** `<prefix>-switch` / `<prefix>-popover`. */
+    testIdPrefix: string;
 }
 
-/** Switch (checked = notifications on), the heart-is-separate line, and the settings link. */
-export function GameNotifyPanelBody({ gameName, muted, disabled, onMutedChange }: NotifyPanelState): JSX.Element {
+/** Switch (checked = notifications on), the subject's hint line, and the settings link. */
+export function NotifyPanelBody({ subjectName, muted, disabled, onMutedChange, mutedHint, settingsHref, testIdPrefix }: NotifyPanelState): JSX.Element {
     const helpId = useId();
-    const label = `Notify me about ${gameName}`;
+    const label = `Notify me about ${subjectName}`;
     return (
         <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-foreground">{label}</span>
                 <Switch checked={!muted} onChange={(on) => onMutedChange(!on)} label={label}
-                    disabled={disabled} testId="game-notify-switch" aria-describedby={helpId} />
+                    disabled={disabled} testId={`${testIdPrefix}-switch`} aria-describedby={helpId} />
             </div>
-            <p id={helpId} className="text-sm text-muted">Muting only silences notifications. Your heart stays as it is.</p>
-            <Link to={NOTIFICATION_SETTINGS_HREF} className="text-sm font-medium text-success hover:underline">
+            <p id={helpId} className="text-sm text-muted">{mutedHint}</p>
+            <Link to={settingsHref} className="text-sm font-medium text-success hover:underline">
                 All notification settings →
             </Link>
         </div>
@@ -74,24 +80,31 @@ function usePopoverFocusExit(open: boolean, onClose: () => void, popupRef: RefOb
     }, [open, onClose, popupRef, returnFocusTo]);
 }
 
-/** ≥1024px: a portalled `role="dialog"` popover anchored under the bell. */
-export function GameNotifyPopover({ open, onClose, anchorRef, bellRef, container, panel }: {
+/** Which popover edge lines up with the bell's matching edge. */
+export type PopoverAlign = PopupAlign;
+
+/**
+ * ≥1024px: a portalled `role="dialog"` popover anchored under the bell. `end`
+ * pins its right edge to the bell's right edge (the hook measures the panel),
+ * so a bell at the right of its row keeps the panel inside the viewport.
+ */
+export function NotifyPopover({ open, onClose, anchorRef, bellRef, container, panel, align }: {
     open: boolean; onClose: () => void;
     anchorRef: RefObject<HTMLElement | null>; bellRef: RefObject<HTMLButtonElement | null>;
-    container: HTMLElement; panel: NotifyPanelState;
+    container: HTMLElement; panel: NotifyPanelState; align: PopoverAlign;
 }): JSX.Element | null {
     const popupRef = useRef<HTMLDivElement | null>(null);
     const titleId = useId();
-    const pos = useAnchoredPopup(anchorRef, popupRef, open, onClose);
+    const pos = useAnchoredPopup(anchorRef, popupRef, open, onClose, align);
     usePopoverFocusExit(open, onClose, popupRef, bellRef);
     useEffect(() => { if (open) popupRef.current?.focus(); }, [open]);
     if (!open) return null;
     return createPortal(
-        <div ref={popupRef} role="dialog" aria-labelledby={titleId} tabIndex={-1} data-testid="game-notify-popover"
+        <div ref={popupRef} role="dialog" aria-labelledby={titleId} tabIndex={-1} data-testid={`${panel.testIdPrefix}-popover`}
             className="fixed z-50 w-80 bg-panel border border-edge rounded-lg shadow-lg p-3 focus:outline-none"
             style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}>
-            <h2 id={titleId} className="text-sm font-semibold text-foreground mb-3">Notifications for {panel.gameName}</h2>
-            <GameNotifyPanelBody {...panel} />
+            <h2 id={titleId} className="text-sm font-semibold text-foreground mb-3">Notifications for {panel.subjectName}</h2>
+            <NotifyPanelBody {...panel} />
         </div>,
         container,
     );

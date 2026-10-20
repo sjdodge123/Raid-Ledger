@@ -34,6 +34,8 @@ export const GuildViewerAccessSchema = z
     role: LadderRoleSchema,
     canEdit: z.boolean(),
     canManageEditors: z.boolean(),
+    /** ROK-1832: viewer muted this group's notifications; absent for non-members. */
+    notificationsMuted: z.boolean().optional(),
   })
   .strict();
 export type GuildViewerAccess = z.infer<typeof GuildViewerAccessSchema>;

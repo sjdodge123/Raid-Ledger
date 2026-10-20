@@ -15,6 +15,7 @@ import { PELICAN_PLUGIN_ID } from '../pelican.constants';
 import {
   isServerHubMemberRow,
   memberServerHubIds,
+  serverHubMemberUserIds,
 } from './server-hub-membership.queries';
 import { ServerHubMembershipService } from './server-hub-membership.service';
 import { buildServerHubPage } from './server-hub-page.helpers';
@@ -54,6 +55,11 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
   async resolveLadder(actor: GuildActor, guildId: number): Promise<LadderRole> {
     if (isStaff(actor)) return 'leader';
     return (await this.isMember(actor.id, guildId)) ? 'member' : 'visitor';
+  }
+
+  /** ROK-1832 D8: the hub's current members (same L-2 window as isMember). */
+  memberUserIds(guildId: number): Promise<number[]> {
+    return serverHubMemberUserIds(this.db, guildId, new Date());
   }
 
   memberGroupIds(userId: number): Promise<number[]> {
