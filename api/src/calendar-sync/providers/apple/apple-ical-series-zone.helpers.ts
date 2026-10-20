@@ -20,6 +20,9 @@
  * Codex r7: a UTC master's EXDATE / RDATE naming an IANA TZID with no
  * VTIMEZONE (floating in ical.js) is rewritten to its UTC instant; Codex
  * r8: so are its overrides' zoned RECURRENCE-ID / DTSTART / DTEND.
+ * Codex r9: a FLOATING master (no `Z`, no TZID) whose occurrences the
+ * collection's `calendar-timezone` places gets the same rewrite onto its
+ * floating wall clock in that zone; with no collection zone it is untouched.
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -28,16 +31,21 @@ import {
   timeToMs,
   utcToWall,
   type FloatingZone,
+  type WallClock,
 } from './apple-ical-time.helpers';
 
 interface Target {
-  zone: string;
+  /** The DTSTART's TZID; null = a floating master (Codex r9). */
+  zone: string | null;
   floating: FloatingZone;
   /** The DTSTART's resolved VTIMEZONE (Codex r5), else null = floating. */
   real: ICAL.Timezone | null;
 }
 
-/** The DTSTART's IANA TZID + whether a VTIMEZONE resolved it; else null. */
+/**
+ * The DTSTART's IANA TZID + whether a VTIMEZONE resolved it; a floating
+ * DTSTART with a collection zone (Codex r9) → zone null; else null.
+ */
 function seriesTarget(
   master: ICAL.Component,
   floating: FloatingZone,
@@ -46,8 +54,10 @@ function seriesTarget(
   const value = prop?.getFirstValue();
   const tzid = prop?.getParameter('tzid');
   if (!(value instanceof ICAL.Time) || value.isDate) return null;
-  if (typeof tzid !== 'string' || tzid.length === 0) return null;
   if (value.zone === ICAL.Timezone.utcTimezone) return null;
+  if (typeof tzid !== 'string' || tzid.length === 0) {
+    return floating === null ? null : { zone: null, floating, real: null };
+  }
   const real = isRealZone(value.zone) ? value.zone : null;
   if (!real && !utcToWall(0, tzid)) return null;
   return { zone: tzid, floating, real };
@@ -75,7 +85,7 @@ function toSeriesWall(
   const ms = timeToMs(value, tzid, target.floating);
   if (ms === null) return value;
   if (target.real) return inRealZone(ms, target.real);
-  const wall = utcToWall(ms, target.zone);
+  const wall = wallOf(ms, target);
   if (!wall) return value;
   return ICAL.Time.fromData(
     { ...wall, isDate: false },
@@ -89,6 +99,16 @@ function toSeriesWall(
  */
 function inRealZone(ms: number, zone: ICAL.Timezone): ICAL.Time {
   return ICAL.Time.fromJSDate(new Date(ms), true).convertToZone(zone);
+}
+
+/** An instant → the series' wall clock: its TZID, else the collection zone. */
+function wallOf(ms: number, target: Target): WallClock | null {
+  const zone = target.zone ?? target.floating;
+  if (zone === null) return null;
+  if (typeof zone === 'string') return utcToWall(ms, zone);
+  const t = inRealZone(ms, zone);
+  const { year, month, day, hour, minute, second } = t;
+  return { year, month, day, hour, minute, second };
 }
 
 function tzidOf(prop: ICAL.Property): string | null {
@@ -131,7 +151,8 @@ function alignOverride(override: ICAL.Component, target: Target): void {
     const wall = toSeriesWall(value, tzidOf(prop), target);
     if (wall === value) continue;
     prop.setValue(wall);
-    prop.setParameter('tzid', target.zone);
+    if (target.zone === null) prop.removeParameter('tzid');
+    else prop.setParameter('tzid', target.zone);
   }
 }
 

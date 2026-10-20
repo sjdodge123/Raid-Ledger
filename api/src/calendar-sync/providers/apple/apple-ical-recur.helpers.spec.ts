@@ -602,3 +602,79 @@ describe('DAILY / WEEKLY rules whose filter can never match (Codex r9)', () => {
     ]);
   });
 });
+
+const nyVtimezone = (): string => {
+  const block = /BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE/.exec(
+    fixture('weekly-ny.ics'),
+  );
+  if (!block) throw new Error('weekly-ny.ics has no VTIMEZONE');
+  return ['BEGIN:VCALENDAR', block[0], 'END:VCALENDAR'].join('\r\n');
+};
+const floatingDaily = (masterExtra: string[], override: string[]) =>
+  [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'BEGIN:VEVENT',
+    'UID:floating-daily@icloud.test',
+    'DTSTART:20261020T190000',
+    'DTEND:20261020T200000',
+    'RRULE:FREQ=DAILY;COUNT=4',
+    ...masterExtra,
+    'END:VEVENT',
+    ...override,
+    'END:VCALENDAR',
+    '',
+  ].join('\r\n');
+const moved = [
+  'BEGIN:VEVENT',
+  'UID:floating-daily@icloud.test',
+  'RECURRENCE-ID:20261021T230000Z',
+  'DTSTART:20261022T010000Z',
+  'DTEND:20261022T020000Z',
+  'END:VEVENT',
+];
+const sorted = (ics: string, calendarTimezone: string | null) =>
+  parseBusyFromIcs(ics, { range, calendarTimezone })
+    .blocks.map((b) => b.start.toISOString())
+    .sort();
+const zones: [string, () => string][] = [
+  ['IANA name', () => 'America/New_York'],
+  ['VTIMEZONE', nyVtimezone],
+];
+
+describe('floating master aligned to the collection zone (Codex r9)', () => {
+  it.each(zones)('a UTC EXDATE removes its occurrence (%s)', (_, zone) => {
+    const ics = floatingDaily(['EXDATE:20261021T230000Z'], []);
+    expect(sorted(ics, zone())).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+      '2026-10-23T23:00:00.000Z',
+    ]);
+  });
+
+  it.each(zones)('a UTC-stamped override reschedules it (%s)', (_, zone) => {
+    expect(sorted(floatingDaily([], moved), zone())).toEqual([
+      '2026-10-20T23:00:00.000Z',
+      '2026-10-22T01:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+      '2026-10-23T23:00:00.000Z',
+    ]);
+  });
+
+  it('without a collection zone keeps the floating-as-UTC behaviour', () => {
+    const ics = floatingDaily(['EXDATE:20261021T230000Z'], []);
+    expect(sorted(ics, null)).toEqual([
+      '2026-10-20T19:00:00.000Z',
+      '2026-10-21T19:00:00.000Z',
+      '2026-10-22T19:00:00.000Z',
+      '2026-10-23T19:00:00.000Z',
+    ]);
+    expect(sorted(floatingDaily([], moved), null)).toEqual([
+      '2026-10-20T19:00:00.000Z',
+      '2026-10-21T19:00:00.000Z',
+      '2026-10-22T01:00:00.000Z',
+      '2026-10-22T19:00:00.000Z',
+      '2026-10-23T19:00:00.000Z',
+    ]);
+  });
+});
