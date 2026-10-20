@@ -3453,3 +3453,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-20 — feat/rok-1870-community-hubs (Codex r5, carried on the ROK-1868 branch)
 
 - **low** — `api/src/guilds/community/community-directory.queries.ts:65-68` (Codex r5 P3): the `/hubs` directory cursor decodes integers without bounding them to PostgreSQL's int4 range, so a crafted cursor reaches the query and fails as a 500 instead of a 400. Suggested: reject cursor ids outside 1..2147483647 in the decoder with the same 400 as a malformed cursor, plus a unit case.
+
+### 2026-10-20 — feat/rok-1868-hub-posts (surfaced during the Opus review)
+
+- **low** — `api/src/guilds/posts/hub-posts.service.ts:207-211` (`relayOutcome`): after the 5 s `HUB_POST_RELAY_TIMEOUT_MS` the `withTimeout` race returns `'failed'`, but the underlying `this.relay.relay(...)` promise is not cancelled — the Discord message can still land and `setRelay` still records it, so the create/edit response says the relay failed while the post is in fact relayed (the next read shows it relayed). Not a regression elsewhere; behaviour change needs a new outcome value in the contract. Suggested: add a `'pending'` (or `'timed_out'`) value to the contract's relay-outcome enum, return it on timeout instead of `'failed'`, and have the web toast say "still sending" and refetch the post.
