@@ -29,7 +29,6 @@ import { parseDemoBody } from './demo-test.utils';
 import {
   CommunityHubsSeedSchema,
   SEED_HUB_NAMES,
-  clearSeedHubs,
   ensureSeedUser,
   resolveSeedGame,
   seedActiveHub,
@@ -37,6 +36,11 @@ import {
   seedProposal,
   type CommunityHubsSeedResult,
 } from './demo-test-community-hubs.helpers';
+import {
+  ensureSeedUsers,
+  muteSeedDiscordDms,
+  resetSeedFixture,
+} from './demo-test-community-hubs.reset';
 
 const CREW = ['officer', 'member-1', 'member-2', 'member-3', 'member-4'];
 
@@ -55,7 +59,9 @@ export class DemoTestCommunityHubsController {
   async seed(@Body() body: unknown): Promise<CommunityHubsSeedResult> {
     const input = parseDemoBody(CommunityHubsSeedSchema, body ?? {});
     const gameId = await resolveSeedGame(this.db, input.gameId);
-    await clearSeedHubs(this.db, gameId);
+    const seedUsers = await ensureSeedUsers(this.db);
+    await muteSeedDiscordDms(this.db, seedUsers);
+    await resetSeedFixture(this.db, gameId, seedUsers);
     const main = await this.seedCrewHub(gameId);
     const soloLeader = await ensureSeedUser(this.db, 'community-solo');
     const solo = await seedActiveHub(

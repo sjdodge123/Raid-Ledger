@@ -2,18 +2,15 @@
  * ROK-1870 §2.6 — `POST /admin/test/community-hubs/seed` helpers: one game,
  * two active community hubs (6 live members incl. an officer + a ban; 1
  * member), one `proposed` by `demo-member`, one archived. Idempotent: the
- * previous seed's rows (by name on the game) are deleted first. No `games`
+ * previous fixture is reset first (demo-test-community-hubs.reset.ts). No `games`
  * INSERT — an existing game is reused, so the name-dedup guard is moot.
  */
 import { NotFoundException } from '@nestjs/common';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../drizzle/schema';
-import {
-  hubNameKey,
-  insertCommunityHub,
-} from '../guilds/community/community-proposals.queries';
+import { insertCommunityHub } from '../guilds/community/community-proposals.queries';
 import { archiveHub } from '../guilds/community/community-hub.lookup';
 import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.helpers';
 
@@ -136,21 +133,6 @@ export async function ensureSeedUser(
     .returning({ id: u.id });
   if (!row) throw new Error(`seed user ${username} insert returned no row`);
   return row.id;
-}
-
-/** Delete the previous seed's hubs on the game (members cascade). */
-export async function clearSeedHubs(db: Db, gameId: number): Promise<void> {
-  const g = schema.guilds;
-  const keys = Object.values(SEED_HUB_NAMES).map(hubNameKey);
-  await db
-    .delete(g)
-    .where(
-      and(
-        eq(g.kind, 'game_community'),
-        eq(g.gameId, gameId),
-        inArray(g.nameKey, keys),
-      ),
-    );
 }
 
 /** Insert an active hub led by `leaderId`. */
