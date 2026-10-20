@@ -9,10 +9,7 @@
 import * as bcrypt from 'bcrypt';
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import {
-  loginAsAdmin,
-  truncateAllTables,
-} from '../../../common/testing/integration-helpers';
+import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
@@ -170,10 +167,6 @@ beforeAll(async () => {
     createdAt: sql`now() + interval '1 second'`,
   });
   tokens.admin = await loginAsAdmin(testApp.request, testApp.seed);
-});
-
-afterAll(async () => {
-  testApp.seed = await truncateAllTables(testApp.db);
 });
 
 describe('roster linkedAccount — staff only (ROK-1794 review)', () => {
