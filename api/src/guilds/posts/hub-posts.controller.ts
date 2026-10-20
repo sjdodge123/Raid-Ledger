@@ -14,7 +14,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Throttle } from '@nestjs/throttler';
 import type {
   CreateHubPostResponse,
   HubPost,
@@ -25,6 +24,7 @@ import type { AuthenticatedRequest } from '../../auth/types';
 import { GuildEditorGuard } from '../guild-editor.guard';
 import { HubKindActiveGuard } from '../hub-kind-active.guard';
 import { HubVisibleGuard } from '../hub-visible.guard';
+import { HubPostThrottleGuard } from './hub-post-throttle.guard';
 import { HubPostsService } from './hub-posts.service';
 
 const jwt = AuthGuard('jwt');
@@ -74,8 +74,7 @@ export class HubPostsController {
 
   /** New post (notifies; relays when asked and available). */
   @Post()
-  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseGuards(jwt, HubPostThrottleGuard, HubVisibleGuard, GuildEditorGuard)
   create(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,

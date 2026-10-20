@@ -31,6 +31,7 @@ export function postMeta(post: HubPost): string {
 const LEADER: Record<GuildKind, { title: string; settings: string }> = {
     wow_guild: { title: 'guild master', settings: 'Guild settings' },
     game_server: { title: 'server leader', settings: 'Server settings' },
+    game_community: { title: 'hub leader', settings: 'Hub settings' },
 };
 
 function unsetHint(kind: GuildKind | undefined, isLeader: boolean): string {

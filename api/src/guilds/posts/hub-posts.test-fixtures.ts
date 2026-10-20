@@ -22,6 +22,7 @@ import { DiscordNotificationService } from '../../notifications/discord-notifica
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { SettingsService } from '../../settings/settings.service';
+import { HubPostThrottleGuard } from './hub-post-throttle.guard';
 
 export type Who = 'officerA' | 'officerB' | 'plain' | 'outsider';
 export const CLIENT_URL = 'https://rl.posts.test';
@@ -245,15 +246,17 @@ export async function clearPostCooldowns(ctx: PostsCtx): Promise<void> {
 }
 
 /**
- * Empty the throttler's in-memory hit store. `POST /guilds/:id/posts` carries
- * its own 10/min `@Throttle` (THROTTLE_DISABLED does not lift a per-route
- * override) and the tracker is the client IP — one for every supertest call —
- * so without a reset the 11th create in a file 429s. `onApplicationShutdown`
- * is the storage's public reset: it clears both the records and the hit
- * expirations (clearing `storage` alone leaves the expirations, which re-count
- * on the next hit); the sweep restarts lazily on the next `increment`.
+ * Empty both throttles between tests. `POST /guilds/:id/posts` carries the
+ * per-user `HubPostThrottleGuard` (10/min, not lifted by THROTTLE_DISABLED),
+ * so without a reset a user's 11th create in a file 429s; `app.get` finds the
+ * guard instance Nest built for the controller (injectables are linked).
+ * The global per-IP storage is emptied too: `onApplicationShutdown` is its
+ * public reset — it clears both the records and the hit expirations
+ * (clearing `storage` alone leaves the expirations, which re-count on the
+ * next hit); the sweep restarts lazily on the next `increment`.
  */
 export function resetThrottler(ctx: PostsCtx): void {
+  ctx.testApp.app.get(HubPostThrottleGuard, { strict: false }).reset();
   const storage = ctx.testApp.app.get<unknown>(getStorageToken());
   if (!(storage instanceof ThrottlerStorageService)) {
     throw new Error('expected the default in-memory ThrottlerStorageService');

@@ -394,8 +394,8 @@ describe('P24–P25 — accepted bodies', () => {
   });
 });
 
-describe('create throttle — 10/min per route', () => {
-  it('the first 10 creates inside a minute → 201; the 11th → 429, not written', async () => {
+describe('create throttle — 10/min per user', () => {
+  it('a user\'s first 10 creates → 201, the 11th → 429; a second editor on the same IP is not blocked', async () => {
     const g = await newHub(ctx);
     const statuses: number[] = [];
     for (let i = 0; i < 11; i += 1) {
@@ -403,5 +403,8 @@ describe('create throttle — 10/min per route', () => {
     }
     expect(statuses).toEqual([...Array.from({ length: 10 }, () => 201), 429]);
     expect(await postRows(ctx, g)).toHaveLength(10);
+    const other = await createPost(ctx, g, 'Officer B post', 'officerB');
+    expect(other.status).toBe(201);
+    expect(await postRows(ctx, g)).toHaveLength(11);
   });
 });

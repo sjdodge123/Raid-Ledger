@@ -16,6 +16,7 @@ describe('relayHint', () => {
         expect(relayHint({ state: 'unset' }, 'wow_guild', true).text).toBe('Link a Discord channel in Guild settings to post there.');
         expect(relayHint({ state: 'unset' }, 'wow_guild', false).text).toBe('Your guild master can link a Discord channel in Guild settings.');
         expect(relayHint({ state: 'unset' }, 'game_server', false).text).toBe('Your server leader can link a Discord channel in Server settings.');
+        expect(relayHint({ state: 'unset' }, 'game_community', false).text).toBe('Your hub leader can link a Discord channel in Hub settings.');
         expect(relayHint({ state: 'unset' }, 'game_server', true).tone).toBe('warning');
     });
     it('explains a refusing, missing or offline channel', () => {
