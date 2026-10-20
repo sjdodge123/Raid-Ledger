@@ -60,7 +60,8 @@ function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogResponse
     const hasPersonal = useValheimMaterials(serverId, filters.includeVehicles).data?.personal != null;
     const plan = useValheimRecipePlan(serverId, serializeTargets(targets), filters.includePersonal && hasPersonal, filters.includeVehicles);
     const tree = useValheimRecipeTree(serverId, picked?.prefab ?? null, picked?.kind ?? 'item', quality);
-    const names = usePlannerNames(serverId, catalog, plan.data, tree.data);
+    // Rows come from the tree while a pick is open, else from the plan (TreePane).
+    const names = usePlannerNames(serverId, catalog, plan.data, tree.data, picked !== null ? 'tree' : 'plan');
     const onPick = (e: Entry | null): void => {
         setPicked(e);
         setQuality(1);
