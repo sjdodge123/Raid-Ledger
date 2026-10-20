@@ -23,6 +23,7 @@ function row(over: Partial<GuildProfileSelect>): GuildProfileSelect {
     discordChannelPrivateAck: false,
     discordChannelSetBy: null,
     discordChannelSetAt: null,
+    discordChannelSource: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...over,
