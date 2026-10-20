@@ -155,17 +155,37 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
   });
 
   it.each([
-    // GM_RANK_IMPLIES_EDIT is off: the GM has no implicit rights.
-    ['gm', 200, { role: 'member', canEdit: false, canManageEditors: false }],
+    // GM_RANK_IMPLIES_EDIT is off: the GM has no implicit rights. Every
+    // seeded rank is a hub member, so the viewer carries notificationsMuted.
+    [
+      'gm',
+      200,
+      {
+        role: 'member',
+        canEdit: false,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
+    ],
     [
       'officer',
       200,
-      { role: 'officer', canEdit: true, canManageEditors: false },
+      {
+        role: 'officer',
+        canEdit: true,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
     ],
     [
       'member',
       200,
-      { role: 'member', canEdit: false, canManageEditors: false },
+      {
+        role: 'member',
+        canEdit: false,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
     ],
     ['outsider', 403, undefined],
   ] as const)('%s → %i with viewer %o', async (role, status, viewer) => {

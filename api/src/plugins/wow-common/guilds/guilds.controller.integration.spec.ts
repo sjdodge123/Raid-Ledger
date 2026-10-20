@@ -137,10 +137,43 @@ beforeAll(async () => {
 
 describe('GET /:id — view matrix', () => {
   it.each([
-    ['gm', { role: 'member', canEdit: false, canManageEditors: false }],
-    ['officer', { role: 'officer', canEdit: true, canManageEditors: false }],
-    ['deleg', { role: 'officer', canEdit: true, canManageEditors: false }],
-    ['plain', { role: 'member', canEdit: false, canManageEditors: false }],
+    [
+      'gm',
+      {
+        role: 'member',
+        canEdit: false,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
+    ],
+    [
+      'officer',
+      {
+        role: 'officer',
+        canEdit: true,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
+    ],
+    [
+      'deleg',
+      {
+        role: 'officer',
+        canEdit: true,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
+    ],
+    [
+      'plain',
+      {
+        role: 'member',
+        canEdit: false,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
+    ],
+    // A staff non-member cannot mute, so its viewer omits notificationsMuted.
     ['admin', { role: 'leader', canEdit: true, canManageEditors: true }],
   ] as const)('%s → 200 with viewer %o', async (who, viewer) => {
     const res = await get(`/${guildId}`, who);
@@ -255,6 +288,7 @@ describe('editors endpoints — manage matrix', () => {
       role: 'officer',
       canEdit: true,
       canManageEditors: false,
+      notificationsMuted: false,
     });
     await testApp.db
       .delete(schema.guildEditors)
