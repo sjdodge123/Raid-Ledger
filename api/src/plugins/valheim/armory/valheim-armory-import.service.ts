@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ValheimLinkMessage } from '@raid-ledger/contract';
 import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
+import { importRecipes } from './valheim-armory-recipes.import';
 import {
   toCatalogValues,
   toMapValues,
@@ -112,8 +113,7 @@ export class ValheimArmoryImportService {
     if (msg.kind === 'character') return this.applyCharacter(tx, snap, msg);
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
     if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
-    // ROK-1854 L2 replaces this with the recipes importer.
-    return Promise.resolve(UNSUPPORTED_RECIPES);
+    return this.applyRecipes(tx, snap, msg);
   }
 
   private async applyCharacter(
@@ -151,6 +151,16 @@ export class ValheimArmoryImportService {
     return IMPORTED;
   }
 
+  /** ROK-1854: one recipe set per (server, gameVersion); older capturedAt is stale. */
+  private async applyRecipes(
+    tx: ValheimLinkTx,
+    snap: ArmorySnapshot,
+    msg: Extract<ValheimLinkMessage, { kind: 'recipes' }>,
+  ): Promise<Applied> {
+    const ok = await importRecipes(tx, snap, msg);
+    return ok ? IMPORTED : STALE;
+  }
+
   private async applyItems(
     tx: ValheimLinkTx,
     snap: ArmorySnapshot,
@@ -163,7 +173,3 @@ export class ValheimArmoryImportService {
 
 const IMPORTED: Applied = { status: 'imported', detail: null };
 const STALE: Applied = { status: 'skipped_stale', detail: null };
-const UNSUPPORTED_RECIPES: Applied = {
-  status: 'failed',
-  detail: 'unsupported:recipes',
-};
