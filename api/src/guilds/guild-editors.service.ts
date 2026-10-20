@@ -26,7 +26,10 @@ import {
 } from './guild-editors.helpers';
 import { findGuild } from './guild-core.queries';
 import { HubKindRegistry } from './hub-kind.registry';
-import type { HubKindAdapter } from '../plugins/plugin-host/extension-points';
+import type {
+  HubEditorStatus,
+  HubKindAdapter,
+} from '../plugins/plugin-host/extension-points';
 
 /**
  * ROK-1785 — the Editors panel: list / grant / revoke delegated editors.
@@ -123,7 +126,11 @@ export class GuildEditorsService {
       loadEditorRows(this.db, guildId),
       hub.rankNames(guildId),
     ]);
-    return rows.map((r) => toGuildEditor(r, rankNames));
+    // ROK-1794 (review): the kind's own access predicate, per grant.
+    const status =
+      (await hub.editorStatus?.(guildId, rows)) ??
+      new Map<number, HubEditorStatus>();
+    return rows.map((r) => toGuildEditor(r, rankNames, status.get(r.id)));
   }
 }
 
