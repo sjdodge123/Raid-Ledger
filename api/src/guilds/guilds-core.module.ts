@@ -17,6 +17,9 @@ import { HubNotificationMuteController } from './hub-notification-mute.controlle
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
 import { HubVisibleGuard } from './hub-visible.guard';
+import { HubPostRelayService } from './posts/hub-post-relay.service';
+import { HubPostsController } from './posts/hub-posts.controller';
+import { HubPostsService } from './posts/hub-posts.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
   EVENT_GUILD_TAGGER_KEY,
@@ -39,6 +42,7 @@ import {
     HubController,
     HubNotificationMuteController,
     GuildDiscordController,
+    HubPostsController,
   ],
   providers: [
     GuildAccessService,
@@ -53,6 +57,8 @@ import {
     HubService,
     HubVisibleGuard,
     HubEventTagger,
+    HubPostRelayService,
+    HubPostsService,
   ],
   exports: [
     GuildAccessService,
@@ -64,6 +70,7 @@ import {
     HubOnboardingService,
     HubService,
     HubVisibleGuard,
+    HubPostsService,
   ],
 })
 export class GuildsCoreModule implements OnModuleInit {
