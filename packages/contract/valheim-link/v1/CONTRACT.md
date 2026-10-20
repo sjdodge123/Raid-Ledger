@@ -163,6 +163,33 @@ origin, inside the atlas) · `{ kind: "file", file: "<name>.png", blob? }`
 `VALHEIM_LINK_BINARY_MAX_BYTES`, §7) and the PNG is uploaded through the §1
 blob route; without `blob` the server leaves the icon unresolved.
 
+## 5a. `kind: "containers"` — player-built container contents (ROK-1853)
+
+Every player-built container on the dedicated server (chests, carts, ships), scanned
+every 10 minutes and **always sent**, even when nothing changed. Snapshot key:
+(`serverId`, `worldUid`); the latest `capturedAt` wins and replaces the world's
+containers wholesale. Stacks arrive aggregated per (`prefab`, `quality`); totals are
+**not** sent — Raid Ledger computes them.
+
+| Field | Type | Notes |
+|---|---|---|
+| `worldUid` | int64 string | the world scanned (as on `character` / `map`) |
+| `containers[]` | ≤ `VALHEIM_LINK_CONTAINERS_MAX` (4 096) | may be empty on a fresh world |
+| `containers[].prefab` | prefab id | the container piece (`piece_chest`, `Cart`, …) |
+| `containers[].x` / `y` / `z` | number, \|v\| ≤ 32 768 | metres; `y` is height |
+| `containers[].creatorPlayerId` | int64 string, never `"0"` | the `character` kind's `playerId` |
+| `containers[].privacy` | `public` \| `private` \| `group` | `private` = owner + admins only at read time; `group` counts as shared |
+| `containers[].vehicle` | boolean | carts and ships |
+| `containers[].slots` / `usedSlots` | int, ≤ 4 096 | `usedSlots` ≤ `slots` |
+| `containers[].unreadable` | boolean | true ⇒ `items` empty and `usedSlots` 0 |
+| `containers[].omittedEntries` | int | entries dropped above 256 per container |
+| `containers[].items[]` | ≤ `VALHEIM_LINK_CONTAINER_ITEMS_MAX` (256) | `{ prefab, quality 1–10, stack ≥ 1 }`, unique per (`prefab`, `quality`) |
+| `omittedShared` / `omittedPrivate` | int | containers the mod dropped at its own count caps |
+
+Message-level rules (§6): (`prefab`, `x`, `y`, `z`, `creatorPlayerId`) is unique across
+`containers`; Σ `containers[].items.length` ≤ `VALHEIM_LINK_CONTAINER_ENTRIES_MAX`
+(50 000, reported as `too_big` at `containers`).
+
 ## 6. Strict keys and refinements
 
 Every object is **strict**: an unknown key rejects the whole message. These
@@ -206,11 +233,12 @@ all pass Zod.
 
 | Constant | Value | Applies to | Typical |
 |---|---|---|---|
-| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.9 MB |
-| `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Largest schema-valid (two 3 M-char layers, 2 000 pins) ≈ 7.0 MB |
+| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.87 MB |
+| `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Largest schema-valid (two 3 M-char layers, 2 000 pins) ≈ 7.03 MB |
 | `VALHEIM_LINK_BITMAP_DATA_MAX_CHARS` | 3 000 000 | one bitmap's `data` | a 2048² mask is 512 KiB raw before gzip; ≤ ~700 KB base64 even if incompressible |
 | `VALHEIM_LINK_BITMAP_EDGE_MAX` | 4096 | `textureSize`, bitmap edges | 2048 vanilla |
-| `VALHEIM_LINK_ITEMS_MAX_BYTES` | 10 485 760 (10 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid ≈ 9.4 MB |
+| `VALHEIM_LINK_ITEMS_MAX_BYTES` | 12 582 912 (12 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid (10 000 file icons, each with a `blob` ref) ≈ 11.05 MB |
+| `VALHEIM_LINK_CONTAINERS_MAX_BYTES` | 10 485 760 (10 MiB) | one `containers` body | 0.2–0.6 MB for ~500 chests. Largest schema-valid (4 096 containers, 50 000 entries) ≈ 8.52 MB (8 517 394 B) |
 | `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas, file icon) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
 | array caps | see §3–§5 | | |
 
@@ -219,7 +247,9 @@ The body caps were **raised** (not the array caps tightened) so that each is
 its max length, free text made of control characters that JSON escapes to 6
 bytes each. A schema-valid message therefore never trips a body cap; the
 array and string caps are what bind. Recompute and raise these if an array or
-string cap grows.
+string cap grows. `src/__tests__/valheim-link-largest-message.spec.ts` builds
+the largest schema-valid message of every kind from these limits and fails CI
+when one no longer fits its cap (ROK-1855) — add the new field to its builder.
 
 ## 8. Fixtures
 
