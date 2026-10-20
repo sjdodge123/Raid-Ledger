@@ -42,6 +42,8 @@ export function eventReportUrlProblem(raw: string): string | null {
   if (url.pathname === '/') {
     return "Paste a link to a specific report, not the site's home page";
   }
+  // Normalising percent-encodes non-ASCII, so the stored form can be longer than the input.
+  if (url.href.length > EVENT_REPORT_URL_MAX) return 'Report link is too long';
   return null;
 }
 
