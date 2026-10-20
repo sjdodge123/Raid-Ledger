@@ -46,7 +46,10 @@ export function ComposerMock({ channel, relayDefault = true }: { channel: Channe
                 <Textarea rows={4} value={draft} maxLength={4000} showCount onChange={(e) => setDraft(e.target.value)} />
             </Field>
             <div className="rounded-lg border border-edge bg-panel p-3">
-                <Switch checked={relay} onChange={setRelay} label="Also post to Discord" disabled={channel !== 'ok'} aria-describedby={hintId} />
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-foreground">Also post to Discord</span>
+                    <Switch checked={relay} onChange={setRelay} label="Also post to Discord" disabled={channel !== 'ok'} aria-describedby={hintId} />
+                </div>
                 <p id={hintId} className={`mt-1 text-xs ${channel === 'ok' ? 'text-muted' : 'text-warning'}`}>{HINT[channel]}</p>
             </div>
             <div className="flex justify-end gap-2">
