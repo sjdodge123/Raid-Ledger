@@ -3,6 +3,18 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-20 (additive)
+
+- **Additive.** `VALHEIM_LINK_ITEMS_MAX_BYTES` is raised from 10 MiB to
+  **12 MiB** (12 582 912). The largest schema-valid `items` message grew to
+  ≈ 11.05 MB when the optional file-icon `blob` landed (2026-10-18), above the
+  old cap — a relaxation the server accepts, so v1 stays. `schema.json`
+  unchanged (the caps are not part of the JSON schema). CONTRACT.md §7 now
+  carries the measured largest message per kind (character ≈ 1.87 MB, map
+  ≈ 7.03 MB, items ≈ 11.05 MB), and a contract test builds each one from the
+  schema limits and fails CI when it stops fitting (ROK-1855). Pin this
+  revision in the mod; the reverse proxy body cap is tracked by ROK-1850.
+
 ## v1 — 2026-10-18 (additive)
 
 - **Additive.** A `file` item icon may carry an optional `blob` — a binary
