@@ -52,7 +52,7 @@ const tv = (userId: number) => currentTokenVersion(testApp.db, userId);
 
 function me(token: string): Promise<Res> {
   return testApp.request
-    .get('/users/me')
+    .get('/auth/me')
     .set('Authorization', `Bearer ${token}`);
 }
 
