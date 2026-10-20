@@ -5,6 +5,7 @@
  */
 import type { JSX } from 'react';
 import type { ValheimPlanNode } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { ItemIcon } from '../character/item-icon';
 import { resolveItem } from '../character/item-icon.helpers';
@@ -22,17 +23,18 @@ interface RowProps {
 
 function Disclosure({ name, expanded, onToggle }: { name: string; expanded: boolean; onToggle: () => void }): JSX.Element {
     return (
-        <button
-            type="button"
+        <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
             aria-expanded={expanded}
             aria-label={`${expanded ? 'Hide' : 'Show'} what ${name} needs`}
             onClick={onToggle}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
         >
             <span aria-hidden="true" className={`transition-transform ${expanded ? 'rotate-90' : ''}`}>
                 ›
             </span>
-        </button>
+        </Button>
     );
 }
 
@@ -44,6 +46,18 @@ function Counts({ node }: { node: ValheimPlanNode }): JSX.Element {
                 <span className="text-warning"> · Short {formatAmount(node.short)}</span>
             )}
         </span>
+    );
+}
+
+function ViaChips({ node, names }: { node: ValheimPlanNode; names: PlannerNames }): JSX.Element {
+    return (
+        <div className="flex flex-wrap gap-1">
+            {viaChips(node, names.stationName).map((chip) => (
+                <StatusChip key={chip} tone="neutral" title={chip}>
+                    {chip}
+                </StatusChip>
+            ))}
+        </div>
     );
 }
 
@@ -61,17 +75,13 @@ export function RecipeTreeRow({ node, names, hasChildren, expanded, onToggle }: 
             <ItemIcon resolved={resolved} prefab={node.prefab} ctx={ctx} />
             <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-sm font-medium text-foreground">{name}</span>
+                    <span className="text-sm font-medium text-foreground" data-testid="valheim-planner-row-name">
+                        {name}
+                    </span>
                     <Counts node={node} />
                 </div>
                 <HaveNeedBar have={node.have} need={node.quantity} name={name} />
-                <div className="flex flex-wrap gap-1">
-                    {viaChips(node, names.stationName).map((chip) => (
-                        <StatusChip key={chip} tone="neutral" title={chip}>
-                            {chip}
-                        </StatusChip>
-                    ))}
-                </div>
+                <ViaChips node={node} names={names} />
             </div>
         </div>
     );
