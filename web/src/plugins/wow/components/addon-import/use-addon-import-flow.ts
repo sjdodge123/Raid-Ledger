@@ -100,6 +100,7 @@ function makeRunImport(mode: AddonImportMode, m: Mutations, s: FlowState, openRe
     return () => {
         const c = s.checked;
         if (!c) return;
+        m.preview.reset(); // a failed re-preview's error gives way to this apply's outcome
         if (mode.mode === 'create') {
             const pick = needsRulesetPick(c.target);
             if (pick && !s.ruleset) return;
@@ -123,7 +124,8 @@ export function useAddonImportFlow(mode: AddonImportMode, isOpen: boolean) {
     const back = () => { m.apply.reset(); s.setStep('paste'); };
     const check = makeCheck(mode, m, s);
     // ROK-1739 (Codex r3 P2): after RULESET_CONFIRM_STALE, re-preview the same string.
-    const previewAgain = () => { if (s.checked) check(s.checked.importString); };
+    // Codex r5 P2: drop the stale apply error first, so a failed re-preview's error is the one shown.
+    const previewAgain = () => { if (s.checked) { m.apply.reset(); check(s.checked.importString); } };
     const again = () => {
         s.setText(''); s.setChecked(null); s.setApplied(null); s.setRuleset(null);
         m.preview.reset(); m.apply.reset(); s.setStep('paste');
