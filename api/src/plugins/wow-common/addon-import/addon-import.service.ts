@@ -35,6 +35,7 @@ import {
 } from './addon-import.run';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
+import { flagIfRosterHeld } from './addon-import-guild.flag';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -74,6 +75,9 @@ export class AddonImportService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) result = err.code;
+      // ROK-1794 AC4: the tx rolled back — flag a held roster to staff
+      // (apply only — a preview flags no one).
+      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await this.finish(userId, characterId, facts, result, perSection);

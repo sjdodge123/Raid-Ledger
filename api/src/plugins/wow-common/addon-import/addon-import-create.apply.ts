@@ -1,5 +1,4 @@
 import { ConflictException } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
 import type {
   AddonImportNewRequestDto,
   AddonImportNewResultDto,
@@ -12,7 +11,6 @@ import {
   rethrowForeverViolation,
   WOW_FOREVER_GAME_SLUG,
 } from '../wow-forever-identity.helpers';
-import { ADDON_GUID_LOCK_CLASS } from './addon-import-binding.apply';
 import {
   assertCreatable,
   createDtoFromExport,
@@ -22,6 +20,7 @@ import { titleCaseClass } from './addon-import.binding-name';
 import { raceDisplayName } from './addon-import.race';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { lockImportScope } from './addon-import.locks';
 import type { AddonImportTx } from './addon-import-apply.types';
 import {
   bindPaste,
@@ -37,7 +36,8 @@ import {
 
 /**
  * ROK-1738 — the create route's preview (D11) and apply (D4) on top of the
- * per-character run. Apply is ONE transaction: GUID advisory lock FIRST,
+ * per-character run. Apply is ONE transaction: GUID then guild advisory
+ * lock FIRST (THE order, `addon-import.locks.ts`),
  * re-resolve under it, every reject a pre-check before any write, nothing
  * caught-and-retried inside (postgres.js poisons the tx). A lost race on the
  * cross-player name index aborts the tx and maps to `CHARACTER_CLAIMED`
@@ -126,12 +126,14 @@ export async function previewImport(
   };
 }
 
-/** Same class + key as `assertGuidFree`: serialises both routes. */
-async function lockGuid(tx: AddonImportTx, q: ImportTargetQuery) {
-  const key = `${q.gameId}:${q.region}:${q.guid}`;
-  await tx.execute(
-    sql`SELECT pg_advisory_xact_lock(${ADDON_GUID_LOCK_CLASS}::int4, hashtext(${key}))`,
-  );
+/**
+ * THE import lock order (`addon-import.locks.ts`): the GUID lock — same
+ * class + key as `assertGuidFree`, so it serialises both routes — THEN the
+ * paste's guild lock, both before the re-resolve (ROK-1794 review P3).
+ */
+function lockScope(tx: AddonImportTx, input: CreateImportInput) {
+  const { gameId, region, guid } = input.query;
+  return lockImportScope(tx, { gameId, region, guid, paste: input.paste });
 }
 
 /** Tracks whether a thrown error came out of the core create step. */
@@ -184,7 +186,7 @@ export async function applyImport(
   const phase: ApplyPhase = { creating: false };
   try {
     return await db.transaction(async (tx) => {
-      await lockGuid(tx, input.query);
+      await lockScope(tx, input);
       const target = await resolveImportTarget(tx, input.query);
       noteTarget(input, target);
       if (target.action === 'create') {
