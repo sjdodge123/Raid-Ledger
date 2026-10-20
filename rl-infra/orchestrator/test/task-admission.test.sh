@@ -629,4 +629,52 @@ run_test "ac3-c-non-build-not-gated" test_non_build_task_not_disk_gated
 run_test "ac3-d-cancel-during-disk-wait" test_cancel_during_disk_wait_never_builds
 run_test "ac3-e-unreadable-df-admits" test_unreadable_df_admits_build
 
+# ROK-1793 S2 — medium class (Playwright-only child): 2560 MB floor.
+test_medium_admits_where_heavy_waits() {
+    CURRENT_TEST_NAME="S2: medium admits at 3000MB free, heavy does not"
+    fake_meminfo 3000
+    fast_admission_env 2 5120
+    export RL_MEDIUM_TASK_MIN_FREE_MB=2560
+    bash "$BIN_DIR/task-start" "mmmm1111" --tool manual --slot 1 --weight medium -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    assert_eq "$(wait_for_terminal_status mmmm1111 15)" "succeeded" "medium must be admitted at 3000MB"
+    # Sequential on purpose: macOS has no flock(1), so two supervisors racing
+    # on admission.json would test the shim, not the gate.
+    bash "$BIN_DIR/task-start" "mmmm2222" --tool manual --slot 1 --weight heavy -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    assert_eq "$(jq -r .weight "$RL_TASKS_DIR/mmmm1111.json")" "medium" "weight persisted as medium"
+    assert_contains "$(cat "$RL_TASKS_DIR/mmmm1111.log")" "need=2560MB" "medium admission line names its own floor"
+    assert_eq "$(wait_for_terminal_status mmmm2222 20)" "failed" "heavy must NOT be admitted at 3000MB"
+}
+
+# Reservations carry `mb`; a legacy entry without it still counts as the heavy floor.
+test_medium_reservation_mb_and_legacy_floor() {
+    CURRENT_TEST_NAME="S2: entries carry mb; legacy entries count as the heavy floor"
+    fake_meminfo 7000
+    fast_admission_env 2 5120
+    export RL_MEDIUM_TASK_MIN_FREE_MB=2560
+    local now; now=$(date +%s)
+    jq -n --argjson n "$now" '{heavy_running:[{key:"legacy1",task_id:"legacy1",admitted_at:"x",admitted_epoch:$n}], heavy_waiting:[]}' > "$ADMISSION_JSON"
+    bash "$BIN_DIR/task-start" "mmmm3333" --tool manual --slot 1 --weight medium -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    assert_eq "$(wait_for_terminal_status mmmm3333 20)" "failed" "7000 - legacy 5120 < 2560 -> medium waits then times out"
+    jq -n --argjson n "$now" '{heavy_running:[{key:"small1",task_id:"small1",admitted_at:"x",admitted_epoch:$n,mb:1000}], heavy_waiting:[]}' > "$ADMISSION_JSON"
+    bash "$BIN_DIR/task-start" "mmmm4444" --tool manual --slot 1 --weight medium -- /bin/sleep 2 >/dev/null 2>&1 || true
+    local mb="" i
+    for i in $(seq 1 40); do
+        mb=$(jq -r '[.heavy_running[] | select(.key == "mmmm4444") | .mb] | first // empty' "$ADMISSION_JSON" 2>/dev/null)
+        [[ -n "$mb" ]] && break; sleep 0.1
+    done
+    assert_eq "$mb" "2560" "a medium reservation records mb=2560 (7000 - 1000 >= 2560 admits)"
+    assert_eq "$(wait_for_terminal_status mmmm4444 15)" "succeeded" "medium admitted next to a small reservation"
+}
+
+test_heartbeat_wrapper_accepts_medium() {
+    CURRENT_TEST_NAME="S2: run-on-runner-with-heartbeat accepts --weight medium"
+    local out
+    out=$(bash "$BIN_DIR/run-on-runner-with-heartbeat" --weight medium -- /bin/true 2>&1 || true)
+    assert_eq "$(grep -c invalid_weight <<<"$out")" "0" "medium is a valid wrapper weight"
+}
+
+run_test "s2-medium-admits" test_medium_admits_where_heavy_waits
+run_test "s2-medium-mb-legacy" test_medium_reservation_mb_and_legacy_floor
+run_test "s2-wrapper-medium" test_heartbeat_wrapper_accepts_medium
+
 print_test_summary

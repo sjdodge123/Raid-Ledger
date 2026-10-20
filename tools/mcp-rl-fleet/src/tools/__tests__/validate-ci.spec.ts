@@ -14,6 +14,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import * as validateCi from '../validate-ci.js';
+import { deriveAgentId } from '../../exec.js';
 import * as envDeploy from '../env-deploy.js';
 import * as release from '../release.js';
 
@@ -321,13 +322,30 @@ describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', ()
     return argvStr.match(/--timeout-seconds \d+/)?.[0];
   }
 
+  // ROK-1793 S2 Codex r4: the parallel path needs the CALLER's own claim, so
+  // slot 1 is claimed by the id the tool derives for this process.
+  let claimant = deriveAgentId();
   beforeEach(() => {
+    claimant = deriveAgentId();
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       if (args.join(' ').includes('rl status')) {
-        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+        return { slots: [{ slot: 1, claimed_by: claimant }] };
       }
       return { ok: true, task_id: 'tdb14520', started_at: '2026-10-01T12:00:00.000Z' };
     });
+  });
+
+  it('refuses a parallel gate when only ANOTHER agent holds a claim (no fallback slot)', async () => {
+    claimant = 'someone-else';
+    const r = await validateCi.execute({
+      fleet: true,
+      parallel: true,
+      base_url: 'https://slot-1.gamernight.net',
+      admin_password: 'x',
+      wait: false,
+    });
+    expect(r).toMatchObject({ ok: false, error: 'parallel_requires_claim' });
+    expect(dispatchedTimeoutFlag()).toBeUndefined();
   });
 
   it('passes --timeout-seconds 5400 to task-start for an --only-e2e run', async () => {
@@ -352,6 +370,24 @@ describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', ()
     expect(dispatchedTimeoutFlag(), 'fleet:true must reach task-start as a long gate').toBe(
       '--timeout-seconds 5400',
     );
+  });
+
+  // ROK-1793 S2 review P2: P outlives its children (admission waits, the copy,
+  // phase-2 child C), so it gets child + C allowance + margin, and the child
+  // budget goes to gate-fanout explicitly.
+  it('gives a parallel parent phase 1 + C (child + 2700s lock wait) + 600s and passes --child-timeout', async () => {
+    await validateCi.execute({
+      fleet: true,
+      parallel: true,
+      base_url: 'https://slot-1.gamernight.net',
+      admin_password: 'x',
+      wait: false,
+    });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 14100');
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) =>
+      JSON.stringify(call[1] ?? []).includes('gate-fanout'),
+    );
+    expect(JSON.stringify(sshCall?.[1] ?? [])).toContain('--child-timeout 5400');
   });
 
   it('passes --timeout-seconds 5400 for a bare run (the script default is the full pipeline)', async () => {

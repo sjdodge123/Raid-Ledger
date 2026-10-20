@@ -166,6 +166,14 @@ fi
 # supervisor may have launched the docker exec before recording the pid).
 RUNNER_SWEPT=$(cancel_runner_children "$SLOT" "$TASK_ID")
 
+# ROK-1793 S2 — a parallel gate parent (gate-fanout) records its child tasks in
+# children[]; they run under their own task-start supervisors (not in this
+# pgid), so cancel each one explicitly. Idempotent: a terminal child is a noop.
+for CHILD_ID in $(jq -r '(.children // [])[] | .task_id // empty' "$JSON_PATH" 2>/dev/null); do
+    [[ "$CHILD_ID" =~ ^[a-z0-9]{8,32}$ && "$CHILD_ID" != "$TASK_ID" ]] || continue
+    bash "$BIN_DIR_SELF/task-cancel" "$CHILD_ID" "parent_cancelled: ${REASON:0:200}" >/dev/null 2>&1 || true
+done
+
 task::audit "$TASK_ID" "cancel" "ok" \
     "$(jq -nc --arg r "$REASON" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
         --argjson rs "$RUNNER_SWEPT" \

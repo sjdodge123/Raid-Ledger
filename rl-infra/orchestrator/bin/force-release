@@ -45,7 +45,7 @@ if [[ "$DESTROY" == "1" ]]; then
 else
     # Manually drop just the claim.
     state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
-        '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null)'
+        '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null | del(.borrowed_for, .borrowed_by))'
     RELEASE_OUT=$(jq -nc --argjson slot "$SLOT" '{ok: true, slot: $slot, destroyed_envs: [], no_destroy: true}')
 fi
 
