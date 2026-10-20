@@ -9,6 +9,7 @@ import {
   resolveCommandWeight,
   resolveValidateCiWeight,
   weightFlag,
+  TASK_WEIGHTS,
 } from '../task-weight.js';
 
 describe('resolveCommandWeight (rl_run_on_runner)', () => {
@@ -79,5 +80,13 @@ describe('weightFlag', () => {
   it('renders a trailing-space task-start flag fragment', () => {
     expect(weightFlag('heavy')).toBe('--weight heavy ');
     expect(weightFlag('light')).toBe('--weight light ');
+  });
+});
+
+describe('medium weight (ROK-1793 S2)', () => {
+  it('is a schema-accepted weight, passed through as an explicit override', () => {
+    expect(TASK_WEIGHTS).toEqual(['heavy', 'medium', 'light']);
+    expect(resolveValidateCiWeight(['--only-e2e'], 'medium')).toBe('medium');
+    expect(weightFlag('medium')).toBe('--weight medium ');
   });
 });

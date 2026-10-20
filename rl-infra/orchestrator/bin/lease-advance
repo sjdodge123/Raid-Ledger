@@ -222,6 +222,7 @@ state::mutate_with_precondition "$RL_CLAIMS_FILE" \
                   | .keep_alive = false
                   | .expires_at = $exp
                   | .extends_count = 0
+                  | del(.borrowed_for, .borrowed_by)
                else . end)
       end
     '

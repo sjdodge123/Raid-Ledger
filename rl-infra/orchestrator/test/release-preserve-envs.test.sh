@@ -319,6 +319,18 @@ test_destroy_recheck_skips_moved_env() {
     test_teardown
 }
 
+test_release_clears_borrow_fields() {
+    CURRENT_TEST_NAME="release drops borrowed_for/borrowed_by from the freed row"
+    _seed_active_claim_with_env "agent-A" "feat-shared" "shared-env"
+    jq '(.[] | select(.slot == 1)) |= (.borrowed_for = "parentold1" | .borrowed_by = "x")' \
+        "$RL_STATE_DIR/claims.json" > "$RL_STATE_DIR/c.tmp" && mv "$RL_STATE_DIR/c.tmp" "$RL_STATE_DIR/claims.json"
+    export RL_AGENT_ID="agent-A"
+    bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
+    assert_eq "$(jq -c '.[] | select(.slot == 1) | {claimed, borrowed_for, borrowed_by}' "$RL_STATE_DIR/claims.json")" \
+        '{"claimed":false,"borrowed_for":null,"borrowed_by":null}' "freed row carries no borrow fields"
+}
+
+run_test "release-clears-borrow-fields" test_release_clears_borrow_fields
 run_test "ac2-preserve-marks-claimable" test_release_preserve_envs_marks_claimable
 run_test "ac2-preserve-reports-preserved" test_release_preserve_envs_reports_preserved
 run_test "ac2-branch-match-inherits" test_branch_match_handoff_inherits_env
