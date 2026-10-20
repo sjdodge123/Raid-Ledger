@@ -20,6 +20,7 @@ import type {
     ForeverProbeStateDto,
     ForeverProbeResultDto,
     ForeverProbeConfigDto,
+    WowForeverRealmRulesetsDto,
 } from '@raid-ledger/contract';
 import {
     CharacterSchema,
@@ -28,6 +29,7 @@ import {
     ForeverProbeStateSchema,
     EventQuestPrereqsResponseSchema,
     ForeverProbeResultSchema,
+    WowForeverRealmRulesetsSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
@@ -216,4 +218,16 @@ export async function runForeverProbe(): Promise<ForeverProbeResultDto> {
 /** Admin: save the probe's extra candidates + optional character path (ROK-1716). */
 export async function updateForeverProbeConfig(dto: ForeverProbeConfigDto): Promise<ForeverProbeStateDto> {
     return fetchApi(`${FOREVER_PROBE_PATH}/config`, { method: 'PUT', body: JSON.stringify(dto) }, ForeverProbeStateSchema);
+}
+
+const FOREVER_REALM_RULESETS_PATH = '/admin/plugins/blizzard/forever/realm-rulesets';
+
+/** Admin: the WoW Forever realm → ruleset map (ROK-1739). */
+export async function fetchForeverRealmRulesets(): Promise<WowForeverRealmRulesetsDto> {
+    return fetchApi(FOREVER_REALM_RULESETS_PATH, {}, WowForeverRealmRulesetsSchema);
+}
+
+/** Admin: replace the whole realm → ruleset map; returns the saved (sorted) list (ROK-1739). */
+export async function updateForeverRealmRulesets(dto: WowForeverRealmRulesetsDto): Promise<WowForeverRealmRulesetsDto> {
+    return fetchApi(FOREVER_REALM_RULESETS_PATH, { method: 'PUT', body: JSON.stringify(dto) }, WowForeverRealmRulesetsSchema);
 }

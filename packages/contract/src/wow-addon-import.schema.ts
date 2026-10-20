@@ -55,6 +55,13 @@ export const AddonImportRequestSchema = z.object({
     dryRun: z.boolean().default(true),
     confirm: z.object({
         updateRuleset: z.boolean().optional(),
+        /**
+         * ROK-1739 (Codex r2 P2): the ruleset the preview showed and the user
+         * approved. When present the apply writes the inferred ruleset only if
+         * the fresh inference still equals it; otherwise it warns
+         * RULESET_CHANGED again and writes nothing (re-preview). Additive.
+         */
+        updateRulesetTo: WowForeverRulesetSchema.optional(),
         repinGuid: z.boolean().optional(),
     }).strict().optional(),
 }).strict();
@@ -89,6 +96,8 @@ export const AddonImportErrorCodeSchema = z.enum([
     'NAME_MISMATCH',
     'NOT_IN_GUILD',
     'GUID_CONFIRM_REQUIRED',
+    /** ROK-1739: `confirm.updateRulesetTo` no longer matches the realm map's inference — re-preview and confirm the new value. Nothing was written. */
+    'RULESET_CONFIRM_STALE',
     'RATE_LIMITED',
     /** ROK-1738 — create route: name + region already belong to another player. */
     'CHARACTER_CLAIMED',
@@ -183,6 +192,18 @@ export const AddonImportSectionResultSchema = z.discriminatedUnion('section', [
 ]);
 export type AddonImportSectionResultDto = z.infer<typeof AddonImportSectionResultSchema>;
 
+/**
+ * ROK-1739 — a ruleset inferred from the export's realm. `'blizzard'` is
+ * declared now so the Blizzard realm-type lookup (slice 2) is not a contract
+ * change.
+ */
+export const AddonImportRulesetInferenceSchema = z.object({
+    ruleset: WowForeverRulesetSchema,
+    realmName: z.string(),
+    source: z.enum(['realm-map', 'blizzard']),
+});
+export type AddonImportRulesetInferenceDto = z.infer<typeof AddonImportRulesetInferenceSchema>;
+
 const resultBase = {
     ...sectionBase,
     warnings: z.array(AddonImportWarningSchema),
@@ -195,6 +216,11 @@ const resultBase = {
      * single-section paste omits it (body unchanged since ROK-1724).
      */
     sections: z.array(AddonImportSectionResultSchema).min(2).max(3).optional(),
+    /**
+     * ROK-1739 — present only when the export's `who.ruleset` was null and the
+     * realm resolved; `realmName` is the export's raw `GetRealmName()` text.
+     */
+    rulesetInference: AddonImportRulesetInferenceSchema.optional(),
 };
 
 /** Discriminated by `section`; `summary` carries that section's counts. */
@@ -222,7 +248,8 @@ export const AddonImportTargetSchema = z.object({
     /**
      * Null ONLY on a `create` target whose export has no ruleset — the web's
      * "show the ruleset picker" signal. An `update` target always carries the
-     * stored ruleset.
+     * stored ruleset. Still null when `rulesetInference` is present (ROK-1739);
+     * the web pre-selects the picker from the inference.
      */
     ruleset: WowForeverRulesetSchema.nullable(),
     /** Title-cased display class, e.g. `Paladin`. */

@@ -206,11 +206,11 @@ all pass Zod.
 
 | Constant | Value | Applies to | Typical |
 |---|---|---|---|
-| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.9 MB |
-| `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Largest schema-valid (two 3 M-char layers, 2 000 pins) ≈ 7.0 MB |
+| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.87 MB |
+| `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Largest schema-valid (two 3 M-char layers, 2 000 pins) ≈ 7.03 MB |
 | `VALHEIM_LINK_BITMAP_DATA_MAX_CHARS` | 3 000 000 | one bitmap's `data` | a 2048² mask is 512 KiB raw before gzip; ≤ ~700 KB base64 even if incompressible |
 | `VALHEIM_LINK_BITMAP_EDGE_MAX` | 4096 | `textureSize`, bitmap edges | 2048 vanilla |
-| `VALHEIM_LINK_ITEMS_MAX_BYTES` | 10 485 760 (10 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid ≈ 9.4 MB |
+| `VALHEIM_LINK_ITEMS_MAX_BYTES` | 12 582 912 (12 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid (10 000 file icons, each with a `blob` ref) ≈ 11.05 MB |
 | `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas, file icon) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
 | array caps | see §3–§5 | | |
 
@@ -219,7 +219,9 @@ The body caps were **raised** (not the array caps tightened) so that each is
 its max length, free text made of control characters that JSON escapes to 6
 bytes each. A schema-valid message therefore never trips a body cap; the
 array and string caps are what bind. Recompute and raise these if an array or
-string cap grows.
+string cap grows. `src/__tests__/valheim-link-largest-message.spec.ts` builds
+the largest schema-valid message of every kind from these limits and fails CI
+when one no longer fits its cap (ROK-1855) — add the new field to its builder.
 
 ## 8. Fixtures
 

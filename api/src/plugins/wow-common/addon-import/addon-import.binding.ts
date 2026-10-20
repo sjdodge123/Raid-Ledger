@@ -46,8 +46,24 @@ export interface AddonBindingOptions {
   /** Preview (`true`) never raises `GUID_CONFIRM_REQUIRED`. */
   dryRun: boolean;
   confirm?:
-    | { updateRuleset?: boolean | undefined; repinGuid?: boolean | undefined }
+    | {
+        updateRuleset?: boolean | undefined;
+        /**
+         * ROK-1739 (Codex r2/r3 P2) — the ruleset the preview showed. When
+         * set, `updateRuleset` authorises only that value; a realm-map edit
+         * between preview and apply rejects the apply with
+         * `RULESET_CONFIRM_STALE` (nothing written). Absent = legacy.
+         */
+        updateRulesetTo?: WowForeverRuleset | undefined;
+        repinGuid?: boolean | undefined;
+      }
     | undefined;
+  /**
+   * ROK-1739 — the admin realm map's ruleset, consulted only when the
+   * export's own `who.ruleset` is null. Treated like an export value: a
+   * differing one warns and is written only with `confirm.updateRuleset`.
+   */
+  inferredRuleset?: WowForeverRuleset | undefined;
 }
 
 export interface AddonBindingResult {
@@ -126,8 +142,12 @@ function guidOutcome(
 }
 
 /**
- * Ruleset: a null `who.ruleset` means the addon could not tell — never a
- * change. A differing one warns; it is written only with `updateRuleset`.
+ * Ruleset: precedence is the export's `who.ruleset` → the realm map's
+ * `inferredRuleset` (ROK-1739) → no change (the addon could not tell). A
+ * differing one warns; it is written only with `updateRuleset` — and, when
+ * the client sent the previewed `updateRulesetTo`, only if it still matches;
+ * a mismatch on apply — including a fresh value that is now null or equal to
+ * the stored one — is `RULESET_CONFIRM_STALE` (preview never raises it).
  */
 function rulesetOutcome(
   who: AddonWho,
@@ -135,13 +155,37 @@ function rulesetOutcome(
   opts: AddonBindingOptions,
   result: AddonBindingResult,
 ): void {
-  if (who.ruleset === null || who.ruleset === character.ruleset) return;
+  const incoming = who.ruleset ?? opts.inferredRuleset ?? null;
+  if (isStaleRulesetConfirm(incoming, opts)) {
+    // Codex r3/r5 P2 — the confirmed value no longer matches (the mapping
+    // changed, was removed, or now equals the stored value): refuse the
+    // whole apply rather than commit the rest without the approved change.
+    result.errors.push(new AddonImportError('RULESET_CONFIRM_STALE'));
+    return;
+  }
+  if (incoming === null || incoming === character.ruleset) return;
   result.warnings.push({
     code: 'RULESET_CHANGED',
     from: character.ruleset,
-    to: who.ruleset,
+    to: incoming,
   });
-  if (opts.confirm?.updateRuleset) result.setRuleset = who.ruleset;
+  const confirm = opts.confirm;
+  if (!confirm?.updateRuleset) return;
+  // A preview with a stale `updateRulesetTo` re-warns the new value only.
+  const approved = confirm.updateRulesetTo;
+  if (approved === undefined || approved === incoming) {
+    result.setRuleset = incoming;
+  }
+}
+
+/** An apply whose previewed `updateRulesetTo` differs from the fresh value (null included). */
+function isStaleRulesetConfirm(
+  incoming: WowForeverRuleset | null,
+  opts: AddonBindingOptions,
+): boolean {
+  if (opts.dryRun || !opts.confirm?.updateRuleset) return false;
+  const approved = opts.confirm.updateRulesetTo;
+  return approved !== undefined && approved !== incoming;
 }
 
 /**

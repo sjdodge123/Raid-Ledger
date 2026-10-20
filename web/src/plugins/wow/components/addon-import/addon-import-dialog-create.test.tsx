@@ -115,6 +115,7 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
         expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Import' }), 'the disabled Import says why').toHaveAccessibleDescription(/Pick one to import\./);
         await user.click(picker.getByRole('radio', { name: 'PvP' }));
+        expect(screen.getByTestId('addon-import-target'), 'the target line names the pick').toHaveTextContent('Creates Ana · US · PvP · Level 60 Paladin');
         expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Import' })).not.toHaveAccessibleDescription();
         await user.click(screen.getByRole('button', { name: 'Import' }));
@@ -144,6 +145,57 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
         await pasteAndCheck(user);
         await user.click(screen.getByRole('button', { name: 'Import' }));
         expect(await screen.findByTestId('addon-import-error')).toHaveTextContent('Already claimed');
+    });
+});
+
+const BLOODMOON = { realmName: 'Bloodmoon', source: 'realm-map' } as const;
+/** A null-ruleset create preview whose realm resolved through the admin's realm map (ROK-1739). */
+const inferred = (ruleset: 'pvp' | 'hardcore'): Reply => ({ status: 200, body: newCharResult({ ruleset: null }, { rulesetInference: { ruleset, ...BLOODMOON } }) });
+
+describe('AddonImportDialog create mode — realm-inferred ruleset (ROK-1739 §6.3)', () => {
+    it('pre-selects the inferred ruleset, labels the target as inferred and sends it as the pick', async () => {
+        const bodies = mockCreate(inferred('pvp'));
+        const user = userEvent.setup();
+        renderCreate();
+        await pasteAndCheck(user);
+        expect(screen.getByTestId('addon-import-target')).toHaveTextContent('Creates Ana · US · PvP (inferred from Bloodmoon) · Level 60 Paladin');
+        const picker = within(screen.getByRole('radiogroup', { name: 'Ruleset' }));
+        expect(picker.getByRole('radio', { name: 'PvP' })).toBeChecked();
+        expect(screen.getByTestId('addon-import-ruleset-inference')).toHaveTextContent("Pre-selected from realm Bloodmoon — change it if that's wrong.");
+        expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled();
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        await waitFor(() => expect(bodies).toHaveLength(2));
+        expect(bodies[1]).toMatchObject({ dryRun: false, ruleset: 'pvp' });
+    });
+
+    it("sends the user's own pick when they override the inferred one", async () => {
+        const bodies = mockCreate(inferred('pvp'));
+        const user = userEvent.setup();
+        renderCreate();
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('radio', { name: 'Normal' }));
+        expect(screen.getByRole('radio', { name: 'Normal' })).toBeChecked();
+        const banner = screen.getByTestId('addon-import-target');
+        expect(banner, 'the target line follows the override, not the inference').toHaveTextContent('Creates Ana · US · Normal · Level 60 Paladin');
+        expect(banner).not.toHaveTextContent('inferred from');
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        await waitFor(() => expect(bodies).toHaveLength(2));
+        expect(bodies[1]).toMatchObject({ dryRun: false, ruleset: 'normal' });
+    });
+
+    it('does not apply a Hardcore inference: nothing picked, the Hardcore hint, Import disabled', async () => {
+        const bodies = mockCreate(inferred('hardcore'));
+        const user = userEvent.setup();
+        renderCreate();
+        await pasteAndCheck(user);
+        expect(screen.getByTestId('addon-import-target')).toHaveTextContent('· ruleset not in export ·');
+        const picker = within(screen.getByRole('radiogroup', { name: 'Ruleset' }));
+        expect(picker.queryByRole('radio', { checked: true })).toBeNull();
+        expect(screen.getByTestId('addon-import-ruleset-inference')).toHaveTextContent(
+            "Realm Bloodmoon is listed as Hardcore, which can't be added yet — pick a ruleset.",
+        );
+        expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
+        expect(bodies).toHaveLength(1);
     });
 });
 
@@ -212,5 +264,35 @@ describe('Import LedgerLink character filler → create dialog', () => {
         await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/characters/${CREATED_ID}`));
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(toast.success).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('AddonImportDialog create mode — stale ruleset confirmation (ROK-1739, Codex r3 P2)', () => {
+    it('an update target refused with RULESET_CONFIRM_STALE shows the banner, never onCreated; Preview again re-previews', async () => {
+        const changed = (to: string): Reply => ({
+            status: 200,
+            body: newCharResult({ action: 'update', characterId: CREATED_ID, name: 'Ana' }, { warnings: [{ code: 'RULESET_CHANGED', from: 'normal', to }] }),
+        });
+        const previews = [changed('pvp'), changed('hardcore')];
+        const bodies: Body[] = [];
+        server.use(http.post(NEW_IMPORT_URL, async ({ request }) => {
+            const body = await request.json() as Body;
+            bodies.push(body);
+            const reply = body.dryRun ? previews.shift() ?? { status: 500, body: {} } : { status: 422, body: { code: 'RULESET_CONFIRM_STALE', message: 'stale' } };
+            return HttpResponse.json(reply.body as Record<string, unknown>, { status: reply.status });
+        }));
+        const user = userEvent.setup();
+        const { onCreated } = renderCreate();
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('checkbox', { name: /Update ruleset to PvP/ }));
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        const banner = await screen.findByTestId('addon-import-error');
+        expect(banner).toHaveTextContent("The realm's ruleset changed since your preview — preview again and confirm the new value.");
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(toast.success).not.toHaveBeenCalled();
+        await user.click(within(banner).getByRole('button', { name: 'Preview again' }));
+        expect(await screen.findByRole('checkbox', { name: /Update ruleset to Hardcore/ })).not.toBeChecked();
+        expect(bodies.map((b) => b.dryRun)).toEqual([true, false, true]);
+        expect(onCreated).not.toHaveBeenCalled();
     });
 });

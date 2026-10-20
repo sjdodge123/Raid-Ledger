@@ -8,14 +8,17 @@
 import type { AddonApplyContext } from './addon-import-apply.types';
 import type { AddonBindingResult } from './addon-import.binding';
 import type { DecodedAddonPaste } from './addon-import.decoder';
-import { applyChar } from './addon-import-char.apply';
+import { applyChar, previewChar } from './addon-import-char.apply';
 import { applyGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
 import { AddonImportError } from './addon-import.errors';
+import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import {
   buildPasteResult,
   runPaste,
   shouldApplyBinding,
+  SNAPSHOT_UNCHANGED,
+  withPendingBindingStatus,
 } from './addon-import.paste-run';
 
 jest.mock('./addon-import-char.apply', () => ({
@@ -185,5 +188,71 @@ describe('buildPasteResult', () => {
     expect(
       shouldApplyBinding(await runPaste(CTX, paste('char', 'raid'), false)),
     ).toBe(false);
+  });
+});
+
+// ROK-1739 Codex r4 P2: an unchanged re-import after the realm was mapped.
+describe('withPendingBindingStatus', () => {
+  const PENDING: AddonBindingResult = {
+    ...BINDING,
+    warnings: [{ code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' }],
+  };
+  const statusOf = async (binding: AddonBindingResult, dryRun: boolean) => {
+    (previewChar as jest.Mock).mockResolvedValue({
+      status: 'noop',
+      summary: CHAR_SUMMARY,
+    });
+    (applyChar as jest.Mock).mockResolvedValue({
+      status: 'noop',
+      summary: CHAR_SUMMARY,
+    });
+    const runs = await runPaste(CTX, paste('char'), dryRun);
+    const res = buildPasteResult(
+      withPendingBindingStatus(runs, binding, dryRun),
+      binding,
+    );
+    return res;
+  };
+
+  it('a noop preview with a pending RULESET_CHANGED is applicable (preview)', async () => {
+    expect((await statusOf(PENDING, true)).status).toBe('preview');
+  });
+
+  it('stays noop when nothing — incl. the ruleset — would change', async () => {
+    expect((await statusOf(BINDING, true)).status).toBe('noop');
+  });
+
+  it('an apply that WROTE the ruleset over a noop snapshot reports applied, flagged snapshot-unchanged', async () => {
+    const res = await statusOf({ ...PENDING, setRuleset: 'pvp' }, false);
+    expect({ status: res.status, marked: SNAPSHOT_UNCHANGED in res }).toEqual({
+      status: 'applied',
+      marked: true,
+    });
+    expect(JSON.stringify(res)).not.toContain('snapshotUnchanged');
+  });
+
+  it('an unconfirmed apply (no ruleset write) stays noop, unflagged', async () => {
+    const res = await statusOf(PENDING, false);
+    expect({ status: res.status, marked: SNAPSHOT_UNCHANGED in res }).toEqual({
+      status: 'noop',
+      marked: false,
+    });
+  });
+});
+
+describe('enqueueAppliedGear gates on a snapshot change, not the status', () => {
+  const gearPaste = {
+    sections: { char: { payload: { data: { gear: [{ itemId: 16921 }] } } } },
+  } as unknown as DecodedAddonPaste;
+  const run = (res: object) => {
+    const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
+    enqueueAppliedGear(itemMeta, gearPaste, res, { warn: jest.fn() });
+    return itemMeta.enqueue.mock.calls.length;
+  };
+
+  it('a snapshot apply queues; a ruleset-only apply does not', () => {
+    const applied = { section: 'char', status: 'applied' };
+    expect(run(applied)).toBe(1);
+    expect(run({ ...applied, [SNAPSHOT_UNCHANGED]: true })).toBe(0);
   });
 });

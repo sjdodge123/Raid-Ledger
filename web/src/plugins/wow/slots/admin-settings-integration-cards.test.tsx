@@ -29,6 +29,11 @@ vi.mock('../components/forever-settings-section', () => ({
     ForeverSettingsSection: () => <div data-testid="forever-settings-section" />,
 }));
 
+// ROK-1739: the realm-rulesets editor has its own spec (forever-realm-rulesets-form.test.tsx).
+vi.mock('../components/forever-realm-rulesets-form', () => ({
+    ForeverRealmRulesetsSection: () => <div data-testid="forever-realm-rulesets-section" />,
+}));
+
 vi.mock('../../../hooks/use-new-badge', () => ({
     useNewBadge: () => ({ isNew: false, markSeen: vi.fn() }),
 }));
@@ -212,5 +217,22 @@ describe('BlizzardIntegrationSlot — WoW Forever section (ROK-1717)', () => {
         mockBlizzardStatus.data = { configured: false };
         render(<BlizzardIntegrationSlot />);
         expect(screen.queryByTestId('forever-settings-section')).not.toBeInTheDocument();
+    });
+});
+
+describe('BlizzardIntegrationSlot — realm rulesets section (ROK-1739)', () => {
+    beforeEach(resetMocks);
+
+    it('renders the realm-rulesets editor even when Blizzard is not configured', () => {
+        mockBlizzardStatus.data = { configured: false };
+        render(<BlizzardIntegrationSlot />);
+        expect(screen.getByTestId('forever-realm-rulesets-section')).toBeInTheDocument();
+        expect(screen.queryByTestId('forever-settings-section')).not.toBeInTheDocument();
+    });
+
+    it('renders the realm-rulesets editor alongside the Forever section once configured', () => {
+        renderConfigured();
+        expect(screen.getByTestId('forever-realm-rulesets-section')).toBeInTheDocument();
+        expect(screen.getByTestId('forever-settings-section')).toBeInTheDocument();
     });
 });
