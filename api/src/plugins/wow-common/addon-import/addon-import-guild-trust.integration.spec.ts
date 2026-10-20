@@ -29,7 +29,7 @@ import {
   buildMember,
   buildWho,
 } from './testing/addon-fixture.builder';
-import { corroborateRoster } from './testing/corroborate-roster';
+import { grantMemberEditor } from './testing/grant-member-editor';
 import { FIXTURE_NOW_MS, pinExportClock } from './testing/pin-export-clock';
 import type { AddonGuildMember } from '@raid-ledger/contract';
 
@@ -164,13 +164,13 @@ const guildRow = async () =>
  * answers 409. The export's `who` must carry that same name (NAME_MISMATCH).
  */
 const OTHER_NAME = 'Bob Forever';
-const otherChar = (token: string): Promise<string> =>
-  createChar(token, { name: OTHER_NAME });
-const whoAsOther = (guid: string) =>
+const otherChar = (token: string, name = OTHER_NAME): Promise<string> =>
+  createChar(token, { name });
+const whoAsOther = (guid: string, name = OTHER_NAME) =>
   buildWho({
     guid,
-    fullName: OTHER_NAME,
-    raw: { getUnitName: OTHER_NAME, unitName: [OTHER_NAME, null] },
+    fullName: name,
+    raw: { getUnitName: name, unitName: [name, null] },
   });
 
 /** A real member (FIXTURE_GUID) creates the 40-member guild and is pinned. */
@@ -178,8 +178,8 @@ async function seedRealGuild(): Promise<{ token: string; id: string }> {
   const token = await memberToken('realgm');
   const id = await createChar(token);
   expect((await apply(token, id, fixture('guild-1-page'))).status).toBe(200);
-  // Other members' imports have carried the roster since (Codex P1).
-  await corroborateRoster(testApp.db);
+  // Explicit grants only (ruling 2026-10-19): staff made the GM an editor.
+  await grantMemberEditor(testApp.db, FIXTURE_GUID);
   return { token, id };
 }
 
@@ -366,65 +366,6 @@ describe('ROK-1794 — staff, snapshot clock and audit', () => {
   });
 });
 
-/** A member-only GUID listed on a new, squatted guild roster. */
-const SQUAT = 'Squat Club';
-function squatRoster(step: number, extra: AddonGuildMember[] = []): string {
-  const payload = buildGuildPayload([
-    buildMember(0x5a0001, { guid: 'Player-4395-005A0001' }),
-    buildMember(0x5a0002, { guid: 'Player-4395-005A0002' }),
-    ...extra,
-  ]);
-  payload.data.name = SQUAT;
-  payload.who = buildWho({ guid: 'Player-4395-005A0001' });
-  payload.data.snapshotAt += step * 60;
-  return buildImportString(payload);
-}
-const squatMembers = async (): Promise<number> => {
-  const [g] = await testApp.db
-    .select({ n: count() })
-    .from(schema.guildMembers)
-    .innerJoin(schema.guilds, eq(schema.guilds.id, schema.guildMembers.guildId))
-    .where(eq(schema.guilds.name, SQUAT));
-  return Number(g?.n ?? 0);
-};
-
-describe('ROK-1794 — self-introduced roster rows (Codex P1)', () => {
-  it(`${AC(2)}: forged export → GUID claim → re-import is refused until another importer corroborates`, async () => {
-    const token = await memberToken('squatter');
-    const id = await createChar(token);
-    // The forged guild export claims 005A0001 for the squatter's character
-    // and introduces every row of the new guild itself.
-    expect((await apply(token, id, squatRoster(1))).status).toBe(200);
-    const fake = buildMember(0x5a0099, { guid: 'Player-4395-005A0099' });
-    const again = await apply(token, id, squatRoster(2, [fake]));
-    expect(again.status).toBe(422);
-    expect(again.body.code).toBe('NOT_IN_GUILD');
-    expect(await squatMembers()).toBe(2);
-    // A second importer, listed by someone else, carries the row.
-    const other = await memberToken('corroborator');
-    const otherId = await otherChar(other);
-    // The guard reads the importer's STORED GUID, and a paste pins it only
-    // after its sections ran — so they link their character first.
-    const pin = buildCharPayload({ who: whoAsOther('Player-4395-005A0002') });
-    expect((await apply(other, otherId, buildImportString(pin))).status).toBe(
-      200,
-    );
-    const theirs = buildGuildPayload([
-      buildMember(0x5a0001, { guid: 'Player-4395-005A0001' }),
-      buildMember(0x5a0002, { guid: 'Player-4395-005A0002' }),
-    ]);
-    theirs.data.name = SQUAT;
-    theirs.who = whoAsOther('Player-4395-005A0002');
-    theirs.data.snapshotAt += 3 * 60;
-    expect(
-      (await apply(other, otherId, buildImportString(theirs))).status,
-    ).toBe(200);
-    const after = await apply(token, id, squatRoster(4, [fake]));
-    expect(after.status).toBe(200);
-    expect(await squatMembers()).toBe(3);
-  });
-});
-
 describe('ROK-1794 — concurrent imports and the character-less route (Codex P2)', () => {
   it(`${AC(4)}: two concurrent identical imports count a removal once`, async () => {
     const { token, id } = await seedRealGuild();
@@ -465,5 +406,151 @@ describe('ROK-1794 — concurrent imports and the character-less route (Codex P2
     expect(flags).toEqual([
       expect.objectContaining({ title: 'Guild roster import held' }),
     ]);
+  });
+});
+
+/** Roster GUID `i` ([0] is the GM's FIXTURE_GUID), unlinked until pinned. */
+const rosterGuid = (i: number): string => {
+  const m = roster()[i];
+  if (!m) throw new Error(`no roster member ${i}`);
+  return m.guid;
+};
+const memberRank = async (guid: string): Promise<number | null> =>
+  nonEmpty(
+    await testApp.db
+      .select({ rank: schema.guildMembers.rankIndex })
+      .from(schema.guildMembers)
+      .where(eq(schema.guildMembers.guid, guid)),
+    'member',
+  )[0].rank;
+
+/** A new user whose character pins roster GUID `guid` by a character export. */
+async function linkRosterMember(user: string, guid: string, name: string) {
+  const token = await memberToken(user);
+  const id = await otherChar(token, name);
+  const pin = buildCharPayload({ who: whoAsOther(guid, name) });
+  expect((await apply(token, id, buildImportString(pin))).status).toBe(200);
+  return { token, id };
+}
+
+type Edit = (ms: AddonGuildMember[]) => AddonGuildMember[];
+/** The real roster, edited, exported by `guid` (as `name`) `step` min later. */
+function rosterAs(guid: string, name: string, step: number, edit: Edit) {
+  const payload = buildGuildPayload(edit(roster()));
+  payload.who = whoAsOther(guid, name);
+  payload.data.snapshotAt += step * 60;
+  return buildImportString(payload);
+}
+const asIs: Edit = (ms) => ms;
+const promote =
+  (guid: string): Edit =>
+  (ms) =>
+    ms.map((m) => (m.guid === guid ? { ...m, rankIndex: 0, rank: 'GM' } : m));
+/** Drop `n` members other than the GM and `keep`. */
+const dropOthers =
+  (n: number, keep: string): Edit =>
+  (ms) => {
+    const others = ms.filter((m) => ![FIXTURE_GUID, keep].includes(m.guid));
+    const gone = new Set(others.slice(0, n).map((m) => m.guid));
+    return ms.filter((m) => !gone.has(m.guid));
+  };
+
+describe('ROK-1794 — explicit grants only (operator ruling 2026-10-19)', () => {
+  it(`${AC(2)}: a GUID claimed by a forged character export earns no re-import, even after another importer's import`, async () => {
+    const gm = await seedRealGuild();
+    const y = rosterGuid(1);
+    const forger = await linkRosterMember('forger', y, OTHER_NAME);
+    const rankBefore = await memberRank(y);
+    const forged = await apply(
+      forger.token,
+      forger.id,
+      rosterAs(y, OTHER_NAME, 1, promote(y)),
+    );
+    expect(forged.status).toBe(422);
+    expect(forged.body.code).toBe('NOT_IN_GUILD');
+    // The real GM (a member editor) carries the roster in a newer import —
+    // the dropped corroboration path would have let the forger in after it.
+    expect((await apply(gm.token, gm.id, sliced(0, 2))).status).toBe(200);
+    const before = await guildRow();
+    const again = await apply(
+      forger.token,
+      forger.id,
+      rosterAs(y, OTHER_NAME, 3, promote(y)),
+    );
+    expect(again.status).toBe(422);
+    expect(again.body.code).toBe('NOT_IN_GUILD');
+    expect(await guildRow()).toEqual(before);
+    expect(await memberRank(y)).toBe(rankBefore);
+  });
+
+  it(`${AC(2)}: the guild's creator may not re-import it without a grant`, async () => {
+    const token = await memberToken('creator');
+    const id = await createChar(token);
+    expect((await apply(token, id, fixture('guild-1-page'))).status).toBe(200);
+    const before = await guildRow();
+    const res = await apply(token, id, sliced(0, 1));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expect(await guildRow()).toEqual(before);
+  });
+
+  it.each([
+    ['a plain roster member', false],
+    ['a rank-grant holder (rank grants confer nothing)', true],
+  ])(`${AC(2)}: %s may not re-import`, async (_label, rankGrant) => {
+    await seedRealGuild();
+    const y = rosterGuid(1);
+    if (rankGrant) {
+      await testApp.db.insert(schema.guildEditors).values({
+        guildId: (await guildRow()).id,
+        kind: 'rank',
+        rankIndex: nonNull(await memberRank(y)),
+      });
+    }
+    const m = await linkRosterMember('plain', y, OTHER_NAME);
+    const before = await guildRow();
+    const res = await apply(m.token, m.id, rosterAs(y, OTHER_NAME, 1, asIs));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expect(await guildRow()).toEqual(before);
+  });
+});
+
+describe('ROK-1794 — member grants on a confirmed link', () => {
+  it(`${AC(2)}/${AC(4)}: an officer staff made a member editor re-imports, and the hold still applies`, async () => {
+    await seedRealGuild();
+    const y = rosterGuid(1);
+    const officer = await linkRosterMember('officer', y, OTHER_NAME);
+    await grantMemberEditor(testApp.db, y);
+    const ok = await apply(
+      officer.token,
+      officer.id,
+      rosterAs(y, OTHER_NAME, 1, dropOthers(4, y)),
+    );
+    expect(ok.status).toBe(200);
+    expect(await liveCount()).toBe(36);
+    const held = await apply(
+      officer.token,
+      officer.id,
+      rosterAs(y, OTHER_NAME, 2, dropOthers(30, y)),
+    );
+    expect(held.status).toBe(422);
+    expect(held.body.code).toBe('INVALID_PAYLOAD');
+    expect(await liveCount()).toBe(36);
+  });
+
+  it(`${AC(5)}: a character that pins the granted GUID after the grant is refused`, async () => {
+    await seedRealGuild();
+    const y = rosterGuid(1);
+    const token = await memberToken('latecomer');
+    const id = await otherChar(token); // exists before the grant, unpinned
+    await grantMemberEditor(testApp.db, y);
+    const pin = buildCharPayload({ who: whoAsOther(y) });
+    expect((await apply(token, id, buildImportString(pin))).status).toBe(200);
+    const before = await guildRow();
+    const res = await apply(token, id, rosterAs(y, OTHER_NAME, 1, asIs));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('NOT_IN_GUILD');
+    expect(await guildRow()).toEqual(before);
   });
 });
