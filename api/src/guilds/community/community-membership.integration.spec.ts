@@ -32,7 +32,7 @@ async function mkUser(inDiscord = true): Promise<Who> {
       .insert(schema.users)
       .values({
         username,
-        discordId: `local:${username}`,
+        discordId: `91${String(Date.now() % 1e9).padStart(9, '0')}${String(seq).padStart(5, '0')}`,
         role: 'member',
         guildMemberSeenAt: inDiscord ? new Date() : null,
       })
@@ -294,6 +294,69 @@ describe('moderation ladder (M6–M8)', () => {
         )
       ).status,
     ).toBe(409);
+  });
+});
+
+describe('review fixes (M16–M19)', () => {
+  it('M16: a member row from the page payload drives the remove route', async () => {
+    const [leader, mem] = [await mkUser(), await mkUser()];
+    const hub = await mkHub(leader, [mem]);
+    const page = await call('get', `/guilds/${hub}`, leader.token);
+    expect(page.status).toBe(200);
+    const rows: { memberId: number; community?: { userId: number } }[] =
+      page.body.ranks[0].members;
+    const row = rows.find((r) => r.community?.userId === mem.id);
+    const [dbRow] = await memberRow(hub, mem.id);
+    expect(row?.memberId).toBe(dbRow?.id);
+    const target = row?.community?.userId ?? 0;
+    expect(
+      (await call('delete', `/hubs/${hub}/members/${target}`, leader.token))
+        .status,
+    ).toBe(204);
+    const [after] = await memberRow(hub, mem.id);
+    expect(after?.leftAt).not.toBeNull();
+  });
+
+  it('M17: a failed transfer leaves the leader in place', async () => {
+    const [leader, mem, outsider] = [
+      await mkUser(),
+      await mkUser(),
+      await mkUser(),
+    ];
+    const hub = await mkHub(leader, [mem]);
+    const res = await call('post', `/hubs/${hub}/leader`, leader.token, {
+      userId: outsider.id,
+    });
+    expect(res.status).toBe(404);
+    const [still] = await memberRow(hub, leader.id);
+    expect(still?.role).toBe('leader');
+  });
+
+  it('M18: the leader pre-bans a non-member, who then cannot join', async () => {
+    const [leader, outsider] = [await mkUser(), await mkUser()];
+    const hub = await mkHub(leader);
+    expect(
+      (await call('put', `/hubs/${hub}/bans/${outsider.id}`, leader.token, {}))
+        .status,
+    ).toBe(204);
+    expect(
+      (await call('post', `/hubs/${hub}/join`, outsider.token)).status,
+    ).toBe(403);
+    expect((await hubRow(hub)).memberCount).toBe(1);
+  });
+
+  it('M19: an officer cannot lift the leader\'s ban on an officer', async () => {
+    const [leader, off, off2] = [await mkUser(), await mkUser(), await mkUser()];
+    const hub = await mkHub(leader, [off, off2]);
+    for (const o of [off, off2])
+      await call('patch', `/hubs/${hub}/members/${o.id}/role`, leader.token, {
+        role: 'officer',
+      });
+    await call('put', `/hubs/${hub}/bans/${off2.id}`, leader.token, {});
+    const unban = (t: string) =>
+      call('delete', `/hubs/${hub}/bans/${off2.id}`, t);
+    expect((await unban(off.token)).status).toBe(403);
+    expect((await unban(leader.token)).status).toBe(204);
   });
 });
 

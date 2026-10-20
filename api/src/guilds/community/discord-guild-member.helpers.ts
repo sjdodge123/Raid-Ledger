@@ -9,10 +9,18 @@ export interface DiscordGuildMemberFields {
   deactivatedAt: Date | null;
 }
 
+/** `local:` (no Discord) / `unlinked:` (unlinked) ids are not a real link. */
+const PLACEHOLDER_PREFIXES = ['local:', 'unlinked:'];
+
+/** True for a real linked Discord id (OQ-6). */
+function isLinkedDiscordId(id: string | null): boolean {
+  return id !== null && !PLACEHOLDER_PREFIXES.some((p) => id.startsWith(p));
+}
+
 /** True when the user may Join / Propose community hubs (A2). */
 export function isInDiscordGuild(user: DiscordGuildMemberFields): boolean {
   return (
-    user.discordId !== null &&
+    isLinkedDiscordId(user.discordId) &&
     user.guildMemberSeenAt !== null &&
     user.deactivatedAt === null
   );

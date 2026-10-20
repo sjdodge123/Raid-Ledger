@@ -23,6 +23,7 @@ import {
   selectUserScreenshotPaths,
 } from '../feedback/feedback-screenshot-user.helpers';
 import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
+import { wipeCommunityHubData } from '../guilds/community/community-user-wipe.helpers';
 
 const logger = new Logger('UserDelete');
 
@@ -243,6 +244,8 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.guildRecommendedAddons,
   // ROK-1870: `guilds.proposed_by` / `reviewed_by` are SET NULL provenance; a
   // community hub belongs to its members, not to whoever proposed/approved it.
+  // Exception: a still-`proposed` row IS the proposer's — wipeCommunityHubData
+  // deletes it (and recounts the hubs whose member rows it removes).
   schema.guilds,
   // ROK-1833: `created_by` is SET NULL; a server's link token outlives the
   // admin who issued it (the mod keeps posting).
@@ -287,6 +290,7 @@ async function deleteDualUserOwnedRows(tx: Db, userId: number): Promise<void> {
 
 /** Delete every user-owned row (Phase A RESTRICT + all ON DELETE CASCADE). */
 async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
+  await wipeCommunityHubData(tx, userId);
   for (const { table, column } of WIPE_BY_COLUMN) {
     await tx.delete(table).where(eq(column, userId));
   }
