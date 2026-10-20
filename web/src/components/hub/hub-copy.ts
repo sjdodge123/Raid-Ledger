@@ -36,7 +36,22 @@ const SERVER_COPY: HubCopy = {
     editorsEmpty: 'No one yet — start with your server leader.',
 };
 
-export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = { wow_guild: WOW_COPY, game_server: SERVER_COPY };
+/** ROK-1870 — a community hub has a leader (the approved proposer) and sessions, no server. */
+const COMMUNITY_COPY: HubCopy = {
+    leaderPostPill: 'From the hub leader',
+    leaderPostHeading: 'Message from the hub leader',
+    leaderPostEmpty: 'No post from the hub leader yet.',
+    scheduleTitle: 'Upcoming sessions',
+    scheduleEmpty: 'No sessions scheduled yet.',
+    attendanceEmpty: "No attendance recorded yet. It fills in once a session's attendance is taken.",
+    editorsEmpty: 'No one yet — start with your hub leader.',
+};
+
+export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {
+    wow_guild: WOW_COPY,
+    game_server: SERVER_COPY,
+    game_community: COMMUNITY_COPY,
+};
 
 /** Copy for a hub kind; an unknown/absent kind reads as a WoW guild (the pre-ROK-1831 default). */
 export function hubCopy(kind: GuildKind | undefined): HubCopy {

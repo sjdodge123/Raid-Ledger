@@ -10,12 +10,12 @@
  */
 import type { ComponentType } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { CreateGuildEditorInput, GuildEditor, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import type { CreateGuildEditorInput, GuildEditor, GuildKind, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
 import { getHubModuleRegistrations } from './plugin-registry';
 
-/** Mirrors the api `GUILD_KINDS` / `guilds.kind` column (ROK-1830 S1). */
-export type HubKind = 'wow_guild' | 'game_server';
+/** The api `GUILD_KINDS` / `guilds.kind` column (ROK-1830 S1; `game_community` since ROK-1870). */
+export type HubKind = GuildKind;
 
 /** One member of the hub, as the page payload carries it. */
 export type HubMemberRow = GuildMemberRow;
