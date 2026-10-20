@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   UpdateGuildProfileSchema,
@@ -25,6 +26,7 @@ import {
   upsertProfile,
 } from './guild-profile.queries';
 import { findGuild } from './guild-core.queries';
+import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
 
 /**
  * ROK-1786 — the guild's GM post, rules and links. Reads need `canView`
@@ -36,6 +38,7 @@ export class GuildProfileService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly access: GuildAccessService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async get(actor: GuildActor, guildId: number): Promise<GuildProfile> {
@@ -46,7 +49,11 @@ export class GuildProfileService {
     return this.load(guildId);
   }
 
-  /** Upsert; the GM post stamp moves only when its text changes. */
+  /**
+   * Upsert; the GM post stamp moves only when its text changes. ROK-1832 D7:
+   * a changed, non-empty post fires the leader-post trigger (fire-and-forget,
+   * D10). D9: rules/links never notify — this is the only emit site.
+   */
   async update(
     actor: GuildActor,
     guildId: number,
@@ -60,6 +67,15 @@ export class GuildProfileService {
       stored?.gmPost,
     );
     await upsertProfile(this.db, guildId, patch);
+    // dropUnchangedGmPost keeps `gmPost` only when the text changed;
+    // normaliseGmPost already turned a blank post into null (cleared).
+    if (typeof patch.gmPost === 'string') {
+      this.events.emit(HUB_NOTIFICATION_EVENTS.LEADER_POST, {
+        guildId,
+        actorId: actor.id,
+        gmPost: patch.gmPost,
+      });
+    }
     return this.load(guildId);
   }
 

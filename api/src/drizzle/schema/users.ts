@@ -1,5 +1,6 @@
 import {
   pgTable,
+  integer,
   numeric,
   serial,
   text,
@@ -27,6 +28,12 @@ export const users = pgTable(
     gameTimeConfirmedAt: timestamp('game_time_confirmed_at'),
     /** Timestamp when the user left the Discord guild and was auto-deactivated (ROK-1260). Null = active. */
     deactivatedAt: timestamp('deactivated_at'),
+    /**
+     * ROK-1823: per-user access-token version. Bumped on every revoke
+     * (password change, role change, refresh-token reuse, delete); a session
+     * token whose `tv` claim differs from it is rejected.
+     */
+    tokenVersion: integer('token_version').default(0).notNull(),
     /**
      * ROK-1749: last time the user was seen in the Discord guild roster — set by
      * the GuildMemberAdd listener (join/rejoin) and by the daily reconciliation

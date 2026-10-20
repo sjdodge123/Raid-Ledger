@@ -15,6 +15,9 @@ export interface AuthenticatedUser {
    * (ROK-1275). Null = active. */
   deactivatedAt: Date | null;
   impersonatedBy: number | null;
+  /** ROK-1823 D6: the `tv` claim of the token that authenticated this
+   * request — an impersonation start signs it as `itv`. */
+  tokenVersion: number;
 }
 
 /**

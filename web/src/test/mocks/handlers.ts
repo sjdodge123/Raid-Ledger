@@ -15,6 +15,7 @@ import { pelicanHandlers } from './pelican-handlers';
 import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
+import { hubNotificationMuteHandlers } from './hub-notification-mute-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 
 const API_BASE = 'http://localhost:3000';
@@ -32,6 +33,8 @@ export const handlers = [
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
     ...guildDiscordHandlers,
+    // Per-group notification mute (ROK-1832) — echo writes, no muted groups.
+    ...hubNotificationMuteHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes
     // POST /auth/refresh before settling on logged-out. Default to 401 (no
     // refresh cookie) so component tests resolve the probe deterministically.

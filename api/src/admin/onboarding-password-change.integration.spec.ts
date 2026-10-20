@@ -2,7 +2,7 @@
  * ROK-1810 — changing the admin password revokes every existing session
  * (refresh families + access JWTs) and re-issues the caller's own session.
  * Real DB; Redis is the standard in-memory REDIS_CLIENT mock from
- * `getTestApp` (the `jwt_block:` keys live there). The old `rl_rt` and old
+ * `getTestApp`. The old `rl_rt` and old
  * access JWT must get 401 while the new cookie and access token keep working.
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  // Also clears the `jwt_block:<adminId>` key this suite writes.
+  // Also clears the auth-user cache holding the admin's bumped token version.
   testApp.seed = await truncateAllTables(testApp.db);
 });
 

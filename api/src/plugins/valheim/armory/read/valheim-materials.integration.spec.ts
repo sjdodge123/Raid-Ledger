@@ -4,7 +4,6 @@
  * fixtures + a synthetic world built on their header); profiles/claims are
  * direct inserts. Visibility is asserted per actor on all three routes.
  */
-import { JwtService } from '@nestjs/jwt';
 import { and, eq } from 'drizzle-orm';
 import {
   ValheimContainerDetailSchema,
@@ -14,6 +13,10 @@ import {
   type ValheimMaterialStack,
   type ValheimMaterialsResponse,
 } from '@raid-ledger/contract';
+import {
+  signTestAccessToken,
+  type TestAccessClaims,
+} from '../../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -52,8 +55,8 @@ const registry = () => testApp.app.get(PluginRegistryService);
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const base = (s: number) => `/plugins/valheim/armory/servers/${s}`;
 const get = (url: string, t: string) => testApp.request.get(url).set(auth(t));
-const sign = (sub: number, extra: Record<string, unknown> = {}) =>
-  testApp.app.get(JwtService).sign({ sub, username: `u${sub}`, ...extra });
+const sign = (sub: number, extra: Partial<TestAccessClaims> = {}) =>
+  signTestAccessToken(testApp, { sub, username: `u${sub}`, ...extra });
 
 async function makeUser(
   username: string,
@@ -246,10 +249,12 @@ beforeEach(async () => {
   ownerId = await makeUser('owner');
   await profile(server, OWNER_PID, 'S_OWNER', { by: ownerId, source: 'auto' });
   tokens = {
-    member: sign(await makeUser('member')),
-    owner: sign(ownerId),
-    operator: sign(await makeUser('operator', 'operator')),
-    impersonated: sign(ownerId, { impersonatedBy: testApp.seed.adminUser.id }),
+    member: await sign(await makeUser('member')),
+    owner: await sign(ownerId),
+    operator: await sign(await makeUser('operator', 'operator')),
+    impersonated: await sign(ownerId, {
+      impersonatedBy: testApp.seed.adminUser.id,
+    }),
   };
 });
 
@@ -393,7 +398,7 @@ describe('containers list + detail (R2/R3/R11/R17)', () => {
     const mine = await keyOf(OWNER_PID, 'piece_chest_private');
     const theirs = await keyOf(OTHER_PID, 'piece_chest_private');
     expect(mine).not.toBe(theirs);
-    const other = sign(otherId);
+    const other = await sign(otherId);
     expect(
       (await get(`${base(server)}/containers/${theirs}`, other)).status,
     ).toBe(200);
@@ -464,11 +469,11 @@ describe('claim rules (R7/R8/R9/R10)', () => {
       by: otherUser,
       source: 'manual',
     });
-    expect(await silver(sign(otherUser))).toBe(false);
+    expect(await silver(await sign(otherUser))).toBe(false);
     await testApp.db.delete(P).where(eq(P.playerId, OTHER_PID));
     const self = await makeUser('manualSelf', 'member', 'S_OTHER');
     await profile(server, OTHER_PID, 'S_OTHER', { by: self, source: 'manual' });
-    expect(await silver(sign(self))).toBe(true);
+    expect(await silver(await sign(self))).toBe(true);
   });
 
   it('R8 a playerId under two Steam ids: owner sees nothing, admin still does', async () => {
@@ -489,12 +494,12 @@ describe('claim rules (R7/R8/R9/R10)', () => {
   it('R10 an admin assignment after import flips visibility, no re-import', async () => {
     const id = await profile(server, OTHER_PID, 'S_OTHER', null);
     const late = await makeUser('late');
-    expect(await silver(sign(late))).toBe(false);
+    expect(await silver(await sign(late))).toBe(false);
     await testApp.db
       .update(P)
       .set({ claimedBy: late, claimSource: 'admin', claimedAt: new Date() })
       .where(eq(P.id, id));
-    expect(await silver(sign(late))).toBe(true);
+    expect(await silver(await sign(late))).toBe(true);
   });
 });
 

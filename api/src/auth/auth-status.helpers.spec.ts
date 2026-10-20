@@ -141,6 +141,7 @@ describe('assertKickCooldownOrClear', () => {
       kickedAt: new Date(Date.now() - KICK_COOLDOWN_MS - 1),
       bannedAt: null,
       banReason: null,
+      tokenVersion: 0,
     });
     const kickedAt = new Date(Date.now() - KICK_COOLDOWN_MS - 1);
 

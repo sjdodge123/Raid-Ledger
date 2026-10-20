@@ -33,8 +33,11 @@ import {
 } from './users-steam-link.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import {
+  bumpTokenVersion,
+  NEXT_TOKEN_VERSION,
+} from '../auth/token-version.helpers';
 import { reactivateUserById } from './users-reactivate.helpers';
-import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
 import { defined } from '../common/defined.helpers';
 
@@ -50,7 +53,6 @@ export class UsersService {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
-    private readonly tokenBlocklist: TokenBlocklistService,
     @Optional() private readonly events?: EventEmitter2,
   ) {}
 
@@ -101,14 +103,14 @@ export class UsersService {
     });
   }
 
+  /** ROK-1823: the role and the token-version bump land in ONE UPDATE. */
   async setRole(userId: number, role: UserRole) {
     const [updated] = await this.db
       .update(schema.users)
-      .set({ role, updatedAt: new Date() })
+      .set({ role, updatedAt: new Date(), tokenVersion: NEXT_TOKEN_VERSION })
       .where(eq(schema.users.id, userId))
       .returning();
     invalidateAuthUser(userId);
-    await this.tokenBlocklist.blockUser(userId);
     return defined(updated, `role-updated user ${userId}`);
   }
 
@@ -333,7 +335,8 @@ export class UsersService {
 
   /** Delete a user and cascade all related data (ROK-405). */
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
-    await this.tokenBlocklist.blockUser(userId);
+    await bumpTokenVersion(this.db, userId); // ROK-1823 D7
+    invalidateAuthUser(userId);
     // ROK-1353: refresh-token rows are removed by the FK ON DELETE CASCADE in
     // deleteUserTransaction; the orchestrated guild-leave path additionally
     // calls revokeAllForUser (see discord-notification-deactivate.helpers).

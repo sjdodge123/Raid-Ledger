@@ -18,7 +18,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { at } from '../common/testing/narrow';
-import type { TokenBlocklistService } from './token-blocklist.service';
 import * as schema from '../drizzle/schema';
 import { clearAuthUserCache } from './auth-user-cache';
 import {
@@ -89,7 +88,6 @@ function makeService(db: Db, row = { id: 5, role: 'member' as const }) {
     {} as JwtService,
     db,
     { emit: jest.fn() } as unknown as EventEmitter2,
-    { minIatFor: jest.fn() } as unknown as TokenBlocklistService,
   );
 }
 
@@ -201,10 +199,7 @@ describe('ROK-1537 AC2 — the configured id wins; login preserves role', () => 
       },
       update: jest.fn().mockReturnValue({ set }),
     };
-    const svc = new UsersService(
-      db as unknown as Db,
-      {} as TokenBlocklistService,
-    );
+    const svc = new UsersService(db as unknown as Db);
     await svc.createOrUpdate({ discordId: DISCORD_ID, username: 'op' });
     expect(set).toHaveBeenCalledTimes(1);
     expect(Object.keys(set.mock.calls[0][0] as object)).not.toContain('role');

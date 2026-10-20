@@ -4,11 +4,11 @@
  * vanilla + Bronze recipe set, the catalogue names and a 40-Copper chest
  * through the real importers. Idempotent; 403 without DEMO_MODE; admin-only.
  */
-import { JwtService } from '@nestjs/jwt';
 import {
   ValheimRecipeCatalogResponseSchema,
   ValheimRecipePlanResponseSchema,
 } from '@raid-ledger/contract';
+import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -34,9 +34,7 @@ let adminToken: string;
 const registry = () => testApp.app.get(PluginRegistryService);
 const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
 const sign = (sub: number) =>
-  testApp.app
-    .get(JwtService)
-    .sign({ sub, username: `u${sub}`, role: 'member' });
+  signTestAccessToken(testApp, { sub, username: `u${sub}`, role: 'member' });
 const post = (token: string) =>
   testApp.request.post(ROUTE).set(bearer(token)).send({});
 
@@ -94,7 +92,7 @@ describe('POST /admin/test/valheim/recipes-fixture (ROK-1854 L5)', () => {
     const f = await seed();
     expect(f.guildId).toBe(f.hubId);
     expect(f.guildPageUrl).toBe(`/guilds/${f.hubId}#planner`);
-    const member = bearer(sign(f.memberUserId));
+    const member = bearer(await sign(f.memberUserId));
     const cat = await testApp.request.get(recipesUrl(f.serverId)).set(member);
     expect(cat.status).toBe(200);
     const names = ValheimRecipeCatalogResponseSchema.parse(cat.body).entries;
@@ -124,7 +122,7 @@ describe('POST /admin/test/valheim/recipes-fixture (ROK-1854 L5)', () => {
 
   it('403s for a non-admin and without DEMO_MODE', async () => {
     const f = await seed();
-    expect((await post(sign(f.memberUserId))).status).toBe(403);
+    expect((await post(await sign(f.memberUserId))).status).toBe(403);
     await setDemoMode(false);
     expect((await post(adminToken)).status).toBe(403);
   });

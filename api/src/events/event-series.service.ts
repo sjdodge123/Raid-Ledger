@@ -2,6 +2,8 @@
  * Sub-service for event series bulk operations (ROK-429).
  * Handles update/delete/cancel across recurrence groups.
  */
+import { findSeriesTagTargets } from './event-group-tag.helpers';
+import { HUB_NOTIFICATION_EVENTS } from '../notifications/hub-notification.constants';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -44,6 +46,7 @@ export class EventSeriesService {
     scope: SeriesScope,
     dto: UpdateEventDto,
   ): Promise<void> {
+    const tagged = await findSeriesTagTargets(this.db, id, scope, dto);
     const ids = await updateSeriesEvents(
       this.db,
       id,
@@ -54,6 +57,10 @@ export class EventSeriesService {
     );
     this.logger.log(`Series updated: ${id} scope=${scope} by user ${userId}`);
     await this.emitLifecycleForIds(ids, APP_EVENT_EVENTS.UPDATED);
+    // ROK-1832 OQ-3: the late-tag fan-out skips unannounced/started ones.
+    for (const eventId of tagged) {
+      this.eventEmitter.emit(HUB_NOTIFICATION_EVENTS.EVENT_TAGGED, { eventId });
+    }
   }
 
   /** Deletes a series of events with scope selection. */

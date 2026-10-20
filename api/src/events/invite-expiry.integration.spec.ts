@@ -3,7 +3,7 @@
  * cancelled: resolve answers `valid: false`, claim is a 400, and nothing is
  * written. Locks the expiry behaviour for share links and PUG-slot links.
  */
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
@@ -40,9 +40,10 @@ async function createMember(username: string) {
     })
     .returning();
   const member = defined(user, username);
-  const token = testApp.app
-    .get(JwtService)
-    .sign({ sub: member.id, username: member.username });
+  const token = await signTestAccessToken(testApp, {
+    sub: member.id,
+    username: member.username,
+  });
   return { id: member.id, token };
 }
 

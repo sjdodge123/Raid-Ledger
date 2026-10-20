@@ -27,6 +27,8 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
+import { GuildsCoreModule } from '../guilds/guilds-core.module';
+import { HubNotificationService } from './hub-notification.service';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { SettingsModule } from '../settings/settings.module';
     forwardRef(() => DiscordBotModule),
     forwardRef(() => EventsModule),
     SettingsModule,
+    // ROK-1832: HubKindRegistry for group fan-out (cycle via DiscordBotModule).
+    forwardRef(() => GuildsCoreModule),
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [NotificationController, GameNotificationMutesController],
@@ -58,8 +62,10 @@ import { SettingsModule } from '../settings/settings.module';
     WeeklyDigestService,
     NotificationDedupService,
     SchedulingThresholdService,
+    HubNotificationService,
   ],
   exports: [
+    HubNotificationService,
     NotificationService,
     NotificationDedupService,
     RosterNotificationBufferService,

@@ -4,7 +4,6 @@
  * real snapshot → importer path (`drainOnce`); profiles/claims are direct
  * inserts, as in the Materials integration spec.
  */
-import { JwtService } from '@nestjs/jwt';
 import {
   ValheimRecipeCatalogResponseSchema,
   VALHEIM_PLAN_QUANTITY_MAX,
@@ -16,6 +15,7 @@ import {
   type ValheimRecipePlanResponse,
   type ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
+import { signTestAccessToken } from '../../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -57,7 +57,7 @@ const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const base = (s: number) => `/plugins/valheim/armory/servers/${s}/recipes`;
 const get = (url: string, t: string) => testApp.request.get(url).set(auth(t));
 const sign = (sub: number) =>
-  testApp.app.get(JwtService).sign({ sub, username: `u${sub}` });
+  signTestAccessToken(testApp, { sub, username: `u${sub}` });
 
 function must<T>(v: T | undefined, label: string): T {
   if (v === undefined) throw new Error(`missing ${label}`);
@@ -262,9 +262,9 @@ beforeEach(async () => {
   const ownerId = await makeUser('owner', 'member');
   await claimProfile(OWNER_PID, ownerId);
   tokens = {
-    member: sign(await makeUser('member', 'member')),
-    owner: sign(ownerId),
-    operator: sign(await makeUser('operator', 'operator')),
+    member: await sign(await makeUser('member', 'member')),
+    owner: await sign(ownerId),
+    operator: await sign(await makeUser('operator', 'operator')),
   };
 });
 

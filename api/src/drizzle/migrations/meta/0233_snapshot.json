@@ -1,5 +1,5 @@
 {
-  "id": "34cf6b15-ed6e-4d0f-b492-4838c3d2ec3a",
+  "id": "fb076e25-ab42-4594-aa6e-e4efa0c9edfa",
   "prevId": "456d4f8d-a4e4-4104-971a-1b44b6013cd5",
   "version": "7",
   "dialect": "postgresql",
@@ -5793,6 +5793,89 @@
           "columns": [
             "user_id",
             "game_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.hub_notification_mutes": {
+      "name": "hub_notification_mutes",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_hub_notification_mutes_guild_id": {
+          "name": "idx_hub_notification_mutes_guild_id",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hub_notification_mutes_user_id_users_id_fk": {
+          "name": "hub_notification_mutes_user_id_users_id_fk",
+          "tableFrom": "hub_notification_mutes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hub_notification_mutes_guild_id_guilds_id_fk": {
+          "name": "hub_notification_mutes_guild_id_guilds_id_fk",
+          "tableFrom": "hub_notification_mutes",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "hub_notification_mutes_user_id_guild_id_pk": {
+          "name": "hub_notification_mutes_user_id_guild_id_pk",
+          "columns": [
+            "user_id",
+            "guild_id"
           ]
         }
       },
@@ -13256,7 +13339,7 @@
       "checkConstraints": {
         "valheim_link_snapshots_kind_chk": {
           "name": "valheim_link_snapshots_kind_chk",
-          "value": "\"valheim_link_snapshots\".\"kind\" IN ('character','map','items','containers','recipes')"
+          "value": "\"valheim_link_snapshots\".\"kind\" IN ('character','map','items')"
         },
         "valheim_link_snapshots_status_chk": {
           "name": "valheim_link_snapshots_status_chk",
@@ -14071,27 +14154,6 @@
           "method": "btree",
           "with": {}
         },
-        "valheim_profiles_server_player_idx": {
-          "name": "valheim_profiles_server_player_idx",
-          "columns": [
-            {
-              "expression": "pelican_server_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "player_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "valheim_profiles_source_snapshot_idx": {
           "name": "valheim_profiles_source_snapshot_idx",
           "columns": [
@@ -14170,1037 +14232,6 @@
         "valheim_profiles_claim_pair_chk": {
           "name": "valheim_profiles_claim_pair_chk",
           "value": "(\"valheim_profiles\".\"claimed_by\" IS NULL) = (\"valheim_profiles\".\"claim_source\" IS NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.valheim_container_scans": {
-      "name": "valheim_container_scans",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "pelican_server_id": {
-          "name": "pelican_server_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "world_uid": {
-          "name": "world_uid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "game_version": {
-          "name": "game_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "captured_at": {
-          "name": "captured_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "omitted_shared": {
-          "name": "omitted_shared",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "omitted_private": {
-          "name": "omitted_private",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "container_count": {
-          "name": "container_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stack_count": {
-          "name": "stack_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_snapshot_id": {
-          "name": "source_snapshot_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "imported_at": {
-          "name": "imported_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "valheim_container_scans_server_captured_idx": {
-          "name": "valheim_container_scans_server_captured_idx",
-          "columns": [
-            {
-              "expression": "pelican_server_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "captured_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "valheim_container_scans_source_snapshot_idx": {
-          "name": "valheim_container_scans_source_snapshot_idx",
-          "columns": [
-            {
-              "expression": "source_snapshot_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "valheim_container_scans_pelican_server_id_pelican_servers_id_fk": {
-          "name": "valheim_container_scans_pelican_server_id_pelican_servers_id_fk",
-          "tableFrom": "valheim_container_scans",
-          "tableTo": "pelican_servers",
-          "columnsFrom": [
-            "pelican_server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "valheim_container_scans_source_snapshot_fk": {
-          "name": "valheim_container_scans_source_snapshot_fk",
-          "tableFrom": "valheim_container_scans",
-          "tableTo": "valheim_link_snapshots",
-          "columnsFrom": [
-            "source_snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "valheim_container_scans_world_uq": {
-          "name": "valheim_container_scans_world_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "pelican_server_id",
-            "world_uid"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.valheim_container_stacks": {
-      "name": "valheim_container_stacks",
-      "schema": "",
-      "columns": {
-        "container_id": {
-          "name": "container_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefab": {
-          "name": "prefab",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quality": {
-          "name": "quality",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stack": {
-          "name": "stack",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "valheim_container_stacks_container_id_valheim_containers_id_fk": {
-          "name": "valheim_container_stacks_container_id_valheim_containers_id_fk",
-          "tableFrom": "valheim_container_stacks",
-          "tableTo": "valheim_containers",
-          "columnsFrom": [
-            "container_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "valheim_container_stacks_pk": {
-          "name": "valheim_container_stacks_pk",
-          "columns": [
-            "container_id",
-            "prefab",
-            "quality"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.valheim_containers": {
-      "name": "valheim_containers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "scan_id": {
-          "name": "scan_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pelican_server_id": {
-          "name": "pelican_server_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "public_key": {
-          "name": "public_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefab": {
-          "name": "prefab",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "x": {
-          "name": "x",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "y": {
-          "name": "y",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "z": {
-          "name": "z",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "creator_player_id": {
-          "name": "creator_player_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "privacy": {
-          "name": "privacy",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicle": {
-          "name": "vehicle",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slots": {
-          "name": "slots",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "used_slots": {
-          "name": "used_slots",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unreadable": {
-          "name": "unreadable",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "omitted_entries": {
-          "name": "omitted_entries",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "valheim_containers_scan_privacy_idx": {
-          "name": "valheim_containers_scan_privacy_idx",
-          "columns": [
-            {
-              "expression": "scan_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "privacy",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "valheim_containers_scan_id_valheim_container_scans_id_fk": {
-          "name": "valheim_containers_scan_id_valheim_container_scans_id_fk",
-          "tableFrom": "valheim_containers",
-          "tableTo": "valheim_container_scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "valheim_containers_scan_key_uq": {
-          "name": "valheim_containers_scan_key_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "scan_id",
-            "public_key"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "valheim_containers_privacy_chk": {
-          "name": "valheim_containers_privacy_chk",
-          "value": "\"valheim_containers\".\"privacy\" IN ('public','private','group')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.valheim_pieces": {
-      "name": "valheim_pieces",
-      "schema": "",
-      "columns": {
-        "set_id": {
-          "name": "set_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefab": {
-          "name": "prefab",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "category": {
-          "name": "category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool": {
-          "name": "tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "station": {
-          "name": "station",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "icon": {
-          "name": "icon",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resources": {
-          "name": "resources",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "valheim_pieces_set_id_valheim_recipe_sets_id_fk": {
-          "name": "valheim_pieces_set_id_valheim_recipe_sets_id_fk",
-          "tableFrom": "valheim_pieces",
-          "tableTo": "valheim_recipe_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "valheim_pieces_pk": {
-          "name": "valheim_pieces_pk",
-          "columns": [
-            "set_id",
-            "prefab"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.valheim_processes": {
-      "name": "valheim_processes",
-      "schema": "",
-      "columns": {
-        "set_id": {
-          "name": "set_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ord": {
-          "name": "ord",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "processor": {
-          "name": "processor",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "inputs": {
-          "name": "inputs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "any_one_of": {
-          "name": "any_one_of",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "output_prefab": {
-          "name": "output_prefab",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "output_amount": {
-          "name": "output_amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "seconds": {
-          "name": "seconds",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "priority": {
-          "name": "priority",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "valheim_processes_set_output_idx": {
-          "name": "valheim_processes_set_output_idx",
-          "columns": [
-            {
-              "expression": "set_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "output_prefab",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "valheim_processes_set_id_valheim_recipe_sets_id_fk": {
-          "name": "valheim_processes_set_id_valheim_recipe_sets_id_fk",
-          "tableFrom": "valheim_processes",
-          "tableTo": "valheim_recipe_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "valheim_processes_pk": {
-          "name": "valheim_processes_pk",
-          "columns": [
-            "set_id",
-            "ord"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.valheim_processors": {
-      "name": "valheim_processors",
-      "schema": "",
-      "columns": {
-        "set_id": {
-          "name": "set_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefab": {
-          "name": "prefab",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fuel": {
-          "name": "fuel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fuel_per_product": {
-          "name": "fuel_per_product",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fuel_seconds_per_unit": {
-          "name": "fuel_seconds_per_unit",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "wind_powered": {
-          "name": "wind_powered",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requires_roof": {
-          "name": "requires_roof",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "max_input": {
-          "name": "max_input",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "burnt_result": {
-          "name": "burnt_result",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "default_result": {
-          "name": "default_result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "valheim_processors_set_id_valheim_recipe_sets_id_fk": {
-          "name": "valheim_processors_set_id_valheim_recipe_sets_id_fk",
-          "tableFrom": "valheim_processors",
-          "tableTo": "valheim_recipe_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "valheim_processors_pk": {
-          "name": "valheim_processors_pk",
-          "columns": [
-            "set_id",
-            "prefab"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "valheim_processors_type_chk": {
-          "name": "valheim_processors_type_chk",
-          "value": "\"valheim_processors\".\"type\" IN ('smelter','fermenter','cooking','incinerator')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.valheim_recipe_sets": {
-      "name": "valheim_recipe_sets",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "pelican_server_id": {
-          "name": "pelican_server_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "game_version": {
-          "name": "game_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "captured_at": {
-          "name": "captured_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "atlas_sha256": {
-          "name": "atlas_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "atlas_width": {
-          "name": "atlas_width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "atlas_height": {
-          "name": "atlas_height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_snapshot_id": {
-          "name": "source_snapshot_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "imported_at": {
-          "name": "imported_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "valheim_recipe_sets_server_captured_idx": {
-          "name": "valheim_recipe_sets_server_captured_idx",
-          "columns": [
-            {
-              "expression": "pelican_server_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "captured_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "valheim_recipe_sets_source_snapshot_idx": {
-          "name": "valheim_recipe_sets_source_snapshot_idx",
-          "columns": [
-            {
-              "expression": "source_snapshot_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "valheim_recipe_sets_pelican_server_id_pelican_servers_id_fk": {
-          "name": "valheim_recipe_sets_pelican_server_id_pelican_servers_id_fk",
-          "tableFrom": "valheim_recipe_sets",
-          "tableTo": "pelican_servers",
-          "columnsFrom": [
-            "pelican_server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "valheim_recipe_sets_source_snapshot_fk": {
-          "name": "valheim_recipe_sets_source_snapshot_fk",
-          "tableFrom": "valheim_recipe_sets",
-          "tableTo": "valheim_link_snapshots",
-          "columnsFrom": [
-            "source_snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "valheim_recipe_sets_version_uq": {
-          "name": "valheim_recipe_sets_version_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "pelican_server_id",
-            "game_version"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.valheim_recipe_stations": {
-      "name": "valheim_recipe_stations",
-      "schema": "",
-      "columns": {
-        "set_id": {
-          "name": "set_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefab": {
-          "name": "prefab",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "max_level": {
-          "name": "max_level",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stackable_extension": {
-          "name": "stackable_extension",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "upgrader": {
-          "name": "upgrader",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "icon": {
-          "name": "icon",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "valheim_recipe_stations_set_id_valheim_recipe_sets_id_fk": {
-          "name": "valheim_recipe_stations_set_id_valheim_recipe_sets_id_fk",
-          "tableFrom": "valheim_recipe_stations",
-          "tableTo": "valheim_recipe_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "valheim_recipe_stations_pk": {
-          "name": "valheim_recipe_stations_pk",
-          "columns": [
-            "set_id",
-            "prefab"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.valheim_recipes": {
-      "name": "valheim_recipes",
-      "schema": "",
-      "columns": {
-        "set_id": {
-          "name": "set_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recipe_id": {
-          "name": "recipe_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "result": {
-          "name": "result",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount": {
-          "name": "amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "station": {
-          "name": "station",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "repair_station": {
-          "name": "repair_station",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "min_station_level": {
-          "name": "min_station_level",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "upgrade_only": {
-          "name": "upgrade_only",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "any_one_of": {
-          "name": "any_one_of",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quality_result_amount_multiplier": {
-          "name": "quality_result_amount_multiplier",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "formula": {
-          "name": "formula",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resources": {
-          "name": "resources",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "valheim_recipes_set_result_idx": {
-          "name": "valheim_recipes_set_result_idx",
-          "columns": [
-            {
-              "expression": "set_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "result",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "valheim_recipes_set_id_valheim_recipe_sets_id_fk": {
-          "name": "valheim_recipes_set_id_valheim_recipe_sets_id_fk",
-          "tableFrom": "valheim_recipes",
-          "tableTo": "valheim_recipe_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "valheim_recipes_pk": {
-          "name": "valheim_recipes_pk",
-          "columns": [
-            "set_id",
-            "recipe_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "valheim_recipes_formula_chk": {
-          "name": "valheim_recipes_formula_chk",
-          "value": "\"valheim_recipes\".\"formula\" IN ('vanilla','custom')"
         }
       },
       "isRLSEnabled": false

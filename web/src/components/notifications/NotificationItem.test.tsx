@@ -182,3 +182,25 @@ describe('NotificationItem — existing navigation paths (regression guards)', (
         expect(onClose).not.toHaveBeenCalled();
     });
 });
+
+// ROK-1832 — per-group hub notifications carry their own icon and navigate to payload.url.
+describe('NotificationItem — hub notifications', () => {
+    it.each([
+        ['hub_leader_post', '/guilds/7'],
+        ['hub_event_tagged', '/events/42'],
+    ] as const)('%s renders its own icon and navigates to payload.url', async (type, url) => {
+        const user = userEvent.setup();
+        const { onClose } = renderItem(makeNotification({ type, payload: { guildId: 7, url } }));
+        expect(document.querySelector(`svg[data-icon="${type}"]`)).not.toBeNull();
+        await user.click(screen.getByRole('button'));
+        expect(mockNavigate).toHaveBeenCalledWith(url);
+        expect(onClose).toHaveBeenCalled();
+    });
+
+    it('ignores a payload.url that is not an in-app path', async () => {
+        const user = userEvent.setup();
+        renderItem(makeNotification({ type: 'hub_leader_post', payload: { url: 'https://evil.example' } }));
+        await user.click(screen.getByRole('button'));
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+});

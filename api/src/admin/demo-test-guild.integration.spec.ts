@@ -10,7 +10,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { SettingsService } from '../settings/settings.service';
 import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
@@ -73,10 +73,12 @@ async function seedGuild(
   return res.body as SeedGuildResponse;
 }
 
-function tokenFor(user: { userId: number; username: string }): string {
-  return testApp.app
-    .get(JwtService)
-    .sign({ sub: user.userId, username: user.username, role: 'member' });
+function tokenFor(user: { userId: number; username: string }): Promise<string> {
+  return signTestAccessToken(testApp, {
+    sub: user.userId,
+    username: user.username,
+    role: 'member',
+  });
 }
 
 function viewGuild(guildId: number, token: string) {
@@ -140,7 +142,7 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
     const out = await seedGuild('Smoke Keepers');
     expect(out.editorRankIndex).toBe(1);
     expect(out.unlinkedMemberIds).toHaveLength(2);
-    const page = await viewGuild(out.guildId, tokenFor(out.users.gm));
+    const page = await viewGuild(out.guildId, await tokenFor(out.users.gm));
     expect(page.status).toBe(200);
     const ranks = (page.body.ranks as { rankIndex: number }[]).map(
       (r) => r.rankIndex,
@@ -164,22 +166,42 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
   });
 
   it.each([
-    // GM_RANK_IMPLIES_EDIT is off: the GM has no implicit rights.
-    ['gm', 200, { role: 'member', canEdit: false, canManageEditors: false }],
+    // GM_RANK_IMPLIES_EDIT is off: the GM has no implicit rights. Every
+    // seeded rank is a hub member, so the viewer carries notificationsMuted.
+    [
+      'gm',
+      200,
+      {
+        role: 'member',
+        canEdit: false,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
+    ],
     [
       'officer',
       200,
-      { role: 'officer', canEdit: true, canManageEditors: false },
+      {
+        role: 'officer',
+        canEdit: true,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
     ],
     [
       'member',
       200,
-      { role: 'member', canEdit: false, canManageEditors: false },
+      {
+        role: 'member',
+        canEdit: false,
+        canManageEditors: false,
+        notificationsMuted: false,
+      },
     ],
     ['outsider', 403, undefined],
   ] as const)('%s → %i with viewer %o', async (role, status, viewer) => {
     const out = await seedGuild('Matrix Keepers');
-    const res = await viewGuild(out.guildId, tokenFor(out.users[role]));
+    const res = await viewGuild(out.guildId, await tokenFor(out.users[role]));
     expect(res.status).toBe(status);
     if (viewer) expect(res.body.viewer).toEqual(viewer);
   });
@@ -202,7 +224,7 @@ describe('POST /admin/test/wow/seed-guild — guild raids (ROK-1787)', () => {
     expect(out.raids.seriesEventIds).toHaveLength(3);
     const res = await testApp.request
       .get(`/plugins/wow/guilds/${out.guildId}/raids`)
-      .set('Authorization', `Bearer ${tokenFor(out.users.gm)}`);
+      .set('Authorization', `Bearer ${await tokenFor(out.users.gm)}`);
     expect(res.status).toBe(200);
     const [firstNight] = out.raids.seriesEventIds;
     expect(res.body.schedule).toEqual([
@@ -271,7 +293,7 @@ describe('POST /admin/test/wow/seed-guild — withContent (ROK-1786)', () => {
   it('without the flag: no content key, empty profile and no addons', async () => {
     const out = await seedGuild('Bare Keepers');
     expect(out).not.toHaveProperty('content');
-    const token = tokenFor(out.users.member);
+    const token = await tokenFor(out.users.member);
     const profile = await guildGet(out.guildId, 'profile', token);
     expect(profile.body).toEqual({
       guildId: out.guildId,
@@ -285,7 +307,7 @@ describe('POST /admin/test/wow/seed-guild — withContent (ROK-1786)', () => {
 
   it('seeds the GM post, rules, links and two addons a plain member can read', async () => {
     const out = await seedGuild('Content Keepers', { withContent: true });
-    const token = tokenFor(out.users.member);
+    const token = await tokenFor(out.users.member);
     const profile = await guildGet(out.guildId, 'profile', token);
     expect(profile.status).toBe(200);
     expect(profile.body.gmPost).toEqual(
@@ -309,7 +331,7 @@ describe('POST /admin/test/wow/seed-guild — withContent (ROK-1786)', () => {
 describe('POST /admin/test/wow/seed-guild — withContent re-seed (ROK-1786)', () => {
   it('a re-call restores edited content with the same addon ids', async () => {
     const first = await seedGuild('Restore Keepers', { withContent: true });
-    const officer = tokenFor(first.users.officer);
+    const officer = await tokenFor(first.users.officer);
     const base = `/plugins/wow/guilds/${first.guildId}`;
     const patched = await testApp.request
       .patch(`${base}/profile`)
@@ -323,7 +345,7 @@ describe('POST /admin/test/wow/seed-guild — withContent re-seed (ROK-1786)', (
     expect(added.status).toBe(201);
     const second = await seedGuild('Restore Keepers', { withContent: true });
     expect(second.content?.addonIds).toEqual(first.content?.addonIds);
-    const token = tokenFor(first.users.member);
+    const token = await tokenFor(first.users.member);
     const profile = await guildGet(first.guildId, 'profile', token);
     expect(profile.body.gmPost.body).toBe(SEED_GUILD_GM_POST);
     const addons = await guildGet(first.guildId, 'addons', token);

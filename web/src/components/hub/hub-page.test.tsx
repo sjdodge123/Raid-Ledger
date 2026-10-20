@@ -250,3 +250,22 @@ describe('GuildPage — a demotion closes the Leader-only overlays (ROK-1830 r1)
         ).toBeNull());
     });
 });
+
+describe('GuildPage — group notification bell (ROK-1832)', () => {
+    it('puts the bell in the hero for a member, before the Leader settings trigger', async () => {
+        const page = makePage(true);
+        serve({ ...page, viewer: { ...page.viewer, notificationsMuted: false } });
+        renderPage();
+        const bell = await screen.findByTestId('hub-notify-bell');
+        expect(bell).toHaveAttribute('aria-label', 'Notifications for Iron Vanguard: on');
+        const settings = within(screen.getByTestId('guild-hero')).getByTestId('guild-settings-trigger');
+        expect(bell.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('shows no bell when the page carries no mute for the viewer (staff non-member)', async () => {
+        serve(makePage(true));
+        renderPage();
+        await screen.findByTestId('guild-hero');
+        expect(screen.queryByTestId('hub-notify-bell')).not.toBeInTheDocument();
+    });
+});

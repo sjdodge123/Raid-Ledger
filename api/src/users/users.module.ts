@@ -21,7 +21,6 @@ import { EventsModule } from '../events/events.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
-import { TokenBlocklistService } from '../auth/token-blocklist.service';
 
 @Module({
   imports: [
@@ -51,7 +50,6 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
     PreferencesService,
     GameTimeService,
     GuildReconciliationService,
-    TokenBlocklistService,
   ],
   exports: [UsersService, AvatarService, PreferencesService, GameTimeService],
 })
