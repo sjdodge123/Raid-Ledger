@@ -9,6 +9,7 @@
  * Extracted from LineupNotificationService to keep the orchestrator under
  * the 300-line ESLint ceiling once the private-routing branches landed.
  */
+import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
@@ -46,6 +47,27 @@ import {
   routeEventCreatedIfPrivate,
 } from './lineup-notification-routing.helpers';
 import type { LineupInfo, MatchInfo } from './lineup-notification.service';
+import { resolveGameHubLinkSafe } from '../discord-bot/channel-lifecycle/hub-link.resolver';
+import {
+  hubLinkPart,
+  resolveEventHubLink,
+  resolveLineupDecidedHubLink,
+} from '../discord-bot/channel-lifecycle/embed-hub-link.helpers';
+import type { HubLink } from '../discord-bot/embeds/hub-link-button.helpers';
+
+const hubLogger = new Logger('LineupNotificationDispatch');
+
+/** ROK-1872: the event-created card's hub — the event's tag wins, else the game's. */
+async function eventCreatedHubLink(
+  db: Db,
+  match: MatchInfo,
+  eventId: number | undefined,
+  clientUrl: string,
+): Promise<HubLink | null> {
+  if (eventId) return resolveEventHubLink(db, eventId, clientUrl, hubLogger);
+  const input = { gameId: match.gameId, clientUrl };
+  return resolveGameHubLinkSafe(db, input, hubLogger);
+}
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -147,10 +169,18 @@ export async function orchestrateMatchesFound(
   if (routedPrivate) return;
   // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
   const schedulingEnabled = lineup.includeSchedulingPhase !== false;
+  const base = await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided');
+  const hub = await resolveLineupDecidedHubLink(
+    deps.db,
+    lineupId,
+    base.baseUrl,
+    hubLogger,
+  );
   const ctx = {
-    ...(await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided')),
+    ...base,
     schedulingEnabled,
     decisionReason,
+    ...hubLinkPart(hub),
   };
   await postEmbed(
     deps,
@@ -248,17 +278,21 @@ export async function orchestrateEventCreated(
     defaultTimezone,
   );
   if (routedPrivate) return;
+  // ROK-1872: ctx (+ hub link) before the roster reads, so the card's
+  // event-roster lookup stays the last DB read the builder depends on.
+  const base = await resolveEmbedCtx(
+    dispatchDeps(deps),
+    match.lineupId,
+    'decided',
+  );
+  const hub = await eventCreatedHubLink(deps.db, match, eventId, base.baseUrl);
+  const ctx = { ...base, ...hubLinkPart(hub) };
   const members = await findMatchMemberUsers(deps.db, match.id);
   // ROK-1624: the card names the people ACTUALLY rostered on the event. The
   // group (`members`) still gets the DM fan-out below — everyone who was in
   // the match hears that a time was locked in — but announcing all of them as
   // players advertised 12 for an event 5 of them were on.
   const rosterNames = await resolveEventRosterNames(deps.db, eventId, members);
-  const ctx = await resolveEmbedCtx(
-    dispatchDeps(deps),
-    match.lineupId,
-    'decided',
-  );
   await postEmbed(
     deps,
     `lineup-event:${match.id}`,
