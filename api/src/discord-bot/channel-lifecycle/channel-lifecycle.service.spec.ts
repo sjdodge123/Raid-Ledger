@@ -282,6 +282,25 @@ describe('actions', () => {
     hubLinker.linkHubsForGame.mockResolvedValue(1);
     expect((await makeService().reconcile(live)).linkedHubs).toBe(1);
   });
+  it('link_hub on a manual binding never rewrites its topic (Codex r3 P1)', async () => {
+    selectRows.mockResolvedValue(
+      [bound(1, { autoManaged: false }, 1)].map((r) => ({
+        ...r,
+        hubNeedsLink: true,
+      })),
+    );
+    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    expect((await makeService().reconcile(live)).linkedHubs).toBe(1);
+    expect(ops.setTopic).not.toHaveBeenCalled();
+  });
+  it('link_hub on an auto-managed binding refreshes the lifecycle topic', async () => {
+    selectRows.mockResolvedValue(
+      [bound(1, {}, 1)].map((r) => ({ ...r, hubNeedsLink: true })),
+    );
+    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    await makeService().reconcile(live);
+    expect(ops.setTopic).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('error policy (D9/D14)', () => {

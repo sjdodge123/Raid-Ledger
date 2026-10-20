@@ -51,14 +51,17 @@ async function refreshTopic(
   await setTopic(ctx.guild, channelId, lifecycleTopic(ctx, game, link?.url));
 }
 
-/** Link the game's hubs to `channelId`; refresh the topic when any linked. */
+/**
+ * Link the game's hubs to `channelId`. Only an auto-managed channel's topic is
+ * refreshed (Codex r3 P1): a manual binding's topic is the admin's.
+ */
 async function linkHubs(
   ctx: ApplyContext,
   game: PlannedGame,
-  channelId: string,
+  channel: { id: string; autoManaged: boolean },
 ): Promise<number> {
-  const n = await ctx.hubLinker.linkHubsForGame(game.row.gameId, channelId);
-  if (n > 0) await refreshTopic(ctx, game, channelId);
+  const n = await ctx.hubLinker.linkHubsForGame(game.row.gameId, channel.id);
+  if (n > 0 && channel.autoManaged) await refreshTopic(ctx, game, channel.id);
   return n;
 }
 
@@ -125,7 +128,10 @@ async function applyCreate(
     autoManaged: true,
     lifecycleState: 'active',
   });
-  const linkedHubs = await linkHubs(ctx, game, channelId);
+  const linkedHubs = await linkHubs(ctx, game, {
+    id: channelId,
+    autoManaged: true,
+  });
   return { outcome: 'done', detail: `#${gameSlug}`, linkedHubs };
 }
 
@@ -221,7 +227,10 @@ export async function applyAction(
   if (game.action === 'archive') return applyArchive(ctx, game, binding);
   if (game.action === 'unarchive') return applyUnarchive(ctx, game, binding);
   if (game.action === 'link_hub') {
-    const n = await linkHubs(ctx, game, binding.channelId);
+    const n = await linkHubs(ctx, game, {
+      id: binding.channelId,
+      autoManaged: binding.autoManaged,
+    });
     return { outcome: 'done', detail: game.reason, linkedHubs: n };
   }
   return { outcome: 'done', detail: game.reason };
