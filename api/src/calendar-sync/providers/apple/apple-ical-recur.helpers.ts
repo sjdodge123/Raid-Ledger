@@ -141,11 +141,16 @@ function allDayDays(vevent: ICAL.Component, start: ICAL.Time): number {
   return duration === null ? 1 : Math.floor(duration / DAY_MS);
 }
 
-/** DTSTART + DTEND | DURATION | nothing. 'bad' → skipped; 'drop' → empty. */
+/**
+ * DTSTART + DTEND | DURATION | nothing. 'bad' → skipped; 'drop' → empty.
+ * `keepEmpty` (Codex r5): a zero-length master still expands when a
+ * THISANDFUTURE override can give its later occurrences a duration.
+ */
 function readStart(
   vevent: ICAL.Component,
   floating: FloatingZone,
   periodEnds: PeriodEnds = new Map(),
+  keepEmpty = false,
 ): Start | 'bad' | 'drop' {
   const start = timeProp(vevent, 'dtstart');
   if (!start) return 'bad';
@@ -167,7 +172,7 @@ function readStart(
   const endMs = endMsOf(start.time, startMs, timing, floating);
   if (endMs === null) return 'bad';
   // Codex r4: an empty master still expands its positive period RDATEs.
-  const empty = endMs <= startMs && periodEnds.size === 0;
+  const empty = endMs <= startMs && periodEnds.size === 0 && !keepEmpty;
   return empty ? 'drop' : { time: start.time, timing, periodEnds };
 }
 
@@ -354,7 +359,8 @@ export function expandSeries(
   ) {
     return merge(own);
   }
-  const start = readStart(master, ctx.floating, periodEnds);
+  const ranged = overrides.some(isThisAndFuture);
+  const start = readStart(master, ctx.floating, periodEnds, ranged);
   if (start === 'bad') return merge([{ blocks: [], skipped: 1 }, ...own]);
   if (start === 'drop') return merge(own);
   const backMs = maxBackwardShiftMs(overrides, ctx.floating);

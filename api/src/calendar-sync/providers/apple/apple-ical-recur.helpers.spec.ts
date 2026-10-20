@@ -266,3 +266,38 @@ describe('zero-duration master with period RDATEs (Codex r4)', () => {
     ]);
   });
 });
+
+function vtimezoneOf(ics: string): string {
+  const block = /BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE\r\n/.exec(ics)?.[0];
+  if (!block) throw new Error('fixture has no VTIMEZONE');
+  return block;
+}
+
+describe('zoned series (VTIMEZONE) + UTC THISANDFUTURE override (Codex r5)', () => {
+  it('weekly 19:00 New York moved to 22:00Z on Oct 27 → Nov 3 at 23:00Z (after DST)', () => {
+    const ics = fixture('weekly-ny-bare-thisandfuture.ics').replace(
+      'CALSCALE:GREGORIAN\r\n',
+      `CALSCALE:GREGORIAN\r\n${vtimezoneOf(fixture('weekly-ny.ics'))}`,
+    );
+    expect(ics).toContain('BEGIN:VTIMEZONE');
+    expect(rows(ics)).toEqual([
+      '2026-10-20T23:00:00.000Z/2026-10-21T01:00:00.000Z',
+      '2026-10-27T22:00:00.000Z/2026-10-28T00:00:00.000Z',
+      '2026-11-03T23:00:00.000Z/2026-11-04T01:00:00.000Z',
+      '2026-11-10T23:00:00.000Z/2026-11-11T01:00:00.000Z',
+    ]);
+  });
+});
+
+describe('zero-duration master + positive THISANDFUTURE override (Codex r5)', () => {
+  it('a four-day empty series from Oct 21 given one hour from Oct 22 → Oct 22–24', () => {
+    const ics = fixture('transparent-thisandfuture.ics')
+      .replace('DTEND:20261021T130000Z', 'DTEND:20261021T120000Z')
+      .replace('TRANSP:TRANSPARENT', 'TRANSP:OPAQUE');
+    expect(rows(ics)).toEqual([
+      '2026-10-22T12:00:00.000Z/2026-10-22T13:00:00.000Z',
+      '2026-10-23T12:00:00.000Z/2026-10-23T13:00:00.000Z',
+      '2026-10-24T12:00:00.000Z/2026-10-24T13:00:00.000Z',
+    ]);
+  });
+});
