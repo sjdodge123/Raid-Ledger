@@ -92,7 +92,7 @@ function baseSteps(input: SetupStepsInput, channel: SetupStepAction): SetupStep[
         },
         {
             id: 'leader-post', label: 'Write a leader post', description: 'It sits at the top of Overview.',
-            done: (profile?.gmPost?.body ?? '').trim().length > 0, action: { kind: 'tab', hash: '#overview' }, actionLabel: 'Write post',
+            done: (profile?.latestPost?.body ?? profile?.gmPost?.body ?? '').trim().length > 0, action: { kind: 'tab', hash: '#overview' }, actionLabel: 'Write post',
         },
         {
             id: 'rules', label: 'Add your guild rules', description: 'They show on the Resources tab.',

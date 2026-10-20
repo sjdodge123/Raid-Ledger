@@ -10,7 +10,7 @@ import type { CoreWidgetId, HubCtx, HubModule } from '../../plugins/hub-module';
 import { GuildAttendance } from './events/guild-attendance';
 import { GuildEvents } from './events/guild-events';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
-import { GmPostCard } from './content/gm-post-card';
+import { LatestPostCard } from './posts/latest-post-card';
 import { useHubSettings } from './settings/hub-settings-context';
 
 
@@ -64,7 +64,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
         : [];
     const cells: Cell[] = [
         ...checklist,
-        { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} kind={page.guild.kind} /> },
+        { key: 'gm-post', order: 10, span: 1, node: <LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} /> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
     if (!data) return cells;

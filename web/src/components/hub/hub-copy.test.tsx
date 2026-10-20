@@ -8,7 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { HUB_COPY, hubCopy } from './hub-copy';
-import { GmPostCard } from './content/gm-post-card';
+import { LatestPostCard } from './posts/latest-post-card';
 import { GuildDiscordMirror } from './discord/guild-discord-mirror';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { GuildAttendance } from './events/guild-attendance';
@@ -37,7 +37,7 @@ describe('members-first core widgets hide on 403 (ROK-1831)', () => {
     it('the leader post renders nothing on a 403', async () => {
         let hit = false;
         server.use(http.get(`${BASE}/profile`, () => { hit = true; return HttpResponse.json({ message: 'no' }, { status: 403 }); }));
-        const { container, queryClient } = renderWithProviders(<GmPostCard guildId={7} canEdit={false} kind="game_server" />);
+        const { container, queryClient } = renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} kind="game_server" />);
         await waitFor(() => expect(hit).toBe(true));
         await waitFor(() => expect(queryClient.getQueryCache().findAll().some((q) => q.state.status === 'error')).toBe(true));
         expect(screen.queryByTestId('guild-gm-post-error')).toBeNull();
