@@ -322,6 +322,18 @@ async function editRealmMap(token: string, add: RealmEntry[], drop: RealmEntry[]
     expect(Array.isArray(saved.entries), `PUT realm map should save: ${JSON.stringify(saved)}`).toBe(true);
 }
 
+/**
+ * Add only the rows of `want` the map lacks (or holds with another ruleset), keeping every other
+ * entry — and write nothing when all are present. Every project's beforeAll runs this while
+ * desktop's P2 saves the WHOLE map from the editor; an unconditional read-then-write landing after
+ * that save would drop P2's row. Once the seed exists no beforeAll writes again, so P2's row is safe.
+ */
+async function ensureRealms(token: string, want: RealmEntry[]): Promise<void> {
+    const have = new Set((await readRealmMap(token)).map((e) => `${realmKey(e)}=${e.ruleset}`));
+    const missing = want.filter((e) => !have.has(`${realmKey(e)}=${e.ruleset}`));
+    if (missing.length > 0) await editRealmMap(token, missing);
+}
+
 /** A null-ruleset export whose raw `GetRealmName()` is `realmName`. */
 function realmImportString(fullName: string, realmName: string): string {
     return buildImportString(fullName, { ruleset: null, raw: { getUnitName: fullName, unitName: [fullName, null], realmName } });
@@ -334,7 +346,7 @@ test.describe('Addon import — realm-inferred ruleset (ROK-1739)', () => {
             const game = (await apiGet(token, `/games/slug/${GAME_SLUG}`)) as { id?: number } | null;
             gameId = game?.id ?? null;
         }
-        await editRealmMap(token, [
+        await ensureRealms(token, [
             { region: 'us', realmName: INFER_PVP, ruleset: 'pvp' },
             { region: 'us', realmName: INFER_HC, ruleset: 'hardcore' },
         ]);
@@ -396,7 +408,8 @@ test.describe('Addon import — realm-inferred ruleset (ROK-1739)', () => {
     });
 
     test('P2 admin editor: an added realm row persists across a reload', async ({ page }, testInfo) => {
-        // The editor saves the WHOLE map; two projects saving at once would drop each other's row, so desktop owns this round-trip.
+        // The editor saves the WHOLE map; two projects saving at once would drop each other's row, so desktop owns this
+        // round-trip — and the beforeAll seed (ensureRealms) never rewrites an already-seeded map, so nothing else races it.
         test.skip(testInfo.project.name !== 'desktop', 'whole-map save — one project only (see comment)');
         const token = await getAdminToken();
         const realm = uniqueName(testInfo, 'Smokeeditor');
