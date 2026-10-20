@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm';
 import type { HubProposal } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { DbOrTx } from './community-membership.queries';
@@ -60,6 +60,19 @@ export async function hasNameClash(
     .where(and(...conds))
     .limit(1);
   return row !== undefined;
+}
+
+/** Advisory-lock namespace of a proposer's limit check + insert (P14). */
+const PROPOSER_LOCK_NS = 1870;
+
+/**
+ * P14: serialise one proposer's D12 limit check and insert — a transaction-
+ * scoped advisory lock on (namespace, user id). Run inside a transaction.
+ */
+export async function lockProposer(tx: DbOrTx, userId: number): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${PROPOSER_LOCK_NS}::int, ${userId}::int)`,
+  );
 }
 
 /** The user's open proposals' game ids (D12 limits). */

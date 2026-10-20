@@ -78,16 +78,8 @@ export class CommunityProposalsService {
       throw new ForbiddenException(PROPOSAL_ERRORS.notInDiscord);
     }
     await this.requireGame(dto.gameId);
-    await this.assertWithinLimits(actor.id, dto.gameId);
-    await this.assertNameFree(this.db, dto.gameId, dto.name, null);
     const row = await conflictOnUnique(
-      () =>
-        q.insertCommunityHub(this.db, {
-          ...dto,
-          status: 'proposed',
-          proposedBy: actor.id,
-          reviewedBy: null,
-        }),
+      () => this.insertProposalTx(actor.id, dto),
       PROPOSAL_ERRORS.nameTaken,
     );
     const proposal = await this.findProposal(row.id);
@@ -97,6 +89,24 @@ export class CommunityProposalsService {
       staff.map((id) => submittedNotice(id, facts, user.username)),
     );
     return proposal;
+  }
+
+  /** P14: D12 limits + D11 name + insert, under the proposer's xact lock. */
+  private insertProposalTx(
+    userId: number,
+    dto: CreateHubProposalDto,
+  ): Promise<schema.GuildSelect> {
+    return this.db.transaction(async (tx) => {
+      await q.lockProposer(tx, userId);
+      await this.assertWithinLimits(tx, userId, dto.gameId);
+      await this.assertNameFree(tx, dto.gameId, dto.name, null);
+      return q.insertCommunityHub(tx, {
+        ...dto,
+        status: 'proposed',
+        proposedBy: userId,
+        reviewedBy: null,
+      });
+    });
   }
 
   /** The caller's open proposals. */
@@ -213,10 +223,11 @@ export class CommunityProposalsService {
   }
 
   private async assertWithinLimits(
+    db: DbOrTx,
     userId: number,
     gameId: number,
   ): Promise<void> {
-    const open = await q.openProposalGameIds(this.db, userId);
+    const open = await q.openProposalGameIds(db, userId);
     if (open.includes(gameId))
       throw new ConflictException(PROPOSAL_ERRORS.pendingForGame);
     if (open.length >= MAX_OPEN_PROPOSALS)

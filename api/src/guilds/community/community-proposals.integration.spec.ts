@@ -474,6 +474,34 @@ describe('concurrent review', () => {
   });
 });
 
+describe('concurrent proposals', () => {
+  it('P14 concurrent proposals by one user: one per game, two overall, the rest 409', async () => {
+    const proposer = await seedUser('p14-proposer');
+    const g2 = await seedGame('P14 Game Two');
+    const g3 = await seedGame('P14 Game Three');
+    const bodies = [
+      { gameId: gameG(), name: 'P14 A' },
+      { gameId: gameG(), name: 'P14 B' },
+      { gameId: g2, name: 'P14 C' },
+      { gameId: g3, name: 'P14 D' },
+    ];
+    const results = await Promise.all(bodies.map((b) => propose(proposer, b)));
+    const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 201, 409, 409]);
+    const rows = await testApp.db
+      .select({ gameId: schema.guilds.gameId })
+      .from(schema.guilds)
+      .where(
+        and(
+          eq(schema.guilds.proposedBy, proposer.user.id),
+          eq(schema.guilds.status, 'proposed'),
+        ),
+      );
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.gameId)).size).toBe(2);
+  });
+});
+
 describe('user wipe', () => {
   it('P13 wiping a proposer deletes their pending proposal and frees the name', async () => {
     const proposer = await seedUser('p13-proposer');

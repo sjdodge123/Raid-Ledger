@@ -17,6 +17,7 @@ jest.mock('./community-proposals.queries', () => ({
   findGameName: jest.fn(),
   hasNameClash: jest.fn(),
   openProposalGameIds: jest.fn(),
+  lockProposer: jest.fn(),
   insertCommunityHub: jest.fn(),
   lockProposal: jest.fn(),
   listProposals: jest.fn(),
@@ -132,6 +133,27 @@ describe('propose', () => {
     await expect(svc.propose(member, dto)).rejects.toThrow(
       'You already have a proposal waiting for this game',
     );
+  });
+
+  it('P14: limits + insert run in one tx under the proposer lock', async () => {
+    const order: string[] = [];
+    mocked(q.lockProposer).mockImplementation(() => {
+      order.push('lock');
+      return Promise.resolve();
+    });
+    mocked(q.openProposalGameIds).mockImplementation(() => {
+      order.push('limits');
+      return Promise.resolve([]);
+    });
+    mocked(q.insertCommunityHub).mockImplementation(() => {
+      order.push('insert');
+      return Promise.resolve(proposedRow);
+    });
+    await svc.propose(member, dto);
+    expect(order).toEqual(['lock', 'limits', 'insert']);
+    expect(q.lockProposer).toHaveBeenCalledWith(tx, 5);
+    expect(q.openProposalGameIds).toHaveBeenCalledWith(tx, 5);
+    expect(q.hasNameClash).toHaveBeenCalledWith(tx, 9, 'BG3 Crew', null);
   });
 
   it('409 at two open proposals overall (D12)', async () => {
