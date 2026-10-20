@@ -17,6 +17,8 @@ interface MagicLinkPayload {
   sub: number;
   magicLink: true;
   iat: number;
+  /** ROK-1823 D11: the user's token version at mint (redeem compares, L2b). */
+  tv?: number;
 }
 
 /** The user a redeemed link signs in, shaped for `AuthService.login`. */
@@ -50,7 +52,7 @@ export class MagicLinkService {
   ) {}
 
   /**
-   * Build `<clientUrl><path>#token=<jwt>` (15m, `{sub, magicLink:true}`), or
+   * Build `<clientUrl><path>#token=<jwt>` (15m, `{sub, magicLink:true, tv}`), or
    * null when the user does not exist. The fragment never reaches a server.
    */
   async generateLink(
@@ -63,7 +65,7 @@ export class MagicLinkService {
     const token = signPurposeJwt(
       this.jwtService,
       'magic-link',
-      { sub: user.id, magicLink: true },
+      { sub: user.id, magicLink: true, tv: user.tokenVersion },
       '15m',
     );
     const url = new URL(path, clientUrl);

@@ -13,6 +13,7 @@ import type { UserRole } from '@raid-ledger/contract';
 import { promoteFirstDiscordLogin } from './fleet-first-login-admin.helpers';
 import { TokenBlocklistService } from './token-blocklist.service';
 import { signAccessToken } from './access-token-mint.helpers';
+import { readTokenVersion } from './token-version.helpers';
 
 /** Event name emitted after Discord OAuth login/link (ROK-292). */
 export const AUTH_EVENTS = {
@@ -95,10 +96,12 @@ export class AuthService {
     } satisfies DiscordLoginPayload);
   }
 
+  /** ROK-1823: signs the user's CURRENT token version as `tv`. */
   async login(user: { id: number; username: string; role: UserRole }) {
-    const access_token = await signAccessToken(
-      { jwt: this.jwtService, blocklist: this.blocklist },
-      { username: user.username, sub: user.id, role: user.role },
+    const tv = await readTokenVersion(this.db, user.id);
+    const access_token = signAccessToken(
+      { jwt: this.jwtService },
+      { username: user.username, sub: user.id, role: user.role, tv },
     );
     return { access_token };
   }

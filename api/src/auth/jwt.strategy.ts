@@ -24,6 +24,10 @@ interface JwtPayload {
   iat: number;
   impersonatedBy?: number | null;
   magicLink?: boolean;
+  /** ROK-1823: the sub's token version at mint (compared from L2b). */
+  tv?: number;
+  /** ROK-1823: the impersonator's token version (impersonation tokens). */
+  itv?: number;
 }
 
 @Injectable()
@@ -161,6 +165,7 @@ function buildAuthResult(
     kickedAt: Date | null;
     bannedAt: Date | null;
     banReason: string | null;
+    tokenVersion: number;
   },
 ) {
   return {
@@ -173,5 +178,9 @@ function buildAuthResult(
     bannedAt: user.bannedAt,
     banReason: user.banReason,
     impersonatedBy: payload.impersonatedBy || null,
+    // ROK-1823 D6: the version that authenticated this request. Until L2b
+    // rejects a claimless token, one minted before the deploy falls back to
+    // the cached row's version (L2b drops the fallback: `tv` is required).
+    tokenVersion: payload.tv ?? user.tokenVersion,
   };
 }

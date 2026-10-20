@@ -68,7 +68,6 @@ export class RefreshTokenController {
       {
         db: this.db,
         jwt: this.jwtService,
-        blocklist: this.blocklist,
         impersonation: this.impersonation,
       },
       rotated,

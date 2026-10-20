@@ -72,8 +72,8 @@ export class PasswordChangeSessionService {
       authMethod: 'local',
       userAgent,
     });
-    const accessToken = await signAccessToken(
-      { jwt: this.jwt, blocklist: this.blocklist },
+    const accessToken = signAccessToken(
+      { jwt: this.jwt },
       {
         username: caller.username,
         sub: caller.id,
