@@ -4,20 +4,9 @@
  * Every call goes through `timedDiscordCall('lifecycle.<op>', …)` and maps
  * 10003 → `ChannelGoneError`, 50013/50001 → `LifecyclePermissionError`.
  *
- * Archive/unarchive are exact inverses for the overwrites they own: archive
- * denies `@everyone` SendMessages (+ ViewChannel when hidden, with a bot
- * ViewChannel allow so the bot can still manage it); unarchive clears exactly
- * those bits and deletes an overwrite left empty — it never writes an Allow.
+ * Archive/unarchive live in `channel-lifecycle.archive-ops.ts` (re-exported).
  */
-import {
-  ChannelType,
-  OverwriteType,
-  PermissionFlagsBits,
-  type Guild,
-  type GuildBasedChannel,
-  type PermissionOverwriteManager,
-  type PermissionOverwriteOptions,
-} from 'discord.js';
+import { ChannelType, type Guild, type GuildBasedChannel } from 'discord.js';
 import { listGuildCategories } from '../discord-bot-client.guild.helpers';
 import {
   isDiscordCode,
@@ -26,13 +15,20 @@ import {
   UNKNOWN_CHANNEL,
 } from './channel-lifecycle.errors';
 
+export {
+  archiveChannel,
+  revertArchive,
+  unarchiveChannel,
+  type ArchiveResult,
+} from './channel-lifecycle.archive-ops';
+
 /** Discord's channel-name and topic length caps. */
 export const MAX_CHANNEL_NAME = 100;
 export const MAX_CHANNEL_TOPIC = 1024;
 /** Discord's cap on channels per category (D5 overflow trigger). */
 export const MAX_CATEGORY_CHILDREN = 50;
-
-type FlagName = keyof typeof PermissionFlagsBits;
+/** Highest `<name> N` treated as overflow — "Archived 2024" is an admin's own category. */
+export const MAX_OVERFLOW_N = 50;
 
 /** A category resolved by `ensureCategory`. */
 export interface EnsuredCategory {
@@ -70,104 +66,6 @@ export async function setTopic(
   );
 }
 
-/** Move a channel without syncing its overwrites to the new parent. */
-async function moveChannel(
-  guild: Guild,
-  op: string,
-  channelId: string,
-  parentId: string | null,
-): Promise<void> {
-  await lifecycleCall(op, channelId, () =>
-    guild.channels.edit(channelId, {
-      parent: parentId,
-      lockPermissions: false,
-    }),
-  );
-}
-
-/**
- * Archive (D6): deny `@everyone` SendMessages (+ ViewChannel when `hide`,
- * granting the bot ViewChannel so it keeps access), then move the channel
- * under `categoryId`. Returns the parent it had, for `restore_parent_id`.
- */
-export async function archiveChannel(
-  guild: Guild,
-  channelId: string,
-  opts: { categoryId: string; hide: boolean },
-): Promise<{ previousParentId: string | null }> {
-  const channel = await resolveTextChannel(guild, channelId);
-  const previousParentId = channel.parentId;
-  const po = channel.permissionOverwrites;
-  await lifecycleCall('archive.lock', channelId, async () => {
-    if (opts.hide) {
-      await po.edit(
-        guild.client.user.id,
-        { ViewChannel: true },
-        { type: OverwriteType.Member },
-      );
-    }
-    await po.edit(
-      guild.id,
-      { SendMessages: false, ...(opts.hide ? { ViewChannel: false } : {}) },
-      { type: OverwriteType.Role },
-    );
-  });
-  await moveChannel(guild, 'archive.move', channelId, opts.categoryId);
-  return { previousParentId };
-}
-
-/**
- * Clear `flags` from one overwrite: delete it when nothing else is left on it,
- * otherwise reset just those bits to inherit (`null`). Never writes an Allow.
- */
-async function clearFlags(
-  po: PermissionOverwriteManager,
-  id: string,
-  flags: FlagName[],
-  type: OverwriteType,
-): Promise<void> {
-  const ow = po.cache.get(id);
-  if (!ow) return;
-  const mask = flags.reduce((acc, f) => acc | PermissionFlagsBits[f], 0n);
-  const rest = (ow.allow.bitfield | ow.deny.bitfield) & ~mask;
-  if (rest === 0n) {
-    await po.delete(id);
-    return;
-  }
-  const reset: PermissionOverwriteOptions = {};
-  for (const f of flags) reset[f] = null;
-  await po.edit(id, reset, { type });
-}
-
-/**
- * Unarchive (D6): move the channel back to `parentId`, then remove exactly the
- * bits archive added — `@everyone` SendMessages/ViewChannel deny and the bot's
- * ViewChannel allow — deleting overwrites that end up empty.
- */
-export async function unarchiveChannel(
-  guild: Guild,
-  channelId: string,
-  opts: { parentId: string | null },
-): Promise<void> {
-  const channel = await resolveTextChannel(guild, channelId);
-  await moveChannel(guild, 'unarchive.move', channelId, opts.parentId);
-  const po = channel.permissionOverwrites;
-  await lifecycleCall('unarchive.unlock', channelId, async () => {
-    await clearFlags(
-      po,
-      guild.id,
-      ['SendMessages', 'ViewChannel'],
-      OverwriteType.Role,
-    );
-    await clearFlags(
-      po,
-      guild.client.user.id,
-      ['ViewChannel'],
-      OverwriteType.Member,
-    );
-  });
-}
-
 /** Number of channels currently parented to `categoryId` (guild cache). */
 function childCount(guild: Guild, categoryId: string): number {
   return guild.channels.cache.filter((ch) => ch.parentId === categoryId).size;
@@ -193,8 +91,9 @@ async function categoryById(
 }
 
 /**
- * Categories named `base` or `base N` (case-insensitive), ordered by N with
- * the bare name as 1. Returns the series and the highest N seen.
+ * Categories named `base` or `base N` (case-insensitive, 2 ≤ N ≤
+ * {@link MAX_OVERFLOW_N}), ordered by N with the bare name as 1. Returns the
+ * series and the highest N seen.
  */
 function overflowSeries(
   guild: Guild,
@@ -208,11 +107,25 @@ function overflowSeries(
     const suffix = name.startsWith(`${want} `)
       ? name.slice(want.length + 1)
       : '';
-    if (/^[1-9]\d*$/.test(suffix)) ranked.push({ cat, n: Number(suffix) });
+    const n = /^[1-9]\d*$/.test(suffix) ? Number(suffix) : 0;
+    if (n >= 2 && n <= MAX_OVERFLOW_N) ranked.push({ cat, n });
   }
   ranked.sort((a, b) => a.n - b.n);
   const maxN = ranked.reduce((m, r) => Math.max(m, r.n), 0);
   return { series: ranked.map((r) => r.cat), maxN };
+}
+
+/** True when `id` still resolves to a category (unarchive's restore target). */
+export async function categoryExists(
+  guild: Guild,
+  id: string,
+): Promise<boolean> {
+  return (await categoryById(guild, id)) !== null;
+}
+
+/** Ids of the `base` / `base N` category series (D5 overflow), e.g. Archived. */
+export function categorySeriesIds(guild: Guild, base: string): Set<string> {
+  return new Set(overflowSeries(guild, base).series.map((c) => c.id));
 }
 
 /** Create a category; returns it as an `EnsuredCategory`. */

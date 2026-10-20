@@ -69,4 +69,6 @@ export interface ItemOutcome {
   linkedHubs?: number;
   /** A permission error: stop the tick (D14). */
   stop?: boolean;
+  /** The guild is at its channel cap (30013): defer the tick's other creates. */
+  stopCreates?: boolean;
 }

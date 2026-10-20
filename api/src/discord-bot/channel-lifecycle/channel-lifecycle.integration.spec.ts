@@ -58,9 +58,11 @@ beforeEach(async () => {
   jest
     .spyOn(ops, 'createTextChannel')
     .mockImplementation(() => Promise.resolve(`ch-${++seq}`));
-  jest
-    .spyOn(ops, 'archiveChannel')
-    .mockResolvedValue({ previousParentId: 'old-parent' });
+  jest.spyOn(ops, 'archiveChannel').mockResolvedValue({
+    previousParentId: 'old-parent',
+    restoreParentId: 'old-parent',
+    added: { everyoneSend: true, everyoneView: false, botView: false },
+  });
   jest.spyOn(ops, 'unarchiveChannel').mockResolvedValue(undefined);
   await settings.setChannelLifecycleSettings({
     enabled: true,
@@ -214,7 +216,11 @@ it('R7: game A failing does not block game B', async () => {
   await autoBinding(b);
   jest.mocked(ops.archiveChannel).mockImplementation((_g, ch) => {
     if (ch === `pre-${a}`) return Promise.reject(new Error('boom'));
-    return Promise.resolve({ previousParentId: null });
+    return Promise.resolve({
+      previousParentId: null,
+      restoreParentId: null,
+      added: { everyoneSend: true, everyoneView: false, botView: false },
+    });
   });
   const res = await svc.reconcile(live);
   expect(res.items.find((i) => i.gameId === a)?.outcome).toBe('failed');

@@ -26,6 +26,7 @@ function binding(
     pinned: false,
     archivedAt: null,
     restoreParentId: null,
+    archivedOverwrites: null,
     ...over,
   };
 }

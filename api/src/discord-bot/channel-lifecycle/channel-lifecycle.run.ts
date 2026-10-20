@@ -4,6 +4,7 @@ import type { ReconcileResultDto } from '@raid-ledger/contract';
 import { applyAction } from './channel-lifecycle.apply';
 import {
   ChannelGoneError,
+  CreateCapacityError,
   LifecyclePermissionError,
 } from './channel-lifecycle.errors';
 import {
@@ -13,6 +14,7 @@ import {
   type ReconcilePlan,
 } from './channel-lifecycle.plan';
 import { insertSuppression } from './channel-lifecycle.store';
+import { unlinkAutoHubsForChannel } from './hub-channel-link.queries';
 import type {
   ApplyContext,
   ItemOutcome,
@@ -44,7 +46,10 @@ export function runErrorText(result: ReconcileResultDto): string | null {
   return null;
 }
 
-/** D9: the channel is gone — suppress first (so it reads `deleted`), then unbind. */
+/**
+ * D9: the channel is gone — suppress first (so it reads `deleted`), unbind,
+ * and clear hubs auto-linked to it (manual hub links are untouched).
+ */
 async function handleGone(
   ctx: ApplyContext,
   game: PlannedGame,
@@ -55,7 +60,10 @@ async function handleGone(
     gameId,
     reason: 'deleted',
   });
-  if (binding) await ctx.bindings.unbindById(binding.id);
+  if (binding) {
+    await ctx.bindings.unbindById(binding.id);
+    await unlinkAutoHubsForChannel(ctx.db, binding.channelId);
+  }
   return { outcome: 'failed', detail: 'channel deleted in Discord' };
 }
 
@@ -67,6 +75,9 @@ async function handleFailure(
 ): Promise<ItemOutcome> {
   if (err instanceof LifecyclePermissionError) {
     return { outcome: 'failed', detail: err.message, stop: true };
+  }
+  if (err instanceof CreateCapacityError) {
+    return { outcome: 'failed', detail: err.message, stopCreates: true };
   }
   if (err instanceof ChannelGoneError) return handleGone(ctx, game);
   const phase = game.action === 'link_hub' ? 'link' : game.action;
@@ -100,31 +111,56 @@ async function runOne(
   }
 }
 
-/** One Sentry message per stopped tick (D14). */
-function reportPermissionStop(result: ReconcileResultDto): void {
-  result.stoppedReason = 'permissions';
-  Sentry.captureMessage('Channel lifecycle stopped: missing permissions', {
+/** Detail for creates deferred after the guild hit its channel cap. */
+export const CAPACITY_DETAIL = 'deferred: server channel limit reached';
+
+/** §2.13: the guild is full — ONE Sentry message per tick. */
+function reportCapacity(): void {
+  Sentry.captureMessage('Channel lifecycle: server channel limit reached', {
     level: 'warning',
-    tags: { area: 'channel-lifecycle-permissions' },
+    tags: { area: 'channel-lifecycle-create' },
   });
 }
 
-/** Execute a plan live; returns the tally (stoppedReason set on a permission stop). */
+/**
+ * Run the plan's items in order. A permission error stops the tick (returns
+ * the not-yet-run items); a full guild (30013) defers the remaining creates.
+ */
+async function runItems(
+  ctx: ApplyContext,
+  run: readonly PlannedGame[],
+  result: ReconcileResultDto,
+): Promise<PlannedGame[]> {
+  const waiting = [...run];
+  let capped = false;
+  for (let game = waiting.shift(); game; game = waiting.shift()) {
+    if (capped && game.action === 'create') {
+      tally(result, game, { outcome: 'deferred', detail: CAPACITY_DETAIL });
+      continue;
+    }
+    const item = await runOne(ctx, game);
+    tally(result, game, item);
+    if (item.stop) {
+      result.stoppedReason = 'permissions';
+      break;
+    }
+    if (item.stopCreates && !capped) reportCapacity();
+    capped ||= item.stopCreates === true;
+  }
+  return waiting;
+}
+
+/**
+ * Execute a plan live; returns the tally (stoppedReason set on a permission
+ * stop — the caller sends the D14 Sentry message, deduped across nudges).
+ */
 export async function executePlan(
   ctx: ApplyContext,
   plan: ReconcilePlan,
 ): Promise<ReconcileResultDto> {
   const result = emptyResult(false, null);
   result.skipped = plan.skipped;
-  const waiting = [...plan.run];
-  for (let game = waiting.shift(); game; game = waiting.shift()) {
-    const item = await runOne(ctx, game);
-    tally(result, game, item);
-    if (item.stop) {
-      reportPermissionStop(result);
-      break;
-    }
-  }
+  const waiting = await runItems(ctx, plan.run, result);
   const stopped = 'stopped: missing permissions';
   for (const g of waiting)
     tally(result, g, { outcome: 'deferred', detail: stopped });

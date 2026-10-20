@@ -8,6 +8,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import type { ArchivedOverwrites } from '../../drizzle/schema/channel-bindings';
 import type { ChannelLifecycleSuppressionReason } from '../../drizzle/schema/channel-lifecycle-suppressions';
 
 /** The app's Drizzle handle. */
@@ -19,6 +20,7 @@ export interface LifecycleStatePatch {
   autoManaged?: boolean;
   archivedAt?: Date | null;
   restoreParentId?: string | null;
+  archivedOverwrites?: ArchivedOverwrites | null;
 }
 
 /** The slice of a deleted binding row the unbind hook reads. */

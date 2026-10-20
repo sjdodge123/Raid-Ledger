@@ -28,6 +28,22 @@ export const MISSING_ACCESS = 50001;
 /** Discord "Missing Permissions" — e.g. no Manage Channels / Manage Roles. */
 export const MISSING_PERMISSIONS = 50013;
 
+/** Discord "Maximum number of guild channels reached (500)". */
+export const MAX_GUILD_CHANNELS = 30013;
+
+/** The guild cannot hold another channel (30013): stop creating this tick (§2.13). */
+export class CreateCapacityError extends Error {
+  override readonly name = 'CreateCapacityError';
+
+  /** @param op - The lifecycle op label that failed (e.g. `create`). */
+  constructor(
+    readonly op: string,
+    options?: { cause: unknown },
+  ) {
+    super(`Discord refused ${op}: the server is at its channel limit`, options);
+  }
+}
+
 /** The managed channel no longer exists in Discord (hand-deleted). */
 export class ChannelGoneError extends Error {
   override readonly name = 'ChannelGoneError';
@@ -75,6 +91,9 @@ export function mapLifecycleError(
 ): unknown {
   if (channelId !== null && isDiscordCode(err, UNKNOWN_CHANNEL)) {
     return new ChannelGoneError(channelId, { cause: err });
+  }
+  if (isDiscordCode(err, MAX_GUILD_CHANNELS)) {
+    return new CreateCapacityError(op, { cause: err });
   }
   for (const code of [MISSING_PERMISSIONS, MISSING_ACCESS]) {
     if (isDiscordCode(err, code)) {

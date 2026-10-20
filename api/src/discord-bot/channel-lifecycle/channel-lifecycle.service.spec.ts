@@ -7,6 +7,10 @@ import { ConflictException } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { ChannelLifecycleSettingsDto } from '@raid-ledger/contract';
 import * as ops from './channel-lifecycle.discord-ops';
+import * as resolver from './hub-link.resolver';
+import * as hubQueries from './hub-channel-link.queries';
+import { CreateCapacityError } from './channel-lifecycle.errors';
+import { PERMISSION_ERROR_TEXT } from './channel-lifecycle.run';
 import * as queries from './game-activity.queries';
 import * as store from './channel-lifecycle.store';
 import * as storeQueries from './channel-lifecycle.store.queries';
@@ -28,6 +32,8 @@ jest.mock('@sentry/nestjs', () => ({
 jest.mock('./channel-lifecycle.discord-ops');
 jest.mock('./game-activity.queries');
 jest.mock('./channel-lifecycle.store.queries');
+jest.mock('./hub-link.resolver');
+jest.mock('./hub-channel-link.queries');
 jest.mock('./channel-lifecycle.store', () => ({
   withReconcileLock: jest.fn(
     async (_db: unknown, fn: () => Promise<unknown>) => ({
@@ -85,6 +91,7 @@ function bound(
       pinned: false,
       archivedAt: null,
       restoreParentId: null,
+      archivedOverwrites: null,
       ...o,
     },
   });
@@ -125,9 +132,14 @@ beforeEach(() => {
     }),
   );
   jest.mocked(ops.createTextChannel).mockResolvedValue('new-ch');
-  jest
-    .mocked(ops.archiveChannel)
-    .mockResolvedValue({ previousParentId: 'cat-games' });
+  jest.mocked(ops.categorySeriesIds).mockReturnValue(new Set());
+  jest.mocked(ops.categoryExists).mockResolvedValue(true);
+  jest.mocked(resolver.resolveGameHubLink).mockResolvedValue(null);
+  jest.mocked(ops.archiveChannel).mockResolvedValue({
+    previousParentId: 'cat-games',
+    restoreParentId: 'cat-games',
+    added: { everyoneSend: true, everyoneView: false, botView: false },
+  });
   jest.mocked(storeQueries.findGameAnnouncementBinding).mockResolvedValue(null);
   bindings.bind.mockResolvedValue({
     binding: { id: 'b-new' },
@@ -249,6 +261,7 @@ describe('actions', () => {
     );
     expect(ops.unarchiveChannel).toHaveBeenCalledWith(guild, 'ch-2', {
       parentId: 'old-cat',
+      added: null,
     });
     expect(res).toMatchObject({ archived: 1, unarchived: 1 });
   });
@@ -348,5 +361,137 @@ describe('cap + dry run', () => {
     expect(store.setLifecycleState).not.toHaveBeenCalled();
     expect(settings.recordChannelLifecycleRun).not.toHaveBeenCalled();
     expect(settings.setChannelLifecycleSettings).not.toHaveBeenCalled();
+  });
+});
+
+const ADDED = { everyoneSend: true, everyoneView: true, botView: false };
+const nudge = { dryRun: false, trigger: 'nudge' as const, gameIds: [1] };
+
+describe('review fixes — archive / unarchive', () => {
+  it('records the bits archive added; unarchive clears only those', async () => {
+    jest.mocked(ops.archiveChannel).mockResolvedValue({
+      previousParentId: 'cat-arch',
+      restoreParentId: null,
+      added: ADDED,
+    });
+    selectRows.mockResolvedValue([bound(1)]);
+    await makeService().reconcile(live);
+    expect(store.setLifecycleState).toHaveBeenCalledWith(
+      expect.anything(),
+      'b-1',
+      expect.objectContaining({
+        restoreParentId: null,
+        archivedOverwrites: ADDED,
+      }),
+    );
+    expect(ops.archiveChannel).toHaveBeenCalledWith(
+      guild,
+      'ch-1',
+      expect.objectContaining({ seriesIds: expect.any(Set) }),
+    );
+  });
+  it('a failed archive DB write reverts the Discord side', async () => {
+    selectRows.mockResolvedValue([bound(1)]);
+    jest.mocked(store.setLifecycleState).mockRejectedValueOnce(new Error('db'));
+    const res = await makeService().reconcile(live);
+    expect(ops.revertArchive).toHaveBeenCalledWith(guild, 'ch-1', {
+      previousParentId: 'cat-games',
+      restoreParentId: 'cat-games',
+      added: { everyoneSend: true, everyoneView: false, botView: false },
+    });
+    expect(res.failed).toBe(1);
+  });
+  it('unarchive passes the recorded bits; a deleted restore parent falls back to Games', async () => {
+    jest.mocked(ops.categoryExists).mockResolvedValue(false);
+    selectRows.mockResolvedValue([
+      bound(
+        2,
+        {
+          lifecycleState: 'archived',
+          restoreParentId: 'gone-cat',
+          archivedOverwrites: ADDED,
+        },
+        1,
+      ),
+    ]);
+    await makeService().reconcile(live);
+    expect(ops.unarchiveChannel).toHaveBeenCalledWith(guild, 'ch-2', {
+      parentId: 'cat-games',
+      added: ADDED,
+    });
+  });
+});
+
+describe('review fixes — create capacity, topic, gone hubs', () => {
+  it('creates under a Games category WITH room (overflow-aware)', async () => {
+    selectRows.mockResolvedValue([row(1, { itemCount: 3 })]);
+    await makeService().reconcile(live);
+    expect(ops.ensureCategory).toHaveBeenCalledWith(guild, {
+      id: 'cat-games',
+      name: expect.any(String),
+      needsRoom: true,
+    });
+  });
+  it('30013 defers the remaining creates with ONE Sentry message', async () => {
+    selectRows.mockResolvedValue(
+      [1, 2, 3].map((g) => row(g, { itemCount: 3 })),
+    );
+    jest
+      .mocked(ops.createTextChannel)
+      .mockRejectedValue(new CreateCapacityError('create'));
+    const res = await makeService().reconcile(live);
+    expect(ops.createTextChannel).toHaveBeenCalledTimes(1);
+    expect(res).toMatchObject({ failed: 1, deferred: 2 });
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+  it('a hub link refreshes the topic with the hub URL (D10)', async () => {
+    selectRows.mockResolvedValue(
+      [bound(1, {}, 1)].map((r) => ({ ...r, hubNeedsLink: true })),
+    );
+    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    const url = 'https://rl.test/guilds/7';
+    jest
+      .mocked(resolver.resolveGameHubLink)
+      .mockResolvedValue({ url, label: 'Hub' });
+    await makeService().reconcile(live);
+    expect(ops.setTopic).toHaveBeenCalledWith(
+      guild,
+      'ch-1',
+      expect.stringContaining(url),
+    );
+  });
+  it('a gone channel clears its auto-linked hubs', async () => {
+    selectRows.mockResolvedValue([bound(1)]);
+    jest
+      .mocked(ops.archiveChannel)
+      .mockRejectedValue(new ChannelGoneError('ch-1'));
+    await makeService().reconcile(live);
+    expect(hubQueries.unlinkAutoHubsForChannel).toHaveBeenCalledWith(
+      expect.anything(),
+      'ch-1',
+    );
+  });
+});
+
+describe('review fixes — nudge ticks', () => {
+  it('a clean nudge tick does not clear lastRunError', async () => {
+    selectRows.mockResolvedValue([]);
+    await makeService().reconcile(nudge);
+    expect(settings.recordChannelLifecycleRun).not.toHaveBeenCalled();
+  });
+  it('a nudge skips the permission Sentry when it is already recorded', async () => {
+    settings.getChannelLifecycleSettings.mockResolvedValue({
+      ...SETTINGS,
+      lastRunError: PERMISSION_ERROR_TEXT,
+    });
+    selectRows.mockResolvedValue([bound(1)]);
+    jest
+      .mocked(ops.archiveChannel)
+      .mockRejectedValue(new LifecyclePermissionError('archive.move', 50013));
+    const res = await makeService().reconcile(nudge);
+    expect(res.stoppedReason).toBe('permissions');
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(settings.recordChannelLifecycleRun).toHaveBeenCalledTimes(1);
   });
 });

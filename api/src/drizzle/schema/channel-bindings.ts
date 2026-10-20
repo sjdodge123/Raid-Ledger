@@ -18,6 +18,19 @@ import type {
 } from '@raid-ledger/contract';
 import { games } from './games';
 
+/**
+ * ROK-1428 D6: the overwrite bits an archive actually ADDED (a bit that was
+ * already set before archive is false), so unarchive clears only those.
+ */
+export interface ArchivedOverwrites {
+  /** `@everyone` SendMessages deny. */
+  everyoneSend: boolean;
+  /** `@everyone` ViewChannel deny (hideOnArchive). */
+  everyoneView: boolean;
+  /** The bot's member ViewChannel allow (granted with the hide). */
+  botView: boolean;
+}
+
 /** Columns the ROK-1429 lifecycle constraints reference. */
 interface LifecycleColumns {
   guildId: AnyPgColumn;
@@ -82,6 +95,9 @@ export const channelBindings = pgTable(
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     /** ROK-1429 (D6): the category the channel sat in before archive, for unarchive. */
     restoreParentId: varchar('restore_parent_id', { length: 32 }),
+    /** ROK-1428 D6: the bits archive added; null when not archived. */
+    archivedOverwrites:
+      jsonb('archived_overwrites').$type<ArchivedOverwrites>(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

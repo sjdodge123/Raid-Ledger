@@ -15,6 +15,7 @@ import {
   archiveChannel,
   createTextChannel,
   ensureCategory,
+  revertArchive,
   setTopic,
   unarchiveChannel,
 } from './channel-lifecycle.discord-ops';
@@ -214,7 +215,11 @@ describe('archiveChannel', () => {
       categoryId: 'arch-cat',
       hide: false,
     });
-    expect(res).toEqual({ previousParentId: 'games-cat' });
+    expect(res).toEqual({
+      previousParentId: 'games-cat',
+      restoreParentId: 'games-cat',
+      added: { everyoneSend: true, everyoneView: false, botView: false },
+    });
     expect(snapshot(ch)).toEqual({
       [GUILD]: [0n, PermissionFlagsBits.SendMessages],
     });
@@ -295,12 +300,15 @@ describe('archiveChannel — Discord errors', () => {
 describe('unarchiveChannel', () => {
   it('moves back to parentId and never writes an explicit Allow', async () => {
     const { guild, ch } = setup();
-    await archiveChannel(guild as never, 'ch-1', {
+    const { added } = await archiveChannel(guild as never, 'ch-1', {
       categoryId: 'arch-cat',
       hide: true,
     });
     const archiveEdits = ch.permissionOverwrites.edit.mock.calls.length;
-    await unarchiveChannel(guild as never, 'ch-1', { parentId: 'games-cat' });
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'games-cat',
+      added,
+    });
     expect(ch.parentId).toBe('games-cat');
     const calls = ch.permissionOverwrites.edit.mock.calls;
     for (const call of calls.slice(archiveEdits)) {
@@ -312,8 +320,12 @@ describe('unarchiveChannel', () => {
     'archive(hide=%s) then unarchive restores an empty overwrite map',
     async (hide) => {
       const { guild, ch } = setup();
-      await archiveChannel(guild as never, 'ch-1', { categoryId: 'a', hide });
-      await unarchiveChannel(guild as never, 'ch-1', { parentId: 'games-cat' });
+      const opts = { categoryId: 'a', hide };
+      const { added } = await archiveChannel(guild as never, 'ch-1', opts);
+      await unarchiveChannel(guild as never, 'ch-1', {
+        parentId: 'games-cat',
+        added,
+      });
       expect(snapshot(ch)).toEqual({});
     },
   );
@@ -328,11 +340,14 @@ describe('unarchiveChannel', () => {
       { type: OverwriteType.Role },
     );
     const before = snapshot(ch);
-    await archiveChannel(guild as never, 'ch-1', {
+    const { added } = await archiveChannel(guild as never, 'ch-1', {
       categoryId: 'a',
       hide: true,
     });
-    await unarchiveChannel(guild as never, 'ch-1', { parentId: 'games-cat' });
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'games-cat',
+      added,
+    });
     expect(snapshot(ch)).toEqual(before);
   });
 
@@ -342,6 +357,108 @@ describe('unarchiveChannel', () => {
     await expect(
       unarchiveChannel(guild as never, 'gone', { parentId: null }),
     ).rejects.toBeInstanceOf(ChannelGoneError);
+  });
+});
+
+const VIEW = PermissionFlagsBits.ViewChannel;
+const SEND = PermissionFlagsBits.SendMessages;
+
+describe('archive → unarchive keeps admin-made privacy (review MAJOR 1)', () => {
+  it('a private channel (pre-existing @everyone View deny) stays private', async () => {
+    const { guild, ch } = setup();
+    const po = ch.permissionOverwrites;
+    await po.edit(GUILD, { ViewChannel: false }, { type: OverwriteType.Role });
+    await po.edit(BOT, { ViewChannel: true }, { type: OverwriteType.Member });
+    const before = snapshot(ch);
+    const res = await archiveChannel(guild as never, 'ch-1', {
+      categoryId: 'a',
+      hide: true,
+    });
+    expect(res.added).toEqual({
+      everyoneSend: true,
+      everyoneView: false,
+      botView: false,
+    });
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'games-cat',
+      added: res.added,
+    });
+    expect(snapshot(ch)).toEqual(before);
+  });
+
+  it('a View deny added after a hide=false archive survives unarchive', async () => {
+    const { guild, ch } = setup();
+    const res = await archiveChannel(guild as never, 'ch-1', {
+      categoryId: 'a',
+      hide: false,
+    });
+    const po = ch.permissionOverwrites;
+    await po.edit(GUILD, { ViewChannel: false }, { type: OverwriteType.Role });
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'games-cat',
+      added: res.added,
+    });
+    expect(snapshot(ch)).toEqual({ [GUILD]: [0n, VIEW] });
+  });
+
+  it('an unrecorded archive (null) clears only the send lock', async () => {
+    const { guild, ch } = setup();
+    const po = ch.permissionOverwrites;
+    await po.edit(
+      GUILD,
+      { ViewChannel: false, SendMessages: false },
+      { type: OverwriteType.Role },
+    );
+    await unarchiveChannel(guild as never, 'ch-1', {
+      parentId: 'games-cat',
+      added: null,
+    });
+    expect(snapshot(ch)).toEqual({ [GUILD]: [0n, VIEW] });
+  });
+});
+
+describe('archive failure safety (review MAJOR 2)', () => {
+  it('a failed move undoes the lock, so the channel is not left locked', async () => {
+    const { guild, ch } = setup();
+    guild.channels.edit.mockRejectedValueOnce(new Error('move failed'));
+    await expect(
+      archiveChannel(guild as never, 'ch-1', { categoryId: 'a', hide: true }),
+    ).rejects.toThrow('move failed');
+    expect(snapshot(ch)).toEqual({});
+  });
+
+  it('never stores an Archived-series parent as the restore target', async () => {
+    const { guild } = setup('arch-2');
+    const res = await archiveChannel(guild as never, 'ch-1', {
+      categoryId: 'arch-1',
+      hide: false,
+      seriesIds: new Set(['arch-1', 'arch-2']),
+    });
+    expect(res).toMatchObject({ previousParentId: 'arch-2' });
+    expect(res.restoreParentId).toBeNull();
+  });
+
+  it('revertArchive moves back and clears the added bits', async () => {
+    const { guild, ch } = setup();
+    const res = await archiveChannel(guild as never, 'ch-1', {
+      categoryId: 'arch-cat',
+      hide: true,
+    });
+    expect(snapshot(ch)[GUILD]).toEqual([0n, SEND | VIEW]);
+    await revertArchive(guild as never, 'ch-1', res);
+    expect(ch.parentId).toBe('games-cat');
+    expect(snapshot(ch)).toEqual({});
+  });
+
+  it('revertArchive never throws', async () => {
+    const guild = makeGuild();
+    await expect(
+      revertArchive(guild as never, 'gone', {
+        previousParentId: null,
+        restoreParentId: null,
+        added: { everyoneSend: true, everyoneView: false, botView: false },
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -439,6 +556,18 @@ describe('ensureCategory (D5) — 50-children overflow', () => {
     });
     expect(res.name).toBe('Archived 3');
     expect(res.created).toBe(true);
+  });
+
+  it('does not treat an admin "Archived 2024" category as overflow', async () => {
+    const guild = makeGuild();
+    addCategory(guild, 'base', 'Archived', 50);
+    addCategory(guild, 'y2024', 'Archived 2024');
+    const cat = await ensureCategory(guild as never, {
+      id: 'base',
+      name: 'Archived',
+      needsRoom: true,
+    });
+    expect(cat).toMatchObject({ name: 'Archived 2', created: true });
   });
 
   it('ignores a full category when room is not needed', async () => {

@@ -23,7 +23,11 @@ import {
   planReconcile,
   plannedResult,
 } from './channel-lifecycle.plan';
-import { executePlan, runErrorText } from './channel-lifecycle.run';
+import {
+  executePlan,
+  PERMISSION_ERROR_TEXT,
+  runErrorText,
+} from './channel-lifecycle.run';
 import { withReconcileLock, type LifecycleDb } from './channel-lifecycle.store';
 import {
   CHANNEL_LIFECYCLE_HUB_LINKER,
@@ -99,6 +103,7 @@ export class ChannelLifecycleService {
       if (!categories) {
         return await this.record(
           now,
+          opts,
           emptyResult(false, 'no-archive-category'),
         );
       }
@@ -106,9 +111,13 @@ export class ChannelLifecycleService {
       const plan = planReconcile(rows, settings);
       if (opts.dryRun) return plannedResult(plan);
       const ctx = await this.context(guild, settings, categories, now);
-      return await this.record(now, await executePlan(ctx, plan));
+      const result = await executePlan(ctx, plan);
+      if (result.stoppedReason === 'permissions') {
+        this.reportPermission(settings, opts);
+      }
+      return await this.record(now, opts, result);
     } catch (err) {
-      return this.handleTickError(now, opts, err);
+      return this.handleTickError(now, settings, opts, err);
     }
   }
 
@@ -171,15 +180,13 @@ export class ChannelLifecycleService {
   /** A permission error before the loop stops the tick; anything else is recorded + rethrown. */
   private async handleTickError(
     now: Date,
+    settings: ChannelLifecycleSettingsDto,
     opts: ReconcileOptions,
     err: unknown,
   ): Promise<ReconcileResultDto> {
     if (err instanceof LifecyclePermissionError && !opts.dryRun) {
-      Sentry.captureMessage('Channel lifecycle stopped: missing permissions', {
-        level: 'warning',
-        tags: { area: 'channel-lifecycle-permissions' },
-      });
-      return this.record(now, emptyResult(false, 'permissions'));
+      this.reportPermission(settings, opts);
+      return this.record(now, opts, emptyResult(false, 'permissions'));
     }
     const message = err instanceof Error ? err.message : String(err);
     this.logger.error(`Reconcile (${opts.trigger}) failed: ${message}`);
@@ -217,12 +224,35 @@ export class ChannelLifecycleService {
     return { gamesId, archiveId: archive.id };
   }
 
-  /** Write `lastRunAt` (+ error text, or clear it on a clean run). */
+  /**
+   * D14: ONE Sentry message per stopped tick. A nudge tick skips it while the
+   * permission error is already recorded — the daily cron re-reports it, so a
+   * guild-wide loss alerts once a day, not once per vote/event.
+   */
+  private reportPermission(
+    settings: ChannelLifecycleSettingsDto,
+    opts: ReconcileOptions,
+  ): void {
+    const known = settings.lastRunError === PERMISSION_ERROR_TEXT;
+    if (opts.trigger === 'nudge' && known) return;
+    Sentry.captureMessage('Channel lifecycle stopped: missing permissions', {
+      level: 'warning',
+      tags: { area: 'channel-lifecycle-permissions' },
+    });
+  }
+
+  /**
+   * Write `lastRunAt` (+ error text, or clear it on a clean run). A clean
+   * nudge tick writes nothing: a single-game run must not clear a banner the
+   * daily run recorded (only cron/manual ticks clear it).
+   */
   private async record(
     now: Date,
+    opts: ReconcileOptions,
     result: ReconcileResultDto,
   ): Promise<ReconcileResultDto> {
     const error = runErrorText(result);
+    if (opts.trigger === 'nudge' && error === null) return result;
     await this.settings.recordChannelLifecycleRun({ at: now, error });
     return result;
   }

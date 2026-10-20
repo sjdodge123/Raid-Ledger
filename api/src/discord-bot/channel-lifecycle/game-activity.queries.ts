@@ -106,6 +106,7 @@ const BINDING_COLUMNS = {
   pinned: cb.pinned,
   archivedAt: cb.archivedAt,
   restoreParentId: cb.restoreParentId,
+  archivedOverwrites: cb.archivedOverwrites,
 };
 
 /** Candidate bindings by game: manual rows win over auto rows, then oldest first. */

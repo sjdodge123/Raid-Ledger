@@ -120,3 +120,27 @@ export async function findManagedForChannel(
     .limit(1);
   return row ?? null;
 }
+
+/**
+ * A managed channel was deleted in Discord (10003): clear it from every hub
+ * the lifecycle AUTO-linked to it. Manual links are the Leader's and stay.
+ *
+ * @returns How many hubs were unlinked.
+ */
+export async function unlinkAutoHubsForChannel(
+  db: Db,
+  channelId: string,
+): Promise<number> {
+  const gp = schema.guildProfiles;
+  const rows = await db
+    .update(gp)
+    .set({ discordChannelId: null, discordChannelSource: null })
+    .where(
+      and(
+        eq(gp.discordChannelId, channelId),
+        eq(gp.discordChannelSource, 'auto'),
+      ),
+    )
+    .returning({ guildId: gp.guildId });
+  return rows.length;
+}

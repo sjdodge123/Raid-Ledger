@@ -2,6 +2,7 @@ import type {
   BindingLifecycleState,
   GameActivitySignalKind,
 } from '@raid-ledger/contract';
+import type { ArchivedOverwrites } from '../../drizzle/schema/channel-bindings';
 import type { GameActivitySignal } from './game-activity.signals';
 
 /** ROK-1430 — shapes produced by `selectGameLifecycleActivity`. */
@@ -16,6 +17,8 @@ export interface LifecycleCandidateBinding {
   pinned: boolean;
   archivedAt: Date | null;
   restoreParentId: string | null;
+  /** D6: the overwrite bits the archive added (null = not recorded). */
+  archivedOverwrites: ArchivedOverwrites | null;
 }
 
 /** One signal kind's contribution for a game. */
