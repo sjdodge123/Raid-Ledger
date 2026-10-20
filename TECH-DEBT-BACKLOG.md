@@ -3449,3 +3449,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-20 — feat/rok-1857-poll-calendar-copies (surfaced during the ROK-1857 Opus review)
 
 - **[med]** `api/src/calendar-sync/write/calendar-write.processor.ts:42` (`concurrency: 2`) + the 5 s `-rerun` delay in `calendar-write.enqueue.helpers.ts` — a write job that runs longer than 5 s can overlap its own rerun; both see "no link" and both create a Google copy. Pre-existing (ROK-1596), not introduced by ROK-1857. Suggested: `concurrency: 1` per connection key (BullMQ group/limiter on `cal-write-{conn}`), or make the create path claim the link row first (insert-then-upsert) so the second creator becomes a PATCH.
+
+### 2026-10-20 — feat/rok-1870-community-hubs (Codex r5, carried on the ROK-1868 branch)
+
+- **low** — `api/src/guilds/community/community-directory.queries.ts:65-68` (Codex r5 P3): the `/hubs` directory cursor decodes integers without bounding them to PostgreSQL's int4 range, so a crafted cursor reaches the query and fails as a 500 instead of a 400. Suggested: reject cursor ids outside 1..2147483647 in the decoder with the same 400 as a malformed cursor, plus a unit case.
