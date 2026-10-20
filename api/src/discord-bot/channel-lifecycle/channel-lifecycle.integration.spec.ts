@@ -32,6 +32,8 @@ let settings: SettingsService;
 let bindings: ChannelBindingsService;
 let seq = 0;
 const channelDelete = jest.fn();
+/** The bits the archive stub reports adding (round-trips via `archived_overwrites`). */
+const ADDED = { everyoneSend: true, everyoneView: false, botView: false };
 const guild = {
   id: GUILD,
   channels: { delete: channelDelete },
@@ -58,10 +60,14 @@ beforeEach(async () => {
   jest
     .spyOn(ops, 'createTextChannel')
     .mockImplementation(() => Promise.resolve(`ch-${++seq}`));
+  // applyArchive / applyUnarchive read the guild's category cache through
+  // these two — the bare guild stub has no `channels.cache`, so stub them.
+  jest.spyOn(ops, 'categorySeriesIds').mockImplementation(() => new Set());
+  jest.spyOn(ops, 'categoryExists').mockResolvedValue(true);
   jest.spyOn(ops, 'archiveChannel').mockResolvedValue({
     previousParentId: 'old-parent',
     restoreParentId: 'old-parent',
-    added: { everyoneSend: true, everyoneView: false, botView: false },
+    added: ADDED,
   });
   jest.spyOn(ops, 'unarchiveChannel').mockResolvedValue(undefined);
   await settings.setChannelLifecycleSettings({
@@ -188,16 +194,19 @@ it('R4/R5: archive stores the old parent; a new event unarchives back to it', as
   expect(archived).toMatchObject({
     lifecycleState: 'archived',
     restoreParentId: 'old-parent',
+    archivedOverwrites: ADDED,
   });
   expect(archived?.archivedAt).toBeInstanceOf(Date);
   await event(id);
   await svc.reconcile(live);
   expect(ops.unarchiveChannel).toHaveBeenCalledWith(guild, `pre-${id}`, {
     parentId: 'old-parent',
+    added: ADDED,
   });
   expect((await gameBindings(id))[0]).toMatchObject({
     lifecycleState: 'active',
     archivedAt: null,
+    archivedOverwrites: null,
   });
 });
 
@@ -219,7 +228,7 @@ it('R7: game A failing does not block game B', async () => {
     return Promise.resolve({
       previousParentId: null,
       restoreParentId: null,
-      added: { everyoneSend: true, everyoneView: false, botView: false },
+      added: ADDED,
     });
   });
   const res = await svc.reconcile(live);
@@ -241,7 +250,7 @@ it('R8: 50013 stops the tick and records lastRunError', async () => {
   );
 });
 
-it('R9: 10003 on archive → binding removed, suppression deleted, never recreated', async () => {
+it("R9: 10003 on archive → binding removed, suppression reason 'deleted', never recreated", async () => {
   const id = await game();
   await autoBinding(id);
   jest
