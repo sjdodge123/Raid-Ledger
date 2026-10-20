@@ -128,7 +128,11 @@ export class AppleCalendarAdapter
     cursor?: Record<string, string>,
   ): Promise<FetchBusyResult> {
     return this.atHome(creds, async (h) => {
-      const cols = await listCollections(h.auth, h.homeSetUrl);
+      const skips = { count: 0 };
+      const cols = await listCollections(h.auth, h.homeSetUrl, skips);
+      if (skips.count > 0) {
+        this.logger.warn(`Skipped ${skips.count} unusable calendar hrefs`);
+      }
       const next = buildCursor(range, calendarIds, cols);
       if (isUnchanged(cursor, next, calendarIds)) {
         return { blocks: [], unchanged: true, cursor: next };

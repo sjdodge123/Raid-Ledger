@@ -38,6 +38,7 @@ import {
   toCollections,
   type CalDavCollection,
   type CalDavObject,
+  type HrefSkips,
   type MultiStatus,
 } from './apple-caldav-xml.helpers';
 
@@ -183,9 +184,10 @@ export async function discover(auth: CalDavAuth): Promise<CalDavDiscovery> {
 export async function listCollections(
   auth: CalDavAuth,
   homeSetUrl: string,
+  skips?: HrefSkips,
 ): Promise<CalDavCollection[]> {
   const r = await propfind(auth, homeSetUrl, '1', PROPFIND_COLLECTIONS);
-  return toCollections(r.ms, r.url);
+  return toCollections(r.ms, r.url, skips);
 }
 
 /** REPORT calendar-query: raw objects overlapping `range` (no expansion). */
@@ -193,6 +195,7 @@ export async function queryEvents(
   auth: CalDavAuth,
   collectionUrl: string,
   range: CalDavRange,
+  skips?: HrefSkips,
 ): Promise<CalDavObject[]> {
   const res = await request({
     method: 'REPORT',
@@ -201,7 +204,7 @@ export async function queryEvents(
     depth: '1',
     body: calendarQueryBody(range),
   });
-  return toCalendarObjects(parseMultiStatus(res.text), res.url);
+  return toCalendarObjects(parseMultiStatus(res.text), res.url, skips);
 }
 
 /** Depth-0 `getetag` of one object (null when the server sends none). */

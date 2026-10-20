@@ -213,6 +213,25 @@ export function resolveHref(href: string, base: string): string {
   return url.href;
 }
 
+/** Counts listing / REPORT responses skipped for an unusable href. */
+export interface HrefSkips {
+  count: number;
+}
+
+/**
+ * A listing row's href, or null (counted) when it is unparseable or off the
+ * allowlist: one odd shared calendar must not fail the whole listing.
+ * Discovery (principal / home set) keeps the throw.
+ */
+function listedHref(href: string, base: string, skips?: HrefSkips) {
+  try {
+    return resolveHref(href, base);
+  } catch {
+    if (skips) skips.count += 1;
+    return null;
+  }
+}
+
 function nestedHref(ms: MultiStatus, key: string, base: string) {
   for (const r of ms.responses) {
     const prop = okProps(r)[key];
@@ -246,12 +265,14 @@ const stripSlash = (href: string) => href.replace(/\/+$/, '');
 export function toCollections(
   ms: MultiStatus,
   homeSetUrl: string,
+  skips?: HrefSkips,
 ): CalDavCollection[] {
   const home = stripSlash(new URL(homeSetUrl).href);
   const out: CalDavCollection[] = [];
   for (const r of ms.responses) {
-    const href = resolveHref(r.href, homeSetUrl);
-    const c = stripSlash(href) === home ? null : toCollection(href, okProps(r));
+    const href = listedHref(r.href, homeSetUrl, skips);
+    if (!href || stripSlash(href) === home) continue;
+    const c = toCollection(href, okProps(r));
     if (c) out.push(c);
   }
   return out;
@@ -293,14 +314,16 @@ function isWritable(set: unknown): boolean {
 export function toCalendarObjects(
   ms: MultiStatus,
   base: string,
+  skips?: HrefSkips,
 ): CalDavObject[] {
   const out: CalDavObject[] = [];
   for (const r of ms.responses) {
     const props = okProps(r);
     const ics = textOf(props['calendar-data']);
     if (!ics) continue;
-    const etag = textOf(props['getetag']);
-    out.push({ href: resolveHref(r.href, base), etag, ics });
+    const href = listedHref(r.href, base, skips);
+    if (!href) continue;
+    out.push({ href, etag: textOf(props['getetag']), ics });
   }
   return out;
 }

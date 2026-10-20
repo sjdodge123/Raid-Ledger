@@ -150,13 +150,27 @@ describe('parseMultiStatus + toCollections (T2)', () => {
     expect(ms.responses[1]?.propstats.map((p) => p.status)).toEqual([200, 404]);
   });
 
-  it('refuses an absolute href off the iCloud allowlist', () => {
+  it('skips (and counts) an off-allowlist or unparseable href, keeping the rest', () => {
     const hostile = LISTING.replace(
       '/1234567/calendars/reminders/',
       'https://evil.example/1234567/calendars/reminders/',
-    );
+    ).replace('/1234567/calendars/home/', 'http://[bad/');
+    const skips = { count: 0 };
     const ms = xml.parseMultiStatus(hostile);
-    expect(transientReason(() => xml.toCollections(ms, HOME))).toBe(
+    let rows: xml.CalDavCollection[] = [];
+    expect(() => (rows = xml.toCollections(ms, HOME, skips))).not.toThrow();
+    expect(rows).toEqual(EXPECTED.filter((c) => c.id !== 'home'));
+    expect(skips.count).toBe(2);
+  });
+
+  it('discovery still refuses an off-allowlist home set', () => {
+    const body = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+      <d:response><d:href>/1234567/principal/</d:href><d:propstat><d:prop>
+        <c:calendar-home-set><d:href>https://evil.example/cal/</d:href></c:calendar-home-set>
+      </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+    </d:multistatus>`;
+    const ms = xml.parseMultiStatus(body);
+    expect(transientReason(() => xml.homeSetHref(ms, HOME))).toBe(
       'href_refused',
     );
   });
@@ -233,6 +247,21 @@ describe('toCalendarObjects (T2)', () => {
       { href: `${HOME}home/a.ics`, etag: '"e1"', ics: lf },
       { href: `${HOME}home/b.ics`, etag: null, ics: lf },
     ]);
+  });
+
+  it('skips (and counts) an object whose href is off the allowlist', () => {
+    const hostile = body.replace(
+      '/1234567/calendars/home/a.ics',
+      'https://evil.example/a.ics',
+    );
+    const skips = { count: 0 };
+    const ms = xml.parseMultiStatus(hostile);
+    let objects: xml.CalDavObject[] = [];
+    expect(
+      () => (objects = xml.toCalendarObjects(ms, HOME, skips)),
+    ).not.toThrow();
+    expect(objects.map((o) => o.href)).toEqual([`${HOME}home/b.ics`]);
+    expect(skips.count).toBe(1);
   });
 });
 

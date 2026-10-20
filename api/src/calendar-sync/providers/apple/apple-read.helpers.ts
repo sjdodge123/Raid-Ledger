@@ -99,13 +99,14 @@ async function readOne(
   range: TimeRange,
 ): Promise<CalendarRead> {
   try {
-    const objects = await queryEvents(auth, col.href, range);
+    const skips = { count: 0 };
+    const objects = await queryEvents(auth, col.href, range, skips);
     const ctx = { range, calendarTimezone: col.timezone };
     const parsed = objects.map((o) => parseBusyFromIcs(o.ics, ctx));
     return {
       kind: 'ok',
       blocks: parsed.flatMap((p) => p.blocks),
-      skipped: parsed.reduce((n, p) => n + p.skipped, 0),
+      skipped: parsed.reduce((n, p) => n + p.skipped, skips.count),
     };
   } catch (err) {
     if (err instanceof NotFoundError) return { kind: 'missing' };
