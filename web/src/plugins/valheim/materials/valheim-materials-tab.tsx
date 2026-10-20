@@ -129,6 +129,8 @@ function MaterialsBody({
     );
     const ctx = useItemIconsFor({ serverId, items, atlas: data.atlas });
     const all = groupTotals(data.shared.totals, ctx.items, ctx.atlas);
+    // The category also filters the personal section, so offer its categories too.
+    const mine = groupTotals(data.personal?.totals ?? [], ctx.items, ctx.atlas);
     const rows = sortRows(
         filterRows(all, filters.search, filters.category),
         sort,
@@ -138,7 +140,7 @@ function MaterialsBody({
             <ScanLine data={data} />
             <MaterialsToolbar
                 filters={filters}
-                categories={categoriesOf(all)}
+                categories={categoriesOf([...all, ...mine])}
                 onChange={setFilters}
             />
             <WarningBanner data={data} />

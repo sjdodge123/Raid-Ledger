@@ -50,9 +50,9 @@ describe('ValheimMaterialsTab', () => {
             expect.stringContaining('Stone'),
             expect.stringContaining('Iron sword'),
         ]);
-        expect(
-            within(list).getByText('q1 ×1 · q2 ×3 · 1 chest'),
-        ).toBeInTheDocument();
+        expect(within(list).getByText(/^q1 ×1 · q2 ×3 ·/)).toHaveTextContent(
+            'q1 ×1 · q2 ×3 · ≥ 1 chest',
+        );
         expect(
             screen.getByTestId('valheim-materials-scan-age'),
         ).toHaveTextContent('Scanned 7 min ago');
@@ -186,5 +186,80 @@ describe('ValheimMaterialsTab', () => {
             within(table).getByRole('columnheader', { name: /Item/ }),
         ).toHaveAttribute('aria-sort', 'ascending');
         expect(names()[0]).toContain('Iron sword');
+    });
+    it('phone: a split-quality chest count is a lower bound; one quality stays exact', async () => {
+        server.use(valheimMaterialsHandler(materialsFixture()));
+        renderTab();
+        const list = await sharedList();
+        const [wood, , sword] = within(list).getAllByRole('listitem');
+        expect(wood?.textContent).toContain('×1,240 · 2 chests');
+        expect(wood?.textContent).not.toContain('≥');
+        expect(sword?.textContent).toContain('≥ 1 chest');
+        const bound = within(list).getByText(
+            'at least 1 chest (counted per quality)',
+        );
+        expect(bound.parentElement).toHaveAttribute(
+            'title',
+            'at least 1 chest (counted per quality)',
+        );
+    });
+
+    it('desktop: lower-bound chest cell, exact single-quality cell, sole q3 labelled', async () => {
+        media.desktop = true;
+        const base = materialsFixture();
+        const shared = {
+            ...base.shared,
+            totals: [
+                ...base.shared.totals,
+                { prefab: 'Coins', quality: 3, total: 5, chests: 1 },
+            ],
+        };
+        server.use(valheimMaterialsHandler(materialsFixture({ shared })));
+        renderTab();
+        const table = await screen.findByRole('table', {
+            name: 'Shared chest totals',
+        });
+        const rowOf = (name: string) =>
+            within(table).getByRole('row', { name: new RegExp(name) });
+        const cells = (name: string) =>
+            within(rowOf(name)).getAllByRole('cell');
+        expect(cells('Wood')[2]?.textContent).toBe('2');
+        expect(cells('Iron sword')[2]?.textContent).toBe(
+            '≥ 1at least 1 chest (counted per quality)',
+        );
+        expect(cells('Coins')[1]).toHaveTextContent('5q3 ×5');
+        expect(cells('Coins')[2]?.textContent).toBe('1');
+    });
+
+    it('a category only personal chests hold is selectable and filters the personal section', async () => {
+        const personal = {
+            totals: [
+                { prefab: 'Coins', quality: 1, total: 99, chests: 1 },
+                { prefab: 'Wood', quality: 1, total: 4, chests: 1 },
+            ],
+            chestCount: 1,
+            omittedPrivate: null,
+        };
+        server.use(valheimMaterialsHandler(materialsFixture({ personal })));
+        renderTab();
+        await sharedList();
+        await userEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        const select = screen.getByRole('combobox', { name: 'Category' });
+        expect(
+            within(select)
+                .getAllByRole('option')
+                .map((o) => o.textContent),
+        ).toContain('Valuable');
+        await userEvent.selectOptions(select, 'Valuable');
+        const mine = screen.getByRole('list', {
+            name: 'Personal chest totals',
+        });
+        await waitFor(() =>
+            expect(
+                within(mine)
+                    .getAllByRole('listitem')
+                    .map((li) => li.textContent),
+            ).toEqual([expect.stringContaining('Coins')]),
+        );
     });
 });

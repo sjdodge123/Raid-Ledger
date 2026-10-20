@@ -37,7 +37,7 @@ export interface MaterialRow {
     label: string;
     category: string | null;
     total: number;
-    /** The most chests any one quality is in — a lower bound across qualities. */
+    /** The most chests any one quality is in — a lower bound across qualities (`isChestLowerBound`). */
     chests: number;
     qualities: QualityTotal[];
 }
@@ -127,6 +127,25 @@ export function categoriesOf(rows: readonly MaterialRow[]): string[] {
 }
 
 export const formatCount = (n: number): string => fmt.format(n);
+
+/**
+ * A multi-quality row's `chests` is the most chests any one quality is in —
+ * the per-prefab count is unknown, so it is a lower bound (Codex r1).
+ */
+export const isChestLowerBound = (r: Pick<MaterialRow, 'qualities'>): boolean =>
+    r.qualities.length > 1;
+
+/** "at least 3 chests (counted per quality)" — the lower bound spelt out. */
+export function chestLowerBoundLabel(n: number): string {
+    return `at least ${fmt.format(n)} ${n === 1 ? 'chest' : 'chests'} (counted per quality)`;
+}
+
+/** Desktop shows the breakdown for several qualities or a sole non-q1 one. */
+export function showsQualityBreakdown(
+    qualities: readonly QualityTotal[],
+): boolean {
+    return qualities.length > 1 || qualities[0]?.quality !== 1;
+}
 
 /** "q1 ×1,240 · q2 ×3" — the quality is dropped when only q1 exists. */
 export function formatQualities(qualities: readonly QualityTotal[]): string {

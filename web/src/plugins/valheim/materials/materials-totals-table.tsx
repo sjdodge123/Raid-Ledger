@@ -1,6 +1,7 @@
 /**
  * ROK-1853 — material totals. ≥1024px a sortable table (header buttons,
- * `aria-sort`); below, a stacked row list with a "Sort by" `Select`.
+ * `aria-sort`); below, a stacked row list with a "Sort by" `Select`. A row
+ * split across qualities shows its chest count as a lower bound (`≥ n`).
  * New pattern (docs/design-system.md §3.2): no shared sortable data table exists.
  */
 import type { JSX } from 'react';
@@ -12,8 +13,11 @@ import { ItemIcon } from '../character/item-icon';
 import type { ItemIconContext } from '../character/use-item-icons';
 import { resolveItem } from '../character/item-icon.helpers';
 import {
+    chestLowerBoundLabel,
     formatCount,
     formatQualities,
+    isChestLowerBound,
+    showsQualityBreakdown,
     type MaterialRow,
     type MaterialSort,
     type MaterialSortKey,
@@ -45,6 +49,26 @@ function RowIcon({
     return (
         <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-edge bg-panel">
             <ItemIcon resolved={resolved} prefab={prefab} ctx={ctx} />
+        </span>
+    );
+}
+
+/** Exact for one quality; `≥ n` (+ the spelt-out bound) when qualities split. */
+function ChestCount({
+    row,
+    unit,
+}: {
+    row: MaterialRow;
+    unit: boolean;
+}): JSX.Element {
+    const word = unit ? ` ${row.chests === 1 ? 'chest' : 'chests'}` : '';
+    const count = `${formatCount(row.chests)}${word}`;
+    if (!isChestLowerBound(row)) return <>{count}</>;
+    const label = chestLowerBoundLabel(row.chests);
+    return (
+        <span title={label}>
+            <span aria-hidden="true">≥ {count}</span>
+            <span className="sr-only">{label}</span>
         </span>
     );
 }
@@ -128,14 +152,14 @@ function DesktopTable({
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-foreground">
                             {formatCount(r.total)}
-                            {r.qualities.length > 1 && (
+                            {showsQualityBreakdown(r.qualities) && (
                                 <span className="block text-xs text-muted">
                                     {formatQualities(r.qualities)}
                                 </span>
                             )}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-secondary">
-                            {formatCount(r.chests)}
+                            <ChestCount row={r} unit={false} />
                         </td>
                     </tr>
                 ))}
@@ -193,8 +217,8 @@ function PhoneList({
                                 {r.label}
                             </span>
                             <span className="block text-xs text-muted">
-                                {formatQualities(r.qualities)} · {r.chests}{' '}
-                                {r.chests === 1 ? 'chest' : 'chests'}
+                                {formatQualities(r.qualities)} ·{' '}
+                                <ChestCount row={r} unit />
                             </span>
                         </span>
                         <span className="text-sm tabular-nums text-foreground">
