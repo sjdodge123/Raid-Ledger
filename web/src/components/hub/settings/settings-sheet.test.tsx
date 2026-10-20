@@ -98,6 +98,7 @@ describe('HubSettingsSheet (ROK-1830 S4)', () => {
         const panel = await screen.findByTestId('guild-editors-panel');
         const chip = await within(panel).findByTestId('guild-editor-chip');
         expect(chip).toHaveTextContent('Rank: Raider');
+        expect(chip, 'a kept rank grant renders inactive (ROK-1794)').toHaveTextContent('Inactive — re-grant by name');
         await userEvent.click(within(chip).getByRole('button', { name: 'Remove Rank: Raider' }));
         await waitFor(() => expect(deletes).toEqual([11]));
     });
