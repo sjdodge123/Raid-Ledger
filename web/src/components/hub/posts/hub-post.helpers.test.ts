@@ -80,3 +80,11 @@ describe('serverBodyError', () => {
         expect(serverBodyError(null)).toBeNull();
     });
 });
+
+describe('relayOutcomeNotice — failed copy (ROK-1868 review)', () => {
+    it('says the post is saved here and promises no retry that does not exist', () => {
+        const text = relayOutcomeNotice('failed', 'news')?.text ?? '';
+        expect(text).toBe('Posted here, but it couldn’t be sent to Discord. The post is saved on this page.');
+        expect(text, 'there is no retry path, so the copy must not offer one').not.toMatch(/try again/i);
+    });
+});

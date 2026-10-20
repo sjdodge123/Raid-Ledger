@@ -59,7 +59,7 @@ export function relayOutcomeNotice(outcome: HubPostRelayOutcome, channelName: st
     const where = channelName ? `#${channelName}` : 'Discord';
     switch (outcome) {
         case 'sent': return { tone: 'success', text: `Posted. It’s in ${where} on Discord too.` };
-        case 'failed': return { tone: 'warning', text: 'Posted here, but it couldn’t be sent to Discord. Try again from Discord later.' };
+        case 'failed': return { tone: 'warning', text: 'Posted here, but it couldn’t be sent to Discord. The post is saved on this page.' };
         case 'unavailable': return { tone: 'warning', text: 'Posted here only — Discord isn’t available for this hub right now.' };
         case 'not_requested': return null;
     }
