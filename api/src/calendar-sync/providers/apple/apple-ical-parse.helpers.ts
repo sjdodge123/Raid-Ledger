@@ -119,9 +119,11 @@ function parseSeries(series: Series, ctx: SeriesContext): IcsParseResult {
 
 /** Split concatenated calendar objects so one bad object spares the rest. */
 function splitCalendars(ics: string): string[] {
-  return ics
+  const chunks = ics
     .split(/(?=^BEGIN:VCALENDAR\r?$)/im)
     .filter((chunk) => /BEGIN:VCALENDAR/i.test(chunk));
+  // Non-empty text with no VCALENDAR at all → one (failing) object.
+  return chunks.length === 0 && ics.trim() !== '' ? [ics] : chunks;
 }
 
 function parseCalendar(text: string, ctx: SeriesContext): IcsParseResult {
