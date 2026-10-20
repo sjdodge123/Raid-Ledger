@@ -35,6 +35,27 @@ async function deleteOrphan(guild: Guild, channelId: string): Promise<void> {
   }
 }
 
+/** Bind a just-created channel (only through `bind()`); on failure delete it (R18). */
+async function bindNewChannel(
+  ctx: ApplyContext,
+  gameId: number,
+  channelId: string,
+): Promise<string> {
+  try {
+    const bound = await ctx.bindings.bind(
+      ctx.guild.id,
+      channelId,
+      'text',
+      'game-announcements',
+      gameId,
+    );
+    return bound.binding.id;
+  } catch (err) {
+    await deleteOrphan(ctx.guild, channelId);
+    throw err;
+  }
+}
+
 /** Create → bind (only through `bind()`) → mark auto-managed → link hubs. */
 async function applyCreate(
   ctx: ApplyContext,
@@ -50,20 +71,7 @@ async function applyCreate(
     parentId: ctx.categories.gamesId,
     topic: lifecycleTopic(ctx, game),
   });
-  let bindingId: string;
-  try {
-    const bound = await ctx.bindings.bind(
-      guildId,
-      channelId,
-      'text',
-      'game-announcements',
-      gameId,
-    );
-    bindingId = bound.binding.id;
-  } catch (err) {
-    await deleteOrphan(ctx.guild, channelId);
-    throw err;
-  }
+  const bindingId = await bindNewChannel(ctx, gameId, channelId);
   await setLifecycleState(ctx.db, bindingId, {
     autoManaged: true,
     lifecycleState: 'active',

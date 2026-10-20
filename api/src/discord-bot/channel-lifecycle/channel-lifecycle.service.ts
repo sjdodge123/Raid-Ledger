@@ -23,16 +23,20 @@ import {
   planReconcile,
   plannedResult,
 } from './channel-lifecycle.plan';
-import { executePlan, PERMISSION_ERROR_TEXT } from './channel-lifecycle.run';
+import { executePlan, runErrorText } from './channel-lifecycle.run';
 import { withReconcileLock, type LifecycleDb } from './channel-lifecycle.store';
 import {
   CHANNEL_LIFECYCLE_HUB_LINKER,
   NOOP_HUB_LINKER,
+  type ApplyContext,
   type HubLinker,
   type ReconcileCategories,
   type ReconcileOptions,
 } from './channel-lifecycle.types';
-import { selectGameLifecycleActivity } from './game-activity.queries';
+import {
+  selectGameLifecycleActivity,
+  type GameLifecycleActivityRow,
+} from './game-activity.queries';
 
 /** `lastRunError` when no archive category can be found or created. */
 export const NO_ARCHIVE_CATEGORY_TEXT =
@@ -102,29 +106,67 @@ export class ChannelLifecycleService {
           emptyResult(false, 'no-archive-category'),
         );
       }
-      const rows = await selectGameLifecycleActivity(this.db, {
-        now,
-        windowDays: settings.recentActivityDays,
-        guildId: guild.id,
-        ...(opts.gameIds ? { gameIds: opts.gameIds } : {}),
-      });
+      const rows = await this.selectRows(guild, settings, opts, now);
       const plan = planReconcile(rows, settings);
       if (opts.dryRun) return plannedResult(plan);
-      const clientUrl = await this.settings.getClientUrl();
-      const ctx = {
-        guild,
-        db: this.db,
-        bindings: this.bindings,
-        settings,
-        categories,
-        hubLinker: this.hubLinker,
-        clientUrl,
-        now,
-      };
+      const ctx = await this.context(guild, settings, categories, now);
       return await this.record(now, await executePlan(ctx, plan));
     } catch (err) {
       return this.handleTickError(now, opts, err);
     }
+  }
+
+  /** The activity rows for this tick (scoped to the bot's guild). */
+  private selectRows(
+    guild: Guild,
+    settings: ChannelLifecycleSettingsDto,
+    opts: ReconcileOptions,
+    now: Date,
+  ): Promise<GameLifecycleActivityRow[]> {
+    return selectGameLifecycleActivity(this.db, {
+      now,
+      windowDays: settings.recentActivityDays,
+      guildId: guild.id,
+      ...(opts.gameIds ? { gameIds: opts.gameIds } : {}),
+    });
+  }
+
+  /** The executor context for a live tick. */
+  private async context(
+    guild: Guild,
+    settings: ChannelLifecycleSettingsDto,
+    categories: ReconcileCategories,
+    now: Date,
+  ): Promise<ApplyContext> {
+    const clientUrl = await this.settings.getClientUrl();
+    const { db, bindings, hubLinker } = this;
+    return {
+      guild,
+      db,
+      bindings,
+      settings,
+      categories,
+      hubLinker,
+      clientUrl,
+      now,
+    };
+  }
+
+  /** Persist found-or-created category ids when they changed (OQ-6). */
+  private async persistCategories(
+    settings: ChannelLifecycleSettingsDto,
+    gamesId: string | null,
+    archiveId: string,
+  ): Promise<void> {
+    if (
+      gamesId === settings.gamesCategoryId &&
+      archiveId === settings.archiveCategoryId
+    )
+      return;
+    await this.settings.setChannelLifecycleSettings({
+      gamesCategoryId: gamesId,
+      archiveCategoryId: archiveId,
+    });
   }
 
   /** A permission error before the loop stops the tick; anything else is recorded + rethrown. */
@@ -172,15 +214,7 @@ export class ChannelLifecycleService {
     );
     if (!archive) return null;
     const gamesId = games?.id ?? null;
-    if (
-      gamesId !== settings.gamesCategoryId ||
-      archive.id !== settings.archiveCategoryId
-    ) {
-      await this.settings.setChannelLifecycleSettings({
-        gamesCategoryId: gamesId,
-        archiveCategoryId: archive.id,
-      });
-    }
+    await this.persistCategories(settings, gamesId, archive.id);
     return { gamesId, archiveId: archive.id };
   }
 
@@ -189,12 +223,7 @@ export class ChannelLifecycleService {
     now: Date,
     result: ReconcileResultDto,
   ): Promise<ReconcileResultDto> {
-    const error =
-      result.stoppedReason === 'permissions'
-        ? PERMISSION_ERROR_TEXT
-        : result.stoppedReason === 'no-archive-category'
-          ? NO_ARCHIVE_CATEGORY_TEXT
-          : null;
+    const error = runErrorText(result);
     await this.settings.recordChannelLifecycleRun({ at: now, error });
     return result;
   }

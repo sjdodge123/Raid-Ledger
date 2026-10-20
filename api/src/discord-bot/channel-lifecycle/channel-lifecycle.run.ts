@@ -31,6 +31,19 @@ const logger = new Logger('ChannelLifecycleRun');
 export const PERMISSION_ERROR_TEXT =
   'Raid Ledger needs Manage Channels and Manage Roles';
 
+/** `lastRunError` when no archive category can be found or created. */
+export const NO_ARCHIVE_CATEGORY_TEXT =
+  'Choose or allow an Archived category before enabling';
+
+/** The `lastRunError` a finished tick records (null = clean, clears it). */
+export function runErrorText(result: ReconcileResultDto): string | null {
+  if (result.stoppedReason === 'permissions') return PERMISSION_ERROR_TEXT;
+  if (result.stoppedReason === 'no-archive-category') {
+    return NO_ARCHIVE_CATEGORY_TEXT;
+  }
+  return null;
+}
+
 /** D9: the channel is gone — suppress first (so it reads `deleted`), then unbind. */
 async function handleGone(
   ctx: ApplyContext,
