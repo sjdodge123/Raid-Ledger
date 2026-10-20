@@ -44,7 +44,7 @@ function user(over: Partial<AuthenticatedUser>): AuthenticatedUser {
 describe('toMaterialsViewer (D6)', () => {
   it.each([
     ['member', user({}), false, false],
-    ['operator', user({ role: 'operator' }), false, false],
+    ['operator', user({ role: 'operator' }), true, false],
     ['admin', user({ role: 'admin' }), true, false],
     [
       'impersonating admin',

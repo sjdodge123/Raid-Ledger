@@ -311,7 +311,18 @@ describe('materials visibility (R1/R2/R4/R5/R6/R12)', () => {
     expect(r.personal?.omittedPrivate).toBe(3);
   });
 
-  it.each(['operator', 'impersonated'] as const)(
+  it('R6 operator: every private chest like an admin (ROK-1858)', async () => {
+    const asAdmin = await materials(admin);
+    const asOperator = await materials(tokens.operator);
+    expect(totalsOf(asOperator.personal)).toEqual(totalsOf(asAdmin.personal));
+    expect(asOperator.personal?.chestCount).toBe(3);
+    expect((await listKeys(tokens.operator)).length).toBe(6);
+    const key = await keyOf(OWNER_PID, 'piece_chest_private');
+    const res = await get(`${base(server)}/containers/${key}`, tokens.operator);
+    expect(res.status).toBe(200);
+  });
+
+  it.each(['impersonated'] as const)(
     'R5/R6 %s: no personal block, shared-only list, private chest detail 404',
     async (who) => {
       expect((await materials(tokens[who])).personal).toBeNull();
