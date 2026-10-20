@@ -54,6 +54,13 @@ function keyMatches(snap: ArmorySnapshot, msg: ValheimLinkMessage): boolean {
   if (msg.kind === 'items' || msg.kind === 'recipes') {
     return snap.steamId === null && snap.playerId === null;
   }
+  if (msg.kind === 'containers') {
+    return (
+      snap.steamId === null &&
+      snap.playerId === null &&
+      snap.worldUid === msg.worldUid
+    );
+  }
   const c = msg.character;
   return (
     snap.steamId === c.steamId &&

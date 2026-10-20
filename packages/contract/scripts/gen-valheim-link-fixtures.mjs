@@ -200,10 +200,54 @@ const invalid = {
     'map-bitmap-oversized-compressed': [{ ...mapPersonal, grid: { textureSize: 64, pixelSizeMetres: 12 }, explored: bitmapWith(64, gzipSync(noise(4096), { level: 0 }).toString('base64')) }, { path: 'explored.data', code: 'custom' }],
     'map-basemap-size-mismatch': [{ ...mapShared, baseMap: { ...mapShared.baseMap, width: 1024, height: 1024 } }, { path: 'baseMap', code: 'custom' }],
 };
+// ROK-1853 — `containers` fixtures. Synthetic ids only (CONTRACT §8).
+const chest = (prefab, x, z, items, extra = {}) => ({
+    prefab, x, y: 32.5, z, creatorPlayerId: identity.playerId, privacy: 'public', vehicle: false,
+    slots: 30, usedSlots: items.length, unreadable: false, omittedEntries: 0, items, ...extra,
+});
+const cstack = (prefab, quality, stack) => ({ prefab, quality, stack });
+const containersBasic = {
+    ...header,
+    kind: 'containers',
+    worldUid: identity.worldUid,
+    containers: [
+        chest('piece_chest_wood', -12.25, 48, [cstack('Wood', 1, 50), cstack('Stone', 1, 20)]),
+        chest('piece_chest', 3, 51.5, [cstack('SwordIron', 2, 1), cstack('Wood', 1, 7)]),
+        chest('piece_chest_blackmetal', 3, 60, [cstack('BlackMetal', 1, 120)], { slots: 48, usedSlots: 1 }),
+        chest('Cart', 20, 20, [cstack('Wood', 1, 99)], { vehicle: true, slots: 18, usedSlots: 1, creatorPlayerId: '1000000000000002' }),
+    ],
+    omittedShared: 0,
+    omittedPrivate: 0,
+};
+const containersPrivate = {
+    ...header,
+    kind: 'containers',
+    worldUid: identity.worldUid,
+    containers: [
+        chest('piece_chest_private', 5, 5, [cstack('Coins', 1, 999)], { privacy: 'private', slots: 8 }),
+        chest('piece_chest', 9, 9, [], { unreadable: true }),
+        chest('piece_chest_wood', 14, 14, [cstack('Resin', 1, 3)], { omittedEntries: 3, usedSlots: 4 }),
+    ],
+    omittedShared: 1,
+    omittedPrivate: 1,
+};
+write(dir, 'containers-basic', containersBasic);
+write(dir, 'containers-private', containersPrivate);
+const withChest = (c) => ({ ...containersBasic, containers: [c, containersBasic.containers[1]] });
+const invalidContainers = {
+    'containers-duplicate-stack': [withChest(chest('piece_chest_wood', 1, 1, [cstack('Wood', 1, 5), cstack('Wood', 1, 6)])), { path: 'containers.0.items.1', code: 'custom' }],
+    'containers-duplicate-identity': [{ ...containersBasic, containers: [containersBasic.containers[0], clone(containersBasic.containers[0])] }, { path: 'containers.1', code: 'custom' }],
+    'containers-used-over-slots': [withChest(chest('piece_chest_wood', 1, 1, [cstack('Wood', 1, 5)], { slots: 2, usedSlots: 3 })), { path: 'containers.0.usedSlots', code: 'custom' }],
+    'containers-unreadable-with-items': [withChest(chest('piece_chest_wood', 1, 1, [cstack('Wood', 1, 5)], { unreadable: true })), { path: 'containers.0.items', code: 'custom' }],
+    'containers-creator-zero': [withChest(chest('piece_chest_wood', 1, 1, [], { creatorPlayerId: '0', usedSlots: 0 })), { path: 'containers.0.creatorPlayerId', code: 'custom' }],
+    'containers-coord-out-of-range': [withChest(chest('piece_chest_wood', 40_000, 1, [])), { path: 'containers.0.x', code: 'too_big' }],
+    'containers-unknown-key': [withChest({ ...chest('piece_chest_wood', 1, 1, []), owner: 'Testviking' }), { path: 'containers.0', code: 'unrecognized_keys' }],
+    'containers-quality-zero': [withChest(chest('piece_chest_wood', 1, 1, [cstack('Wood', 0, 5)])), { path: 'containers.0.items.0.quality', code: 'too_small' }],
+};
 const recipes = recipesFixtures(header);
 for (const [name, v] of Object.entries(recipes.valid)) write(dir, name, v);
 const expected = {};
-for (const [name, [msg, want]] of Object.entries({ ...invalid, ...recipes.invalid })) {
+for (const [name, [msg, want]] of Object.entries({ ...invalid, ...invalidContainers, ...recipes.invalid })) {
     write(invalidDir, name, msg);
     expected[name] = want;
 }

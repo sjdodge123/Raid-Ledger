@@ -18,19 +18,33 @@ export interface ItemIconContext {
     atlasUrl: string | null;
 }
 
-export function useItemIcons(
-    character: ValheimCharacterDetail,
-): ItemIconContext {
-    const atlas = character.atlas ?? null;
+export interface ItemIconSource {
+    serverId: number;
+    items: ValheimItemCatalogue | undefined;
+    atlas: ValheimMapBaseMap | null | undefined;
+}
+
+/** ROK-1853 — the same context for any catalogue subset (the Materials tab). */
+export function useItemIconsFor({
+    serverId,
+    items,
+    atlas: rawAtlas,
+}: ItemIconSource): ItemIconContext {
+    const atlas = rawAtlas ?? null;
     const blobUrl = useValheimBlobUrl(
-        character.pelicanServerId,
+        serverId,
         atlas?.ready ? atlas.sha256 : null,
     );
     const atlasUrl = useDecodedImage(blobUrl);
-    return {
+    return { serverId, items: items ?? {}, atlas, atlasUrl };
+}
+
+export function useItemIcons(
+    character: ValheimCharacterDetail,
+): ItemIconContext {
+    return useItemIconsFor({
         serverId: character.pelicanServerId,
-        items: character.items ?? {},
-        atlas,
-        atlasUrl,
-    };
+        items: character.items,
+        atlas: character.atlas,
+    });
 }

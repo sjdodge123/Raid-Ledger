@@ -115,6 +115,38 @@
     "path": "baseMap",
     "code": "custom"
   },
+  "containers-duplicate-stack": {
+    "path": "containers.0.items.1",
+    "code": "custom"
+  },
+  "containers-duplicate-identity": {
+    "path": "containers.1",
+    "code": "custom"
+  },
+  "containers-used-over-slots": {
+    "path": "containers.0.usedSlots",
+    "code": "custom"
+  },
+  "containers-unreadable-with-items": {
+    "path": "containers.0.items",
+    "code": "custom"
+  },
+  "containers-creator-zero": {
+    "path": "containers.0.creatorPlayerId",
+    "code": "custom"
+  },
+  "containers-coord-out-of-range": {
+    "path": "containers.0.x",
+    "code": "too_big"
+  },
+  "containers-unknown-key": {
+    "path": "containers.0",
+    "code": "unrecognized_keys"
+  },
+  "containers-quality-zero": {
+    "path": "containers.0.items.0.quality",
+    "code": "too_small"
+  },
   "recipes-unknown-station": {
     "path": "recipes.0.station",
     "code": "custom"

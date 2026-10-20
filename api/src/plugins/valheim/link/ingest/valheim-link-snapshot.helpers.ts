@@ -11,10 +11,11 @@ import type {
  * CONTRACT §1 latest-wins key, minus the server (that is the
  * `pelican_server_id` column of `valheim_link_snapshots_key_uq`):
  * character → steamId:playerId; map → steamId:playerId:worldUid;
- * items → gameVersion.
+ * items → gameVersion; containers → worldUid (ROK-1853).
  */
 export function valheimSnapshotKey(msg: ValheimLinkMessage): string {
   if (msg.kind === 'items' || msg.kind === 'recipes') return msg.gameVersion;
+  if (msg.kind === 'containers') return msg.worldUid;
   const { steamId, playerId, worldUid } = msg.character;
   return msg.kind === 'map'
     ? `${steamId}:${playerId}:${worldUid}`
@@ -58,14 +59,17 @@ export function valheimSnapshotRow(
   msg: ValheimLinkMessage,
 ): NewValheimLinkSnapshot {
   const who =
-    msg.kind === 'items' || msg.kind === 'recipes' ? null : msg.character;
+    msg.kind === 'items' || msg.kind === 'containers' || msg.kind === 'recipes'
+      ? null
+      : msg.character;
   return {
     pelicanServerId,
     kind: msg.kind,
     snapshotKey: valheimSnapshotKey(msg),
     steamId: who?.steamId ?? null,
     playerId: who?.playerId ?? null,
-    worldUid: who?.worldUid ?? null,
+    worldUid:
+      msg.kind === 'containers' ? msg.worldUid : (who?.worldUid ?? null),
     gameVersion: msg.gameVersion,
     modVersion: msg.modVersion,
     capturedAt: new Date(msg.capturedAt),

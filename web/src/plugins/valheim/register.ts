@@ -3,6 +3,7 @@ import { ValheimLinkTokenControl } from './slots/valheim-link-token-control';
 import { registerServerHubGameTab } from '../pelican/hub/server-hub-game-tabs';
 import { LazyValheimCharactersHubTab } from './hub/valheim-characters-hub-tab-lazy';
 import { LazyValheimMapHubTab } from './hub/valheim-map-hub-tab-lazy';
+import { LazyValheimMaterialsHubTab } from './hub/valheim-materials-hub-tab-lazy';
 
 /** Valheim plugin (ROK-1833) — the slug matches the api manifest id `valheim`. Neutral registry colour. */
 const valheim = registerPlugin('valheim', {
@@ -28,4 +29,12 @@ registerServerHubGameTab('valheim', {
     label: 'Map',
     order: 20,
     component: LazyValheimMapHubTab,
+});
+
+// The hub Materials tab (ROK-1853) — chest totals; only on server hubs running Valheim.
+registerServerHubGameTab('valheim', {
+    id: 'materials',
+    label: 'Materials',
+    order: 25,
+    component: LazyValheimMaterialsHubTab,
 });

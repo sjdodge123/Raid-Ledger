@@ -102,6 +102,8 @@ describe('Valheim Link v1 golden fixtures — valid', () => {
     expect(names).toEqual([
       'character-eaqs',
       'character-vanilla',
+      'containers-basic',
+      'containers-private',
       'items-atlas',
       'items-file-icons',
       'map-personal',

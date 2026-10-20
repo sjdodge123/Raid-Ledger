@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // ============================================================
 // RL Valheim Link wire contract — shared primitives (ROK-1829)
@@ -26,6 +26,8 @@ export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 2_097_152;
 export const VALHEIM_LINK_MAP_MAX_BYTES = 8_388_608;
 /** Request-body cap for an `items` message; worst case ≈ 11.05 MB (file icons with blob refs, ROK-1855). */
 export const VALHEIM_LINK_ITEMS_MAX_BYTES = 12_582_912;
+/** Request-body cap for a `containers` message; worst case ≈ 8.51 MB (ROK-1853, largest-message spec). */
+export const VALHEIM_LINK_CONTAINERS_MAX_BYTES = 10_485_760;
 /** Request-body cap for a `recipes` message; worst case ≈ 10.31 MB at the design caps (ROK-1854, largest-message spec). */
 export const VALHEIM_LINK_RECIPES_MAX_BYTES = 12_582_912;
 /** Recommended cap for one binary upload (base-map PNG or icon atlas). */
@@ -44,6 +46,11 @@ export const VALHEIM_LINK_TROPHIES_MAX = 1024;
 export const VALHEIM_LINK_KNOWN_MAX = 8192;
 export const VALHEIM_LINK_PINS_MAX = 2000;
 export const VALHEIM_LINK_ITEM_EXPORT_MAX = 10_000;
+/** `containers` (ROK-1853): containers per message, items per container, items summed over the message, slots per container. */
+export const VALHEIM_LINK_CONTAINERS_MAX = 4096;
+export const VALHEIM_LINK_CONTAINER_ITEMS_MAX = 256;
+export const VALHEIM_LINK_CONTAINER_ENTRIES_MAX = 50_000;
+export const VALHEIM_LINK_CONTAINER_SLOTS_MAX = 4096;
 /** `recipes` (ROK-1854): recipes[], pieces[], stations[], processors[], processes[]; resources per recipe/piece; inputs per process; entries summed over the message; station levels. */
 export const VALHEIM_LINK_RECIPES_MAX = 4096;
 export const VALHEIM_LINK_PIECES_MAX = 4096;
@@ -69,7 +76,9 @@ export const VALHEIM_LINK_INT64_MAX = (INT64_LIMIT - BigInt(1)).toString(); // 9
  * account 0) = 0x0110000100000000 = 2^56 + 2^52 + 2^32 = 76561197960265728.
  */
 export const VALHEIM_LINK_STEAMID64_MIN = (
-    TWO ** BigInt(56) + TWO ** BigInt(52) + TWO ** BigInt(32)
+  TWO ** BigInt(56) +
+  TWO ** BigInt(52) +
+  TWO ** BigInt(32)
 ).toString();
 
 /**
@@ -79,10 +88,15 @@ export const VALHEIM_LINK_STEAMID64_MIN = (
  * never reach `BigInt` with a non-decimal or unbounded string (`BigInt('abc')`
  * throws out of `safeParse`).
  */
-const inBigIntRange = (v: string, canonical: RegExp, min: string, max: string): boolean => {
-    if (v.length > 20 || !canonical.test(v)) return false;
-    const n = BigInt(v);
-    return n >= BigInt(min) && n <= BigInt(max);
+const inBigIntRange = (
+  v: string,
+  canonical: RegExp,
+  min: string,
+  max: string,
+): boolean => {
+  if (v.length > 20 || !canonical.test(v)) return false;
+  const n = BigInt(v);
+  return n >= BigInt(min) && n <= BigInt(max);
 };
 
 const STEAMID64_PATTERN = /^[1-9]\d{16}$/;
@@ -95,11 +109,20 @@ const INT64_PATTERN = /^(0|-?[1-9]\d{0,18})$/;
  * ~2.04 B roll it over to `7656120…`).
  */
 export const ValheimSteamId64Schema = z
-    .string()
-    .regex(STEAMID64_PATTERN, { abort: true })
-    .refine((v) => inBigIntRange(v, STEAMID64_PATTERN, VALHEIM_LINK_STEAMID64_MIN, VALHEIM_LINK_INT64_MAX), {
-        message: `SteamID64 must be >= ${VALHEIM_LINK_STEAMID64_MIN}`,
-    });
+  .string()
+  .regex(STEAMID64_PATTERN, { abort: true })
+  .refine(
+    (v) =>
+      inBigIntRange(
+        v,
+        STEAMID64_PATTERN,
+        VALHEIM_LINK_STEAMID64_MIN,
+        VALHEIM_LINK_INT64_MAX,
+      ),
+    {
+      message: `SteamID64 must be >= ${VALHEIM_LINK_STEAMID64_MIN}`,
+    },
+  );
 
 /**
  * A .NET `long` (Valheim `playerId`, world `uid`) as a CANONICAL decimal
@@ -107,11 +130,20 @@ export const ValheimSteamId64Schema = z
  * one id has exactly one spelling and always fits a `bigint` column.
  */
 export const ValheimInt64StringSchema = z
-    .string()
-    .regex(INT64_PATTERN, { abort: true })
-    .refine((v) => inBigIntRange(v, INT64_PATTERN, VALHEIM_LINK_INT64_MIN, VALHEIM_LINK_INT64_MAX), {
-        message: 'outside the signed 64-bit range',
-    });
+  .string()
+  .regex(INT64_PATTERN, { abort: true })
+  .refine(
+    (v) =>
+      inBigIntRange(
+        v,
+        INT64_PATTERN,
+        VALHEIM_LINK_INT64_MIN,
+        VALHEIM_LINK_INT64_MAX,
+      ),
+    {
+      message: "outside the signed 64-bit range",
+    },
+  );
 
 /**
  * Prefab id exactly as the game names it (`SwordIron`, `TrophyEikthyr`,
@@ -128,7 +160,9 @@ export const ValheimPrefabIdSchema = z.string().regex(/^[A-Za-z0-9_.-]{1,96}$/);
 export const ValheimServerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 /** Game build as `Version.GetVersionString()` prints it, e.g. `0.220.5`. */
-export const ValheimGameVersionSchema = z.string().regex(/^\d{1,4}(\.\d{1,5}){1,3}$/);
+export const ValheimGameVersionSchema = z
+  .string()
+  .regex(/^\d{1,4}(\.\d{1,5}){1,3}$/);
 
 /**
  * The mod's own version: SemVer 2.0.0 (`1.0.0`, `1.2.0-beta.1`, `1.0.0+build.1`),
@@ -136,11 +170,11 @@ export const ValheimGameVersionSchema = z.string().regex(/^\d{1,4}(\.\d{1,5}){1,
  * string and nothing later sees a rejected value.
  */
 const SEMVER_PATTERN =
-    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 export const ValheimModVersionSchema = z
-    .string()
-    .max(64, { abort: true })
-    .regex(SEMVER_PATTERN, { abort: true });
+  .string()
+  .max(64, { abort: true })
+  .regex(SEMVER_PATTERN, { abort: true });
 
 /** Longest `capturedAt`: `YYYY-MM-DDTHH:MM:SS.sssZ` (≤ 3 fractional digits). */
 export const VALHEIM_LINK_TIMESTAMP_MAX_CHARS = 24;
@@ -155,19 +189,23 @@ export const VALHEIM_LINK_CAPTURED_AT_MAX_FUTURE_MS = 300_000;
  * ISO-8601 UTC instant with a `Z` offset, e.g. `2026-10-17T20:15:00Z`; at
  * most millisecond precision (the length cap enforces it).
  */
-export const ValheimTimestampSchema = z.iso.datetime().max(VALHEIM_LINK_TIMESTAMP_MAX_CHARS);
+export const ValheimTimestampSchema = z.iso
+  .datetime()
+  .max(VALHEIM_LINK_TIMESTAMP_MAX_CHARS);
 
 /** Lowercase hex SHA-256 of a separately uploaded binary. */
 export const ValheimSha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** Reference to a binary the mod uploads separately (CONTRACT.md §6). */
-export const ValheimBinaryRefSchema = z.object({
+export const ValheimBinaryRefSchema = z
+  .object({
     sha256: ValheimSha256Schema,
     byteLength: z.number().int().positive().max(VALHEIM_LINK_BINARY_MAX_BYTES),
-    contentType: z.literal('image/png'),
+    contentType: z.literal("image/png"),
     width: z.number().int().positive().max(16_384),
     height: z.number().int().positive().max(16_384),
-}).strict();
+  })
+  .strict();
 export type ValheimBinaryRef = z.infer<typeof ValheimBinaryRefSchema>;
 
 /**
@@ -175,9 +213,9 @@ export type ValheimBinaryRef = z.infer<typeof ValheimBinaryRefSchema>;
  * discriminated union stays a plain list of strict objects.
  */
 export const valheimLinkHeaderShape = {
-    schemaVersion: z.literal(VALHEIM_LINK_SCHEMA_VERSION),
-    serverId: ValheimServerIdSchema,
-    capturedAt: ValheimTimestampSchema,
-    gameVersion: ValheimGameVersionSchema,
-    modVersion: ValheimModVersionSchema,
+  schemaVersion: z.literal(VALHEIM_LINK_SCHEMA_VERSION),
+  serverId: ValheimServerIdSchema,
+  capturedAt: ValheimTimestampSchema,
+  gameVersion: ValheimGameVersionSchema,
+  modVersion: ValheimModVersionSchema,
 } as const;

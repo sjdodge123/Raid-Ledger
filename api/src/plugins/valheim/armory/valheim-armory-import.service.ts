@@ -9,6 +9,7 @@ import {
   validateSnapshotPayload,
   type ArmorySnapshot,
 } from './valheim-armory.mappers';
+import { importContainers } from './valheim-armory-containers.import';
 import {
   VALHEIM_PROFILE_UPSERTED_HOOK,
   type ValheimProfileUpsertedHook,
@@ -113,7 +114,9 @@ export class ValheimArmoryImportService {
     if (msg.kind === 'character') return this.applyCharacter(tx, snap, msg);
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
     if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
-    return this.applyRecipes(tx, snap, msg);
+    if (msg.kind === 'containers') return applyContainers(tx, snap, msg);
+    if (msg.kind === 'recipes') return this.applyRecipes(tx, snap, msg);
+    return unsupportedKind(msg);
   }
 
   private async applyCharacter(
@@ -173,3 +176,17 @@ export class ValheimArmoryImportService {
 
 const IMPORTED: Applied = { status: 'imported', detail: null };
 const STALE: Applied = { status: 'skipped_stale', detail: null };
+
+/** ROK-1853: a world's containers, latest scan wins (D3). */
+async function applyContainers(
+  tx: ValheimLinkTx,
+  snap: ArmorySnapshot,
+  msg: Extract<ValheimLinkMessage, { kind: 'containers' }>,
+): Promise<Applied> {
+  return (await importContainers(tx, snap, msg)) ? IMPORTED : STALE;
+}
+
+/** Exhaustiveness guard: a new `kind` in the contract is a compile error here. */
+function unsupportedKind(msg: never): never {
+  throw new Error(`unsupported Valheim Link kind: ${String(msg)}`);
+}

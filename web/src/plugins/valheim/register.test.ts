@@ -12,3 +12,12 @@ describe('valheim register — hub Map tab', () => {
         expect(tab?.component.name).toBe('LazyValheimMapHubTab');
     });
 });
+
+describe('valheim register — hub Materials tab (ROK-1853)', () => {
+    it('registers a lazy `materials` tab after the Map tab', () => {
+        const tab = serverHubGameTabs().find((t) => t.id === 'materials');
+        expect(tab?.label).toBe('Materials');
+        expect(tab?.order).toBe(25);
+        expect(tab?.component.name).toBe('LazyValheimMaterialsHubTab');
+    });
+});

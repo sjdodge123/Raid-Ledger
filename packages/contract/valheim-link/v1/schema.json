@@ -882,6 +882,170 @@
         },
         "kind": {
           "type": "string",
+          "const": "containers"
+        },
+        "worldUid": {
+          "type": "string",
+          "pattern": "^(0|-?[1-9]\\d{0,18})$"
+        },
+        "containers": {
+          "maxItems": 4096,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "prefab": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+              },
+              "x": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "y": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "z": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "creatorPlayerId": {
+                "type": "string",
+                "pattern": "^(0|-?[1-9]\\d{0,18})$"
+              },
+              "privacy": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "private",
+                  "group"
+                ]
+              },
+              "vehicle": {
+                "type": "boolean"
+              },
+              "slots": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              "usedSlots": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4096
+              },
+              "unreadable": {
+                "type": "boolean"
+              },
+              "omittedEntries": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000000
+              },
+              "items": {
+                "maxItems": 256,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "prefab": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+                    },
+                    "quality": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10
+                    },
+                    "stack": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000000000
+                    }
+                  },
+                  "required": [
+                    "prefab",
+                    "quality",
+                    "stack"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "prefab",
+              "x",
+              "y",
+              "z",
+              "creatorPlayerId",
+              "privacy",
+              "vehicle",
+              "slots",
+              "usedSlots",
+              "unreadable",
+              "omittedEntries",
+              "items"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "omittedShared": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "omittedPrivate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "serverId",
+        "capturedAt",
+        "gameVersion",
+        "modVersion",
+        "kind",
+        "worldUid",
+        "containers",
+        "omittedShared",
+        "omittedPrivate"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "serverId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "maxLength": 24,
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "gameVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,4}(\\.\\d{1,5}){1,3}$"
+        },
+        "modVersion": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "kind": {
+          "type": "string",
           "const": "recipes"
         },
         "locale": {
@@ -1488,5 +1652,5 @@
   ],
   "$id": "https://raid.gamernight.net/contracts/valheim-link/v1/schema.json",
   "title": "RL Valheim Link message v1",
-  "description": "GENERATED from ValheimLinkMessageSchema (packages/contract/src/valheim-link-*.schema.ts) — do not edit by hand. Refinements (grid bounds, uniqueness, extraRows coverage, bitmap and base-map size, base64 length, compressed-bitmap cap, int64 / SteamID64 ranges) are enforced by the Zod schema but not expressible here, and the server alone inflates bitmaps and checks the clock; see CONTRACT.md §6."
+  "description": "GENERATED from ValheimLinkMessageSchema (packages/contract/src/valheim-link-*.schema.ts) — do not edit by hand. Refinements (grid bounds, uniqueness, extraRows coverage, bitmap and base-map size, base64 length, compressed-bitmap cap, int64 / SteamID64 ranges, container uniqueness, the total-entry cap, usedSlots ≤ slots, unreadable ⇒ empty) are enforced by the Zod schema but not expressible here, and the server alone inflates bitmaps and checks the clock; see CONTRACT.md §6."
 }

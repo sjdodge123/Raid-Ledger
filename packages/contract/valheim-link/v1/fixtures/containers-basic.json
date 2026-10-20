@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "containers",
+  "worldUid": "1234567890123",
+  "containers": [
+    {
+      "prefab": "piece_chest_wood",
+      "x": -12.25,
+      "y": 32.5,
+      "z": 48,
+      "creatorPlayerId": "1000000000000001",
+      "privacy": "public",
+      "vehicle": false,
+      "slots": 30,
+      "usedSlots": 2,
+      "unreadable": false,
+      "omittedEntries": 0,
+      "items": [
+        {
+          "prefab": "Wood",
+          "quality": 1,
+          "stack": 50
+        },
+        {
+          "prefab": "Stone",
+          "quality": 1,
+          "stack": 20
+        }
+      ]
+    },
+    {
+      "prefab": "piece_chest",
+      "x": 3,
+      "y": 32.5,
+      "z": 51.5,
+      "creatorPlayerId": "1000000000000001",
+      "privacy": "public",
+      "vehicle": false,
+      "slots": 30,
+      "usedSlots": 2,
+      "unreadable": false,
+      "omittedEntries": 0,
+      "items": [
+        {
+          "prefab": "SwordIron",
+          "quality": 2,
+          "stack": 1
+        },
+        {
+          "prefab": "Wood",
+          "quality": 1,
+          "stack": 7
+        }
+      ]
+    },
+    {
+      "prefab": "piece_chest_blackmetal",
+      "x": 3,
+      "y": 32.5,
+      "z": 60,
+      "creatorPlayerId": "1000000000000001",
+      "privacy": "public",
+      "vehicle": false,
+      "slots": 48,
+      "usedSlots": 1,
+      "unreadable": false,
+      "omittedEntries": 0,
+      "items": [
+        {
+          "prefab": "BlackMetal",
+          "quality": 1,
+          "stack": 120
+        }
+      ]
+    },
+    {
+      "prefab": "Cart",
+      "x": 20,
+      "y": 32.5,
+      "z": 20,
+      "creatorPlayerId": "1000000000000002",
+      "privacy": "public",
+      "vehicle": true,
+      "slots": 18,
+      "usedSlots": 1,
+      "unreadable": false,
+      "omittedEntries": 0,
+      "items": [
+        {
+          "prefab": "Wood",
+          "quality": 1,
+          "stack": 99
+        }
+      ]
+    }
+  ],
+  "omittedShared": 0,
+  "omittedPrivate": 0
+}

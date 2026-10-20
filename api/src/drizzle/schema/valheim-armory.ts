@@ -80,6 +80,11 @@ export const valheimProfiles = pgTable(
     index('valheim_profiles_claimed_by_idx').on(t.claimedBy),
     // Attach-on-Steam-link lookup (A2).
     index('valheim_profiles_steam_id_idx').on(t.steamId),
+    // ROK-1853: personal-chest ownership EXISTS (creator_player_id → profile).
+    index('valheim_profiles_server_player_idx').on(
+      t.pelicanServerId,
+      t.playerId,
+    ),
     index('valheim_profiles_source_snapshot_idx').on(t.sourceSnapshotId),
     snapshotFk('valheim_profiles', t.sourceSnapshotId),
     check(
