@@ -201,6 +201,48 @@ describe('bindToCharacter — ruleset', () => {
   });
 });
 
+describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
+  const inferred = (
+    over: Partial<AddonBindingOptions> = {},
+  ): AddonBindingOptions => ({ dryRun: false, inferredRuleset: 'pvp', ...over });
+
+  it('B1 null export ruleset + inferred pvp vs stored normal → RULESET_CHANGED, nothing written', () => {
+    const r = bindToCharacter(payload({ ruleset: null }), char(), inferred());
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
+    ]);
+    expect(r.setRuleset).toBeUndefined();
+    expect(codes(r)).toEqual([]);
+  });
+
+  it('B2 the same with confirm.updateRuleset → writes the inferred pvp', () => {
+    const opts = inferred({ confirm: { updateRuleset: true } });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(r.setRuleset).toBe('pvp');
+  });
+
+  it('B3 stored pvp + inferred pvp → no warning, nothing written', () => {
+    const r = bindToCharacter(
+      payload({ ruleset: null }),
+      char({ ruleset: 'pvp' }),
+      inferred({ confirm: { updateRuleset: true } }),
+    );
+    expect(warns(r)).not.toContain('RULESET_CHANGED');
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it("B4 the export's own roleplaying beats the inferred pvp", () => {
+    const r = bindToCharacter(
+      payload({ ruleset: 'roleplaying' }),
+      char(),
+      inferred(),
+    );
+    expect(r.warnings).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'roleplaying' },
+    ]);
+  });
+});
+
 describe('bindToCharacter — GUID', () => {
   it('pins when the character has no GUID yet', () => {
     const r = bindToCharacter(payload(), char({ addonGuid: null }), APPLY);

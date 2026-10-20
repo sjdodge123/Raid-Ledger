@@ -48,6 +48,12 @@ export interface AddonBindingOptions {
   confirm?:
     | { updateRuleset?: boolean | undefined; repinGuid?: boolean | undefined }
     | undefined;
+  /**
+   * ROK-1739 — the admin realm map's ruleset, consulted only when the
+   * export's own `who.ruleset` is null. Treated like an export value: a
+   * differing one warns and is written only with `confirm.updateRuleset`.
+   */
+  inferredRuleset?: WowForeverRuleset | undefined;
 }
 
 export interface AddonBindingResult {
@@ -126,8 +132,9 @@ function guidOutcome(
 }
 
 /**
- * Ruleset: a null `who.ruleset` means the addon could not tell — never a
- * change. A differing one warns; it is written only with `updateRuleset`.
+ * Ruleset: precedence is the export's `who.ruleset` → the realm map's
+ * `inferredRuleset` (ROK-1739) → no change (the addon could not tell). A
+ * differing one warns; it is written only with `updateRuleset`.
  */
 function rulesetOutcome(
   who: AddonWho,
@@ -135,13 +142,14 @@ function rulesetOutcome(
   opts: AddonBindingOptions,
   result: AddonBindingResult,
 ): void {
-  if (who.ruleset === null || who.ruleset === character.ruleset) return;
+  const incoming = who.ruleset ?? opts.inferredRuleset ?? null;
+  if (incoming === null || incoming === character.ruleset) return;
   result.warnings.push({
     code: 'RULESET_CHANGED',
     from: character.ruleset,
-    to: who.ruleset,
+    to: incoming,
   });
-  if (opts.confirm?.updateRuleset) result.setRuleset = who.ruleset;
+  if (opts.confirm?.updateRuleset) result.setRuleset = incoming;
 }
 
 /**

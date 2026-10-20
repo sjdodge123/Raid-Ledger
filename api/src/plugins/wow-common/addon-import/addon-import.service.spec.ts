@@ -10,6 +10,7 @@ import type * as schema from '../../../drizzle/schema';
 import type { CharactersService } from '../../../characters/characters.service';
 import type { AddonImportAuditService } from './addon-import.audit';
 import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
+import type { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { bindToCharacter } from './addon-import.binding';
 import { applyBinding } from './addon-import-binding.apply';
 import { applyChar } from './addon-import-char.apply';
@@ -79,11 +80,13 @@ function setup() {
     recordSections: jest.fn().mockResolvedValue(undefined),
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
+  const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
   const service = new AddonImportService(
     makeDb(),
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
     itemMeta as unknown as WowItemMetaService,
+    realmRulesets as unknown as ForeverRealmRulesetsService,
   );
   return { service, characters, audit, itemMeta };
 }

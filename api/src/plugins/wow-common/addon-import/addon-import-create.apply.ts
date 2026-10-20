@@ -4,9 +4,11 @@ import type {
   AddonImportNewRequestDto,
   AddonImportNewResultDto,
   AddonImportResultDto,
+  AddonImportRulesetInferenceDto,
   AddonWho,
   WowForeverRuleset,
 } from '@raid-ledger/contract';
+import { createFallbackRuleset } from '../forever-realm-rulesets.helpers';
 import type { CharactersService } from '../../../characters/characters.service';
 import {
   rethrowForeverViolation,
@@ -52,6 +54,8 @@ export interface CreateImportInput {
   /** The AUTHORITATIVE section's `who` (ruling Q7). */
   who: AddonWho;
   query: ImportTargetQuery;
+  /** ROK-1739 — the realm map's ruleset for the export; never persisted. */
+  inference?: AddonImportRulesetInferenceDto | null | undefined;
   /**
    * Codex P2 — told the EXISTING row's id the moment the target resolves to
    * `update`, so a later throw still audits it. Never told a created id: that
@@ -93,13 +97,19 @@ export function previewCharacter(input: CreateImportInput): LoadedCharacter {
   };
 }
 
-/** Bind every section against `character`, then preview/apply on `tx`. */
+/**
+ * Bind every section against `character`, then preview/apply on `tx`.
+ * `inferred` (ROK-1739) is passed for an EXISTING row only: a create
+ * consumes the inference in `createRuleset`, so binding the new row against
+ * it would raise a bogus `RULESET_CHANGED` when the user picked otherwise.
+ */
 function runBound(
   tx: AddonImportTx,
   input: CreateImportInput,
   character: LoadedCharacter,
+  inferred?: WowForeverRuleset,
 ): Promise<AddonImportResultDto> {
-  const binding = bindPaste(input.paste, character, input.request);
+  const binding = bindPaste(input.paste, character, input.request, inferred);
   return runForCharacter(
     tx,
     input.userId,
@@ -119,7 +129,11 @@ export async function previewImport(
   noteTarget(input, target);
   const character =
     target.action === 'update' ? target.character : previewCharacter(input);
-  const result = await db.transaction((tx) => runBound(tx, input, character));
+  const inferred =
+    target.action === 'update' ? input.inference?.ruleset : undefined;
+  const result = await db.transaction((tx) =>
+    runBound(tx, input, character, inferred),
+  );
   return {
     ...result,
     target: targetDto(target, input.who, input.query.region),
@@ -148,12 +162,14 @@ async function runCreate(
   phase: ApplyPhase,
 ): Promise<AddonImportNewResultDto> {
   const { who, query, request } = input;
-  // A1 + D13 pre-checks (RULESET_REQUIRED) — before any write.
+  // A1 + D13 pre-checks (RULESET_REQUIRED) — before any write. A Hardcore
+  // inference is never a create fallback (ROK-1739 D6).
   const dto = createDtoFromExport(
     who,
     query.region,
     query.gameId,
     request.ruleset,
+    createFallbackRuleset(input.inference),
   );
   phase.creating = true;
   const created = await creator.createWithin(tx, input.userId, dto);
@@ -190,7 +206,12 @@ export async function applyImport(
       if (target.action === 'create') {
         return runCreate(tx, creator, input, target, phase);
       }
-      const result = await runBound(tx, input, target.character);
+      const result = await runBound(
+        tx,
+        input,
+        target.character,
+        input.inference?.ruleset,
+      );
       const dto = targetDto(target, input.who, input.query.region);
       return { ...result, target: dto };
     });
