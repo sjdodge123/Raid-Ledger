@@ -82,7 +82,7 @@ describe('ForeverRealmRulesetsSection — validation (ROK-1739)', () => {
         await user.click(saveButton());
         const row2 = second.closest('li');
         if (!row2) throw new Error('row 2 is not rendered in a list item');
-        expect(within(row2).getByRole('alert')).toHaveTextContent('Duplicate realm for this region');
+        expect(within(row2).queryByRole('alert')?.textContent).toBe('Duplicate realm for this region');
         expect(second).toHaveAttribute('aria-invalid', 'true');
         expect(puts).toEqual([]);
     });
