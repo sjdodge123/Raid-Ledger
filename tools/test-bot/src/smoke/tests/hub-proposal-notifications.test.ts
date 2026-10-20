@@ -144,7 +144,7 @@ async function proposeAndReject(ctx: TestContext): Promise<void> {
   const id = await propose(ctx, await gameOf(ctx), name);
   let rejected = false;
   try {
-    await ctx.api.post(`/admin/hubs/proposals/${id}/reject`, { reason });
+    await ctx.api.postNoContent(`/admin/hubs/proposals/${id}/reject`, { reason });
     rejected = true;
     await awaitProcessing(ctx.api);
     const reviewed = await waitForNotice(ctx, ctx.testUserId, REVIEWED, id);
