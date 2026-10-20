@@ -63,6 +63,11 @@ function FixButton({ connection }: { connection: CalendarConnection }): JSX.Elem
     return connection.provider === 'apple' ? <AppleFixButton connection={connection} /> : <GoogleFixButton />;
 }
 
+/** "Grant read access" applies to a live Google grant without read; an Apple password always reads. */
+function offersGrant(connection: CalendarConnection): boolean {
+    return connection.provider !== 'apple' && connection.status !== 'disconnecting' && !readGranted(connection);
+}
+
 interface CardProps {
     connection: CalendarConnection; readSwitch?: boolean; anyReadable?: boolean;
     /** 2+ connections of this provider: the account email sits under the title (operator R3). */
@@ -73,8 +78,7 @@ export function CalendarConnectionCard({ connection, readSwitch = false, anyRead
     const desktop = useMediaQuery(DESKTOP_MQ);
     const broken = connection.status === 'needs_reconnect';
     const showPicker = desktop && !broken && connection.read.enabled && readGranted(connection);
-    const showGrant = anyReadable && !broken && connection.provider !== 'apple'
-        && connection.status !== 'disconnecting' && !readGranted(connection);
+    const showGrant = anyReadable && !broken && offersGrant(connection);
     const display = PROVIDER_DISPLAY[connection.provider];
     // The account line already names the email; keep it out of the "Connected · <email>" fallback.
     const statusInput = showAccount ? { ...connection, accountLabel: null } : connection;
