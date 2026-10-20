@@ -22,6 +22,7 @@ import {
 } from '../utils/embed-lead-time';
 import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import { announceGroupForEvent } from '../services/embed-scheduler-announce.helpers';
+import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 import {
   findEventMessages,
   findDiscordMessageRecord,
@@ -132,7 +133,7 @@ export class DiscordEventListener {
     if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
     if (records.length === 0) return;
-    const context = await this.buildContext();
+    const context = await this.buildContext(payload.eventId);
     for (const record of records) {
       try {
         await cancelEmbedRecord(
@@ -206,7 +207,7 @@ export class DiscordEventListener {
     if (!this.clientService.isConnected()) return;
     const records = await findEventMessages(this.deps, eventId);
     if (records.length === 0) return;
-    const context = await this.buildContext();
+    const context = await this.buildContext(eventId);
     await updateEmbedStateForRecords(
       this.deps,
       records,
@@ -219,13 +220,16 @@ export class DiscordEventListener {
 
   // --- Private helpers ---
 
-  private async buildContext(): Promise<EmbedContext> {
+  /** Settings context; with `eventId`, plus that card's hub link (ROK-1872). */
+  private async buildContext(eventId?: number): Promise<EmbedContext> {
     const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
-    return { communityName: branding.communityName, clientUrl, timezone };
+    const ctx = { communityName: branding.communityName, clientUrl, timezone };
+    if (eventId === undefined) return ctx;
+    return withEventHubLink(this.db, ctx, eventId, this.logger);
   }
 
   private isWithinLeadTime(payload: EventPayload): boolean {
@@ -346,7 +350,7 @@ export class DiscordEventListener {
     // by handleEventUpdated, which also gates the SE sync on it.
     isRescheduling: boolean,
   ): Promise<void> {
-    const context = await this.buildContext();
+    const context = await this.buildContext(payload.eventId);
     const eventData = await enrichEventData(this.deps, payload);
     await applyEmbedUpdates(
       this.deps,

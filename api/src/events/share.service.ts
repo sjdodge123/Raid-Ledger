@@ -13,6 +13,7 @@ import { computeEmbedStateForData } from '../discord-bot/services/embed-state.he
 import type { EmbedState } from '../discord-bot/discord-bot.constants';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from './events.service';
+import { withEventHubLink } from '../discord-bot/channel-lifecycle/embed-event-context.helpers';
 import type { ShareEventResponseDto } from '@raid-ledger/contract';
 
 /**
@@ -55,7 +56,7 @@ export class ShareService {
       guild.id,
     );
     const eventData = await this.eventsService.buildEmbedEventData(eventId);
-    const context = await this.buildContext();
+    const context = await this.buildContext(eventId);
 
     return this.postToChannels(
       guild,
@@ -215,16 +216,14 @@ export class ShareService {
     );
   }
 
-  private async buildContext(): Promise<EmbedContext> {
+  /** Settings context + the event's hub link (ROK-1872, best-effort). */
+  private async buildContext(eventId: number): Promise<EmbedContext> {
     const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
-    return {
-      communityName: branding.communityName,
-      clientUrl,
-      timezone,
-    };
+    const ctx = { communityName: branding.communityName, clientUrl, timezone };
+    return withEventHubLink(this.db, ctx, eventId, this.logger);
   }
 }

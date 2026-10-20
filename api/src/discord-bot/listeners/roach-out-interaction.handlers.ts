@@ -21,6 +21,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
 import { errorStack } from '../../common/error-format.helpers';
+import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 
 /** Dependencies for roach-out handlers. */
 export interface RoachOutDeps {
@@ -134,7 +135,7 @@ export async function updateChannelEmbeds(
     const records = await findGuildEmbedRecords(deps, eventId);
     if (!records || records.length === 0) return;
     const eventData = await deps.eventsService.buildEmbedEventData(eventId);
-    const context = await buildEmbedContext(deps);
+    const context = await buildEmbedContext(deps, eventId);
     await rerenderEmbedRecords(deps, records, eventData, context, eventId);
   } catch (error) {
     deps.logger.error(
@@ -161,16 +162,21 @@ async function findGuildEmbedRecords(
     );
 }
 
-async function buildEmbedContext(deps: RoachOutDeps): Promise<EmbedContext> {
+/** Settings context + the card's hub link (ROK-1872, best-effort). */
+async function buildEmbedContext(
+  deps: RoachOutDeps,
+  eventId: number,
+): Promise<EmbedContext> {
   const [branding, timezone] = await Promise.all([
     deps.settingsService.getBranding(),
     deps.settingsService.getDefaultTimezone(),
   ]);
-  return {
+  const ctx = {
     communityName: branding.communityName,
     clientUrl: process.env.CLIENT_URL ?? null,
     timezone,
   };
+  return withEventHubLink(deps.db, ctx, eventId, deps.logger);
 }
 
 async function rerenderEmbedRecords(

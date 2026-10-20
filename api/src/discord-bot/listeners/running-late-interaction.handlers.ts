@@ -21,6 +21,7 @@ import { RUNNING_LATE_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
 import { findLinkedUser } from './signup-interaction.helpers';
 import { errorMessage, errorStack } from '../../common/error-format.helpers';
+import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 
 /** Dependencies for the running-late interaction handlers (ROK-1379). */
 export interface RunningLateDeps {
@@ -169,7 +170,7 @@ export async function updateChannelEmbeds(
     const records = await findGuildEmbedRecords(deps, eventId);
     if (!records || records.length === 0) return;
     const eventData = await deps.eventsService.buildEmbedEventData(eventId);
-    const context = await buildEmbedContext(deps);
+    const context = await buildEmbedContext(deps, eventId);
     for (const record of records) {
       await rerenderRecord(deps, record, eventData, context, eventId);
     }
@@ -198,16 +199,21 @@ async function findGuildEmbedRecords(
     );
 }
 
-async function buildEmbedContext(deps: RunningLateDeps): Promise<EmbedContext> {
+/** Settings context + the card's hub link (ROK-1872, best-effort). */
+async function buildEmbedContext(
+  deps: RunningLateDeps,
+  eventId: number,
+): Promise<EmbedContext> {
   const [branding, timezone] = await Promise.all([
     deps.settingsService.getBranding(),
     deps.settingsService.getDefaultTimezone(),
   ]);
-  return {
+  const ctx = {
     communityName: branding.communityName,
     clientUrl: process.env.CLIENT_URL ?? null,
     timezone,
   };
+  return withEventHubLink(deps.db, ctx, eventId, deps.logger);
 }
 
 async function rerenderRecord(
