@@ -13,17 +13,22 @@ export function tokenErrorMessage(err: unknown): string {
     return err instanceof Error ? err.message : 'Something went wrong';
 }
 
-/** The BepInEx config lines and endpoints the dialog shows, for this origin and server. */
-export function modConfigLines(origin: string, serverId: string): { config: string[]; endpoints: string[] } {
+export const TOKEN_PLACEHOLDER = '<paste the token here>';
+
+/** The mod's full operations runbook (opened in a new tab from the setup notes). */
+export const VALHEIM_LINK_RUNBOOK_URL = 'https://github.com/Raid-Ledger-Plugins/rl-valheim-link/blob/main/docs/operations.md';
+
+/**
+ * The `[RaidLedger]` section of `RaidLedger.ValheimLink.cfg` and the ingest endpoints, for this origin and server.
+ * `token` fills `ServerToken`; without it the line carries {@link TOKEN_PLACEHOLDER}.
+ */
+export function modConfigLines(origin: string, serverId: string, token?: string): { config: string[]; endpoints: string[] } {
+    const base = origin.replace(/\/+$/, '');
     return {
-        config: [
-            `RaidLedger.BaseUrl = ${origin}`,
-            `RaidLedger.ServerId = ${serverId}`,
-            'RaidLedger.ServerToken = (the token above)',
-        ],
+        config: ['[RaidLedger]', `BaseUrl = ${base}`, `ServerId = ${serverId}`, `ServerToken = ${token ?? TOKEN_PLACEHOLDER}`],
         endpoints: [
-            `POST ${origin}/api/plugins/valheim/link/messages/{kind}`,
-            `PUT ${origin}/api/plugins/valheim/link/blobs/{sha256}`,
+            `POST ${base}/api/plugins/valheim/link/messages/{kind}`,
+            `PUT ${base}/api/plugins/valheim/link/blobs/{sha256}`,
         ],
     };
 }

@@ -256,6 +256,7 @@ if [[ -n "$TARGET_SLOT" ]]; then
                       | .keep_alive = ($keep_alive == 1)
                       | .expires_at = $exp
                       | .extends_count = 0
+                      | del(.borrowed_for, .borrowed_by)
                    else . end)
           end
         '

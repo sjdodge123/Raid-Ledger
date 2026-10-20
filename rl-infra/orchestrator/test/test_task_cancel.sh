@@ -119,6 +119,26 @@ test_task_cancel_rejects_missing_file() {
     assert_exit_code "$exit_code" "2" "should exit 2 when JSON file missing"
 }
 
+# ROK-1793 S2 — cancelling a parallel-gate parent cascades over children[].
+test_task_cancel_cascades_children() {
+    CURRENT_TEST_NAME="S2: cancel of a parent cancels every children[] task"
+    local p="cascpar1" a="cascchda" b="cascchdb" id
+    for id in "$p" "$a" "$b"; do
+        bash "$BIN_DIR/task-start" "$id" --tool manual --slot 1 -- /bin/sleep 60 >/dev/null 2>&1 || true
+    done
+    RL_PARENT_TASK_ID="$p" bash "$BIN_DIR/task-start" "cascchdc" --tool manual --slot 1 -- /bin/sh -c "exit 0" >/dev/null 2>&1 || true
+    assert_eq "$(jq -r .parent_task_id "$RL_TASKS_DIR/cascchdc.json")" "$p" "task-start records parent_task_id from RL_PARENT_TASK_ID"
+    assert_eq "$(jq -r .parent_task_id "$RL_TASKS_DIR/$a.json")" "null" "no RL_PARENT_TASK_ID -> parent_task_id null"
+    jq --arg a "$a" --arg b "$b" '.children = [{task_id:$a, role:"a", slot:1, borrowed:false}, {task_id:$b, role:"b", slot:2, borrowed:true}]' \
+        "$RL_TASKS_DIR/$p.json" > "$RL_TASKS_DIR/$p.json.tmp" && mv "$RL_TASKS_DIR/$p.json.tmp" "$RL_TASKS_DIR/$p.json"
+    sleep 0.5
+    bash "$BIN_DIR/task-cancel" "$p" "operator_test" >/dev/null 2>&1
+    assert_eq "$(jq -r .status "$RL_TASKS_DIR/$a.json")" "cancelled" "child a cancelled with the parent"
+    assert_eq "$(jq -r .status "$RL_TASKS_DIR/$b.json")" "cancelled" "child b cancelled with the parent"
+    assert_contains "$(jq -r .cancel_reason "$RL_TASKS_DIR/$b.json")" "parent_cancelled" "child reason names the parent cancel"
+}
+
+run_test "s2-children-cascade" test_task_cancel_cascades_children
 run_test "ac-m1-6" test_task_cancel_mid_run
 run_test "ac-m1-7" test_task_cancel_terminal_noop
 run_test "invalid-id" test_task_cancel_rejects_invalid_id

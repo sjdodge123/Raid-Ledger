@@ -55,7 +55,7 @@ if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( TIMEOUT_SECONDS > 86400 )); then
 fi
 
 # ---- validate ----
-if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "light" ]]; then
+if [[ "$WEIGHT" != "heavy" && "$WEIGHT" != "medium" && "$WEIGHT" != "light" ]]; then
     echo "{\"ok\":false,\"error\":\"invalid_weight\",\"weight\":\"$WEIGHT\"}" >&2
     exit 2
 fi
@@ -144,6 +144,7 @@ INITIAL_JSON=$(jq -nc \
     --arg weight "$WEIGHT" \
     --arg cwd "$CWD" \
     --argjson env "$ENV_JSON" \
+    --arg parent "${RL_PARENT_TASK_ID:-}" \
     '{
         task_id: $task_id,
         tool: $tool,
@@ -163,6 +164,7 @@ INITIAL_JSON=$(jq -nc \
         cancel_reason: null,
         failure_reason: null,
         admission_state: null,
+        parent_task_id: (if ($parent | test("^[a-z0-9]{8,32}$")) then $parent else null end),
         steps: []
     }')
 
@@ -242,10 +244,10 @@ rm -f "$PARSE_DONE"
 # RL_ADMISSION_HELD is exported for the wrapped command: nested wrappers
 # (run-on-runner-with-heartbeat --weight heavy) see that an ancestor already
 # holds a heavy slot and do NOT gate again — no double counting, no deadlock.
-if [[ "$WEIGHT" == "heavy" ]]; then
+if [[ "$WEIGHT" == "heavy" || "$WEIGHT" == "medium" ]]; then
     state::mutate "$JSON_PATH" ".admission_state = \"waiting\"" 2>/dev/null || true
     admission::acquire "$TASK_ID" "$TASK_ID" "$LOG_PATH" \
-        "admission::json_status_terminal \"$JSON_PATH\""
+        "admission::json_status_terminal \"$JSON_PATH\"" "$(admission::need_mb_for "$WEIGHT")"
     ADM_RC=$?
     if (( ADM_RC == 2 )); then
         # Cancelled (or otherwise finished) while parked on the gate. Do NOT
