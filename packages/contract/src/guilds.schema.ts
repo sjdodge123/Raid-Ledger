@@ -88,6 +88,15 @@ export const GuildMemberRowSchema = z
     characterId: z.string().uuid().nullable(),
     isMain: z.boolean(),
     server: GuildMemberServerSchema.optional(),
+    /**
+     * ROK-1794 (review): STAFF-ONLY — the RL account linked to this row and
+     * since when, so a grant is never made on the roster name alone. Omitted
+     * for every other viewer.
+     */
+    linkedAccount: z
+      .object({ username: z.string(), linkedSince: isoDate })
+      .strict()
+      .optional(),
   })
   .strict();
 export type GuildMemberRow = z.infer<typeof GuildMemberRowSchema>;
@@ -218,6 +227,14 @@ export const GuildEditorSchema = z
     memberName: z.string().nullable(),
     grantedBy: z.string().nullable(),
     createdAt: isoDate,
+    /**
+     * ROK-1794: whether the grant confers rights right now — rank grants
+     * never; a member grant only while its row has a link confirmed before
+     * the grant was made.
+     */
+    effective: z.boolean().optional(),
+    /** ROK-1794: the RL account a member grant currently resolves to, if any. */
+    linkedUsername: z.string().nullable().optional(),
   })
   .strict();
 export type GuildEditor = z.infer<typeof GuildEditorSchema>;
