@@ -31,7 +31,12 @@ import type {
   ChannelType,
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
-import { defined } from '../../common/defined.helpers';
+import {
+  insertBindingRow,
+  updateBindingRow,
+  type BindOptions,
+  type UpsertBindingOpts,
+} from './channel-bindings-upsert.helpers';
 import {
   suppressUnboundAutoBindings,
   type LifecycleDb,
@@ -48,31 +53,6 @@ export interface BindingRecord extends BindingLifecycleColumns {
   config: ChannelBindingConfig | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-interface UpsertBindingOpts {
-  guildId: string;
-  channelId: string;
-  channelType: ChannelType;
-  bindingPurpose: BindingPurpose;
-  gameId: number | null;
-  config?: ChannelBindingConfig;
-  recurrenceGroupId?: string | null;
-  lifecycle?: BindLifecycle;
-}
-
-/** ROK-1428 (Codex r3): lifecycle ownership written in the binding's own insert. */
-interface BindLifecycle {
-  autoManaged: boolean;
-  lifecycleState: 'active' | 'archived';
-}
-
-/** `bind()` extras for the channel lifecycle; other callers pass none. */
-export interface BindOptions {
-  /** Run on this handle (the reconcile lock's tx) instead of the pool. */
-  db?: LifecycleDb;
-  /** Stamp lifecycle ownership atomically with the row. */
-  lifecycle?: BindLifecycle;
 }
 
 @Injectable()
@@ -155,42 +135,9 @@ export class ChannelBindingsService {
     await assertQuickPlayGameFree(db, opts); // ROK-1766 D3
     const existing = await findExistingBinding(db, opts);
     if (existing) {
-      const [result] = await mappingConflicts(() =>
-        db
-          .update(schema.channelBindings)
-          .set({
-            channelType: opts.channelType,
-            bindingPurpose: opts.bindingPurpose,
-            // ROK-1462: omit the column entirely when the caller supplied no
-            // config, so the stored tuning survives. `/bind` re-binds with no
-            // config at all; coercing that to `{}` wiped autoClose /
-            // minPlayers / gracePeriod set from the admin form. An explicit
-            // `{}` still means "clear it" and IS written.
-            ...(opts.config !== undefined && { config: opts.config }),
-            ...opts.lifecycle,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.channelBindings.id, existing.id))
-          .returning(),
-      );
-      return defined(result, 'updated channel binding');
+      return updateBindingRow(db, existing.id, opts);
     }
-    const [result] = await mappingConflicts(() =>
-      db
-        .insert(schema.channelBindings)
-        .values({
-          guildId: opts.guildId,
-          channelId: opts.channelId,
-          channelType: opts.channelType,
-          bindingPurpose: opts.bindingPurpose,
-          gameId: opts.gameId,
-          recurrenceGroupId: opts.recurrenceGroupId ?? null,
-          config: opts.config ?? {},
-          ...opts.lifecycle,
-        })
-        .returning(),
-    );
-    return defined(result, 'inserted channel binding');
+    return insertBindingRow(db, opts);
   }
 
   /**
