@@ -96,6 +96,8 @@ export const AddonImportErrorCodeSchema = z.enum([
     'NAME_MISMATCH',
     'NOT_IN_GUILD',
     'GUID_CONFIRM_REQUIRED',
+    /** ROK-1739: `confirm.updateRulesetTo` no longer matches the realm map's inference — re-preview and confirm the new value. Nothing was written. */
+    'RULESET_CONFIRM_STALE',
     'RATE_LIMITED',
     /** ROK-1738 — create route: name + region already belong to another player. */
     'CHARACTER_CLAIMED',
