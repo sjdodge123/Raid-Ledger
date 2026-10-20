@@ -1674,6 +1674,13 @@
       "when": 1792515133872,
       "tag": "0239_backfill_discord_channel_source",
       "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1792515170292,
+      "tag": "0240_channel_lifecycle_suppressions",
+      "breakpoints": true
     }
   ]
 }

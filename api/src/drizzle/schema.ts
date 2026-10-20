@@ -25,6 +25,7 @@ export * from './schema/discord-event-messages';
 export * from './schema/discord-channel-presence-messages';
 export * from './schema/discord-channel-presence-occupancy';
 export * from './schema/channel-bindings';
+export * from './schema/channel-lifecycle-suppressions';
 export * from './schema/post-event-reminders-sent';
 export * from './schema/post-event-followup-sent';
 export * from './schema/event-plans';
