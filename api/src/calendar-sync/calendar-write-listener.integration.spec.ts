@@ -250,25 +250,27 @@ describe('kill switch', () => {
 });
 
 describe('event lifecycle emits', () => {
-  it.each([APP_EVENT_EVENTS.UPDATED, APP_EVENT_EVENTS.CANCELLED])(
-    '%s fans out over the event',
-    async (name) => {
-      const [signed, linkOnly] = [await member(), await member()];
-      const eventId = await newEvent();
-      await signUp(eventId, signed.userId);
-      await seedLink(eventId, linkOnly);
-      await emitter.emitAsync(name, { eventId });
-      await expectQueued(signed, eventId);
-      await expectQueued(linkOnly, eventId);
-    },
-  );
+  it.each([
+    APP_EVENT_EVENTS.UPDATED,
+    APP_EVENT_EVENTS.CANCELLED,
+    APP_EVENT_EVENTS.RESCHEDULE_CLEARED,
+  ])('%s fans out over the event', async (name) => {
+    const [signed, linkOnly] = [await member(), await member()];
+    const eventId = await newEvent();
+    await signUp(eventId, signed.userId);
+    await seedLink(eventId, linkOnly);
+    await emitter.emitAsync(name, { eventId });
+    await expectQueued(signed, eventId);
+    await expectQueued(linkOnly, eventId);
+  });
 
-  it('RESCHEDULING is a no-op', async () => {
+  // ROK-1857: was 'RESCHEDULING is a no-op' — opening a poll now deletes the copies.
+  it('RESCHEDULING fans out over the event', async () => {
     const m = await member();
     const eventId = await newEvent();
     await signUp(eventId, m.userId);
     await emitter.emitAsync(APP_EVENT_EVENTS.RESCHEDULING, { eventId });
-    expect(await queuedIds()).toEqual([]);
+    await expectQueued(m, eventId);
   });
 
   it('DELETE /events/:id queues each link before the row goes; the job deletes the copy', async () => {
