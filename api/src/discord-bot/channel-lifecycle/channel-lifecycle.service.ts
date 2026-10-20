@@ -113,16 +113,19 @@ export class ChannelLifecycleService {
   }
 
   /** The activity rows for this tick (scoped to the bot's guild). */
-  private selectRows(
+  private async selectRows(
     guild: Guild,
     settings: ChannelLifecycleSettingsDto,
     opts: ReconcileOptions,
     now: Date,
   ): Promise<GameLifecycleActivityRow[]> {
+    const hubNeedsLinkGameIds =
+      (await this.hubLinker.hubNeedsLinkGameIds?.()) ?? new Set<number>();
     return selectGameLifecycleActivity(this.db, {
       now,
       windowDays: settings.recentActivityDays,
       guildId: guild.id,
+      hubNeedsLinkGameIds,
       ...(opts.gameIds ? { gameIds: opts.gameIds } : {}),
     });
   }
