@@ -85,9 +85,7 @@ function toSeriesWall(
  * rules (its TZID may be unknown to Intl, or its rules differ from tzdata).
  */
 function inRealZone(ms: number, zone: ICAL.Timezone): ICAL.Time {
-  const utc = new ICAL.Time();
-  utc.fromUnixTime(ms / 1000);
-  return utc.convertToZone(zone);
+  return ICAL.Time.fromJSDate(new Date(ms), true).convertToZone(zone);
 }
 
 function tzidOf(prop: ICAL.Property): string | null {
