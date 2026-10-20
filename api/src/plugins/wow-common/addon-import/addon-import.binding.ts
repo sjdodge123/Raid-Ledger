@@ -146,7 +146,8 @@ function guidOutcome(
  * `inferredRuleset` (ROK-1739) → no change (the addon could not tell). A
  * differing one warns; it is written only with `updateRuleset` — and, when
  * the client sent the previewed `updateRulesetTo`, only if it still matches;
- * a mismatch on apply is `RULESET_CONFIRM_STALE` (preview never raises it).
+ * a mismatch on apply — including a fresh value that is now null or equal to
+ * the stored one — is `RULESET_CONFIRM_STALE` (preview never raises it).
  */
 function rulesetOutcome(
   who: AddonWho,
@@ -155,21 +156,36 @@ function rulesetOutcome(
   result: AddonBindingResult,
 ): void {
   const incoming = who.ruleset ?? opts.inferredRuleset ?? null;
+  if (isStaleRulesetConfirm(incoming, opts)) {
+    // Codex r3/r5 P2 — the confirmed value no longer matches (the mapping
+    // changed, was removed, or now equals the stored value): refuse the
+    // whole apply rather than commit the rest without the approved change.
+    result.errors.push(new AddonImportError('RULESET_CONFIRM_STALE'));
+    return;
+  }
   if (incoming === null || incoming === character.ruleset) return;
   result.warnings.push({
     code: 'RULESET_CHANGED',
     from: character.ruleset,
     to: incoming,
   });
-  if (!opts.confirm?.updateRuleset) return;
-  const approved = opts.confirm.updateRulesetTo;
+  const confirm = opts.confirm;
+  if (!confirm?.updateRuleset) return;
+  // A preview with a stale `updateRulesetTo` re-warns the new value only.
+  const approved = confirm.updateRulesetTo;
   if (approved === undefined || approved === incoming) {
     result.setRuleset = incoming;
-  } else if (!opts.dryRun) {
-    // Codex r3 P2 — the confirmed value is stale: refuse the whole apply
-    // rather than commit the rest of the import without the ruleset change.
-    result.errors.push(new AddonImportError('RULESET_CONFIRM_STALE'));
   }
+}
+
+/** An apply whose previewed `updateRulesetTo` differs from the fresh value (null included). */
+function isStaleRulesetConfirm(
+  incoming: WowForeverRuleset | null,
+  opts: AddonBindingOptions,
+): boolean {
+  if (opts.dryRun || !opts.confirm?.updateRuleset) return false;
+  const approved = opts.confirm.updateRulesetTo;
+  return approved !== undefined && approved !== incoming;
 }
 
 /**

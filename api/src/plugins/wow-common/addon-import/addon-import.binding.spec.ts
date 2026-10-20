@@ -286,6 +286,46 @@ describe('bindToCharacter — realm-map inferred ruleset (ROK-1739 D4)', () => {
     expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
     expect(r.setRuleset).toBeUndefined();
   });
+
+  it('B9 apply: realm mapping removed since preview (approved pvp, now nothing) → RULESET_CONFIRM_STALE, nothing written', () => {
+    const opts: AddonBindingOptions = {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    };
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it('B10 apply: mapping now equals the stored normal (approved pvp) → RULESET_CONFIRM_STALE, nothing written', () => {
+    const opts = inferred({
+      inferredRuleset: 'normal',
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual(['RULESET_CONFIRM_STALE']);
+    expect(r.setRuleset).toBeUndefined();
+  });
+
+  it('B11 preview (dryRun) after the mapping was removed → no error, no warning', () => {
+    const opts: AddonBindingOptions = {
+      dryRun: true,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    };
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual([]);
+    expect(warns(r)).not.toContain('RULESET_CHANGED');
+  });
+
+  it('B12 legacy confirm (no updateRulesetTo) with the mapping removed → no error, nothing written', () => {
+    const opts: AddonBindingOptions = {
+      dryRun: false,
+      confirm: { updateRuleset: true },
+    };
+    const r = bindToCharacter(payload({ ruleset: null }), char(), opts);
+    expect(codes(r)).toEqual([]);
+    expect(r.setRuleset).toBeUndefined();
+  });
 });
 
 describe('bindToCharacter — GUID', () => {

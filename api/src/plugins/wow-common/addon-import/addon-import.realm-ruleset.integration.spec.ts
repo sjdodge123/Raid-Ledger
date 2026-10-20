@@ -245,6 +245,35 @@ describe('per-character route — realm-map inference (ROK-1739 D4)', () => {
     ]);
   });
 
+  it('I8d realm mapping removed between preview and apply → 422 RULESET_CONFIRM_STALE, nothing committed', async () => {
+    const token = await memberToken('realmremoved');
+    const id = await createChar(token);
+    const s = exportFrom('Bloodmoon');
+    const preview = await perChar(token, id, s);
+    expect(rulesetChanged(preview.body)).toEqual([
+      { code: 'RULESET_CHANGED', from: 'normal', to: 'pvp' },
+    ]);
+    const before = await storedRow(id);
+    const withoutBloodmoon = MAP.filter((e) => e.realmName !== 'Bloodmoon');
+    await testApp.app
+      .get(SettingsService)
+      .set(
+        WOW_FOREVER_REALM_RULESETS_KEY,
+        JSON.stringify({ entries: withoutBloodmoon }),
+      );
+    const res = await perChar(token, id, s, {
+      dryRun: false,
+      confirm: { updateRuleset: true, updateRulesetTo: 'pvp' },
+    });
+    expect({ status: res.status, code: res.body.code }).toEqual({
+      status: 422,
+      code: 'RULESET_CONFIRM_STALE',
+    });
+    // Nothing committed: ruleset, class/level and the GUID pin all unchanged.
+    expect(await storedRow(id)).toEqual(before);
+    expect(before.ruleset).toBe('normal');
+  });
+
   it('I8c re-importing an already-imported string after its realm is mapped → preview (not noop) → confirmed apply writes pvp → noop', async () => {
     const token = await memberToken('realmlater');
     const id = await createChar(token);
