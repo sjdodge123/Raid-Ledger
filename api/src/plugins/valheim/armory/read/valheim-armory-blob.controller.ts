@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
   Param,
+  Req,
   Res,
   StreamableFile,
   UseGuards,
@@ -19,6 +20,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
 import { ValheimSha256Schema } from '@raid-ledger/contract';
+import type { AuthenticatedExpressRequest } from '../../../../auth/types';
 import {
   PluginActiveGuard,
   RequirePlugin,
@@ -79,7 +81,8 @@ export async function sizeOf(file: FileHandle): Promise<number> {
 /**
  * ROK-1836 D5 — member-only PNG bytes for an icon atlas, file icon or base
  * map. Located by `(server, sha256)` → `valheim_link_blobs.storage_path`
- * alone (R6: names never become paths); 404 when absent or not on disk.
+ * alone (R6: names never become paths); 404 when absent or not on disk, and
+ * `Guild not found` for non-staff while the server's hub is hidden (ROK-1856).
  */
 @Controller()
 @UseGuards(AuthGuard('jwt'), PluginActiveGuard)
@@ -93,9 +96,11 @@ export class ValheimArmoryBlobController {
   async blob(
     @Param('serverId', armoryIdPipe) serverId: number,
     @Param('sha256', new Sha256Pipe()) sha256: string,
+    @Req() req: AuthenticatedExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const file = await openBlob(await this.reads.blobPath(serverId, sha256));
+    const abs = await this.reads.blobPath(serverId, sha256, req.user);
+    const file = await openBlob(abs);
     const size = await sizeOf(file);
     res.set({
       'Content-Type': 'image/png',

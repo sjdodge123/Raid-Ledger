@@ -1,7 +1,8 @@
 /**
  * ROK-1836 follow-up (additive) against a real database: the member list
- * carries `total`; the detail carries the server's community hub id (ROK-1831,
- * hidden hubs null for non-staff); admin claim events carry resolved users.
+ * carries `total`; the detail carries the server's community hub id (ROK-1831;
+ * a hidden hub's character is a 404 for non-staff, ROK-1856); admin claim
+ * events carry resolved users.
  */
 import { eq } from 'drizzle-orm';
 import {
@@ -16,6 +17,7 @@ import {
 } from '../../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
+import { HUB_NOT_FOUND } from '../../../../guilds/hub-hidden.helpers';
 import { SettingsService } from '../../../../settings/settings.service';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID } from '../../../pelican/pelican.constants';
@@ -158,12 +160,15 @@ describe('armory detail hubId (ROK-1836 follow-up)', () => {
     expect(await hubIdAs(plain.id, token)).toBeNull();
   });
 
-  it('a hidden hub is null for a member and visible to an admin', async () => {
+  it('a hidden hub 404s the sheet for a member; an admin sees the hub id', async () => {
     const c = await seedCharacter(1);
     const hubId = await makeHub(c.serverId, true);
     const member = await memberToken(testApp, 'alice');
     const admin = await loginAsAdmin(testApp.request, testApp.seed);
-    expect(await hubIdAs(c.id, member)).toBeNull();
+    // ROK-1856: was 200 + `hubId: null` — the sheet itself leaked (L-5).
+    const res = await get(`${BASE}/${c.id}`, member);
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ message: HUB_NOT_FOUND });
     expect(await hubIdAs(c.id, admin)).toBe(hubId);
   });
 });
