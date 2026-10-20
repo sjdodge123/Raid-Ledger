@@ -39,6 +39,11 @@ describe('withEventHubLink (ROK-1872)', () => {
     expect('hubLink' in ctx).toBe(false);
   });
 
+  it('skips the lookup without an event id', async () => {
+    expect(await withEventHubLink(db, CTX, undefined, logger)).toBe(CTX);
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
   it('passes a null client URL through', async () => {
     resolve.mockResolvedValueOnce(null);
     await withEventHubLink(db, { clientUrl: null, timezone: 'UTC' }, 9, logger);

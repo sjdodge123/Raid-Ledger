@@ -19,14 +19,15 @@ interface ContextWithClientUrl {
 
 /**
  * Resolve the event's hub link from `ctx.clientUrl` and spread it onto `ctx`.
- * Never throws.
+ * `eventId` undefined ⇒ `ctx` unchanged (no lookup). Never throws.
  */
 export async function withEventHubLink<T extends ContextWithClientUrl>(
   db: PostgresJsDatabase<typeof schema>,
   ctx: T,
-  eventId: number,
+  eventId: number | undefined,
   logger: HubLinkLogger,
 ): Promise<T & { hubLink?: HubLink }> {
+  if (eventId === undefined) return ctx;
   const clientUrl = ctx.clientUrl ?? null;
   const hub = await resolveEventHubLink(db, eventId, clientUrl, logger);
   return { ...ctx, ...hubLinkPart(hub) };

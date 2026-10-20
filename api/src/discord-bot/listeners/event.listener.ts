@@ -228,7 +228,6 @@ export class DiscordEventListener {
       this.settingsService.getDefaultTimezone(),
     ]);
     const ctx = { communityName: branding.communityName, clientUrl, timezone };
-    if (eventId === undefined) return ctx;
     return withEventHubLink(this.db, ctx, eventId, this.logger);
   }
 

@@ -29,17 +29,19 @@ type ButtonJson = { label?: string; url?: string };
 function postedButtons(): ButtonJson[] {
   const row: unknown = sendEmbed.mock.calls[0]?.[2];
   if (!(row instanceof ActionRowBuilder)) return [];
-  return row.components.map((c): ButtonJson => {
-    const json: unknown = c.toJSON();
-    if (typeof json !== 'object' || json === null) return {};
-    const label =
-      'label' in json && typeof json.label === 'string'
-        ? json.label
-        : undefined;
-    const url =
-      'url' in json && typeof json.url === 'string' ? json.url : undefined;
-    return { ...(label ? { label } : {}), ...(url ? { url } : {}) };
-  });
+  const json: unknown = row.toJSON();
+  if (typeof json !== 'object' || json === null) return [];
+  if (!('components' in json) || !Array.isArray(json.components)) return [];
+  const items: unknown[] = json.components;
+  return items.map(toButtonJson);
+}
+
+/** Narrow one serialized component to its label + url. */
+function toButtonJson(c: unknown): ButtonJson {
+  if (typeof c !== 'object' || c === null) return {};
+  const label = 'label' in c && typeof c.label === 'string' ? c.label : null;
+  const url = 'url' in c && typeof c.url === 'string' ? c.url : null;
+  return { ...(label ? { label } : {}), ...(url ? { url } : {}) };
 }
 
 async function seedEvent(): Promise<{ eventId: number; gameId: number }> {
