@@ -301,3 +301,46 @@ describe('zero-duration master + positive THISANDFUTURE override (Codex r5)', ()
     ]);
   });
 });
+
+describe('zoned series whose VTIMEZONE TZID is unknown to Intl (Codex r6)', () => {
+  it('converts the UTC override with the embedded rules → Nov 3 at 23:00Z', () => {
+    const ics = fixture('weekly-ny-bare-thisandfuture.ics')
+      .replace(
+        'CALSCALE:GREGORIAN\r\n',
+        `CALSCALE:GREGORIAN\r\n${vtimezoneOf(fixture('weekly-ny.ics'))}`,
+      )
+      .replace(/America\/New_York/g, 'Custom/New_York');
+    expect(ics).toContain('TZID:Custom/New_York');
+    expect(rows(ics)).toEqual([
+      '2026-10-20T23:00:00.000Z/2026-10-21T01:00:00.000Z',
+      '2026-10-27T22:00:00.000Z/2026-10-28T00:00:00.000Z',
+      '2026-11-03T23:00:00.000Z/2026-11-04T01:00:00.000Z',
+      '2026-11-10T23:00:00.000Z/2026-11-11T01:00:00.000Z',
+    ]);
+  });
+});
+
+describe('THISANDFUTURE DURATION:PT24H across the New York DST end (Codex r6)', () => {
+  const expected = [
+    '2026-10-29T16:00:00.000Z/2026-10-29T17:00:00.000Z',
+    '2026-10-30T16:00:00.000Z/2026-10-31T16:00:00.000Z',
+    '2026-10-31T16:00:00.000Z/2026-11-01T16:00:00.000Z',
+    '2026-11-01T17:00:00.000Z/2026-11-02T17:00:00.000Z',
+  ];
+  const ics = fixture('daily-ny-duration-thisandfuture.ics');
+  const wideParse = (text: string) =>
+    parseBusyFromIcs(text, {
+      range: { start: new Date('2026-10-25T00:00:00Z'), end: range.end },
+      calendarTimezone: null,
+    })
+      .blocks.map((b) => `${b.start.toISOString()}/${b.end.toISOString()}`)
+      .sort();
+
+  it('keeps the exact 24 hours on the shifted Oct 31 occurrence (VTIMEZONE)', () => {
+    expect(wideParse(ics)).toEqual(expected);
+  });
+
+  it('keeps the exact 24 hours through the Intl path (no VTIMEZONE)', () => {
+    expect(wideParse(ics.replace(vtimezoneOf(ics), ''))).toEqual(expected);
+  });
+});

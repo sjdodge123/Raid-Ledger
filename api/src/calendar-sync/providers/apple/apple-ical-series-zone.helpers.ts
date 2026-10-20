@@ -15,7 +15,8 @@
  * treatment (value moved onto the series' wall clock, TZID set to the series
  * zone, instant unchanged), so ical.js matches an override to its occurrence
  * and computes a THISANDFUTURE shift wall clock to wall clock — a weekly
- * 19:00 New York series moved to 22:00Z on Oct 27 is 23:00Z on Nov 3.
+ * 19:00 New York series moved to 22:00Z on Oct 27 is 23:00Z on Nov 3. With
+ * a VTIMEZONE the conversion uses its rules, never an Intl lookup (Codex r6).
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -69,12 +70,24 @@ function toSeriesWall(
 ): ICAL.Time {
   if (value.isDate || onSeriesClock(value, tzid, target)) return value;
   const ms = timeToMs(value, tzid, target.floating);
-  const wall = ms === null ? null : utcToWall(ms, target.zone);
+  if (ms === null) return value;
+  if (target.real) return inRealZone(ms, target.real);
+  const wall = utcToWall(ms, target.zone);
   if (!wall) return value;
   return ICAL.Time.fromData(
     { ...wall, isDate: false },
-    target.real ?? ICAL.Timezone.localTimezone,
+    ICAL.Timezone.localTimezone,
   );
+}
+
+/**
+ * Codex r6: an instant → the series' embedded VTIMEZONE, by that zone's own
+ * rules (its TZID may be unknown to Intl, or its rules differ from tzdata).
+ */
+function inRealZone(ms: number, zone: ICAL.Timezone): ICAL.Time {
+  const utc = new ICAL.Time();
+  utc.fromUnixTime(ms / 1000);
+  return utc.convertToZone(zone);
 }
 
 function tzidOf(prop: ICAL.Property): string | null {
