@@ -62,6 +62,15 @@ const READS: Record<string, ChannelMirrorRead> = {
   [GONE_ID]: { state: 'gone', channelId: GONE_ID, channelName: null },
 };
 
+/** ROK-1871: an `ok` mirror also reports how the channel got there. */
+function withMeta(
+  read: ChannelMirrorRead | undefined,
+  channelSource: 'auto' | 'manual' | null,
+): object | undefined {
+  if (read?.state !== 'ok') return read;
+  return { ...read, channelSource, managedFor: null };
+}
+
 /** `editor` has a real Discord id; `local` is a granted editor without one. */
 type Who = 'editor' | 'local' | 'plain' | 'outsider';
 type Actor = Who | 'admin';
@@ -290,7 +299,7 @@ describe('GET mirror states', () => {
     await bindDirect(channelId);
     const res = await call('get', '/discord', 'plain');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(READS[channelId]);
+    expect(res.body).toEqual(withMeta(READS[channelId], null));
     expect(res.body.state).toBe(state);
     expect(mirror.readLatest).toHaveBeenCalledWith(channelId);
   });
@@ -322,7 +331,7 @@ describe('private channel without an ack on record (review MINOR 3)', () => {
     await bindDirect(PRIVATE.id, undefined, true);
     const res = await call('get', '/discord', 'plain');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(READS[PRIVATE.id]);
+    expect(res.body).toEqual(withMeta(READS[PRIVATE.id], null));
   });
 });
 
@@ -339,6 +348,8 @@ describe('server name (review MINOR 5)', () => {
     expect(res.body).toEqual({
       ...OK_READ,
       channel: { ...OK_READ.channel, serverName: 'Keepers HQ' },
+      channelSource: null,
+      managedFor: null,
     });
   });
 
@@ -373,9 +384,10 @@ describe('PUT public channel', () => {
       channelId: PUBLIC.id,
     });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(OK_READ);
+    expect(res.body).toEqual(withMeta(OK_READ, 'manual'));
     const row = await profileRow();
     expect(row?.discordChannelId).toBe(PUBLIC.id);
+    expect(row?.discordChannelSource).toBe('manual');
     expect(row?.discordChannelPrivateAck).toBe(false);
     expect(row?.discordChannelSetBy).toBe(adminUserId);
     expect(row?.discordChannelSetAt).toBeInstanceOf(Date);
@@ -504,6 +516,7 @@ describe('DELETE + set_by', () => {
     expect(row?.discordChannelId).toBeNull();
     expect(row?.discordChannelSetBy).toBeNull();
     expect(row?.discordChannelPrivateAck).toBe(false);
+    expect(row?.discordChannelSource).toBe('manual');
     expect(mirror.clear).toHaveBeenCalledWith(PUBLIC.id);
     expect((await call('get', '/discord', 'plain')).body).toEqual({
       state: 'unset',
