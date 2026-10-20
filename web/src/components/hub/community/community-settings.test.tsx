@@ -12,12 +12,13 @@ import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { communityHubBodies, communityHubCalls, communityHubHandlers } from '../../../test/mocks/community-hub-handlers';
 import { buildCommunityPage } from '../../../test/factories/community-hub';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import type { HubCtx } from '../../../plugins/hub-module';
 import { communityHubModule } from './community-hub-module';
 import { CommunitySettingsSections } from './community-settings';
 import { HubSettingsSheet } from '../settings/settings-sheet';
-import { canOpenHubSettings } from '../settings/settings-access';
+import { canOpenHubSettings, canUseHubChannelPicker } from '../settings/settings-access';
+import { MY_GUILDS_KEY_PREFIX } from '../api/use-guild-content';
 import { http, HttpResponse } from 'msw';
 
 let userRole = 'member';
@@ -76,6 +77,18 @@ describe('community settings sections', () => {
         await waitFor(() => expect(communityHubBodies).toEqual([{ status: 'archived' }]));
     });
 
+    it('Codex r2 P2: archiving refreshes the nav hubs, every game card and every directory listing', async () => {
+        const queryClient = createTestQueryClient();
+        const listings = [[...MY_GUILDS_KEY_PREFIX, 'viewer-1'], ['game-hubs', 9], ['hubs-directory', { membership: 'all' }]];
+        for (const key of listings) queryClient.setQueryData(key, { seeded: true });
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'leader' })}>{(ctx) => <CommunitySettingsSections {...ctx} />}</WithCtx>, { queryClient });
+        await userEvent.click(screen.getByRole('button', { name: 'Archive hub' }));
+        await userEvent.click(screen.getByTestId('community-archive-confirm'));
+        await waitFor(() => {
+            for (const key of listings) expect(queryClient.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
+        });
+    });
+
     it('offers an officer neither Archive nor Restore', async () => {
         renderSections(buildCommunityPage({ role: 'officer' }));
         await screen.findByText('Griefer');
@@ -106,6 +119,12 @@ describe('community settings in the sheet', () => {
         const wow: GuildPage = { ...buildCommunityPage({ role: 'officer' }) };
         delete wow.community;
         expect(canOpenHubSettings({ ...wow, guild: { ...wow.guild, kind: 'wow_guild' } })).toBe(false);
+    });
+
+    it('Codex r2 P2: an officer opens settings but not the Leader-only channel picker', () => {
+        expect(canOpenHubSettings(buildCommunityPage({ role: 'officer' }))).toBe(true);
+        expect(canUseHubChannelPicker(buildCommunityPage({ role: 'officer' }))).toBe(false);
+        expect(canUseHubChannelPicker(buildCommunityPage({ role: 'leader' }))).toBe(true);
     });
 
     it('gives an officer the community sections only, not the Leader rows', async () => {

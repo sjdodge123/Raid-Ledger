@@ -9,6 +9,7 @@ import { CommunityHubJoinResponseSchema, type CommunityHubJoinResponse } from '@
 import { fetchApi } from '../../../lib/api-client';
 import { toast } from '../../../lib/toast';
 import { invalidateHubMembership } from './invalidate-hub-membership';
+import { hubBansKey } from './community-settings-api';
 
 const base = (hubId: number): string => `/hubs/${hubId}`;
 
@@ -51,10 +52,14 @@ function sendCommand(hubId: number, cmd: CommunityMemberCommand): Promise<unknow
 
 /** Remove / ban / promote / demote / hand over leadership; the page refetches after each. */
 export function useCommunityMemberCommand(hubId: number): UseMutationResult<unknown, Error, CommunityMemberCommand> {
+    const qc = useQueryClient();
     const refresh = useRefresh(hubId);
     return useMutation({
         mutationFn: (cmd: CommunityMemberCommand) => sendCommand(hubId, cmd),
         onError: (err) => { toast.error(err.message || 'That didn’t work. Try again.'); },
-        onSettled: refresh,
+        // A ban also refreshes the Banned list, so a cached settings sheet shows the user at once.
+        onSettled: async (_res, _err, cmd) => {
+            await Promise.all([refresh(), cmd.kind === 'ban' ? qc.invalidateQueries({ queryKey: hubBansKey(hubId) }) : undefined]);
+        },
     });
 }

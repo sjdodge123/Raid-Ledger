@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { HubBanListSchema, type HubBanList, type HubBlurbUpdateDto, type HubStatusUpdateDto } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { toast } from '../../../lib/toast';
-import { guildPageKey } from '../api/use-guild';
+import { invalidateHubMembership } from './invalidate-hub-membership';
 
 /** Query key of one hub's Banned list. */
 export const hubBansKey = (hubId: number): readonly [string, number, string] => ['community-hub', hubId, 'bans'];
@@ -33,7 +33,7 @@ export function useHubUnban(hubId: number): UseMutationResult<unknown, Error, nu
     });
 }
 
-/** Save the hub's blurb (`PATCH /hubs/:id`, `null` clears it); the page refetches after. */
+/** Save the hub's blurb (`PATCH /hubs/:id`, `null` clears it); the page, nav, game cards and directory refetch after. */
 export function useHubBlurb(hubId: number): UseMutationResult<unknown, Error, HubBlurbUpdateDto['blurb']> {
     const qc = useQueryClient();
     return useMutation({
@@ -42,11 +42,11 @@ export function useHubBlurb(hubId: number): UseMutationResult<unknown, Error, Hu
         }),
         onSuccess: () => { toast.success('Description saved'); },
         onError: (err) => { toast.error(err.message || 'Couldn’t save the description. Try again.'); },
-        onSettled: () => qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
+        onSettled: () => invalidateHubMembership(qc, hubId),
     });
 }
 
-/** Archive (`'archived'`) or restore (`'active'`) the hub; the page refetches after. */
+/** Archive (`'archived'`) or restore (`'active'`) the hub; the page, nav, game cards and directory refetch after. */
 export function useHubStatus(hubId: number): UseMutationResult<unknown, Error, HubStatusUpdateDto['status']> {
     const qc = useQueryClient();
     return useMutation({
@@ -55,6 +55,6 @@ export function useHubStatus(hubId: number): UseMutationResult<unknown, Error, H
         }),
         onSuccess: (_data, status) => { toast.success(status === 'archived' ? 'Hub archived' : 'Hub restored'); },
         onError: (err) => { toast.error(err.message || 'Couldn’t change the hub’s status. Try again.'); },
-        onSettled: () => qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
+        onSettled: () => invalidateHubMembership(qc, hubId),
     });
 }

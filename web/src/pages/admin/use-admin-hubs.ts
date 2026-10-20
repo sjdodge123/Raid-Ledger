@@ -4,7 +4,7 @@
  * leader, archive/restore). Every mutation invalidates the `['admin-hubs']`
  * prefix, so each tab's list (`['admin-hubs', tab]`) refetches.
  */
-import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import {
     AdminHubListSchema,
     type AdminCreateHubDto, type AdminHubList, type ApproveHubProposalDto, type GuildSummary,
@@ -12,6 +12,7 @@ import {
 } from '@raid-ledger/contract';
 import { getAuthToken } from '../../hooks/use-auth';
 import { adminFetch } from '../../hooks/admin/admin-fetch';
+import { invalidateHubMembership } from '../../components/hub/community/invalidate-hub-membership';
 
 export type AdminHubTab = 'pending' | 'active' | 'archived';
 export const ADMIN_HUBS_KEY = 'admin-hubs';
@@ -39,12 +40,16 @@ export function useAdminHubList(status: 'active' | 'archived'): UseQueryResult<A
     });
 }
 
-/** Builds a mutation that invalidates every admin-hubs tab on success. */
-function useHubMutation<V, R = unknown>(fn: (vars: V) => Promise<R>): UseMutationResult<R, Error, V> {
+/** Builds a mutation that invalidates every admin-hubs tab (plus whatever `after` refreshes) on success. */
+function useHubMutation<V, R = unknown>(
+    fn: (vars: V) => Promise<R>, after?: (qc: QueryClient, vars: V) => Promise<void>,
+): UseMutationResult<R, Error, V> {
     const qc = useQueryClient();
     return useMutation<R, Error, V>({
         mutationFn: fn,
-        onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_HUBS_KEY] }),
+        onSuccess: async (_res, vars) => {
+            await Promise.all([qc.invalidateQueries({ queryKey: [ADMIN_HUBS_KEY] }), after?.(qc, vars)]);
+        },
     });
 }
 
@@ -72,10 +77,11 @@ export function useTransferHubLeader(): UseMutationResult<unknown, Error, { hubI
         adminFetch<unknown>(`/hubs/${hubId}/leader`, post({ userId }), 'Failed to transfer leadership'));
 }
 
-/** Archive or restore a hub. */
+/** Archive or restore a hub; the nav, game cards and directory drop / regain it too. */
 export function useSetHubStatus(): UseMutationResult<unknown, Error, { hubId: number } & HubStatusUpdateDto> {
     return useHubMutation(({ hubId, status }: { hubId: number } & HubStatusUpdateDto) =>
-        adminFetch<unknown>(`/hubs/${hubId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }, 'Failed to update hub'));
+        adminFetch<unknown>(`/hubs/${hubId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }, 'Failed to update hub'),
+    (qc, { hubId }) => invalidateHubMembership(qc, hubId));
 }
 
 /** A 204 has no JSON body — `adminFetch`'s parse fails after an ok response; treat that as success. */

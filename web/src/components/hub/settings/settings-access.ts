@@ -11,3 +11,13 @@ export function canOpenHubSettings(page: GuildPage): boolean {
     if (page.community !== undefined) return page.viewer.role === 'leader' || page.viewer.role === 'officer';
     return page.viewer.canManageEditors;
 }
+
+/**
+ * `true` when the viewer may use the Discord channel picker — the api's
+ * `canManageDiscord`: the Leader / staff (`canManageEditors`; staff resolve to
+ * `leader` on a community page). A community Officer opens settings (blurb,
+ * Banned list) but never the picker, whose routes are Leader-only.
+ */
+export function canUseHubChannelPicker(page: GuildPage): boolean {
+    return page.viewer.canManageEditors;
+}

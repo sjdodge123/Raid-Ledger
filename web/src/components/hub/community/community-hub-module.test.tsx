@@ -13,7 +13,8 @@ import { server } from '../../../test/mocks/server';
 import { communityHubCalls, communityHubHandlers } from '../../../test/mocks/community-hub-handlers';
 import { buildCommunityMember, buildCommunityPage } from '../../../test/factories/community-hub';
 import { mockDesktop } from '../../../test/handlers/media';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
+import { hubBansKey } from './community-settings-api';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { useHubModule, useHubModulePending, type CoreWidgetId, type HubCtx } from '../../../plugins/hub-module';
 import { HubMembers } from '../hub-members';
@@ -129,6 +130,17 @@ describe('community Members tab', () => {
         await userEvent.type(screen.getByLabelText('Reason (optional)'), 'spam');
         await userEvent.click(screen.getByTestId('community-ban-confirm'));
         await waitFor(() => expect(communityHubCalls).toContain('PUT /hubs/41/bans/2'));
+    });
+
+    it('Codex r2 P2: a settled ban refreshes the cached Banned list', async () => {
+        selfId = 1;
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(hubBansKey(41), { bans: [] });
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'leader' })}>{(ctx) => <HubMembers ctx={ctx} module={communityHubModule} />}</WithCtx>, { queryClient });
+        await userEvent.click(within(rowOf('Offy')).getByTestId('community-member-manage'));
+        await userEvent.click(screen.getByTestId('community-member-ban'));
+        await userEvent.click(screen.getByTestId('community-ban-confirm'));
+        await waitFor(() => expect(queryClient.getQueryState(hubBansKey(41))?.isInvalidated).toBe(true));
     });
 
     it('staff get no menu on their own row (matched by user id, not the row id)', () => {

@@ -30,7 +30,7 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { canOpenHubSettings } from './settings/settings-access';
+import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 
@@ -130,7 +130,7 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
 }
 
 /** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
-function useHubSettingsState(canManage: boolean) {
+function useHubSettingsState(canManage: boolean, canPick: boolean) {
     const [requested, setRequested] = useState<HubOverlay>('closed');
     const openPicker = useCallback(() => setRequested('picker'), []);
     const openSettings = useCallback(() => setRequested('settings'), []);
@@ -140,9 +140,10 @@ function useHubSettingsState(canManage: boolean) {
     // mid-session takes the open dialog off the screen in the same commit, and
     // nothing cascades. (The stale request is harmless — a re-promoted viewer
     // reopens from the trigger.)
-    const overlay: HubOverlay = canManage ? requested : 'closed';
+    const allowed = requested === 'picker' ? canPick : canManage;
+    const overlay: HubOverlay = allowed ? requested : 'closed';
     const value: HubSettingsValue = useMemo(
-        () => ({ openChannelPicker: canManage ? openPicker : null }), [canManage, openPicker]);
+        () => ({ openChannelPicker: canPick ? openPicker : null }), [canPick, openPicker]);
     return { overlay, openPicker, onClose, openSettings, value };
 }
 
@@ -158,7 +159,7 @@ function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.El
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
     const canManage = canOpenHubSettings(ctx.page);
-    const s = useHubSettingsState(canManage);
+    const s = useHubSettingsState(canManage, canUseHubChannelPicker(ctx.page));
     return (
         <HubSettingsProvider value={s.value}>
             <div className={PAGE}>
