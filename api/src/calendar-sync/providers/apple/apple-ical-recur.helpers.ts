@@ -29,6 +29,8 @@
  * INTERVAL / BYSETPOS phase). 20 000 covers a daily series ~54 years old or
  * an hourly one ~2 years old and costs ~75 ms worst case; a series that
  * hits it keeps the blocks found so far and is counted in `skipped`.
+ * Codex r8: a rule whose single ical.js step is itself unbounded is refused
+ * before iterating (`isCostlyRule`).
  */
 import ICAL from 'ical.js';
 import type { BusyBlock, TimeRange } from '../calendar-provider.interface';
@@ -41,6 +43,7 @@ import {
   isThisAndFuture,
   maxBackwardShiftMs,
 } from './apple-ical-range-shift.helpers';
+import { isCostlyRule } from './apple-ical-recur-cost.helpers';
 import { alignSeriesZone } from './apple-ical-series-zone.helpers';
 import { masterTimes } from './apple-ical-series-times.helpers';
 import {
@@ -325,9 +328,12 @@ function iterateMaster(
   backMs: number,
 ): SeriesResult {
   const blocks: RawBlock[] = [];
-  let steps = 0;
-  for (const t of masterTimes(event)) {
-    if (++steps > MAX_SERIES_ITERATIONS) return { blocks, skipped: 1 };
+  const times = masterTimes(event);
+  // Codex r8: the cap is checked BEFORE each step, never after it.
+  for (let steps = 0; steps < MAX_SERIES_ITERATIONS; steps++) {
+    const next = times.next();
+    if (next.done) return { blocks, skipped: 0 };
+    const t = next.value;
     const block = occurrenceBlock(event, t, start, ctx);
     if (block === 'skip') continue;
     if (!block) return { blocks, skipped: 1 };
@@ -339,7 +345,7 @@ function iterateMaster(
       blocks.push(block);
     }
   }
-  return { blocks, skipped: 0 };
+  return { blocks, skipped: 1 };
 }
 
 function merge(results: SeriesResult[]): SeriesResult {
@@ -373,7 +379,9 @@ export function expandSeries(
   }
   const ranged = overrides.some(isThisAndFuture);
   const start = readStart(master, ctx.floating, periodEnds, ranged);
-  if (start === 'bad') return merge([{ blocks: [], skipped: 1 }, ...own]);
+  if (start === 'bad' || isCostlyRule(master, ctx.range.end)) {
+    return merge([{ blocks: [], skipped: 1 }, ...own]);
+  }
   if (start === 'drop') return merge(own);
   const backMs = maxBackwardShiftMs(overrides, ctx.floating);
   return merge([iterateMaster(event, start, ctx, backMs), ...own]);
