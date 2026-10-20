@@ -220,6 +220,7 @@ export * from './valheim-link-common.schema.js';
 export * from './valheim-link-character.schema.js';
 export * from './valheim-link-map.schema.js';
 export * from './valheim-link-items.schema.js';
+export * from './valheim-link-containers.schema.js';
 export * from './valheim-link-message.schema.js';
 export * from './valheim-link-admin.schema.js';
 export * from './valheim-armory.schema.js';
