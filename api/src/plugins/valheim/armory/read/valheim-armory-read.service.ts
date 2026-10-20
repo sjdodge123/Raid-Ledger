@@ -25,8 +25,16 @@ import {
   isStaff,
   type GuildActor,
 } from '../../../../guilds/guild-access.service';
+import {
+  assertCharacterHubVisible,
+  assertServerHubVisible,
+  refuseHiddenHub,
+} from './valheim-armory-hub-visibility.helpers';
 import { containedBlobPath } from './valheim-armory-map-bytes.service';
-import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
+import {
+  ValheimArmoryReadRepository,
+  type ArmoryListFilter,
+} from './valheim-armory-read.repository';
 
 /** `GET /admin/plugins/valheim/armory/characters` — includes `steamId64`. */
 export interface ValheimAdminCharacterListResponse {
@@ -38,9 +46,18 @@ export interface ValheimAdminCharacterListResponse {
 export class ValheimArmoryReadService {
   constructor(private readonly repo: ValheimArmoryReadRepository) {}
 
-  /** Member list page, sorted by name; never includes a SteamID64. */
-  async list(q: ArmoryListQuery): Promise<ValheimCharacterListResponse> {
-    const [rows, total] = await this.page(q);
+  /**
+   * Member list page, sorted by name; never includes a SteamID64. Non-staff
+   * lose characters on a hidden hub's server (ROK-1856, L-5 list filter).
+   */
+  async list(
+    q: ArmoryListQuery,
+    actor: GuildActor,
+  ): Promise<ValheimCharacterListResponse> {
+    const [rows, total] = await this.page({
+      ...q,
+      hideHiddenHubs: !isStaff(actor),
+    });
     return { data: rows.map(toSummary), total };
   }
 
@@ -54,21 +71,16 @@ export class ValheimArmoryReadService {
 
   /** One page plus the filtered total (same filters, one COUNT). */
   private page(
-    q: ArmoryListQuery,
+    q: ArmoryListFilter,
   ): Promise<
     [Awaited<ReturnType<ValheimArmoryReadRepository['listProfiles']>>, number]
   > {
     return Promise.all([this.repo.listProfiles(q), this.repo.countProfiles(q)]);
   }
 
-  /**
-   * The server's community hub id (ROK-1831); a hidden hub is null for
-   * non-staff — the same L-5 rule the hub routes apply.
-   */
-  async hubIdFor(serverId: number, actor: GuildActor): Promise<number | null> {
-    const hub = await this.repo.findServerHub(serverId);
-    if (!hub || (hub.hidden && !isStaff(actor))) return null;
-    return hub.id;
+  /** ROK-1856: 404 `Guild not found` when the character's hub is hidden. */
+  assertCharacterVisible(id: number, actor: GuildActor): Promise<void> {
+    return assertCharacterHubVisible(this.repo, actor, id);
   }
 
   /** One character's member summary (claim/owner responses); 404 when unknown. */
@@ -85,13 +97,16 @@ export class ValheimArmoryReadService {
   async detail(id: number, actor: GuildActor): Promise<ValheimCharacterDetail> {
     const row = await this.repo.findProfile(id);
     if (!row) throw new NotFoundException('Character not found');
+    // ROK-1856: a hidden hub hides the whole sheet from non-staff (L-5).
+    const hub = await this.repo.findServerHub(row.pelicanServerId);
+    refuseHiddenHub(hub, actor);
     const prefabs = referencedPrefabs(row);
-    const [maps, catalog, hubId] = await Promise.all([
+    const [maps, catalog] = await Promise.all([
       this.repo.listMapRefs(id),
       this.repo.findCatalog(row.pelicanServerId, row.gameVersion, prefabs),
-      this.hubIdFor(row.pelicanServerId, actor),
     ]);
     const sheet = toDetail(row, maps);
+    const hubId = hub?.id ?? null;
     return { ...sheet, ...projectCatalog(prefabs, catalog), hubId };
   }
 
@@ -99,7 +114,12 @@ export class ValheimArmoryReadService {
    * Absolute path of a server's stored PNG (D5); 404 when unknown or when
    * its `storage_path` would escape the blob root (a tampered row).
    */
-  async blobPath(serverId: number, sha256: string): Promise<string> {
+  async blobPath(
+    serverId: number,
+    sha256: string,
+    actor: GuildActor,
+  ): Promise<string> {
+    await assertServerHubVisible(this.repo, actor, serverId);
     const rel = await this.repo.findBlobPath(serverId, sha256);
     const abs = rel === null ? null : containedBlobPath(rel);
     if (abs === null) throw new NotFoundException('Blob not found');
@@ -107,7 +127,12 @@ export class ValheimArmoryReadService {
   }
 
   /** Map metadata; 404 unless the map belongs to the character. */
-  async map(id: number, mapId: number): Promise<ValheimMapMeta> {
+  async map(
+    id: number,
+    mapId: number,
+    actor: GuildActor,
+  ): Promise<ValheimMapMeta> {
+    await this.assertCharacterVisible(id, actor);
     const row = await this.repo.findMap(id, mapId);
     if (!row) throw new NotFoundException('Map not found');
     return toMapMeta(row);

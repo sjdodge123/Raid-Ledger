@@ -31,6 +31,8 @@ const cat = schema.valheimItemCatalogs;
 export interface ArmoryListFilter {
   serverId?: number | undefined;
   unclaimed?: boolean | undefined;
+  /** ROK-1856: drop characters whose server's hub is hidden (non-staff). */
+  hideHiddenHubs?: boolean | undefined;
   limit: number;
   offset: number;
 }
@@ -83,10 +85,17 @@ function itemsSubset(prefabs: readonly string[]) {
   );
 }
 
+/** ROK-1856 (L-5 list filter): the profile's server has no hidden hub. */
+const notOnHiddenHub = sql`NOT EXISTS (
+  SELECT 1 FROM ${hubs} h
+  WHERE h.pelican_server_id = ${p.pelicanServerId}
+    AND h.hidden_at IS NOT NULL)`;
+
 function listWhere(f: ArmoryListFilter): SQL | undefined {
   const parts: SQL[] = [];
   if (f.serverId !== undefined) parts.push(eq(p.pelicanServerId, f.serverId));
   if (f.unclaimed === true) parts.push(isNull(p.claimedBy));
+  if (f.hideHiddenHubs === true) parts.push(notOnHiddenHub);
   return parts.length > 0 ? and(...parts) : undefined;
 }
 
@@ -127,6 +136,22 @@ export class ValheimArmoryReadRepository {
       })
       .from(hubs)
       .where(eq(hubs.pelicanServerId, serverId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** The hub of the character's server (ROK-1856), or null (no profile/hub). */
+  async findProfileHub(
+    profileId: number,
+  ): Promise<{ id: number; hidden: boolean } | null> {
+    const [row] = await this.db
+      .select({
+        id: hubs.id,
+        hidden: sql<boolean>`${hubs.hiddenAt} IS NOT NULL`,
+      })
+      .from(p)
+      .innerJoin(hubs, eq(hubs.pelicanServerId, p.pelicanServerId))
+      .where(eq(p.id, profileId))
       .limit(1);
     return row ?? null;
   }
