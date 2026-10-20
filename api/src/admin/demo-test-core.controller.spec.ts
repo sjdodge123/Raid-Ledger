@@ -307,6 +307,7 @@ function clearGameTimeConfirmationTests(
         discordId: null,
         deactivatedAt: null,
         impersonatedBy: null,
+        tokenVersion: 0,
       },
     };
     const result = await getController().clearGameTimeConfirmationForTest(req);
@@ -482,6 +483,7 @@ function resetOnboardingTests(getController: GetController) {
         discordId: null,
         deactivatedAt: null,
         impersonatedBy: null,
+        tokenVersion: 0,
       },
     };
     (resetOnboardingHelperMock as jest.Mock)

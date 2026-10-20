@@ -14,7 +14,8 @@
  * Vector 2: Notification dedup keys survive truncate.
  *   The Playwright reset (`demo-test-reset.service.ts:flushDedupRedisCache`)
  *   sweeps `lineup-*`, `event-*`, `tiebreaker-*`, `scheduling-*`,
- *   `standalone-poll-*`. The integration teardown only sweeps `jwt_block:*`.
+ *   `standalone-poll-*`. The integration teardown originally swept only the
+ *   (since removed, ROK-1823) token-blocklist keys.
  *   A dedup write in spec A silences a notification in spec B.
  *
  * Vector 3: Cron jobs run during the test window (ROK-1223).
@@ -101,8 +102,8 @@ function describeTeardownGaps() {
     // The canonical reset.
     testApp.seed = await truncateAllTables(testApp.db);
 
-    // After teardown, no dedup keys may remain. Today only `jwt_block:*`
-    // is purged, so each of these survives — every assertion below fails
+    // After teardown, no dedup keys may remain. Before ROK-1232 none were
+    // purged, so each of these survives — every assertion below fails
     // until the dev mirrors `flushDedupRedisCache` into the helper.
     const storeAfter = testApp.redisMock.store;
     const survivors = keys.filter((k) => storeAfter.has(k));

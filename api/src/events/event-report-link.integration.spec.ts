@@ -5,9 +5,9 @@
  * a cancelled event is a 409; and the write emits NO `event.updated`, so no
  * embed redraw, Discord Scheduled Event or calendar sync is triggered.
  */
-import { JwtService } from '@nestjs/jwt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -59,9 +59,10 @@ async function createMember(username: string, opts: MemberOpts = {}) {
     })
     .returning();
   const member = defined(user, username);
-  const token = testApp.app
-    .get(JwtService)
-    .sign({ sub: member.id, username: member.username });
+  const token = await signTestAccessToken(testApp, {
+    sub: member.id,
+    username: member.username,
+  });
   return { id: member.id, token };
 }
 

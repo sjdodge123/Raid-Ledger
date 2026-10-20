@@ -1,4 +1,3 @@
-import type { TokenBlocklistService } from './token-blocklist.service';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -49,10 +48,6 @@ function baseUser(overrides: Record<string, unknown>) {
   };
 }
 
-const mockBlocklist = {
-  minIatFor: jest.fn().mockResolvedValue(undefined),
-} as unknown as TokenBlocklistService;
-
 beforeEach(() => {
   (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 });
@@ -60,12 +55,7 @@ beforeEach(() => {
 describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313)', () => {
   it('rejects a banned user with the suspension message', async () => {
     const db = makeDb([[localCred], [baseUser({ bannedAt: new Date() })]]);
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(
       service.validateCredentials('a@b.com', 'pw'),
@@ -75,12 +65,7 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
   it('rejects a kicked user still inside the cooldown', async () => {
     const kickedAt = new Date(Date.now() - 60_000);
     const db = makeDb([[localCred], [baseUser({ kickedAt })]]);
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(service.validateCredentials('a@b.com', 'pw')).rejects.toThrow(
       /log in again in \d+ minute/,
@@ -89,12 +74,7 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
 
   it('returns the user for a clean (non-banned, non-kicked) account', async () => {
     const db = makeDb([[localCred], [baseUser({})]]);
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     const user = await service.validateCredentials('a@b.com', 'pw');
     expect(user).toMatchObject({ id: 5, username: 'target' });
@@ -111,12 +91,7 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
           .fn()
           .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
       });
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     const user = await service.validateCredentials('a@b.com', 'pw');
     expect(user).toMatchObject({ id: 5 });
@@ -124,16 +99,16 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
 });
 
 describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)', () => {
-  const admin = { id: 1, username: 'admin', role: 'admin' as const };
+  const admin = {
+    id: 1,
+    username: 'admin',
+    role: 'admin' as const,
+    tokenVersion: 0,
+  };
 
   it('rejects impersonating a banned account', async () => {
     const db = makeDb([[baseUser({ bannedAt: new Date() })]]);
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(service.impersonate(admin, 5)).rejects.toThrow(
       'Cannot impersonate a suspended account',
@@ -142,12 +117,7 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
 
   it('allows impersonating a non-banned member', async () => {
     const db = makeDb([[baseUser({})]]);
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     const result = await service.impersonate(admin, 5);
     expect(result).toMatchObject({ user: { id: 5 } });
@@ -155,12 +125,7 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
 
   it('still rejects impersonating an admin (UnauthorizedException)', async () => {
     const db = makeDb([[baseUser({ role: 'admin' })]]);
-    const service = new LocalAuthService(
-      db,
-      mockJwt,
-      mockSessions,
-      mockBlocklist,
-    );
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(service.impersonate(admin, 5)).rejects.toBeInstanceOf(
       UnauthorizedException,

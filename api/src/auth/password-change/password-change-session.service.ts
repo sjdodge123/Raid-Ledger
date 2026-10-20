@@ -1,7 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { UserRole } from '@raid-ledger/contract';
-import { TokenBlocklistService } from '../token-blocklist.service';
 import { signAccessToken } from '../access-token-mint.helpers';
 import {
   RefreshTokenService,
@@ -23,54 +22,52 @@ export interface ReissuedSession {
 
 /**
  * ROK-1810: a password change ends every existing session. Refresh families
- * are revoked (no more `/auth/refresh`) and the user is blocklisted (every
- * access JWT minted so far gets 401). The caller who changed their own
+ * are revoked (no more `/auth/refresh`) and the user's token version is
+ * bumped (every access JWT minted so far gets 401, ROK-1823). The caller who changed their own
  * password is then handed a brand-new session instead of being logged out.
  */
 @Injectable()
 export class PasswordChangeSessionService {
-  private readonly logger = new Logger(PasswordChangeSessionService.name);
-
   constructor(
     private readonly refresh: RefreshTokenService,
-    private readonly blocklist: TokenBlocklistService,
     private readonly jwt: JwtService,
   ) {}
 
   /**
-   * Revoke every refresh family and access JWT the user holds. Run it BEFORE
-   * the hash update: a failure after it leaves the old password with no live
-   * sessions, never the new password live beside old ones. A swallowed Redis
-   * error in `blockUser` is logged at error level; the refresh families are
-   * already dead in Postgres, and with Redis down `isBlocked` fails open for
-   * every token anyway, so failing the change would buy nothing.
+   * Revoke every refresh family and access JWT the user holds; returns the
+   * bumped token version for `issueSession`. Run it BEFORE the hash update:
+   * a failure after it leaves the old password with no live sessions, never
+   * the new password live beside old ones. ROK-1823: the refresh revoke and
+   * the version bump share one transaction, so a failure there throws and
+   * leaves every session intact.
    */
-  async revokeAllSessions(userId: number): Promise<void> {
-    await this.refresh.revokeAllForUser(userId);
-    const blocked = await this.blocklist.blockUser(userId);
-    if (!blocked) {
-      this.logger.error(
-        `Password change for user ${userId}: access-token blocklist write failed; existing access JWTs stay valid until they expire (<=1h)`,
-      );
-    }
+  async revokeAllSessions(userId: number): Promise<number> {
+    return this.refresh.revokeAllAndBump(userId);
   }
 
   /**
-   * Issue the caller a fresh session after `revokeAllSessions`. `authMethod`
+   * Issue the caller a fresh session after `revokeAllSessions`, signed with
+   * the version it returned (ROK-1823). `authMethod`
    * is `local` even for a Discord/magic-link session: the caller just proved
    * the local password.
    */
   async issueSession(
     caller: PasswordChangeCaller,
     userAgent: string | null,
+    tokenVersion: number,
   ): Promise<ReissuedSession> {
     const refresh = await this.refresh.issue(caller.id, {
       authMethod: 'local',
       userAgent,
     });
-    const accessToken = await signAccessToken(
-      { jwt: this.jwt, blocklist: this.blocklist },
-      { username: caller.username, sub: caller.id, role: caller.role },
+    const accessToken = signAccessToken(
+      { jwt: this.jwt },
+      {
+        username: caller.username,
+        sub: caller.id,
+        role: caller.role,
+        tv: tokenVersion,
+      },
     );
     return { accessToken, refresh };
   }

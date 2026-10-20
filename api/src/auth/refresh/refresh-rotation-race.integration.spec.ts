@@ -230,10 +230,11 @@ describe('ROK-1820 refresh in flight across a password change', () => {
     const admin = testApp.seed.adminUser;
     let reissued: string | undefined;
     afterRotateCommits(async () => {
-      await pw.revokeAllSessions(userId);
+      const tokenVersion = await pw.revokeAllSessions(userId);
       const session = await pw.issueSession(
         { id: admin.id, username: admin.username, role: admin.role },
         null,
+        tokenVersion,
       );
       reissued = session.refresh.rawToken;
     });

@@ -15,7 +15,7 @@ import * as schema from '../../drizzle/schema';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie.helpers';
 import { CROSS_SITE_REJECTED_MESSAGE } from './same-origin-cookie-post.guard';
 import { RACE_GRACE_MS } from './refresh-grace.helpers';
-import { TokenBlocklistService } from '../token-blocklist.service';
+import { readTokenVersion } from '../token-version.helpers';
 
 const APP_HOST = 'raid.gamernight.net';
 const SAME_ORIGIN = `https://${APP_HOST}`;
@@ -184,17 +184,16 @@ async function familyRevocations(familyId: string) {
     .where(eq(schema.refreshTokens.familyId, familyId));
 }
 
-function isUserBlocked(): Promise<boolean> {
-  const nowSec = Math.floor(Date.now() / 1000);
-  return testApp.app
-    .get(TokenBlocklistService)
-    .isBlocked(testApp.seed.adminUser.id, nowSec);
+/** The admin's token version (ROK-1823: reuse bumps it; a race must not). */
+function adminVersion(): Promise<number> {
+  return readTokenVersion(testApp.db, testApp.seed.adminUser.id);
 }
 
 describe('refresh race grace — one sibling per parent (ROK-1755)', () => {
-  it('3 concurrent refreshes on one cookie → rotation + one sibling + 409, family live, user not blocked', async () => {
+  it('3 concurrent refreshes on one cookie → rotation + one sibling + 409, family live, token version unchanged', async () => {
     const token = await login();
     const familyId = (await rowFor(token)).familyId;
+    const before = await adminVersion();
 
     const results = await Promise.all(
       [0, 1, 2].map(() => post('/auth/refresh', token)),
@@ -214,12 +213,13 @@ describe('refresh race grace — one sibling per parent (ROK-1755)', () => {
     const family = await familyRevocations(familyId);
     expect(family.length).toBe(3); // parent + winner child + one sibling
     expect(family.filter((r) => r.revokedAt !== null)).toEqual([]);
-    expect(await isUserBlocked()).toBe(false);
+    expect(await adminVersion()).toBe(before);
   });
 
   it('a sequential third in-window replay is raced (409), not reuse', async () => {
     const token = await login();
     const familyId = (await rowFor(token)).familyId;
+    const before = await adminVersion();
     expect((await post('/auth/refresh', token)).status).toBe(200);
     expect((await post('/auth/refresh', token)).status).toBe(200);
 
@@ -229,12 +229,13 @@ describe('refresh race grace — one sibling per parent (ROK-1755)', () => {
     expect(replay.body).not.toHaveProperty('access_token');
     const family = await familyRevocations(familyId);
     expect(family.filter((r) => r.revokedAt !== null)).toEqual([]);
-    expect(await isUserBlocked()).toBe(false);
+    expect(await adminVersion()).toBe(before);
   });
 
-  it('a replay older than the window is reuse → family revoked + user blocked', async () => {
+  it('a replay older than the window is reuse → family revoked + token version bumped', async () => {
     const token = await login();
     const familyId = (await rowFor(token)).familyId;
+    const before = await adminVersion();
     expect((await post('/auth/refresh', token)).status).toBe(200);
     await testApp.db
       .update(schema.refreshTokens)
@@ -247,6 +248,6 @@ describe('refresh race grace — one sibling per parent (ROK-1755)', () => {
     const family = await familyRevocations(familyId);
     expect(family.length).toBe(2);
     expect(family.filter((r) => r.revokedAt === null)).toEqual([]);
-    expect(await isUserBlocked()).toBe(true);
+    expect(await adminVersion()).toBe(before + 1);
   });
 });

@@ -10,6 +10,7 @@ import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { IN_FLIGHT_MAX_MS } from './refresh-grace.helpers';
+import { bumpTokenVersion } from '../token-version.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.refreshTokens;
@@ -166,4 +167,24 @@ export async function revokeActiveRows(tx: Db, scope: SQL): Promise<void> {
     .update(t)
     .set({ revokedAt: sql`NOW()` })
     .where(and(scope, isNull(t.revokedAt)));
+}
+
+/**
+ * ROK-1823 D5a: end every session of `userId` inside `tx` — lock its live
+ * families (ROK-1809: an in-flight rotation's child commits first and is
+ * revoked here), revoke every live refresh row, and bump the token version
+ * so every access token dies at the SAME commit. Returns the new version.
+ */
+export async function revokeAllAndBumpTx(
+  tx: Db,
+  userId: number,
+): Promise<number> {
+  // Bump FIRST (review P3): the UPDATE row-locks `users`, so an
+  // `issueAtTokenVersion` racing this transaction either sees the new version
+  // or holds its FOR SHARE lock until its row is committed — and the revoke
+  // below, a later statement, then sees that row too.
+  const version = await bumpTokenVersion(tx, userId);
+  await lockUserFamilies(tx, userId);
+  await revokeActiveRows(tx, eq(t.userId, userId));
+  return version;
 }

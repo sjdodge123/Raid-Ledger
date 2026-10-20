@@ -5,7 +5,6 @@ import type { UserRole } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { UsersService } from '../users/users.service';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { assertKickCooldownOrClear } from './auth-status.helpers';
 import { signPurposeJwt, verifyPurposeJwt } from './purpose-jwt.helpers';
 import { consumeTokenOnce } from './single-use-token.helpers';
@@ -17,6 +16,9 @@ interface MagicLinkPayload {
   sub: number;
   magicLink: true;
   iat: number;
+  /** ROK-1823 D11: the user's token version at mint. Optional in the shape so
+   * a claimless link is still CONSUMED before `redeem` refuses it. */
+  tv?: number;
 }
 
 /** The user a redeemed link signs in, shaped for `AuthService.login`. */
@@ -24,6 +26,8 @@ export interface MagicLinkUser {
   id: number;
   username: string;
   role: UserRole;
+  /** ROK-1823: the version `redeem` checked — the session binds to exactly it. */
+  tokenVersion: number;
 }
 
 function invalidLink(): UnauthorizedException {
@@ -43,14 +47,12 @@ export class MagicLinkService {
   constructor(
     @Inject(JwtService) private jwtService: JwtService,
     @Inject(UsersService) private usersService: UsersService,
-    @Inject(TokenBlocklistService)
-    private tokenBlocklist: TokenBlocklistService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
 
   /**
-   * Build `<clientUrl><path>#token=<jwt>` (15m, `{sub, magicLink:true}`), or
+   * Build `<clientUrl><path>#token=<jwt>` (15m, `{sub, magicLink:true, tv}`), or
    * null when the user does not exist. The fragment never reaches a server.
    */
   async generateLink(
@@ -63,7 +65,7 @@ export class MagicLinkService {
     const token = signPurposeJwt(
       this.jwtService,
       'magic-link',
-      { sub: user.id, magicLink: true },
+      { sub: user.id, magicLink: true, tv: user.tokenVersion },
       '15m',
     );
     const url = new URL(path, clientUrl);
@@ -73,22 +75,26 @@ export class MagicLinkService {
 
   /**
    * Exchange a link token for its user, exactly once. D6: the token is
-   * consumed BEFORE any user check, so a replay is always a 401. Deactivated
-   * users are not refused here — like Discord login, NotDeactivatedGuard
-   * gates them per route.
+   * consumed BEFORE any user check, so a replay is always a 401. ROK-1823
+   * D11: a link whose `tv` is missing or no longer the user's version (minted
+   * before a password/role change) is refused. Deactivated users are not
+   * refused here — like Discord login, NotDeactivatedGuard gates them per route.
    */
   async redeem(token: string): Promise<MagicLinkUser> {
     const payload = this.verify(token);
     if (!(await consumeTokenOnce(this.db, token))) throw invalidLink();
     const user = await this.usersService.findById(payload.sub);
     if (!user || user.bannedAt) throw invalidLink();
-    if (await this.tokenBlocklist.isBlocked(user.id, payload.iat)) {
-      throw invalidLink();
-    }
+    if (payload.tv !== user.tokenVersion) throw invalidLink();
     await assertKickCooldownOrClear(this.db, user).catch(() => {
       throw invalidLink();
     });
-    return { id: user.id, username: user.username, role: user.role };
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+    };
   }
 
   private verify(token: string): MagicLinkPayload {

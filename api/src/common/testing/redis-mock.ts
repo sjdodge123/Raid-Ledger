@@ -7,7 +7,7 @@
  * the codebase touches (set with NX, setex, del, incr, expire, ttl, exists,
  * keys with `*` glob, getdel, ping, quit, disconnect, duplicate). The `store` Map
  * is exposed via the returned handle so `truncateAllTables` can purge
- * cross-suite keys (e.g. `jwt_block:*`) without round-tripping the client.
+ * cross-suite keys (e.g. the `lineup-*` dedup claims) without round-tripping the client.
  *
  * ROK-1436: `set`/`setex`/`expire` now record an expiry so `ttl` reports
  * the real remaining seconds instead of a flat -1. The mock deliberately
@@ -16,11 +16,6 @@
  * surface. `ttl` returns -2 for a missing key and -1 for one with no
  * expiry, matching Redis.
  */
-import {
-  BLOCK_USER_SCRIPT,
-  nextBlockStamp,
-} from '../../auth/token-blocklist.service';
-
 /**
  * Parses ioredis-style trailing `EX <seconds>` / `PX <millis>` tokens into
  * an absolute expiry timestamp. Returns null when no expiry was requested.
@@ -54,30 +49,6 @@ function mockRedisSet(
     if (expiresAt === null) expiries.delete(key);
     else expiries.set(key, expiresAt);
     return Promise.resolve('OK');
-  };
-}
-
-/**
- * ROK-1810: EVAL for the scripts the codebase runs, by their JS twins. An
- * unknown script throws, so a new Lua call cannot silently no-op in tests.
- */
-export function mockRedisEval(
-  store: Map<string, string>,
-  expiries: Map<string, number>,
-) {
-  return (script: string, _numKeys: number, ...args: string[]) => {
-    const [key, seqKey, now, ttl] = args;
-    if (script !== BLOCK_USER_SCRIPT || !key || !seqKey || !now || !ttl) {
-      return Promise.reject(new Error('redis-mock: unsupported EVAL script'));
-    }
-    const previous = store.get(key) ?? null;
-    const sequence = store.get(seqKey) ?? null;
-    const stamp = nextBlockStamp(previous, sequence, Number(now));
-    for (const k of [key, seqKey]) {
-      store.set(k, String(stamp));
-      expiries.set(k, Date.now() + Number(ttl) * 1000);
-    }
-    return Promise.resolve(stamp);
   };
 }
 
@@ -185,7 +156,6 @@ function buildRedisMockClient(
       return Promise.resolve(list.slice(start, end));
     },
     set: mockRedisSet(store, expiries),
-    eval: mockRedisEval(store, expiries),
     setex: (key: string, seconds: number, value: string) => {
       store.set(key, value);
       expiries.set(key, Date.now() + seconds * 1000);

@@ -10,7 +10,7 @@
  * unlinked user), and the JWT + admin guards in front of it all.
  * Discord I/O is stubbed: the LIVE embed post is the smoke's job, not this one.
  */
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { at, nonEmpty } from '../common/testing/narrow';
@@ -244,9 +244,10 @@ describe('POST /admin/test/quick-play/voice-join guards', () => {
 
   it('403s a member who is not an admin', async () => {
     const join = await seededJoin();
-    const token = testApp.app
-      .get(JwtService)
-      .sign({ sub: join.userId, username: 'quickplayer' });
+    const token = await signTestAccessToken(testApp, {
+      sub: join.userId,
+      username: 'quickplayer',
+    });
     const res = await testApp.request
       .post('/admin/test/quick-play/voice-join')
       .set('Authorization', `Bearer ${token}`)

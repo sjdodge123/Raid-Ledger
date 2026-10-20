@@ -6,8 +6,8 @@
  * section, the member none, the admin `omittedPrivate`. Idempotent; 403
  * without DEMO_MODE; admin-only.
  */
-import { JwtService } from '@nestjs/jwt';
 import { ValheimMaterialsResponseSchema } from '@raid-ledger/contract';
+import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -36,9 +36,7 @@ let adminToken: string;
 const registry = () => testApp.app.get(PluginRegistryService);
 const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
 const sign = (sub: number) =>
-  testApp.app
-    .get(JwtService)
-    .sign({ sub, username: `u${sub}`, role: 'member' });
+  signTestAccessToken(testApp, { sub, username: `u${sub}`, role: 'member' });
 
 async function setDemoMode(on: boolean): Promise<void> {
   process.env.DEMO_MODE = on ? 'true' : 'false';
@@ -115,20 +113,20 @@ describe('POST /admin/test/valheim/armory/seed-containers (ROK-1853 L5)', () => 
     );
     const hub = await testApp.request
       .get(`/guilds/${f.hubId}`)
-      .set(bearer(sign(f.memberUserId)));
+      .set(bearer(await sign(f.memberUserId)));
     expect(hub.status).toBe(200);
 
-    const member = await materials(f.serverId, sign(f.memberUserId));
+    const member = await materials(f.serverId, await sign(f.memberUserId));
     expect(member.personal).toBeNull();
     expect(woodTotal(member.shared.totals)).toBe(156);
     const noCarts = await materials(
       f.serverId,
-      sign(f.memberUserId),
+      await sign(f.memberUserId),
       '?includeVehicles=false',
     );
     expect(woodTotal(noCarts.shared.totals)).toBe(57);
 
-    const owner = await materials(f.serverId, sign(f.ownerUserId));
+    const owner = await materials(f.serverId, await sign(f.ownerUserId));
     expect(owner.personal?.chestCount).toBe(1);
     expect(owner.personal?.omittedPrivate).toBeNull();
     expect(owner.personal?.totals).toEqual([
@@ -145,14 +143,14 @@ describe('POST /admin/test/valheim/armory/seed-containers (ROK-1853 L5)', () => 
       testApp.request
         .get(`/plugins/valheim/armory/servers/${f.serverId}/containers/${key}`)
         .set(bearer(token));
-    const shared = await detail(f.sharedChestKey, sign(f.memberUserId));
+    const shared = await detail(f.sharedChestKey, await sign(f.memberUserId));
     expect(shared.status).toBe(200);
-    expect((await detail(f.privateChestKey, sign(f.ownerUserId))).status).toBe(
-      200,
-    );
-    expect((await detail(f.privateChestKey, sign(f.memberUserId))).status).toBe(
-      404,
-    );
+    expect(
+      (await detail(f.privateChestKey, await sign(f.ownerUserId))).status,
+    ).toBe(200);
+    expect(
+      (await detail(f.privateChestKey, await sign(f.memberUserId))).status,
+    ).toBe(404);
   });
 
   it('is idempotent: a re-run returns the same ids and keys, one scan', async () => {
@@ -183,7 +181,7 @@ describe('POST /admin/test/valheim/armory/seed-containers (ROK-1853 L5)', () => 
     const f = await seed();
     const asMember = await testApp.request
       .post(ROUTE)
-      .set(bearer(sign(f.memberUserId)))
+      .set(bearer(await sign(f.memberUserId)))
       .send({});
     expect(asMember.status).toBe(403);
     await setDemoMode(false);

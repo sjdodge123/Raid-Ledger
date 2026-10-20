@@ -19,13 +19,20 @@ import type { AuthService } from './auth.service';
 import type { RefreshTokenService } from './refresh/refresh-token.service';
 import { RATE_LIMIT_TIERS } from '../throttler/rate-limit.decorator';
 
-const USER = { id: 9, username: 'mia', role: 'member' as const };
+const USER = {
+  id: 9,
+  username: 'mia',
+  role: 'member' as const,
+  tokenVersion: 4,
+};
 
 function setup() {
   const magic = { redeem: jest.fn().mockResolvedValue(USER) };
   const auth = { login: jest.fn().mockReturnValue({ access_token: 'acc' }) };
   const refresh = {
-    issue: jest.fn().mockResolvedValue({ rawToken: 'raw-rt', maxAgeMs: 5000 }),
+    issueAtTokenVersion: jest
+      .fn()
+      .mockResolvedValue({ rawToken: 'raw-rt', maxAgeMs: 5000 }),
   };
   const ctrl = new MagicLinkController(
     magic as unknown as MagicLinkService,
@@ -50,7 +57,7 @@ describe('MagicLinkController — POST /auth/redeem-magic-link', () => {
     const out = await ctrl.redeem({ token: 'tok' }, jsonReq(), res);
 
     expect(magic.redeem).toHaveBeenCalledWith('tok');
-    expect(refresh.issue).toHaveBeenCalledWith(9, {
+    expect(refresh.issueAtTokenVersion).toHaveBeenCalledWith(9, 4, {
       authMethod: 'magic',
       userAgent: 'UA/1.0',
     });
@@ -59,7 +66,7 @@ describe('MagicLinkController — POST /auth/redeem-magic-link', () => {
       'raw-rt',
       expect.objectContaining({ httpOnly: true, maxAge: 5000 }),
     );
-    expect(auth.login).toHaveBeenCalledWith(USER);
+    expect(auth.login).toHaveBeenCalledWith(USER, 4);
     expect(out).toEqual({ access_token: 'acc' });
   });
 
@@ -100,8 +107,19 @@ describe('MagicLinkController — POST /auth/redeem-magic-link', () => {
     await expect(
       ctrl.redeem({ token: 'spent' }, jsonReq(), res),
     ).rejects.toThrow(INVALID_MAGIC_LINK_MESSAGE);
-    expect(refresh.issue).not.toHaveBeenCalled();
+    expect(refresh.issueAtTokenVersion).not.toHaveBeenCalled();
     expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it('a token version moved since the redeem check → the shared 401, no cookie, no access token', async () => {
+    const { ctrl, auth, refresh, res } = setup();
+    refresh.issueAtTokenVersion.mockResolvedValue(null);
+
+    await expect(ctrl.redeem({ token: 'tok' }, jsonReq(), res)).rejects.toThrow(
+      INVALID_MAGIC_LINK_MESSAGE,
+    );
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(auth.login).not.toHaveBeenCalled();
   });
 
   it('carries the auth rate-limit tier and no guard (AC7)', () => {

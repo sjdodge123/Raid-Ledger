@@ -22,7 +22,6 @@ import { CharactersModule } from '../characters/characters.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SessionCleanupService } from './session-cleanup.service';
 import { IntentTokenCleanupService } from './intent-token-cleanup.service';
-import { TokenBlocklistService } from './token-blocklist.service';
 import { RefreshTokenService } from './refresh/refresh-token.service';
 import { RefreshTokenController } from './refresh/refresh-token.controller';
 import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
@@ -75,7 +74,6 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     JwtStrategy,
     SessionCleanupService,
     IntentTokenCleanupService,
-    TokenBlocklistService,
     RefreshTokenService,
     RefreshTokenCleanupService,
     ImpersonationSessionService,
@@ -87,7 +85,6 @@ import { PasswordChangeSessionService } from './password-change/password-change-
     MagicLinkService,
     IntentTokenService,
     LinkNonceService,
-    TokenBlocklistService,
     RefreshTokenService,
     PasswordChangeSessionService,
   ],

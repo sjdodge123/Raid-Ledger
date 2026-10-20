@@ -36,6 +36,7 @@ function user(over: Partial<AuthenticatedUser>): AuthenticatedUser {
     discordId: null,
     deactivatedAt: null,
     impersonatedBy: null,
+    tokenVersion: 0,
     ...over,
   };
 }
