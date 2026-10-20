@@ -17,6 +17,7 @@ import * as users from './community-proposals.users';
 jest.mock('./community-hub.lookup', () => ({
   ...jest.requireActual('./community-hub.lookup'),
   requireCommunityHub: jest.fn(),
+  assertUserExists: jest.fn(),
 }));
 jest.mock('./community-membership.queries');
 jest.mock('./community-proposals.users');
@@ -223,5 +224,27 @@ describe('setStatus copy', () => {
     expect(Object.keys(set.mock.calls[0]?.[0] ?? {})).not.toContain(
       'hiddenAt',
     );
+  });
+});
+
+describe('banUser (M22)', () => {
+  it('reads the target role under the hub lock — the new leader cannot be banned', async () => {
+    const order: string[] = [];
+    jest.mocked(lookup.requireCommunityHub).mockResolvedValue(HUB);
+    jest.mocked(mq.lockHubRow).mockImplementation(() => {
+      order.push('lock');
+      return Promise.resolve({ status: 'active' });
+    });
+    jest.mocked(mq.findMembership).mockImplementation(() => {
+      order.push('read');
+      return Promise.resolve(memberRow({ userId: 3, role: 'leader' }));
+    });
+    await expect(svc.banUser(leader, 7, 3, {})).rejects.toThrow(
+      ConflictException,
+    );
+    expect(order).toEqual(['lock', 'read']);
+    expect(mq.findMembership).toHaveBeenCalledWith({}, 7, 3);
+    expect(mq.ban).not.toHaveBeenCalled();
+    expect(rolledBack).toBe(true);
   });
 });

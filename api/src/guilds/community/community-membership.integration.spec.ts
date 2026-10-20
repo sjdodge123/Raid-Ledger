@@ -364,6 +364,42 @@ describe('review fixes (M16–M19)', () => {
   });
 });
 
+describe('transfer races (M22)', () => {
+  async function liveLeaders(hub: number): Promise<number[]> {
+    const rows = await testApp.db
+      .select()
+      .from(schema.hubCommunityMembers)
+      .where(eq(schema.hubCommunityMembers.guildId, hub));
+    return rows
+      .filter((r) => r.role === 'leader' && !r.leftAt && !r.bannedAt)
+      .map((r) => r.userId);
+  }
+
+  it('M22: a transfer racing the new leader leaving / being demoted never leaves the hub leaderless', async () => {
+    const [leader, heir, other] = [
+      await mkUser(),
+      await mkUser(),
+      await mkUser(),
+    ];
+    const hubA = await mkHub(leader, [heir, other]);
+    await Promise.all([
+      call('post', `/hubs/${hubA}/leader`, leader.token, { userId: heir.id }),
+      call('delete', `/hubs/${hubA}/join`, heir.token),
+    ]);
+    expect(await liveLeaders(hubA)).toHaveLength(1);
+    expect((await hubRow(hubA)).status).toBe('active');
+
+    const hubB = await mkHub(leader, [heir, other]);
+    await Promise.all([
+      call('post', `/hubs/${hubB}/leader`, leader.token, { userId: heir.id }),
+      call('patch', `/hubs/${hubB}/members/${heir.id}/role`, leader.token, {
+        role: 'member',
+      }),
+    ]);
+    expect(await liveLeaders(hubB)).toHaveLength(1);
+  });
+});
+
 describe('core hub surfaces (M9–M11)', () => {
   it('M9 + M10: guilds/mine lists the hub; its page reads via the core adapter', async () => {
     const [leader, u] = [await mkUser(), await mkUser()];

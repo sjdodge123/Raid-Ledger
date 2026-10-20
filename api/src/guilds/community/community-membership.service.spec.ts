@@ -1,6 +1,10 @@
 /** ROK-1870 review — Join / leader-leave run under the hub row lock. */
 import { Test } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type * as schema from '../../drizzle/schema';
 import type { GuildActor } from '../guild-access.service';
@@ -38,6 +42,7 @@ const row = (
   ...over,
 });
 const order: string[] = [];
+const adapter = { resolveLadder: jest.fn() };
 const db = {
   transaction: async (fn: (tx: object) => Promise<unknown>) => {
     order.push('begin');
@@ -55,7 +60,7 @@ beforeEach(async () => {
     providers: [
       CommunityMembershipService,
       { provide: DrizzleAsyncProvider, useValue: db },
-      { provide: CommunityHubKindAdapter, useValue: {} },
+      { provide: CommunityHubKindAdapter, useValue: adapter },
     ],
   }).compile();
   svc = mod.get(CommunityMembershipService);
@@ -105,5 +110,40 @@ describe('join', () => {
       memberCount: 3,
     });
     expect(order).toEqual(['begin', 'lock', 'upsert', 'commit']);
+  });
+});
+
+describe('role-sensitive writes serialise with transfers (M22)', () => {
+  beforeEach(() => {
+    jest.mocked(mq.findMembership).mockImplementation(() => {
+      order.push('read');
+      return Promise.resolve(row({ userId: 3, role: 'leader' }));
+    });
+  });
+
+  it('remove reads the target under the hub lock — a just-promoted leader is refused', async () => {
+    adapter.resolveLadder.mockResolvedValue('officer');
+    await expect(svc.remove(actor, 7, 3)).rejects.toThrow(ForbiddenException);
+    expect(order).toEqual(['begin', 'lock', 'read']);
+    expect(mq.findMembership).toHaveBeenCalledWith({}, 7, 3);
+    expect(mq.markLeft).not.toHaveBeenCalled();
+  });
+
+  it('setRole reads the target under the hub lock — never demotes the new leader', async () => {
+    adapter.resolveLadder.mockResolvedValue('leader');
+    await expect(
+      svc.setRole(actor, 7, 3, { role: 'member' }),
+    ).rejects.toThrow(ConflictException);
+    expect(order).toEqual(['begin', 'lock', 'read']);
+    expect(mq.setRole).not.toHaveBeenCalled();
+  });
+
+  it("leave reads the leaver's role under the hub lock", async () => {
+    jest.mocked(lookup.countLiveMembers).mockResolvedValue(2);
+    await expect(svc.leave({ id: 3, role: 'member' }, 7)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(order).toEqual(['begin', 'lock', 'read']);
+    expect(mq.markLeft).not.toHaveBeenCalled();
   });
 });

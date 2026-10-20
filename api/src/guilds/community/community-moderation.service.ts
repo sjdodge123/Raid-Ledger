@@ -29,9 +29,11 @@ import { mayChangeStatus, mayModerate } from './community-ladder.helpers';
 import {
   ban,
   findMembership,
+  lockHubRow,
   refreshMemberCount,
   swapLeader,
   unban,
+  type DbOrTx,
 } from './community-membership.queries';
 import {
   CommunityMembershipService,
@@ -114,20 +116,33 @@ export class CommunityModerationService {
   ): Promise<void> {
     await requireCommunityHub(this.db, hubId, true);
     await assertUserExists(this.db, userId);
-    const row = await findMembership(this.db, hubId, userId);
+    await this.db.transaction(async (tx) => {
+      await lockHubRow(tx, hubId);
+      await this.assertMayBan(tx, actor, hubId, userId);
+      await ban(tx, {
+        guildId: hubId,
+        userId,
+        bannedBy: actor.id,
+        reason: body.reason ?? null,
+      });
+    });
+    await refreshMemberCount(this.db, hubId);
+  }
+
+  /** The D7 ban ladder, read under the caller's hub row lock (M22). */
+  private async assertMayBan(
+    tx: DbOrTx,
+    actor: GuildActor,
+    hubId: number,
+    userId: number,
+  ): Promise<void> {
+    const row = await findMembership(tx, hubId, userId);
     const liveRole = row !== null && isLive(row) ? row.role : null;
     if (liveRole === 'leader')
       throw new ConflictException('The leader cannot be banned');
     if (!mayModerate(await this.members.role(actor, hubId), liveRole)) {
       throw new ForbiddenException("You can't ban this member");
     }
-    await ban(this.db, {
-      guildId: hubId,
-      userId,
-      bannedBy: actor.id,
-      reason: body.reason ?? null,
-    });
-    await refreshMemberCount(this.db, hubId);
   }
 
   /** DELETE /hubs/:id/bans/:userId — 404 when not banned; the D7 ladder. */

@@ -31,6 +31,7 @@ import {
   refreshMemberCount,
   setRole,
   upsertJoin,
+  type DbOrTx,
   type HubCommunityMemberRow,
 } from './community-membership.queries';
 
@@ -85,46 +86,56 @@ export class CommunityMembershipService {
     hubId: number,
   ): Promise<CommunityHubJoinResponse> {
     await requireCommunityHub(this.db, hubId, true);
-    const row = await findMembership(this.db, hubId, actor.id);
-    if (isLive(row) && row?.role === 'leader') {
-      await this.leaveAsLeader(hubId, actor.id);
-    } else {
-      await markLeft(this.db, hubId, actor.id, null);
-    }
+    await this.db.transaction(async (tx) => {
+      await lockHubRow(tx, hubId);
+      const row = await findMembership(tx, hubId, actor.id);
+      if (isLive(row) && row?.role === 'leader') {
+        await this.leaveAsLeader(tx, hubId, actor.id);
+      } else {
+        await markLeft(tx, hubId, actor.id, null);
+      }
+    });
     return {
       joined: false,
       memberCount: await refreshMemberCount(this.db, hubId),
     };
   }
 
-  /** D13 under the hub row lock, so a concurrent Join cannot slip in. */
-  private async leaveAsLeader(hubId: number, userId: number): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await lockHubRow(tx, hubId);
-      if ((await countLiveMembers(tx, hubId)) > 1) {
-        throw new ConflictException('Transfer leadership before leaving');
-      }
-      await markLeft(tx, hubId, userId, null);
-      await archiveHub(tx, hubId, 'empty');
-    });
+  /** D13 — the caller holds the hub row lock, so a Join cannot slip in. */
+  private async leaveAsLeader(
+    tx: DbOrTx,
+    hubId: number,
+    userId: number,
+  ): Promise<void> {
+    if ((await countLiveMembers(tx, hubId)) > 1) {
+      throw new ConflictException('Transfer leadership before leaving');
+    }
+    await markLeft(tx, hubId, userId, null);
+    await archiveHub(tx, hubId, 'empty');
   }
 
-  /** DELETE /hubs/:id/members/:userId — the D7 ladder. */
+  /**
+   * DELETE /hubs/:id/members/:userId — the D7 ladder. Roles are read under
+   * the hub row lock `swapLeader` takes, so a transfer cannot interleave.
+   */
   async remove(
     actor: GuildActor,
     hubId: number,
     userId: number,
   ): Promise<void> {
     await requireCommunityHub(this.db, hubId, true);
-    const target = await this.liveTarget(hubId, userId);
-    if (!mayModerate(await this.role(actor, hubId), target.role)) {
-      throw new ForbiddenException("You can't remove this member");
-    }
-    await markLeft(this.db, hubId, userId, actor.id);
+    await this.db.transaction(async (tx) => {
+      await lockHubRow(tx, hubId);
+      const target = await this.liveTarget(hubId, userId, tx);
+      if (!mayModerate(await this.role(actor, hubId), target.role)) {
+        throw new ForbiddenException("You can't remove this member");
+      }
+      await markLeft(tx, hubId, userId, actor.id);
+    });
     await refreshMemberCount(this.db, hubId);
   }
 
-  /** PATCH /hubs/:id/members/:userId/role — Leader only; never the Leader. */
+  /** PATCH …/role — Leader only; never the Leader (read under the hub lock). */
   async setRole(
     actor: GuildActor,
     hubId: number,
@@ -132,12 +143,15 @@ export class CommunityMembershipService {
     body: HubMemberRoleUpdateDto,
   ): Promise<CommunityMemberRoleResult> {
     await requireCommunityHub(this.db, hubId, true);
-    await this.assertLeader(actor, hubId);
-    const target = await this.liveTarget(hubId, userId);
-    if (target.role === 'leader') {
-      throw new ConflictException("The leader's role cannot be changed");
-    }
-    const row = await setRole(this.db, hubId, userId, body.role);
+    const row = await this.db.transaction(async (tx) => {
+      await lockHubRow(tx, hubId);
+      await this.assertLeader(actor, hubId);
+      const target = await this.liveTarget(hubId, userId, tx);
+      if (target.role === 'leader') {
+        throw new ConflictException("The leader's role cannot be changed");
+      }
+      return setRole(tx, hubId, userId, body.role);
+    });
     if (!row) throw new NotFoundException('Not a member of this hub');
     return { userId, role: row.role, joinedAt: row.joinedAt.toISOString() };
   }
@@ -154,12 +168,13 @@ export class CommunityMembershipService {
     }
   }
 
-  /** The target's live row; 404 when they are not a live member. */
+  /** The target's live row (read on `db`); 404 when not a live member. */
   async liveTarget(
     hubId: number,
     userId: number,
+    db: DbOrTx = this.db,
   ): Promise<HubCommunityMemberRow> {
-    const row = await findMembership(this.db, hubId, userId);
+    const row = await findMembership(db, hubId, userId);
     if (row === null || !isLive(row)) {
       throw new NotFoundException('Not a member of this hub');
     }
