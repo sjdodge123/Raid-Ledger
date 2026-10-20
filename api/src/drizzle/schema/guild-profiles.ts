@@ -50,6 +50,8 @@ export const guildProfiles = pgTable(
     discordChannelSetAt: timestamp('discord_channel_set_at', {
       withTimezone: true,
     }),
+    /** ROK-1868 A4: the composer's "Also post to Discord" default (last choice). */
+    postRelayDefault: boolean('post_relay_default').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

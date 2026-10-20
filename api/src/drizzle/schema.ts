@@ -73,6 +73,7 @@ export * from './schema/guilds';
 export * from './schema/guild-members';
 export * from './schema/guild-editors';
 export * from './schema/guild-profiles';
+export * from './schema/hub-posts';
 export * from './schema/guild-recommended-addons';
 export * from './schema/hub-server-members';
 export * from './schema/hub-onboarding-dismissals';
