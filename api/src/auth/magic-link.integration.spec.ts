@@ -11,6 +11,7 @@
  * this file's realm by `getTestApp`).
  */
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import { currentTokenVersion } from '../common/testing/sign-test-access-token';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -358,7 +359,8 @@ describe('magic tokens as Authorization: Bearer (AC5)', () => {
 
   it('a JWT_SECRET-signed {magicLink:true} token is 401 through JwtStrategy', async () => {
     const sub = testApp.seed.adminUser.id;
-    const payload = { sub, username: 'admin', role: 'admin' };
+    const tv = await currentTokenVersion(testApp.db, sub);
+    const payload = { sub, username: 'admin', role: 'admin', tv };
     const opts = jwtSecretSignOptions();
     const plain = signer.sign(payload, opts);
     const legacy = signer.sign({ ...payload, magicLink: true }, opts);

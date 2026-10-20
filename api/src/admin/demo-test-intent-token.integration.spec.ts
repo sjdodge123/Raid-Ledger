@@ -8,6 +8,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { z } from 'zod';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -140,9 +141,11 @@ describe('POST /admin/test/intent-token — gates', () => {
       })
       .returning();
     const memberId = defined(member, 'inserted member').id;
-    const memberToken = testApp.app
-      .get(JwtService)
-      .sign({ sub: memberId, username: 'intent-token-member', role: 'member' });
+    const memberToken = await signTestAccessToken(testApp, {
+      sub: memberId,
+      username: 'intent-token-member',
+      role: 'member',
+    });
 
     const eventId = await insertEvent('intent-token-non-admin');
     const res = await mint({ eventId, intent: 'signup' }, memberToken);

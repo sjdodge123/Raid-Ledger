@@ -6,7 +6,7 @@
  * attendance math over current linked members, and the viewer's status.
  */
 import { randomUUID } from 'node:crypto';
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -77,9 +77,11 @@ async function seedUser(who: Who, rankIndex: number | null): Promise<void> {
       lastSeenAt: SNAP,
     });
   }
-  const token = testApp.app
-    .get(JwtService)
-    .sign({ sub: user.id, username: who, role: 'member' });
+  const token = await signTestAccessToken(testApp, {
+    sub: user.id,
+    username: who,
+    role: 'member',
+  });
   users[who] = { id: user.id, charId: char.id, token };
 }
 

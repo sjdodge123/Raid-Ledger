@@ -8,6 +8,7 @@
  * 500 from the users lookup.
  */
 import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
@@ -48,10 +49,11 @@ async function setDeactivated(userId: number, on: boolean): Promise<void> {
   invalidateAuthUser(userId);
 }
 
-function bearer(user: { id: number; username: string }): string {
-  return testApp.app
-    .get(JwtService)
-    .sign({ sub: user.id, username: user.username });
+function bearer(user: { id: number; username: string }): Promise<string> {
+  return signTestAccessToken(testApp, {
+    sub: user.id,
+    username: user.username,
+  });
 }
 
 async function issueRefresh(userId: number): Promise<string> {
@@ -92,7 +94,7 @@ function hit(token: string, route: (typeof GUARDED)[number]) {
 describe('ROK-1753 — deactivated access JWT is rejected by JwtStrategy', () => {
   it.each(GUARDED)('$name → 401 USER_DEACTIVATED', async (route) => {
     const user = await createMember(`deact-${route.method}`);
-    const token = bearer(user);
+    const token = await bearer(user);
     await setDeactivated(user.id, true);
 
     const res = await hit(token, route);
@@ -105,7 +107,7 @@ describe('ROK-1753 — deactivated access JWT is rejected by JwtStrategy', () =>
 
   it('reactivation resumes the SAME access token', async () => {
     const user = await createMember('react-access');
-    const token = bearer(user);
+    const token = await bearer(user);
     await setDeactivated(user.id, true);
     expect((await hit(token, defined(GUARDED[2], 'me'))).status).toBe(401);
 
@@ -118,7 +120,7 @@ describe('ROK-1753 — deactivated access JWT is rejected by JwtStrategy', () =>
   it('an admin impersonating a deactivated user is still let through', async () => {
     const user = await createMember('imp-deact');
     await setDeactivated(user.id, true);
-    const token = testApp.app.get(JwtService).sign({
+    const token = await signTestAccessToken(testApp, {
       sub: user.id,
       username: user.username,
       impersonatedBy: testApp.seed.adminUser.id,
@@ -197,7 +199,7 @@ describe('ROK-1753 — a banned (hence also deactivated) user keeps the ban path
 
   it('the access JWT gets the suspended reason, NOT USER_DEACTIVATED', async () => {
     const user = await createMember('banned-bearer');
-    const token = bearer(user);
+    const token = await bearer(user);
     await banAndDeactivate(user.id);
 
     const res = await hit(token, defined(GUARDED[2], 'me'));
@@ -231,7 +233,10 @@ describe('ROK-1764 — a bearer JWT without a numeric sub is a 401', () => {
     ['zero', 0],
     ['a float', 1.5],
   ])('rejects a sub that is %s', async (_label, sub) => {
-    const token = testApp.app.get(JwtService).sign({ sub, username: 'x' });
+    // `tv: 0` keeps the version claim well-formed, so only the bad sub can 401.
+    const token = testApp.app
+      .get(JwtService)
+      .sign({ sub, username: 'x', tv: 0 });
 
     const res = await testApp.request
       .get('/auth/me')
