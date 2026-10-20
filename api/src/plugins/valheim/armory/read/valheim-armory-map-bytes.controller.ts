@@ -12,7 +12,7 @@ import {
   type PipeTransform,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import {
   ValheimMapFogLayerSchema,
   type ValheimMapFogLayer,
@@ -21,6 +21,7 @@ import {
   PluginActiveGuard,
   RequirePlugin,
 } from '../../../plugin-host/plugin-active.guard';
+import type { AuthenticatedExpressRequest } from '../../../../auth/types';
 import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { armoryIdPipe } from '../valheim-armory-id.pipe';
 import {
@@ -80,10 +81,10 @@ export class ValheimArmoryMapBytesController {
   async baseMap(
     @Param('id', armoryIdPipe) id: number,
     @Param('mapId', armoryIdPipe) mapId: number,
-    @Req() req: Request,
+    @Req() req: AuthenticatedExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile | undefined> {
-    const { sha256, absPath } = await this.bytes.baseMap(id, mapId);
+    const { sha256, absPath } = await this.bytes.baseMap(id, mapId, req.user);
     const etag = `"${sha256}"`;
     // `req.fresh` compares against the response ETag, so set it to ask —
     // a 304 carries no body, so it may keep the validator (file unopened).
@@ -109,10 +110,10 @@ export class ValheimArmoryMapBytesController {
     @Param('id', armoryIdPipe) id: number,
     @Param('mapId', armoryIdPipe) mapId: number,
     @Query('layer', new FogLayerPipe()) layer: ValheimMapFogLayer,
-    @Req() req: Request,
+    @Req() req: AuthenticatedExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile | undefined> {
-    const { bytes, etag } = await this.bytes.fog(id, mapId, layer);
+    const { bytes, etag } = await this.bytes.fog(id, mapId, layer, req.user);
     res.set({
       'Content-Type': 'application/octet-stream',
       'X-Content-Type-Options': 'nosniff',
