@@ -167,6 +167,7 @@ test.describe("Valheim hub — Materials personal section per viewer (ROK-1853)"
 
   test("owner sees their 1 private chest; a member sees no personal section", async ({
     page,
+    browser,
   }, testInfo) => {
     const f = await seedContainers(testInfo);
     const wide = isDesktop(testInfo);
@@ -181,10 +182,21 @@ test.describe("Valheim hub — Materials personal section per viewer (ROK-1853)"
     // The admin-only omittedPrivate line; the shared warnings block may say "was not scanned".
     await expect(page.getByText(/personal chests? not scanned/)).toHaveCount(0);
 
-    await page.context().clearCookies();
-    await signInContextAs(page.context(), f.memberUserId);
-    await openMaterials(page, f, wide);
-    await expect(totalRows(totals(page, wide), wide).first()).toBeVisible();
-    await expect(personalHeading(page)).toHaveCount(0);
+    // A fresh context for the member: the SPA keeps its session in memory, so
+    // clearing cookies on the owner's page does not sign that page out.
+    const viewport = page.viewportSize();
+    const memberContext = await browser.newContext({
+      ...(viewport ? { viewport } : {}),
+      storageState: { cookies: [], origins: [] },
+    });
+    try {
+      const memberPage = await memberContext.newPage();
+      await signInContextAs(memberContext, f.memberUserId);
+      await openMaterials(memberPage, f, wide);
+      await expect(totalRows(totals(memberPage, wide), wide).first()).toBeVisible();
+      await expect(personalHeading(memberPage)).toHaveCount(0);
+    } finally {
+      await memberContext.close();
+    }
   });
 });
