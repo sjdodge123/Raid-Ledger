@@ -26,6 +26,7 @@ import {
   upsertJoin,
   type DbOrTx,
 } from './community-membership.queries';
+import { conflictOnUnique } from './community-db-errors';
 import * as q from './community-proposals.queries';
 import { findProposalUser, staffUserIds } from './community-proposals.users';
 import { isInDiscordGuild } from './discord-guild-member.helpers';
@@ -79,12 +80,16 @@ export class CommunityProposalsService {
     await this.requireGame(dto.gameId);
     await this.assertWithinLimits(actor.id, dto.gameId);
     await this.assertNameFree(this.db, dto.gameId, dto.name, null);
-    const row = await q.insertCommunityHub(this.db, {
-      ...dto,
-      status: 'proposed',
-      proposedBy: actor.id,
-      reviewedBy: null,
-    });
+    const row = await conflictOnUnique(
+      () =>
+        q.insertCommunityHub(this.db, {
+          ...dto,
+          status: 'proposed',
+          proposedBy: actor.id,
+          reviewedBy: null,
+        }),
+      PROPOSAL_ERRORS.nameTaken,
+    );
     const proposal = await this.findProposal(row.id);
     const staff = await staffUserIds(this.db);
     const facts = factsOf(proposal);
@@ -117,20 +122,7 @@ export class CommunityProposalsService {
     id: number,
     dto: ApproveHubProposalDto,
   ): Promise<GuildSummary> {
-    const { row, proposerId } = await this.db.transaction(async (tx) => {
-      const locked = await q.lockProposal(tx, id);
-      if (!locked) throw new NotFoundException(PROPOSAL_ERRORS.notFound);
-      const proposer = await this.activeProposer(tx, locked.proposedBy);
-      if (dto.name !== undefined)
-        await this.assertNameFree(tx, locked.gameId, dto.name, id);
-      const active = await q.activateProposal(tx, id, {
-        reviewedBy: adminId,
-        ...dto,
-      });
-      await upsertJoin(tx, id, proposer, 'leader');
-      const memberCount = await refreshMemberCount(tx, id);
-      return { row: { ...active, memberCount }, proposerId: proposer };
-    });
+    const { row, proposerId } = await this.approveTx(adminId, id, dto);
     const gameName = (await q.findGameName(this.db, row.gameId)) ?? 'your game';
     await this.send([
       approvedNotice(proposerId, {
@@ -142,15 +134,46 @@ export class CommunityProposalsService {
     return toCommunitySummary(row);
   }
 
-  /** A1: notify the proposer with the reason, THEN delete the row. */
+  /** The D8 transaction; a rename clash on the unique index is a 409. */
+  private approveTx(
+    adminId: number,
+    id: number,
+    dto: ApproveHubProposalDto,
+  ): Promise<{ row: schema.GuildSelect; proposerId: number }> {
+    const run = () =>
+      this.db.transaction(async (tx) => {
+        const locked = await q.lockProposal(tx, id);
+        if (!locked) throw new NotFoundException(PROPOSAL_ERRORS.notFound);
+        const proposer = await this.activeProposer(tx, locked.proposedBy);
+        if (dto.name !== undefined)
+          await this.assertNameFree(tx, locked.gameId, dto.name, id);
+        const active = await q.activateProposal(tx, id, {
+          reviewedBy: adminId,
+          ...dto,
+        });
+        await upsertJoin(tx, id, proposer, 'leader');
+        const memberCount = await refreshMemberCount(tx, id);
+        return { row: { ...active, memberCount }, proposerId: proposer };
+      });
+    return conflictOnUnique(run, PROPOSAL_ERRORS.nameTaken);
+  }
+
+  /**
+   * A1: delete the locked row, THEN notify from the captured payload (it is
+   * self-contained). An orphan (proposer deleted) is still rejectable.
+   */
   async reject(id: number, reason: string): Promise<void> {
-    const proposal = await this.findProposal(id);
+    const proposal = await this.db.transaction(async (tx) => {
+      if (!(await q.lockProposal(tx, id)))
+        throw new NotFoundException(PROPOSAL_ERRORS.notFound);
+      const [found] = await q.listProposals(tx, { ids: [id] });
+      await q.deleteProposal(tx, id);
+      return found ?? null;
+    });
+    if (proposal === null) return;
     await this.send([
       rejectedNotice(proposal.proposedBy.userId, factsOf(proposal), reason),
     ]);
-    if (!(await q.deleteProposal(this.db, id))) {
-      throw new NotFoundException(PROPOSAL_ERRORS.notFound);
-    }
   }
 
   /** `POST /admin/hubs` — an active hub led by `leaderUserId`. */
@@ -165,19 +188,22 @@ export class CommunityProposalsService {
       throw new ConflictException(PROPOSAL_ERRORS.leaderInactive);
     }
     await this.assertNameFree(this.db, dto.gameId, dto.name, null);
-    const row = await this.db.transaction(async (tx) => {
-      const hub = await q.insertCommunityHub(tx, {
-        gameId: dto.gameId,
-        name: dto.name,
-        blurb: dto.blurb,
-        status: 'active',
-        proposedBy: null,
-        reviewedBy: adminId,
+    const run = () =>
+      this.db.transaction(async (tx) => {
+        const hub = await q.insertCommunityHub(tx, {
+          gameId: dto.gameId,
+          name: dto.name,
+          blurb: dto.blurb,
+          status: 'active',
+          proposedBy: null,
+          reviewedBy: adminId,
+        });
+        await upsertJoin(tx, hub.id, leader.id, 'leader');
+        return { ...hub, memberCount: await refreshMemberCount(tx, hub.id) };
       });
-      await upsertJoin(tx, hub.id, leader.id, 'leader');
-      return { ...hub, memberCount: await refreshMemberCount(tx, hub.id) };
-    });
-    return toCommunitySummary(row);
+    return toCommunitySummary(
+      await conflictOnUnique(run, PROPOSAL_ERRORS.nameTaken),
+    );
   }
 
   private async requireGame(gameId: number): Promise<string> {

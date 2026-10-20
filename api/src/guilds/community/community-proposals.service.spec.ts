@@ -188,18 +188,45 @@ describe('approve / reject / withdraw / createDirect', () => {
     );
   });
 
-  it('reject notifies with the reason BEFORE deleting', async () => {
+  it('reject deletes the locked row, THEN notifies with the reason', async () => {
     const order: string[] = [];
+    mocked(q.lockProposal).mockResolvedValue(proposedRow);
     create.mockImplementation(() => Promise.resolve(order.push('notify')));
     mocked(q.deleteProposal).mockImplementation(() => {
       order.push('delete');
       return Promise.resolve(true);
     });
     await svc.reject(40, 'Duplicate');
-    expect(order).toEqual(['notify', 'delete']);
+    expect(order).toEqual(['delete', 'notify']);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Duplicate' }),
     );
+  });
+
+  it('reject 404s when the row is no longer proposed — no notice', async () => {
+    mocked(q.lockProposal).mockResolvedValue(null);
+    await expect(svc.reject(40, 'x')).rejects.toThrow(NotFoundException);
+    expect(create).not.toHaveBeenCalled();
+    expect(q.deleteProposal).not.toHaveBeenCalled();
+  });
+
+  it('reject removes an orphan (proposer deleted) without a notice', async () => {
+    mocked(q.lockProposal).mockResolvedValue({
+      ...proposedRow,
+      proposedBy: null,
+    });
+    mocked(q.listProposals).mockResolvedValue([]);
+    mocked(q.deleteProposal).mockResolvedValue(true);
+    await svc.reject(40, 'x');
+    expect(q.deleteProposal).toHaveBeenCalledWith(tx, 40);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('a concurrent same-name insert (23505) is a 409, not a 500', async () => {
+    mocked(q.insertCommunityHub).mockRejectedValue(
+      Object.assign(new Error('dup'), { code: '23505' }),
+    );
+    await expect(svc.propose(member, dto)).rejects.toThrow(ConflictException);
   });
 
   it('withdraw 404s when nothing of theirs was deleted', async () => {
