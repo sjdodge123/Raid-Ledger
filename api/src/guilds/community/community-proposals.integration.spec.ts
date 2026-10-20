@@ -450,7 +450,7 @@ describe('A7 visibility of a proposed hub', () => {
     expect(staff.status).toBe(200);
     // The hub page nests the summary under `guild` (GuildPage), not at the root.
     expect(staff.body.guild.id).toBe(id);
-    expect(staff.body.status).toBe('proposed');
+    expect(staff.body.guild.status).toBe('proposed');
   });
 });
 
