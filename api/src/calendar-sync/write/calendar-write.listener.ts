@@ -12,7 +12,10 @@
  *   event-wide fan-out (signups with a write connection ∪ existing links).
  * - DELETED (`emitAsync`, before the row delete) → every link of the event;
  *   the job then finds the event gone and deletes the copy.
- * - RESCHEDULING → no-op (UPDATED follows at lock-in); not subscribed.
+ * - RESCHEDULING (poll opened) / RESCHEDULE_CLEARED (poll expired or lineup
+ *   aborted, original time kept) → event-wide fan-out (ROK-1857): the job sees
+ *   `rescheduling_poll_id` and deletes the copy, or sees it cleared and creates
+ *   a fresh one. Lock-in needs nothing new — its UPDATED emits do the create.
  * Bench (F11, ruled 2026-10-11): a benched copy is Free + "(Bench) ".
  * Bench is a roster assignment, not a status, so the reconcile job reads it
  * (`loadSignupBenched`); every bench move already emits SIGNUP_EVENTS.UPDATED
@@ -84,6 +87,18 @@ export class CalendarWriteListener {
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
   onEventCancelled(payload: { eventId: number }): Promise<void> {
+    return this.onEventUpdated(payload);
+  }
+
+  /** ROK-1857: poll opened — the job deletes every copy of the event. */
+  @OnEvent(APP_EVENT_EVENTS.RESCHEDULING)
+  onEventRescheduling(payload: { eventId: number }): Promise<void> {
+    return this.onEventUpdated(payload);
+  }
+
+  /** ROK-1857: poll cleared without a lock-in — the job restores the copies. */
+  @OnEvent(APP_EVENT_EVENTS.RESCHEDULE_CLEARED)
+  onRescheduleCleared(payload: { eventId: number }): Promise<void> {
     return this.onEventUpdated(payload);
   }
 
