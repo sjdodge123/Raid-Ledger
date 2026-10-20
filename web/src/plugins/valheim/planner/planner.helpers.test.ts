@@ -9,6 +9,8 @@ import {
     havePct,
     parseStoredTargets,
     serializeTargets,
+    addPlannerTarget,
+    PLANNER_TARGETS_MAX,
     shoppingListText,
     stockAgeLabel,
     viaChips,
@@ -34,11 +36,21 @@ describe('foldNodes', () => {
 });
 
 describe('formatting', () => {
-    it('serialises targets as prefab:quality:amount', () => {
+    it('serialises targets as prefab:quality:amount:0:kind', () => {
         expect(serializeTargets([
             { prefab: 'SwordIron', kind: 'item', quality: 2, amount: 3 },
             { prefab: 'piece_chest', kind: 'piece', quality: 1, amount: 1 },
-        ])).toBe('SwordIron:2:3,piece_chest:1:1');
+        ])).toBe('SwordIron:2:3:0:item,piece_chest:1:1:0:piece');
+    });
+    it('merges a target only on the same prefab + kind + quality; refuses a new one at the cap', () => {
+        const item = { prefab: 'Shared', kind: 'item', quality: 1, amount: 2 } as const;
+        const piece = { ...item, kind: 'piece' } as const;
+        const both = addPlannerTarget([item], piece);
+        expect(both).toEqual([item, piece]);
+        expect(addPlannerTarget([item], { ...item, amount: 3 })).toEqual([{ ...item, amount: 5 }]);
+        const full = Array.from({ length: PLANNER_TARGETS_MAX }, (_, i) => ({ ...item, prefab: `P${i}` }));
+        expect(addPlannerTarget(full, piece)).toBeNull();
+        expect(addPlannerTarget(full, { ...item, prefab: 'P0' })?.length).toBe(PLANNER_TARGETS_MAX);
     });
     it('renders null as an em dash and groups thousands', () => {
         expect(formatAmount(null)).toBe('—');

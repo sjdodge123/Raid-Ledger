@@ -148,4 +148,17 @@ describe('ValheimPlannerTab', () => {
         const tree = screen.getByRole('list', { name: 'What your list needs' });
         expect(within(tree).getAllByTestId('valheim-planner-row')[1]).toHaveTextContent('Need 40 · Have —');
     });
+    it('remounts per server: a cached second hub never shows or saves the first hub\'s list', async () => {
+        localStorage.setItem(KEY, STORED);
+        const view = renderWithProviders(<ValheimPlannerTab serverId={7} />);
+        expect(await screen.findByRole('list', { name: 'Planned items' })).toHaveTextContent('Iron sword');
+        view.rerender(<ValheimPlannerTab serverId={8} />);
+        await screen.findByRole('combobox', { name: 'Search an item or piece' });
+        view.rerender(<ValheimPlannerTab serverId={7} />);
+        expect(await screen.findByRole('list', { name: 'Planned items' })).toHaveTextContent('Iron sword');
+        view.rerender(<ValheimPlannerTab serverId={8} />); // both catalogues cached now
+        await waitFor(() => expect(screen.queryByRole('list', { name: 'Planned items' })).toBeNull());
+        expect(localStorage.getItem(plannerStorageKey(8))).toBeNull();
+        expect(localStorage.getItem(KEY)).toBe(STORED);
+    });
 });

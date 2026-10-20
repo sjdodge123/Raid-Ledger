@@ -20,7 +20,9 @@ import { isDesktop } from "./helpers";
 
 const FIXTURE = "/admin/test/valheim/recipes-fixture";
 const SLOTS = 16;
-const CHAIN = ["Copper", "Tin", "Copper ore", "Tin ore", "Coal"];
+/** Prefabs that appear exactly once in the Bronze tree. Coal does not:
+ * it fuels both smelts (and each Coal fuel row has its kiln child). */
+const UNIQUE = ["Copper", "Tin", "CopperOre", "TinOre"];
 
 interface RecipesFixture {
   serverId: number;
@@ -123,14 +125,12 @@ const picker = (page: Page) =>
 const tree = (page: Page, name: string) =>
   page.getByRole("list", { name: `What ${name} needs` });
 
-const row = (page: Page, list: string, name: string) =>
-  tree(page, list)
-    .getByTestId("valheim-planner-row")
-    .filter({
-      has: page.getByTestId("valheim-planner-row-name").getByText(name, {
-        exact: true,
-      }),
-    });
+/** Rows by their OWN `data-prefab` — a `has:` filter would also match every
+ * ancestor row whose subtree contains a matching name. */
+const row = (page: Page, list: string, prefab: string) =>
+  tree(page, list).locator(
+    `[data-testid="valheim-planner-row"][data-prefab="${prefab}"]`,
+  );
 
 async function pick(page: Page, query: string, option: string) {
   await picker(page).fill(query);
@@ -166,10 +166,12 @@ test.describe("Valheim hub — Planner tab (ROK-1854)", () => {
 
       // Searching "Bronze" opens its full craft tree (no stock netting yet).
       await pick(p, "Bronze", "Bronze");
-      for (const name of CHAIN)
-        await expect(row(p, "Bronze", name)).toHaveCount(1);
+      for (const prefab of UNIQUE)
+        await expect(row(p, "Bronze", prefab)).toHaveCount(1);
+      await expect(row(p, "Bronze", "Coal").first()).toBeVisible();
 
-      // On the list, the plan nets against chests: Copper is covered by 40.
+      // On the list, the plan nets against chests: the 40 Copper in the
+      // chests cover the 2 needed (have = the stock available).
       await p.getByRole("button", { name: "Add to list" }).click();
       await expect(planned(p)).toHaveCount(1);
       await expect(row(p, "your list", "Copper")).toContainText("Have 40");
