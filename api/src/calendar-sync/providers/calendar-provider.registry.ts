@@ -1,8 +1,10 @@
 /**
  * ROK-1592: resolves a calendar adapter by provider key (plan L1, L12, L15).
  *
- * Only `google` resolves today; `microsoft` (ROK-1597) and `apple` (ROK-1598)
- * return null so their routes 404. ROK-1596 adds
+ * `google` and `apple` (ROK-1598) resolve; `microsoft` (ROK-1597) returns
+ * null so its routes 404. Apple connects with a password, not OAuth:
+ * `getPasswordProvider` resolves it for the connect route, and its OAuth
+ * methods refuse (the OAuth routes accept only google/microsoft). ROK-1596 adds
  * `getWriteProviderForConnection`: an adapter is a write provider when it
  * implements `CalendarWriteCapability` (Google from ROK-1596 G2).
  *
@@ -16,9 +18,11 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import type {
   CalendarAccountProvider,
+  CalendarPasswordCapability,
   CalendarReadCapability,
   CalendarWriteCapability,
 } from './calendar-provider.interface';
+import { AppleCalendarAdapter } from './apple/apple.adapter';
 import { GoogleCalendarAdapter } from './google/google.adapter';
 import { FAKE_SUBJECT_PREFIX } from './testing/fake-calendar.provider';
 
@@ -59,6 +63,12 @@ export type CalendarReadProvider = CalendarAccountProvider &
 
 const READ_METHODS = ['listCalendars', 'fetchBusy'] as const;
 
+/** An adapter connected with an email + app password (ROK-1598 D1). */
+export type CalendarPasswordProvider = CalendarAccountProvider &
+  CalendarPasswordCapability;
+
+const PASSWORD_METHODS = ['connectWithPassword'] as const;
+
 function hasMethods(
   p: CalendarAccountProvider | null,
   names: readonly string[],
@@ -82,6 +92,13 @@ export function hasReadCapability(
   return hasMethods(p, READ_METHODS);
 }
 
+/** true when `p` connects with a password (ROK-1598 D1). */
+export function hasPasswordCapability(
+  p: CalendarAccountProvider | null,
+): p is CalendarPasswordProvider {
+  return hasMethods(p, PASSWORD_METHODS);
+}
+
 export function isDemoFakeSubject(subject: string): boolean {
   return subject.startsWith(DEMO_FAKE_SUBJECT_PREFIX);
 }
@@ -99,13 +116,23 @@ export class CalendarProviderRegistry {
     @Optional()
     @Inject(CALENDAR_FAKE_PROVIDER)
     private readonly fake: CalendarAccountProvider | null = null,
+    @Optional()
+    @Inject(AppleCalendarAdapter)
+    apple: CalendarAccountProvider | null = null,
   ) {
-    this.accountProviders = new Map([[google.key, google]]);
+    const all = apple ? [google, apple] : [google];
+    this.accountProviders = new Map(all.map((p) => [p.key, p]));
   }
 
   /** The adapter that starts a new connect; null = not shipped (404). */
   getAccountProvider(key: string): CalendarAccountProvider | null {
     return this.accountProviders.get(key) ?? null;
+  }
+
+  /** The password-connect adapter (Apple); null = none (route 404s). */
+  getPasswordProvider(key: string): CalendarPasswordProvider | null {
+    const provider = this.getAccountProvider(key);
+    return hasPasswordCapability(provider) ? provider : null;
   }
 
   /** The adapter for an existing row; null = none may touch it. */

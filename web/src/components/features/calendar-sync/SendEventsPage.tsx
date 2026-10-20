@@ -11,7 +11,7 @@ import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { ProviderTile } from './CalendarProviderRow';
 import { CALENDARS_PATH, CALENDAR_ROW } from './calendar-sync-row';
 import { SendEventsSettings } from './SendEventsSettings';
-import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S, connectionStatusLine } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, PROVIDER_DISPLAY, SEND_EVENTS_COPY as S, connectionStatusLine } from './calendar-sync.copy';
 
 function BackCrumb(): JSX.Element {
     return (
@@ -33,9 +33,9 @@ function SendEventsBody({ connectionId }: { connectionId: string | undefined }):
     return (
         <>
             <div className={CALENDAR_ROW} data-testid="send-events-provider">
-                <ProviderTile label={C.google.tile} />
+                <ProviderTile label={PROVIDER_DISPLAY[connection.provider].tile} />
                 <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground">{C.google.name}</p>
+                    <p className="text-sm font-semibold text-foreground">{PROVIDER_DISPLAY[connection.provider].name}</p>
                     <p className="truncate text-xs text-muted">{connectionStatusLine(connection)}</p>
                 </div>
             </div>

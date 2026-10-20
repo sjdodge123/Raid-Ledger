@@ -7,8 +7,9 @@
  * one-line change in `CALENDARS_COPY.lede` below.
  */
 
-import type { CalendarConnection, CalendarOAuthErrorCode } from '@raid-ledger/contract';
+import type { CalendarConnection, CalendarOAuthErrorCode, CalendarProvider } from '@raid-ledger/contract';
 import { syncedAgo } from '../../../lib/synced-ago';
+import { APPLE_CONNECT_COPY } from './apple-connect.copy';
 
 /** Approved K1 lede (describes read sync). */
 const LEDE_APPROVED = 'Connect a calendar and Raid Ledger fills in your time away for you.';
@@ -96,7 +97,7 @@ export const SEND_EVENTS_COPY = {
     dedicated: 'A "Raid Ledger" calendar',
     primary: 'My main calendar',
     phone: { helper: 'New sign-ups show up within a minute', dedicated: 'We create it and only ever touch that one. Hide or delete it any time.', primary: 'Events sit with everything else.' },
-    desktop: { helper: 'To Google Calendar', dedicated: 'We only ever touch that one', primary: 'Next to everything else' },
+    desktop: { helper: (calendar: string) => `To ${calendar}`, dedicated: 'We only ever touch that one', primary: 'Next to everything else' },
     noteTitle: 'Stays in step.',
     noteBody: "A new time moves the event, a cancellation or leaving the roster removes it. We never read these copies back as busy time, so your own sign-up can't clash with itself.",
     /* Not on the canvas (lane copy, F6 / errors). */
@@ -108,12 +109,24 @@ export const SEND_EVENTS_COPY = {
     writeHeading: 'Write · send my Raid Ledger events',
     pageTitle: 'Send my events',
     back: 'My Integrations',
-    entrySub: { dedicated: 'To Google Calendar · a "Raid Ledger" calendar', primary: 'To Google Calendar · my main calendar', off: 'Off' },
+    /** `calendar` is the provider's calendar name (`PROVIDER_CALENDAR_NAME`, ROK-1598): "To Google Calendar · …". */
+    entrySub: {
+        dedicated: (calendar: string) => `To ${calendar} · a "Raid Ledger" calendar`,
+        primary: (calendar: string) => `To ${calendar} · my main calendar`,
+        off: 'Off',
+    },
     notFound: 'That calendar is no longer connected.',
 } as const;
 
 /** Provider display names for the event line + toast ("On your Google Calendar"). */
 export const PROVIDER_CALENDAR_NAME = { google: 'Google Calendar', microsoft: 'Outlook Calendar', apple: 'Apple Calendar' } as const;
+
+/** ROK-1598: the connected card's monogram tile + title per provider (Microsoft stays hidden, ROK-669 Q13). */
+export const PROVIDER_DISPLAY: Record<CalendarProvider, { tile: string; name: string }> = {
+    google: { tile: CALENDARS_COPY.google.tile, name: CALENDARS_COPY.google.name },
+    apple: { tile: APPLE_CONNECT_COPY.tile, name: APPLE_CONNECT_COPY.name },
+    microsoft: { tile: 'O', name: PROVIDER_CALENDAR_NAME.microsoft },
+};
 
 /** S3 — the event page's calendar line, the sign-up toast and the "Add to calendar" menu (ROK-1596 W2). */
 export const EVENT_CALENDAR_COPY = {
@@ -156,6 +169,8 @@ export const READ_COPY = {
     syncedCount: (ago: string, count: number) => `Synced ${ago} · ${count} ${count === 1 ? 'calendar' : 'calendars'}`,
     /* (lane) from here on. */
     reconnect: 'Access was revoked · reconnect',
+    /** ROK-1598 Q7: an Apple ID password change revokes every app-specific password. */
+    reconnectApple: 'Password was revoked · reconnect',
     fix: 'Fix',
     fixFailed: 'Could not start the Google sign-in. Try again.',
     grantTitle: 'Let Raid Ledger see when you are busy',
@@ -180,10 +195,10 @@ export const READ_COPY = {
 } as const;
 
 /** The status line under the account name; `desktop` drops the calendar count (K4). */
-type StatusInput = Pick<CalendarConnection, 'status' | 'accountLabel' | 'lastSyncedAt' | 'read'>;
+type StatusInput = Pick<CalendarConnection, 'provider' | 'status' | 'accountLabel' | 'lastSyncedAt' | 'read'>;
 
 export function readStatusLine(c: StatusInput, desktop: boolean, now: number = Date.now()): string {
-    if (c.status === 'needs_reconnect') return READ_COPY.reconnect;
+    if (c.status === 'needs_reconnect') return c.provider === 'apple' ? READ_COPY.reconnectApple : READ_COPY.reconnect;
     if (c.status !== 'active' || !c.lastSyncedAt) return connectionStatusLine(c);
     const ago = syncedAgo(c.lastSyncedAt, now);
     if (desktop || !c.read.enabled) return READ_COPY.synced(ago);

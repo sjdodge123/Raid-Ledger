@@ -1,11 +1,14 @@
 /**
- * ROK-1592 (L12, L15): only `google` resolves; a `demo-fake:` row reaches
- * the fake only under the double gate with a fake registered — never Google.
+ * ROK-1592 (L12, L15): `google` (and, ROK-1598 T24, `apple`) resolve; a
+ * `demo-fake:` row reaches the fake only under the double gate with a fake
+ * registered — never Google.
  */
+import { AppleCalendarAdapter } from './apple/apple.adapter';
 import type { CalendarAccountProvider } from './calendar-provider.interface';
 import {
   CalendarProviderRegistry,
   DEMO_FAKE_SUBJECT_PREFIX,
+  hasPasswordCapability,
   hasReadCapability,
   hasWriteCapability,
   type CalendarReadProvider,
@@ -46,6 +49,7 @@ function registry(opts: {
   withFake: boolean;
   google?: CalendarAccountProvider;
   fake?: CalendarAccountProvider;
+  apple?: CalendarAccountProvider;
 }) {
   const settings: DemoModeSource = {
     getDemoMode: jest.fn().mockResolvedValue(opts.setting),
@@ -54,6 +58,7 @@ function registry(opts: {
     settings,
     opts.google ?? google,
     opts.withFake ? (opts.fake ?? fake) : null,
+    opts.apple ?? null,
   );
 }
 
@@ -64,7 +69,7 @@ afterEach(() => {
 });
 
 describe('CalendarProviderRegistry.getAccountProvider', () => {
-  it('resolves google and nothing else', () => {
+  it('resolves google and nothing else when no Apple adapter is injected', () => {
     const reg = registry({ setting: false, withFake: true });
     expect(reg.getAccountProvider('google')).toBe(google);
     expect(reg.getAccountProvider('microsoft')).toBeNull();
@@ -219,5 +224,50 @@ describe('CalendarProviderRegistry.getReadProviderForConnection (ROK-1593)', () 
     expect(hasReadCapability(partial as never)).toBe(false);
     expect(hasReadCapability(google)).toBe(false);
     expect(hasReadCapability(null)).toBe(false);
+  });
+});
+
+describe('CalendarProviderRegistry with Apple (ROK-1598 T24)', () => {
+  const apple = new AppleCalendarAdapter();
+  const APPLE_ROW = { provider: 'apple', accountSubject: 'me@icloud.com' };
+  const withApple = () => registry({ setting: true, withFake: true, apple });
+
+  it('getAccountProvider / getPasswordProvider resolve the Apple adapter', () => {
+    const reg = withApple();
+    expect(reg.getAccountProvider('apple')).toBe(apple);
+    expect(reg.getPasswordProvider('apple')).toBe(apple);
+    expect(reg.getAccountProvider('google')).toBe(google);
+    expect(reg.getAccountProvider('microsoft')).toBeNull();
+  });
+
+  it('getPasswordProvider is null for an OAuth-only provider or an unknown key', () => {
+    const reg = withApple();
+    expect(reg.getPasswordProvider('google')).toBeNull();
+    expect(reg.getPasswordProvider('microsoft')).toBeNull();
+    expect(hasPasswordCapability(apple)).toBe(true);
+    expect(hasPasswordCapability(google)).toBe(false);
+    expect(hasPasswordCapability(null)).toBe(false);
+  });
+
+  it('an apple row resolves to Apple for account, read and write', async () => {
+    const reg = withApple();
+    await expect(reg.getAccountProviderForConnection(APPLE_ROW)).resolves.toBe(
+      apple,
+    );
+    await expect(reg.getReadProviderForConnection(APPLE_ROW)).resolves.toBe(
+      apple,
+    );
+    await expect(reg.getWriteProviderForConnection(APPLE_ROW)).resolves.toBe(
+      apple,
+    );
+  });
+
+  it('a demo-fake row still routes to the fake, never Apple', async () => {
+    process.env.DEMO_MODE = 'true';
+    const reg = withApple();
+    const row = { ...APPLE_ROW, accountSubject: FAKE_ROW.accountSubject };
+    await expect(reg.getAccountProviderForConnection(row)).resolves.toBe(fake);
+    process.env.DEMO_MODE = 'false';
+    await expect(reg.getAccountProviderForConnection(row)).resolves.toBeNull();
   });
 });
