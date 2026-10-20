@@ -114,7 +114,14 @@ export class ValheimRecipesService {
         null,
         { maxQuality: maxQ },
       );
-      return { target: { prefab, quality: q }, ...pickTree(res) };
+      const { items, atlas } = await this.nodeCatalog(r, set, res);
+      return {
+        target: { prefab, quality: q },
+        ...pickTree(res),
+        items,
+        itemAtlas: atlas,
+        recipeAtlas: await r.recipeAtlas(set),
+      };
     });
     return ValheimRecipeTreeResponseSchema.parse(body);
   }

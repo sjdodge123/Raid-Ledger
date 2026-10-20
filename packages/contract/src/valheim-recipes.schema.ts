@@ -122,6 +122,10 @@ export const ValheimRecipeTreeResponseSchema = z
     target: z.object({ prefab: ValheimPrefabIdSchema, quality }).strict(),
     nodes,
     truncated: z.boolean(),
+    /** Catalogue entries for every prefab the nodes reference (names + icons). */
+    items: z.record(z.string(), ValheimCatalogEntrySchema),
+    itemAtlas: ValheimMapBaseMapSchema.nullable(),
+    recipeAtlas: ValheimMapBaseMapSchema.nullable(),
   })
   .strict();
 export type ValheimRecipeTreeResponse = z.infer<

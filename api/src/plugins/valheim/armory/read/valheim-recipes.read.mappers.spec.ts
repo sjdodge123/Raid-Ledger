@@ -95,7 +95,7 @@ describe('parsePlanTargets', () => {
     expect(badRequest(() => parsePlanTargets(raw))).toBe('Invalid targets');
   });
 
-  it('400s on a missing / empty / repeated param and on more than 50 targets', () => {
+  it('400s on a missing / empty / repeated param and on more than VALHEIM_PLAN_TARGETS_MAX targets', () => {
     expect(badRequest(() => parsePlanTargets(undefined))).toBe(
       'Invalid targets',
     );
@@ -103,10 +103,13 @@ describe('parsePlanTargets', () => {
     expect(badRequest(() => parsePlanTargets(['A:1:1', 'B:1:1']))).toBe(
       'Invalid targets',
     );
-    const many = Array.from({ length: 51 }, () => 'Wood:1:1').join(',');
+    const many = Array.from(
+      { length: VALHEIM_PLAN_TARGETS_MAX + 1 },
+      () => 'Wood:1:1',
+    ).join(',');
     expect(badRequest(() => parsePlanTargets(many))).toBe('Too many targets');
     expect(parsePlanTargets(many.split(',').slice(1).join(','))).toHaveLength(
-      50,
+      VALHEIM_PLAN_TARGETS_MAX,
     );
   });
 });
