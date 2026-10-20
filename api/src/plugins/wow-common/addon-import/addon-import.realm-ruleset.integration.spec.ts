@@ -252,7 +252,6 @@ describe('create route — realm-map inference (ROK-1739 D5/D6)', () => {
       'normal',
     );
   });
-
 });
 
 describe('create route — no usable realm-map fallback (ROK-1739 D6)', () => {
@@ -282,7 +281,6 @@ describe('create route — no usable realm-map fallback (ROK-1739 D6)', () => {
     expect(res.status).toBe(422);
     expect(await characterCount()).toBe(0);
   });
-
 });
 
 describe('create route — update target (ROK-1739 D4)', () => {
