@@ -114,12 +114,16 @@ function overflowSeries(
   return { series: ranked.map((r) => r.cat), maxN };
 }
 
-/** True when `id` still resolves to a category (unarchive's restore target). */
-export async function categoryExists(
+/**
+ * True when `id` still resolves to a category below the 50-children limit
+ * (unarchive's restore target — a full one would fail every move back).
+ */
+export async function categoryHasRoom(
   guild: Guild,
   id: string,
 ): Promise<boolean> {
-  return (await categoryById(guild, id)) !== null;
+  const cat = await categoryById(guild, id);
+  return cat !== null && childCount(guild, cat.id) < MAX_CATEGORY_CHILDREN;
 }
 
 /** Ids of the `base` / `base N` category series (D5 overflow), e.g. Archived. */

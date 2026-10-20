@@ -63,7 +63,7 @@ beforeEach(async () => {
   // applyArchive / applyUnarchive read the guild's category cache through
   // these two — the bare guild stub has no `channels.cache`, so stub them.
   jest.spyOn(ops, 'categorySeriesIds').mockImplementation(() => new Set());
-  jest.spyOn(ops, 'categoryExists').mockResolvedValue(true);
+  jest.spyOn(ops, 'categoryHasRoom').mockResolvedValue(true);
   jest.spyOn(ops, 'archiveChannel').mockResolvedValue({
     previousParentId: 'old-parent',
     restoreParentId: 'old-parent',

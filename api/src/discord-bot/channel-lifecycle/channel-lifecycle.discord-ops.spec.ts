@@ -13,6 +13,7 @@ import {
 } from 'discord.js';
 import {
   archiveChannel,
+  categoryHasRoom,
   createTextChannel,
   ensureCategory,
   revertArchive,
@@ -633,6 +634,21 @@ describe('ensureCategory (D5)', () => {
       name: 'Archived',
       type: ChannelType.GuildCategory,
     });
+  });
+});
+
+describe('categoryHasRoom (Codex r2 P2)', () => {
+  it.each([
+    [49, true],
+    [50, false],
+  ])('a category with %s children has room = %s', async (kids, want) => {
+    const guild = makeGuild();
+    addCategory(guild, 'cat', 'Games', kids);
+    expect(await categoryHasRoom(guild as never, 'cat')).toBe(want);
+  });
+
+  it('a missing category has no room', async () => {
+    expect(await categoryHasRoom(makeGuild() as never, 'nope')).toBe(false);
   });
 });
 

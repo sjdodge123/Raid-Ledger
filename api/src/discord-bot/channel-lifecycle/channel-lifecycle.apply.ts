@@ -2,7 +2,7 @@ import { LIFECYCLE_DEFAULTS } from '@raid-ledger/contract';
 import type { Guild } from 'discord.js';
 import {
   archiveChannel,
-  categoryExists,
+  categoryHasRoom,
   categorySeriesIds,
   createTextChannel,
   ensureCategory,
@@ -178,14 +178,17 @@ async function applyArchive(
   return { outcome: 'done', detail: game.reason };
 }
 
-/** The unarchive parent: `restore_parent_id` while it still exists, else Games (or none). */
+/**
+ * The unarchive parent: `restore_parent_id` while it exists with room, else a
+ * Games category with room (overflow-aware, D5 / §2.13), or none.
+ */
 async function restoreParent(
   ctx: ApplyContext,
   binding: LifecycleCandidateBinding,
 ): Promise<string | null> {
   const saved = binding.restoreParentId;
-  if (saved !== null && (await categoryExists(ctx.guild, saved))) return saved;
-  return ctx.categories.gamesId;
+  if (saved !== null && (await categoryHasRoom(ctx.guild, saved))) return saved;
+  return gamesParent(ctx);
 }
 
 /** Unarchive (D6): move back to `restoreParent`, clear only the bits archive added. */

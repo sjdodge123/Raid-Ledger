@@ -133,7 +133,7 @@ beforeEach(() => {
   );
   jest.mocked(ops.createTextChannel).mockResolvedValue('new-ch');
   jest.mocked(ops.categorySeriesIds).mockReturnValue(new Set());
-  jest.mocked(ops.categoryExists).mockResolvedValue(true);
+  jest.mocked(ops.categoryHasRoom).mockResolvedValue(true);
   jest.mocked(resolver.resolveGameHubLink).mockResolvedValue(null);
   jest.mocked(ops.archiveChannel).mockResolvedValue({
     previousParentId: 'cat-games',
@@ -402,7 +402,7 @@ describe('review fixes — archive / unarchive', () => {
     expect(res.failed).toBe(1);
   });
   it('unarchive passes the recorded bits; a deleted restore parent falls back to Games', async () => {
-    jest.mocked(ops.categoryExists).mockResolvedValue(false);
+    jest.mocked(ops.categoryHasRoom).mockResolvedValue(false);
     selectRows.mockResolvedValue([
       bound(
         2,
@@ -419,6 +419,31 @@ describe('review fixes — archive / unarchive', () => {
       parentId: 'cat-games',
       added: ADDED,
     });
+  });
+  it('a FULL restore parent overflows to a Games category with room (r2 P2)', async () => {
+    jest.mocked(ops.categoryHasRoom).mockResolvedValue(false);
+    jest.mocked(ops.ensureCategory).mockImplementation((_g, o) =>
+      Promise.resolve({
+        id: o.needsRoom ? `${o.id ?? 'new'}-2` : (o.id ?? 'new'),
+        name: o.name,
+        created: false,
+      }),
+    );
+    selectRows.mockResolvedValue([
+      bound(2, { lifecycleState: 'archived', restoreParentId: 'full-cat' }, 1),
+    ]);
+    await makeService().reconcile(live);
+    expect(ops.categoryHasRoom).toHaveBeenCalledWith(guild, 'full-cat');
+    expect(ops.ensureCategory).toHaveBeenCalledWith(guild, {
+      id: 'cat-games',
+      name: expect.any(String),
+      needsRoom: true,
+    });
+    expect(ops.unarchiveChannel).toHaveBeenCalledWith(
+      guild,
+      'ch-2',
+      expect.objectContaining({ parentId: 'cat-games-2' }),
+    );
   });
 });
 
