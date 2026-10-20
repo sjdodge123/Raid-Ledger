@@ -1,13 +1,16 @@
 /**
  * ROK-1853 L3 — read queries behind the Materials routes. Every query is
  * scoped to one scan (D4) and passes through the D5 privacy fragments; the
- * selected columns never include a row id or `creatorPlayerId`.
+ * selected columns never include a row id or `creatorPlayerId`. A request's
+ * reads run in one read-only REPEATABLE READ transaction (`read`), so an
+ * import committing mid-request cannot mix old and new totals (review M2).
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
+import type { ValheimLinkTx } from '../../link/valheim-link-token-lock';
 import { findLatestContainerScan } from '../valheim-containers.repository';
 import type { ArmoryCatalogReadRow } from './valheim-armory-catalog.helpers';
 import { atlasReady, itemsSubset } from './valheim-armory-read.repository';
@@ -17,6 +20,7 @@ import type {
 } from './valheim-materials.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Exec = Db | ValheimLinkTx;
 const c = schema.valheimContainers;
 const st = schema.valheimContainerStacks;
 const cat = schema.valheimItemCatalogs;
@@ -58,9 +62,28 @@ const summaryCols = {
   stackCount,
 };
 
+/** One consistent snapshot: every statement sees the same committed state. */
+export const MATERIALS_READ_TX = {
+  isolationLevel: 'repeatable read',
+  accessMode: 'read only',
+} as const;
+
 @Injectable()
 export class ValheimMaterialsRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
+
+  /** Run `fn`'s reads in one read-only REPEATABLE READ transaction. */
+  read<T>(fn: (reader: MaterialsReader) => Promise<T>): Promise<T> {
+    return this.db.transaction(
+      (tx) => fn(new MaterialsReader(tx)),
+      MATERIALS_READ_TX,
+    );
+  }
+}
+
+/** The Materials queries, bound to one executor (the read transaction). */
+export class MaterialsReader {
+  constructor(private readonly db: Exec) {}
 
   /** D4: the server's newest scan, or null before the first import. */
   latestScan(serverId: number): Promise<schema.ValheimContainerScan | null> {
