@@ -70,6 +70,9 @@ describe('MarkdownEditor (V10)', () => {
         expect(last()).toBe('[raid](https://example.com)');
     });
 
+});
+
+describe('MarkdownEditor (V10) — keyboard, paste, contract', () => {
     it('roving tabindex: one Tab stop, ArrowRight moves focus', () => {
         setup('x');
         const buttons = screen.getAllByRole('button');
