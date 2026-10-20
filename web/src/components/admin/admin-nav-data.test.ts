@@ -229,13 +229,13 @@ describe('buildDiscordNavItems — part 1', () => {
         expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot']);
     });
 
-    it('returns 5 items when bot is connected: Overview, Authentication, Bot, Channels, Features', () => {
+    it('returns 6 items when bot is connected: Overview, Authentication, Bot, Channels, Channel automation, Features', () => {
         const items = buildDiscordNavItems(
             { connected: true, connecting: false },
             { configured: true, loading: false },
         );
-        expect(items).toHaveLength(5);
-        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Features']);
+        expect(items).toHaveLength(6);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Channel automation', 'Features']);
     });
 
     it('Authentication item shows online status when OAuth configured', () => {

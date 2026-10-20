@@ -97,6 +97,7 @@ export function buildDiscordNavItems(
     if (botConnected) {
         items.push(
             { to: '/admin/settings/discord/channels', label: 'Channels' },
+            { to: '/admin/settings/discord/lifecycle', label: 'Channel automation' },
             { to: '/admin/settings/discord/features', label: 'Features' },
         );
     }

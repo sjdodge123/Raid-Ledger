@@ -29,7 +29,7 @@ import {
   CronJobsPanel, BackupsPanel, LogsPanel,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
-  DiscordFeaturesPage,
+  DiscordFeaturesPage, DiscordLifecyclePage,
   LineupWireframesRoute, LineupWireframesIndexRoute,
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
@@ -95,6 +95,7 @@ function AdminSettingsRoutes() {
       <Route path="discord/connection" element={<DiscordConnectionPage />} />
       <Route path="discord/channels" element={<DiscordChannelsPage />} />
       <Route path="discord/features" element={<DiscordFeaturesPage />} />
+      <Route path="discord/lifecycle" element={<DiscordLifecyclePage />} />
       <Route path="integrations" element={<Navigate to="/admin/settings/discord" replace />} />
       <Route path="integrations/discord" element={<Navigate to="/admin/settings/discord" replace />} />
       <Route path="integrations/discord-bot" element={<Navigate to="/admin/settings/discord/connection" replace />} />

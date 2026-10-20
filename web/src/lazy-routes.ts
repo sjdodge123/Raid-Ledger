@@ -223,6 +223,9 @@ export const DiscordConnectionPage = lazyWithRetry(() =>
 export const DiscordChannelsPage = lazyWithRetry(() =>
     import('./pages/admin/discord-channels-page').then((m) => ({ default: m.DiscordChannelsPage })),
 );
+export const DiscordLifecyclePage = lazyWithRetry(() =>
+    import('./pages/admin/discord-lifecycle-page').then((m) => ({ default: m.DiscordLifecyclePage })),
+);
 export const DiscordFeaturesPage = lazyWithRetry(() =>
     import('./pages/admin/discord-features-page').then((m) => ({ default: m.DiscordFeaturesPage })),
 );

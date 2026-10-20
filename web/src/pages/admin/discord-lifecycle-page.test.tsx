@@ -59,6 +59,9 @@ describe('DiscordLifecyclePage (ROK-1433)', () => {
         expect(screen.getByRole('switch', { name: 'Create and archive game channels automatically' })).toBeDisabled();
     });
 
+});
+
+describe('DiscordLifecyclePage thresholds + run (ROK-1433)', () => {
     it('W3: out-of-range thresholds show field errors and send nothing', async () => {
         trackPatch();
         renderWithProviders(<DiscordLifecyclePage />);

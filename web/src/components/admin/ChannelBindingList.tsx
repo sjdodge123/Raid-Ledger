@@ -4,6 +4,7 @@ import { classifyBindingTriple } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { BindingConfigForm } from './BindingConfigForm';
 import { useMultiMonitorChannels } from './use-multi-monitor-channels';
+import { ChannelBindingLifecycleCell } from './channel-binding-lifecycle-cell';
 
 const BEHAVIOR_LABELS: Record<string, string> = {
   'game-announcements': 'Event Announcements',
@@ -74,7 +75,10 @@ function MultiMonitorNote() {
     );
 }
 
-function BindingInfo({ binding, hasMultiMonitor, isInert }: { binding: ChannelBindingDto; hasMultiMonitor: boolean; isInert: boolean }) {
+function BindingInfo({ binding, hasMultiMonitor, isInert, onPin, pinPending }: {
+    binding: ChannelBindingDto; hasMultiMonitor: boolean; isInert: boolean;
+    onPin: (id: string, pinned: boolean) => void; pinPending: boolean;
+}) {
     return (
         <div className="flex items-center gap-3 min-w-0">
             <div className="flex-shrink-0"><ChannelTypeIcon type={binding.channelType} /></div>
@@ -88,6 +92,7 @@ function BindingInfo({ binding, hasMultiMonitor, isInert }: { binding: ChannelBi
                     {binding.gameName ? binding.gameName : 'All games'}{' · '}{BEHAVIOR_LABELS[binding.bindingPurpose] ?? binding.bindingPurpose}
                 </p>
                 {hasMultiMonitor && <MultiMonitorNote />}
+                <ChannelBindingLifecycleCell binding={binding} onPin={onPin} pending={pinPending} />
             </div>
         </div>
     );
@@ -112,11 +117,12 @@ function BindingActions({ binding, isEditing, isInert, onToggleEdit, onFix, onDe
     );
 }
 
-function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSaving, saveLocked, isDeleting, deletingId, hasMultiMonitor, updateError }: {
+function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSaving, saveLocked, isDeleting, deletingId, hasMultiMonitor, updateError, onPin, pinPending }: {
     binding: ChannelBindingDto; editingId: string | null; setEditingId: (id: string | null) => void;
     onSave: (id: string, dto: UpdateChannelBindingDto) => void; onDelete: (id: string) => void;
     isSaving: boolean; saveLocked: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean;
     updateError?: string | null | undefined;
+    onPin: (id: string, pinned: boolean) => void; pinPending: boolean;
 }) {
     const isEditing = editingId === binding.id;
     const isInert = isBindingInert(binding);
@@ -125,7 +131,7 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSavi
             {/* Below sm the 44px action cluster stacks under the info block so it can't squeeze it; a row from sm. */}
             <div data-testid="channel-binding-row"
                 className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 rounded-lg border ${isInert ? 'bg-danger/5 border-danger/30' : 'bg-panel/50 border-edge'}`}>
-                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} isInert={isInert} />
+                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} isInert={isInert} onPin={onPin} pinPending={pinPending} />
                 <BindingActions binding={binding} isEditing={isEditing} isInert={isInert}
                     onToggleEdit={() => setEditingId(isEditing ? null : binding.id)}
                     onFix={() => setEditingId(binding.id)}
@@ -198,6 +204,8 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
                     // One PATCH at a time: the row that saved shows loading; every other open row is locked.
                     isSaving={isUpdating && savedId === binding.id} saveLocked={isUpdating && savedId !== binding.id}
                     updateError={savedId === binding.id ? updateError : null}
+                    // ROK-1428: a pin is a direct PATCH (no editor); locked while any PATCH is in flight.
+                    onPin={(id, pinned) => { void onUpdate(id, { pinned }); }} pinPending={isUpdating}
                     hasMultiMonitor={binding.bindingPurpose === 'game-voice-monitor' && multiMonitorChannels.has(binding.channelId)} />
             ))}
         </div>
