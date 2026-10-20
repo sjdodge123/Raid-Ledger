@@ -85,6 +85,14 @@ function RowToggle({
     );
 }
 
+/**
+ * Phone/tablet row (ROK-1867): the Button label span is `inline-flex` and does
+ * not stretch, so the icon + name + total sat centred; `[&>[data-button-label]]:w-full`
+ * (the menu-item idiom) lets the name's `flex-1` push the total to the right.
+ */
+const COMPACT_ROW_CLS =
+    'flex min-h-11 w-full items-center justify-start gap-3 px-1 py-2 text-left [&>[data-button-label]]:w-full [&>[data-button-label]]:gap-3';
+
 /** Exact for one quality; `≥ n` (+ the spelt-out bound) when qualities split. */
 function ChestCount({
     row,
@@ -256,7 +264,7 @@ function PhoneList({
                             row={r}
                             selected={selected === r.prefab}
                             onSelect={onSelect}
-                            className={`flex min-h-11 w-full items-center gap-3 px-1 py-2 ${selected === r.prefab ? 'bg-overlay' : ''}`}
+                            className={`${COMPACT_ROW_CLS} ${selected === r.prefab ? 'bg-overlay' : ''}`}
                         >
                             <RowIcon prefab={r.prefab} ctx={ctx} />
                             <span className="min-w-0 flex-1">
