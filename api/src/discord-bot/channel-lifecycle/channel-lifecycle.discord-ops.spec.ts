@@ -31,6 +31,21 @@ jest.mock('../services/scheduled-event.helpers', () => ({
 
 const GUILD = 'guild-1';
 const BOT = 'bot-1';
+/** Archive's read-only lock (Codex r4b): posting + thread replies/creation. */
+const LOCK =
+  PermissionFlagsBits.SendMessages |
+  PermissionFlagsBits.SendMessagesInThreads |
+  PermissionFlagsBits.CreatePublicThreads |
+  PermissionFlagsBits.CreatePrivateThreads;
+/** The four lock changes archive records for one target, all from inherit. */
+function lockChanges(target: 'bot' | 'everyone') {
+  return [
+    { target, flag: 'SendMessages', prior: 'inherit' },
+    { target, flag: 'SendMessagesInThreads', prior: 'inherit' },
+    { target, flag: 'CreatePublicThreads', prior: 'inherit' },
+    { target, flag: 'CreatePrivateThreads', prior: 'inherit' },
+  ];
+}
 type FlagName = keyof typeof PermissionFlagsBits;
 type FlagOpts = Partial<Record<FlagName, boolean | null>>;
 
@@ -220,15 +235,12 @@ describe('archiveChannel', () => {
       previousParentId: 'games-cat',
       restoreParentId: 'games-cat',
       added: {
-        changes: [
-          { target: 'bot', flag: 'SendMessages', prior: 'inherit' },
-          { target: 'everyone', flag: 'SendMessages', prior: 'inherit' },
-        ],
+        changes: [...lockChanges('bot'), ...lockChanges('everyone')],
       },
     });
     expect(snapshot(ch)).toEqual({
-      [GUILD]: [0n, PermissionFlagsBits.SendMessages],
-      [BOT]: [PermissionFlagsBits.SendMessages, 0n],
+      [GUILD]: [0n, LOCK],
+      [BOT]: [LOCK, 0n],
     });
     expect(guild.channels.edit).toHaveBeenCalledWith('ch-1', {
       parent: 'arch-cat',
@@ -243,14 +255,8 @@ describe('archiveChannel', () => {
       hide: true,
     });
     expect(snapshot(ch)).toEqual({
-      [GUILD]: [
-        0n,
-        PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel,
-      ],
-      [BOT]: [
-        PermissionFlagsBits.SendMessages | PermissionFlagsBits.ViewChannel,
-        0n,
-      ],
+      [GUILD]: [0n, LOCK | PermissionFlagsBits.ViewChannel],
+      [BOT]: [LOCK | PermissionFlagsBits.ViewChannel, 0n],
     });
   });
 
@@ -268,8 +274,8 @@ describe('archiveChannel', () => {
       lockPermissions: false,
     });
     expect(snapshot(ch)).toEqual({
-      [GUILD]: [0n, PermissionFlagsBits.SendMessages],
-      [BOT]: [PermissionFlagsBits.SendMessages, 0n],
+      [GUILD]: [0n, LOCK],
+      [BOT]: [LOCK, 0n],
     });
   });
 });
@@ -386,10 +392,7 @@ describe('archive → unarchive keeps admin-made privacy (review MAJOR 1)', () =
       hide: true,
     });
     expect(res.added).toEqual({
-      changes: [
-        { target: 'bot', flag: 'SendMessages', prior: 'inherit' },
-        { target: 'everyone', flag: 'SendMessages', prior: 'inherit' },
-      ],
+      changes: [...lockChanges('bot'), ...lockChanges('everyone')],
     });
     await unarchiveChannel(guild as never, 'ch-1', {
       parentId: 'games-cat',
@@ -456,7 +459,7 @@ describe('archive failure safety (review MAJOR 2)', () => {
       categoryId: 'arch-cat',
       hide: true,
     });
-    expect(snapshot(ch)[GUILD]).toEqual([0n, SEND | VIEW]);
+    expect(snapshot(ch)[GUILD]).toEqual([0n, LOCK | VIEW]);
     await revertArchive(guild as never, 'ch-1', res);
     expect(ch.parentId).toBe('games-cat');
     expect(snapshot(ch)).toEqual({});
