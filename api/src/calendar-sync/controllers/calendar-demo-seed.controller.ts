@@ -3,6 +3,8 @@
  * ROK-1596 W3: `writeEnabled?`/`writeTarget?` on it, and `POST seed-link`
  * (a link row + a Fake copy for one user × event, without the queue).
  * ROK-1593 §3.6: `POST seed-busy` (busy blocks for one connection).
+ * ROK-1598 §2.8: `seed-connection` takes `provider: 'apple'` and
+ * `status: 'needs_reconnect'` (`calendar-demo-seed-connection.helpers.ts`).
  *
  * Creates a `google` connection with a `demo-fake:` subject and Fake
  * credentials, owned by the caller (or `userId`), so smoke specs and UI test
@@ -22,9 +24,6 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
-import { randomBytes } from 'node:crypto';
-import { eq } from 'drizzle-orm';
-import { z } from 'zod';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -36,7 +35,10 @@ import { SettingsService } from '../../settings/settings.service';
 import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
-import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
+import {
+  SeedConnectionSchema,
+  seedDemoConnection,
+} from './calendar-demo-seed-connection.helpers';
 import {
   SeedLinkSchema,
   seedDemoLink,
@@ -46,15 +48,6 @@ import {
   seedDemoBusy,
   type SeedBusyResult,
 } from './calendar-demo-seed-busy.helpers';
-
-const SeedConnectionSchema = z
-  .object({
-    userId: z.number().int().positive().optional(),
-    accountLabel: z.string().min(1).max(255).optional(),
-    writeEnabled: z.boolean().optional(),
-    writeTarget: z.enum(['dedicated', 'primary']).optional(),
-  })
-  .strict();
 
 const DEMO_ONLY = 'Only available in DEMO_MODE';
 
@@ -78,25 +71,12 @@ export class CalendarDemoSeedController {
   ): Promise<{ id: number }> {
     const fake = await this.assertDemoMode();
     const input = parseDemoBody(SeedConnectionSchema, body ?? {});
-    const result = fake.seedConnection({
-      id: randomBytes(6).toString('hex'),
-      label: input.accountLabel ?? null,
-    });
-    const { id } = await upsertCalendarConnection(this.db, {
-      userId: input.userId ?? req.user.id,
-      provider: 'google',
-      result,
-    });
-    if (input.writeEnabled !== undefined || input.writeTarget) {
-      await this.db
-        .update(schema.calendarConnections)
-        .set({
-          writeEnabled: input.writeEnabled,
-          writeTarget: input.writeTarget,
-        })
-        .where(eq(schema.calendarConnections.id, id));
-    }
-    return { id };
+    return seedDemoConnection(
+      this.db,
+      fake,
+      input.userId ?? req.user.id,
+      input,
+    );
   }
 
   /** A link row (+ a Fake copy when `synced`) for one user × event, no queue. */

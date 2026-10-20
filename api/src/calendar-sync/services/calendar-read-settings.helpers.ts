@@ -34,6 +34,7 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { CALENDAR_READ_MODE_KEY } from '../read/calendar-busy-query.helpers';
+import { withEligiblePrimary } from '../read/calendar-read-cursor.helpers';
 import {
   READ_SYNC_INTERVAL_MS,
   READ_SYNC_JITTER_MS,
@@ -161,13 +162,14 @@ export async function listConnectionCalendars(
   const rows = await withFreshCredentials(db, row, provider, (creds) =>
     provider.listCalendars(creds),
   );
-  return rows.map((c) => ({
+  const flagged = rows.map((c) => ({
     id: c.id,
     name: c.name,
     primary: c.primary,
     writable: c.writable,
     isRaidLedger: c.isRaidLedger || c.id === row.dedicatedCalendarId,
   }));
+  return withEligiblePrimary(provider.key, flagged);
 }
 
 /**

@@ -9,7 +9,7 @@ import { useId, type JSX } from 'react';
 import type { CalendarConnection } from '@raid-ledger/contract';
 import { Switch } from '../../ui/switch';
 import { useConnectionRead } from './use-read-rules';
-import { CALENDARS_COPY as C, READ_COPY as R } from './calendar-sync.copy';
+import { PROVIDER_DISPLAY, READ_COPY as R } from './calendar-sync.copy';
 
 export function CalendarConnectionRead({ connection }: { connection: CalendarConnection }): JSX.Element {
     const subId = useId();
@@ -22,7 +22,7 @@ export function CalendarConnectionRead({ connection }: { connection: CalendarCon
                     <p id={subId} className="text-xs text-muted">{R.accountRead.sub}</p>
                 </div>
                 <Switch checked={connection.read.enabled} onChange={toggle} aria-describedby={subId}
-                    label={R.accountRead.aria(connection.accountLabel ?? C.google.name)}
+                    label={R.accountRead.aria(connection.accountLabel ?? PROVIDER_DISPLAY[connection.provider].name)}
                     disabled={busy || connection.status === 'needs_reconnect'} />
             </div>
             {failed && <p role="alert" className="text-sm text-danger" data-testid="calendar-connection-read-error">{R.saveFailed}</p>}

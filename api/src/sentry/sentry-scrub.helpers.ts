@@ -36,6 +36,10 @@ const VALHEIM_LINK_TOKEN = /rlvl_[A-Za-z0-9_-]{43}/g;
 // every Calendar v3 call; `primary` names no one and stays for triage.
 const CALENDAR_PATH =
   /(\/calendar\/v3\/calendars\/)(?!primary(?:[/?#\s"']|$))[^/?#\s"']+/g;
+// ROK-1598 D11: the iCloud DSID (Apple account number) is the first path
+// segment of every CalDAV URL, partition hosts included.
+const CALDAV_PATH =
+  /((?:p\d{1,3}-)?caldav\.icloud\.com(?::\d+)?\/)\d{4,}(?=\/)/g;
 const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {
@@ -55,6 +59,7 @@ export function scrubString(value: string): string {
     .replace(QUERY_SECRET, `$1$2${REDACTED}`)
     .replace(PATH_SECRET, `$1${REDACTED}`)
     .replace(CALENDAR_PATH, `$1${REDACTED}`)
+    .replace(CALDAV_PATH, `$1${REDACTED}`)
     .replace(VALHEIM_LINK_TOKEN, REDACTED)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }

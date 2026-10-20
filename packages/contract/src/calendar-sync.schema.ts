@@ -161,6 +161,18 @@ export const AppleConnectInputSchema = z
   .strict();
 export type AppleConnectInput = z.infer<typeof AppleConnectInputSchema>;
 
+/** Error `code` on a refused `POST /users/me/calendars/apple` (ROK-1598). Never echoes input. */
+export const AppleConnectErrorCodeSchema = z.enum([
+  'invalid_input', // 400 — body failed AppleConnectInputSchema; `fields` lists the bad paths
+  'apple_auth_failed', // 400 — iCloud refused the email + app-specific password (401/403 on discovery)
+  'apple_unavailable', // 503 — iCloud 5xx / timeout / refused redirect / 429
+]);
+export type AppleConnectErrorCode = z.infer<typeof AppleConnectErrorCodeSchema>;
+export const AppleConnectErrorSchema = z
+  .object({ code: AppleConnectErrorCodeSchema, fields: z.array(z.string()).optional() })
+  .strict();
+export type AppleConnectError = z.infer<typeof AppleConnectErrorSchema>;
+
 /** `GET /users/me/calendars/oauth/:provider/start`. */
 export const OAuthStartResponseSchema = z.object({ url: z.string().url() });
 export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;

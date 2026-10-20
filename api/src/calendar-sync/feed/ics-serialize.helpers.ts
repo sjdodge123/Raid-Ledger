@@ -13,6 +13,12 @@
 export interface IcsEvent {
   /** Globally unique and STABLE across exports (§3.8.4.7). */
   uid: string;
+  /**
+   * ROK-1598 D5: the copy id as `X-RAID-LEDGER-ID` (emitted right after
+   * `UID`), so a copy stays recognisable even if a client rewrites its UID.
+   * Absent → no line.
+   */
+  raidLedgerId?: string;
   start: Date;
   end: Date;
   summary: string;
@@ -40,6 +46,11 @@ export interface IcsCalendar {
    * as `REFRESH-INTERVAL` (RFC 7986 §5.7) and `X-PUBLISHED-TTL` (Outlook).
    */
   refreshInterval?: string;
+  /**
+   * ROK-1598: omit `METHOD:PUBLISH`. A CalDAV calendar object resource MUST
+   * NOT carry METHOD (RFC 4791 §4.1); a subscription feed keeps it.
+   */
+  omitMethod?: boolean;
 }
 
 const CRLF = '\r\n';
@@ -88,6 +99,9 @@ function eventLines(event: IcsEvent): string[] {
   const lines = [
     'BEGIN:VEVENT',
     `UID:${escapeIcsText(event.uid)}`,
+    ...(event.raidLedgerId !== undefined
+      ? [`X-RAID-LEDGER-ID:${escapeIcsText(event.raidLedgerId)}`]
+      : []),
     `DTSTAMP:${formatIcsUtc(event.stamp)}`,
     `DTSTART:${formatIcsUtc(event.start)}`,
     `DTEND:${formatIcsUtc(event.end)}`,
@@ -117,8 +131,8 @@ export function serializeIcsCalendar(calendar: IcsCalendar): string {
     'VERSION:2.0',
     `PRODID:${calendar.prodId}`,
     'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
   ];
+  if (calendar.omitMethod !== true) lines.push('METHOD:PUBLISH');
   if (calendar.name !== undefined) {
     lines.push(`X-WR-CALNAME:${escapeIcsText(calendar.name)}`);
   }

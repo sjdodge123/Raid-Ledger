@@ -6,6 +6,9 @@
  * Every control saves immediately (no Save button, K4 note). Picking "My main
  * calendar" without the `calendar.events` grant answers 409 `needs_consent`,
  * which sends the browser to Google with `intent=primary` (D8).
+ *
+ * ROK-1598: an Apple connection writes only to the dedicated calendar (A9/Q3),
+ * so "My main calendar" is hidden for it, not disabled.
  */
 import { useId, useState, type JSX } from 'react';
 import type { CalendarConnection, CalendarWriteTarget } from '@raid-ledger/contract';
@@ -15,7 +18,8 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useStartOAuth, useUpdateConnection } from '../../../hooks/use-calendar-sync';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
-import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
+import { PROVIDER_CALENDAR_NAME, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
+import { supportsPrimaryWrite } from './calendar-providers';
 
 type Write = CalendarConnection['write'];
 
@@ -95,10 +99,11 @@ interface SendEventsSettingsProps {
 export function SendEventsSettings({ connection, asPage = false }: SendEventsSettingsProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const v = desktop ? S.desktop : S.phone;
+    const helper = desktop ? S.desktop.helper(PROVIDER_CALENDAR_NAME[connection.provider]) : S.phone.helper;
     const { write, save, message, busy } = useWriteSettings(connection);
     const options = [
         { value: 'dedicated' as const, label: S.dedicated, description: v.dedicated },
-        { value: 'primary' as const, label: S.primary, description: v.primary },
+        ...(supportsPrimaryWrite(connection.provider) ? [{ value: 'primary' as const, label: S.primary, description: v.primary }] : []),
     ];
     return (
         <section className="bg-surface border border-edge-subtle rounded-xl p-4 space-y-3"
@@ -110,7 +115,7 @@ export function SendEventsSettings({ connection, asPage = false }: SendEventsSet
                 </div>
             )}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <SendSwitchRow checked={write.enabled} helper={v.helper} disabled={busy} onChange={(enabled) => save({ enabled })} />
+                <SendSwitchRow checked={write.enabled} helper={helper} disabled={busy} onChange={(enabled) => save({ enabled })} />
                 <RadioGroup<CalendarWriteTarget> label={S.putThemIn} hideLabel={desktop} options={options}
                     value={write.target} onChange={(target) => save({ target })} disabled={busy}
                     className="lg:col-span-2 lg:[&>div]:grid lg:[&>div]:grid-cols-2 lg:[&>div]:gap-4" />

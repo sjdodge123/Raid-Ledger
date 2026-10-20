@@ -18,6 +18,7 @@ import {
   decryptCalendarCredentials,
   encryptCalendarCredentials,
 } from './calendar-credentials.helpers';
+import { upsertPasswordConnection } from './calendar-connect-password.helpers';
 
 const STORED_REFRESH = '1//STORED-REFRESH';
 
@@ -198,5 +199,25 @@ describe('mergeGrantWithStored', () => {
         appPassword: 'p',
       }),
     ).toBeNull();
+  });
+});
+
+describe('upsertPasswordConnection (ROK-1598 Codex r5)', () => {
+  it('a reconnect clears sync_cursor so the next read is a full read', async () => {
+    const db = dbWith([{ id: 7, credentialsEncrypted: storedBlob() }]);
+    await upsertPasswordConnection(db as never, {
+      userId: 3,
+      provider: 'apple',
+      result: {
+        credentials: {
+          kind: 'caldav',
+          username: 'U@icloud.example',
+          appPassword: 'abcd-efgh-ijkl-mnop',
+        },
+        accountSubject: 'U@icloud.example',
+        accountLabel: 'U@icloud.example',
+      },
+    });
+    expect(conflictSet(db)).toMatchObject({ syncCursor: null });
   });
 });
