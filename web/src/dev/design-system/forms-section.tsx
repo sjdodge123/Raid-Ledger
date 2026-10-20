@@ -5,7 +5,7 @@
  * `PasswordInput` here and `FilePicker` / `ColorInput` / `Button brandColor` in
  * forms-pickers-demo.tsx, and ROK-1653's segmented "All" filter and row-menu
  * recipes plus the one-save-at-a-time row lock in forms-recipes-demo.tsx,
- * and ROK-1868's `MarkdownBlock` / `CharCounter` in markdown-block-demo.tsx and the lazy `MarkdownEditor` in markdown-editor-demo.tsx. Every example mounts the REAL component, so this page
+ * and ROK-1868's `MarkdownBlock` / `CharCounter` in markdown-block-demo.tsx and the lazy `MarkdownEditor` in markdown-editor-demo.tsx (those three load lazily via forms-lazy-demos.tsx). Every example mounts the REAL component, so this page
  * is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the
@@ -30,11 +30,10 @@ import { SearchInput } from '../../components/ui/search-input';
 import { Combobox } from '../../components/ui/combobox';
 import { SavedSecretStatus } from '../../components/admin/saved-secret-status';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
-import { PickerStates } from './forms-pickers-demo';
-import { RecipeStates } from './forms-recipes-demo';
+import { LazyMarkdownEditor } from '../../components/ui/markdown/lazy-markdown-editor';
 
-/** ROK-1868 markdown demos, lazy so they stay out of DesignSystemPage's capped chunk. */
-const MarkdownDemos = lazy(() => import('./markdown-demos'));
+/** Pickers, recipes and the ROK-1868 markdown demos — lazy so they stay out of DesignSystemPage's capped chunk. */
+const FormsLazyDemos = lazy(() => import('./forms-lazy-demos'));
 
 function ButtonVariants(): JSX.Element {
     return (
@@ -236,10 +235,8 @@ export function FormsSection(): JSX.Element {
                     <SelectTextareaStates />
                     <ChoiceStates />
                     <SearchStates />
-                    <PickerStates />
-                    <RecipeStates />
                     <Suspense fallback={null}>
-                        <MarkdownDemos />
+                        <FormsLazyDemos Editor={LazyMarkdownEditor} />
                     </Suspense>
                 </StateGrid>
             </div>

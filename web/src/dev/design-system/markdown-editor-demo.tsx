@@ -5,22 +5,28 @@
  * route) and the `aria-busy` loading frame is visible on a cold load. Check the
  * toolbar's active state, the link row and the counter in default-dark AND
  * default-light (the side-by-side toggle renders this twice).
+ *
+ * The editor arrives as a prop from `forms-section.tsx` (which imports it
+ * statically) rather than by import here: this file rides in the lazy
+ * `forms-lazy-demos` chunk, and a static edge to `lazy-markdown-editor` (which
+ * reaches `app-entry` through `Textarea`) made Vite emit a ~80-path preload
+ * list into DesignSystemPage's chunk — 1.3 KB gz over its cap.
  */
 import { useState, type JSX } from 'react';
 import { Field } from '../../components/ui/field';
-import { LazyMarkdownEditor } from '../../components/ui/markdown/lazy-markdown-editor';
+import type { LazyMarkdownEditor } from '../../components/ui/markdown/lazy-markdown-editor';
 import { StateFrame } from './design-system-bits';
 
 const START = 'Raid night is **Thursday**. Bring `flasks` and read [the guide](/guides/raid).\n\n- Tanks: soak the frontal\n- Healers: cooldown sheet';
 
 /** One live editor wired through `Field`, with a short limit so the counter is easy to push over. */
-export function MarkdownEditorStates(): JSX.Element {
+export function MarkdownEditorStates({ Editor }: { Editor: typeof LazyMarkdownEditor }): JSX.Element {
     const [body, setBody] = useState<string>(START);
     const over = body.length > 200;
     return (
         <StateFrame label="MarkdownEditor — lazy, toolbar + link row" note="Loaded via LazyMarkdownEditor (own chunk). Select text, then Bold / Link (Mod-K); a bare host gains https://. Counter = markdown SOURCE length; past 200 the frame turns invalid.">
             <Field label="Post body" error={over ? 'Keep it under 200 characters.' : undefined} className="w-full">
-                <LazyMarkdownEditor value={body} onChange={setBody} maxLength={200} invalid={over} testId="ds-md-editor" />
+                <Editor value={body} onChange={setBody} maxLength={200} invalid={over} testId="ds-md-editor" />
             </Field>
         </StateFrame>
     );
