@@ -31,6 +31,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   AppleConnectInputSchema,
   type AppleConnectError,
+  type AppleConnectInput,
   type CalendarConnection,
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
@@ -71,35 +72,12 @@ export class CalendarAppleController {
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ): Promise<CalendarConnection> {
-    if (!this.attempts.tryAttempt(req.user.id)) {
-      throw new HttpException(
-        'Too Many Requests',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-    const parsed = AppleConnectInputSchema.safeParse(body);
-    if (!parsed.success) {
-      const fields = [
-        ...new Set(parsed.error.issues.map((i) => i.path.join('.'))),
-      ];
-      throw refusal({ code: 'invalid_input', fields }, HttpStatus.BAD_REQUEST);
-    }
+    const input = this.admit(req.user.id, body);
     const provider = this.registry.getPasswordProvider('apple');
     if (!provider) throw new NotFoundException();
     const deps = this.deps();
-    const outcome = await connectApple(
-      deps,
-      provider,
-      req.user.id,
-      parsed.data,
-    );
-    if ('refused' in outcome) {
-      const status =
-        outcome.refused === 'apple_auth_failed'
-          ? HttpStatus.BAD_REQUEST
-          : HttpStatus.SERVICE_UNAVAILABLE;
-      throw refusal({ code: outcome.refused }, status);
-    }
+    const outcome = await connectApple(deps, provider, req.user.id, input);
+    if ('refused' in outcome) throw refusalOf(outcome.refused);
     const created = outcome.outcome === 'created';
     const connection = await finishAppleConnect(
       deps,
@@ -109,6 +87,21 @@ export class CalendarAppleController {
     );
     res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
     return connection;
+  }
+
+  /** D13 throttle, then the D11 schema check (never Zod's message). */
+  private admit(userId: number, body: unknown): AppleConnectInput {
+    if (!this.attempts.tryAttempt(userId)) {
+      throw new HttpException(
+        'Too Many Requests',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    const parsed = AppleConnectInputSchema.safeParse(body);
+    if (parsed.success) return parsed.data;
+    const paths = parsed.error.issues.map((i) => i.path.join('.'));
+    const fields = [...new Set(paths)];
+    return thrown({ code: 'invalid_input', fields }, HttpStatus.BAD_REQUEST);
   }
 
   private deps(): AppleConnectDeps {
@@ -126,6 +119,14 @@ export class CalendarAppleController {
   }
 }
 
-function refusal(body: AppleConnectError, status: HttpStatus): HttpException {
-  return new HttpException(body, status);
+function thrown(body: AppleConnectError, status: HttpStatus): never {
+  throw new HttpException(body, status);
+}
+
+function refusalOf(code: AppleConnectError['code']): HttpException {
+  const status =
+    code === 'apple_unavailable'
+      ? HttpStatus.SERVICE_UNAVAILABLE
+      : HttpStatus.BAD_REQUEST;
+  return new HttpException({ code }, status);
 }

@@ -114,6 +114,17 @@ const CONNECTION_KEY = [
   calendarConnections.accountSubject,
 ];
 
+/** The ON CONFLICT update: never `read_*` / `write_*` / dedicated id. */
+function reconnectSet<T extends object>(both: T, accountLabel: string | null) {
+  return {
+    ...both,
+    // A grant without an email keeps the stored label (undefined = skip).
+    accountLabel: accountLabel ?? undefined,
+    lastErrorCode: null,
+    updatedAt: new Date(),
+  };
+}
+
 /**
  * The single statement that cannot duplicate: insert, or update on the key.
  * ROK-1593 D-R3: every grant recomputes read access; `write_*` untouched.
@@ -142,13 +153,7 @@ export async function writeConnectionRow(
     })
     .onConflictDoUpdate({
       target: CONNECTION_KEY,
-      set: {
-        ...both,
-        // A grant without an email keeps the stored label (undefined = skip).
-        accountLabel: accountLabel ?? undefined,
-        lastErrorCode: null,
-        updatedAt: new Date(),
-      },
+      set: reconnectSet(both, accountLabel),
     })
     .returning({ id: calendarConnections.id });
   if (!row) throw new Error('calendar connection upsert returned no row');

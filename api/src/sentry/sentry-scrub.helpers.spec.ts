@@ -186,6 +186,26 @@ describe('scrubSecrets', () => {
     );
   });
 
+  it('ROK-1598: redacts the iCloud DSID in a CalDAV path, keeps the calendar id', () => {
+    const p07 = 'https://p07-caldav.icloud.com/1234567/calendars/home/';
+    const port = 'PROPFIND https://caldav.icloud.com:443/987654321/principal/';
+    expect(scrubString(p07)).toBe(
+      `https://p07-caldav.icloud.com/${REDACTED}/calendars/home/`,
+    );
+    expect(scrubString(port)).toBe(
+      `PROPFIND https://caldav.icloud.com:443/${REDACTED}/principal/`,
+    );
+    const event = scrubSecrets({
+      request: { data: { appPassword: 'abcd-efgh-ijkl-mnop' } },
+      breadcrumbs: [{ data: { url: p07, Authorization: 'Basic cmFpZGVy' } }],
+    });
+    const text = JSON.stringify(event);
+    expect(text).not.toContain('1234567');
+    expect(text).not.toContain('abcd-efgh-ijkl-mnop');
+    expect(text).not.toContain('cmFpZGVy');
+    expect(text).toContain('/calendars/home/');
+  });
+
   it('ROK-1593: a span description carrying a calendar id is scrubbed', () => {
     const event = scrubSecrets({
       spans: [

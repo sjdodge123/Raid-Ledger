@@ -15,8 +15,20 @@ import {
 } from '../providers/google/google-oauth.helpers';
 import {
   applyFirstConnectRead,
+  grantAllowsRead,
   type FirstConnectReadInput,
 } from './calendar-read-consent.helpers';
+
+describe('grantAllowsRead (ROK-1598 T25)', () => {
+  it('Apple is read-capable with no scope step', () => {
+    expect(grantAllowsRead('apple', [])).toBe(true);
+  });
+
+  it('Google still needs the read scopes', () => {
+    expect(grantAllowsRead('google', [])).toBe(false);
+    expect(grantAllowsRead('google', GOOGLE_READ_SCOPES)).toBe(true);
+  });
+});
 
 const WRITE_ONLY = GOOGLE_CONNECT_SCOPES.split(' ');
 const WITH_READ = [...WRITE_ONLY, ...GOOGLE_READ_SCOPES];

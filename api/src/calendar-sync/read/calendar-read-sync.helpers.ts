@@ -134,8 +134,15 @@ export function safeReadWindow(now: Date, timeZone: string): ReadWindow {
   }
 }
 
-function fetchWindow(
-  deps: ReadSyncDeps,
+/** Exported for the D7 cursor-wiring unit spec. */
+export function fetchWindow(
+  deps: {
+    db: Db;
+    provider: Pick<
+      CalendarReadProvider,
+      'key' | 'listCalendars' | 'fetchBusy' | 'refresh'
+    >;
+  },
   conn: ReadSyncConnection,
   window: ReadWindow,
 ): Promise<FetchBusyResult> {
