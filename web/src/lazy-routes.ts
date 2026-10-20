@@ -158,6 +158,9 @@ export const SchedulingWireframesPage = lazyWithRetry(() =>
 export const ServerScheduleWireframesPage = lazyWithRetry(() =>
     import('./dev/server-schedule-wireframes/ServerScheduleWireframesPage').then((m) => ({ default: m.ServerScheduleWireframesPage })),
 );
+export const CommunityHubWireframesPage = lazyWithRetry(() =>
+    import('./dev/community-hub-wireframes/CommunityHubWireframesPage').then((m) => ({ default: m.CommunityHubWireframesPage })),
+);
 export const HubPostsWireframesPage = lazyWithRetry(() =>
     import('./dev/hub-posts-wireframes/HubPostsWireframesPage').then((m) => ({ default: m.HubPostsWireframesPage })),
 );
