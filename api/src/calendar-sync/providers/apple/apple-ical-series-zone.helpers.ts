@@ -27,6 +27,10 @@
  * with no VTIMEZONE → its UTC instant (it was left floating).
  * Codex r12: a UTC master's override in an embedded VTIMEZONE converts by
  * the corrected instant rules, so a DST-fold RECURRENCE-ID still matches.
+ * Codex r13: an embedded-zone master's UNTIL / EXDATE / RDATE go onto its
+ * wall clock by those corrected rules too (ical.js's own fold offset is the
+ * second occurrence), and a UTC master's embedded-zone EXDATE / RDATE → UTC
+ * by them, so a fold EXDATE / inclusive UNTIL agrees with the blocks.
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -191,7 +195,7 @@ function alignToUtc(master: ICAL.Component, floating: FloatingZone): void {
       const values: unknown[] = prop.getValues();
       prop.setValues(
         values.map((v) =>
-          v instanceof ICAL.Time ? toUtc(v, tzid, floating) : v,
+          v instanceof ICAL.Time ? zonedToUtc(v, tzid, floating) : v,
         ),
       );
     }
@@ -244,15 +248,6 @@ export function alignSeriesZone(
   }
   const target = seriesTarget(master, floating);
   if (target === null) return;
-  if (target.real) {
-    // ical.js compares UNTIL / EXDATE / RDATE as instants in a real zone;
-    // only the THISANDFUTURE shift needs both ends on the series' clock.
-    // Codex r11: one naming another IANA zone with no VTIMEZONE is floating
-    // in ical.js, so it becomes its UTC instant first.
-    alignToUtc(master, floating);
-    for (const o of overrides) alignOverride(o, target);
-    return;
-  }
   alignUntil(master, target);
   alignDates(master, 'exdate', target);
   alignDates(master, 'rdate', target);

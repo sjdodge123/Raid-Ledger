@@ -37,6 +37,16 @@ const starts = (text: string): string[] =>
     .blocks.map((b) => b.start.toISOString())
     .sort();
 
+const berlinZone = (): string => {
+  const text = readFileSync(
+    join(__dirname, '__fixtures__', 'berlin-vtimezone.ics'),
+    'utf8',
+  ).replace(/\r?\n/g, '\r\n');
+  const block = /BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE\r\n/.exec(text)?.[0];
+  if (!block) throw new Error('fixture has no VTIMEZONE');
+  return block.trimEnd();
+};
+
 describe('EXDATE / RDATE in another IANA zone, master with a VTIMEZONE (Codex r11)', () => {
   const exdate = ['EXDATE;TZID=Asia/Tokyo:20261028T080000'];
   const rdate = ['RDATE;TZID=Asia/Tokyo:20261105T120000'];
@@ -67,15 +77,6 @@ describe('EXDATE / RDATE in another IANA zone, master with a VTIMEZONE (Codex r1
 });
 
 describe('a UTC series, override RECURRENCE-ID in a DST fold (Codex r12)', () => {
-  const berlinZone = (): string => {
-    const text = readFileSync(
-      join(__dirname, '__fixtures__', 'berlin-vtimezone.ics'),
-      'utf8',
-    ).replace(/\r?\n/g, '\r\n');
-    const block = /BEGIN:VTIMEZONE[\s\S]*?END:VTIMEZONE\r\n/.exec(text)?.[0];
-    if (!block) throw new Error('fixture has no VTIMEZONE');
-    return block.trimEnd();
-  };
   const event = (lines: string[]): string[] => [
     'BEGIN:VEVENT',
     'UID:utc-fold@icloud.test',
@@ -110,5 +111,61 @@ describe('a UTC series, override RECURRENCE-ID in a DST fold (Codex r12)', () =>
       '2026-10-25T10:00:00.000Z',
       '2026-10-26T00:30:00.000Z',
     ]);
+  });
+});
+
+describe('recurrence comparisons in a DST fold (Codex r13)', () => {
+  const feed = (zone: string, lines: string[]): string =>
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      ...(zone ? [zone] : []),
+      'BEGIN:VEVENT',
+      'UID:fold-recur@icloud.test',
+      ...lines,
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ].join('\r\n');
+  const berlin = (rule: string, extra: string[] = []): string[] => [
+    'DTSTART;TZID=Europe/Berlin:20261024T023000',
+    'DTEND;TZID=Europe/Berlin:20261024T033000',
+    rule,
+    ...extra,
+  ];
+  const count3 = 'RRULE:FREQ=DAILY;COUNT=3';
+  const zones: [string, string][] = [
+    ['VTIMEZONE', berlinZone()],
+    ['no VTIMEZONE', ''],
+  ];
+  const oct24 = '2026-10-24T00:30:00.000Z';
+  const oct25 = '2026-10-25T00:30:00.000Z';
+  const oct26 = '2026-10-26T01:30:00.000Z';
+
+  it.each(zones)('a UTC EXDATE at the fold removes 02:30 (%s)', (_, z) => {
+    const text = feed(z, berlin(count3, ['EXDATE:20261025T003000Z']));
+    expect(starts(text)).toEqual([oct24, oct26]);
+  });
+
+  it.each(zones)('an inclusive UNTIL at the fold keeps 02:30 (%s)', (_, z) => {
+    const text = feed(z, berlin('RRULE:FREQ=DAILY;UNTIL=20261025T003000Z'));
+    expect(starts(text)).toEqual([oct24, oct25]);
+  });
+
+  it.each(zones)('non-fold EXDATE / UNTIL are unchanged (%s)', (_, z) => {
+    const ex = feed(z, berlin(count3, ['EXDATE:20261026T013000Z']));
+    const until = feed(z, berlin('RRULE:FREQ=DAILY;UNTIL=20261024T003000Z'));
+    expect(starts(ex)).toEqual([oct24, oct25]);
+    expect(starts(until)).toEqual([oct24]);
+  });
+
+  it.each(zones)('a UTC series drops a Berlin fold EXDATE (%s)', (_, z) => {
+    const text = feed(z, [
+      'DTSTART:20261024T003000Z',
+      'DTEND:20261024T013000Z',
+      count3,
+      'EXDATE;TZID=Europe/Berlin:20261025T023000',
+    ]);
+    expect(starts(text)).toEqual([oct24, '2026-10-26T00:30:00.000Z']);
   });
 });
