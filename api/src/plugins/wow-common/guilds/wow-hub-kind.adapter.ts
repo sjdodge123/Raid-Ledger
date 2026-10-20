@@ -9,6 +9,8 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type {
+  HubEditorGrant,
+  HubEditorStatus,
   HubKindAdapter,
   HubMineRank,
 } from '../../plugin-host/extension-points';
@@ -20,6 +22,7 @@ import {
   type LinkedMemberRow,
 } from './guild-membership.helpers';
 import { hasDelegation } from './guild-delegation.helpers';
+import { editorGrantStatus } from './guild-editor-status.helpers';
 import { rankNamesInSnapshot } from './guild-queries.helpers';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
@@ -105,6 +108,14 @@ export class WowHubKindAdapter implements HubKindAdapter {
 
   isLiveMember(guildId: number, memberId: number): Promise<boolean> {
     return isLiveMemberOf(this.db, guildId, memberId);
+  }
+
+  /** ROK-1794 (review): whether each grant confers rights, and to whom. */
+  editorStatus(
+    guildId: number,
+    grants: HubEditorGrant[],
+  ): Promise<Map<number, HubEditorStatus>> {
+    return editorGrantStatus(this.db, guildId, grants);
   }
 }
 

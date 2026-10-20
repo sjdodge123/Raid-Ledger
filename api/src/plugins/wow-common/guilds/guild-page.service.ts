@@ -39,6 +39,7 @@ import {
 } from '../../../guilds/hub-hidden.helpers';
 import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
+import { loadRosterLinks } from './guild-roster-links.helpers';
 
 /**
  * ROK-1785 — read side of `/plugins/wow/guilds`. Every access answer comes
@@ -119,11 +120,15 @@ export class GuildPageService {
       findImportedBy(this.db, guildId),
       this.access.resolveLadder(actor, guildId),
     ]);
+    // ROK-1794 (review): who a row links to is STAFF-ONLY — the grant basis.
+    const links = isStaff(actor)
+      ? await loadRosterLinks(this.db, rows)
+      : undefined;
     return {
       guild: hubSummaryFor(guild, isStaff(actor)),
       importedBy,
       viewer: viewerAccess(role),
-      ranks: groupRoster(rows),
+      ranks: groupRoster(rows, links),
       roleCounts: computeRoleCounts(rows),
     };
   }

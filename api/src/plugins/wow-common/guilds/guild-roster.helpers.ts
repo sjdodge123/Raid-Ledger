@@ -46,7 +46,18 @@ export function effectiveRole(row: RawRosterRow): CharacterRole | null {
   return parsed.success ? parsed.data : null;
 }
 
-export function toMemberRow(row: RawRosterRow): GuildMemberRow {
+/** STAFF-ONLY roster link details, by linked character id (ROK-1794). */
+export type RosterLinks = Map<
+  string,
+  NonNullable<GuildMemberRow['linkedAccount']>
+>;
+
+export function toMemberRow(
+  row: RawRosterRow,
+  links?: RosterLinks,
+): GuildMemberRow {
+  const account =
+    row.characterId === null ? undefined : links?.get(row.characterId);
   return {
     memberId: row.memberId,
     name: row.name,
@@ -57,6 +68,7 @@ export function toMemberRow(row: RawRosterRow): GuildMemberRow {
     effectiveRole: effectiveRole(row),
     characterId: row.characterId,
     isMain: row.isMain ?? false,
+    ...(account ? { linkedAccount: account } : {}),
   };
 }
 
@@ -78,20 +90,26 @@ export function compareRosterRows(a: RawRosterRow, b: RawRosterRow): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 }
 
-/** Group sorted rows by rank; the group's name is its first row's rank name. */
-export function groupRoster(rows: RawRosterRow[]): GuildRankGroup[] {
+/**
+ * Group sorted rows by rank; the group's name is its first row's rank name.
+ * `links` is passed for staff viewers only (ROK-1794) — never for anyone else.
+ */
+export function groupRoster(
+  rows: RawRosterRow[],
+  links?: RosterLinks,
+): GuildRankGroup[] {
   const sorted = dedupeByMember(rows).sort(compareRosterRows);
   const groups: GuildRankGroup[] = [];
   for (const row of sorted) {
     const last = groups[groups.length - 1];
     if (last && last.rankIndex === row.rankIndex) {
-      last.members.push(toMemberRow(row));
+      last.members.push(toMemberRow(row, links));
       continue;
     }
     groups.push({
       rankIndex: row.rankIndex,
       rankName: row.rankName,
-      members: [toMemberRow(row)],
+      members: [toMemberRow(row, links)],
     });
   }
   return groups;
