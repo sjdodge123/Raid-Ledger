@@ -130,6 +130,8 @@ beforeAll(async () => {
   await insertMember('Player-1-unlinked', 'Unlinked', 3, SNAP);
   await testApp.db.insert(schema.guildEditors).values([
     { guildId, kind: 'rank', rankIndex: 1 },
+    // ROK-1794: rank grants are inert; the officer edits via a member grant.
+    { guildId, kind: 'member', guildMemberId: memberIds.officer },
     { guildId, kind: 'member', guildMemberId: memberIds.deleg },
   ]);
   tokens.admin = await loginAsAdmin(testApp.request, testApp.seed);

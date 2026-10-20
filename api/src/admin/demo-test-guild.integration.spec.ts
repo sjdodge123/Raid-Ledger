@@ -149,9 +149,18 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
     const editors = await testApp.request
       .get(`/plugins/wow/guilds/${out.guildId}/editors`)
       .set('Authorization', `Bearer ${adminToken}`);
-    expect(editors.body.editors).toEqual([
-      expect.objectContaining({ id: out.editorId, kind: 'rank', rankIndex: 1 }),
-    ]);
+    // ROK-1794: the rank grant is inert, so the seed also grants the rank's
+    // member rows directly (the seeded officer keeps editing).
+    expect(editors.body.editors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: out.editorId,
+          kind: 'rank',
+          rankIndex: 1,
+        }),
+        expect.objectContaining({ kind: 'member' }),
+      ]),
+    );
   });
 
   it.each([

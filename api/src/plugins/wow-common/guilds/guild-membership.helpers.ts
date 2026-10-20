@@ -1,4 +1,14 @@
-import { and, eq, gte, isNull, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 
@@ -25,6 +35,8 @@ export interface LinkedMemberRow {
   guildId: number;
   memberId: number;
   rankIndex: number | null;
+  /** The user's character that links to the row (ROK-1794 delegation). */
+  characterId: string;
 }
 
 /** SQL predicate: the member row is in its guild's latest snapshot. */
@@ -72,6 +84,7 @@ export async function findLinkedMemberRows(
       guildId: guildMembers.guildId,
       memberId: guildMembers.id,
       rankIndex: guildMembers.rankIndex,
+      characterId: characters.id,
     })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
@@ -102,6 +115,46 @@ export async function findLinkedMemberUserIds(
     .innerJoin(users, eq(users.id, characters.userId))
     .where(and(eq(guilds.id, guildId), liveLinkedMember()));
   return rows.map((r) => r.userId);
+}
+
+/** ROK-1794 (review): a live linked row of a granted member, with its owner. */
+export interface MemberLinkRow extends LinkedMemberRow {
+  userId: number;
+  username: string;
+}
+
+/**
+ * The live linked rows of these member ids in one guild — the same D3 joins
+ * and filters as `findLinkedMemberRows`, keyed by member row instead of user.
+ */
+export async function findLinksOfMembers(
+  db: Db,
+  guildId: number,
+  memberIds: number[],
+): Promise<MemberLinkRow[]> {
+  if (memberIds.length === 0) return [];
+  return db
+    .select({
+      guildId: guildMembers.guildId,
+      memberId: guildMembers.id,
+      rankIndex: guildMembers.rankIndex,
+      characterId: characters.id,
+      userId: users.id,
+      username: users.username,
+    })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .innerJoin(characters, characterLink())
+    .innerJoin(users, eq(users.id, characters.userId))
+    .where(
+      and(
+        eq(guilds.id, guildId),
+        inArray(guildMembers.id, memberIds),
+        isNull(users.deactivatedAt),
+        inLatestSnapshot(),
+      ),
+    )
+    .orderBy(asc(users.id));
 }
 
 /** Is this member row in the guild's latest snapshot? */
