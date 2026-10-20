@@ -10,9 +10,15 @@ import {
   PATH_METADATA,
 } from '@nestjs/common/constants';
 import type { AuthenticatedRequest } from '../../auth/types';
+import { ThrottlerException } from '@nestjs/throttler';
+import { PerUserThrottleGuard } from '../../common/throttle/per-user-throttle.guard';
 import { GuildEditorGuard } from '../guild-editor.guard';
 import { HubKindActiveGuard } from '../hub-kind-active.guard';
 import { HubVisibleGuard } from '../hub-visible.guard';
+import {
+  HUB_POST_CREATE_WINDOW_MS,
+  HubPostThrottleGuard,
+} from './hub-post-throttle.guard';
 import { HubPostsController } from './hub-posts.controller';
 import type { HubPostsService } from './hub-posts.service';
 
@@ -57,7 +63,7 @@ describe('HubPostsController — routing metadata', () => {
     },
   );
 
-  it.each<Handler>(['composer', 'create', 'update', 'remove'])(
+  it.each<Handler>(['composer', 'update', 'remove'])(
     '%s: jwt + HubVisibleGuard + GuildEditorGuard',
     (name) => {
       const guards = guardsOf(name);
@@ -65,6 +71,17 @@ describe('HubPostsController — routing metadata', () => {
       expect(guards.slice(1)).toEqual([HubVisibleGuard, GuildEditorGuard]);
     },
   );
+
+  it('create: jwt + HubPostThrottleGuard + HubVisibleGuard + GuildEditorGuard', () => {
+    const guards = guardsOf('create');
+    expect(guards).toHaveLength(4);
+    expect(guards[0]).toBe(guardsOf('update')[0]);
+    expect(guards.slice(1)).toEqual([
+      HubPostThrottleGuard,
+      HubVisibleGuard,
+      GuildEditorGuard,
+    ]);
+  });
 
   it.each<Handler>(['list', 'composer', 'get'])(
     '%s: Cache-Control private, no-store',
@@ -75,19 +92,26 @@ describe('HubPostsController — routing metadata', () => {
     },
   );
 
-  it('throttles POST at 10/min and answers DELETE with 204', () => {
-    const keys = Reflect.getMetadataKeys(handler('create')) as string[];
-    const limitKey = keys.find((k) => String(k).startsWith('THROTTLER:LIMIT'));
-    const ttlKey = keys.find((k) => String(k).startsWith('THROTTLER:TTL'));
-    expect(limitKey && Reflect.getMetadata(limitKey, handler('create'))).toBe(
-      10,
-    );
-    expect(ttlKey && Reflect.getMetadata(ttlKey, handler('create'))).toBe(
-      60_000,
-    );
+  it('answers DELETE with 204', () => {
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, handler('remove'))).toBe(
       204,
     );
+  });
+});
+
+describe('HubPostsController — POST throttle', () => {
+  it('throttles POST at 10/min PER USER via its route guard', () => {
+    expect(guardsOf('create')[1]).toBe(HubPostThrottleGuard);
+    const guard = new HubPostThrottleGuard();
+    expect(guard).toBeInstanceOf(PerUserThrottleGuard);
+    let t = 1_000;
+    guard.now = () => t;
+    for (let i = 0; i < 10; i += 1) guard.hit(3);
+    expect(() => guard.hit(3)).toThrow(ThrottlerException);
+    expect(() => guard.hit(4)).not.toThrow();
+    expect(HUB_POST_CREATE_WINDOW_MS).toBe(60_000);
+    t += 60_000;
+    expect(() => guard.hit(3)).not.toThrow();
   });
 });
 
