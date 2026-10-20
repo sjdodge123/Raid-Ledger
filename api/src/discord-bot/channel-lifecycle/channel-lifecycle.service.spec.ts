@@ -117,13 +117,13 @@ beforeEach(() => {
   settings.getChannelLifecycleSettings.mockResolvedValue(SETTINGS);
   client.isConnected.mockReturnValue(true);
   client.getGuild.mockReturnValue(guild);
-  jest
-    .mocked(ops.ensureCategory)
-    .mockImplementation(async (_g, o) => ({
+  jest.mocked(ops.ensureCategory).mockImplementation((_g, o) =>
+    Promise.resolve({
       id: o.id ?? 'new',
       name: o.name,
       created: false,
-    }));
+    }),
+  );
   jest.mocked(ops.createTextChannel).mockResolvedValue('new-ch');
   jest
     .mocked(ops.archiveChannel)
@@ -154,9 +154,9 @@ describe('gates', () => {
     expect((await makeService().reconcile(live)).stoppedReason).toBe('offline');
   });
   it('archive category unresolvable → no-archive-category + lastRunError', async () => {
-    jest.mocked(ops.ensureCategory).mockImplementation(async (_g, o) => {
-      if (o.name === 'Archived') throw new Error('nope');
-      return { id: 'cat-games', name: o.name, created: false };
+    jest.mocked(ops.ensureCategory).mockImplementation((_g, o) => {
+      if (o.name === 'Archived') return Promise.reject(new Error('nope'));
+      return Promise.resolve({ id: 'cat-games', name: o.name, created: false });
     });
     expect((await makeService().reconcile(live)).stoppedReason).toBe(
       'no-archive-category',
