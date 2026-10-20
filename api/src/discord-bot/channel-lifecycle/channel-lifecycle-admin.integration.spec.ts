@@ -5,7 +5,7 @@
  * the bot client is stubbed per test.
  */
 import { eq } from 'drizzle-orm';
-import type { Guild } from 'discord.js';
+import { Collection, type Guild } from 'discord.js';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -22,7 +22,11 @@ import { selectGameLifecycleActivity } from './game-activity.queries';
 
 const BASE = '/admin/discord/lifecycle';
 const GUILD = 'rok1432-guild';
-const guild = { id: GUILD } as unknown as Guild;
+/** A connected guild with an empty channel cache (the bindings list reads it). */
+const guild = {
+  id: GUILD,
+  channels: { cache: new Collection() },
+} as unknown as Guild;
 let t: TestApp;
 let admin: string;
 let member: string;
