@@ -286,7 +286,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   ChannelLifecycleScheduler_reconcile: {
     description:
       'ROK-1428: reconciles game text channels daily at 04:15 — creates a channel for a game whose activity crossed the create threshold, archives quiet auto-managed channels into the Archived category, brings them back on new activity, links hubs to their managed channel (the nudge queue runs the same reconcile for one game within ~60 s of new activity)',
-    category: 'Discord',
+    category: 'Events',
   },
   EphemeralVoiceScheduler_scanCreateWindow: {
     description:
