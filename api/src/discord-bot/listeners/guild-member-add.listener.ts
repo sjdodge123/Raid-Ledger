@@ -11,6 +11,7 @@ import { NotificationService } from '../../notifications/notification.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 import { invalidateAuthUser } from '../../auth/auth-user-cache';
+import { refreshUserHubCounts } from '../../guilds/community/community-membership.queries';
 
 /**
  * Re-activate users when they rejoin the Discord guild (ROK-1260).
@@ -100,6 +101,8 @@ export class GuildMemberAddListener {
       )
       .returning({ id: schema.users.id, username: schema.users.username });
     if (!row) return;
+    // ROK-1870: the user's community hubs count them again (M11).
+    await refreshUserHubCounts(this.db, row.id);
     // ROK-1753: JwtStrategy 401s deactivated users off a 30s cache — drop it.
     invalidateAuthUser(row.id);
     this.logger.log(

@@ -4,12 +4,16 @@
  * a two-column grid from 1024px, plus the read rules (ROK-1595: K2 switches
  * on phone, K4 radio cards on desktop). Nothing renders but a notice when the admin
  * kill switch is off; My Integrations hides the whole section on the same flag.
+ * ROK-1598: provider-generic — Google and Apple iCloud connections share the
+ * Connected list, read rules and Send events; Microsoft stays hidden.
  */
 import type { JSX, ReactNode } from 'react';
 import type { CalendarConnection, CalendarReadMode, CalendarsOverview } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { CalendarProviderRow } from './CalendarProviderRow';
+import { AppleProviderRow } from './AppleProviderRow';
+import { countOf, shippedConnections } from './calendar-providers';
 import { CalendarConnectionCard } from './CalendarConnectionCard';
 import { CalendarReadRules } from './CalendarReadRules';
 import { readableConnections } from './use-read-rules';
@@ -109,30 +113,37 @@ function SubscribeLink({ feed }: { feed: CalendarsOverview['feed'] }): JSX.Eleme
     return <Section heading={F.heading}><SubscribeLinkCard feed={feed} /></Section>;
 }
 
+/** Q15: several accounts per provider are allowed, so each row stays once one is connected. */
+function AddCalendar({ data, shown }: { data: CalendarsOverview; shown: CalendarConnection[] }): JSX.Element {
+    return (
+        <Section heading={C.addHeading}>
+            <CalendarProviderRow available={data.providers.google.available} another={countOf(shown, 'google') > 0} />
+            <AppleProviderRow available={data.providers.apple.available} another={countOf(shown, 'apple') > 0} />
+        </Section>
+    );
+}
+
 /** The K2 column / K4 two-card grid: Connected, (phone) Read + Write, Add a calendar. */
 function ConnectionsGrid({ data }: { data: CalendarsOverview }): JSX.Element {
-    const google = data.connections.filter((c) => c.provider === 'google');
-    const readable = readableConnections(google);
+    const shown = shippedConnections(data.connections);
+    const readable = readableConnections(shown);
     const readSwitch = readable.length > 1;
     // R2: every card's "Read this account" is off — say so quietly, no warning tone.
     const readingNone = readSwitch && readable.every((c) => !c.read.enabled);
     return (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {google.length > 0 && (
+            {shown.length > 0 && (
                 <Section heading={C.connectedHeading}>
-                    {google.map((c) => (
+                    {shown.map((c) => (
                         <CalendarConnectionCard key={c.id} connection={c} readSwitch={readSwitch}
-                            anyReadable={readable.length > 0} showAccount={google.length > 1} />
+                            anyReadable={readable.length > 0} showAccount={countOf(shown, c.provider) > 1} />
                     ))}
                     {readingNone && <p className="text-xs text-muted" data-testid="calendar-reading-none">{R.notReadingAny}</p>}
                 </Section>
             )}
-            <ReadRules connections={google} mode={data.readSettings.mode} desktopRow={false} />
-            <PhoneWriteSection connections={google} />
-            {/* Q15: several Google accounts are allowed, so the row stays once one is connected. */}
-            <Section heading={C.addHeading}>
-                <CalendarProviderRow available={data.providers.google.available} another={google.length > 0} />
-            </Section>
+            <ReadRules connections={shown} mode={data.readSettings.mode} desktopRow={false} />
+            <PhoneWriteSection connections={shown} />
+            <AddCalendar data={data} shown={shown} />
         </div>
     );
 }
@@ -146,13 +157,13 @@ export function CalendarsPage(): JSX.Element {
     if (!data.enabled) {
         return <PageFrame><p className="text-sm text-muted" data-testid="calendars-unavailable">{C.unavailable}</p></PageFrame>;
     }
-    const google = data.connections.filter((c) => c.provider === 'google');
+    const shown = shippedConnections(data.connections);
     return (
         <PageFrame lede={desktop ? C.ledeDesktop : C.lede}>
             {errorCode && <OAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
             <ConnectionsGrid data={data} />
-            <ReadRules connections={google} mode={data.readSettings.mode} desktopRow />
-            <DesktopSendEvents connections={google} />
+            <ReadRules connections={shown} mode={data.readSettings.mode} desktopRow />
+            <DesktopSendEvents connections={shown} />
             <SubscribeLink feed={data.feed} />
             <PrivacyNote />
         </PageFrame>

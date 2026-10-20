@@ -33,7 +33,7 @@ export function HubEventsTab({ query, kind }: EventsTabProps): JSX.Element {
                 <GuildRaidSchedule schedule={raids.schedule} kind={kind} />
                 <GuildAttendance attendance={raids.attendance} kind={kind} />
             </div>
-            <GuildEvents raids={raids} />
+            <GuildEvents raids={raids} kind={kind} />
         </div>
     );
 }

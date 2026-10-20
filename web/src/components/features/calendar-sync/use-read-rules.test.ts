@@ -75,6 +75,10 @@ describe('readGranted / status line', () => {
     it('needs_reconnect → the reconnect line', () => {
         expect(readStatusLine({ ...readConnectionFixture, status: 'needs_reconnect' }, false, now)).toBe('Access was revoked · reconnect');
     });
+    it('Apple needs_reconnect → the app-specific password line (ROK-1598 Q7)', () => {
+        expect(readStatusLine({ ...readConnectionFixture, provider: 'apple', status: 'needs_reconnect' }, false, now))
+            .toBe('Password was revoked · reconnect');
+    });
     it('never synced → the ROK-1594 "Connected · <email>" line', () => {
         expect(readStatusLine({ ...readConnectionFixture, lastSyncedAt: null }, false, now)).toBe('Connected · raider@example.com');
     });

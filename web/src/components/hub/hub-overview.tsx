@@ -79,7 +79,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
     ];
     if (!data) return cells;
     cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} kind={page.guild.kind} /> });
-    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={EVENTS_TAB} /> });
+    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={EVENTS_TAB} kind={page.guild.kind} /> });
     cells.push({ key: 'attendance', order: 70, span: 1, node: <GuildAttendance attendance={data.attendance} limit={OVERVIEW_ATTENDANCE_TOP} kind={page.guild.kind} /> });
     return cells;
 }

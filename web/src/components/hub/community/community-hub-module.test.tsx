@@ -1,0 +1,243 @@
+/**
+ * ROK-1870 §3.7 W7–W9, W11 — the core community hub module: Join gating,
+ * the officer/leader row menu, the leader's transfer prompt, and the module
+ * resolving with every plugin off.
+ */
+import type { JSX, ReactNode } from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { screen, waitFor, within, renderHook } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useQuery } from '@tanstack/react-query';
+import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import { server } from '../../../test/mocks/server';
+import { communityHubCalls, communityHubHandlers } from '../../../test/mocks/community-hub-handlers';
+import { buildCommunityMember, buildCommunityPage } from '../../../test/factories/community-hub';
+import { mockDesktop } from '../../../test/handlers/media';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
+import { hubBansKey } from './community-settings-api';
+import { usePluginStore } from '../../../stores/plugin-store';
+import { useHubModule, useHubModulePending, type CoreWidgetId, type HubCtx } from '../../../plugins/hub-module';
+import { HubMembers } from '../hub-members';
+import { communityHubModule } from './community-hub-module';
+import { CommunityJoinPill, CommunityKindPill } from './community-hero';
+
+let selfId = 3;
+vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
+    useAuth: () => ({ user: { id: selfId, role: 'member' }, isAuthenticated: true }),
+}));
+
+function WithCtx({ page, children }: { page: GuildPage; children: (ctx: HubCtx) => ReactNode }): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['test-raids'], queryFn: () => new Promise<GuildRaidsDto>(() => undefined), enabled: false });
+    return <>{children({ page, raids })}</>;
+}
+
+function renderHero(page: GuildPage): void {
+    renderWithProviders(<WithCtx page={page}>{(ctx) => <><CommunityKindPill {...ctx} /><CommunityJoinPill {...ctx} /></>}</WithCtx>);
+}
+
+function renderMembers(page: GuildPage): void {
+    renderWithProviders(<WithCtx page={page}>{(ctx) => <HubMembers ctx={ctx} module={communityHubModule} />}</WithCtx>);
+}
+
+function rowOf(name: string): HTMLElement {
+    const row = screen.getAllByTestId('guild-member-row').find((r) => r.textContent?.includes(name));
+    if (!row) throw new Error(`no member row for ${name}`);
+    return row;
+}
+
+beforeEach(() => { communityHubCalls.length = 0; server.use(...communityHubHandlers); });
+afterEach(() => { vi.restoreAllMocks(); });
+
+describe('community hub hero', () => {
+    it('shows the "Community hub" chip and the leader', () => {
+        renderHero(buildCommunityPage());
+        expect(screen.getByTestId('community-hub-kind')).toHaveTextContent('Community hub');
+        expect(screen.getByTestId('community-hub-leader')).toHaveTextContent('Led by Lead');
+    });
+
+    it('marks a proposed hub for staff', () => {
+        renderHero(buildCommunityPage({ role: 'leader', community: { status: 'proposed' } }));
+        expect(screen.getByTestId('community-hub-kind')).toHaveTextContent('Proposed');
+    });
+
+    it('W7: a visitor outside Discord gets a disabled Join and the reason', () => {
+        renderHero(buildCommunityPage({ role: 'visitor', community: { canJoin: false, joinBlockedReason: 'not-in-discord' } }));
+        expect(screen.getByTestId('community-hub-join')).toBeDisabled();
+        expect(screen.getByTestId('community-hub-join-blocked')).toHaveTextContent('Join the Discord server to join hubs');
+    });
+
+    it('a visitor who may join POSTs /hubs/:id/join', async () => {
+        renderHero(buildCommunityPage({ role: 'visitor', community: { viewerJoined: false } }));
+        await userEvent.click(screen.getByTestId('community-hub-join'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['POST /hubs/41/join']));
+    });
+
+    it('W9: a leader with members gets the transfer prompt, not a DELETE', async () => {
+        selfId = 1;
+        renderHero(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(screen.getByTestId('community-hub-leave'));
+        expect(screen.getByTestId('community-hub-transfer-prompt')).toBeInTheDocument();
+        expect(communityHubCalls).toEqual([]);
+    });
+
+    it('W9: staff (resolved to leader) who joined as a plain member leave after one confirm', async () => {
+        selfId = 3;
+        renderHero(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(screen.getByTestId('community-hub-leave'));
+        expect(screen.queryByTestId('community-hub-transfer-prompt')).toBeNull();
+        await userEvent.click(screen.getByTestId('community-hub-leave-yes'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['DELETE /hubs/41/join']));
+    });
+
+    it('a member leaves after one confirm', async () => {
+        selfId = 3;
+        renderHero(buildCommunityPage({ role: 'member' }));
+        await userEvent.click(screen.getByTestId('community-hub-leave'));
+        await userEvent.click(screen.getByTestId('community-hub-leave-yes'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['DELETE /hubs/41/join']));
+    });
+});
+
+describe('community Members tab', () => {
+    it('shows each role as a chip', () => {
+        selfId = 3;
+        renderMembers(buildCommunityPage());
+        expect(screen.getAllByTestId('community-member-role').map((c) => c.textContent)).toEqual(['Leader', 'Officer', 'Member']);
+        expect(screen.queryByTestId('community-member-manage'), 'a plain member manages nobody').toBeNull();
+    });
+
+    it('W8: an officer has no menu on the leader row; the member row offers Remove and Ban', async () => {
+        selfId = 2;
+        renderMembers(buildCommunityPage({ role: 'officer' }));
+        expect(within(rowOf('Lead')).queryByTestId('community-member-manage')).toBeNull();
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        expect(screen.getByTestId('community-member-remove')).toBeInTheDocument();
+        expect(screen.getByTestId('community-member-ban')).toBeInTheDocument();
+        expect(screen.queryByTestId('community-member-make-officer'), 'promote is leader-only').toBeNull();
+        await userEvent.click(screen.getByTestId('community-member-remove'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['DELETE /hubs/41/members/3']));
+    });
+
+    it('the leader promotes a member and bans with a reason', async () => {
+        selfId = 1;
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        await userEvent.click(screen.getByTestId('community-member-make-officer'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['PATCH /hubs/41/members/3/role']));
+        await userEvent.click(within(rowOf('Offy')).getByTestId('community-member-manage'));
+        await userEvent.click(screen.getByTestId('community-member-ban'));
+        await userEvent.type(screen.getByLabelText('Reason (optional)'), 'spam');
+        await userEvent.click(screen.getByTestId('community-ban-confirm'));
+        await waitFor(() => expect(communityHubCalls).toContain('PUT /hubs/41/bans/2'));
+    });
+
+    it('Codex r2 P2: a settled ban refreshes the cached Banned list', async () => {
+        selfId = 1;
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(hubBansKey(41), { bans: [] });
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'leader' })}>{(ctx) => <HubMembers ctx={ctx} module={communityHubModule} />}</WithCtx>, { queryClient });
+        await userEvent.click(within(rowOf('Offy')).getByTestId('community-member-manage'));
+        await userEvent.click(screen.getByTestId('community-member-ban'));
+        await userEvent.click(screen.getByTestId('community-ban-confirm'));
+        await waitFor(() => expect(queryClient.getQueryState(hubBansKey(41))?.isInvalidated).toBe(true));
+    });
+
+    it('staff get no menu on their own row (matched by user id, not the row id)', () => {
+        selfId = 3;
+        renderMembers(buildCommunityPage({ role: 'leader', members: [buildCommunityMember(1, 'Lead', 'leader'), buildCommunityMember(3, 'Mem', 'member'), buildCommunityMember(103, 'Clash', 'member')] }));
+        expect(within(rowOf('Mem')).queryByTestId('community-member-manage')).toBeNull();
+        expect(within(rowOf('Clash')).getByTestId('community-member-manage')).toBeInTheDocument();
+    });
+
+    it('desktop: the Manage dropdown takes arrow keys, and Esc closes it back to the trigger', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        const trigger = within(rowOf('Mem')).getByTestId('community-member-manage');
+        await userEvent.click(trigger);
+        const menu = screen.getByRole('menu', { name: 'Manage Mem' });
+        expect(screen.getByTestId('community-member-remove')).toHaveFocus();
+        await userEvent.keyboard('{ArrowDown}');
+        expect(screen.getByTestId('community-member-ban')).toHaveFocus();
+        await userEvent.keyboard('{End}');
+        expect(screen.getByTestId('community-member-make-leader')).toHaveFocus();
+        await userEvent.keyboard('{ArrowDown}');
+        expect(screen.getByTestId('community-member-remove')).toHaveFocus();
+        await userEvent.keyboard('{Escape}');
+        expect(menu).not.toBeVisible();
+        expect(trigger).toHaveFocus();
+    });
+
+    it('desktop: an outside click closes the Manage dropdown', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        const menu = screen.getByRole('menu', { name: 'Manage Mem' });
+        await userEvent.click(document.body);
+        expect(menu).not.toBeVisible();
+    });
+
+    it('desktop: the Manage dropdown is portalled out of the table scroller (last row not clipped)', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        expect(screen.getByRole('menu', { name: 'Manage Mem' })).toBeInTheDocument();
+        expect(within(screen.getByTestId('guild-members-table')).queryByRole('menu')).toBeNull();
+    });
+
+    it('Make leader asks for confirmation before handing over', async () => {
+        selfId = 1;
+        mockDesktop(true);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        await userEvent.click(screen.getByTestId('community-member-make-leader'));
+        expect(screen.getByTestId('community-leader-dialog')).toBeInTheDocument();
+        expect(communityHubCalls).toEqual([]);
+        await userEvent.click(screen.getByTestId('community-leader-confirm'));
+        await waitFor(() => expect(communityHubCalls).toHaveLength(1));
+    });
+
+    it('phone: Manage opens a bottom sheet with the same actions', async () => {
+        selfId = 1;
+        mockDesktop(false);
+        renderMembers(buildCommunityPage({ role: 'leader' }));
+        await userEvent.click(within(rowOf('Mem')).getByTestId('community-member-manage'));
+        const sheet = await screen.findByRole('dialog', { name: 'Manage Mem' });
+        await userEvent.click(within(sheet).getByTestId('community-member-remove'));
+        await waitFor(() => expect(communityHubCalls).toEqual(['DELETE /hubs/41/members/3']));
+    });
+
+    it('a visitor sees the Join invite when the list is empty', () => {
+        renderMembers(buildCommunityPage({ role: 'visitor', community: { viewerJoined: false }, members: [] }));
+        expect(screen.getByTestId('guild-members-empty')).toHaveTextContent("Join to see who's here");
+    });
+});
+
+describe('W11: useHubModule', () => {
+    it('Codex P2: a signed-in visitor (not yet joined) is shown every core Overview widget', () => {
+        const ids: readonly CoreWidgetId[] = ['gm-post', 'discord', 'schedule', 'events', 'attendance'];
+        const seen: (boolean | undefined)[] = [];
+        renderWithProviders(<WithCtx page={buildCommunityPage({ role: 'visitor', community: { viewerJoined: false } })}>{(ctx) => {
+            seen.push(...ids.map((id) => communityHubModule.coreWidgetVisible?.(id, ctx)));
+            return null;
+        }}</WithCtx>);
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every((v) => v === true)).toBe(true);
+    });
+
+    it('returns the core community module with every plugin off, once its lazy chunk resolves', async () => {
+        usePluginStore.setState({ activeSlugs: new Set<string>() });
+        const { result } = renderHook(() => useHubModule('game_community'));
+        await waitFor(() => expect(result.current).toBe(communityHubModule));
+        expect(result.current?.tabs).toEqual([]);
+    });
+
+    it('reports the community module pending until loaded, and never for other kinds', async () => {
+        const { result } = renderHook(() => ({ community: useHubModulePending('game_community'), wow: useHubModulePending('wow_guild') }));
+        expect(result.current.wow).toBe(false);
+        await waitFor(() => expect(result.current.community).toBe(false));
+    });
+});

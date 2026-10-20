@@ -61,9 +61,22 @@ export function mergeGrantWithStored(
   };
 }
 
-async function findExisting(
+/** The row's unique key (`calendar_connections_user_provider_subject_uq`). */
+export interface ConnectionKey {
+  userId: number;
+  provider: CalendarProviderKey;
+  accountSubject: string;
+}
+
+/** What `writeConnectionRow` stores besides the credentials. */
+export interface ConnectionRowInput extends ConnectionKey {
+  /** null keeps the stored label on an update. */
+  accountLabel: string | null;
+}
+
+export async function findExistingConnection(
   db: Db,
-  input: UpsertCalendarConnectionInput,
+  key: ConnectionKey,
 ): Promise<{ id: number; credentialsEncrypted: string } | null> {
   const [row] = await db
     .select({
@@ -73,9 +86,9 @@ async function findExisting(
     .from(calendarConnections)
     .where(
       and(
-        eq(calendarConnections.userId, input.userId),
-        eq(calendarConnections.provider, input.provider),
-        eq(calendarConnections.accountSubject, input.result.accountSubject),
+        eq(calendarConnections.userId, key.userId),
+        eq(calendarConnections.provider, key.provider),
+        eq(calendarConnections.accountSubject, key.accountSubject),
       ),
     )
     .limit(1);
@@ -101,50 +114,60 @@ const CONNECTION_KEY = [
   calendarConnections.accountSubject,
 ];
 
-/** ROK-1593 D-R3: every grant recomputes read access; `write_*` untouched. */
-function grantFields(
-  input: UpsertCalendarConnectionInput,
-  credentialsEncrypted: string,
-) {
-  const { scopes } = input.result.credentials;
+/** The ON CONFLICT update: never `read_*` / `write_*` / dedicated id. */
+function reconnectSet<T extends object>(both: T, accountLabel: string | null) {
   return {
-    credentialsEncrypted,
-    status: 'active' as const,
-    readAccessGranted: grantAllowsRead(input.provider, scopes),
+    ...both,
+    // A grant without an email keeps the stored label (undefined = skip).
+    accountLabel: accountLabel ?? undefined,
+    lastErrorCode: null,
+    // ROK-1598 Codex r5: a reconnect (e.g. of a row whose blocks a pending
+    // disconnect already purged) must not answer `unchanged` off an old
+    // provider cursor — the next read is a full read.
+    syncCursor: null,
+    updatedAt: new Date(),
   };
 }
 
-/** The single statement that cannot duplicate: insert, or update on the key. */
-async function writeConnection(
+/**
+ * The single statement that cannot duplicate: insert, or update on the key.
+ * ROK-1593 D-R3: every grant recomputes read access; `write_*` untouched.
+ * ROK-1598 D10: shared with the Apple password connect.
+ */
+export async function writeConnectionRow(
   db: Db,
-  input: UpsertCalendarConnectionInput,
+  input: ConnectionRowInput,
   credentialsEncrypted: string,
+  readAccessGranted: boolean,
 ): Promise<number> {
-  const accountLabel = input.result.accountLabel;
-  const both = grantFields(input, credentialsEncrypted);
+  const { accountLabel } = input;
+  const both = {
+    credentialsEncrypted,
+    status: 'active' as const,
+    readAccessGranted,
+  };
   const [row] = await db
     .insert(calendarConnections)
     .values({
       userId: input.userId,
       provider: input.provider,
-      accountSubject: input.result.accountSubject,
+      accountSubject: input.accountSubject,
       accountLabel,
       ...both,
     })
     .onConflictDoUpdate({
       target: CONNECTION_KEY,
-      set: {
-        ...both,
-        // A grant without an email keeps the stored label (undefined = skip).
-        accountLabel: accountLabel ?? undefined,
-        lastErrorCode: null,
-        updatedAt: new Date(),
-      },
+      set: reconnectSet(both, accountLabel),
     })
     .returning({ id: calendarConnections.id });
   if (!row) throw new Error('calendar connection upsert returned no row');
   return row.id;
 }
+
+const accountOf = (r: ConnectResult) => ({
+  accountSubject: r.accountSubject,
+  accountLabel: r.accountLabel,
+});
 
 /**
  * Insert or update the connection. Throws `ProviderAuthError
@@ -155,16 +178,16 @@ export async function upsertCalendarConnection(
   db: Db,
   input: UpsertCalendarConnectionInput,
 ): Promise<UpsertCalendarConnectionResult> {
-  const existing = await findExisting(db, input);
-  const creds = mergeGrantWithStored(
-    input.result.credentials,
-    readStored(existing),
-  );
+  const { userId, provider, result } = input;
+  const row = { userId, provider, ...accountOf(result) };
+  const existing = await findExistingConnection(db, row);
+  const creds = mergeGrantWithStored(result.credentials, readStored(existing));
   if (!creds) throw new ProviderAuthError('missing_refresh_token');
-  const id = await writeConnection(
+  const id = await writeConnectionRow(
     db,
-    input,
+    row,
     encryptCalendarCredentials(creds),
+    grantAllowsRead(provider, result.credentials.scopes),
   );
   return { id, outcome: existing ? 'updated' : 'created' };
 }

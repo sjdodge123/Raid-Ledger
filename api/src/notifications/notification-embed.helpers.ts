@@ -62,6 +62,9 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   // ROK-1832: a leader post is news; a group-tagged event announces.
   hub_leader_post: 'done',
   hub_event_tagged: 'announcing',
+  // ROK-1870: a proposal waiting on staff; its review outcome.
+  hub_proposal_submitted: 'needs_you',
+  hub_proposal_reviewed: 'done',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -127,6 +130,8 @@ export function getEmojiForType(type: NotificationType): string {
     lfg_player_invite: '✉️',
     hub_leader_post: '📣',
     hub_event_tagged: '🛡️',
+    hub_proposal_submitted: '🗳️',
+    hub_proposal_reviewed: '🏕️',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -157,6 +162,8 @@ export function getTypeLabel(type: NotificationType): string {
     lfg_player_invite: 'LFG Invite',
     hub_leader_post: 'Group Post',
     hub_event_tagged: 'Group Event',
+    hub_proposal_submitted: 'Hub Proposal',
+    hub_proposal_reviewed: 'Hub Proposal Reviewed',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';

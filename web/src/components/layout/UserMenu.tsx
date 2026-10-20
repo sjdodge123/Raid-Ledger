@@ -13,6 +13,8 @@ import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { SearchInput } from '../ui/search-input';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { PluginSlot } from '../../plugins';
+import { UserMenuGuild } from './hub-nav/user-menu-guild';
+import { UserMenuBrowseHubs } from './hub-nav/hubs-nav-links';
 
 interface ImpersonateUser {
     id: number;
@@ -189,24 +191,29 @@ function ImpersonateSection({ showMenu, onToggle, users, search, onSearch, onSel
     );
 }
 
+/** Open/close state of the impersonate sub-menu; closing clears the search, opening focuses it. */
+function useImpersonateToggle() {
+    const [showImpersonateMenu, setShowImpersonateMenu] = useState(false);
+    const [impersonateSearch, setImpersonateSearch] = useState('');
+    const impersonateSearchRef = useRef<HTMLInputElement>(null);
+    const toggleImpersonate = (): void => {
+        const next = !showImpersonateMenu; setShowImpersonateMenu(next);
+        if (!next) setImpersonateSearch(''); else setTimeout(() => impersonateSearchRef.current?.focus(), 0);
+    };
+    return { showImpersonateMenu, impersonateSearch, setImpersonateSearch, impersonateSearchRef, toggleImpersonate };
+}
+
 function DropdownContent({ user, isImpersonating, onClose, onLogout, onExitImpersonation, onImpersonate, impersonateUsers, trapRef }: {
     user: User; isImpersonating: boolean; onClose: () => void;
     onLogout: () => void; onExitImpersonation: () => void; onImpersonate: (id: number) => void;
     impersonateUsers: ImpersonateUser[] | undefined; trapRef: React.RefObject<HTMLDivElement | null>;
 }) {
-    const [showImpersonateMenu, setShowImpersonateMenu] = useState(false);
-    const [impersonateSearch, setImpersonateSearch] = useState('');
-    const impersonateSearchRef = useRef<HTMLInputElement>(null);
-
-    const toggleImpersonate = () => {
-        const next = !showImpersonateMenu; setShowImpersonateMenu(next);
-        if (!next) setImpersonateSearch(''); else setTimeout(() => impersonateSearchRef.current?.focus(), 0);
-    };
-
+    const { showImpersonateMenu, impersonateSearch, setImpersonateSearch, impersonateSearchRef, toggleImpersonate } = useImpersonateToggle();
     return (
         <div ref={trapRef} role="menu" className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
             <ProfileLink username={user.username} role={user.role} isImpersonating={isImpersonating} onClose={onClose} userId={user.id} />
             <div className="py-1">
+                <UserMenuGuild onClose={onClose} /><UserMenuBrowseHubs onClose={onClose} />
                 <PluginSlot name="user-menu:items" context={{ onClose }} />
                 <MySettingsLink onClose={onClose} />
                 {isImpersonating && <ExitImpersonationItem onExit={onExitImpersonation} />}

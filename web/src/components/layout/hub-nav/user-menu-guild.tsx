@@ -1,5 +1,5 @@
 /**
- * ROK-1785 entry E (tablet): `user-menu:items` filler — one item per guild at
+ * ROK-1785 entry E (tablet), core since ROK-1870 D9 — one item per guild at
  * the top of the header user menu, 768–1023px only. From 1024px the header
  * bar's "Guild" link is the entry, so this hides at `lg`; below 768px the
  * user menu is not rendered and the drawer's "Your guild" block takes over.
@@ -8,7 +8,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
-import { guildHref, useMyGuilds } from './guild-queries';
+import { guildHref, useMyGuilds } from './my-hubs-queries';
 
 export function UserMenuGuild({ onClose }: { onClose?: () => void }): JSX.Element | null {
     const guilds = useMyGuilds();

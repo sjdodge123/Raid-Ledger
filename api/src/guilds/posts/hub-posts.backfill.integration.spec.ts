@@ -45,7 +45,7 @@ async function insertGuild(name: string): Promise<number> {
 async function runBackfill(): Promise<void> {
   const file = join(
     __dirname,
-    '../../drizzle/migrations/0238_hub_posts_backfill.sql',
+    '../../drizzle/migrations/0240_hub_posts_backfill.sql',
   );
   const statements = readFileSync(file, 'utf8')
     .split('--> statement-breakpoint')

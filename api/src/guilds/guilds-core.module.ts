@@ -21,6 +21,7 @@ import { HubVisibleGuard } from './hub-visible.guard';
 import { HubPostRelayService } from './posts/hub-post-relay.service';
 import { HubPostsController } from './posts/hub-posts.controller';
 import { HubPostsService } from './posts/hub-posts.service';
+import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
   EVENT_GUILD_TAGGER_KEY,
@@ -60,6 +61,7 @@ import {
     HubEventTagger,
     HubPostRelayService,
     HubPostsService,
+    CommunityHubKindAdapter,
   ],
   exports: [
     GuildAccessService,
@@ -72,12 +74,14 @@ import {
     HubService,
     HubVisibleGuard,
     HubPostsService,
+    CommunityHubKindAdapter,
   ],
 })
 export class GuildsCoreModule implements OnModuleInit {
   constructor(
     private readonly plugins: PluginRegistryService,
     private readonly tagger: HubEventTagger,
+    private readonly communityHubs: CommunityHubKindAdapter,
   ) {}
 
   /** ROK-1831 Q2: core owns event tagging for every hub kind (no owner plugin). */
@@ -86,6 +90,12 @@ export class GuildsCoreModule implements OnModuleInit {
       EXTENSION_POINTS.EVENT_GUILD_TAGGER,
       EVENT_GUILD_TAGGER_KEY,
       this.tagger,
+    );
+    // ROK-1870 A4: core owns `game_community` — no owner plugin, always live.
+    this.plugins.registerAdapter(
+      EXTENSION_POINTS.HUB_KIND,
+      'game_community',
+      this.communityHubs,
     );
   }
 }

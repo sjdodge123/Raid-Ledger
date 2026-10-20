@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 
 /**
  * Admin-triggered user reactivation (ROK-1260 AC-9).
@@ -28,6 +29,8 @@ export async function reactivateUserById(
   if (!updated) {
     throw new Error(`reactivateUserById: user ${userId} not found`);
   }
+  // ROK-1870: the user's community hubs count them again (M11).
+  await refreshUserHubCounts(db, userId);
   invalidateAuthUser(userId);
   logger.log(`Admin reactivated user ${userId}`);
   return updated;

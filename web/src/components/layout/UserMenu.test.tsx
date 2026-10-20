@@ -10,6 +10,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { UserMenu } from './UserMenu';
 
 vi.mock('../../hooks/use-auth', () => ({
+    // ROK-1870 D9: the core hub nav entries key their query by viewer.
+    useViewerCacheScope: () => 'viewer-1',
     useAuth: vi.fn(),
     isAdmin: (user: { role?: string } | null) => user?.role === 'admin',
     isOperatorOrAdmin: (user: { role?: string } | null) => user?.role === 'operator' || user?.role === 'admin',
@@ -74,6 +76,16 @@ describe('UserMenu dropdown (ROK-548)', () => {
         expect(profileLink).toBeInTheDocument();
         const linkEl = profileLink.closest('a');
         expect(linkEl).toHaveAttribute('href', '/users/42');
+    });
+
+    it('offers "Browse hubs" to /hubs in the hub group, hidden from lg (ROK-1870)', async () => {
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /testuser/i }));
+        const link = screen.getByTestId('user-menu-browse-hubs');
+        expect(link).toHaveAttribute('href', '/hubs');
+        expect(link).toHaveTextContent('Browse hubs');
+        expect(link.className).toContain('lg:hidden');
     });
 
     it('shows "My Settings" link navigating to /profile when dropdown is open', async () => {

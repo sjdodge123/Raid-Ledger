@@ -76,6 +76,7 @@ export * from './schema/guild-profiles';
 export * from './schema/hub-posts';
 export * from './schema/guild-recommended-addons';
 export * from './schema/hub-server-members';
+export * from './schema/hub-community-members';
 export * from './schema/hub-onboarding-dismissals';
 export * from './schema/calendar-connections';
 export * from './schema/calendar-busy-blocks';

@@ -12,6 +12,7 @@ import { LatestPostCard } from './posts/latest-post-card';
 import { GuildDiscordMirror } from './discord/guild-discord-mirror';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { GuildAttendance } from './events/guild-attendance';
+import { HubSettingsTrigger } from './settings/settings-trigger';
 
 const BASE = 'http://localhost:3000/guilds/7';
 
@@ -22,6 +23,13 @@ describe('hubCopy (ROK-1831)', () => {
         expect(hubCopy('game_server').editorsEmpty).toContain('start with your server leader');
         expect(hubCopy('wow_guild').leaderPostPill).toBe('From the guild master');
         expect(hubCopy(undefined)).toBe(HUB_COPY.wow_guild);
+    });
+
+    it('names the settings "Hub settings" on a community hub (ROK-1870)', () => {
+        expect(hubCopy('game_community').settingsTitle).toBe('Hub settings');
+        expect(hubCopy('wow_guild').settingsTitle).toBe('Guild settings');
+        render(<HubSettingsTrigger onOpen={() => undefined} label={hubCopy('game_community').settingsTitle} />);
+        expect(screen.getByTestId('guild-settings-trigger')).toHaveTextContent('Hub settings');
     });
 
     it('renders the server copy on the schedule and attendance widgets', () => {

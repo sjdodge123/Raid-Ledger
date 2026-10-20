@@ -12,12 +12,19 @@ const id = z.number().int().positive();
 const isoDate = z.iso.datetime({ offset: true });
 
 /**
- * ROK-1830 — what kind of group a hub is. Every row today is a WoW guild
- * (`guilds.kind` defaults to `wow_guild`); `game_server` arrives with ROK-1831.
+ * ROK-1830 — what kind of group a hub is: a WoW guild (`guilds.kind` default
+ * `wow_guild`), a game-server hub (`game_server`, ROK-1831) or a game community
+ * hub with no server and no guild (`game_community`, ROK-1870 — members
+ * propose it, an admin approves it, anyone in the Discord guild can Join).
  */
-export const GUILD_KINDS = ['wow_guild', 'game_server'] as const;
+export const GUILD_KINDS = ['wow_guild', 'game_server', 'game_community'] as const;
 export const GuildKindSchema = z.enum(GUILD_KINDS);
 export type GuildKind = z.infer<typeof GuildKindSchema>;
+
+/** ROK-1870 — a community hub's life: proposed → active → archived. */
+export const HUB_STATUSES = ['proposed', 'active', 'archived'] as const;
+export const HubStatusSchema = z.enum(HUB_STATUSES);
+export type HubStatus = z.infer<typeof HubStatusSchema>;
 
 /**
  * ROK-1830 D5-A — the hub permission ladder, highest first. `canEdit` is
@@ -56,9 +63,24 @@ export const GuildSummarySchema = z
     lastSnapshotAt: isoDate.nullable(),
     /** ROK-1831 — `guilds.hidden_at` is set; sent to staff only. */
     hidden: z.boolean().optional(),
+    /** ROK-1870 — community hubs only; absent ⇒ `active` (older fixtures parse). */
+    status: HubStatusSchema.optional(),
+    /** ROK-1870 — the short blurb a community hub was proposed with. */
+    blurb: z.string().max(280).nullable().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
+
+/** ROK-1870 — the community-hub columns of one member (other kinds omit it). */
+export const GuildMemberCommunitySchema = z
+  .object({
+    /** The member's `users.id` — the id every `/hubs/:id/members/:userId` route takes (`memberId` is the row id). */
+    userId: id,
+    role: z.enum(['leader', 'officer', 'member']),
+    joinedAt: isoDate,
+  })
+  .strict();
+export type GuildMemberCommunity = z.infer<typeof GuildMemberCommunitySchema>;
 
 /** ROK-1831 — the game-server columns of one hub member (WoW rows omit it). */
 export const GuildMemberServerSchema = z
@@ -90,6 +112,8 @@ export const GuildMemberRowSchema = z
     characterId: z.string().uuid().nullable(),
     isMain: z.boolean(),
     server: GuildMemberServerSchema.optional(),
+    /** ROK-1870 — set on community-hub rows only. */
+    community: GuildMemberCommunitySchema.optional(),
     /**
      * ROK-1794 (review): STAFF-ONLY — the RL account linked to this row and
      * since when, so a grant is never made on the roster name alone. Omitted
@@ -160,6 +184,23 @@ export const GuildPageServerSchema = z
   .strict();
 export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;
 
+/** ROK-1870 — the community-hub block of the page payload (sent for `game_community` only). */
+export const GuildPageCommunitySchema = z
+  .object({
+    status: HubStatusSchema,
+    blurb: z.string().max(280).nullable(),
+    viewerJoined: z.boolean(),
+    viewerBanned: z.boolean(),
+    canJoin: z.boolean(),
+    joinBlockedReason: z.enum(['not-in-discord', 'banned', 'archived']).nullable(),
+    leader: z
+      .object({ userId: id, username: z.string(), avatarUrl: z.string().nullable() })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type GuildPageCommunity = z.infer<typeof GuildPageCommunitySchema>;
+
 export const GuildPageSchema = z
   .object({
     guild: GuildSummarySchema,
@@ -169,6 +210,8 @@ export const GuildPageSchema = z
     ranks: z.array(GuildRankGroupSchema),
     roleCounts: GuildRoleCountsSchema,
     server: GuildPageServerSchema.optional(),
+    /** ROK-1870 — present for `game_community` hubs only. */
+    community: GuildPageCommunitySchema.optional(),
   })
   .strict();
 export type GuildPage = z.infer<typeof GuildPageSchema>;

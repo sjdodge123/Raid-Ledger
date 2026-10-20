@@ -11,6 +11,7 @@ import type { GuildEventCardDto } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { NAV_CHIP_CLASS } from '../ui/nav-chip';
 import { signedShort, whenLabel } from './events/guild-raids.helpers';
+import { memberCountLabel } from '../layout/hub-nav/my-hubs-queries';
 
 /** Up to two initials for the crest placeholder ("Iron Vanguard" → "IV"). */
 function crestInitials(name: string): string {
@@ -31,7 +32,7 @@ function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | unde
     return (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             {(mod?.heroPills ?? []).map((Pill, i) => <Pill key={`hero-pill-${i}`} {...ctx} />)}
-            <span data-testid="guild-member-count">{ctx.page.guild.memberCount} members</span>
+            <span data-testid="guild-member-count">{memberCountLabel(ctx.page.guild.memberCount)}</span>
         </div>
     );
 }
@@ -60,6 +61,8 @@ interface HubHeroProps {
 
 export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroProps): JSX.Element {
     const line = mod?.heroNote ? mod.heroNote(ctx) : null;
+    // ROK-1870: a community hub's leader-edited blurb sits under the name (the settings copy promises it here).
+    const blurb = ctx.page.community?.blurb ?? null;
     // Core always has an Events tab now (ROK-1830 S3c), so the chip always has
     // somewhere to land; a module only redirects it (WoW → its Raids tab).
     const jumpTab = mod?.eventsJumpTab ?? 'events';
@@ -71,6 +74,7 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
                 <Crest name={ctx.page.guild.name} />
                 <div className="min-w-0">
                     <h1 className="mb-2 break-words text-2xl font-bold text-foreground sm:text-3xl">{ctx.page.guild.name}</h1>
+                    {blurb && <p className="mb-2 break-words text-sm text-secondary" data-testid="hub-hero-blurb">{blurb}</p>}
                     <HeroFacts ctx={ctx} module={mod} />
                 </div>
             </div>

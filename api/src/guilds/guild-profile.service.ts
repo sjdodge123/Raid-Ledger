@@ -28,7 +28,8 @@ export const GM_POST_MOVED_MESSAGE =
   'The leader post moved to POST /guilds/:id/posts';
 
 /**
- * ROK-1786 — the guild's GM post, rules and links. Reads need `canView`
+ * ROK-1786 — the guild's GM post, rules and links. Reads need `canReadOverview`
+ * (`canView`, or a visitor on an active community hub — ROK-1870 D14)
  * (403 before 404, like `GET :id`); writes arrive behind `GuildEditorGuard`.
  * ROK-1868 A3: `gmPost` is derived from the newest hub post (`latestPost`
  * rides along); the legacy `gm_post` columns are never read or written.
@@ -43,7 +44,7 @@ export class GuildProfileService {
   ) {}
 
   async get(actor: GuildActor, guildId: number): Promise<GuildProfile> {
-    if (!(await this.access.canView(actor, guildId))) {
+    if (!(await this.access.canReadOverview(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
     await this.assertGuild(guildId);

@@ -49,6 +49,8 @@ const RULING_TABLE: ReadonlyArray<[NotificationType, EmbedState]> = [
   ['lfg_player_invite', 'announcing'],
   ['hub_leader_post', 'done'],
   ['hub_event_tagged', 'announcing'],
+  ['hub_proposal_submitted', 'needs_you'],
+  ['hub_proposal_reviewed', 'done'],
   ['user_deactivated_discord', 'done'],
   ['user_reactivated_discord', 'done'],
   ['post_event_followup', 'done'],

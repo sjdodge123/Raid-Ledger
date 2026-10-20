@@ -190,3 +190,29 @@ describe('serializeIcsCalendar — TRANSP and refresh interval (ROK-1599)', () =
     expect(plain).not.toContain('X-PUBLISHED-TTL');
   });
 });
+
+describe('serializeIcsCalendar — X-RAID-LEDGER-ID and METHOD (ROK-1598)', () => {
+  const lines = (ics: string) => ics.split('\r\n');
+
+  it('emits X-RAID-LEDGER-ID right after UID only when raidLedgerId is set', () => {
+    const ics = serializeIcsCalendar({
+      prodId: '-//Test//EN',
+      events: [event({ raidLedgerId: 'rl:0123456789ab:42:7' })],
+    });
+    const all = lines(ics);
+    const uidAt = all.indexOf('UID:rl-42@raid.example.test');
+    expect(all[uidAt + 1]).toBe('X-RAID-LEDGER-ID:rl:0123456789ab:42:7');
+    const plain = serializeIcsCalendar({
+      prodId: '-//Test//EN',
+      events: [event()],
+    });
+    expect(plain).not.toContain('X-RAID-LEDGER-ID');
+  });
+
+  it('omits METHOD only when omitMethod is set (CalDAV objects, RFC 4791 §4.1)', () => {
+    const base = { prodId: '-//Test//EN', events: [event()] };
+    expect(lines(serializeIcsCalendar(base))).toContain('METHOD:PUBLISH');
+    const caldav = serializeIcsCalendar({ ...base, omitMethod: true });
+    expect(caldav).not.toContain('METHOD:');
+  });
+});
