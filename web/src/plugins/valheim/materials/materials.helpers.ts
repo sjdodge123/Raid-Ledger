@@ -3,10 +3,27 @@ import type {
     ValheimMapBaseMap,
     ValheimMaterialStack,
 } from '@raid-ledger/contract';
+import type { ValheimContainerSummary } from '@raid-ledger/contract';
 import {
     resolveItem,
     type ValheimItemCatalogue,
 } from '../character/item-icon.helpers';
+
+export interface MaterialsFilters {
+    search: string;
+    category: string | null;
+    includeVehicles: boolean;
+}
+
+/** D10: vehicles are counted by default. */
+export const DEFAULT_MATERIALS_FILTERS: MaterialsFilters = {
+    search: '',
+    category: null,
+    includeVehicles: true,
+};
+
+export const MATERIALS_EMPTY_COPY =
+    'No chest data yet. The server sends it every 10 minutes; the first arrives a few minutes after it starts.';
 
 export interface QualityTotal {
     quality: number;
@@ -143,4 +160,19 @@ export function warningLines(w: WarningCounts): string[] {
     if (w.omittedEntries > 0) lines.push('Some chests had too many items to list');
     if (w.omittedShared > 0) lines.push(`${chests(w.omittedShared)} were not scanned`);
     return lines;
+}
+
+/** Same column flips direction; a new column starts A→Z for names, most-first for counts. */
+export function nextSort(current: MaterialSort, key: MaterialSortKey): MaterialSort {
+    if (current.key === key)
+        return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };
+    return { key, dir: key === 'name' ? 'asc' : 'desc' };
+}
+
+/** A chest's display name from the catalogue (falls back to its prefab id). */
+export function chestLabel(
+    chest: Pick<ValheimContainerSummary, 'prefab'>,
+    ctx: { items: ValheimItemCatalogue; atlas: ValheimMapBaseMap | null },
+): string {
+    return resolveItem(chest.prefab, ctx.items, ctx.atlas).label;
 }
