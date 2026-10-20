@@ -252,6 +252,10 @@ describe('POST /users/me/calendars/apple — connect', () => {
     expect(row.writeEnabled).toBe(true);
     const creds = decryptCalendarCredentials(row.credentialsEncrypted);
     expect(creds).toMatchObject({ kind: 'caldav', appPassword: PASSWORD });
+    const job = await readQueue.getJob(readSyncJobId(id));
+    expect({ reconnectReadSyncQueued: job?.id }).toEqual({
+      reconnectReadSyncQueued: readSyncJobId(id),
+    });
   });
 
   it.each([

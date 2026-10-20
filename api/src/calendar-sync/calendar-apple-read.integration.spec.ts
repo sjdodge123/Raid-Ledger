@@ -43,6 +43,7 @@ import {
   timed,
   tomorrowAt,
 } from './read/calendar-read.integration.spec-helpers';
+import { purgeAllCalendarReadData } from './read/calendar-read-purge.helpers';
 import { CalendarReadProcessor } from './read/calendar-read.processor';
 import { upsertCalendarConnection } from './services/calendar-connect.helpers';
 import {
@@ -218,6 +219,31 @@ describe('Apple read sync', () => {
     expect(after.lastSyncedAt?.getTime()).toBeGreaterThan(
       before.lastSyncedAt?.getTime() ?? Number.POSITIVE_INFINITY,
     );
+  });
+
+  it('D7: kill switch off (purge) → on → the next sync re-reads and rewrites the blocks', async () => {
+    const m = await appleMember();
+    server.seedEvent('home', {
+      start: tomorrowAt(19),
+      end: tomorrowAt(21),
+      busy: true,
+    });
+    expect(await processQueued(m.connectionId)).toBe('synced');
+    await setCalendarSyncEnabled(settings, false);
+    await purgeAllCalendarReadData(testApp.db);
+    expect(await blocksOf(m.connectionId)).toEqual([]);
+    expect((await connection(m.connectionId)).syncCursor).toBeNull();
+    await setCalendarSyncEnabled(settings, true);
+    const mark = server.requests.length;
+
+    await enqueue(m.connectionId);
+    expect(await processQueued(m.connectionId)).toBe('synced');
+
+    expect(reportsSince(mark)).toHaveLength(1);
+    const blocks = await blocksOf(m.connectionId);
+    expect(blocks.map((b) => [b.startsAt, b.endsAt])).toEqual([
+      [tomorrowAt(19), tomorrowAt(21)],
+    ]);
   });
 
   it('D7: a bumped ctag → a full re-read that replaces the blocks', async () => {

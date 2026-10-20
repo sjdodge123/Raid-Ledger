@@ -72,22 +72,24 @@ export async function connectApple(
   });
 }
 
-/** First connect: read on + the first sync; always: a pending write-off. */
+/**
+ * First connect: read on. Always: a read sync (a reconnect from
+ * `needs_reconnect` refreshes the card now, not at the next cron tick — the
+ * job skips a row whose reading is off) and a pending write-off.
+ */
 async function postConnect(
   deps: AppleConnectDeps,
   connectionId: number,
   created: boolean,
 ): Promise<void> {
-  if (created) {
-    await applyReadConsent(deps.db, connectionId);
-    await enqueueCalendarReadSync(
-      {
-        queue: deps.readQueue,
-        isSyncEnabled: () => getCalendarSyncEnabled(deps.settings),
-      },
-      connectionId,
-    );
-  }
+  if (created) await applyReadConsent(deps.db, connectionId);
+  await enqueueCalendarReadSync(
+    {
+      queue: deps.readQueue,
+      isSyncEnabled: () => getCalendarSyncEnabled(deps.settings),
+    },
+    connectionId,
+  );
   const writeDeps = {
     queue: deps.writeQueue,
     isSyncEnabled: () => Promise.resolve(true),
