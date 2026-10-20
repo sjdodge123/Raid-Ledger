@@ -15,7 +15,7 @@
  * checkbox / radio / range chrome follows the ROOT `color-scheme`, so judge
  * those with the page-level scheme switcher, not the scoped side-by-side.
  */
-import { useState, type JSX } from 'react';
+import { Suspense, lazy, useState, type JSX } from 'react';
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
@@ -32,8 +32,9 @@ import { SavedSecretStatus } from '../../components/admin/saved-secret-status';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { PickerStates } from './forms-pickers-demo';
 import { RecipeStates } from './forms-recipes-demo';
-import { MarkdownStates } from './markdown-block-demo';
-import { MarkdownEditorStates } from './markdown-editor-demo';
+
+/** ROK-1868 markdown demos, lazy so they stay out of DesignSystemPage's capped chunk. */
+const MarkdownDemos = lazy(() => import('./markdown-demos'));
 
 function ButtonVariants(): JSX.Element {
     return (
@@ -237,8 +238,9 @@ export function FormsSection(): JSX.Element {
                     <SearchStates />
                     <PickerStates />
                     <RecipeStates />
-                    <MarkdownStates />
-                    <MarkdownEditorStates />
+                    <Suspense fallback={null}>
+                        <MarkdownDemos />
+                    </Suspense>
                 </StateGrid>
             </div>
         </Section>

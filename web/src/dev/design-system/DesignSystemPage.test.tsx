@@ -641,10 +641,10 @@ describe('DesignSystemPage — ROK-1868 markdown (Forms, V13)', () => {
         mockUseSystemStatus.mockReset();
     });
 
-    it('mounts the real MarkdownBlock sample', () => {
+    it('mounts the real MarkdownBlock sample (lazy demo chunk)', async () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
-        const block = within(screen.getByTestId('ds-forms')).getByTestId('ds-markdown-block');
+        const block = await within(screen.getByTestId('ds-forms')).findByTestId('ds-markdown-block');
         expect(block.querySelector('ul'), 'MarkdownBlock sample must render a bulleted list').not.toBeNull();
         expect(block.querySelector('ol'), 'MarkdownBlock sample must render a numbered list').not.toBeNull();
     });
