@@ -1,5 +1,7 @@
 import {
   VALHEIM_PLAN_NODES_MAX,
+  VALHEIM_PLAN_QUANTITY_MAX,
+  ValheimRecipePlanResponseSchema,
   type ValheimPlanNode,
   type ValheimProcess,
   type ValheimProcessor,
@@ -16,6 +18,7 @@ import {
   resolveTree,
   type ResolveTarget,
 } from './valheim-recipes.resolve';
+import { emptyPlan } from './valheim-recipes.read.mappers';
 
 const res = (
   prefab: string,
@@ -540,5 +543,57 @@ describe('resolvePlan — anyOneOf, cooking fuel, pieces', () => {
       stationLevel: 1,
       quality: 1,
     });
+  });
+});
+
+describe('resolvePlan — quantity bound (VALHEIM_PLAN_QUANTITY_MAX)', () => {
+  const huge = graphOf({
+    recipes: [
+      recipe('r_a', 'ModA', [res('ModB', 10_000)]),
+      recipe('r_b', 'ModB', [res('ModC', 10_000)]),
+      recipe('r_c', 'ModC', [res('ModD', 10_000)]),
+    ],
+  });
+
+  it('clamps an oversized branch to the max, stops it there and flags truncated', () => {
+    const targets = [item('ModA', 10_000)];
+    const plan = resolvePlan(huge, targets, new Map());
+    expect(shape(plan.nodes)).toEqual([
+      '0<- ModA:recipe×10000',
+      '1<0 ModB:recipe×100000000',
+      `2<1 ModC:recipe×${VALHEIM_PLAN_QUANTITY_MAX}`,
+    ]);
+    expect(plan.truncated).toBe(true);
+    const counts = plan.nodes.flatMap((n) => [
+      n.quantity,
+      n.crafts,
+      n.have ?? 0,
+      n.short ?? 0,
+    ]);
+    const lines = plan.shoppingList.flatMap((l) => [
+      l.need,
+      l.have ?? 0,
+      l.short ?? 0,
+    ]);
+    expect(Math.max(...counts, ...lines)).toBeLessThanOrEqual(
+      VALHEIM_PLAN_QUANTITY_MAX,
+    );
+    expect(plan.shoppingList).toEqual([
+      {
+        prefab: 'ModC',
+        need: VALHEIM_PLAN_QUANTITY_MAX,
+        have: 0,
+        short: VALHEIM_PLAN_QUANTITY_MAX,
+      },
+    ]);
+    const body = {
+      ...emptyPlan(targets),
+      stock: 'scan' as const,
+      nodes: plan.nodes,
+      truncated: plan.truncated,
+      shoppingList: plan.shoppingList,
+      fuelEstimates: plan.fuelEstimates,
+    };
+    expect(ValheimRecipePlanResponseSchema.safeParse(body).success).toBe(true);
   });
 });

@@ -7,6 +7,7 @@
 import { JwtService } from '@nestjs/jwt';
 import {
   ValheimRecipeCatalogResponseSchema,
+  VALHEIM_PLAN_QUANTITY_MAX,
   ValheimRecipePlanResponseSchema,
   ValheimRecipeTreeResponseSchema,
   ValheimCharacterMessageSchema,
@@ -687,6 +688,30 @@ describe('modded cycle (R14)', () => {
     expect({ truncated: p.truncated, list: p.shoppingList }).toEqual({
       truncated: false,
       list: [{ prefab: 'ModA', need: 1, have: null, short: null }],
+    });
+  });
+});
+
+describe('modded quantity overflow', () => {
+  it('a 10 000 × 10 000 × 10 000 chain is 200 + truncated, never a 500', async () => {
+    await importMsg(
+      server,
+      bronzeRecipes({
+        recipes: [
+          recipeEntry('Recipe_HugeA', 'HugeA', [recipeRes('HugeB', 10_000)]),
+          recipeEntry('Recipe_HugeB', 'HugeB', [recipeRes('HugeC', 10_000)]),
+          recipeEntry('Recipe_HugeC', 'HugeC', [recipeRes('HugeD', 10_000)]),
+        ],
+      }),
+    );
+    const p = await plan('targets=HugeA:1:10000');
+    expect({ truncated: p.truncated, nodes: shape(p.nodes) }).toEqual({
+      truncated: true,
+      nodes: [
+        '0<- HugeA:recipe×10000',
+        '1<0 HugeB:recipe×100000000',
+        `2<1 HugeC:recipe×${VALHEIM_PLAN_QUANTITY_MAX}`,
+      ],
     });
   });
 });

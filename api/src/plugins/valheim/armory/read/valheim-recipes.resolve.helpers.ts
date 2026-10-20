@@ -3,17 +3,18 @@
  * formula, D9 source choice, and the node builder that owns the stock
  * ledger, the node cap and the leaf roll-ups.
  */
-import type {
-  ValheimPiece,
-  ValheimPlanNode,
-  ValheimPlanVia,
-  ValheimProcess,
-  ValheimProcessor,
-  ValheimProcessorType,
-  ValheimRecipe,
-  ValheimRecipePlanResponse,
-  ValheimRecipePlanTarget,
-  ValheimRecipeResource,
+import {
+  VALHEIM_PLAN_QUANTITY_MAX,
+  type ValheimPiece,
+  type ValheimPlanNode,
+  type ValheimPlanVia,
+  type ValheimProcess,
+  type ValheimProcessor,
+  type ValheimProcessorType,
+  type ValheimRecipe,
+  type ValheimRecipePlanResponse,
+  type ValheimRecipePlanTarget,
+  type ValheimRecipeResource,
 } from '@raid-ledger/contract';
 import type { RecipeGraph } from './valheim-recipes.graph';
 
@@ -221,6 +222,13 @@ export class PlanBuilder {
     return false;
   }
 
+  /** Clamps to VALHEIM_PLAN_QUANTITY_MAX; flags `truncated` when it bites. */
+  cap(n: number): number {
+    if (n <= VALHEIM_PLAN_QUANTITY_MAX) return n;
+    this.truncated = true;
+    return VALHEIM_PLAN_QUANTITY_MAX;
+  }
+
   /** What the ledger still holds of `prefab` (0 without stock). */
   peek(prefab: string): number {
     return this.ledger?.get(prefab) ?? 0;
@@ -239,7 +247,8 @@ export class PlanBuilder {
     const used = Math.min(available, need);
     this.ledger.set(prefab, available - used);
     const rest = need - used;
-    return { have: available, rest, short: rest };
+    const have = Math.min(available, VALHEIM_PLAN_QUANTITY_MAX);
+    return { have, rest, short: rest };
   }
 
   push(node: NodeInput): number {
@@ -273,8 +282,9 @@ export class PlanBuilder {
         have: this.hasStock ? (n.have ?? 0) : null,
         short: this.hasStock ? 0 : null,
       };
-      line.need += n.quantity;
-      if (line.short !== null) line.short += n.short ?? 0;
+      line.need = this.cap(line.need + n.quantity);
+      if (line.short !== null)
+        line.short = this.cap(line.short + (n.short ?? 0));
       lines.set(n.prefab, line);
     }
     return [...lines.values()];

@@ -6,6 +6,7 @@
  */
 import {
   VALHEIM_PLAN_NODES_MAX,
+  VALHEIM_PLAN_QUANTITY_MAX,
   type ValheimPiece,
   type ValheimRecipe,
 } from '@raid-ledger/contract';
@@ -56,6 +57,18 @@ function canPlace(ctx: Ctx, depth: number): boolean {
   return false;
 }
 
+/**
+ * A need above VALHEIM_PLAN_QUANTITY_MAX is clamped to it and becomes a leaf
+ * (`expand` false); the builder flags `truncated`.
+ */
+function bound(ctx: Ctx, need: Need): { need: Need; expand: boolean } {
+  if (need.quantity <= VALHEIM_PLAN_QUANTITY_MAX) return { need, expand: true };
+  return {
+    need: { ...need, quantity: ctx.b.cap(need.quantity) },
+    expand: false,
+  };
+}
+
 function expandChildren(
   ctx: Ctx,
   need: Need,
@@ -74,8 +87,9 @@ function expandChildren(
   }
 }
 
-function expandItem(ctx: Ctx, need: Need): void {
-  if (!canPlace(ctx, need.depth)) return;
+function expandItem(ctx: Ctx, raw: Need): void {
+  if (!canPlace(ctx, raw.depth)) return;
+  const { need, expand } = bound(ctx, raw);
   const taken = ctx.b.takeFor(need.prefab, need.quantity, need.net);
   const leaf = { ...nodeBase(need, taken), crafts: 0 };
   if (need.path.has(need.prefab)) {
@@ -87,37 +101,37 @@ function expandItem(ctx: Ctx, need: Need): void {
   if (!pick.source) {
     ctx.b.push({ ...leaf, via: { type: 'gathered' }, alternatives });
   } else if (pick.source.type === 'recipe') {
-    expandRecipe(ctx, need, taken, pick.source.recipe, alternatives);
+    const recipe = pick.source.recipe;
+    expandRecipe(ctx, { need, taken, alternatives, expand }, recipe);
   } else {
-    expandProcess(ctx, need, taken, pick.source, alternatives);
+    expandProcess(ctx, { need, taken, alternatives, expand }, pick.source);
   }
 }
 
-function expandRecipe(
-  ctx: Ctx,
-  need: Need,
-  taken: Taken,
-  recipe: ValheimRecipe,
-  alternatives: number,
-): void {
+/** One placed node's walk state. */
+interface Step {
+  need: Need;
+  taken: Taken;
+  alternatives: number;
+  /** False once the quantity was clamped: the node is a leaf. */
+  expand: boolean;
+}
+
+function expandRecipe(ctx: Ctx, step: Step, recipe: ValheimRecipe): void {
+  const { need, taken, alternatives } = step;
   const steps = recipeSteps(recipe, need.startStep, need.quality, taken.rest);
   const via = recipeVia(ctx.graph, recipe, need.quality);
   const id = ctx.b.push({
     ...nodeBase(need, taken),
     via,
     alternatives,
-    crafts: steps.crafts,
+    crafts: ctx.b.cap(steps.crafts),
   });
-  expandChildren(ctx, need, id, recipe.anyOneOf, steps.totals);
+  if (step.expand) expandChildren(ctx, need, id, recipe.anyOneOf, steps.totals);
 }
 
-function expandProcess(
-  ctx: Ctx,
-  need: Need,
-  taken: Taken,
-  src: ProcessSource,
-  alternatives: number,
-): void {
+function expandProcess(ctx: Ctx, step: Step, src: ProcessSource): void {
+  const { need, taken, alternatives } = step;
   const { process, processor } = src;
   const runs = Math.ceil(taken.rest / process.output.amount);
   const via = processVia(process, processor);
@@ -125,9 +139,9 @@ function expandProcess(
     ...nodeBase(need, taken),
     via,
     alternatives,
-    crafts: runs,
+    crafts: ctx.b.cap(runs),
   });
-  if (runs === 0) return;
+  if (runs === 0 || !step.expand) return;
   const inputs = process.inputs.map((i) => ({
     prefab: i.prefab,
     amount: i.amount * runs,
@@ -159,8 +173,9 @@ function addFuel(
 }
 
 /** A `fuel` node; a producible fuel (Coal via kiln) gets its source as one child. */
-function expandFuel(ctx: Ctx, need: Need): void {
-  if (!canPlace(ctx, need.depth)) return;
+function expandFuel(ctx: Ctx, raw: Need): void {
+  if (!canPlace(ctx, raw.depth)) return;
+  const { need, expand } = bound(ctx, raw);
   const taken = ctx.b.takeFor(need.prefab, need.quantity, need.net);
   const id = ctx.b.push({
     ...nodeBase(need, taken),
@@ -168,7 +183,7 @@ function expandFuel(ctx: Ctx, need: Need): void {
     alternatives: 0,
     crafts: 0,
   });
-  if (taken.rest === 0 || need.path.has(need.prefab)) return;
+  if (!expand || taken.rest === 0 || need.path.has(need.prefab)) return;
   if (!pickSource(ctx.graph, need.prefab, 1, 1).source) return;
   expandItem(ctx, {
     ...child(need, id, need.prefab, taken.rest),
