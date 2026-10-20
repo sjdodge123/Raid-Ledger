@@ -242,13 +242,15 @@ describe('reconcile never touches the pool while a game tx is open', () => {
     );
   });
 
-  it('create: the race read, bind() and the hub link all run on the tx', async () => {
+  // Codex r5 P1: the hub link runs in a SECOND tx after the create commits, so
+  // a link failure cannot roll back the binding and orphan the channel.
+  it('create: the race read + bind() run on the tx, the hub link on its own tx', async () => {
     const h = makeHarness(3);
     jest.mocked(ops.createTextChannel).mockResolvedValue('ch-3');
     const row = { ...bound(3, 'active', 3), binding: null };
     const res = await tick(h, row);
     expect(res.items[0]).toMatchObject({ action: 'create', outcome: 'done' });
     expect(h.poolCallsInTx).toEqual([]);
-    expect(h.txCount()).toBe(1);
+    expect(h.txCount()).toBe(2);
   });
 });

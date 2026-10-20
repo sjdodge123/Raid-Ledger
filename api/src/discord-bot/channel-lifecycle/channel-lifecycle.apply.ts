@@ -55,7 +55,7 @@ async function refreshTopic(
  * Link the game's hubs to `channelId`. Only an auto-managed channel's topic is
  * refreshed (Codex r3 P1): a manual binding's topic is the admin's.
  */
-async function linkHubs(
+export async function linkHubs(
   ctx: ApplyContext,
   game: PlannedGame,
   channel: { id: string; autoManaged: boolean },
@@ -118,7 +118,11 @@ async function bindNewChannel(
   }
 }
 
-/** Create → bind as auto-managed (one insert, via `bind()`) → link hubs. */
+/**
+ * Create → bind as auto-managed (one insert, via `bind()`). Hub linking runs
+ * AFTER this game's tx commits (`createdChannelId`, Codex r5 P1): a link
+ * failure must not roll back the binding and orphan the new channel.
+ */
 async function applyCreate(
   ctx: ApplyContext,
   game: PlannedGame,
@@ -134,11 +138,11 @@ async function applyCreate(
     topic: lifecycleTopic(ctx, game),
   });
   await bindNewChannel(ctx, gameId, channelId);
-  const linkedHubs = await linkHubs(ctx, game, {
-    id: channelId,
-    autoManaged: true,
-  });
-  return { outcome: 'done', detail: `#${gameSlug}`, linkedHubs };
+  return {
+    outcome: 'done',
+    detail: `#${gameSlug}`,
+    createdChannelId: channelId,
+  };
 }
 
 /** The Archived series (default + configured names, overflow) — never a restore target. */

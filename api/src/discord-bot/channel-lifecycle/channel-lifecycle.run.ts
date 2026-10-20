@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { ReconcileResultDto } from '@raid-ledger/contract';
-import { applyAction } from './channel-lifecycle.apply';
+import { applyAction, linkHubs } from './channel-lifecycle.apply';
 import {
   ChannelGoneError,
   CreateCapacityError,
@@ -95,6 +95,36 @@ async function handleFailure(
 }
 
 /**
+ * Link a just-created channel's hubs in a tx of its own, after the create
+ * committed (Codex r5 P1). A failure never undoes the create: the binding
+ * stays and the next reconcile retries the link (`link_hub`, spec §2.7).
+ */
+async function linkAfterCreate(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  created: ItemOutcome & { createdChannelId: string },
+): Promise<ItemOutcome> {
+  const { createdChannelId: id, ...item } = created;
+  try {
+    const linkedHubs = await ctx.db.transaction((tx) =>
+      linkHubs({ ...ctx, db: tx }, game, { id, autoManaged: true }),
+    );
+    return { ...item, linkedHubs };
+  } catch (err) {
+    if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
+    Sentry.captureException(err, {
+      tags: { area: 'channel-lifecycle-link' },
+      extra: { gameId: game.row.gameId },
+    });
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Hub link after create failed for ${game.row.gameId}: ${message}`,
+    );
+    return item;
+  }
+}
+
+/**
  * Run one game, never throwing (per-game isolation). `ctx.db` is the pool:
  * the game's writes commit in their OWN transaction (Codex r4b P1), so a
  * failed statement — which poisons a postgres.js tx, savepoints included —
@@ -104,8 +134,9 @@ async function runOne(
   ctx: ApplyContext,
   game: PlannedGame,
 ): Promise<ItemOutcome> {
+  let item: ItemOutcome;
   try {
-    return await ctx.db.transaction((tx) =>
+    item = await ctx.db.transaction((tx) =>
       applyAction({ ...ctx, db: tx }, game),
     );
   } catch (err) {
@@ -120,6 +151,9 @@ async function runOne(
       return { outcome: 'failed', detail: 'cleanup failed' };
     }
   }
+  const { createdChannelId } = item;
+  if (createdChannelId === undefined) return item;
+  return linkAfterCreate(ctx, game, { ...item, createdChannelId });
 }
 
 /** Detail for creates deferred after the guild hit its channel cap. */

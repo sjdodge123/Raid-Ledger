@@ -72,6 +72,8 @@ export interface ItemOutcome {
   outcome: 'done' | 'failed' | 'deferred' | 'planned';
   detail: string | null;
   linkedHubs?: number;
+  /** A create's new channel: hubs are linked after the create tx commits. */
+  createdChannelId?: string;
   /** A permission error: stop the tick (D14). */
   stop?: boolean;
   /** The guild is at its channel cap (30013): defer the tick's other creates. */
