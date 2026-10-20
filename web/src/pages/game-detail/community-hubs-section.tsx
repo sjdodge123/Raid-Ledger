@@ -16,7 +16,7 @@ const SHOWN = 3;
 type BlockedReason = NonNullable<GameHubs['proposeBlockedReason']>;
 
 /** Why "Start a community hub" is disabled. */
-export const PROPOSE_BLOCKED_COPY: Record<BlockedReason, string> = {
+const PROPOSE_BLOCKED_COPY: Record<BlockedReason, string> = {
     'not-in-discord': 'Join the Discord server to start a hub.',
     'limit-reached': 'You already have two proposals waiting for review.',
     'pending-for-game': 'You already have a proposal waiting for this game.',

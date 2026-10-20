@@ -39,6 +39,15 @@ function HubGrid({ hubs, params }: { hubs: HubDirectoryEntry[]; params: HubsDire
     );
 }
 
+function PageHeader(): JSX.Element {
+    return (
+        <header>
+            <h1 className="text-2xl font-semibold text-foreground">Community hubs</h1>
+            <p className="text-sm text-muted">Groups for the games we play. Join any of them.</p>
+        </header>
+    );
+}
+
 function useDirectoryUrl(): [HubsDirectoryParams, (next: HubsDirectoryParams) => void] {
     const [search, setSearch] = useSearchParams();
     const update = (next: HubsDirectoryParams): void => setSearch(writeDirectoryParams(next), { replace: true });
@@ -57,10 +66,7 @@ export function HubsDirectoryPage(): JSX.Element {
     const clear = (): void => { setText(''); update({ membership: 'all', sort: params.sort }); };
     return (
         <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 pb-24">
-            <header>
-                <h1 className="text-2xl font-semibold text-foreground">Community hubs</h1>
-                <p className="text-sm text-muted">Groups for the games we play. Join any of them.</p>
-            </header>
+            <PageHeader />
             <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                     <SearchInput label="Search hubs" placeholder="Search hubs" value={text} onChange={setText}
