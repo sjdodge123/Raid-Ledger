@@ -566,7 +566,7 @@ describe('ROK-1794 — member grants on a confirmed link', () => {
 });
 
 describe('ROK-1794 review P3 — a created character', () => {
-  it(`${AC(5)}: a character the CREATE route makes on the granted GUID after the grant is refused`, async () => {
+  it(`${AC(5)}: a character the CREATE route makes on the granted GUID after the grant is refused, by creation time alone`, async () => {
     await seedRealGuild();
     const y = rosterGuid(1);
     await grantMemberEditor(testApp.db, y);
@@ -582,8 +582,10 @@ describe('ROK-1794 review P3 — a created character', () => {
       });
     expect([made.status, made.body.target?.action]).toEqual([200, 'create']);
     const id = made.body.target.characterId as string;
-    // Born pinned: no GUID claim is audited, so only the grant-vs-creation
-    // time (`lte(c.createdAt, ge.createdAt)`) stands between it and the edit.
+    // The create route audits its GUID claim (so `claimedSinceGrant` refuses
+    // it too). Drop that row: creation time alone —
+    // `lte(c.createdAt, ge.createdAt)` — must still refuse a character born
+    // after the grant (review P3).
     const claims = await testApp.db
       .select({ id: schema.activityLog.id })
       .from(schema.activityLog)
@@ -593,7 +595,11 @@ describe('ROK-1794 review P3 — a created character', () => {
           sql`${schema.activityLog.metadata}->>'characterId' = ${id}`,
         ),
       );
-    expect(claims).toEqual([]);
+    expect(claims).toHaveLength(1);
+    const claimIds = claims.map((c) => c.id);
+    await testApp.db
+      .delete(schema.activityLog)
+      .where(inArray(schema.activityLog.id, claimIds));
     const before = await guildRow();
     const res = await apply(token, id, rosterAs(y, OTHER_NAME, 1, asIs));
     expectNotEditor(res);
