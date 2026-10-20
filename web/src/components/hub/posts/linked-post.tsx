@@ -20,7 +20,8 @@ export function LinkedPost({ guildId, postId, canEdit, removedCopy }: LinkedPost
     if (!one.data) return null;
     return (
         <div className="mb-4" data-testid="hub-post-linked">
-            <PostItem guildId={guildId} post={one.data} canEdit={canEdit} highlighted />
+            {/* Keyed by id: moving to another cached post must reset edit / delete state (Codex r3). */}
+            <PostItem key={one.data.id} guildId={guildId} post={one.data} canEdit={canEdit} highlighted />
         </div>
     );
 }
