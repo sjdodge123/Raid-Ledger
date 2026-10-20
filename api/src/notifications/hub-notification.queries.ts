@@ -65,7 +65,12 @@ export async function filterGroupRecipients(
   return rows.filter((r) => !hidden || isStaff(r)).map((r) => r.id);
 }
 
-/** D5: users who switched both `hub_event_tagged` channels off. */
+/**
+ * D5: users whose group notice cannot be created. `NotificationService.create`
+ * returns null (no row, no Discord dispatch) whenever the type's `inApp` is
+ * off, so `inApp: false` alone gates the group copy — whatever `discord` says.
+ * The plan then falls back to their game copy (Codex r6 P2).
+ */
 export async function findGroupTypeOff(
   db: Db,
   userIds: readonly number[],
@@ -76,10 +81,7 @@ export async function findGroupTypeOff(
     .select({ userId: t.userId, prefs: t.channelPrefs })
     .from(t)
     .where(inArray(t.userId, [...userIds]));
-  const off = rows.filter((r) => {
-    const p = r.prefs.hub_event_tagged;
-    return p?.inApp === false && p.discord === false;
-  });
+  const off = rows.filter((r) => r.prefs.hub_event_tagged?.inApp === false);
   return new Set(off.map((r) => r.userId));
 }
 
