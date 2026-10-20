@@ -34,7 +34,12 @@ import {
 import { pasteSections } from './addon-import.paste-run';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
-import { parseImportRequest, rawFacts } from './addon-import.service.helpers';
+import {
+  parseImportRequest,
+  rawFacts,
+  withRulesetInference,
+} from './addon-import.service.helpers';
+import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { flagIfRosterHeld } from './addon-import-guild.flag';
 
 /**
@@ -55,6 +60,7 @@ export class AddonImportCreateService {
     private readonly characters: CharactersService,
     private readonly audit: AddonImportAuditService,
     private readonly itemMeta: WowItemMetaService,
+    private readonly realmRulesets: ForeverRealmRulesetsService,
   ) {}
 
   async importNew(
@@ -108,10 +114,15 @@ export class AddonImportCreateService {
     input.onTarget = (id) => {
       outcome.characterId = id;
     };
-    if (request.dryRun) return previewImport(this.db, input);
-    const res = await applyImport(this.db, this.characters, input);
+    const run = request.dryRun
+      ? previewImport(this.db, input)
+      : applyImport(this.db, this.characters, input);
+    // ROK-1739 D7: the inference rides on preview AND apply, never persisted.
+    const res = withRulesetInference(await run, input.inference);
     // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
-    enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    if (!request.dryRun) {
+      enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    }
     return res;
   }
 
@@ -134,6 +145,7 @@ export class AddonImportCreateService {
       request,
       who,
       query: { userId, gameId, region, guid: who.guid, name },
+      inference: await this.realmRulesets.inferForPaste(paste),
     };
   }
 }

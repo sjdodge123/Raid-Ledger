@@ -39,16 +39,28 @@ export function authoritativeSectionIndex(
  * throws `errors[0]`, so a single-section paste behaves exactly as before).
  * Everything else — warnings and the character-row writes (diff / pinGuid /
  * setRuleset) — comes from the authoritative section alone, so the row never
- * takes an older section's class/level/ruleset. GUID confirm/repin and
- * ruleset confirm are unchanged (the decoder guarantees one GUID).
+ * takes an older section's class/level/ruleset. GUID confirm/repin is
+ * checked on every section (the decoder guarantees one GUID); the ruleset
+ * confirmation only on the authoritative one (ROK-1739 Codex r4 P2) — the
+ * preview showed only its `RULESET_CHANGED`, so another section's differing
+ * ruleset must not turn a confirmed apply into `RULESET_CONFIRM_STALE`.
  */
 export function bindEverySection(
   sections: AddonBindingSection[],
   character: AddonBindingCharacter,
   opts: AddonBindingOptions,
 ): AddonBindingResult {
-  const results = sections.map((s) => bindToCharacter(s, character, opts));
-  const lead = results[authoritativeSectionIndex(sections)];
+  const leadIndex = authoritativeSectionIndex(sections);
+  const results = sections.map((s, i) =>
+    bindToCharacter(s, character, i === leadIndex ? opts : identityOnly(opts)),
+  );
+  const lead = results[leadIndex];
   if (!lead) throw new Error('bindEverySection: a paste has ≥1 section');
   return { ...lead, errors: results.flatMap((r) => r.errors) };
+}
+
+/** A non-authoritative section's opts: no ruleset confirmation to check. */
+function identityOnly(opts: AddonBindingOptions): AddonBindingOptions {
+  if (!opts.confirm) return opts;
+  return { ...opts, confirm: { repinGuid: opts.confirm.repinGuid } };
 }

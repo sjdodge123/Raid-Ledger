@@ -9,7 +9,8 @@
  *
  * Ruleset pick (D13): when the create target's export carries no ruleset the
  * preview asks for one. The pick is reset on every new preview and is sent as
- * `ruleset` on apply ONLY when `target.ruleset === null`.
+ * `ruleset` on apply ONLY when `target.ruleset === null`. ROK-1739: a
+ * selectable realm inference pre-selects the pick (state only, never stored).
  */
 import { useEffect, useRef, useState } from 'react';
 import type {
@@ -19,7 +20,7 @@ import type {
     WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import { toast } from '../../../../lib/toast';
-import { resultHeadline } from './addon-import.helpers';
+import { resultHeadline, selectableInference } from './addon-import.helpers';
 import {
     useAddonImportApply,
     useAddonImportNewApply,
@@ -82,7 +83,8 @@ function makeCheck(mode: AddonImportMode, m: Mutations, s: FlowState) {
         m.apply.reset();
         s.setChecked({ importString, result, target });
         s.setConfirm({});
-        s.setRuleset(null);
+        // ROK-1739 D5: pre-select a selectable realm inference; the user's pick still wins on apply.
+        s.setRuleset(needsRulesetPick(target) ? selectableInference(result.rulesetInference) : null);
         s.setStep('preview');
     };
     return (importString: string) => {
@@ -98,6 +100,7 @@ function makeRunImport(mode: AddonImportMode, m: Mutations, s: FlowState, openRe
     return () => {
         const c = s.checked;
         if (!c) return;
+        m.preview.reset(); // a failed re-preview's error gives way to this apply's outcome
         if (mode.mode === 'create') {
             const pick = needsRulesetPick(c.target);
             if (pick && !s.ruleset) return;
@@ -119,13 +122,17 @@ export function useAddonImportFlow(mode: AddonImportMode, isOpen: boolean) {
     const m = useModeMutations(mode);
     const openRef = useIsOpenRef(isOpen);
     const back = () => { m.apply.reset(); s.setStep('paste'); };
+    const check = makeCheck(mode, m, s);
+    // ROK-1739 (Codex r3 P2): after RULESET_CONFIRM_STALE, re-preview the same string.
+    // Codex r5 P2: drop the stale apply error first, so a failed re-preview's error is the one shown.
+    const previewAgain = () => { if (s.checked) { m.apply.reset(); check(s.checked.importString); } };
     const again = () => {
         s.setText(''); s.setChecked(null); s.setApplied(null); s.setRuleset(null);
         m.preview.reset(); m.apply.reset(); s.setStep('paste');
     };
     return {
-        ...s, preview: m.preview, apply: m.apply, back, again,
-        check: makeCheck(mode, m, s), runImport: makeRunImport(mode, m, s, openRef),
+        ...s, preview: m.preview, apply: m.apply, back, again, previewAgain,
+        check, runImport: makeRunImport(mode, m, s, openRef),
     };
 }
 
