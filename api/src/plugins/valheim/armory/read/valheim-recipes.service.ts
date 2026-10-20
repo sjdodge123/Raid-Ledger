@@ -109,12 +109,8 @@ export class ValheimRecipesService {
       const { cat, maxQ } = await this.catalogFor(r, set, graph, [prefab]);
       const q = kind === 'piece' ? 1 : Math.min(quality, maxQ(prefab));
       const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
-      const res = resolveTree(
-        graph,
-        kind ? { ...target, kind } : target,
-        null,
-        { maxQuality: maxQ },
-      );
+      const asked = kind ? { ...target, kind } : target;
+      const res = resolveTree(graph, asked, null, { maxQuality: maxQ });
       return {
         target: { prefab, quality: q },
         ...pickTree(res),

@@ -86,6 +86,18 @@ const station = (prefab: string, name: string, maxLevel: number) => ({
   icon: null,
 });
 
+const bronzeChainRecipes = (): Msg[] => [
+  recipeEntry('Recipe_Bronze', 'Bronze', [
+    recipeRes('Copper', 2),
+    recipeRes('Tin', 1),
+  ]),
+  recipeEntry('Recipe_SwordBronze', 'SwordBronze', [
+    recipeRes('Bronze', 8, 4),
+    recipeRes('Wood', 2, 1),
+    recipeRes('LeatherScraps', 2, 1),
+  ]),
+];
+
 /**
  * The vanilla fixture's header with the resolver spec's Bronze chain:
  * Bronze ← Copper 2 + Tin 1 (forge); Copper/Tin ← ore (smelter, 2 Coal per
@@ -100,17 +112,7 @@ export function bronzeRecipes(over: Msg = {}): Msg {
       station('piece_workbench', 'Workbench', 5),
       station('forge', 'Forge', 7),
     ],
-    recipes: [
-      recipeEntry('Recipe_Bronze', 'Bronze', [
-        recipeRes('Copper', 2),
-        recipeRes('Tin', 1),
-      ]),
-      recipeEntry('Recipe_SwordBronze', 'SwordBronze', [
-        recipeRes('Bronze', 8, 4),
-        recipeRes('Wood', 2, 1),
-        recipeRes('LeatherScraps', 2, 1),
-      ]),
-    ],
+    recipes: bronzeChainRecipes(),
     processors: [
       processorEntry('smelter', 'Coal', 2),
       processorEntry('charcoal_kiln'),
@@ -189,13 +191,8 @@ const largestProcess = (i: number): Msg => ({
   priority: -10_000,
 });
 
-/** Every array full, every string at its cap; `serverId` re-pointed. */
-export function largestRecipesMessage(serverId: string, capturedAt: string) {
-  const budget = VALHEIM_LINK_RECIPE_ENTRIES_MAX - VALHEIM_LINK_PROCESSES_MAX;
-  const full = Math.floor(budget / VALHEIM_LINK_REQUIREMENTS_MAX);
-  const rest = budget % VALHEIM_LINK_REQUIREMENTS_MAX;
-  const size = (i: number) =>
-    i < full ? VALHEIM_LINK_REQUIREMENTS_MAX : i === full ? rest : 0;
+/** The header + atlas of the largest message, every string at its cap. */
+function largestHeader(serverId: string, capturedAt: string) {
   return {
     schemaVersion: 1,
     serverId,
@@ -211,25 +208,41 @@ export function largestRecipesMessage(serverId: string, capturedAt: string) {
       width: 16_384,
       height: 16_384,
     },
-    stations: Array.from({ length: VALHEIM_LINK_STATIONS_MAX }, (_, i) => ({
-      prefab: prefab(i),
-      name: ctl(96),
-      maxLevel: VALHEIM_LINK_STATION_LEVEL_MAX,
-      stackableExtension: false,
-      upgrader: false,
-      icon: atlasIcon,
-    })),
-    recipes: Array.from({ length: VALHEIM_LINK_RECIPES_MAX }, (_, i) =>
-      recipeAt(i, size(i)),
-    ),
-    pieces: Array.from({ length: VALHEIM_LINK_PIECES_MAX }, (_, i) =>
-      pieceAt(i),
-    ),
-    processors: Array.from({ length: VALHEIM_LINK_PROCESSORS_MAX }, (_, i) =>
-      largestProcessor(i),
-    ),
-    processes: Array.from({ length: VALHEIM_LINK_PROCESSES_MAX }, (_, i) =>
-      largestProcess(i),
-    ),
+  };
+}
+
+const largestStation = (i: number): Msg => ({
+  prefab: prefab(i),
+  name: ctl(96),
+  maxLevel: VALHEIM_LINK_STATION_LEVEL_MAX,
+  stackableExtension: false,
+  upgrader: false,
+  icon: atlasIcon,
+});
+
+/** Recipes sized so recipes + processes fill the entry budget exactly. */
+function largestRecipes(): Msg[] {
+  const budget = VALHEIM_LINK_RECIPE_ENTRIES_MAX - VALHEIM_LINK_PROCESSES_MAX;
+  const full = Math.floor(budget / VALHEIM_LINK_REQUIREMENTS_MAX);
+  const rest = budget % VALHEIM_LINK_REQUIREMENTS_MAX;
+  const size = (i: number) =>
+    i < full ? VALHEIM_LINK_REQUIREMENTS_MAX : i === full ? rest : 0;
+  return Array.from({ length: VALHEIM_LINK_RECIPES_MAX }, (_, i) =>
+    recipeAt(i, size(i)),
+  );
+}
+
+const fill = <T>(n: number, at: (i: number) => T): T[] =>
+  Array.from({ length: n }, (_, i) => at(i));
+
+/** Every array full, every string at its cap; `serverId` re-pointed. */
+export function largestRecipesMessage(serverId: string, capturedAt: string) {
+  return {
+    ...largestHeader(serverId, capturedAt),
+    stations: fill(VALHEIM_LINK_STATIONS_MAX, largestStation),
+    recipes: largestRecipes(),
+    pieces: fill(VALHEIM_LINK_PIECES_MAX, pieceAt),
+    processors: fill(VALHEIM_LINK_PROCESSORS_MAX, largestProcessor),
+    processes: fill(VALHEIM_LINK_PROCESSES_MAX, largestProcess),
   };
 }
