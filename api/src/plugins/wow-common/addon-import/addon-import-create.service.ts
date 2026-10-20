@@ -40,6 +40,7 @@ import {
   withRulesetInference,
 } from './addon-import.service.helpers';
 import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
+import { flagIfRosterHeld } from './addon-import-guild.flag';
 
 /**
  * ROK-1738 — `POST /plugins/wow/characters/addon-import`: import a
@@ -82,6 +83,8 @@ export class AddonImportCreateService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
+      // ROK-1794 AC4: both routes flag a held roster (Codex P2).
+      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await finishAttempt(this.audit, outcome);

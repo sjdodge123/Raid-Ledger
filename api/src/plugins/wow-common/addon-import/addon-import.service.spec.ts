@@ -46,6 +46,8 @@ jest.mock('./addon-import-char.apply', () => ({
 
 const CHAR_ID = '00000000-0000-4000-8000-000000000001';
 const SUMMARY = { gearCount: 1, avgIlvl: 80, talentNodes: 1, lockouts: 0 };
+/** The run's tx: apply takes THE import locks on it (ROK-1794 lock order). */
+const TX = { execute: jest.fn(() => Promise.resolve(undefined)) };
 
 function makeDb() {
   const row = {
@@ -67,7 +69,7 @@ function makeDb() {
     innerJoin: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     limit: jest.fn().mockResolvedValue([row]),
-    transaction: jest.fn((fn: (tx: unknown) => unknown) => fn('TX')),
+    transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(TX)),
   };
   return chain as unknown as PostgresJsDatabase<typeof schema>;
 }
@@ -156,7 +158,7 @@ describe('AddonImportService', () => {
     });
     await service.importString(1, CHAR_ID, body);
     expect(applyBinding).toHaveBeenCalledWith(
-      expect.objectContaining({ tx: 'TX', characterId: CHAR_ID }),
+      expect.objectContaining({ tx: TX, characterId: CHAR_ID }),
       expect.objectContaining({ pinGuid: 'Player-1-A' }),
     );
   });

@@ -94,4 +94,20 @@ describe('groupRoster', () => {
   it('returns no groups for an empty roster', () => {
     expect(groupRoster([])).toEqual([]);
   });
+
+  it('ROK-1794: attaches linkedAccount only when links are passed (staff), and only to the linked row', () => {
+    const rows = [
+      row({ memberId: 1, characterId: CHAR }),
+      row({ memberId: 2, name: 'Bea' }),
+    ];
+    const account = {
+      username: 'anna-rl',
+      linkedSince: '2026-10-01T00:00:00.000Z',
+    };
+    const [staff] = groupRoster(rows, new Map([[CHAR, account]]));
+    expect(staff?.members[0]?.linkedAccount).toEqual(account);
+    expect(staff?.members[1]).not.toHaveProperty('linkedAccount');
+    const [plain] = groupRoster(rows);
+    expect(plain?.members.filter((m) => 'linkedAccount' in m)).toEqual([]);
+  });
 });

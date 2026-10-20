@@ -14,6 +14,7 @@ import { bindEverySection } from './addon-import.binding-paste';
 import { applyBinding } from './addon-import-binding.apply';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { lockImportScope } from './addon-import.locks';
 import type { AddonImportTx } from './addon-import-apply.types';
 import {
   buildPasteResult,
@@ -135,6 +136,11 @@ export async function runForCharacter(
     gameId: character.gameId,
     region: character.binding.region as WowRegion,
   };
+  // ROK-1794 — THE lock order (GUID, then guild) before any section runs.
+  if (!request.dryRun) {
+    const { gameId, region } = ctx;
+    await lockImportScope(tx, { gameId, region, guid: binding.pinGuid, paste });
+  }
   const runs = await runPaste(ctx, paste, request.dryRun);
   // Lead ruling: a stale export writes NOTHING — binding updates too
   // (a mixed paste skips them only when EVERY section is stale).
