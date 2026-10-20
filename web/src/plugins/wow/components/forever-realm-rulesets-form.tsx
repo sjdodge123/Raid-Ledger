@@ -32,8 +32,8 @@ async function submit(mutate: SaveFn, dto: WowForeverRealmRulesetsDto): Promise<
     }
 }
 
-function RowList({ rows, errors, onChange, onRemove }: {
-    rows: RealmRulesetRow[]; errors: RealmRowErrors; onChange: RowPatch; onRemove: (key: string) => void;
+function RowList({ rows, errors, onChange, onRemove, disabled }: {
+    rows: RealmRulesetRow[]; errors: RealmRowErrors; onChange: RowPatch; onRemove: (key: string) => void; disabled: boolean;
 }): JSX.Element {
     if (rows.length === 0) return <p className="text-center py-6 text-sm text-muted">No realms mapped yet. Add one below.</p>;
     return (
@@ -44,7 +44,7 @@ function RowList({ rows, errors, onChange, onRemove }: {
             <ul className="space-y-4 lg:space-y-2">
                 {rows.map((row, i) => (
                     <li key={row.key}>
-                        <RealmRulesetRowEditor row={row} index={i} error={errors[row.key]} onChange={onChange} onRemove={onRemove} />
+                        <RealmRulesetRowEditor row={row} index={i} error={errors[row.key]} onChange={onChange} onRemove={onRemove} disabled={disabled} />
                     </li>
                 ))}
             </ul>
@@ -66,9 +66,10 @@ function RealmRulesetsForm({ saved, mutate, pending }: { saved: WowForeverRealmR
     };
     return (
         <form onSubmit={onSubmit} noValidate className="space-y-3">
-            <RowList rows={rows} errors={errors} onChange={onChange} onRemove={onRemove} />
+            {/* Locked while the PUT is pending: success re-keys the form, which would drop any later edit. */}
+            <RowList rows={rows} errors={errors} onChange={onChange} onRemove={onRemove} disabled={pending} />
             <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" disabled={rows.length >= WOW_FOREVER_REALM_RULESETS_MAX}
+                <Button variant="secondary" disabled={pending || rows.length >= WOW_FOREVER_REALM_RULESETS_MAX}
                     onClick={() => setRows((prev) => [...prev, blankRow()])}>
                     <PlusIcon aria-hidden="true" className="w-4 h-4" /> Add realm
                 </Button>

@@ -163,3 +163,33 @@ describe('ForeverRealmRulesetsSection — save (ROK-1739)', () => {
         expect(screen.queryByRole('button', { name: /save realm rulesets/i })).not.toBeInTheDocument();
     });
 });
+
+describe('ForeverRealmRulesetsSection — pending save (ROK-1739)', () => {
+    it('locks every row control and Add realm while the save is pending, then unlocks once it settles (Codex r1 P2)', async () => {
+        const user = userEvent.setup();
+        serve();
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.put(URL, async ({ request }) => {
+            const body = await request.json();
+            await gate;
+            return HttpResponse.json(body);
+        }));
+        renderWithProviders(<ForeverRealmRulesetsSection />);
+        await user.selectOptions(await screen.findByRole('combobox', { name: 'Ruleset, row 1' }), 'hardcore');
+        await user.click(saveButton());
+        const controls = (): [string, HTMLElement][] => [
+            ['realm name', screen.getByRole('textbox', { name: 'Realm name, row 1' })],
+            ['region', screen.getByRole('combobox', { name: 'Region, row 1' })],
+            ['ruleset', screen.getByRole('combobox', { name: 'Ruleset, row 1' })],
+            ['remove', screen.getByRole('button', { name: 'Remove Bloodmoon' })],
+            ['add realm', screen.getByRole('button', { name: /add realm/i })],
+        ];
+        await waitFor(() => expect(saveButton()).toHaveAttribute('aria-busy', 'true'));
+        for (const [label, el] of controls()) expect(el, `${label} is locked while saving`).toBeDisabled();
+        release();
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Realm rulesets saved'));
+        await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+        for (const [label, el] of controls()) expect(el, `${label} is editable again`).toBeEnabled();
+    });
+});
