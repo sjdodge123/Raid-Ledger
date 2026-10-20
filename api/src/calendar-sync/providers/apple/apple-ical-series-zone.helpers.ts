@@ -25,6 +25,8 @@
  * floating wall clock in that zone; with no collection zone it is untouched.
  * Codex r11: an embedded-zone master's EXDATE / RDATE in another IANA zone
  * with no VTIMEZONE → its UTC instant (it was left floating).
+ * Codex r12: a UTC master's override in an embedded VTIMEZONE converts by
+ * the corrected instant rules, so a DST-fold RECURRENCE-ID still matches.
  * Call it AFTER the overrides have been judged on their own times.
  */
 import ICAL from 'ical.js';
@@ -196,14 +198,19 @@ function alignToUtc(master: ICAL.Component, floating: FloatingZone): void {
   }
 }
 
-/** A zoned value (VTIMEZONE rules, else its IANA TZID) → its UTC instant. */
+/**
+ * A zoned value (VTIMEZONE rules, else its IANA TZID) → its UTC instant.
+ * Codex r12: a VTIMEZONE value goes through `timeToMs` (first occurrence
+ * in a fall-back fold, like IANA), never ical.js's `convertToZone`.
+ */
 function zonedToUtc(
   value: ICAL.Time,
   tzid: string,
   floating: FloatingZone,
 ): ICAL.Time {
   if (!isRealZone(value.zone)) return toUtc(value, tzid, floating);
-  return value.convertToZone(ICAL.Timezone.utcTimezone);
+  const ms = timeToMs(value, tzid, floating);
+  return ms === null ? value : ICAL.Time.fromJSDate(new Date(ms), true);
 }
 
 /**
