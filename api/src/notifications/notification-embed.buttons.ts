@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { buildHubProposalButton } from './notification-embed.hub-proposal';
 import {
   RESCHEDULE_BUTTON_IDS,
   ROACH_OUT_BUTTON_IDS,
@@ -151,6 +152,8 @@ export function buildPrimaryButton(
   }
   // ROK-1832: a leader post carries a guildId, not an eventId.
   if (type === 'hub_leader_post') return buildGroupButton(payload, clientUrl);
+  if (type === 'hub_proposal_submitted' || type === 'hub_proposal_reviewed')
+    return buildHubProposalButton(payload, clientUrl);
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
   if (

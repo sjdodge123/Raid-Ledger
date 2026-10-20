@@ -28,7 +28,10 @@ describe('hub proposal notices', () => {
   it('rejected carries the reason and no link', () => {
     const n = rejectedNotice(5, facts, 'Duplicate of BG3 Raiders');
     expect(n.message).toBe('Duplicate of BG3 Raiders');
-    expect(n.payload).toMatchObject({ outcome: 'rejected', reason: 'Duplicate of BG3 Raiders' });
+    expect(n.payload).toMatchObject({
+      outcome: 'rejected',
+      reason: 'Duplicate of BG3 Raiders',
+    });
     expect(n.payload).not.toHaveProperty('url');
   });
 });

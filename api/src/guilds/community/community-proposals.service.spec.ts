@@ -55,6 +55,7 @@ const hubRow: schema.GuildSelect = {
   status: 'active',
   blurb: 'Act 3 runs',
   proposedBy: 5,
+  blizzardGuildId: null,
   reviewedBy: null,
   reviewedAt: null,
   archivedAt: null,
@@ -189,10 +190,11 @@ describe('approve / reject / withdraw / createDirect', () => {
 
   it('reject notifies with the reason BEFORE deleting', async () => {
     const order: string[] = [];
-    create.mockImplementation(async () => order.push('notify'));
-    mocked(q.deleteProposal).mockImplementation(
-      async () => (order.push('delete'), true),
-    );
+    create.mockImplementation(() => Promise.resolve(order.push('notify')));
+    mocked(q.deleteProposal).mockImplementation(() => {
+      order.push('delete');
+      return Promise.resolve(true);
+    });
     await svc.reject(40, 'Duplicate');
     expect(order).toEqual(['notify', 'delete']);
     expect(create).toHaveBeenCalledWith(
