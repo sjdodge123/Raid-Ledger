@@ -106,6 +106,8 @@ export interface RecipeSteps {
   crafts: number;
   /** Ingredient prefab → total amount, in resource order; zero amounts dropped. */
   totals: InputLine[];
+  /** q = 1 batch overshoot: `crafts × recipe.amount − rest`. */
+  surplus: number;
 }
 
 /** Σ over quality steps `startStep..quality`; 1 item per upgrade step. */
@@ -119,8 +121,10 @@ export function recipeSteps(
     recipe.resources.map((r) => [r.prefab, 0]),
   );
   let crafts = 0;
+  let surplus = 0;
   for (let q = startStep; q <= quality && rest > 0; q += 1) {
     const stepCrafts = q === 1 ? Math.ceil(rest / recipe.amount) : rest;
+    if (q === 1) surplus = stepCrafts * recipe.amount - rest;
     crafts += stepCrafts;
     for (const r of recipe.resources) {
       sums.set(
@@ -132,7 +136,7 @@ export function recipeSteps(
   const totals = [...sums]
     .filter(([, n]) => n > 0)
     .map(([prefab, amount]) => ({ prefab, amount }));
-  return { crafts, totals };
+  return { crafts, totals, surplus };
 }
 
 export interface ProcessSource {
@@ -205,6 +209,8 @@ export class PlanBuilder {
   readonly fuelEstimates: FuelEstimate[] = [];
   truncated = false;
   private readonly parents = new Set<number>();
+  /** Planned batch overshoot per prefab, reused by later needs (any branch). */
+  private readonly surplus = new Map<string, number>();
 
   constructor(
     private readonly ledger: Map<string, number> | null,
@@ -234,21 +240,38 @@ export class PlanBuilder {
     return this.ledger?.get(prefab) ?? 0;
   }
 
+  /** Records a planned craft's overshoot for later needs of `prefab`. */
+  addSurplus(prefab: string, n: number): void {
+    if (n > 0) this.surplus.set(prefab, (this.surplus.get(prefab) ?? 0) + n);
+  }
+
   /**
+   * Planned surplus first (never shown as `have`), then the chest ledger.
    * `have` = what the ledger holds of `prefab` BEFORE this take (the stock
-   * available to this node); the ledger loses `min(have, need)`; `short` =
-   * `max(0, need − have)`. `net` false (upgrade / quality > 1 target):
-   * nothing taken, have 0. No ledger (`/tree`): have/short null.
+   * available to this node); the ledger loses `min(have, left)`; `short` =
+   * `max(0, need − surplus − have)`. `net` false (upgrade / quality > 1
+   * target, piece): nothing taken, have 0. No ledger (`/tree`): have/short null.
    */
   takeFor(prefab: string, need: number, net: boolean): Taken {
-    if (!this.ledger) return { have: null, rest: need, short: null };
-    if (!net) return { have: 0, rest: need, short: need };
+    if (!net) {
+      if (!this.ledger) return { have: null, rest: need, short: null };
+      return { have: 0, rest: need, short: need };
+    }
+    const left = need - this.takeSurplus(prefab, need);
+    if (!this.ledger) return { have: null, rest: left, short: null };
     const available = this.ledger.get(prefab) ?? 0;
-    const used = Math.min(available, need);
+    const used = Math.min(available, left);
     this.ledger.set(prefab, available - used);
-    const rest = need - used;
+    const rest = left - used;
     const have = Math.min(available, VALHEIM_PLAN_QUANTITY_MAX);
     return { have, rest, short: rest };
+  }
+
+  private takeSurplus(prefab: string, need: number): number {
+    const held = this.surplus.get(prefab) ?? 0;
+    const used = Math.min(held, need);
+    if (used > 0) this.surplus.set(prefab, held - used);
+    return used;
   }
 
   push(node: NodeInput): number {

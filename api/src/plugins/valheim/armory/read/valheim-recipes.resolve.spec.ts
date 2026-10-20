@@ -597,3 +597,97 @@ describe('resolvePlan — quantity bound (VALHEIM_PLAN_QUANTITY_MAX)', () => {
     expect(ValheimRecipePlanResponseSchema.safeParse(body).success).toBe(true);
   });
 });
+
+const piece = (prefab: string, resources: [string, number][]) => ({
+  prefab,
+  name: prefab,
+  category: 'Building',
+  tool: 'Hammer',
+  station: 'workbench',
+  icon: null,
+  resources: resources.map(([p, amount]) => ({
+    prefab: p,
+    amount,
+    recover: true,
+  })),
+});
+
+describe('resolvePlan — piece netting and list truncation', () => {
+  it('a piece target never nets a same-prefab item from stock', () => {
+    const g = graphOf({
+      recipes: [recipe('Recipe_Shared', 'Shared', [res('Iron', 1)])],
+      pieces: [piece('Shared', [['Wood', 10]])],
+    });
+    const target = item('Shared', 1, { kind: 'piece' });
+    const plan = resolvePlan(g, [target], new Map([['Shared', 1]]));
+    expect(shape(plan.nodes)).toEqual([
+      '0<- Shared:recipe×1',
+      '1<0 Wood:gathered×10',
+    ]);
+    expect(plan.nodes[0]).toMatchObject({ have: 0, short: 1, crafts: 1 });
+    expect(plan.shoppingList).toEqual([
+      { prefab: 'Wood', need: 10, have: 0, short: 10 },
+    ]);
+  });
+
+  it('a shopping total capped at the max reports truncated', () => {
+    const g = graphOf({
+      recipes: [recipe('r_w', 'ModW', [res('Wood', 10_000)])],
+    });
+    const targets = Array.from({ length: 20 }, () => item('ModW', 10_000));
+    const plan = resolvePlan(g, targets, new Map());
+    expect(nodeOf(plan.nodes, 'Wood').quantity).toBe(100_000_000);
+    expect({ truncated: plan.truncated, list: plan.shoppingList }).toEqual({
+      truncated: true,
+      list: [
+        {
+          prefab: 'Wood',
+          need: VALHEIM_PLAN_QUANTITY_MAX,
+          have: 0,
+          short: VALHEIM_PLAN_QUANTITY_MAX,
+        },
+      ],
+    });
+  });
+});
+
+describe('resolvePlan — batch surplus across branches', () => {
+  const nails = graphOf({
+    recipes: [
+      recipe('Recipe_Nails', 'BronzeNails', [res('Bronze', 1)], {
+        amount: 20,
+      }),
+    ],
+    pieces: [
+      piece('wall_a', [['BronzeNails', 4]]),
+      piece('wall_b', [['BronzeNails', 4]]),
+    ],
+  });
+
+  it('a later branch reuses an earlier batch surplus (20 nails per Bronze)', () => {
+    const targets = [item('wall_a'), item('wall_b')];
+    const plan = resolvePlan(nails, targets, new Map());
+    const nailNodes = plan.nodes.filter((n) => n.prefab === 'BronzeNails');
+    expect(nailNodes.map((n) => [n.quantity, n.crafts, n.have])).toEqual([
+      [4, 1, 0],
+      [4, 0, 0],
+    ]);
+    expect(plan.shoppingList).toEqual([
+      { prefab: 'Bronze', need: 1, have: 0, short: 1 },
+    ]);
+  });
+
+  it('`/tree` of one batch target is unchanged by the surplus ledger', () => {
+    const tree = resolveTree(nails, item('wall_a'), null);
+    expect(shape(tree.nodes)).toEqual([
+      '0<- wall_a:recipe×1',
+      '1<0 BronzeNails:recipe×4',
+      '2<1 Bronze:gathered×1',
+    ]);
+    expect(nodeOf(tree.nodes, 'BronzeNails')).toMatchObject({
+      crafts: 1,
+      have: null,
+      short: null,
+    });
+  });
+});

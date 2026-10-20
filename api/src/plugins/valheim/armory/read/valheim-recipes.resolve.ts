@@ -1,7 +1,8 @@
 /**
  * ROK-1854 §2.4 — tree / plan resolver over one `RecipeGraph`. Depth-first;
- * every item first takes `min(stock, need)` from the ledger (plan only),
- * the rest comes from the D9 source. Flat `ValheimPlanNode` list, ids =
+ * every item first takes planned surplus, then `min(stock, need)` from the
+ * ledger (plan only); the rest comes from the D9 source. Piece targets never
+ * net against stock. Flat `ValheimPlanNode` list, ids =
  * list index, `parentId` links. Pure: no Nest, no DB.
  */
 import {
@@ -127,7 +128,9 @@ function expandRecipe(ctx: Ctx, step: Step, recipe: ValheimRecipe): void {
     alternatives,
     crafts: ctx.b.cap(steps.crafts),
   });
-  if (step.expand) expandChildren(ctx, need, id, recipe.anyOneOf, steps.totals);
+  if (!step.expand) return;
+  ctx.b.addSurplus(need.prefab, steps.surplus);
+  expandChildren(ctx, need, id, recipe.anyOneOf, steps.totals);
 }
 
 function expandProcess(ctx: Ctx, step: Step, src: ProcessSource): void {
@@ -142,6 +145,7 @@ function expandProcess(ctx: Ctx, step: Step, src: ProcessSource): void {
     crafts: ctx.b.cap(runs),
   });
   if (runs === 0 || !step.expand) return;
+  ctx.b.addSurplus(need.prefab, runs * process.output.amount - taken.rest);
   const inputs = process.inputs.map((i) => ({
     prefab: i.prefab,
     amount: i.amount * runs,
@@ -191,9 +195,13 @@ function expandFuel(ctx: Ctx, raw: Need): void {
   });
 }
 
-/** Pieces have no quality and no recipe id: the piece prefab stands in. */
+/**
+ * Pieces have no quality and no recipe id: the piece prefab stands in. A
+ * piece is built, never taken from a chest: a same-prefab ITEM in stock
+ * cannot stand in for it, so it never nets (only its ingredients do).
+ */
 function expandPiece(ctx: Ctx, need: Need, piece: ValheimPiece): void {
-  const taken = ctx.b.takeFor(need.prefab, need.quantity, need.net);
+  const taken = ctx.b.takeFor(need.prefab, need.quantity, false);
   const id = ctx.b.push({
     ...nodeBase(need, taken),
     via: pieceVia(piece),
@@ -254,10 +262,12 @@ export function resolvePlan(
   };
   const maxQuality = options.maxQuality ?? (() => 1);
   for (const target of targets) expandTarget(ctx, target, maxQuality);
+  // The list's own totals can hit the cap: build it BEFORE reading the flag.
+  const shoppingList = b.shoppingList();
   return {
     nodes: b.nodes,
     truncated: b.truncated,
-    shoppingList: b.shoppingList(),
+    shoppingList,
     fuelEstimates: b.fuelEstimates,
   };
 }
