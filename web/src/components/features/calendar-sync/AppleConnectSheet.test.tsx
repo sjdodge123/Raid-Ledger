@@ -189,6 +189,17 @@ describe('AppleConnectSheet — submit', () => {
         expect(passwordInput()).toHaveValue(APPLE_PASSWORD_DOWN);
     });
 
+    it('a refusal leaves the sheet open with its copy but no email or password in the mutation cache', async () => {
+        const user = userEvent.setup();
+        const { queryClient } = renderRow();
+        await openSheet(user);
+        await fill(user, EMAIL, APPLE_PASSWORD_DOWN);
+        await user.click(screen.getByTestId('apple-connect-submit'));
+        expect(await screen.findByRole('alert')).toHaveTextContent(E.apple_unavailable);
+        const cached = queryClient.getMutationCache().getAll().map((m) => JSON.stringify(m.state.variables ?? null));
+        expect(cached.filter((v) => v.includes(APPLE_PASSWORD_DOWN) || v.includes(EMAIL))).toEqual([]);
+    });
+
     it('the route throttle (429) → "Too many tries"', async () => {
         server.use(appleConnectThrottledHandler());
         const user = userEvent.setup();

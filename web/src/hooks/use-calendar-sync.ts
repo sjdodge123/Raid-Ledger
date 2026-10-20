@@ -103,7 +103,10 @@ async function postAppleConnect(input: AppleConnectInput): Promise<CalendarConne
         throw new AppleConnectRequestError('network');
     }
     if (!res.ok) throw new AppleConnectRequestError(await appleConnectFailureOf(res));
-    return CalendarConnectionSchema.parse(await res.json());
+    // An unparseable 2xx is a broken answer, not a thrown ZodError the sheet cannot show.
+    const parsed = CalendarConnectionSchema.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new AppleConnectRequestError('network');
+    return parsed.data;
 }
 
 /**

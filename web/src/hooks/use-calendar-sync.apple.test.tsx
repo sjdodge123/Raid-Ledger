@@ -57,6 +57,11 @@ describe('useConnectApple', () => {
         expect(await failureFor('abcd-efgh-ijkl-mnop')).toBe('network');
     });
 
+    it('a 2xx whose body is not a connection → network (not a raw ZodError)', async () => {
+        server.use(http.post(APPLE_CONNECT_URL, () => HttpResponse.json({ id: 'nope' }, { status: 201 })));
+        expect(await failureFor('abcd-efgh-ijkl-mnop')).toBe('network');
+    });
+
     it('a 5xx without a code body → apple_unavailable', async () => {
         server.use(http.post(APPLE_CONNECT_URL, () => new HttpResponse('<html>', { status: 502 })));
         expect(await failureFor('abcd-efgh-ijkl-mnop')).toBe('apple_unavailable');
