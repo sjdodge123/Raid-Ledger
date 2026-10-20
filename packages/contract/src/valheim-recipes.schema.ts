@@ -19,7 +19,10 @@ export const VALHEIM_PLAN_NODES_MAX = 2000;
 /** Targets per plan request. */
 export const VALHEIM_PLAN_TARGETS_MAX = 20;
 
-const count = z.number().int().min(0);
+/** Upper bound for every propagated quantity; the resolver stops a branch (and marks the response truncated) before exceeding it. */
+export const VALHEIM_PLAN_QUANTITY_MAX = 1_000_000_000;
+
+const count = z.number().int().min(0).max(VALHEIM_PLAN_QUANTITY_MAX);
 const quality = z.number().int().min(1).max(10);
 
 export const ValheimRecipeCatalogEntrySchema = z
