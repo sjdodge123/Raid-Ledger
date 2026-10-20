@@ -5,7 +5,11 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import { getCachedAuthUser, setCachedAuthUser } from './auth-user-cache';
+import {
+  authUserEpoch,
+  getCachedAuthUser,
+  setCachedAuthUser,
+} from './auth-user-cache';
 import { TokenBlocklistService } from './token-blocklist.service';
 import {
   suspendedMessage,
@@ -66,12 +70,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
   }
 
+  /** ROK-1823 D9: the epoch is captured BEFORE the load (stale-cache guard). */
   private async authUser(userId: number) {
-    let user = getCachedAuthUser(userId);
-    if (!user) {
-      user = await this.loadAuthUser(userId);
-      setCachedAuthUser(userId, user);
-    }
+    const cached = getCachedAuthUser(userId);
+    if (cached) return cached;
+    const epoch = authUserEpoch(userId);
+    const user = await this.loadAuthUser(userId);
+    setCachedAuthUser(userId, user, epoch);
     return user;
   }
 
@@ -84,6 +89,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         kickedAt: schema.users.kickedAt,
         bannedAt: schema.users.bannedAt,
         banReason: schema.users.banReason,
+        tokenVersion: schema.users.tokenVersion,
       })
       .from(schema.users)
       .where(eq(schema.users.id, userId))

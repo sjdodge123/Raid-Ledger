@@ -30,8 +30,11 @@ import {
   lockUserFamilies,
   markFirstChildIssued,
   revokeActiveRows,
+  revokeAllAndBumpTx,
   rowIsRevoked,
 } from './refresh-rotation.helpers';
+import { bumpTokenVersion } from '../token-version.helpers';
+import { invalidateAuthUser } from '../auth-user-cache';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
 
@@ -132,6 +135,25 @@ export class RefreshTokenService {
       await lockUserFamilies(tx, userId);
       await revokeActiveRows(tx, eq(schema.refreshTokens.userId, userId));
     });
+    await this.endUserImpersonations(userId);
+  }
+
+  /**
+   * ROK-1823 D5a: `revokeAllForUser` plus a token-version bump in the SAME
+   * transaction — every refresh row and every access token die at one
+   * commit (password change). Returns the new version; the caller's
+   * re-issued session signs with it.
+   */
+  async revokeAllAndBump(userId: number): Promise<number> {
+    const version = await this.db.transaction((tx) =>
+      revokeAllAndBumpTx(tx, userId),
+    );
+    invalidateAuthUser(userId);
+    await this.endUserImpersonations(userId);
+    return version;
+  }
+
+  private async endUserImpersonations(userId: number): Promise<void> {
     await this.endImpersonationBestEffort(`user ${userId}`, () =>
       this.impersonation.endForUser(userId, 'session_revoked'),
     );
@@ -280,6 +302,8 @@ export class RefreshTokenService {
     );
     await this.revokeFamily(existing.familyId);
     await this.blocklist.blockUser(existing.userId);
+    await bumpTokenVersion(this.db, existing.userId); // ROK-1823 D7
+    invalidateAuthUser(existing.userId);
     return null;
   }
 

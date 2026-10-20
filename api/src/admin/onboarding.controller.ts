@@ -201,13 +201,19 @@ export class OnboardingController {
     );
     // ROK-1810: revoke BEFORE the hash update so a failure in between leaves
     // the old password with no live sessions, never new password + old ones.
-    await this.passwordSession.revokeAllSessions(req.user.id);
+    const tokenVersion = await this.passwordSession.revokeAllSessions(
+      req.user.id,
+    );
     await this.updatePassword(localCred.id, parsed.data.newPassword);
 
     this.logger.log(
       `Admin user ${req.user.username} changed password via onboarding`,
     );
-    const accessToken = await this.reissueCallerSession(req, res);
+    const accessToken = await this.reissueCallerSession(
+      req,
+      res,
+      tokenVersion,
+    );
     return {
       success: true,
       message: 'Password changed successfully',
@@ -222,6 +228,7 @@ export class OnboardingController {
   private async reissueCallerSession(
     req: AuthenticatedExpressRequest,
     res: Response,
+    tokenVersion: number,
   ): Promise<string | null> {
     // Defence in depth: unreachable today (AdminGuard + local-auth.service
     // refuses to impersonate an admin). The cookie would be the admin's.
@@ -229,6 +236,7 @@ export class OnboardingController {
     const session = await this.passwordSession.issueSession(
       req.user,
       req.headers['user-agent'] ?? null,
+      tokenVersion,
     );
     setRefreshCookie(res, session.refresh.rawToken, session.refresh.maxAgeMs);
     return session.accessToken;

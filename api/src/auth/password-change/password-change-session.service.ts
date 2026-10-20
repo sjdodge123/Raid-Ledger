@@ -38,31 +38,35 @@ export class PasswordChangeSessionService {
   ) {}
 
   /**
-   * Revoke every refresh family and access JWT the user holds. Run it BEFORE
-   * the hash update: a failure after it leaves the old password with no live
-   * sessions, never the new password live beside old ones. A swallowed Redis
-   * error in `blockUser` is logged at error level; the refresh families are
-   * already dead in Postgres, and with Redis down `isBlocked` fails open for
-   * every token anyway, so failing the change would buy nothing.
+   * Revoke every refresh family and access JWT the user holds; returns the
+   * bumped token version for `issueSession`. Run it BEFORE the hash update:
+   * a failure after it leaves the old password with no live sessions, never
+   * the new password live beside old ones. ROK-1823: the refresh revoke and
+   * the version bump share one transaction, so a failure there throws and
+   * leaves every session intact. The legacy blocklist write still follows
+   * (removed in a later lane); its swallowed Redis error is logged.
    */
-  async revokeAllSessions(userId: number): Promise<void> {
-    await this.refresh.revokeAllForUser(userId);
+  async revokeAllSessions(userId: number): Promise<number> {
+    const version = await this.refresh.revokeAllAndBump(userId);
     const blocked = await this.blocklist.blockUser(userId);
     if (!blocked) {
       this.logger.error(
-        `Password change for user ${userId}: access-token blocklist write failed; existing access JWTs stay valid until they expire (<=1h)`,
+        `Password change for user ${userId}: access-token blocklist write failed; the token-version bump already revoked existing access JWTs`,
       );
     }
+    return version;
   }
 
   /**
-   * Issue the caller a fresh session after `revokeAllSessions`. `authMethod`
+   * Issue the caller a fresh session after `revokeAllSessions`, signed with
+   * the version it returned (ROK-1823). `authMethod`
    * is `local` even for a Discord/magic-link session: the caller just proved
    * the local password.
    */
   async issueSession(
     caller: PasswordChangeCaller,
     userAgent: string | null,
+    tokenVersion: number,
   ): Promise<ReissuedSession> {
     const refresh = await this.refresh.issue(caller.id, {
       authMethod: 'local',
@@ -70,7 +74,12 @@ export class PasswordChangeSessionService {
     });
     const accessToken = await signAccessToken(
       { jwt: this.jwt, blocklist: this.blocklist },
-      { username: caller.username, sub: caller.id, role: caller.role },
+      {
+        username: caller.username,
+        sub: caller.id,
+        role: caller.role,
+        tv: tokenVersion,
+      },
     );
     return { accessToken, refresh };
   }

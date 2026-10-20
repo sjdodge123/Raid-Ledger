@@ -33,6 +33,10 @@ import {
 } from './users-steam-link.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import {
+  bumpTokenVersion,
+  NEXT_TOKEN_VERSION,
+} from '../auth/token-version.helpers';
 import { reactivateUserById } from './users-reactivate.helpers';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
@@ -101,10 +105,11 @@ export class UsersService {
     });
   }
 
+  /** ROK-1823: the role and the token-version bump land in ONE UPDATE. */
   async setRole(userId: number, role: UserRole) {
     const [updated] = await this.db
       .update(schema.users)
-      .set({ role, updatedAt: new Date() })
+      .set({ role, updatedAt: new Date(), tokenVersion: NEXT_TOKEN_VERSION })
       .where(eq(schema.users.id, userId))
       .returning();
     invalidateAuthUser(userId);
@@ -333,6 +338,8 @@ export class UsersService {
 
   /** Delete a user and cascade all related data (ROK-405). */
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
+    await bumpTokenVersion(this.db, userId); // ROK-1823 D7
+    invalidateAuthUser(userId);
     await this.tokenBlocklist.blockUser(userId);
     // ROK-1353: refresh-token rows are removed by the FK ON DELETE CASCADE in
     // deleteUserTransaction; the orchestrated guild-leave path additionally

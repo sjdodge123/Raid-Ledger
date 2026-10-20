@@ -16,6 +16,8 @@ export interface AccessTokenClaims {
   role: UserRole;
   /** Set on an impersonation token; `JwtStrategy` checks this id's block too. */
   impersonatedBy?: number;
+  /** ROK-1823: the sub's `users.token_version` at mint (required from L2a). */
+  tv?: number;
 }
 
 /** Access-token lifetime when a mint gives no `ttlSeconds` (ROK-1353: 1h). */
