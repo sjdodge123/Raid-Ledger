@@ -16,6 +16,7 @@ import {
     fetchValheimClaimEvents,
     valheimClaimKeys,
 } from '../lib/valheim-armory-claims-api';
+import { valheimMaterialsKeys } from './use-valheim-materials';
 
 /** Refetch the sheet, every list page and the claim history for `id`. */
 export async function invalidateOwnership(
@@ -28,6 +29,8 @@ export async function invalidateOwnership(
             queryKey: [...valheimArmoryKeys.all, 'characters'],
         }),
         qc.invalidateQueries({ queryKey: valheimClaimKeys.events(id) }),
+        // ROK-1853 D9: personal chests follow the character's owner.
+        qc.invalidateQueries({ queryKey: valheimMaterialsKeys.all }),
     ]);
 }
 

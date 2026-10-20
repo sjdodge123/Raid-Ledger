@@ -4,6 +4,11 @@ import {
     VALHEIM_LINK_BITMAP_DATA_MAX_CHARS,
     VALHEIM_LINK_BITMAP_EDGE_MAX,
     VALHEIM_LINK_CHARACTER_MAX_BYTES,
+    VALHEIM_LINK_CONTAINER_ENTRIES_MAX,
+    VALHEIM_LINK_CONTAINER_ITEMS_MAX,
+    VALHEIM_LINK_CONTAINER_SLOTS_MAX,
+    VALHEIM_LINK_CONTAINERS_MAX,
+    VALHEIM_LINK_CONTAINERS_MAX_BYTES,
     VALHEIM_LINK_GRID_EDGE_MAX,
     VALHEIM_LINK_INT64_MIN,
     VALHEIM_LINK_INVENTORY_ITEMS_MAX,
@@ -155,10 +160,43 @@ function largestItems(): unknown {
     };
 }
 
+
+function largestContainers(): unknown {
+    // 50 000 entries bind before 4 096 × 256: spread them as 256 per container
+    // until the budget runs out, then empty containers up to the container cap.
+    const full = Math.floor(VALHEIM_LINK_CONTAINER_ENTRIES_MAX / VALHEIM_LINK_CONTAINER_ITEMS_MAX);
+    const rest = VALHEIM_LINK_CONTAINER_ENTRIES_MAX % VALHEIM_LINK_CONTAINER_ITEMS_MAX;
+    const coord = -(VALHEIM_LINK_WORLD_COORD_MAX - 0.000000000004);
+    const container = (i: number, itemCount: number) => ({
+        prefab: prefab(i),
+        x: coord,
+        y: coord,
+        z: coord,
+        creatorPlayerId: VALHEIM_LINK_INT64_MIN,
+        privacy: 'private',
+        vehicle: false,
+        slots: VALHEIM_LINK_CONTAINER_SLOTS_MAX,
+        usedSlots: VALHEIM_LINK_CONTAINER_SLOTS_MAX,
+        unreadable: false,
+        omittedEntries: 100_000_000,
+        items: Array.from({ length: itemCount }, (_, j) => ({ prefab: prefab(j), quality: 10, stack: 1_000_000_000 })),
+    });
+    return {
+        ...header,
+        kind: 'containers',
+        worldUid: VALHEIM_LINK_INT64_MIN,
+        containers: Array.from({ length: VALHEIM_LINK_CONTAINERS_MAX }, (_, i) =>
+            container(i, i < full ? VALHEIM_LINK_CONTAINER_ITEMS_MAX : i === full ? rest : 0)),
+        omittedShared: 1_000_000,
+        omittedPrivate: 1_000_000,
+    };
+}
+
 const KINDS = [
     ['character', largestCharacter, VALHEIM_LINK_CHARACTER_MAX_BYTES],
     ['map', largestMap, VALHEIM_LINK_MAP_MAX_BYTES],
     ['items', largestItems, VALHEIM_LINK_ITEMS_MAX_BYTES],
+    ['containers', largestContainers, VALHEIM_LINK_CONTAINERS_MAX_BYTES],
 ] as const;
 
 describe.each(KINDS)('largest schema-valid %s message (ROK-1855)', (kind, build, cap) => {
@@ -170,5 +208,17 @@ describe.each(KINDS)('largest schema-valid %s message (ROK-1855)', (kind, build,
         // A builder that quietly shrank would pass the cap for the wrong reason.
         expect(bytes).toBeGreaterThan(cap / 2);
         expect(bytes, `${kind}: ${bytes} bytes vs cap ${cap}`).toBeLessThanOrEqual(cap);
+    });
+});
+
+describe('containers entry cap (ROK-1853)', () => {
+    it('one entry over VALHEIM_LINK_CONTAINER_ENTRIES_MAX is too_big at containers', () => {
+        const msg = largestContainers() as { containers: Array<{ items: unknown[] }> };
+        const spare = msg.containers.find((c) => c.items.length < VALHEIM_LINK_CONTAINER_ITEMS_MAX);
+        if (!spare) throw new Error('builder left no container with room');
+        spare.items.push({ prefab: 'extra', quality: 10, stack: 1 });
+        const res = ValheimLinkMessageSchema.safeParse(msg);
+        expect(res.success).toBe(false);
+        expect(res.error?.issues.some((i) => i.code === 'too_big' && i.path.join('.') === 'containers')).toBe(true);
     });
 });

@@ -225,7 +225,8 @@ export function ItemTile({
                 {...data}
             />
             <LazyItemDetail
-                {...{ open, anchorRef, container, ...data }}
+                {...{ open, anchorRef, ...data }}
+                stacked={container !== document.body}
                 onClose={close}
                 returnRef={buttonRef}
             />
