@@ -6,6 +6,8 @@ import {
 const NOW = new Date('2026-10-11T12:00:00Z');
 const FUTURE = new Date('2026-10-12T12:00:00Z');
 const PAST = new Date('2026-10-10T12:00:00Z');
+/** A later future end (a moved event). */
+const MOVED_END = new Date('2026-10-13T12:00:00Z');
 
 function input(over: Partial<DesiredStateInput> = {}): DesiredStateInput {
   return {
@@ -205,6 +207,84 @@ describe('computeDesiredState — frozen (never touches the calendar)', () => {
       action: 'noop',
       reason: 'event_ended',
       copy: null,
+    });
+  });
+});
+
+describe('computeDesiredState — rescheduling poll (ROK-1857)', () => {
+  const polling = { title: 'Raid Night', cancelled: false, endsAt: FUTURE };
+  const underPoll = { ...polling, rescheduling: true };
+
+  it('under a poll with a copy → delete it', () => {
+    expect(
+      computeDesiredState(input({ event: underPoll, link: SYNCED })),
+    ).toEqual({ action: 'delete', reason: 'rescheduling', copy: null });
+  });
+
+  it('under a poll without a copy (reschedule before lock-in) → noop', () => {
+    expect(computeDesiredState(input({ event: underPoll }))).toEqual({
+      action: 'noop',
+      reason: 'rescheduling',
+      copy: null,
+    });
+  });
+
+  it('poll closed at a new time (copy deleted at open) → create', () => {
+    const closed = { ...polling, rescheduling: false, endsAt: MOVED_END };
+    expect(computeDesiredState(input({ event: closed }))).toEqual({
+      action: 'create',
+      reason: 'active_signup',
+      copy: { tentative: false, benched: false, title: 'Raid Night' },
+    });
+  });
+
+  it('poll aborted (original time) → create a fresh copy', () => {
+    const out = computeDesiredState(
+      input({ event: { ...polling, rescheduling: false } }),
+    );
+    expect(out.action).toBe('create');
+    expect(out.reason).toBe('active_signup');
+  });
+
+  it('cancelled mid-poll → event_cancelled wins (delete with a copy)', () => {
+    const event = { ...underPoll, cancelled: true };
+    expect(computeDesiredState(input({ event, link: SYNCED }))).toEqual({
+      action: 'delete',
+      reason: 'event_cancelled',
+      copy: null,
+    });
+    expect(computeDesiredState(input({ event })).reason).toBe(
+      'event_cancelled',
+    );
+  });
+
+  it('a suppressed copy stays frozen under a poll', () => {
+    const link = { state: 'suppressed' };
+    expect(computeDesiredState(input({ event: underPoll, link }))).toEqual({
+      action: 'noop',
+      reason: 'suppressed',
+      copy: null,
+    });
+  });
+
+  it('needs_reconnect stays frozen under a poll', () => {
+    const connection = { status: 'needs_reconnect', writeEnabled: true };
+    const out = computeDesiredState(
+      input({ connection, event: underPoll, link: SYNCED }),
+    );
+    expect(out).toEqual({
+      action: 'noop',
+      reason: 'connection_inactive',
+      copy: null,
+    });
+  });
+
+  it('no poll + a time change (manual edit) → update in place', () => {
+    const moved = { ...polling, rescheduling: false, endsAt: MOVED_END };
+    expect(computeDesiredState(input({ event: moved, link: SYNCED }))).toEqual({
+      action: 'update',
+      reason: 'active_signup',
+      copy: { tentative: false, benched: false, title: 'Raid Night' },
     });
   });
 });
