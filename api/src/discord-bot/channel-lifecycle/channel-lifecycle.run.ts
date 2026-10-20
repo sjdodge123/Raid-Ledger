@@ -61,7 +61,9 @@ async function handleGone(
     reason: 'deleted',
   });
   if (binding) {
-    await ctx.bindings.unbindById(binding.id);
+    // On the lock's tx (int-fix 3): a pool unbind re-inserts the suppression on
+    // a second connection, which waits on the tx's uncommitted row → deadlock.
+    await ctx.bindings.unbindById(binding.id, { db: ctx.db });
     await unlinkAutoHubsForChannel(ctx.db, binding.channelId);
   }
   return { outcome: 'failed', detail: 'channel deleted in Discord' };

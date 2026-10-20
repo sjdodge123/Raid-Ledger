@@ -352,7 +352,9 @@ describe('error policy (D9/D14)', () => {
       gameId: 1,
       reason: 'deleted',
     });
-    expect(bindings.unbindById).toHaveBeenCalledWith('b-1');
+    expect(bindings.unbindById).toHaveBeenCalledWith('b-1', {
+      db: expect.anything(),
+    });
     expect(res.items[0]).toMatchObject({
       outcome: 'failed',
       detail: 'channel deleted in Discord',

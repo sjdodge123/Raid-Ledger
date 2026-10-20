@@ -192,13 +192,22 @@ export class ChannelBindingsService {
    * Remove a SINGLE binding by id (ROK-1419). The admin Remove button uses this
    * so deleting one binding never drops a sibling on the same channel — contrast
    * unbind(), which deletes EVERY non-series binding on the channel.
+   *
+   * @param options.db - The caller's open transaction (the reconcile lock's
+   *   `tx`). The delete AND the D9 suppression hook run on it: from inside the
+   *   lock, a pool query here waits on the tx's own uncommitted suppression row
+   *   while the tx waits on this call — a self-deadlock (ROK-1428 R9).
    */
-  async unbindById(id: string): Promise<boolean> {
-    const result = await this.db
+  async unbindById(
+    id: string,
+    options: { db?: LifecycleDb } = {},
+  ): Promise<boolean> {
+    const db = options.db ?? this.db;
+    const result = await db
       .delete(schema.channelBindings)
       .where(eq(schema.channelBindings.id, id))
       .returning();
-    await suppressUnboundAutoBindings(this.db, result);
+    await suppressUnboundAutoBindings(db, result);
     const channelIds = result.map((row) => row.channelId);
     return this.announced(channelIds, result.length > 0);
   }
