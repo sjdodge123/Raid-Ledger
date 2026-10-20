@@ -211,10 +211,10 @@ describe('computeDesiredState — frozen (never touches the calendar)', () => {
   });
 });
 
-describe('computeDesiredState — rescheduling poll (ROK-1857)', () => {
-  const polling = { title: 'Raid Night', cancelled: false, endsAt: FUTURE };
-  const underPoll = { ...polling, rescheduling: true };
+const polling = { title: 'Raid Night', cancelled: false, endsAt: FUTURE };
+const underPoll = { ...polling, rescheduling: true };
 
+describe('computeDesiredState — rescheduling poll open (ROK-1857)', () => {
   it('under a poll with a copy → delete it', () => {
     expect(
       computeDesiredState(input({ event: underPoll, link: SYNCED })),
@@ -227,23 +227,6 @@ describe('computeDesiredState — rescheduling poll (ROK-1857)', () => {
       reason: 'rescheduling',
       copy: null,
     });
-  });
-
-  it('poll closed at a new time (copy deleted at open) → create', () => {
-    const closed = { ...polling, rescheduling: false, endsAt: MOVED_END };
-    expect(computeDesiredState(input({ event: closed }))).toEqual({
-      action: 'create',
-      reason: 'active_signup',
-      copy: { tentative: false, benched: false, title: 'Raid Night' },
-    });
-  });
-
-  it('poll aborted (original time) → create a fresh copy', () => {
-    const out = computeDesiredState(
-      input({ event: { ...polling, rescheduling: false } }),
-    );
-    expect(out.action).toBe('create');
-    expect(out.reason).toBe('active_signup');
   });
 
   it('cancelled mid-poll → event_cancelled wins (delete with a copy)', () => {
@@ -273,6 +256,30 @@ describe('computeDesiredState — rescheduling poll (ROK-1857)', () => {
       input({ connection, event: underPoll, link: SYNCED }),
     );
     expect(out).toEqual({
+      action: 'noop',
+      reason: 'connection_inactive',
+      copy: null,
+    });
+  });
+});
+
+describe('computeDesiredState — rescheduling poll cleared (ROK-1857)', () => {
+  it('poll closed at a new time (copy deleted at open) → create', () => {
+    const closed = { ...polling, rescheduling: false, endsAt: MOVED_END };
+    expect(computeDesiredState(input({ event: closed }))).toEqual({
+      action: 'create',
+      reason: 'active_signup',
+      copy: { tentative: false, benched: false, title: 'Raid Night' },
+    });
+  });
+
+  it('poll cleared: a link-less signup creates, a needs_reconnect one still noops', () => {
+    const cleared = { ...polling, rescheduling: false };
+    expect(computeDesiredState(input({ event: cleared })).action).toBe(
+      'create',
+    );
+    const connection = { status: 'needs_reconnect', writeEnabled: true };
+    expect(computeDesiredState(input({ connection, event: cleared }))).toEqual({
       action: 'noop',
       reason: 'connection_inactive',
       copy: null,
