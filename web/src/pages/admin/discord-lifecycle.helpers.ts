@@ -93,9 +93,10 @@ export function relativeTime(iso: string | null): string {
     return iso ? formatDistanceToNow(new Date(iso), { addSuffix: true }) : '—';
 }
 
-/** The confirm prompt: "Create 2, archive 1, unarchive 0 channels in Discord?" */
+/** The confirm prompt: "Create 2, archive 1, unarchive 0 channels [and link 1 hubs] in Discord?" */
 export function confirmCopy(r: ReconcileResultDto): string {
-    return `Create ${r.created}, archive ${r.archived}, unarchive ${r.unarchived} channels in Discord?`;
+    const hubs = r.linkedHubs > 0 ? ` and link ${r.linkedHubs} hubs` : '';
+    return `Create ${r.created}, archive ${r.archived}, unarchive ${r.unarchived} channels${hubs} in Discord?`;
 }
 
 /** Channels a run would create, archive or unarchive. */
@@ -103,9 +104,9 @@ export function plannedChanges(r: ReconcileResultDto): number {
     return r.created + r.archived + r.unarchived;
 }
 
-/** Ask to confirm only a dry run that can go ahead and would change something. */
+/** Ask to confirm only a dry run that can go ahead and would change something (hub links included). */
 export function needsConfirm(r: ReconcileResultDto): boolean {
-    return !r.stoppedReason && plannedChanges(r) > 0;
+    return !r.stoppedReason && (plannedChanges(r) > 0 || r.linkedHubs > 0);
 }
 
 /** One-line result summary: future tense for a dry run, past for a real one. */
