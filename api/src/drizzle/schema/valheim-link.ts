@@ -106,7 +106,7 @@ export const valheimLinkSnapshots = pgTable(
     ),
     check(
       'valheim_link_snapshots_kind_chk',
-      sql`${t.kind} IN ('character','map','items')`,
+      sql`${t.kind} IN ('character','map','items','containers')`,
     ),
     check(
       'valheim_link_snapshots_status_chk',

@@ -24,19 +24,19 @@ import { pelicanServers } from './pelican-servers';
 import { users } from './users';
 import { valheimLinkSnapshots } from './valheim-link';
 
-const tsz = (name: string) => timestamp(name, { withTimezone: true });
-const importedAt = () => tsz('imported_at').notNull().defaultNow();
-const serverFk = () =>
+export const tsz = (name: string) => timestamp(name, { withTimezone: true });
+export const importedAt = () => tsz('imported_at').notNull().defaultNow();
+export const serverFk = () =>
   integer('pelican_server_id')
     .notNull()
     .references(() => pelicanServers.id, { onDelete: 'cascade' });
-const snapshotCol = () => bigint('source_snapshot_id', { mode: 'number' });
+export const snapshotCol = () => bigint('source_snapshot_id', { mode: 'number' });
 /**
  * Explicitly named: drizzle's default `<table>_source_snapshot_id_
  * valheim_link_snapshots_id_fk` exceeds Postgres' 63-char identifier limit
  * (constraint-name-length.spec.ts, ROK-1387).
  */
-const snapshotFk = (table: string, col: AnyPgColumn) =>
+export const snapshotFk = (table: string, col: AnyPgColumn) =>
   foreignKey({
     columns: [col],
     foreignColumns: [valheimLinkSnapshots.id],
@@ -97,6 +97,11 @@ export const valheimProfiles = pgTable(
     index('valheim_profiles_claimed_by_idx').on(t.claimedBy),
     // Attach-on-Steam-link lookup (A2).
     index('valheim_profiles_steam_id_idx').on(t.steamId),
+    // ROK-1853: personal-chest ownership EXISTS (creator_player_id → profile).
+    index('valheim_profiles_server_player_idx').on(
+      t.pelicanServerId,
+      t.playerId,
+    ),
     index('valheim_profiles_source_snapshot_idx').on(t.sourceSnapshotId),
     snapshotFk('valheim_profiles', t.sourceSnapshotId),
     check(
