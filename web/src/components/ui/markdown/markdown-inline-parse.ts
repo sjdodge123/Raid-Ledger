@@ -114,13 +114,25 @@ function closeBracket(s: string, i: number): number {
     return -1;
 }
 
-/** `[label](href)` at i — only when the href is safe. */
+/** Index of the `)` closing a link destination opened at i (balanced, escapes skipped), or -1. */
+function closeParen(s: string, i: number): number {
+    let depth = 0;
+    for (let j = i; j < s.length; j++) {
+        const ch = s[j];
+        if (ch === '\\') j++;
+        else if (ch === '(') depth++;
+        else if (ch === ')' && depth-- === 0) return j;
+    }
+    return -1;
+}
+
+/** `[label](href)` at i — only when the href is safe; balanced `(…)` and escaped `\(` / `\)` stay in the href. */
 function matchLink(ctx: Ctx, i: number): Hit | null {
     const { s } = ctx;
     const close = closeBracket(s, i);
     if (close <= i + 1 || s[close + 1] !== '(') return null;
-    const paren = s.indexOf(')', close + 2);
-    const href = paren === -1 ? '' : s.slice(close + 2, paren);
+    const paren = closeParen(s, close + 2);
+    const href = paren === -1 ? '' : s.slice(close + 2, paren).replace(/\\([()])/g, '$1');
     if (href === '' || !isSafeMarkdownHref(href)) return null;
     return { nodes: [{ kind: 'link', href, children: parseNested(ctx, s.slice(i + 1, close), true) }], end: paren + 1 };
 }

@@ -120,3 +120,17 @@ describe('MarkdownInline — links (ROK-1077 cases on the shared tokenizer)', ()
         expect(host.textContent).toBe(text);
     });
 });
+
+describe('MarkdownInline — parentheses in link destinations (ROK-1868 Codex P2)', () => {
+    it('keeps balanced parentheses in the href', () => {
+        const host = mount('see [Foo](https://en.wikipedia.org/wiki/Foo_(bar)) now');
+        expect(host.querySelector('a')?.getAttribute('href')).toBe('https://en.wikipedia.org/wiki/Foo_(bar)');
+        expect(host.textContent, 'no stray ) after the link').toBe('see Foo now');
+    });
+
+    it('unescapes an escaped paren in the href', () => {
+        const host = mount('[x](https://example.com/a\\)b) end');
+        expect(host.querySelector('a')?.getAttribute('href')).toBe('https://example.com/a)b');
+        expect(host.textContent).toBe('x end');
+    });
+});
