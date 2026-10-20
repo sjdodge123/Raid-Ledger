@@ -17,6 +17,7 @@ import {
     valheimClaimKeys,
 } from '../lib/valheim-armory-claims-api';
 import { valheimMaterialsKeys } from './use-valheim-materials';
+import { valheimRecipesKeys } from './use-valheim-recipes';
 
 /** Refetch the sheet, every list page and the claim history for `id`. */
 export async function invalidateOwnership(
@@ -31,6 +32,8 @@ export async function invalidateOwnership(
         qc.invalidateQueries({ queryKey: valheimClaimKeys.events(id) }),
         // ROK-1853 D9: personal chests follow the character's owner.
         qc.invalidateQueries({ queryKey: valheimMaterialsKeys.all }),
+        // ROK-1854: the plan nets personal chests, which follow the owner too.
+        qc.invalidateQueries({ queryKey: valheimRecipesKeys.all }),
     ]);
 }
 

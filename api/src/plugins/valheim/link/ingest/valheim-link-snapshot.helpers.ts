@@ -14,7 +14,7 @@ import type {
  * items → gameVersion; containers → worldUid (ROK-1853).
  */
 export function valheimSnapshotKey(msg: ValheimLinkMessage): string {
-  if (msg.kind === 'items') return msg.gameVersion;
+  if (msg.kind === 'items' || msg.kind === 'recipes') return msg.gameVersion;
   if (msg.kind === 'containers') return msg.worldUid;
   const { steamId, playerId, worldUid } = msg.character;
   return msg.kind === 'map'
@@ -40,6 +40,7 @@ export function valheimBlobRefs(
   const refs: ValheimLinkBlobRefRow[] = [];
   if (msg.kind === 'map' && msg.baseMap)
     refs.push(toRef(msg.baseMap, 'baseMap'));
+  if (msg.kind === 'recipes' && msg.atlas) refs.push(toRef(msg.atlas, 'atlas'));
   if (msg.kind === 'items') {
     if (msg.atlas) refs.push(toRef(msg.atlas, 'atlas'));
     for (const item of msg.items) {
@@ -58,7 +59,9 @@ export function valheimSnapshotRow(
   msg: ValheimLinkMessage,
 ): NewValheimLinkSnapshot {
   const who =
-    msg.kind === 'items' || msg.kind === 'containers' ? null : msg.character;
+    msg.kind === 'items' || msg.kind === 'containers' || msg.kind === 'recipes'
+      ? null
+      : msg.character;
   return {
     pelicanServerId,
     kind: msg.kind,

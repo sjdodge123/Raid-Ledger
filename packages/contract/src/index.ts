@@ -222,10 +222,13 @@ export * from './valheim-link-character.schema.js';
 export * from './valheim-link-map.schema.js';
 export * from './valheim-link-items.schema.js';
 export * from './valheim-link-containers.schema.js';
+export * from './valheim-link-recipes-processing.schema.js';
+export * from './valheim-link-recipes.schema.js';
 export * from './valheim-link-message.schema.js';
 export * from './valheim-link-admin.schema.js';
 export * from './valheim-armory.schema.js';
 export * from './valheim-materials.schema.js';
+export * from './valheim-recipes.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';

@@ -4,6 +4,7 @@ import { registerServerHubGameTab } from '../pelican/hub/server-hub-game-tabs';
 import { LazyValheimCharactersHubTab } from './hub/valheim-characters-hub-tab-lazy';
 import { LazyValheimMapHubTab } from './hub/valheim-map-hub-tab-lazy';
 import { LazyValheimMaterialsHubTab } from './hub/valheim-materials-hub-tab-lazy';
+import { LazyValheimPlannerHubTab } from './hub/valheim-planner-hub-tab-lazy';
 
 /** Valheim plugin (ROK-1833) — the slug matches the api manifest id `valheim`. Neutral registry colour. */
 const valheim = registerPlugin('valheim', {
@@ -37,4 +38,12 @@ registerServerHubGameTab('valheim', {
     label: 'Materials',
     order: 25,
     component: LazyValheimMaterialsHubTab,
+});
+
+// The hub Planner tab (ROK-1854 D10) — recipe trees + a shopping list; only on server hubs running Valheim.
+registerServerHubGameTab('valheim', {
+    id: 'planner',
+    label: 'Planner',
+    order: 30,
+    component: LazyValheimPlannerHubTab,
 });

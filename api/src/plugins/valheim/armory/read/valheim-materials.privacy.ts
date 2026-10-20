@@ -40,13 +40,27 @@ export const sharedSql: SQL = sql`${c.privacy} <> 'private'`;
  */
 export function personalVisibleSql(viewer: MaterialsViewer): SQL {
   if (viewer.impersonated) return sql`false`;
-  const isPrivate = sql`${c.privacy} = 'private'`;
-  if (viewer.isAdmin) return isPrivate;
-  return sql`(${isPrivate} AND EXISTS (
+  if (viewer.isAdmin) return sql`${c.privacy} = 'private'`;
+  return claimedPrivateSql(viewer.id);
+}
+
+/**
+ * The viewer's OWN private chests only, whatever their role — the recipe
+ * planner's "Include my personal chests" (ROK-1854 review): an admin's plan
+ * never nets against other members' private stock. Impersonated → none.
+ */
+export function ownPersonalSql(viewer: MaterialsViewer): SQL {
+  if (viewer.impersonated) return sql`false`;
+  return claimedPrivateSql(viewer.id);
+}
+
+/** Private chests whose creator is a character `viewerId` validly claims. */
+function claimedPrivateSql(viewerId: number): SQL {
+  return sql`(${c.privacy} = 'private' AND EXISTS (
     SELECT 1 FROM valheim_profiles p JOIN users u ON u.id = p.claimed_by
     WHERE p.pelican_server_id = ${c.pelicanServerId}
       AND p.player_id = ${c.creatorPlayerId}
-      AND p.claimed_by = ${viewer.id}
+      AND p.claimed_by = ${viewerId}
       AND (p.claim_source IN ('auto', 'admin')
            OR (p.claim_source = 'manual' AND u.steam_id = p.steam_id))
       AND NOT EXISTS (

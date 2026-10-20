@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ValheimLinkMessage } from '@raid-ledger/contract';
 import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
+import { importRecipes } from './valheim-armory-recipes.import';
 import {
   toCatalogValues,
   toMapValues,
@@ -114,6 +115,7 @@ export class ValheimArmoryImportService {
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
     if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
     if (msg.kind === 'containers') return applyContainers(tx, snap, msg);
+    if (msg.kind === 'recipes') return this.applyRecipes(tx, snap, msg);
     return unsupportedKind(msg);
   }
 
@@ -150,6 +152,16 @@ export class ValheimArmoryImportService {
       return { status: 'waiting_blob', detail: 'blob:baseMap' };
     }
     return IMPORTED;
+  }
+
+  /** ROK-1854: one recipe set per (server, gameVersion); older capturedAt is stale. */
+  private async applyRecipes(
+    tx: ValheimLinkTx,
+    snap: ArmorySnapshot,
+    msg: Extract<ValheimLinkMessage, { kind: 'recipes' }>,
+  ): Promise<Applied> {
+    const ok = await importRecipes(tx, snap, msg);
+    return ok ? IMPORTED : STALE;
   }
 
   private async applyItems(

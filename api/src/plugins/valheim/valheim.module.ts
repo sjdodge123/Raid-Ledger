@@ -34,6 +34,9 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
 import { ValheimMaterialsController } from './armory/read/valheim-materials.controller';
 import { ValheimMaterialsRepository } from './armory/read/valheim-materials.repository';
 import { ValheimMaterialsService } from './armory/read/valheim-materials.service';
+import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
+import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
+import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -51,6 +54,7 @@ import { ValheimMaterialsService } from './armory/read/valheim-materials.service
     ValheimArmoryClaimsController,
     ValheimArmoryReadController,
     ValheimMaterialsController,
+    ValheimRecipesController,
     ValheimArmoryBlobController,
     ValheimArmoryMapBytesController,
   ],
@@ -80,6 +84,8 @@ import { ValheimMaterialsService } from './armory/read/valheim-materials.service
     ValheimArmoryReadService,
     ValheimMaterialsRepository,
     ValheimMaterialsService,
+    ValheimRecipesReadRepository,
+    ValheimRecipesService,
     ValheimArmoryMapBytesService,
     {
       provide: VALHEIM_PROFILE_UPSERTED_HOOK,
