@@ -274,6 +274,7 @@ describe('AC1 — leader post', () => {
         guildId: g.id,
         guildName: g.name,
         url: `/guilds/${g.id}?post=${postId}#posts`,
+        postId,
       },
     });
     expect(await rowsFor(muted)).toHaveLength(0);

@@ -80,7 +80,7 @@ export class HubNotificationService {
       const url = `/guilds/${input.guildId}?post=${input.postId}#posts`;
       const delivered = await this.sendLeaderPost(
         ids,
-        { guildId: input.guildId, guildName, url },
+        { guildId: input.guildId, guildName, url, postId: input.postId },
         headline,
       );
       if (ids.length > 0 && delivered === 0) await this.dedup.releaseKey(key);
@@ -93,7 +93,12 @@ export class HubNotificationService {
   /** Send the leader-post notice to each id; resolves to the count actually stored. */
   private async sendLeaderPost(
     ids: number[],
-    payload: { guildId: number; guildName: string; url: string },
+    payload: {
+      guildId: number;
+      guildName: string;
+      url: string;
+      postId: number;
+    },
     headline: string,
   ): Promise<number> {
     const results = await Promise.allSettled(

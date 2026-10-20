@@ -77,6 +77,7 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
         guildId: 7,
         guildName: 'Onyx',
         url: '/guilds/7?post=42#posts',
+        postId: 42,
       },
     });
   });
