@@ -120,9 +120,11 @@ function memberRow(page: Page, username: string): Locator {
     return page.getByTestId('guild-member-row').filter({ hasText: username });
 }
 
-async function usernameOf(token: string, userId: number): Promise<string> {
-    const user = (await apiGet(token, `/users/${userId}`)) as { username?: string; data?: { username?: string } } | null;
-    return must(user?.username ?? user?.data?.username, `username of user ${userId}`);
+/** The seed's usernames for `memberUserIds` (demo-test-community-hubs.controller `CREW`). */
+const CREW_USERNAMES = ['community-officer', 'community-member-1', 'community-member-2', 'community-member-3', 'community-member-4'];
+
+function crewUsername(index: number): string {
+    return must(CREW_USERNAMES[index], `crew username ${index}`);
 }
 
 test.describe('community hubs — member', () => {
@@ -198,9 +200,8 @@ test.describe('community hubs — member', () => {
 
     test('hub page: Join, the Members tab lists the joiner, Leave', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
-        const actor = actorId(seed, testInfo);
-        const jwt = await signInOnboardedMember(page, actor);
-        const username = await usernameOf(await getAdminToken(), actor);
+        const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
+        const username = crewUsername(1 + slotOf(testInfo));
         await page.goto(`/guilds/${seed.hubIds.solo}`);
         await expect(page.getByTestId('community-hub-kind')).toBeVisible({ timeout: 20_000 });
 
@@ -259,8 +260,7 @@ test.describe('community hubs — leader', () => {
     test('Manage menu: promote a member to officer, then remove them', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
-        const targetId = must(seed.memberUserIds[4], 'member-4 id');
-        const target = await usernameOf(admin, targetId);
+        const target = crewUsername(4);
         await signInOnboardedMember(page, seed.leaderUserId);
         await page.goto(`/guilds/${seed.hubIds.crew}#members`);
         const row = memberRow(page, target);
