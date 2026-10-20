@@ -59,12 +59,15 @@ export class HubNotificationService {
   }
 
   /**
-   * D3 + D7: notify the group's members that the leader posted. Recipients
+   * D3 + D7: notify the group's members that a leader posted (ROK-1868: once
+   * per NEW post, still under the hourly cooldown). Dedup rule (§2.5): this
+   * fan-out NEVER posts to a channel — the channel copy is the post relay
+   * (`HubPostRelayService`), its Discord leg is the per-user DM. Recipients
    * resolve first; the cooldown is claimed just before sending and given
    * back when nothing was delivered, so a failure never mutes the next post.
    */
   async notifyLeaderPost(input: LeaderPostInput): Promise<void> {
-    const headline = gmPostHeadline(input.gmPost);
+    const headline = gmPostHeadline(input.body);
     if (!headline) return;
     const guildName =
       (await findGuildName(this.db, input.guildId)) ?? 'your group';
@@ -74,9 +77,10 @@ export class HubNotificationService {
       return;
     }
     try {
+      const url = `/guilds/${input.guildId}?post=${input.postId}#posts`;
       const delivered = await this.sendLeaderPost(
         ids,
-        { guildId: input.guildId, guildName },
+        { guildId: input.guildId, guildName, url },
         headline,
       );
       if (ids.length > 0 && delivered === 0) await this.dedup.releaseKey(key);
@@ -89,16 +93,15 @@ export class HubNotificationService {
   /** Send the leader-post notice to each id; resolves to the count actually stored. */
   private async sendLeaderPost(
     ids: number[],
-    group: { guildId: number; guildName: string },
+    payload: { guildId: number; guildName: string; url: string },
     headline: string,
   ): Promise<number> {
-    const payload = { ...group, url: `/guilds/${group.guildId}` };
     const results = await Promise.allSettled(
       ids.map((userId) =>
         this.notificationService.create({
           userId,
           type: 'hub_leader_post',
-          title: `New post in ${group.guildName}`,
+          title: `New post in ${payload.guildName}`,
           message: headline,
           payload,
         }),

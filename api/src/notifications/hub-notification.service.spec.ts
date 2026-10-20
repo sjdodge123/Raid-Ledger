@@ -63,7 +63,8 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
     await svc.notifyLeaderPost({
       guildId: 7,
       actorId: 2,
-      gmPost: 'Hi all\nmore',
+      postId: 42,
+      body: '**Hi** [all](/events)\nmore',
     });
     expect(dedup.checkAndMarkSent).toHaveBeenCalledWith('hub-post:7', 3600);
     expect(notifications.create).toHaveBeenCalledTimes(2);
@@ -72,19 +73,33 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
       type: 'hub_leader_post',
       title: 'New post in Onyx',
       message: 'Hi all',
-      payload: { guildId: 7, guildName: 'Onyx', url: '/guilds/7' },
+      payload: {
+        guildId: 7,
+        guildName: 'Onyx',
+        url: '/guilds/7?post=42#posts',
+      },
     });
   });
 
   it('sends nothing inside the cooldown', async () => {
     const { svc, notifications } = setup({ claimed: true });
-    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Edit' });
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Edit',
+    });
     expect(notifications.create).not.toHaveBeenCalled();
   });
 
   it('sends nothing for a blank post', async () => {
     const { svc, notifications, dedup } = setup();
-    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: '  \n ' });
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: '  \n ',
+    });
     expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
     expect(notifications.create).not.toHaveBeenCalled();
   });
@@ -92,15 +107,24 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
   it('sends nothing when the kind has no live adapter', async () => {
     const { svc, registry, notifications } = setup();
     registry.forGuild.mockResolvedValue(undefined);
-    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Hi',
+    });
     expect(notifications.create).not.toHaveBeenCalled();
   });
+});
+
+describe('HubNotificationService.notifyLeaderPost cooldown give-back (D7)', () => {
+  beforeEach(() => jest.clearAllMocks());
 
   it('claims no cooldown when resolving recipients throws', async () => {
     const { svc, registry, dedup } = setup();
     registry.forGuild.mockRejectedValue(new Error('db down'));
     await expect(
-      svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' }),
+      svc.notifyLeaderPost({ guildId: 7, actorId: 2, postId: 42, body: 'Hi' }),
     ).rejects.toThrow('db down');
     expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
   });
@@ -108,7 +132,12 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
   it('gives the cooldown back when every send fails', async () => {
     const { svc, notifications, dedup } = setup();
     notifications.create.mockRejectedValue(new Error('boom'));
-    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Hi',
+    });
     expect(dedup.checkAndMarkSent).toHaveBeenCalledWith('hub-post:7', 3600);
     expect(dedup.releaseKey).toHaveBeenCalledWith('hub-post:7');
   });
@@ -122,7 +151,12 @@ describe('HubNotificationService.notifyLeaderPost opted-out recipients (Codex r2
     notifications.create
       .mockResolvedValueOnce(null)
       .mockRejectedValueOnce(new Error('boom'));
-    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Hi',
+    });
     expect(notifications.create).toHaveBeenCalledTimes(2);
     expect(dedup.releaseKey).toHaveBeenCalledWith('hub-post:7');
   });
@@ -132,7 +166,12 @@ describe('HubNotificationService.notifyLeaderPost opted-out recipients (Codex r2
     notifications.create
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: 50 });
-    await svc.notifyLeaderPost({ guildId: 7, actorId: 2, gmPost: 'Hi' });
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Hi',
+    });
     expect(dedup.releaseKey).not.toHaveBeenCalled();
   });
 });

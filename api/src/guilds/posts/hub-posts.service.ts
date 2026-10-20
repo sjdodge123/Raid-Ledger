@@ -20,7 +20,10 @@ import {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { HUB_NOTIFICATION_EVENTS } from '../../notifications/hub-notification.constants';
+import {
+  HUB_NOTIFICATION_EVENTS,
+  type LeaderPostInput,
+} from '../../notifications/hub-notification.constants';
 import { GuildAccessService, type GuildActor } from '../guild-access.service';
 import { findGuild } from '../guild-core.queries';
 import { findProfileRow, upsertProfile } from '../guild-profile.queries';
@@ -43,12 +46,7 @@ import {
 } from './hub-posts.service.helpers';
 
 /** `LEADER_POST` payload since ROK-1868 — emitted by `create` only. */
-export interface HubPostCreatedEvent {
-  guildId: number;
-  actorId: number;
-  postId: number;
-  body: string;
-}
+export type HubPostCreatedEvent = LeaderPostInput;
 
 type Db = PostgresJsDatabase<typeof schema>;
 

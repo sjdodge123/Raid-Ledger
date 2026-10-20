@@ -1,6 +1,6 @@
 /**
- * ROK-1832 — app events that trigger group notifications. Emitted by the guild
- * profile and event update paths so neither imports the notification module.
+ * ROK-1832 — app events that trigger group notifications. Emitted by the hub
+ * posts create path (ROK-1868) and the event update paths so neither imports the notification module.
  */
 export const HUB_NOTIFICATION_EVENTS = {
   /** Payload: {@link LeaderPostInput}. */
@@ -12,8 +12,13 @@ export const HUB_NOTIFICATION_EVENTS = {
 /** D7: one leader-post notice per group per hour. */
 export const HUB_POST_COOLDOWN_SECONDS = 3600;
 
+/**
+ * ROK-1868 §2.5: emitted by `HubPostsService.create` only — once per NEW
+ * post (edits and deletes never fire). `body` is the stored markdown.
+ */
 export interface LeaderPostInput {
   guildId: number;
   actorId: number;
-  gmPost: string;
+  postId: number;
+  body: string;
 }
