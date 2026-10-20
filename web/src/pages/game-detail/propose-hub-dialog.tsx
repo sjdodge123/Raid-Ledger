@@ -64,5 +64,5 @@ export function ProposeHubDialog({ isOpen, onClose, gameId, gameName }: ProposeH
     if (isDesktop) {
         return <Modal isOpen={isOpen} onClose={cancel} title={TITLE} footer={<Footer form={form} onCancel={cancel} full={false} />}>{body}</Modal>;
     }
-    return <BottomSheet isOpen={isOpen} onClose={cancel} title={TITLE} footer={<Footer form={form} onCancel={cancel} full />}>{body}</BottomSheet>;
+    return <BottomSheet isOpen={isOpen} onClose={cancel} title={TITLE} initiallyExpanded footer={<Footer form={form} onCancel={cancel} full />}>{body}</BottomSheet>;
 }

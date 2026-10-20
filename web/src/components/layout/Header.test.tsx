@@ -3,6 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Header } from './Header';
 
+vi.mock('./hub-nav/use-hub-nav-active', () => ({
+    useHubNavActive: (pathname: string) => ({ guild: false, hubs: pathname === '/hubs' }),
+}));
+
 // Mock all hooks that Header depends on
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({ user: null, isAuthenticated: false }),

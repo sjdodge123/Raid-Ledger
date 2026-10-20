@@ -17,6 +17,7 @@ import { Checkbox } from '../ui/checkbox';
 import { SearchInput } from '../ui/search-input';
 import { Card, SectionTitle } from './hub-bits';
 import { HubMemberCards, HubMemberTable } from './hub-member-table';
+import { memberCountLabel } from '../layout/hub-nav/my-hubs-queries';
 import { bandMembers, filterMembers, groupingColumn, membersCountFor } from './hub-members.helpers';
 
 interface ToolsProps {
@@ -98,7 +99,7 @@ export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModul
     const List = isDesktop ? HubMemberTable : HubMemberCards;
     return (
         <section id="members" className="scroll-mt-4" data-testid="guild-members">
-            <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? `${page.guild.memberCount} members`} />
+            <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? memberCountLabel(page.guild.memberCount)} />
             <Card className="flex flex-col gap-3">
                 {Summary && <Summary {...ctx} />}
                 <MemberTools query={query} onQuery={setQuery} grouped={grouped} onGrouped={setGrouped}

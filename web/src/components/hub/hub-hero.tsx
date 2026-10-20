@@ -11,6 +11,7 @@ import type { GuildEventCardDto } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { NAV_CHIP_CLASS } from '../ui/nav-chip';
 import { signedShort, whenLabel } from './events/guild-raids.helpers';
+import { memberCountLabel } from '../layout/hub-nav/my-hubs-queries';
 
 /** Up to two initials for the crest placeholder ("Iron Vanguard" → "IV"). */
 function crestInitials(name: string): string {
@@ -31,7 +32,7 @@ function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | unde
     return (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             {(mod?.heroPills ?? []).map((Pill, i) => <Pill key={`hero-pill-${i}`} {...ctx} />)}
-            <span data-testid="guild-member-count">{ctx.page.guild.memberCount} members</span>
+            <span data-testid="guild-member-count">{memberCountLabel(ctx.page.guild.memberCount)}</span>
         </div>
     );
 }

@@ -11,6 +11,7 @@ import { PluginSlot } from '../../plugins';
 import { navClass } from './nav-class';
 import { NavGuildLink } from './hub-nav/nav-guild-link';
 import { HUBS_PATH } from './hub-nav/my-hubs-queries';
+import { useHubNavActive } from './hub-nav/use-hub-nav-active';
 
 interface HeaderProps {
     /** Called when the mobile hamburger button is tapped. */
@@ -35,10 +36,13 @@ const NAV_LINKS = [
 ];
 
 function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
+    // A community hub page lights "Hubs", not "Guild" (ROK-1870).
+    const hubsActive = useHubNavActive(pathname).hubs;
+    const linkPath = (to: string): string => (to === HUBS_PATH && hubsActive ? HUBS_PATH : pathname);
     return (
         <>
             <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
-                {NAV_LINKS.filter((l) => user || !l.membersOnly).map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}
+                {NAV_LINKS.filter((l) => user || !l.membersOnly).map(({ to, label }) => <Link key={to} to={to} className={navClass(linkPath(to), to)}>{label}</Link>)}
                 {/* Plugin links show from lg: at md (768) the core links already fill the row (ROK-1785). */}
                 {user && <span className="hidden lg:contents"><NavGuildLink pathname={pathname} /><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
                 {user && (

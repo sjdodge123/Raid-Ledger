@@ -95,4 +95,13 @@ describe('HubsDirectoryPage', () => {
         renderPage();
         expect(await screen.findByText('1 member · Led by Mirelle')).toBeInTheDocument();
     });
+
+    it('the Game box shows the game from ?game= when the panel opens', async () => {
+        server.use(http.get(`${API}/hubs`, () => HttpResponse.json(createMockHubDirectoryPage())));
+        mockDesktop(true);
+        renderPage('/hubs?game=5');
+        expect(await screen.findByText('Tavern Regulars')).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        expect(screen.getByRole('combobox', { name: 'Game' })).toHaveValue("Baldur's Gate 3");
+    });
 });

@@ -11,6 +11,7 @@ import { navClass } from '../nav-class';
 import { Button } from '../../ui/button';
 import { GuildRows } from './hub-entry-bits';
 import { guildHref, useMyGuilds } from './my-hubs-queries';
+import { useHubNavActive } from './use-hub-nav-active';
 
 function useDismiss(ref: React.RefObject<HTMLDivElement | null>, isOpen: boolean, close: () => void): void {
     useEffect(() => {
@@ -48,12 +49,13 @@ function GuildMenu({ guilds, active }: { guilds: MyGuild[]; active: boolean }): 
 
 export function NavGuildLink({ pathname }: { pathname?: string }): JSX.Element | null {
     const guilds = useMyGuilds();
+    const current = pathname ?? '';
+    const active = useHubNavActive(current);
     const [first] = guilds;
     if (!first) return null;
-    const current = pathname ?? '';
     if (guilds.length === 1) {
         const to = guildHref(first.id);
-        return <Link to={to} className={navClass(current, to)} data-testid="nav-guild-link">Guild</Link>;
+        return <Link to={to} className={navClass(active.guild ? current : '', to)} data-testid="nav-guild-link">Guild</Link>;
     }
-    return <GuildMenu guilds={guilds} active={current.startsWith('/guilds/')} />;
+    return <GuildMenu guilds={guilds} active={active.guild} />;
 }

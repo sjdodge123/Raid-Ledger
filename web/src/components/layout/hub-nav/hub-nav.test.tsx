@@ -78,15 +78,15 @@ describe('DrawerYourGuild (nav:drawer-top)', () => {
         serve(ONE);
         const onClose = vi.fn();
         renderWithProviders(<DrawerYourGuild onClose={onClose} />);
-        expect(await screen.findByTestId('drawer-your-guild')).toHaveTextContent('Your guild');
+        expect(await screen.findByTestId('drawer-your-guild')).toHaveTextContent('Your hub');
         await userEvent.click(screen.getByTestId('guild-entry-row'));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('two guilds → "Your guilds" with both rows', async () => {
+    it('two hubs → "Your hubs" with both rows', async () => {
         serve(TWO);
         renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
-        expect(await screen.findByText('Your guilds')).toBeInTheDocument();
+        expect(await screen.findByText('Your hubs')).toBeInTheDocument();
         expect(screen.getAllByTestId('guild-entry-row')).toHaveLength(2);
     });
 

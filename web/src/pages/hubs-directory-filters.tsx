@@ -31,13 +31,14 @@ export interface HubsDirectoryFiltersProps {
 }
 
 function GameFilter({ params, onChange, gameName }: HubsDirectoryFiltersProps): JSX.Element {
-    const [text, setText] = useState('');
-    const search = useGameSearch(text);
+    // null = untouched: the box shows the URL's game (?game=N) instead of an empty field.
+    const [text, setText] = useState<string | null>(null);
+    const search = useGameSearch(text ?? '');
     const options: GameOption[] = (search.data?.data ?? []).map((g) => ({ id: g.id, name: g.name }));
     const value: GameOption | null = params.gameId ? { id: params.gameId, name: gameName ?? `Game ${params.gameId}` } : null;
     return (
         <Combobox<GameOption> label="Game" options={options} value={value} getKey={(g) => String(g.id)} getLabel={(g) => g.name}
-            inputValue={text} onInputChange={setText} loading={search.isFetching} emptyText="Type to search games"
+            inputValue={text ?? value?.name ?? ''} onInputChange={setText} loading={search.isFetching} emptyText="Type to search games"
             onChange={(g) => onChange({ ...params, gameId: g?.id })} />
     );
 }

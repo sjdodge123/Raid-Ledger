@@ -11,6 +11,10 @@ import { at } from '../../test/defined';
 import { registerPlugin } from '../../plugins/plugin-registry';
 import { usePluginStore } from '../../stores/plugin-store';
 
+vi.mock('./hub-nav/use-hub-nav-active', () => ({
+    useHubNavActive: (pathname: string) => ({ guild: false, hubs: pathname === '/hubs' }),
+}));
+
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({
         user: { id: 1, username: 'TestUser', role: 'member' },
