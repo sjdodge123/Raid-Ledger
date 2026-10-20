@@ -21,7 +21,7 @@ import { Select } from '../../../components/ui/select';
 import type { RealmRulesetRow } from './forever-realm-rulesets.helpers';
 
 /** Shared with the editor's desktop column header so the two line up. */
-export const REALM_ROW_GRID = 'grid grid-cols-[6rem_minmax(0,1fr)_auto] items-start gap-2 lg:grid-cols-[7rem_10rem_minmax(0,1fr)_auto]';
+export const REALM_ROW_GRID = 'grid grid-cols-[6rem_minmax(0,1fr)_auto] items-start gap-2 lg:grid-cols-[7rem_10rem_auto_minmax(0,1fr)]';
 
 /** The name takes the whole phone row under region | ruleset | remove; one column from `lg`. */
 const FULL_ROW_ON_PHONE = 'col-span-3 lg:col-span-1';
