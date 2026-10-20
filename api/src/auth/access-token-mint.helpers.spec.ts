@@ -1,176 +1,113 @@
 /**
- * ROK-1810 Codex P2: an access token minted in the same second as a
- * `blockUser` (a sibling tab's `/auth/refresh`, a fresh login) must not be
- * born revoked. Drives the real TokenBlocklistService over an in-memory Redis.
+ * ROK-1823 U2 (D10): `signAccessToken` takes ONE clock read — `iat` and `exp`
+ * are plain clock values, no block floor is read — and signs the `tv`/`itv`
+ * token-version claims verbatim. Real JwtService, fake timers.
  */
 import { JwtService } from '@nestjs/jwt';
-import type Redis from 'ioredis';
-import { TokenBlocklistService } from './token-blocklist.service';
-import { mockRedisEval } from '../common/testing/redis-mock';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   BornExpiredTokenError,
-  issuedAtFor,
   signAccessToken,
 } from './access-token-mint.helpers';
 
 const NOW = new Date('2026-10-16T12:00:00.250Z');
-const CLAIMS = { username: 'admin', sub: 7, role: 'admin' as const };
+const SECOND = Math.floor(NOW.getTime() / 1000);
+const CLAIMS = { username: 'admin', sub: 7, role: 'admin' as const, tv: 3 };
+
+interface Decoded {
+  iat: number;
+  exp: number;
+  sub: number;
+  tv?: number;
+  itv?: number;
+  impersonatedBy?: number;
+}
 
 function build() {
-  const store = new Map<string, string>();
-  const redis = {
-    set: jest.fn((key: string, value: string) => {
-      store.set(key, value);
-      return Promise.resolve('OK');
-    }),
-    get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
-    eval: jest.fn(mockRedisEval(store, new Map<string, number>())),
-  };
-  const blocklist = new TokenBlocklistService(redis as unknown as Redis);
   const jwt = new JwtService({ secret: 'test-secret' });
-  return { blocklist, jwt, redis };
+  const sign = jest.spyOn(jwt, 'sign');
+  return { deps: { jwt }, jwt, sign };
 }
 
-function iatOf(jwt: JwtService, token: string): number {
-  return jwt.decode<{ iat: number }>(token).iat;
+function decode(jwt: JwtService, token: string): Decoded {
+  return jwt.decode<Decoded>(token);
 }
 
-describe('ROK-1810 signAccessToken — same-second mint after a block', () => {
+describe('ROK-1823 U2 signAccessToken — clock-only iat/exp', () => {
   beforeEach(() => jest.useFakeTimers({ now: NOW }));
   afterEach(() => jest.useRealTimers());
 
-  it('a token minted in the block second is NOT rejected by isBlocked', async () => {
+  it('iat is floor(now) and exp is iat + the default ttl', () => {
     const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    const token = await signAccessToken(t, CLAIMS);
-    const iat = iatOf(t.jwt, token);
-    expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(false);
+    const payload = decode(t.jwt, signAccessToken(t.deps, CLAIMS));
+    expect(payload.iat).toBe(SECOND);
+    expect(payload.exp).toBe(SECOND + ACCESS_TOKEN_TTL_SECONDS);
   });
 
-  it('control: a plain sign in the block second IS rejected', async () => {
+  it('an explicit ttl is counted from the same clock read', () => {
     const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    const iat = iatOf(t.jwt, t.jwt.sign(CLAIMS));
-    expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(true);
+    const token = signAccessToken(t.deps, CLAIMS, { ttlSeconds: 120 });
+    expect(decode(t.jwt, token).exp).toBe(SECOND + 120);
   });
 
-  it('an impersonation token clears the impersonating admin block too', async () => {
+  it('notAfter caps exp at its whole second', () => {
     const t = build();
-    await t.blocklist.blockUser(99);
-    const token = await signAccessToken(t, { ...CLAIMS, impersonatedBy: 99 });
-    expect(await t.blocklist.isBlocked(99, iatOf(t.jwt, token))).toBe(false);
+    const notAfter = new Date(NOW.getTime() + 10 * 60 * 1000 + 900);
+    const token = signAccessToken(t.deps, CLAIMS, { notAfter });
+    expect(decode(t.jwt, token).exp).toBe(Math.floor(notAfter.getTime() / 1000));
   });
 
-  it('with no block, or a Redis read failure, the iat is the current second', async () => {
+  it('a notAfter later than iat + ttl leaves exp at iat + ttl', () => {
     const t = build();
-    const second = Math.floor(NOW.getTime() / 1000);
-    expect(iatOf(t.jwt, await signAccessToken(t, CLAIMS))).toBe(second);
-    t.redis.get.mockRejectedValueOnce(new Error('down'));
-    expect(iatOf(t.jwt, await signAccessToken(t, CLAIMS))).toBe(second);
-  });
-});
-
-describe('ROK-1810 issuedAtFor', () => {
-  it('keeps the current second when the block floor is in the past', () => {
-    const nowMs = NOW.getTime();
-    const second = Math.floor(nowMs / 1000);
-    expect(issuedAtFor(second - 60, nowMs)).toBe(second);
-    expect(issuedAtFor(second + 1, nowMs)).toBe(second + 1);
-    expect(issuedAtFor(undefined, nowMs)).toBe(second);
-  });
-});
-
-describe('ROK-1810 Codex r2 — a second block in the same second', () => {
-  beforeEach(() => jest.useFakeTimers({ now: NOW }));
-  afterEach(() => jest.useRealTimers());
-
-  it('revokes the token minted after the first block; a later mint survives', async () => {
-    const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    const between = iatOf(t.jwt, await signAccessToken(t, CLAIMS));
-    await t.blocklist.blockUser(CLAIMS.sub);
-    expect(await t.blocklist.isBlocked(CLAIMS.sub, between)).toBe(true);
-    const after = iatOf(t.jwt, await signAccessToken(t, CLAIMS));
-    expect(await t.blocklist.isBlocked(CLAIMS.sub, after)).toBe(false);
-  });
-});
-
-describe('ROK-1810 Codex r3 — impersonation vs a same-second block of either id', () => {
-  beforeEach(() => jest.useFakeTimers({ now: NOW }));
-  afterEach(() => jest.useRealTimers());
-
-  const IMP = { ...CLAIMS, impersonatedBy: 99 };
-
-  it('target blocked, raised impersonation token, admin blocked same second → revoked', async () => {
-    const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    const iat = iatOf(t.jwt, await signAccessToken(t, IMP));
-    expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(false);
-    await t.blocklist.blockUser(99);
-    expect({ adminBlockCovers: await t.blocklist.isBlocked(99, iat) }).toEqual({
-      adminBlockCovers: true,
-    });
+    const notAfter = new Date(NOW.getTime() + 3 * 60 * 60 * 1000);
+    const token = signAccessToken(t.deps, CLAIMS, { notAfter });
+    expect(decode(t.jwt, token).exp).toBe(SECOND + ACCESS_TOKEN_TTL_SECONDS);
   });
 
-  it('a token minted after both blocks survives both checks', async () => {
+  it('notAfter inside the current second → BornExpiredTokenError, nothing signed', () => {
     const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    await t.blocklist.blockUser(99);
-    const iat = iatOf(t.jwt, await signAccessToken(t, IMP));
-    expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(false);
-    expect(await t.blocklist.isBlocked(99, iat)).toBe(false);
-  });
-});
-
-describe('ROK-1820 exp is anchored to the clock, not the floored iat', () => {
-  beforeEach(() => jest.useFakeTimers({ now: NOW }));
-  afterEach(() => jest.useRealTimers());
-
-  const SECOND = Math.floor(NOW.getTime() / 1000);
-  const claimsOf = (jwt: JwtService, token: string) =>
-    jwt.decode<{ iat: number; exp: number }>(token);
-
-  it('a floored iat does not lengthen the token: exp = clock + ttl', async () => {
-    const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    const { iat, exp } = claimsOf(t.jwt, await signAccessToken(t, CLAIMS));
-    expect({ iat, exp }).toEqual({
-      iat: SECOND + 1,
-      exp: SECOND + ACCESS_TOKEN_TTL_SECONDS,
-    });
-  });
-
-  it('an explicit ttl is also counted from the clock', async () => {
-    const t = build();
-    await t.blocklist.blockUser(CLAIMS.sub);
-    const token = await signAccessToken(t, CLAIMS, { ttlSeconds: 60 });
-    expect(claimsOf(t.jwt, token).exp).toBe(SECOND + 60);
-  });
-
-  it('impersonation exp never passes the marker deadline when iat is floored', async () => {
-    const t = build();
-    await t.blocklist.blockUser(99);
-    const notAfter = new Date((SECOND + 10) * 1000 + 900);
-    const token = await signAccessToken(
-      t,
-      { ...CLAIMS, impersonatedBy: 99 },
-      { ttlSeconds: 3600, notAfter },
+    const notAfter = new Date(NOW.getTime() + 500);
+    expect(() => signAccessToken(t.deps, CLAIMS, { notAfter })).toThrow(
+      BornExpiredTokenError,
     );
-    expect(claimsOf(t.jwt, token)).toMatchObject({
-      iat: SECOND + 1,
-      exp: SECOND + 10,
-    });
+    expect(t.sign).not.toHaveBeenCalled();
   });
 
-  it('refuses to mint a token the floor would make born expired', async () => {
+  it('a notAfter already past also refuses to mint', () => {
     const t = build();
-    await t.blocklist.blockUser(99);
-    const notAfter = new Date((SECOND + 1) * 1000);
-    const sign = jest.spyOn(t.jwt, 'sign');
-    await expect(
-      signAccessToken(t, { ...CLAIMS, impersonatedBy: 99 }, { notAfter }),
-    ).rejects.toBeInstanceOf(BornExpiredTokenError);
-    expect(sign).not.toHaveBeenCalled();
+    const notAfter = new Date(NOW.getTime() - 5_000);
+    expect(() => signAccessToken(t.deps, CLAIMS, { notAfter })).toThrow(
+      BornExpiredTokenError,
+    );
+    expect(t.sign).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-1823 U2 signAccessToken — version claims', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  it('signs tv verbatim and adds no itv to a plain session token', () => {
+    const t = build();
+    const payload = decode(t.jwt, signAccessToken(t.deps, CLAIMS));
+    expect(payload.tv).toBe(3);
+    expect(payload).not.toHaveProperty('itv');
+  });
+
+  it('signs tv (target) and itv (impersonator) verbatim on an impersonation token', () => {
+    const t = build();
+    const claims = { ...CLAIMS, sub: 8, impersonatedBy: 7, tv: 0, itv: 12 };
+    const payload = decode(t.jwt, signAccessToken(t.deps, claims));
+    expect(payload).toMatchObject({ sub: 8, impersonatedBy: 7, tv: 0, itv: 12 });
+  });
+
+  it('mint deps are the jwt signer only — no blocklist floor is consulted', () => {
+    const t = build();
+    signAccessToken(t.deps, CLAIMS);
+    expect(Object.keys(t.deps)).toEqual(['jwt']);
+    expect(t.sign).toHaveBeenCalledWith(
+      { ...CLAIMS, iat: SECOND },
+      { expiresIn: ACCESS_TOKEN_TTL_SECONDS },
+    );
   });
 });
