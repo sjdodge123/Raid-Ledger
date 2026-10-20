@@ -18,6 +18,13 @@ export function GuildCrest({ small = false }: { small?: boolean }): JSX.Element 
     );
 }
 
+/** ROK-1831 D6: the hub game's icon when the API sends one, else the generic crest. */
+export function GuildRowIcon({ guild }: { guild: MyGuild }): JSX.Element {
+    if (!guild.gameIconUrl) return <GuildCrest small />;
+    return <img src={guild.gameIconUrl} alt="" aria-hidden="true" data-testid="guild-entry-game-icon"
+        className="h-6 w-6 shrink-0 rounded-lg border border-edge-strong object-cover" />;
+}
+
 function rowMeta(guild: MyGuild): string {
     return [guild.rankName, guildRealm(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
 }
@@ -26,7 +33,7 @@ function GuildLinkRow({ guild, onNavigate }: { guild: MyGuild; onNavigate?: (() 
     return (
         <Link to={guildHref(guild.id)} onClick={onNavigate} data-testid="guild-entry-row"
             className="flex min-h-[44px] items-center gap-3 px-4 py-2 text-sm transition-colors hover:bg-overlay">
-            <GuildCrest small />
+            <GuildRowIcon guild={guild} />
             <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium text-foreground">{guild.name}</span>
                 <span className="block truncate text-xs text-muted">{rowMeta(guild)}</span>

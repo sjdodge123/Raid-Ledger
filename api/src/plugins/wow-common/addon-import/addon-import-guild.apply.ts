@@ -9,7 +9,13 @@ import { guildMembers, guilds } from '../../../drizzle/schema';
 import { titleCaseClass } from './addon-import.binding-name';
 import { AddonImportError } from './addon-import.errors';
 import {
-  fromUnix,
+  assertMayReplaceRoster,
+  auditRosterReplaced,
+  lockGuildImport,
+  receivedSnapshotAt,
+  type RosterDelta,
+} from './addon-import-guild.guard';
+import {
   guildNameKey,
   type AddonApplyContext,
   type AddonSectionOutcome,
@@ -25,7 +31,12 @@ import {
 export type AddonGuildSummary = z.infer<typeof AddonGuildImportSummarySchema>;
 type GuildOutcome = AddonSectionOutcome<AddonGuildSummary>;
 
-/** The exporter must appear in the roster they export. */
+/**
+ * Shape check only: the exporter must appear in the roster they export. It
+ * authorises nothing — being listed (by your own upload) earns no right to
+ * update an existing guild; `assertMayReplaceRoster` gates that (staff or an
+ * explicit member grant, ROK-1794). A brand-new guild needs only this.
+ */
 export function assertExporterInGuild(payload: AddonGuildExport): void {
   const guid = payload.who.guid;
   if (!payload.data.members.some((m) => m.guid === guid)) {
@@ -33,13 +44,16 @@ export function assertExporterInGuild(payload: AddonGuildExport): void {
   }
 }
 
-/** A snapshot older than the stored one is stale (equal is not). */
+/**
+ * A snapshot older than the stored one is stale (equal is not). Compared at
+ * its received instant — `min(snapshotAt, now)` (ROK-1794 AC3).
+ */
 export function isStaleGuildSnapshot(
   lastSnapshotAt: Date | null | undefined,
   snapshotAt: number,
 ): boolean {
   if (!lastSnapshotAt) return false;
-  return fromUnix(snapshotAt).getTime() < lastSnapshotAt.getTime();
+  return receivedSnapshotAt(snapshotAt).getTime() < lastSnapshotAt.getTime();
 }
 
 export function buildGuildSummary(
@@ -111,7 +125,29 @@ async function countKnownMembers(
   return rows.length;
 }
 
-/** Dry run: NOT_IN_GUILD / stale checks + new-vs-updated counts; no writes. */
+type StoredGuild = Awaited<ReturnType<typeof loadGuild>>;
+
+/**
+ * ROK-1794 AC2/AC4: an existing guild's roster is only replaced by staff or
+ * a member-grant holder, never wholesale. Returns whether the snapshot is stale and
+ * the members it removes and adds (audited for the rolling window). The
+ * guild-creating import counts 0/0: it is the window's baseline.
+ */
+async function guardExisting(
+  ctx: AddonApplyContext,
+  guild: StoredGuild,
+  payload: AddonGuildExport,
+): Promise<{ stale: boolean; delta: RosterDelta }> {
+  if (!guild) return { stale: false, delta: { removed: 0, added: 0 } };
+  const stale = isStaleGuildSnapshot(
+    guild.lastSnapshotAt,
+    payload.data.snapshotAt,
+  );
+  const delta = await assertMayReplaceRoster(ctx, guild.id, payload, !stale);
+  return { stale, delta };
+}
+
+/** Dry run: NOT_IN_GUILD / guard / stale checks + new-vs-updated counts. */
 export async function previewGuild(
   ctx: AddonApplyContext,
   payload: AddonGuildExport,
@@ -119,13 +155,11 @@ export async function previewGuild(
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
   const guild = await loadGuild(ctx, payload.data.name);
+  const { stale } = await guardExisting(ctx, guild, payload);
   const guids = payload.data.members.map((m) => m.guid);
   const known = guild ? await countKnownMembers(ctx, guild.id, guids) : 0;
   const summary = buildGuildSummary(payload, pages, guids.length - known);
-  if (isStaleGuildSnapshot(guild?.lastSnapshotAt, payload.data.snapshotAt)) {
-    return { status: 'stale', summary };
-  }
-  return { status: 'preview', summary };
+  return { status: stale ? 'stale' : 'preview', summary };
 }
 
 /** One row per GUID (the decoder rejects cross-page repeats; last wins here). */
@@ -138,11 +172,14 @@ export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
  * the stored one (`setWhere`, atomic). No row back = stale, nothing written.
  */
 /** Guild columns an addon snapshot owns (insert + conflict update). */
-export function guildSet(payload: AddonGuildExport) {
+export function guildSet(
+  payload: AddonGuildExport,
+  seenAt: Date = receivedSnapshotAt(payload.data.snapshotAt),
+) {
   return {
     name: payload.data.name,
     memberCount: payload.data.members.length,
-    lastSnapshotAt: fromUnix(payload.data.snapshotAt),
+    lastSnapshotAt: seenAt,
     rawRealm: payload.data.rawRealm ?? null,
     faction: payload.who.faction,
     updatedAt: new Date(),
@@ -152,8 +189,9 @@ export function guildSet(payload: AddonGuildExport) {
 async function upsertGuild(
   ctx: AddonApplyContext,
   payload: AddonGuildExport,
+  seenAt: Date,
 ): Promise<number | undefined> {
-  const set = guildSet(payload);
+  const set = guildSet(payload, seenAt);
   const [row] = await ctx.tx
     .insert(guilds)
     .values({
@@ -165,7 +203,7 @@ async function upsertGuild(
     })
     .onConflictDoUpdate({
       target: [guilds.gameId, guilds.region, guilds.nameKey],
-      targetWhere: sql`${guilds.realmSlug} IS NULL`,
+      targetWhere: sql`${guilds.realmSlug} IS NULL AND ${guilds.kind} = 'wow_guild'`,
       set,
       // Compare against `excluded`, never a bound JS Date: drizzle's
       // postgres.js driver does not serialize a Date inside raw `sql`
@@ -202,8 +240,8 @@ async function upsertMembers(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
+  seenAt: Date,
 ): Promise<number> {
-  const seenAt = fromUnix(payload.data.snapshotAt);
   const rows = dedupeMembers(payload.data.members).map((m) =>
     memberValues(m, guildId, ctx, seenAt),
   );
@@ -219,19 +257,29 @@ async function upsertMembers(
   return result.filter((r) => r.inserted).length;
 }
 
-/** Apply: NOT_IN_GUILD → reject; stale → nothing written; else upsert all. */
+/**
+ * Apply: NOT_IN_GUILD / guard → reject; stale → nothing written; else upsert
+ * all, stamped with ONE received instant (guild + members must match for
+ * `inLatestSnapshot`), and audit who replaced the roster.
+ */
 export async function applyGuild(
   ctx: AddonApplyContext,
   payload: AddonGuildExport,
   pages: number,
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
-  const guildId = await upsertGuild(ctx, payload);
+  await lockGuildImport(ctx, guildNameKey(payload.data.name));
+  const guild = await loadGuild(ctx, payload.data.name);
+  const { delta } = await guardExisting(ctx, guild, payload);
+  const seenAt = receivedSnapshotAt(payload.data.snapshotAt);
+  const guildId = await upsertGuild(ctx, payload, seenAt);
   if (guildId === undefined) {
     const stale = await previewGuild(ctx, payload, pages);
     return { status: 'stale', summary: stale.summary };
   }
-  const inserted = await upsertMembers(ctx, guildId, payload);
+  const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
+  const members = payload.data.members.length;
+  await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {
     status: 'applied',
     summary: buildGuildSummary(payload, pages, inserted),

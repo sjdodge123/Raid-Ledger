@@ -1,6 +1,7 @@
 /**
  * ROK-1786 (S2 of ROK-1781): guild page content API — GM post, rules, links
- * and recommended addons under `/plugins/wow/guilds/:id`. Every response is
+ * under core `/guilds/:id/profile` (ROK-1831) and recommended addons under
+ * the WoW plugin's `/plugins/wow/guilds/:id/addons`. Every response is
  * parsed by its contract schema.
  */
 import type {
@@ -10,13 +11,14 @@ import { GuildAddonListSchema, GuildAddonSchema, GuildProfileSchema } from '@rai
 import { fetchApi } from '../../../lib/api-client';
 
 const base = (guildId: number): string => `/plugins/wow/guilds/${guildId}`;
+const coreBase = (guildId: number): string => `/guilds/${guildId}`;
 
 export function fetchGuildProfile(guildId: number): Promise<GuildProfile> {
-    return fetchApi(`${base(guildId)}/profile`, {}, GuildProfileSchema);
+    return fetchApi(`${coreBase(guildId)}/profile`, {}, GuildProfileSchema);
 }
 
 export function patchGuildProfile(guildId: number, input: UpdateGuildProfileInput): Promise<GuildProfile> {
-    return fetchApi(`${base(guildId)}/profile`, { method: 'PATCH', body: JSON.stringify(input) }, GuildProfileSchema);
+    return fetchApi(`${coreBase(guildId)}/profile`, { method: 'PATCH', body: JSON.stringify(input) }, GuildProfileSchema);
 }
 
 export function fetchGuildAddons(guildId: number): Promise<GuildAddonList> {

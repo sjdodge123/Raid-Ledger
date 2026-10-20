@@ -13,6 +13,8 @@ export type DesiredReason =
   | 'event_ended'
   | 'event_missing'
   | 'event_cancelled'
+  /** ROK-1857: the event is under a rescheduling poll — no copy until it clears. */
+  | 'rescheduling'
   | 'write_disabled'
   | 'not_signed_up'
   | 'active_signup';
@@ -20,8 +22,16 @@ export type DesiredReason =
 export interface DesiredStateInput {
   connection: { status: string; writeEnabled: boolean };
   killSwitchOn: boolean;
-  /** null when the event row is gone. */
-  event: { title: string; cancelled: boolean; endsAt: Date } | null;
+  /**
+   * null when the event row is gone. `rescheduling` = `events.rescheduling_poll_id`
+   * is set (ROK-1857); absent = false.
+   */
+  event: {
+    title: string;
+    cancelled: boolean;
+    rescheduling?: boolean;
+    endsAt: Date;
+  } | null;
   /** The user's signup status for the event; null when there is no signup. */
   signupStatus: string | null;
   /** The signup's roster assignment is the bench (F11). Absent = false. */
@@ -80,6 +90,9 @@ export function computeDesiredState(input: DesiredStateInput): DesiredState {
   const { event, signupStatus } = input;
   if (!event) return removal(input, 'event_missing');
   if (event.cancelled) return removal(input, 'event_cancelled');
+  // ROK-1857: a poll removes the copy; when the poll id clears (lock-in,
+  // abort, expiry) the next run creates a fresh one at the event's time.
+  if (event.rescheduling) return removal(input, 'rescheduling');
   if (!input.connection.writeEnabled) return removal(input, 'write_disabled');
   if (!signupStatus || !COPY_STATUSES.has(signupStatus)) {
     return removal(input, 'not_signed_up');

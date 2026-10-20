@@ -23,7 +23,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { eq, sql } from 'drizzle-orm';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -527,7 +527,7 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
 
 // ─────────────── ROK-1279: GET /admin/backups/:type/:filename/download ───────────────
 
-/** Build a non-admin user JWT by reaching into the running app's JwtService. */
+/** Build a non-admin user JWT carrying the member's live token version. */
 async function signMemberToken(testApp: TestApp): Promise<string> {
   const [member] = nonEmpty(
     await testApp.db
@@ -540,8 +540,10 @@ async function signMemberToken(testApp: TestApp): Promise<string> {
       .returning(),
     'member',
   );
-  const jwtService = testApp.app.get(JwtService);
-  return jwtService.sign({ sub: member.id, username: member.username });
+  return signTestAccessToken(testApp, {
+    sub: member.id,
+    username: member.username,
+  });
 }
 
 /** Write a tiny fixture dump file directly to disk for download tests. */

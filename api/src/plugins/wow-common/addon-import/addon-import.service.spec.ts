@@ -10,6 +10,7 @@ import type * as schema from '../../../drizzle/schema';
 import type { CharactersService } from '../../../characters/characters.service';
 import type { AddonImportAuditService } from './addon-import.audit';
 import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
+import type { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { bindToCharacter } from './addon-import.binding';
 import { applyBinding } from './addon-import-binding.apply';
 import { applyChar } from './addon-import-char.apply';
@@ -45,6 +46,8 @@ jest.mock('./addon-import-char.apply', () => ({
 
 const CHAR_ID = '00000000-0000-4000-8000-000000000001';
 const SUMMARY = { gearCount: 1, avgIlvl: 80, talentNodes: 1, lockouts: 0 };
+/** The run's tx: apply takes THE import locks on it (ROK-1794 lock order). */
+const TX = { execute: jest.fn(() => Promise.resolve(undefined)) };
 
 function makeDb() {
   const row = {
@@ -66,7 +69,7 @@ function makeDb() {
     innerJoin: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     limit: jest.fn().mockResolvedValue([row]),
-    transaction: jest.fn((fn: (tx: unknown) => unknown) => fn('TX')),
+    transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(TX)),
   };
   return chain as unknown as PostgresJsDatabase<typeof schema>;
 }
@@ -79,11 +82,13 @@ function setup() {
     recordSections: jest.fn().mockResolvedValue(undefined),
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
+  const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
   const service = new AddonImportService(
     makeDb(),
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
     itemMeta as unknown as WowItemMetaService,
+    realmRulesets as unknown as ForeverRealmRulesetsService,
   );
   return { service, characters, audit, itemMeta };
 }
@@ -153,7 +158,7 @@ describe('AddonImportService', () => {
     });
     await service.importString(1, CHAR_ID, body);
     expect(applyBinding).toHaveBeenCalledWith(
-      expect.objectContaining({ tx: 'TX', characterId: CHAR_ID }),
+      expect.objectContaining({ tx: TX, characterId: CHAR_ID }),
       expect.objectContaining({ pinGuid: 'Player-1-A' }),
     );
   });

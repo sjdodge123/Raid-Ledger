@@ -15,7 +15,7 @@ import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { GuildPage } from '../hub-page';
 import { dayLabel, timeRange, timeShort } from './guild-raids.helpers';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = 'http://localhost:3000/guilds/7';
 const CHAR_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
 const GROUP_ID = '0d7e3f5a-1b2c-4d3e-8f9a-0b1c2d3e4f5a';
 

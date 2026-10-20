@@ -1,8 +1,8 @@
 /**
  * ROK-1830 S2b — the WoW hub kind's own rules, moved verbatim out of
  * `guilds/guild-access.service.spec.ts` when membership / rank / delegation
- * left core. The membership query (`findLinkedMemberRows`) and the delegation
- * lookup both end at `.where()`; the SQL semantics of soft removal and
+ * left core. The membership query (`findLinkedMemberRows`) ends at
+ * `.where()`, the member-grant lookup at `.limit()`; the SQL semantics of soft removal and
  * deactivation are proven in `guilds/guild-access.integration.spec.ts`.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -17,12 +17,16 @@ import {
   WowHubKindAdapter,
 } from './wow-hub-kind.adapter';
 import type { LinkedMemberRow } from './guild-membership.helpers';
+import { RANK_GRANTS_CONFER_EDIT } from './guild-delegation.helpers';
+import type { GuildPageService } from './guild-page.service';
+import type { GuildRaidsService } from './guild-raids.service';
 
 const GUILD = 7;
 const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({
   guildId: GUILD,
   memberId: id,
   rankIndex,
+  characterId: `char-${id}`,
 });
 const actor = (role: GuildActor['role']): GuildActor => ({ id: 42, role });
 
@@ -32,12 +36,37 @@ let adapter: WowHubKindAdapter;
 beforeEach(() => {
   db = createDrizzleMock();
   const asDb: unknown = db;
-  adapter = new WowHubKindAdapter(asDb as PostgresJsDatabase<typeof schema>);
+  const pagesStub: unknown = { page: pageFn, mineRanks: mineRanksFn };
+  const raidsStub: unknown = { raids: raidsFn };
+  adapter = new WowHubKindAdapter(
+    asDb as PostgresJsDatabase<typeof schema>,
+    pagesStub as GuildPageService,
+    raidsStub as GuildRaidsService,
+  );
 });
 
-/** Queue the membership rows, then the delegation grants (if queried). */
+const pageFn = jest.fn();
+const raidsFn = jest.fn();
+const mineRanksFn = jest.fn();
+
+describe('ROK-1831 core route delegation', () => {
+  it('page / raids / mineRanks hand off to the existing WoW services', async () => {
+    pageFn.mockResolvedValueOnce('page');
+    raidsFn.mockResolvedValueOnce('raids');
+    mineRanksFn.mockResolvedValueOnce(new Map());
+    await expect(adapter.page(actor('member'), 5)).resolves.toBe('page');
+    await expect(adapter.raids(actor('member'), 5)).resolves.toBe('raids');
+    await expect(adapter.mineRanks(42, [5])).resolves.toEqual(new Map());
+    expect(pageFn).toHaveBeenCalledWith(actor('member'), 5);
+    expect(raidsFn).toHaveBeenCalledWith(actor('member'), 5);
+    expect(mineRanksFn).toHaveBeenCalledWith(42, [5]);
+  });
+});
+
+/** Queue the membership rows, then the member-grant lookup (if queried). */
 function queue(rows: LinkedMemberRow[], grants: { id: number }[] = []) {
-  db.where.mockResolvedValueOnce(rows).mockResolvedValueOnce(grants);
+  db.where.mockResolvedValueOnce(rows);
+  db.limit.mockResolvedValueOnce(grants);
 }
 
 describe('WowHubKindAdapter identity', () => {
@@ -56,9 +85,11 @@ describe('WowHubKindAdapter.resolveLadder', () => {
     },
   );
 
-  it('an explicit grant (rank or member) makes an officer', async () => {
+  it('a confirmed member grant makes an officer; rank grants are not queried', async () => {
     queue([member(2, 1)], [{ id: 9 }]);
     expect(await adapter.resolveLadder(actor('member'), GUILD)).toBe('officer');
+    // ROK-1794: with RANK_GRANTS_CONFER_EDIT off only the member lookup runs.
+    expect(db.limit).toHaveBeenCalledTimes(1);
   });
 
   it('a delegated member row is an officer (grant keyed by member id)', async () => {
@@ -104,5 +135,23 @@ describe('WowHubKindAdapter membership', () => {
 describe('GM_RANK_IMPLIES_EDIT', () => {
   it('is off until character ownership is verified', () => {
     expect(GM_RANK_IMPLIES_EDIT).toBe(false);
+  });
+
+  it('rank-kind grants confer nothing until ownership is verified (ROK-1794)', () => {
+    expect(RANK_GRANTS_CONFER_EDIT).toBe(false);
+  });
+});
+
+describe('ROK-1832 WowHubKindAdapter.memberUserIds', () => {
+  it('returns each live linked owner once (set form of isMember)', async () => {
+    db.where.mockResolvedValueOnce([{ userId: 3 }, { userId: 9 }]);
+    await expect(adapter.memberUserIds(GUILD)).resolves.toEqual([3, 9]);
+    expect(db.selectDistinct).toHaveBeenCalled();
+  });
+
+  it('omits a non-member — no linked row, no id', async () => {
+    db.where.mockResolvedValueOnce([{ userId: 3 }]);
+    const ids = await adapter.memberUserIds(GUILD);
+    expect(ids).not.toContain(42);
   });
 });

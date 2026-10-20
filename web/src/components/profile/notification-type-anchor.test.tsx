@@ -11,6 +11,7 @@ import * as useNotificationsHook from '../../hooks/use-notifications';
 import { partialResult } from '../../test/partial-result';
 
 vi.mock('./muted-games-list', () => ({ MutedGamesList: () => null }));
+vi.mock('./muted-groups-list', () => ({ MutedGroupsList: () => null }));
 
 const scrollIntoView = vi.fn();
 

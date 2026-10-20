@@ -15,6 +15,7 @@
  * hiding is remembered on the account rather than in this browser.
  */
 import type { JSX } from 'react';
+import type { GuildKind } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { buttonClass } from '../../ui/button-classes';
 import { WidgetCard } from '../hub-bits';
@@ -95,13 +96,15 @@ export interface HubSetupChecklistProps {
     modsConfigured: boolean;
     /** The hub kind registers mod sources at all (Lead ruling 3). */
     hasModSources: boolean;
+    /** ROK-1831: the hub kind — picks the step set and copy. */
+    kind?: GuildKind | undefined;
 }
 
 /** The grid cell is a Fragment, so the card owns its own two-column span. */
 const SPAN = 'md:col-span-2';
 
 export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | null {
-    const { guildId, canEdit, guildName, memberCount, nextRaid, modsConfigured, hasModSources } = props;
+    const { guildId, canEdit, guildName, memberCount, nextRaid, modsConfigured, hasModSources, kind } = props;
     const prompt = useHubOnboarding('hub-setup-checklist', guildId);
     const profile = useGuildProfile(guildId, canEdit);
     const discord = useGuildDiscord(guildId);
@@ -109,7 +112,7 @@ export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | 
     const steps = setupSteps({
         profile: profile.data, discord: discord.data, memberCount,
         hasNextRaid: nextRaid !== null && nextRaid !== undefined,
-        modsConfigured, hasModSources, canPickChannel: openChannelPicker !== null,
+        modsConfigured, hasModSources, canPickChannel: openChannelPicker !== null, kind,
     });
     const progress = setupProgress(steps);
     // Every query has to have answered: a missing profile reads exactly like

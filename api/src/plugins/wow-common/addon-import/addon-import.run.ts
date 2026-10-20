@@ -2,6 +2,7 @@ import { eq, type SQL } from 'drizzle-orm';
 import type {
   AddonImportRequestDto,
   AddonImportResultDto,
+  WowForeverRuleset,
   WowRegion,
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
@@ -13,12 +14,14 @@ import { bindEverySection } from './addon-import.binding-paste';
 import { applyBinding } from './addon-import-binding.apply';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { lockImportScope } from './addon-import.locks';
 import type { AddonImportTx } from './addon-import-apply.types';
 import {
   buildPasteResult,
   pasteSections,
   runPaste,
   shouldApplyBinding,
+  withPendingBindingStatus,
 } from './addon-import.paste-run';
 
 /**
@@ -99,16 +102,19 @@ export async function loadImportCharacter(
 /**
  * Bind EVERY section (Codex P2) against the character; any section's reject
  * rejects the whole paste before anything runs. Pure — throws `errors[0]`.
+ * `inferredRuleset` (ROK-1739) is the realm map's fallback for a null
+ * export ruleset — an opt-in `RULESET_CHANGED`, never auto-written.
  */
 export function bindPaste(
   paste: DecodedAddonPaste,
   character: LoadedCharacter,
   request: ImportRunRequest,
+  inferredRuleset?: WowForeverRuleset,
 ): AddonBindingResult {
   const binding = bindEverySection(
     pasteSections(paste).map((s) => s.payload),
     character.binding,
-    { dryRun: request.dryRun, confirm: request.confirm },
+    { dryRun: request.dryRun, confirm: request.confirm, inferredRuleset },
   );
   const [firstError] = binding.errors;
   if (firstError) throw firstError;
@@ -131,7 +137,16 @@ export async function runForCharacter(
     gameId: character.gameId,
     region: character.binding.region as WowRegion,
   };
-  const runs = await runPaste(ctx, paste, request.dryRun);
+  // ROK-1794 — THE lock order (GUID, then guild) before any section runs.
+  if (!request.dryRun) {
+    const { gameId, region } = ctx;
+    await lockImportScope(tx, { gameId, region, guid: binding.pinGuid, paste });
+  }
+  const runs = withPendingBindingStatus(
+    await runPaste(ctx, paste, request.dryRun),
+    binding,
+    request.dryRun,
+  );
   // Lead ruling: a stale export writes NOTHING — binding updates too
   // (a mixed paste skips them only when EVERY section is stale).
   if (!request.dryRun && shouldApplyBinding(runs)) {

@@ -21,6 +21,7 @@ import {
   getLeadTimeFromRecurrence,
 } from '../utils/embed-lead-time';
 import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
+import { announceGroupForEvent } from '../services/embed-scheduler-announce.helpers';
 import {
   findEventMessages,
   findDiscordMessageRecord,
@@ -263,13 +264,13 @@ export class DiscordEventListener {
     this.gameAffinityNotificationService!.notifyGameAffinity({
       eventId: payload.eventId,
       eventTitle: payload.event.title,
-      gameName: payload.event.game!.name,
-      gameId: payload.gameId!,
+      gameName: payload.event.game?.name ?? null,
+      gameId: payload.gameId ?? null,
       startTime: payload.event.startTime,
       endTime: payload.event.endTime,
       creatorId: payload.creatorId!,
       clientUrl: context.clientUrl ?? null,
-      gameCoverUrl: payload.event.game!.coverUrl ?? null,
+      gameCoverUrl: payload.event.game?.coverUrl ?? null,
       discordMessage,
       followupForEventId: payload.followupForEventId ?? null,
     }).catch((err: unknown) => {
@@ -280,12 +281,7 @@ export class DiscordEventListener {
   }
 
   private canSendAffinityNotification(payload: EventPayload): boolean {
-    return !!(
-      this.gameAffinityNotificationService &&
-      payload.gameId &&
-      payload.event.game?.name &&
-      payload.creatorId
-    );
+    return !!(this.gameAffinityNotificationService && payload.creatorId);
   }
 
   private fireScheduledEventUpdate(payload: EventPayload): void {
@@ -320,14 +316,25 @@ export class DiscordEventListener {
       this.logger.log(
         `Rescheduled event ${payload.eventId} is now within lead-time, posting`,
       );
-      await this.embedPoster.postEmbed(
+      const posted = await this.embedPoster.postEmbed(
         payload.eventId,
         payload.event,
         payload.gameId,
         payload.recurrenceGroupId,
         payload.notificationChannelOverride,
       );
+      if (posted) await this.announceGroup(payload.eventId);
     }
+  }
+
+  /** ROK-1832 (Codex r3): the first embed posted on update announces the group (never throws). */
+  private async announceGroup(eventId: number): Promise<void> {
+    const affinity = this.gameAffinityNotificationService;
+    const clientUrl = () => this.settingsService.getClientUrl();
+    const deps = { db: this.db, affinity, clientUrl };
+    const warn = (e: unknown) =>
+      this.logger.warn(`Group announce: ${String(e)}`);
+    await announceGroupForEvent(deps, eventId).catch(warn);
   }
 
   private async updateExistingEmbeds(

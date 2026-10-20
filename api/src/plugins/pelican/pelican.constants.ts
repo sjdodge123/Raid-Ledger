@@ -12,6 +12,8 @@ export const PELICAN_MAX_PER_PAGE = 100;
 export const PELICAN_SYNC_CRON = '0 */15 * * * *';
 /** Status poll tick — every 2 minutes (ROK-1772). */
 export const PELICAN_STATUS_CRON = '0 */2 * * * *';
+/** ROK-1831 L-3: server-hub "still online" touch, every 10 min. */
+export const PELICAN_HUB_TOUCH_CRON = '0 */10 * * * *';
 /** At most this many `/resources` calls in flight (D6). */
 export const PELICAN_STATUS_CONCURRENCY = 4;
 /** A server checked this recently is skipped — honours the panel's cache. */

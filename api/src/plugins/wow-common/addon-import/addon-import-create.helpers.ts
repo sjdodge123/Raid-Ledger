@@ -76,14 +76,16 @@ export function assertCreatable(who: AddonWho): asserts who is CreatableWho {
 
 /**
  * D13: the export's ruleset wins (a picked one is ignored); only a null
- * `who.ruleset` consults the pick; neither → `RULESET_REQUIRED`.
+ * `who.ruleset` consults the pick, then (ROK-1739 D5) the realm map's
+ * selectable `fallback`; none → `RULESET_REQUIRED`.
  */
 export function createRuleset(
   who: AddonWho,
   picked?: WowForeverSelectableRuleset,
+  fallback?: WowForeverSelectableRuleset,
 ): WowForeverSelectableRuleset {
   assertCreatable(who);
-  const ruleset = who.ruleset ?? picked;
+  const ruleset = who.ruleset ?? picked ?? fallback;
   if (!ruleset) throw new AddonImportError('RULESET_REQUIRED');
   return ruleset;
 }
@@ -98,12 +100,13 @@ export function createDtoFromExport(
   region: WowRegion,
   gameId: number,
   pickedRuleset?: WowForeverSelectableRuleset,
+  fallbackRuleset?: WowForeverSelectableRuleset,
 ): CreateCharacterDto {
   return {
     gameId,
     name: resolveExportName(who),
     region,
-    ruleset: createRuleset(who, pickedRuleset),
+    ruleset: createRuleset(who, pickedRuleset, fallbackRuleset),
     class: titleCaseClass(who.class),
     isMain: false,
   };

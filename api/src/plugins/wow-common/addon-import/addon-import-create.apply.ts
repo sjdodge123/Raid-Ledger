@@ -1,18 +1,18 @@
 import { ConflictException } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
 import type {
   AddonImportNewRequestDto,
   AddonImportNewResultDto,
   AddonImportResultDto,
+  AddonImportRulesetInferenceDto,
   AddonWho,
   WowForeverRuleset,
 } from '@raid-ledger/contract';
+import { createFallbackRuleset } from '../forever-realm-rulesets.helpers';
 import type { CharactersService } from '../../../characters/characters.service';
 import {
   rethrowForeverViolation,
   WOW_FOREVER_GAME_SLUG,
 } from '../wow-forever-identity.helpers';
-import { ADDON_GUID_LOCK_CLASS } from './addon-import-binding.apply';
 import {
   assertCreatable,
   createDtoFromExport,
@@ -22,6 +22,7 @@ import { titleCaseClass } from './addon-import.binding-name';
 import { raceDisplayName } from './addon-import.race';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { lockImportScope } from './addon-import.locks';
 import type { AddonImportTx } from './addon-import-apply.types';
 import {
   bindPaste,
@@ -37,7 +38,8 @@ import {
 
 /**
  * ROK-1738 — the create route's preview (D11) and apply (D4) on top of the
- * per-character run. Apply is ONE transaction: GUID advisory lock FIRST,
+ * per-character run. Apply is ONE transaction: GUID then guild advisory
+ * lock FIRST (THE order, `addon-import.locks.ts`),
  * re-resolve under it, every reject a pre-check before any write, nothing
  * caught-and-retried inside (postgres.js poisons the tx). A lost race on the
  * cross-player name index aborts the tx and maps to `CHARACTER_CLAIMED`
@@ -52,6 +54,8 @@ export interface CreateImportInput {
   /** The AUTHORITATIVE section's `who` (ruling Q7). */
   who: AddonWho;
   query: ImportTargetQuery;
+  /** ROK-1739 — the realm map's ruleset for the export; never persisted. */
+  inference?: AddonImportRulesetInferenceDto | null | undefined;
   /**
    * Codex P2 — told the EXISTING row's id the moment the target resolves to
    * `update`, so a later throw still audits it. Never told a created id: that
@@ -93,13 +97,19 @@ export function previewCharacter(input: CreateImportInput): LoadedCharacter {
   };
 }
 
-/** Bind every section against `character`, then preview/apply on `tx`. */
+/**
+ * Bind every section against `character`, then preview/apply on `tx`.
+ * `inferred` (ROK-1739) is passed for an EXISTING row only: a create
+ * consumes the inference in `createRuleset`, so binding the new row against
+ * it would raise a bogus `RULESET_CHANGED` when the user picked otherwise.
+ */
 function runBound(
   tx: AddonImportTx,
   input: CreateImportInput,
   character: LoadedCharacter,
+  inferred?: WowForeverRuleset,
 ): Promise<AddonImportResultDto> {
-  const binding = bindPaste(input.paste, character, input.request);
+  const binding = bindPaste(input.paste, character, input.request, inferred);
   return runForCharacter(
     tx,
     input.userId,
@@ -119,19 +129,25 @@ export async function previewImport(
   noteTarget(input, target);
   const character =
     target.action === 'update' ? target.character : previewCharacter(input);
-  const result = await db.transaction((tx) => runBound(tx, input, character));
+  const inferred =
+    target.action === 'update' ? input.inference?.ruleset : undefined;
+  const result = await db.transaction((tx) =>
+    runBound(tx, input, character, inferred),
+  );
   return {
     ...result,
     target: targetDto(target, input.who, input.query.region),
   };
 }
 
-/** Same class + key as `assertGuidFree`: serialises both routes. */
-async function lockGuid(tx: AddonImportTx, q: ImportTargetQuery) {
-  const key = `${q.gameId}:${q.region}:${q.guid}`;
-  await tx.execute(
-    sql`SELECT pg_advisory_xact_lock(${ADDON_GUID_LOCK_CLASS}::int4, hashtext(${key}))`,
-  );
+/**
+ * THE import lock order (`addon-import.locks.ts`): the GUID lock — same
+ * class + key as `assertGuidFree`, so it serialises both routes — THEN the
+ * paste's guild lock, both before the re-resolve (ROK-1794 review P3).
+ */
+function lockScope(tx: AddonImportTx, input: CreateImportInput) {
+  const { gameId, region, guid } = input.query;
+  return lockImportScope(tx, { gameId, region, guid, paste: input.paste });
 }
 
 /** Tracks whether a thrown error came out of the core create step. */
@@ -148,12 +164,14 @@ async function runCreate(
   phase: ApplyPhase,
 ): Promise<AddonImportNewResultDto> {
   const { who, query, request } = input;
-  // A1 + D13 pre-checks (RULESET_REQUIRED) — before any write.
+  // A1 + D13 pre-checks (RULESET_REQUIRED) — before any write. A Hardcore
+  // inference is never a create fallback (ROK-1739 D6).
   const dto = createDtoFromExport(
     who,
     query.region,
     query.gameId,
     request.ruleset,
+    createFallbackRuleset(input.inference),
   );
   phase.creating = true;
   const created = await creator.createWithin(tx, input.userId, dto);
@@ -165,6 +183,21 @@ async function runCreate(
     ...result,
     target: targetDto(target, who, query.region, { id: created.id, ruleset }),
   };
+}
+
+/**
+ * `update` target: bind the EXISTING row with the realm map's inference —
+ * a differing one is the opt-in `RULESET_CHANGED` (ROK-1739 D4).
+ */
+async function runUpdate(
+  tx: AddonImportTx,
+  input: CreateImportInput,
+  target: Extract<ImportTarget, { action: 'update' }>,
+): Promise<AddonImportNewResultDto> {
+  const inferred = input.inference?.ruleset;
+  const result = await runBound(tx, input, target.character, inferred);
+  const dto = targetDto(target, input.who, input.query.region);
+  return { ...result, target: dto };
 }
 
 /**
@@ -184,15 +217,13 @@ export async function applyImport(
   const phase: ApplyPhase = { creating: false };
   try {
     return await db.transaction(async (tx) => {
-      await lockGuid(tx, input.query);
+      await lockScope(tx, input);
       const target = await resolveImportTarget(tx, input.query);
       noteTarget(input, target);
       if (target.action === 'create') {
         return runCreate(tx, creator, input, target, phase);
       }
-      const result = await runBound(tx, input, target.character);
-      const dto = targetDto(target, input.who, input.query.region);
-      return { ...result, target: dto };
+      return runUpdate(tx, input, target);
     });
   } catch (err) {
     if (!phase.creating) throw err;

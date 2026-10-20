@@ -11,7 +11,7 @@
  * does NOT exercise full happy-path business logic — endpoint-specific
  * integration specs cover that.
  */
-import { JwtService } from '@nestjs/jwt';
+import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -42,9 +42,11 @@ async function createMember(
   return user;
 }
 
-function signFor(user: { id: number; username: string }): string {
-  const jwt = testApp.app.get(JwtService);
-  return jwt.sign({ sub: user.id, username: user.username });
+function signFor(user: { id: number; username: string }): Promise<string> {
+  return signTestAccessToken(testApp, {
+    sub: user.id,
+    username: user.username,
+  });
 }
 
 async function ensureCacheConsistent(userId: number, deactivated: boolean) {
@@ -237,7 +239,7 @@ describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
         deactivated: true,
       });
       await ensureCacheConsistent(user.id, true);
-      const token = signFor(user);
+      const token = await signFor(user);
       const res = await sendWith(token, ep);
       expect(res.status).toBe(401);
       expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
@@ -246,7 +248,7 @@ describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
     it(`${ep.name}: active user is NOT blocked by the gate`, async () => {
       const user = await createMember(`active-${ep.name.replace(/\W+/g, '-')}`);
       await ensureCacheConsistent(user.id, false);
-      const token = signFor(user);
+      const token = await signFor(user);
       const res = await sendWith(token, ep);
       // Active user must NOT trip the gate. The handler may still 400/
       // 404 because the fixture event/lineup/poll ID doesn't exist —
@@ -258,8 +260,7 @@ describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
   it('impersonated deactivated user is allowed past the gate', async () => {
     const deactivated = await createMember('imp-target', { deactivated: true });
     const admin = testApp.seed.adminUser;
-    const jwt = testApp.app.get(JwtService);
-    const token = jwt.sign({
+    const token = await signTestAccessToken(testApp, {
       sub: deactivated.id,
       username: deactivated.username,
       impersonatedBy: admin.id,

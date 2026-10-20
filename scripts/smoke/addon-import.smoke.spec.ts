@@ -27,7 +27,7 @@ import path from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { signInContextWithJwt } from './browser-session';
-import { apiDelete, apiGet, apiPost, getAdminToken, getInviteeFixture } from './api-helpers';
+import { apiDelete, apiGet, apiPost, apiPut, getAdminToken, getInviteeFixture } from './api-helpers';
 
 const GAME_SLUG = 'world-of-warcraft-forever';
 
@@ -146,16 +146,20 @@ async function expectLandedOn(page: Page, add: Locator, id: string, fullName: st
     await expect(add, 'the import closes Add Character').toHaveCount(0);
 }
 
+/**
+ * File scope (ROK-1739, Codex r2 P2): BOTH suites push into `createdIds`, so the
+ * drain runs once after every test in the file, not after the first suite only.
+ */
+test.afterAll(async () => {
+    const token = await getAdminToken();
+    for (const id of createdIds.splice(0)) await apiDelete(token, `/users/me/characters/${id}`);
+});
+
 test.describe('Addon Import string dialog (ROK-1724)', () => {
     test.beforeAll(async () => {
         const token = await getAdminToken();
         const game = (await apiGet(token, `/games/slug/${GAME_SLUG}`)) as { id?: number } | null;
         gameId = game?.id ?? null;
-    });
-
-    test.afterAll(async () => {
-        const token = await getAdminToken();
-        for (const id of createdIds.splice(0)) await apiDelete(token, `/users/me/characters/${id}`);
     });
 
     test.beforeEach(() => {
@@ -291,5 +295,151 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
         const token = await getAdminToken();
         const created = (await apiGet(token, `/characters/${id}`)) as { ruleset?: string | null } | null;
         expect(created?.ruleset, 'the character is created with the picked ruleset').toBe('pvp');
+    });
+});
+
+/* ---------- ROK-1739: realm → ruleset inference (spec §7 P1/P2) ---------- */
+
+const REALM_MAP_PATH = '/admin/plugins/blizzard/forever/realm-rulesets';
+/**
+ * Smoke-only realms, IDENTICAL for desktop and mobile so their concurrent
+ * upserts converge. They are deliberately NOT removed in afterAll: the realm
+ * map is one global row and the two projects run in parallel, so a restore
+ * from whichever finishes first would pull the realm out from under the other.
+ */
+const INFER_PVP = 'Smokeinfer Pvp';
+const INFER_HC = 'Smokeinfer Hardcore';
+type RealmEntry = { region: string; realmName: string; ruleset: string };
+const realmKey = (e: RealmEntry): string => `${e.region}:${e.realmName.toLowerCase()}`;
+
+async function readRealmMap(token: string): Promise<RealmEntry[]> {
+    const map = (await apiGet(token, REALM_MAP_PATH)) as { entries?: RealmEntry[] } | null;
+    expect(Array.isArray(map?.entries), `GET realm map should return entries: ${JSON.stringify(map)}`).toBe(true);
+    return map?.entries ?? [];
+}
+
+/** Replace the realms named in `drop` with `add` (by region + realm name), keeping every other entry. */
+async function editRealmMap(token: string, add: RealmEntry[], drop: RealmEntry[] = add): Promise<void> {
+    const gone = new Set(drop.map(realmKey));
+    const kept = (await readRealmMap(token)).filter((e) => !gone.has(realmKey(e)));
+    const saved = (await apiPut(token, REALM_MAP_PATH, { entries: [...kept, ...add] })) as { entries?: RealmEntry[] };
+    expect(Array.isArray(saved.entries), `PUT realm map should save: ${JSON.stringify(saved)}`).toBe(true);
+}
+
+/**
+ * Add only the rows of `want` the map lacks (or holds with another ruleset), keeping every other
+ * entry — and write nothing when all are present. Every project's beforeAll runs this while
+ * desktop's P2 saves the WHOLE map from the editor; an unconditional read-then-write landing after
+ * that save would drop P2's row. Once the seed exists no beforeAll writes again, so P2's row is safe.
+ */
+async function ensureRealms(token: string, want: RealmEntry[]): Promise<void> {
+    const have = new Set((await readRealmMap(token)).map((e) => `${realmKey(e)}=${e.ruleset}`));
+    const missing = want.filter((e) => !have.has(`${realmKey(e)}=${e.ruleset}`));
+    if (missing.length > 0) await editRealmMap(token, missing);
+}
+
+/** A null-ruleset export whose raw `GetRealmName()` is `realmName`. */
+function realmImportString(fullName: string, realmName: string): string {
+    return buildImportString(fullName, { ruleset: null, raw: { getUnitName: fullName, unitName: [fullName, null], realmName } });
+}
+
+test.describe('Addon import — realm-inferred ruleset (ROK-1739)', () => {
+    test.beforeAll(async () => {
+        const token = await getAdminToken();
+        if (gameId === null) {
+            const game = (await apiGet(token, `/games/slug/${GAME_SLUG}`)) as { id?: number } | null;
+            gameId = game?.id ?? null;
+        }
+        await ensureRealms(token, [
+            { region: 'us', realmName: INFER_PVP, ruleset: 'pvp' },
+            { region: 'us', realmName: INFER_HC, ruleset: 'hardcore' },
+        ]);
+    });
+
+    test('P1 per-character: an inferred ruleset change names the realm and stays opt-in', async ({ page }, testInfo) => {
+        const token = await getAdminToken();
+        const fullName = uniqueName(testInfo, 'Smokeinfer');
+        const id = await createForeverCharacter(token, fullName);
+        await openCharacter(page, id, fullName);
+        const dialog = await openImportDialog(page);
+        const checked = await pasteAndCheck(page, dialog, realmImportString(fullName, INFER_PVP));
+        expect(checked.status, `the inferred preview should succeed: ${checked.body}`).toBe(200);
+
+        const warning = dialog.getByTestId('addon-import-warning');
+        await expect(warning, 'the warning names the realm the ruleset was inferred from')
+            .toContainText(`Realm "${INFER_PVP}" is listed as PvP — this character is Normal here.`);
+        await expect(dialog.getByTestId('addon-import-inference-source'))
+            .toHaveText('Inferred from the realm list your admin maintains — not from the export.');
+        await dialog.getByRole('checkbox', { name: 'Update ruleset to PvP' }).check();
+        await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+        await expect(dialog.getByTestId('addon-import-success')).toHaveText('Character data imported.', { timeout: 20_000 });
+        await expect.poll(async () => ((await apiGet(token, `/characters/${id}`)) as { ruleset?: string | null } | null)?.ruleset,
+            { message: 'the opted-in inferred ruleset is written', timeout: 15_000 }).toBe('pvp');
+    });
+
+    test('P1 create: the picker is pre-selected from the realm and the character is created with it', async ({ page }, testInfo) => {
+        const fullName = uniqueName(testInfo, 'Smokeinfercreate');
+        const { add, dialog } = await openCreateImport(page);
+        const checked = await pasteAndCheck(page, dialog, realmImportString(fullName, INFER_PVP));
+        expect(checked.status, `the inferred create preview should succeed: ${checked.body}`).toBe(200);
+
+        await expect(dialog.getByTestId('addon-import-target'), 'the target line labels the ruleset as inferred')
+            .toContainText(`PvP (inferred from ${INFER_PVP})`);
+        const picker = dialog.getByTestId('addon-import-ruleset-picker');
+        await expect(picker.getByRole('radio', { name: 'PvP' }), 'the inferred ruleset is pre-selected').toBeChecked();
+        await expect(dialog.getByTestId('addon-import-ruleset-inference'))
+            .toHaveText(`Pre-selected from realm ${INFER_PVP} — change it if that's wrong.`);
+
+        const id = await applyAndClaim(page, dialog);
+        await expectLandedOn(page, add, id, fullName);
+        const token = await getAdminToken();
+        await expect.poll(async () => ((await apiGet(token, `/characters/${id}`)) as { ruleset?: string | null } | null)?.ruleset,
+            { message: 'the character is created with the pre-selected ruleset', timeout: 15_000 }).toBe('pvp');
+    });
+
+    test('P1 create: a Hardcore realm is reported but never pre-selected', async ({ page }, testInfo) => {
+        const fullName = uniqueName(testInfo, 'Smokeinferhc');
+        const { dialog } = await openCreateImport(page);
+        const checked = await pasteAndCheck(page, dialog, realmImportString(fullName, INFER_HC));
+        expect(checked.status, `the Hardcore-realm preview should succeed: ${checked.body}`).toBe(200);
+
+        await expect(dialog.getByTestId('addon-import-target')).toContainText('ruleset not in export');
+        const picker = dialog.getByTestId('addon-import-ruleset-picker');
+        await expect(picker.getByRole('radio', { checked: true }), 'a Hardcore inference leaves the picker empty').toHaveCount(0);
+        await expect(dialog.getByTestId('addon-import-ruleset-inference'))
+            .toHaveText(`Realm ${INFER_HC} is listed as Hardcore, which can't be added yet — pick a ruleset.`);
+        await expect(dialog.getByRole('button', { name: 'Import', exact: true }), 'Import waits for a pick').toBeDisabled();
+    });
+
+    test('P2 admin editor: an added realm row persists across a reload', async ({ page }, testInfo) => {
+        // The editor saves the WHOLE map; two projects saving at once would drop each other's row, so desktop owns this
+        // round-trip — and the beforeAll seed (ensureRealms) never rewrites an already-seeded map, so nothing else races it.
+        test.skip(testInfo.project.name !== 'desktop', 'whole-map save — one project only (see comment)');
+        const token = await getAdminToken();
+        const realm = uniqueName(testInfo, 'Smokeeditor');
+        const row: RealmEntry = { region: 'us', realmName: realm, ruleset: 'pvp' };
+        try {
+            await page.goto('/admin/settings/integrations');
+            const href = await page.locator('a[href*="/integrations/plugin/blizzard/"]').first().getAttribute('href', { timeout: 15_000 });
+            expect(href, 'the Blizzard integration panel is linked from Integrations').toBeTruthy();
+            await page.goto(String(href));
+            const section = page.getByRole('region', { name: 'Realm rulesets' });
+            await expect(section).toBeVisible({ timeout: 15_000 });
+            const names = section.getByRole('textbox', { name: /^Realm name, row \d+$/ });
+            const n = (await names.count()) + 1;
+            await section.getByRole('button', { name: 'Add realm' }).click();
+            await section.getByRole('textbox', { name: `Realm name, row ${n}` }).fill(realm);
+            await section.getByRole('combobox', { name: `Ruleset, row ${n}` }).selectOption('pvp');
+            const put = page.waitForResponse((r) => r.request().method() === 'PUT' && r.url().includes('/forever/realm-rulesets'));
+            await section.getByRole('button', { name: 'Save realm rulesets' }).click();
+            expect((await put).status(), 'the realm map saves').toBe(200);
+
+            await page.reload();
+            await expect(section).toBeVisible({ timeout: 15_000 });
+            await expect.poll(() => names.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value)),
+                { message: `the saved realm "${realm}" is listed after a reload`, timeout: 15_000 }).toContain(realm);
+        } finally {
+            await editRealmMap(token, [], [row]);
+        }
     });
 });

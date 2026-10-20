@@ -104,7 +104,9 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
    `proxmox-vm:/srv/rl-infra/runners/slot-N/worktree`. Excludes `node_modules`,
    `dist`, `coverage`, and the entire `.git` tree (the runner-side `.git` is
    scaffolded separately via `git init` + `git fetch origin`), plus
-   `*.tsbuildinfo` and Playwright output dirs.
+   `*.tsbuildinfo` and Playwright output dirs — and every `.env` / `.env.*`
+   file except the tracked `*.example` templates (ROK-1849: they hold real
+   secrets and the runner side lands everything at 0644).
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
@@ -255,6 +257,11 @@ makes it safe is admission control, which replaced the manual
   `RL_HEAVY_TASK_SETTLE_SECONDS` (90), because its memory isn't in
   `MemAvailable` yet — that's what stops two waiters from admitting into the
   same 6 GiB on the same poll tick.
+- `--weight medium` (ROK-1793 S2) sits between the two: it waits until
+  `MemAvailable` is at or above `RL_MEDIUM_TASK_MIN_FREE_MB` (default 2560,
+  2.5 GB) and reserves that much (not a heavy floor) while it settles. The
+  parallel gate's Playwright-only child on a borrowed slot runs `medium`; its
+  parent runs `light` and holds no admission.
 - `task-start` exports `RL_ADMISSION_HELD` for the wrapped command, so a
   nested `run-on-runner-with-heartbeat --weight heavy` does not re-gate (no
   double counting, no self-deadlock). The wrapper gates only on the
@@ -873,8 +880,8 @@ call) and a compact tool index; this section is the authoritative detail.
 
 | Tool | Use When |
 |------|----------|
-| `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Returns `{slot, inherited_envs, expires_at}` immediately when granted; when every slot is held, returns `{ok: true, enqueued: true, queue_position: N, queue_ahead: [...]}` and the caller MUST poll `rl_claim_wait` or accept being queued and pick non-env work in the meantime. Idempotent for the calling agent's own existing claim — **one slot per worktree**, and `slot: N` is IGNORED when this tree already holds a slot (you get the held slot back, silently). See "One claim per worktree" below. |
-| `mcp__mcp-rl-fleet__rl_release` | Release the runner slot held by this agent. ROK-1331 M5a: by default PRESERVES any env stacks the slot spun up — they're marked `claimable_by_next` on the env-registry so the next claim on the same branch inherits them (skip-deploy fast path). Pass `preserve_envs: false` to force the legacy destroy-everything behavior. Branch-mismatch handoff destroys envs synchronously inside lease-advance. Call at session end. |
+| `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Returns `{slot, inherited_envs, expires_at}` immediately when granted; when every slot is held, returns `{ok: true, enqueued: true, queue_position: N, queue_ahead: [...]}` and the caller MUST poll `rl_claim_wait` or accept being queued and pick non-env work in the meantime. Idempotent for the calling agent's own existing claim — **one slot per worktree**, and `slot: N` is IGNORED when this tree already holds a slot (you get the held slot back, silently). See "One claim per worktree" below. **Branch:** an omitted `branch` is derived from `worktree_path` (`git branch --show-current`, the same derivation as the `rl` CLI — never `rev-parse`, which returns `heads/foo` when a tag shares the name); a detached HEAD, a rebase in progress or a git failure refuses the claim with `claim_branch_unresolved`, and an explicit `branch` always wins. The orchestrator treats an empty branch and the literal `unknown` alike: it never enqueues one (`branch_required`), refuses one on a free slot holding claimable envs (`branch_required`), and `lease-advance` drops such a queue head (`head_dropped_branch_required` audit line) and grants the next waiter. **Pinned envs (`env-pin`) survive a branch-mismatch claim:** they stay on the slot, keep `claimable_by_next`, and are listed in `preserved_pinned` instead of `destroyed_envs` (2026-10-19 valheim-mod incident). An env's owner is its `created_for_branch` stamp, never the pin flag: release, claim expiry and the dead-claim/hoarded-slot reapers never re-stamp or destroy an env stamped with another branch (a reaper keeps it `claimable_by_next`, audit `reap_skipped_foreign_pinned`), and `env-spin` onto another branch's env is refused with `env_spin_refused_foreign_env` unless `--takeover` re-stamps it to the acting branch and agent. |
+| `mcp__mcp-rl-fleet__rl_release` | Release the runner slot held by this agent. ROK-1331 M5a: by default PRESERVES any env stacks the slot spun up — they're marked `claimable_by_next` on the env-registry so the next claim on the same branch inherits them (skip-deploy fast path). Pass `preserve_envs: false` to force the legacy destroy-everything behavior. Branch-mismatch handoff destroys unpinned envs synchronously inside lease-advance; pinned envs are kept and reported in `preserved_pinned`. Call at session end. |
 | `mcp__mcp-rl-fleet__rl_status` | Snapshot the fleet: per-slot claim state, active envs, host RAM/disk/load, per-runner CPU/mem. ROK-1338 PR-1 adds per-runner `last_sync_at` (ISO mtime of `/srv/rl-infra/runners/slot-N/worktree` — proxy for Mutagen sync recency) + `worktree_head` (short SHA from `git rev-parse` inside the runner) and top-level `deployed_sha` (contents of `/srv/rl-infra/.deployed_sha`, set by the operator's deploy script; null until written). All three are optional + nullable for backward compat. Use to check if your slot is still valid, verify a freshly-merged change is live on the VM, or before spinning a new env. **Gotcha:** `worktree_head` reads the runner's SEPARATE `.git` scaffold (built via `git fetch origin <branch>`; Mutagen excludes `.git`), NOT the Mutagen-synced `/workspace` file contents that the build actually uses — and after an UNPUSHED local rebase it can legitimately lag the laptop HEAD. It is a coarse staleness hint, not a build-source guarantee. The authoritative "is the build source current" check is `rl_env_deploy`'s pre-build sync guard (`synced_head`) / `rl_force_resync`. ROK-1470 adds `heavy_running` / `heavy_waiting` / `mem_available_mb` / `heavy_task_min_free_mb` — check these first when a heavy task looks hung: it may just be parked on the admission gate. Top-level `settings_bundle` `{present, mtime, age_hours, key_count, decrypts, warning}` — bundle.enc freshness without SSH; never key names/values; null/absent until the operator redeploys. |
 | `mcp__mcp-rl-fleet__rl_force_resync` | Force-recreate a WEDGED Mutagen sync for the slot you hold: terminate + recreate the session, flush until in-sync, re-scaffold the runner `.git`. Recovery for the stale-build hazard (TECH-DEBT 2026-06-02) — symptom: a redeploy keeps serving OLD code, or the runner's synced `/workspace` lags your laptop branch HEAD, typically after rapid local rebases in the synced worktree. Requires an active claim; pass `worktree_path`. Does NOT release the slot. `rl_env_deploy` runs this automatically when its pre-build sync guard trips; call it standalone to recover without a full release/reclaim. (CLI equivalent: `rl resync`.) |
 | `mcp__mcp-rl-fleet__rl_env_spin` | Bring up a per-test env (allinone + sibling Postgres). **ASYNC BY DEFAULT:** returns `{ok, task_id:'local-…', started_at}` in ~1s; the blocking `rl env spin` CLI call then runs in a detached laptop process. Poll `rl_task_status` / `rl_task_wait` on the `local-…` id (each wait caps at 120s and returns a `still_running` snapshot until the spin finishes); `wait:true` blocks for at most 120s and returns the terminal status or that snapshot inline. **ALWAYS use the `url` field** for tester links, test plan deep-links, Chrome MCP navigation. `url` is the slot-stable hostname (`https://slot-N.gamernight.net`) which supports Discord OAuth AND routes to the env. The per-slug `public_url` (`https://{slug}test.gamernight.net`) is kept for backward compat — DO NOT hand it out, Discord login won't work on it. `url`, `slot_url` (= `url` when public), `internal_url` (LAN fallback), `admin_email`, `admin_password_available` (true|false) and `operator_admin` now arrive in the TERMINAL `rl_task_status`, not in the dispatch reply. **A3-B P4: the admin password itself is NOT returned by default** — it is withheld so the credential does not enter your context as a side effect of spinning an env. You rarely need it: `rl_validate_ci({against_env_slug})` re-seeds and threads it into the runner itself, and testers log in via Discord OAuth. If you genuinely must POST `{email, password}` to `{url}/api/auth/local` yourself, read it back with `rl_task_status({task_id, include_credentials: true})` on the spin's task id (the task JSON is stored 0600 on the laptop); an `include_credentials` re-call of `rl_env_spin` no longer returns it, because the dispatch payload never carries a password. `admin_password_available: false` means the bootstrap-admin exec FAILED — read `bootstrap_warnings`; it is not the ordinary no-credentials-requested state. |
@@ -883,6 +890,7 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
 | `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. **ROK-1362: now ASYNC** — runs as a detached LAPTOP task and returns `{ok:true, task_id:'local-…', started_at}` in ~1s. Poll `rl_task_status local-…` / `rl_task_wait local-…` (each wait caps at 120s). |
 | `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. **ROK-1470:** task-routed runs carry an admission `weight` — commands matching jest/vitest/playwright/validate-ci/docker-build default to `heavy` and wait for host memory; pass `weight:'light'`/`'heavy'` to override. The sync path is never gated. |
+| `mcp__mcp-rl-fleet__rl_validate_ci` | Run `scripts/validate-ci.sh` on your claimed runner as an async task (poll `rl_task_status`). **`parallel: true` (ROK-1793 S2, opt-in, `fleet: true` only):** the task becomes a parent that borrows one FREE slot (unclaimed, empty lease queue, no live laptop Mutagen session) and fans out: child `a` on your slot runs build/tsc/lint/unit/integration (`--fleet --no-e2e`), child `b` on the borrowed slot runs Playwright against the same env, and child `c` runs the Discord smoke on your slot afterwards (only when `b` deferred it). It never queues for a slot: no free slot prints `[parallel] fallback: serial (no free slot)` and runs today's serial gate. The terminal `rl_task_status` adds `parallel: {mode: "parallel" | "serial_fallback", borrowed_slot}` and `children[]` (`task_id`, `role` a/b/c, `slot`, `status`, `exit`); the parent's log ends in ONE merged Summary, so the sentinel reads it unchanged. **`fail_fast: true`** cancels the sibling on the first child FAIL (default: every child runs to completion). Cancelling the parent cancels every child. Runbook: `docs/runbooks/local-ci-gate.md` → "Parallel fleet gate". |
 | `mcp__mcp-rl-fleet__rl_db_url` | Get psql/pgweb URLs for an env's Postgres. Pure metadata — no remote call. |
 | `mcp__mcp-rl-fleet__rl_logs_url` | Generate a Grafana Explore URL pre-filled with a Loki LogQL query (e.g. `{rl_slot="1"}` or `{rl_env="myslug"} \|= "error"`). |
 | `mcp__mcp-rl-fleet__rl_test_plan_create` | After `rl_env_deploy`, post a structured test checklist tied to the slug. Each step takes `description`, optional `expected`, optional `test_url` (deep link rendered as ↗), and optional `reset_hint` (causes the ↻ reset button to render with that hint as tooltip + agent instruction). Steps render on `https://fleet.gamernight.net` env-card section. Testers draft verdicts LOCALLY then hit Submit — agent gets one batched signal per round. Sequential ordering enforced server-side. **ROK-1847:** `test_url` must be `https://slot-N.<domain>` or `*.rl.lan` (400 otherwise). Stored plans are re-checked too: a failing link is stripped on every read and removed from disk once at dashboard startup (audit line `test_url_blocked`; skipped when `RL_PUBLIC_DOMAIN` is unset), and the step shows "Link blocked". Returns `plan_url` (token-less, read-only on the public host — the link for PRs, Linear, `CURRENT-STATE.md`) and `tester_url` / `tester_url_lan` (carry the plan's tester token as `k`; public-host tester writes 401 without it). Hand `tester_url` only to the tester, never into a PR/Linear/commit/report; it is returned once and not recoverable, so re-create the plan if it is lost. Create and clear require `X-Agent-Token`. |
@@ -1105,6 +1113,58 @@ Terminate + recreate — `rl release` then `rl claim`, or `rl resync` /
 Relevant for the ROK-1466 `scripts/.auth` ignore: a slot claimed before that
 change still reaps the runner-written auth dir (the `PLAYWRIGHT_AUTH_DIR`
 relocation covers that case independently).
+
+Since ROK-1849 `ensure_mutagen_sync` stamps the session with an
+`rl-sync-config=N` label and recreates any live session that lacks the current
+one, so a flag change no longer waits for a manual release: **bump `N` in
+`ensure_mutagen_sync` whenever you change the create flags**. Mutagen never
+deletes an ignored path on the beta, so every claim and every `rl resync` goes
+through one function, `sync_slot_and_purge`: it reads the session's own
+`rl-sync-config` label (`mutagen sync list <name> --template …`), terminates and
+recreates the session when the label is missing or older than the current `N`,
+flushes, and THEN removes the `.env` copies a pre-fix session left in
+`/workspace` — before any other script runs in the runner. The purge (and the
+exec-bit repair after it, chmod only) is the `rl` CLI's OWN copy of
+`rl-infra/runner/purge-synced-secrets.sh` / `restore-exec-bits.sh`, resolved from
+the CLI's checkout and streamed to `bash -s` over `run-on-runner`; nothing is
+executed from the synced `/workspace/rl-infra/**`, because that is branch
+content and could read the secrets or skip the clean-up. A failed purge warns on
+claim and fails `rl resync` (`resync_purge_failed`).
+
+#### ROK-1849 secret rotation — operator procedure (in order)
+
+**Deleting the synced files does NOT revoke anything.** Any value that sat in a
+runner's `/workspace` at 0644 may already have been copied by branch code or a
+VM account, so every one of them must be rotated, and rotation must come AFTER
+the purge (otherwise the new values sync straight back from a stale worktree).
+
+1. **Purge first.** Make sure every active worktree's `rl` CLI carries this fix
+   (rebase onto main), then purge every slot from the VM host:
+   `for d in /srv/rl-infra/runners/slot-*/worktree; do sudo bash <repo>/rl-infra/runner/purge-synced-secrets.sh "$d"; done`.
+   Confirm with `rl_run_on_runner 'ls -la /workspace/.env /workspace/api/.env /workspace/tools/test-bot/.env'`
+   → "No such file" on each slot. Optionally `docker builder prune` on the VM
+   (pre-fix image builds cached the synced `.env` in builder layers).
+2. **`SENTRY_AUTH_TOKEN` and `SENTRY_AUTH_TOKEN_WRITE`** — revoke both in Sentry
+   (User/Org auth tokens), issue new ones, update the laptop `.env` and the
+   GitHub Actions secrets.
+3. **`DISCORD_CLIENT_SECRET`** — Discord developer portal → OAuth2 → Reset
+   Secret; update `.env` and every deployment that uses it (prod, staging).
+4. **`JWT_SECRET`** — generate a new random value (`openssl rand -base64 48`)
+   and deploy it; every existing session token becomes invalid (users sign in
+   again).
+5. **`ADMIN_PASSWORD`** — set a new admin password in `.env` and on every env
+   that bootstraps from it.
+6. **`RL_INFRA_GRAFANA_ADMIN_PASSWORD`** — change the Grafana admin password
+   (Grafana UI or `grafana cli admin reset-admin-password`) and update
+   `/srv/rl-infra/.env` and the laptop `.env`.
+7. **`RL_SETTINGS_BUNDLE_KEY`** — generate a new key, **re-encrypt the settings
+   bundle with it** (decrypt with the old key, encrypt with the new one, commit /
+   deploy the re-encrypted bundle), then retire the old key everywhere it is set.
+8. Re-check step 1's `ls` on each slot after the next claim — the rotated values
+   must not appear in `/workspace`.
+Consequence: a runner has no `tools/test-bot/.env`, so a fleet Discord smoke
+tier SKIPs (FAILs under `--ci`) unless `TEST_BOT_TOKEN` + `TEST_GUILD_ID` are
+exported — GitHub CI runs Discord smoke from its own secrets.
 
 ### Stale-build sync guard + force-resync (TECH-DEBT 2026-06-02)
 

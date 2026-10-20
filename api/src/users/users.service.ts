@@ -27,10 +27,17 @@ import {
 import { linkDiscordFields } from './users-link-discord.helpers';
 import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
+import {
+  clearSteamIdReturningPrevious,
+  setSteamIdReturningPrevious,
+} from './users-steam-link.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import {
+  bumpTokenVersion,
+  NEXT_TOKEN_VERSION,
+} from '../auth/token-version.helpers';
 import { reactivateUserById } from './users-reactivate.helpers';
-import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
 import { defined } from '../common/defined.helpers';
 
@@ -46,7 +53,6 @@ export class UsersService {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
-    private readonly tokenBlocklist: TokenBlocklistService,
     @Optional() private readonly events?: EventEmitter2,
   ) {}
 
@@ -97,14 +103,14 @@ export class UsersService {
     });
   }
 
+  /** ROK-1823: the role and the token-version bump land in ONE UPDATE. */
   async setRole(userId: number, role: UserRole) {
     const [updated] = await this.db
       .update(schema.users)
-      .set({ role, updatedAt: new Date() })
+      .set({ role, updatedAt: new Date(), tokenVersion: NEXT_TOKEN_VERSION })
       .where(eq(schema.users.id, userId))
       .returning();
     invalidateAuthUser(userId);
-    await this.tokenBlocklist.blockUser(userId);
     return defined(updated, `role-updated user ${userId}`);
   }
 
@@ -185,29 +191,25 @@ export class UsersService {
     return result ?? null;
   }
 
-  /** Link a Steam account to an existing user (ROK-417). */
-  async linkSteam(userId: number, steamId: string) {
+  /**
+   * Link a Steam account to an existing user (ROK-417). Returns the SteamID
+   * it replaced (null if none), read in the same statement (ROK-1835).
+   */
+  async linkSteam(userId: number, steamId: string): Promise<string | null> {
     const existing = await this.findBySteamId(steamId);
     if (existing && existing.id !== userId)
       throw new ConflictException(
         'This Steam account is already linked to another user',
       );
-    const [updated] = await this.db
-      .update(schema.users)
-      .set({ steamId, updatedAt: new Date() })
-      .where(eq(schema.users.id, userId))
-      .returning();
-    return updated;
+    return setSteamIdReturningPrevious(this.db, userId, steamId);
   }
 
-  /** Unlink Steam from a user account (ROK-417). */
-  async unlinkSteam(userId: number) {
-    const [updated] = await this.db
-      .update(schema.users)
-      .set({ steamId: null, updatedAt: new Date() })
-      .where(eq(schema.users.id, userId))
-      .returning();
-    return updated;
+  /**
+   * Unlink Steam from a user account (ROK-417). Returns the SteamID that was
+   * cleared — read and cleared in one statement (ROK-1835) — or null.
+   */
+  unlinkSteam(userId: number): Promise<string | null> {
+    return clearSteamIdReturningPrevious(this.db, userId);
   }
 
   /** Count total users with 5-minute cache (ROK-175 AC-4, ROK-662). */
@@ -333,7 +335,8 @@ export class UsersService {
 
   /** Delete a user and cascade all related data (ROK-405). */
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
-    await this.tokenBlocklist.blockUser(userId);
+    await bumpTokenVersion(this.db, userId); // ROK-1823 D7
+    invalidateAuthUser(userId);
     // ROK-1353: refresh-token rows are removed by the FK ON DELETE CASCADE in
     // deleteUserTransaction; the orchestrated guild-leave path additionally
     // calls revokeAllForUser (see discord-notification-deactivate.helpers).

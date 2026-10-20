@@ -477,7 +477,10 @@ describe('findLinkedEvents / recapEvents predicates', () => {
     );
 
     expect(text).toContain('"events"."is_ad_hoc" =');
-    expect(text).toContain('"events"."channel_binding_id" =');
+    // ROK-1851: any binding on the same Discord channel, never server-born.
+    expect(text).toContain('"events"."channel_binding_id" IN (');
+    expect(text).toContain('me.channel_id = cb.channel_id');
+    expect(text).not.toContain('"events"."channel_binding_id" is null');
     expect(text).toContain('"events"."ad_hoc_status" in (');
     expect(text).toContain('"events"."cancelled_at" is null');
     expect(params).toEqual(
@@ -505,6 +508,8 @@ describe('findLinkedEvents / recapEvents predicates', () => {
     // `>=`, not `>`: a session ending exactly at `opened_at` stays in, which
     // is the inclusive boundary the old predicate carried.
     expect(text).toContain('upper("events"."duration") >=');
+    // ROK-1851: a same-channel monitor's shared session is in the recap.
+    expect(text).toContain('me.channel_id = cb.channel_id');
     expect(params).toEqual(
       expect.arrayContaining(['bind-1', '2026-09-04T10:00:00.000Z']),
     );

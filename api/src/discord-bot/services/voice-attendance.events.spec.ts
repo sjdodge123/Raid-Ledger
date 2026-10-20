@@ -435,6 +435,7 @@ describe('EventsController — voice endpoint authorization', () => {
     discordId: null,
     deactivatedAt: null,
     impersonatedBy: null,
+    tokenVersion: 0,
   };
   const operatorUser = {
     id: 4,
@@ -443,6 +444,7 @@ describe('EventsController — voice endpoint authorization', () => {
     discordId: null,
     deactivatedAt: null,
     impersonatedBy: null,
+    tokenVersion: 0,
   };
   const memberUser = {
     id: otherUserId,
@@ -451,6 +453,7 @@ describe('EventsController — voice endpoint authorization', () => {
     discordId: null,
     deactivatedAt: null,
     impersonatedBy: null,
+    tokenVersion: 0,
   };
 
   const mockEvent = {
@@ -545,6 +548,7 @@ describe('EventsController — voice endpoint authorization', () => {
           discordId: null,
           deactivatedAt: null,
           impersonatedBy: null,
+          tokenVersion: 0,
         },
       });
 
@@ -593,6 +597,7 @@ describe('EventsController — voice endpoint authorization', () => {
           discordId: null,
           deactivatedAt: null,
           impersonatedBy: null,
+          tokenVersion: 0,
         },
       });
 
@@ -653,6 +658,7 @@ describe('EventsController — voice endpoint authorization', () => {
           discordId: null,
           deactivatedAt: null,
           impersonatedBy: null,
+          tokenVersion: 0,
         },
       });
 
@@ -685,6 +691,7 @@ describe('EventsController — voice endpoint authorization', () => {
           discordId: null,
           deactivatedAt: null,
           impersonatedBy: null,
+          tokenVersion: 0,
         },
       });
 

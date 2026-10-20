@@ -6,7 +6,6 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { getSessionLengthDays } from '../../settings/settings-session.helpers';
-import { TokenBlocklistService } from '../token-blocklist.service';
 import { deactivatedException } from '../auth-status.helpers';
 import {
   type AuthMethod,
@@ -30,8 +29,11 @@ import {
   lockUserFamilies,
   markFirstChildIssued,
   revokeActiveRows,
+  revokeAllAndBumpTx,
   rowIsRevoked,
 } from './refresh-rotation.helpers';
+import { bumpTokenVersion } from '../token-version.helpers';
+import { invalidateAuthUser } from '../auth-user-cache';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
 
@@ -42,6 +44,31 @@ export interface IssuedRefreshToken {
   userId: number;
   /** ROK-1754: the refresh family — keys the impersonation marker. */
   familyId: string;
+}
+
+/** What a fresh login says about the family it starts. */
+type IssueOptions = { authMethod: AuthMethod; userAgent?: string | null };
+
+/** A brand-new family's first row, plus what `issue` hands back for it. */
+function newFamily(
+  userId: number,
+  opts: IssueOptions,
+  maxAgeMs: number,
+): {
+  row: typeof schema.refreshTokens.$inferInsert;
+  issued: IssuedRefreshToken;
+} {
+  const rawToken = generateRawToken();
+  const familyId = crypto.randomUUID();
+  const row = {
+    userId,
+    tokenHash: hashToken(rawToken),
+    familyId,
+    authMethod: opts.authMethod,
+    userAgent: opts.userAgent ?? null,
+    expiresAt: new Date(Date.now() + maxAgeMs),
+  };
+  return { row, issued: { rawToken, maxAgeMs, userId, familyId } };
 }
 
 /** The parent fields a child row inherits. */
@@ -55,8 +82,8 @@ type ParentRow = Pick<
  *
  * issue() mints a new family; rotate() atomically consumes the presented row
  * and mints its child; reuse of a consumed row (outside the 10 s race grace)
- * is treated as theft → the whole family is revoked + the user is
- * blocklisted. ROK-1755: inside the grace a parent mints at most one
+ * is treated as theft → the whole family is revoked + the user's token
+ * version is bumped (ROK-1823). ROK-1755: inside the grace a parent mints at most one
  * sibling; later in-window replays get a non-revoking 409 `refresh_raced`.
  * revokeAllForUser/revokeFamily back logout + deactivation.
  */
@@ -68,28 +95,44 @@ export class RefreshTokenService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
-    private readonly blocklist: TokenBlocklistService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly impersonation: ImpersonationSessionService,
   ) {}
 
   /** Mint a brand-new refresh family for a fresh login. */
-  async issue(
-    userId: number,
-    opts: { authMethod: AuthMethod; userAgent?: string | null },
-  ): Promise<IssuedRefreshToken> {
+  async issue(userId: number, opts: IssueOptions): Promise<IssuedRefreshToken> {
     const maxAgeMs = await this.sessionMaxAgeMs();
-    const rawToken = generateRawToken();
-    const familyId = crypto.randomUUID();
-    await this.db.insert(schema.refreshTokens).values({
-      userId,
-      tokenHash: hashToken(rawToken),
-      familyId,
-      authMethod: opts.authMethod,
-      userAgent: opts.userAgent ?? null,
-      expiresAt: new Date(Date.now() + maxAgeMs),
+    const family = newFamily(userId, opts, maxAgeMs);
+    await this.db.insert(schema.refreshTokens).values(family.row);
+    return family.issued;
+  }
+
+  /**
+   * ROK-1823 review P3: `issue`, but only while `users.token_version` still
+   * equals `tokenVersion` — the version the caller already checked. The user
+   * row is read FOR SHARE in the insert's transaction, so a concurrent bump
+   * either commits first (→ null, nothing inserted) or waits for this commit
+   * and then revokes the new row (`revokeAllAndBumpTx` bumps BEFORE it
+   * revokes). Null → the caller answers 401. The session length is read
+   * before the transaction opens (Codex r2: no outer-pool read inside it).
+   */
+  async issueAtTokenVersion(
+    userId: number,
+    tokenVersion: number,
+    opts: IssueOptions,
+  ): Promise<IssuedRefreshToken | null> {
+    const maxAgeMs = await this.sessionMaxAgeMs();
+    const family = newFamily(userId, opts, maxAgeMs);
+    return this.db.transaction(async (tx) => {
+      const [user] = await tx
+        .select({ tokenVersion: schema.users.tokenVersion })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .for('share');
+      if (user?.tokenVersion !== tokenVersion) return null;
+      await tx.insert(schema.refreshTokens).values(family.row);
+      return family.issued;
     });
-    return { rawToken, maxAgeMs, userId, familyId };
   }
 
   /**
@@ -132,6 +175,25 @@ export class RefreshTokenService {
       await lockUserFamilies(tx, userId);
       await revokeActiveRows(tx, eq(schema.refreshTokens.userId, userId));
     });
+    await this.endUserImpersonations(userId);
+  }
+
+  /**
+   * ROK-1823 D5a: `revokeAllForUser` plus a token-version bump in the SAME
+   * transaction — every refresh row and every access token die at one
+   * commit (password change). Returns the new version; the caller's
+   * re-issued session signs with it.
+   */
+  async revokeAllAndBump(userId: number): Promise<number> {
+    const version = await this.db.transaction((tx) =>
+      revokeAllAndBumpTx(tx, userId),
+    );
+    invalidateAuthUser(userId);
+    await this.endUserImpersonations(userId);
+    return version;
+  }
+
+  private async endUserImpersonations(userId: number): Promise<void> {
     await this.endImpersonationBestEffort(`user ${userId}`, () =>
       this.impersonation.endForUser(userId, 'session_revoked'),
     );
@@ -158,7 +220,7 @@ export class RefreshTokenService {
   /**
    * ROK-1754: ending a marker (delete + audit) runs AFTER the revoke and never
    * throws, so an audit failure cannot skip the revoke, the reuse-path
-   * `blockUser`, or logout's cookie clear. A marker left behind is harmless:
+   * token-version bump, or logout's cookie clear. A marker left behind is harmless:
    * its family is revoked, so `/auth/refresh` can never resume it.
    */
   private async endImpersonationBestEffort(
@@ -241,7 +303,7 @@ export class RefreshTokenService {
   /**
    * No row was consumed: classify why. Replaying an already-CONSUMED
    * (rotated, not-revoked) token is reuse/theft — revoke the whole family +
-   * blocklist the user so the live child dies too (standard rotation-with-
+   * bump the user's token version so the live child dies too (standard rotation-with-
    * reuse-detection). A merely revoked/expired/unknown token → 401 only.
    *
    * RACE GRACE (Codex P1, 2026-06-07): tabs share ONE cookie but the web
@@ -275,12 +337,24 @@ export class RefreshTokenService {
       );
       return this.mintSibling(existing);
     }
+    await this.revokeReusedFamily(existing);
+    return null;
+  }
+
+  /**
+   * Theft: revoke the whole family, then revoke every access token the user
+   * holds with a token-version bump (ROK-1823 D7), which also kills the
+   * access tokens of the user's other families.
+   */
+  private async revokeReusedFamily(
+    existing: Pick<ParentRow, 'userId' | 'familyId'>,
+  ): Promise<void> {
     this.logger.warn(
       `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
     );
     await this.revokeFamily(existing.familyId);
-    await this.blocklist.blockUser(existing.userId);
-    return null;
+    await bumpTokenVersion(this.db, existing.userId);
+    invalidateAuthUser(existing.userId);
   }
 
   /**

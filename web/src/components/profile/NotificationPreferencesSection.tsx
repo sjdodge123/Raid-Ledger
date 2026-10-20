@@ -7,6 +7,7 @@ import {
 import { useNotifTypeHashFocus } from '../../hooks/use-notif-type-hash-focus';
 import { ChannelIcon } from './notification-channel-icons';
 import { MutedGamesList } from './muted-games-list';
+import { MutedGroupsList } from './muted-groups-list';
 
 /** Metadata for each notification type row */
 const NOTIFICATION_TYPE_META: {
@@ -38,6 +39,16 @@ const NOTIFICATION_TYPE_META: {
         type: 'subscribed_game',
         label: 'Subscribed Games',
         description: 'Activity for games you follow',
+    },
+    {
+        type: 'hub_leader_post',
+        label: 'Group posts',
+        description: 'A leader posts an update in a group you belong to',
+    },
+    {
+        type: 'hub_event_tagged',
+        label: 'Group events',
+        description: 'An event is tagged to a group you belong to',
     },
     {
         type: 'event_cancelled',
@@ -193,6 +204,7 @@ function NotificationPreferencesContent({ preferences, visibleChannels, handleTo
                     <div key={meta.type}>
                         <NotificationRow {...meta} visibleChannels={visibleChannels} preferences={preferences} onToggle={handleToggle} />
                         {meta.type === 'subscribed_game' && <MutedGamesList />}
+                        {meta.type === 'hub_leader_post' && <MutedGroupsList />}
                     </div>
                 ))}
             </div>

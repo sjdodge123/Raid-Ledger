@@ -24,6 +24,8 @@ import type {
   GameServerStatusDto,
   UpdateCharacterDto,
   GuildKind,
+  GuildPage,
+  GuildRaidsDto,
   LadderRole,
   UserRole,
 } from '@raid-ledger/contract';
@@ -249,8 +251,11 @@ export interface GameLogParser {
  * Core never imports the guild plugin; it resolves this adapter instead.
  */
 export interface EventGuildTagger {
-  /** Owning plugin id — core treats tagging as unavailable while inactive. */
-  readonly pluginSlug: string;
+  /**
+   * Owning plugin id — core treats tagging as unavailable while inactive.
+   * `null` = core-owned (ROK-1831: the kind-agnostic hub tagger), always on.
+   */
+  readonly pluginSlug: string | null;
   /** Throws (400 unknown guild / wrong game, 403 not an editor) to refuse. */
   assertCanTag(
     actor: { id: number; role: UserRole },
@@ -277,12 +282,62 @@ export interface HubKindAdapter {
     actor: { id: number; role: UserRole },
     groupId: number,
   ): Promise<LadderRole>;
+  /**
+   * ROK-1832 D8: every user who is a live member of the group — the set form
+   * of `isMember`, so group-scoped fan-out can never drift from the gate.
+   */
+  memberUserIds(groupId: number): Promise<number[]>;
   /** Ids of the groups of this kind the user is a live member of. */
   memberGroupIds(userId: number): Promise<number[]>;
   /** Rank index → rank name for rank-based editor grants (empty if none). */
   rankNames(groupId: number): Promise<Map<number, string | null>>;
   /** Is this member-row id a live member of the group (member grants)? */
   isLiveMember(groupId: number, memberId: number): Promise<boolean>;
+  /** ROK-1831: the hub page for this kind (403 non-viewer, 404 missing). */
+  page(
+    actor: { id: number; role: UserRole },
+    groupId: number,
+  ): Promise<GuildPage>;
+  /** ROK-1831: the Raids tab + Overview widgets for this kind. */
+  raids(
+    actor: { id: number; role: UserRole },
+    groupId: number,
+  ): Promise<GuildRaidsDto>;
+  /**
+   * ROK-1831: the viewer's best rank per group for `GET guilds/mine`, keyed by
+   * group id. Optional — a kind without ranks omits it (both fields null).
+   */
+  mineRanks?(
+    userId: number,
+    groupIds: number[],
+  ): Promise<Map<number, HubMineRank>>;
+  /**
+   * ROK-1794: per-grant status for the Editors panel, keyed by grant id —
+   * the SAME predicate the ladder applies. Optional; omitted ⇒ no status.
+   */
+  editorStatus?(
+    groupId: number,
+    grants: HubEditorGrant[],
+  ): Promise<Map<number, HubEditorStatus>>;
+}
+
+/** ROK-1794: one `guild_editors` row as `HubKindAdapter.editorStatus` reads it. */
+export interface HubEditorGrant {
+  id: number;
+  kind: string;
+  guildMemberId: number | null;
+}
+
+/** ROK-1794: does the grant confer rights now, and to which RL account. */
+export interface HubEditorStatus {
+  effective: boolean;
+  linkedUsername: string | null;
+}
+
+/** ROK-1831: one row of `HubKindAdapter.mineRanks`. */
+export interface HubMineRank {
+  rankIndex: number | null;
+  rankName: string | null;
 }
 
 /** Well-known extension point identifiers */

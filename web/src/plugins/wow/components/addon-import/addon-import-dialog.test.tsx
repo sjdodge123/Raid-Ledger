@@ -142,3 +142,58 @@ describe('AddonImportDialog frame', () => {
         expect(screen.queryByTestId('modal-footer')).toBeNull();
     });
 });
+
+describe('AddonImportDialog stale ruleset confirmation (ROK-1739, Codex r3 P2)', () => {
+    it('shows RULESET_CONFIRM_STALE instead of a result; Preview again re-previews the same string and confirms the new value', async () => {
+        const changed = (to: string): Reply => ({ status: 200, body: charResult({ warnings: [{ code: 'RULESET_CHANGED', from: 'normal', to }] }) });
+        const previews = [changed('pvp'), changed('hardcore')];
+        const applies: Reply[] = [{ status: 422, body: { code: 'RULESET_CONFIRM_STALE', message: 'stale' } }, OK_APPLY];
+        const bodies: Record<string, unknown>[] = [];
+        server.use(http.post(IMPORT_URL, async ({ request }) => {
+            const body = await request.json() as Record<string, unknown>;
+            bodies.push(body);
+            const reply = (body.dryRun ? previews.shift() : applies.shift()) ?? { status: 500, body: {} };
+            return HttpResponse.json(reply.body, { status: reply.status });
+        }));
+        const user = userEvent.setup();
+        renderDialog();
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('checkbox', { name: /Update ruleset to PvP/ }));
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        const banner = await screen.findByTestId('addon-import-error');
+        expect(banner).toHaveTextContent("The realm's ruleset changed since your preview — preview again and confirm the new value.");
+        expect(screen.queryByTestId('addon-import-success')).toBeNull();
+        await user.click(within(banner).getByRole('button', { name: 'Preview again' }));
+        const box = await screen.findByRole('checkbox', { name: /Update ruleset to Hardcore/ });
+        expect(box).not.toBeChecked();
+        expect(screen.queryByTestId('addon-import-error')).toBeNull();
+        await user.click(box);
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        expect(await screen.findByTestId('addon-import-success')).toBeInTheDocument();
+        expect(bodies).toEqual([
+            { importString: CHAR_STRING, dryRun: true },
+            { importString: CHAR_STRING, dryRun: false, confirm: { updateRuleset: true, updateRulesetTo: 'pvp' } },
+            { importString: CHAR_STRING, dryRun: true },
+            { importString: CHAR_STRING, dryRun: false, confirm: { updateRuleset: true, updateRulesetTo: 'hardcore' } },
+        ]);
+    });
+
+    it('a failed Preview again (RATE_LIMITED) shows its own error on the preview step, replacing the stale message (Codex r5 P2)', async () => {
+        const previews: Reply[] = [OK_PREVIEW, { status: 429, body: { code: 'RATE_LIMITED', message: 'slow down' } }];
+        server.use(http.post(IMPORT_URL, async ({ request }) => {
+            const body = await request.json() as { dryRun: boolean };
+            const reply = (body.dryRun ? previews.shift() : { status: 422, body: { code: 'RULESET_CONFIRM_STALE', message: 'stale' } }) ?? { status: 500, body: {} };
+            return HttpResponse.json(reply.body, { status: reply.status });
+        }));
+        const user = userEvent.setup();
+        renderDialog();
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        const stale = await screen.findByTestId('addon-import-error');
+        await user.click(within(stale).getByRole('button', { name: 'Preview again' }));
+        await waitFor(() => expect(screen.getByTestId('addon-import-error')).toHaveTextContent('Too many imports'));
+        const banner = screen.getByTestId('addon-import-error');
+        expect(banner).not.toHaveTextContent('preview again and confirm the new value');
+        expect(screen.getByRole('button', { name: 'Import' })).toBeInTheDocument();
+    });
+});

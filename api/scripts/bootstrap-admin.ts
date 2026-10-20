@@ -23,6 +23,7 @@ import postgres from 'postgres';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import * as schema from '../src/drizzle/schema';
+import { revokeAllAndBumpTx } from '../src/auth/refresh/refresh-rotation.helpers';
 
 const SALT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin@local';
@@ -138,6 +139,51 @@ async function findLinkedAdmin(
     return rows[0];
 }
 
+type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * ROK-1823 review P3: whose sessions must die when a credential is written
+ * with a hash of `password`? The user the EXISTING credential was bound to —
+ * every session minted under the old password — unless the password does not
+ * actually change: a fixed ADMIN_PASSWORD re-applied by a fleet re-seed
+ * (RESET_PASSWORD + ADMIN_PASSWORD) leaves live sessions alone. A fresh
+ * random password always changes it. No existing credential → nobody.
+ */
+async function sessionsToRevoke(
+    existing: { userId: number | null; passwordHash: string } | undefined,
+    password: string,
+    isFixedPassword: boolean,
+): Promise<number | null> {
+    if (!existing || existing.userId == null) return null;
+    if (isFixedPassword && (await bcrypt.compare(password, existing.passwordHash))) {
+        return null;
+    }
+    return existing.userId;
+}
+
+/**
+ * ROK-1823 review P3: run the credential write and — when `revokeUserId` is
+ * set — revoke that user's refresh rows and bump its token version in the
+ * SAME transaction (`revokeAllAndBumpTx`), so no refresh family or access
+ * token minted under the old password outlives the reset. A running API's
+ * in-process auth-user cache is not reachable from here; bootstrap runs
+ * before the API starts.
+ */
+async function writeCredential(
+    db: Db,
+    revokeUserId: number | null,
+    write: (tx: Db) => Promise<unknown>,
+): Promise<void> {
+    if (revokeUserId == null) {
+        await write(db);
+        return;
+    }
+    await db.transaction(async (tx) => {
+        await write(tx);
+        await revokeAllAndBumpTx(tx, revokeUserId);
+    });
+}
+
 export async function bootstrapAdmin() {
     const databaseUrl = process.env.DATABASE_URL;
     const resetMode =
@@ -230,17 +276,24 @@ export async function bootstrapAdmin() {
                 // ROK-1356: `effectiveHash` carries the existing hash forward on
                 // a no-reset / no-fixed-password rebind so the seeded password
                 // survives restart_for_settings.
-                await db
-                    .insert(schema.localCredentials)
-                    .values({
-                        email: DEFAULT_EMAIL,
-                        passwordHash: effectiveHash,
-                        userId: linkedUser.id,
-                    })
-                    .onConflictDoUpdate({
-                        target: schema.localCredentials.email,
-                        set: { passwordHash: effectiveHash, userId: linkedUser.id },
-                    });
+                // ROK-1823: a write that changes the password ends the old
+                // password's sessions in the same transaction.
+                const revokeUserId = carryHashForward
+                    ? null
+                    : await sessionsToRevoke(existingCred, password, !!fixedPassword);
+                await writeCredential(db, revokeUserId, (tx) =>
+                    tx
+                        .insert(schema.localCredentials)
+                        .values({
+                            email: DEFAULT_EMAIL,
+                            passwordHash: effectiveHash,
+                            userId: linkedUser.id,
+                        })
+                        .onConflictDoUpdate({
+                            target: schema.localCredentials.email,
+                            set: { passwordHash: effectiveHash, userId: linkedUser.id },
+                        }),
+                );
             }
 
             // Best-effort purge of the orphan `local:admin@local` placeholder
@@ -292,10 +345,17 @@ export async function bootstrapAdmin() {
 
         if (existingCred) {
             if (resetMode) {
-                await db
-                    .update(schema.localCredentials)
-                    .set({ passwordHash })
-                    .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
+                const revokeUserId = await sessionsToRevoke(
+                    existingCred,
+                    password,
+                    !!fixedPassword,
+                );
+                await writeCredential(db, revokeUserId, (tx) =>
+                    tx
+                        .update(schema.localCredentials)
+                        .set({ passwordHash })
+                        .where(eq(schema.localCredentials.email, DEFAULT_EMAIL)),
+                );
                 printAdminBanner('ADMIN PASSWORD RESET', password);
             } else {
                 printExistingCredentialHint(

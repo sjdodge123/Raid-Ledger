@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { emitNewGroupTag } from './event-group-tag.helpers';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -15,10 +16,12 @@ import {
   RescheduleEventDto,
   UserEventSignupsResponseDto,
   CancelEventDto,
+  UpdateEventReportLinkDto,
 } from '@raid-ledger/contract';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
+import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
 import {
@@ -48,6 +51,7 @@ import {
   buildUpdateData,
 } from './event-update.helpers';
 import { inviteMemberToEvent } from './event-invite.helpers';
+import { setEventReportLink } from './event-report-link.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
@@ -64,6 +68,7 @@ export class EventsService {
     private readonly eventEmitter: EventEmitter2,
     private readonly activityLog: ActivityLogService,
     private readonly settingsService: SettingsService,
+    private readonly notificationDedup: NotificationDedupService,
   ) {}
 
   /** Creates a single or recurring event. */
@@ -143,7 +148,30 @@ export class EventsService {
       .update(schema.events)
       .set(updateData)
       .where(eq(schema.events.id, id));
-    return this.postMutate(id, userId, 'updated', APP_EVENT_EVENTS.UPDATED);
+    const res = await this.postMutate(
+      id,
+      userId,
+      'updated',
+      APP_EVENT_EVENTS.UPDATED,
+    );
+    // ROK-1832 D6b: a newly set group gets its late-tag fan-out.
+    emitNewGroupTag(this.eventEmitter, id, dto.guildId, existing.guildId);
+    return res;
+  }
+
+  /**
+   * ROK-1725: sets or clears the report link. Deliberately skips postMutate —
+   * no UPDATED emit, so no embed redraw / Scheduled Event / calendar sync.
+   */
+  async updateReportLink(
+    id: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateEventReportLinkDto,
+  ): Promise<EventResponseDto> {
+    await setEventReportLink(this.db, id, userId, isAdmin, dto);
+    this.logger.log(`Event report link set: ${id} by user ${userId}`);
+    return this.findOne(id);
   }
 
   /** Deletes an event after ownership verification. */
@@ -324,6 +352,7 @@ export class EventsService {
       findOne: (id: number) => this.findOne(id),
       // ROK-1371: post-create follow-up fan-out (NotificationService already injected).
       notificationService: this.notificationService,
+      noticeDedup: this.notificationDedup,
     };
   }
 }

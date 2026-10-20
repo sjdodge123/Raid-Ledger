@@ -122,7 +122,7 @@ export async function upsertGuild(
         schema.guilds.region,
         schema.guilds.nameKey,
       ],
-      targetWhere: sql`${schema.guilds.realmSlug} IS NULL`,
+      targetWhere: sql`${schema.guilds.realmSlug} IS NULL AND ${schema.guilds.kind} = 'wow_guild'`,
       set,
     })
     .returning({ id: schema.guilds.id });
@@ -251,6 +251,7 @@ export async function ensureRankEditor(
       grantedBy,
     })
     .onConflictDoNothing();
+  await ensureRankMemberEditors(db, guildId, grantedBy);
   const [row] = await db
     .select({ id: schema.guildEditors.id })
     .from(schema.guildEditors)
@@ -262,4 +263,37 @@ export async function ensureRankEditor(
     )
     .limit(1);
   return defined(row, 'seed-guild rank editor').id;
+}
+
+/**
+ * ROK-1794: rank grants confer nothing until character ownership is verified,
+ * so the seeded editor rank's members also get member grants (the seeded
+ * officer keeps editing). Their characters predate the grant, as required.
+ */
+async function ensureRankMemberEditors(
+  db: Db,
+  guildId: number,
+  grantedBy: number,
+): Promise<void> {
+  const rows = await db
+    .select({ id: schema.guildMembers.id })
+    .from(schema.guildMembers)
+    .where(
+      and(
+        eq(schema.guildMembers.guildId, guildId),
+        eq(schema.guildMembers.rankIndex, SEED_GUILD_EDITOR_RANK),
+      ),
+    );
+  if (rows.length === 0) return;
+  await db
+    .insert(schema.guildEditors)
+    .values(
+      rows.map((r) => ({
+        guildId,
+        kind: 'member',
+        guildMemberId: r.id,
+        grantedBy,
+      })),
+    )
+    .onConflictDoNothing();
 }

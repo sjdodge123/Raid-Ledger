@@ -54,6 +54,15 @@ export class NotificationDedupService {
   }
 
   /**
+   * ROK-1832 D6b: read-only — has `dedupKey` been claimed (and not expired)?
+   * Never marks; use `checkAndMarkSent` to claim.
+   */
+  async isMarked(dedupKey: string): Promise<boolean> {
+    if (await this.redis.get(dedupKey)) return true;
+    return this.findValidDbRecord(dedupKey);
+  }
+
+  /**
    * Give back a claim made by `checkAndMarkSent`.
    *
    * Used when the send the claim was made for failed: leaving the key in place
@@ -71,6 +80,23 @@ export class NotificationDedupService {
       DELETE FROM notification_dedup WHERE dedup_key = ${dedupKey}
     `);
     await this.redis.del(dedupKey);
+  }
+
+  /**
+   * ROK-1832 (Codex r10): `releaseKey` for a batch. Clears both stores, in the
+   * same DB-then-Redis order, so a claim a concurrent `checkAndMarkSent`
+   * cached in Redis is not left behind once its row is gone.
+   *
+   * @param dedupKeys - The keys to un-claim; a no-op when empty.
+   */
+  async releaseKeys(dedupKeys: readonly string[]): Promise<void> {
+    if (dedupKeys.length === 0) return;
+    const keys = dedupKeys.map((k) => sql`${k}`);
+    await this.db.execute(sql`
+      DELETE FROM notification_dedup
+      WHERE dedup_key IN (${sql.join(keys, sql`, `)})
+    `);
+    await this.redis.del(...dedupKeys);
   }
 
   /**

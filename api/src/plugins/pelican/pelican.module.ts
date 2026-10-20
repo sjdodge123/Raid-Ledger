@@ -22,6 +22,9 @@ import { PelicanAdapterRegistration } from './pelican-adapters';
 import { PelicanDemoSeedController } from './pelican-demo-seed.controller';
 import { PelicanPresenceRepository } from './presence/pelican-presence.repository';
 import { PelicanPresenceSupervisor } from './presence/pelican-presence.supervisor';
+import { PelicanHubController } from './hub/pelican-hub.controller';
+import { PelicanHubKindAdapter } from './hub/pelican-hub-kind.adapter';
+import { ServerHubMembershipService } from './hub/server-hub-membership.service';
 
 type UninstalledPayload = { slug: string };
 
@@ -34,6 +37,8 @@ type UninstalledPayload = { slug: string };
   controllers: [
     PelicanAdminController,
     PelicanServersAdminController,
+    // ROK-1831 server-hub Join/Leave/Quick Play.
+    PelicanHubController,
     // DEMO_MODE fixture (ROK-1094) — NOT plugin-gated: it installs + activates
     // the plugin itself, so it must answer while Pelican is inactive.
     PelicanDemoSeedController,
@@ -52,6 +57,8 @@ type UninstalledPayload = { slug: string };
     PelicanAdapterRegistration,
     PelicanPresenceRepository,
     PelicanPresenceSupervisor,
+    ServerHubMembershipService,
+    PelicanHubKindAdapter,
   ],
   exports: [
     PelicanClientFactory,

@@ -3,6 +3,55 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-20 (additive) — `recipes`
+
+- **Additive.** New message `kind: "recipes"` (ROK-1854): crafting recipes,
+  build pieces, crafting stations and processing steps (smelter, kiln,
+  windmill, spinning wheel, refinery, fermenter, cooking, obliterator),
+  exported by an admin client once per (game version, mod set), keyed
+  (`serverId`, `gameVersion`), latest `capturedAt` wins. Requirements carry
+  the **raw** fields (`amount`, `amountPerLevel`,
+  `extraAmountOnlyOneIngredient`, `recover`); Raid Ledger computes the
+  per-quality cost with the formula in CONTRACT §5b, and `formula: "custom"`
+  flags recipes whose live values differ. Valheim 1.0.20 fields are optional:
+  `stations[].upgrader`, `resources[].upgraderResource`. Piece and station
+  icons are atlas-only, from a separately uploaded `atlas`. Caps: 4 096
+  recipes, 4 096 pieces, 256 stations, 256 processors, 2 048 processes, 16
+  requirements per recipe/piece, 8 inputs per process, 12 000 requirement
+  entries in total; body cap `VALHEIM_LINK_RECIPES_MAX_BYTES` 12 MiB (largest
+  schema-valid ≈ 10.33 MB, pinned by the largest-message spec); gzip
+  optional. A new value in the closed `kind` enum is additive under §9: the
+  server ships first. `schema.json` regenerated; fixtures `recipes-vanilla`,
+  `recipes-processing` and 12 invalid.
+
+## v1 — 2026-10-20 (additive) — `containers`
+
+- **Additive.** New message `kind: "containers"` (ROK-1853): every player-built
+  container on the dedicated server, sent every 10 minutes, keyed (`serverId`,
+  `worldUid`), latest `capturedAt` wins. Per container: `prefab`, `x`/`y`/`z`,
+  `creatorPlayerId` (the `character` kind's `playerId`), `privacy`
+  (`public`/`private`/`group`), `vehicle`, `slots`, `usedSlots`, `unreadable`,
+  `omittedEntries`, and `items[]` aggregated per (`prefab`, `quality`) with
+  `stack`; plus `omittedShared` / `omittedPrivate`. Caps: 4 096 containers, 256
+  items per container, 50 000 items in total; body cap
+  `VALHEIM_LINK_CONTAINERS_MAX_BYTES` 10 MiB (largest schema-valid ≈ 8.52 MB,
+  pinned by the largest-message spec). A new value in the closed `kind` enum is
+  additive under §9: the server ships first; the mod emits it only after its pin
+  refresh. `schema.json` regenerated; fixtures `containers-basic`,
+  `containers-private` and 8 invalid.
+
+## v1 — 2026-10-20 (additive)
+
+- **Additive.** `VALHEIM_LINK_ITEMS_MAX_BYTES` is raised from 10 MiB to
+  **12 MiB** (12 582 912). The largest schema-valid `items` message grew to
+  ≈ 11.05 MB when the optional file-icon `blob` landed (2026-10-18), above the
+  old cap — a relaxation the server accepts, so v1 stays. `schema.json`
+  unchanged (the caps are not part of the JSON schema). CONTRACT.md §7 now
+  carries the measured largest message per kind (character ≈ 1.87 MB, map
+  ≈ 7.03 MB, items ≈ 11.05 MB), and a contract test builds each one from the
+  schema limits and fails CI when it stops fitting (ROK-1855). Pin this
+  revision in the mod; the reverse proxy body cap is tracked by ROK-1850.
+
 ## v1 — 2026-10-18 (additive)
 
 - **Additive.** A `file` item icon may carry an optional `blob` — a binary

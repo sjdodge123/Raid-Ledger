@@ -1,4 +1,3 @@
-import type { TokenBlocklistService } from './token-blocklist.service';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
@@ -60,7 +59,6 @@ function makeService(existing: Record<string, unknown> | null): Harness {
     mockJwt,
     db,
     { emit } as unknown as EventEmitter2,
-    { minIatFor: jest.fn() } as unknown as TokenBlocklistService,
   );
   return { service, users, emit, update };
 }

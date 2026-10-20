@@ -31,7 +31,7 @@ describe('Valheim plugin registration', () => {
       id: 'valheim',
       gameSlugs: ['valheim'],
       dependencies: ['pelican'],
-      capabilities: ['game-log-parser'],
+      capabilities: ['game-log-parser', 'cron-registrar'],
     });
   });
 });

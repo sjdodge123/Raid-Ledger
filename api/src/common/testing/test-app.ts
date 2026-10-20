@@ -73,7 +73,7 @@ export interface TestApp {
   /** Only set when running locally via Testcontainers; null in CI. */
   container: StartedPostgreSqlContainer | null;
   /** Handle to the in-memory Redis mock. Exposed so truncateAllTables can
-   * clear cross-suite state (e.g. jwt_block:* keys) without call-site changes. */
+   * clear cross-suite state (e.g. lineup-* dedup keys) without call-site changes. */
   redisMock: RedisMockHandle;
   /**
    * Internal: raw postgres-js client. Stored so `closeTestApp` can end the

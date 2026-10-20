@@ -38,7 +38,7 @@ function wrapperFor(client: QueryClient) {
 
 describe('guild queries are scoped to the viewer', () => {
     it('useMyGuilds refetches for the next viewer instead of serving the cached guilds', async () => {
-        server.use(http.get(`${API}/mine`, () =>
+        server.use(http.get(`http://localhost:3000/guilds/mine`, () =>
             HttpResponse.json({ guilds: viewer.id === 1 ? [guild(11, 'Iron Vanguard')] : [guild(12, 'Dusk Wardens')] })));
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         viewer.id = 1;

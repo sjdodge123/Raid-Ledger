@@ -15,10 +15,32 @@ import { ValheimLinkRemapListener } from './link/valheim-link-remap.listener';
 import { ValheimLinkTokensAdminController } from './link/valheim-link-tokens-admin.controller';
 import { ValheimLinkTokensRepository } from './link/valheim-link-tokens.repository';
 import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
+import { ValheimArmoryBlobController } from './armory/read/valheim-armory-blob.controller';
+import { ValheimArmoryMapBytesController } from './armory/read/valheim-armory-map-bytes.controller';
+import { ValheimArmoryMapBytesService } from './armory/read/valheim-armory-map-bytes.service';
 import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module';
+import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
+import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
+import { ValheimArmoryRepository } from './armory/valheim-armory.repository';
+import { VALHEIM_PROFILE_UPSERTED_HOOK } from './armory/valheim-armory-profile.hook';
+import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-claims.controller';
+import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
+import { ValheimIdentityRepository } from './armory/identity/valheim-identity.repository';
+import { ValheimIdentityService } from './armory/identity/valheim-identity.service';
+import { ValheimSteamLinkListener } from './armory/identity/valheim-steam-link.listener';
+import { ValheimArmoryReadController } from './armory/read/valheim-armory-read.controller';
+import { ValheimArmoryReadRepository } from './armory/read/valheim-armory-read.repository';
+import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.service';
+import { ValheimMaterialsController } from './armory/read/valheim-materials.controller';
+import { ValheimMaterialsRepository } from './armory/read/valheim-materials.repository';
+import { ValheimMaterialsService } from './armory/read/valheim-materials.service';
+import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
+import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
+import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 
 /**
- * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833).
+ * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
+ * the armory importer (ROK-1835).
  * Registers its manifest — no
  * `ensureInstalled`, so an uninstall survives a restart (as Pelican).
  */
@@ -29,6 +51,12 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
     ValheimLinkTokensAdminController,
     ValheimLinkIngestController,
     ValheimLinkBlobController,
+    ValheimArmoryClaimsController,
+    ValheimArmoryReadController,
+    ValheimMaterialsController,
+    ValheimRecipesController,
+    ValheimArmoryBlobController,
+    ValheimArmoryMapBytesController,
   ],
   providers: [
     ValheimAdapterRegistration,
@@ -43,6 +71,26 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
     ValheimLinkIngestService,
     ValheimLinkBlobsRepository,
     ValheimLinkBlobService,
+    // ROK-1835 armory importer (30 s drain) + Steam identity / claims.
+    ValheimArmoryRepository,
+    ValheimArmoryImportService,
+    ValheimArmoryImportCron,
+    ValheimIdentityRepository,
+    ValheimIdentityService,
+    ValheimSteamLinkListener,
+    ValheimArmoryClaimsService,
+    // ROK-1835 L4 member/admin reads.
+    ValheimArmoryReadRepository,
+    ValheimArmoryReadService,
+    ValheimMaterialsRepository,
+    ValheimMaterialsService,
+    ValheimRecipesReadRepository,
+    ValheimRecipesService,
+    ValheimArmoryMapBytesService,
+    {
+      provide: VALHEIM_PROFILE_UPSERTED_HOOK,
+      useExisting: ValheimIdentityService,
+    },
   ],
 })
 export class ValheimModule implements OnModuleInit {

@@ -85,6 +85,15 @@ describe('AdHocEventService — lifecycle', () => {
       await service.finalizeEvent(600);
       expect(service.getActiveState('binding-cleanup', 1)).toBeUndefined();
     });
+
+    it('removes EVERY key the event is registered under (ROK-1851)', async () => {
+      await createActiveEvent('binding-lobby', 601);
+      service.adoptEvent('binding-monitor', 1, 601);
+      mockGracePeriodEvent(601, 'binding-monitor');
+      await service.finalizeEvent(601);
+      expect(service.getActiveState('binding-lobby', 1)).toBeUndefined();
+      expect(service.getActiveState('binding-monitor', 1)).toBeUndefined();
+    });
   });
 
   describe('getAdHocRoster', () => {

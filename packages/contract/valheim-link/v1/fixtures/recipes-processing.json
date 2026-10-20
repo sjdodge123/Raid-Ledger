@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "recipes",
+  "locale": "English",
+  "atlas": {
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "byteLength": 65536,
+    "contentType": "image/png",
+    "width": 256,
+    "height": 256
+  },
+  "stations": [
+    {
+      "prefab": "piece_workbench",
+      "name": "Workbench",
+      "maxLevel": 5,
+      "stackableExtension": false,
+      "icon": {
+        "kind": "atlas",
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      }
+    },
+    {
+      "prefab": "piece_cauldron",
+      "name": "Cauldron",
+      "maxLevel": 4,
+      "stackableExtension": false,
+      "icon": {
+        "kind": "atlas",
+        "x": 64,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      }
+    }
+  ],
+  "recipes": [
+    {
+      "id": "Recipe_MeadBase",
+      "result": "MeadBaseHealthMinor",
+      "amount": 1,
+      "enabled": true,
+      "station": "piece_cauldron",
+      "repairStation": "piece_cauldron",
+      "minStationLevel": 1,
+      "upgradeOnly": false,
+      "anyOneOf": false,
+      "qualityResultAmountMultiplier": 1,
+      "formula": "vanilla",
+      "resources": [
+        {
+          "prefab": "Honey",
+          "amount": 10,
+          "amountPerLevel": 0,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        },
+        {
+          "prefab": "Blueberries",
+          "amount": 5,
+          "amountPerLevel": 0,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        },
+        {
+          "prefab": "Raspberry",
+          "amount": 10,
+          "amountPerLevel": 0,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        },
+        {
+          "prefab": "Dandelion",
+          "amount": 1,
+          "amountPerLevel": 0,
+          "extraAmountOnlyOneIngredient": 0,
+          "recover": true
+        }
+      ]
+    }
+  ],
+  "pieces": [
+    {
+      "prefab": "piece_chest",
+      "name": "Chest",
+      "category": "Furniture",
+      "tool": "Hammer",
+      "station": "piece_workbench",
+      "icon": {
+        "kind": "atlas",
+        "x": 128,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "resources": [
+        {
+          "prefab": "Wood",
+          "amount": 10,
+          "recover": true
+        }
+      ]
+    },
+    {
+      "prefab": "fermenter",
+      "name": "Fermenter",
+      "category": "Crafting",
+      "tool": "Hammer",
+      "station": "piece_workbench",
+      "icon": {
+        "kind": "atlas",
+        "x": 192,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "resources": [
+        {
+          "prefab": "FineWood",
+          "amount": 30,
+          "recover": true
+        },
+        {
+          "prefab": "Bronze",
+          "amount": 5,
+          "recover": true
+        },
+        {
+          "prefab": "Resin",
+          "amount": 10,
+          "recover": true
+        }
+      ]
+    }
+  ],
+  "processors": [
+    {
+      "prefab": "fermenter",
+      "type": "fermenter",
+      "fuel": null,
+      "fuelPerProduct": null,
+      "fuelSecondsPerUnit": null,
+      "windPowered": false,
+      "requiresRoof": true,
+      "maxInput": 1,
+      "burntResult": null,
+      "defaultResult": null
+    },
+    {
+      "prefab": "piece_cookingstation",
+      "type": "cooking",
+      "fuel": null,
+      "fuelPerProduct": null,
+      "fuelSecondsPerUnit": null,
+      "windPowered": false,
+      "requiresRoof": false,
+      "maxInput": 2,
+      "burntResult": "CookedMeatBurnt",
+      "defaultResult": null
+    },
+    {
+      "prefab": "incinerator",
+      "type": "incinerator",
+      "fuel": null,
+      "fuelPerProduct": null,
+      "fuelSecondsPerUnit": null,
+      "windPowered": false,
+      "requiresRoof": false,
+      "maxInput": null,
+      "burntResult": null,
+      "defaultResult": {
+        "prefab": "Coal",
+        "perInputs": 1
+      }
+    }
+  ],
+  "processes": [
+    {
+      "processor": "fermenter",
+      "inputs": [
+        {
+          "prefab": "MeadBaseHealthMinor",
+          "amount": 1
+        }
+      ],
+      "anyOneOf": false,
+      "output": {
+        "prefab": "MeadHealthMinor",
+        "amount": 6
+      },
+      "seconds": 2400,
+      "priority": 0
+    },
+    {
+      "processor": "piece_cookingstation",
+      "inputs": [
+        {
+          "prefab": "RawMeat",
+          "amount": 1
+        }
+      ],
+      "anyOneOf": false,
+      "output": {
+        "prefab": "CookedMeat",
+        "amount": 1
+      },
+      "seconds": 25,
+      "priority": 0
+    },
+    {
+      "processor": "incinerator",
+      "inputs": [
+        {
+          "prefab": "Wood",
+          "amount": 1
+        },
+        {
+          "prefab": "Stone",
+          "amount": 1
+        }
+      ],
+      "anyOneOf": true,
+      "output": {
+        "prefab": "Coal",
+        "amount": 1
+      },
+      "seconds": null,
+      "priority": -1
+    }
+  ]
+}

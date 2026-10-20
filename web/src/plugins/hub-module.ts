@@ -36,6 +36,9 @@ export interface HubTab {
     visible?: (ctx: HubCtx) => boolean;
 }
 
+/** ROK-1831: the core Overview widgets a module may hide (`HubModule.coreWidgetVisible`). */
+export type CoreWidgetId = 'gm-post' | 'discord' | 'schedule' | 'events' | 'attendance';
+
 export interface HubWidget {
     id: string;
     /** Merged with the core Overview widgets and sorted — core ids sit on 10/20/30/40/70. */
@@ -113,6 +116,8 @@ export interface HubModule {
     kind: HubKind;
     tabs: readonly HubTab[];
     overviewWidgets: readonly HubWidget[];
+    /** ROK-1831: hide a core Overview widget for this viewer (members-first privacy). Omitted = every core widget shows. */
+    coreWidgetVisible?: (id: CoreWidgetId, ctx: HubCtx) => boolean;
     memberColumns: readonly HubMemberColumn[];
     heroPills: readonly ComponentType<HubCtx>[];
     /** Every member of the hub, in the order the module wants them listed. */
@@ -123,8 +128,8 @@ export interface HubModule {
     membersSummary?: ComponentType<HubCtx>;
     /** Sub-title under the Members heading. */
     membersBlurb?: (page: GuildPage) => string;
-    /** Shown instead of the groups when there are none. */
-    membersEmpty?: string;
+    /** Shown instead of the groups when there are none (a function can read the page, e.g. visitor vs member). */
+    membersEmpty?: string | ((page: GuildPage) => string);
     /** Left-rule class per member row (WoW: the role colour). */
     memberRowClass?: (row: HubMemberRow) => string;
     /** Line under the hero's next-event chip (WoW: the LedgerLink import line). */

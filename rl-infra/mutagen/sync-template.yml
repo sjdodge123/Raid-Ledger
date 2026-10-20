@@ -25,6 +25,10 @@ sync:
       # mirror to 0600 / 0700 and break Docker COPY inside the allinone build).
       # Bug S Layer 1 (ROK-1326).
       mode: manual
+      # ROK-1849 AC5 — reviewed, 0644/0755 stay. `docker build` COPYs this tree
+      # into the allinone image as root-owned files that the non-root app user
+      # must read; 0640/0750 breaks that exactly as the 0600 tree of Bug S did.
+      # Secrets are excluded by the .env ignores below instead.
       defaultFile: 0644
       defaultDirectory: 0755
       # WARNING — `defaultFileExecutable` below is NOT in effect and never has
@@ -102,6 +106,19 @@ sync:
         # consumers to read it.
         - .rl-perf.log
         - .rl-perf.log.errors
+        # ROK-1849 — never sync .env files: they are gitignored secrets
+        # (DISCORD_CLIENT_SECRET, JWT_SECRET, ADMIN_PASSWORD, Sentry tokens,
+        # RL_SETTINGS_BUNDLE_KEY) and the beta lands them world-readable in
+        # every runner's /workspace. The `!` rules re-include the tracked
+        # templates. Mutagen never deletes an ignored path on the beta, so
+        # flush_mutagen also runs rl-infra/runner/purge-synced-secrets.sh.
+        # The drift guard (orchestrator/test/cli-rl-mutagen-secret-ignores
+        # .test.sh) keeps these rules identical to cli/rl.
+        - .env
+        - "**/.env"
+        - "**/.env.*"
+        - "!**/.env.example"
+        - "!**/.env.*.example"
         - tools/test-bot/node_modules
         - api/dist
         - web/dist

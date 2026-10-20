@@ -17,6 +17,7 @@ import {
   type PelicanExecutor as Executor,
 } from './pelican-plugin-lock.helpers';
 import type { ListedServer } from './pelican-sync.helpers';
+import { hideServerHubs } from './hub/server-hub-toggle.helpers';
 
 export type { PelicanTx } from './pelican-plugin-lock.helpers';
 
@@ -86,6 +87,12 @@ export class PelicanServersRepository {
         },
       })
       .returning({ id: pelicanServers.id });
+    // ROK-1831: a server gone from the panel hides its hub (data kept).
+    await hideServerHubs(
+      tx,
+      rows.map((r) => r.id),
+      now,
+    );
     return rows.length;
   }
 
@@ -164,6 +171,8 @@ export class PelicanServersRepository {
 
   /** Uninstall (D13): the FK cascade empties `pelican_schedules`. */
   async deleteAll(): Promise<void> {
+    // ROK-1831: hide every server hub before its key goes NULL (data kept).
+    await hideServerHubs(this.db, 'all', new Date());
     await this.db.delete(pelicanServers);
   }
 

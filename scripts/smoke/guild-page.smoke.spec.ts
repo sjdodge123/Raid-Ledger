@@ -4,7 +4,8 @@
  * Every test seeds its OWN guild through the DEMO_MODE fixture
  * `POST /admin/test/wow/seed-guild` (a per-project, per-worker, per-run name),
  * so the parallel projects never share a guild or a viewer. The cast: a GM
- * (rank 0), a delegated officer (rank 1, rank-editor grant), a plain member
+ * (rank 0), an officer (rank 1: the seed keeps a rank-1 grant, inactive since ROK-1794, and
+ * also grants the officer by name so they keep editing), a plain member
  * (rank 3), two unlinked roster rows (ranks 2, 4) and an outsider with no
  * character. Each viewer is a fresh member signed in with its own session —
  * the shared admin's session and preferences are never touched. The seeded
@@ -92,7 +93,7 @@ test('GM: hero, rank-grouped members, character link, no Page editors card', asy
     });
 });
 
-test('admin: the settings sheet holds the editors, with the rank-1 grant and the "add your Guild Master" hint', async ({ page }, testInfo) => {
+test('admin: the settings sheet holds the editors — the rank-1 grant inactive, the officer granted by name, a picker naming each linked account, and the "grant the Guild Master by name" hint', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInAsAdmin(page.context());
         await page.goto(`/guilds/${guild.guildId}`);
@@ -101,15 +102,31 @@ test('admin: the settings sheet holds the editors, with the rank-1 grant and the
         await trigger.click();
         const panel = page.getByTestId('guild-editors-panel');
         await expect(panel, 'admins manage page editors').toBeVisible();
-        await expect(panel.getByTestId('guild-editors-gm-hint')).toHaveText('Add your Guild Master as an editor.');
-        await expect(panel.getByTestId('guild-editor-chip')).toHaveCount(1);
+        await expect(panel.getByTestId('guild-editors-gm-hint')).toHaveText("Grant the Guild Master by name once you've confirmed the linked account is theirs.");
+        // The seed keeps the rank-1 grant AND (ROK-1794) grants the officer by name.
+        const chips = panel.getByTestId('guild-editor-chip');
+        await expect(chips, 'exactly the seeded rank-1 grant and the officer member grant').toHaveCount(2);
+        const rankChip = chips.filter({ hasText: 'Rank' });
+        await expect(rankChip, 'a rank grant is kept but confers nothing (ROK-1794 explicit grants only)').toContainText('Inactive — re-grant by name');
+        await expect(rankChip).toHaveAttribute('data-active', 'false');
+        const officerChip = chips.filter({ hasText: 'Brisa' });
+        await expect(officerChip, 'the officer was linked before the grant, so it confers rights (effective: true)').toHaveAttribute('data-active', 'true');
+        await expect(officerChip).not.toContainText('Inactive');
+        await expect(panel.getByTestId('guild-editor-rank-select'), 'new grants are by name only').toHaveCount(0);
+        const select = panel.getByTestId('guild-editor-member-select');
+        await expect(select).toBeVisible();
+        await expect(select.locator('option', { hasText: 'Aldren' }), 'staff see the RL account behind each row (ROK-1794 review)').toHaveText(/^Aldren — Guild Master · linked to guild-.+-gm since .+$/);
+        const unlinked = select.locator('option', { hasText: 'Corvin' });
+        await expect(unlinked).toHaveText('Corvin — Veteran · not linked to an account');
+        await expect(unlinked, 'a row no RL account owns cannot be granted').toBeDisabled();
+        await expect(select.locator('option', { hasText: 'Brisa' }), 'an already-granted member drops out of the picker').toHaveCount(0);
         const hide = page.getByTestId('guild-settings-hide-hub');
-        await expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831)').toBeDisabled();
+        await expect(hide, 'an admin can hide the hub (ROK-1831 PATCH /guilds/:id/hidden)').toBeEnabled();
         await expect(hide).toHaveAttribute('aria-checked', 'false');
     });
 });
 
-test('officer (rank-1 grant): can edit, but no settings sheet and no editors', async ({ page }, testInfo) => {
+test('officer (inactive rank-1 grant): sees the page, but no settings sheet and no editors', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });

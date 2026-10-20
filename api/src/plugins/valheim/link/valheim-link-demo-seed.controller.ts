@@ -34,6 +34,23 @@ import {
 } from './valheim-link-demo-seed.helpers';
 import { ValheimLinkTokensService } from './valheim-link-tokens.service';
 
+/** Valheim depends on Pelican, so Pelican (and its fake config) goes first. */
+export async function ensureValheimDemoPlugins(
+  registry: PluginRegistryService,
+  pelicanConfig: PelicanConfigService,
+): Promise<void> {
+  await registry.ensureInstalled(PELICAN_PLUGIN_ID);
+  await registry.activate(PELICAN_PLUGIN_ID);
+  await pelicanConfig.updateConfig(
+    PelicanConfigUpdateSchema.parse({
+      panelUrl: DEMO_PELICAN_PANEL_URL,
+      apiKey: DEMO_PELICAN_API_KEY,
+    }),
+  );
+  await registry.ensureInstalled(VALHEIM_PLUGIN_ID);
+  await registry.activate(VALHEIM_PLUGIN_ID);
+}
+
 /** Seed response. `token` is present only with `withToken: true` (DEMO_MODE). */
 export interface ValheimLinkFixture extends ValheimLinkFixtureRows {
   /** The body `serverId` the mod sends (= `String(valheimServerId)`). */
@@ -70,7 +87,7 @@ export class ValheimLinkDemoSeedController {
     if (valheimGameId === null) {
       throw new NotFoundException('No Valheim game — seed games first');
     }
-    await this.ensureDemoPlugins();
+    await ensureValheimDemoPlugins(this.registry, this.pelicanConfig);
     const otherGameId = await findOtherGameId(this.db);
     const rows = await seedValheimLinkFixtureRows(
       this.db,
@@ -82,19 +99,5 @@ export class ValheimLinkDemoSeedController {
     if (!req.withToken) return { ...rows, serverId };
     const issued = await this.tokens.issue(rows.valheimServerId, null, true);
     return { ...rows, serverId: issued.serverId, token: issued.token };
-  }
-
-  /** Valheim depends on Pelican, so Pelican (and its fake config) goes first. */
-  private async ensureDemoPlugins(): Promise<void> {
-    await this.registry.ensureInstalled(PELICAN_PLUGIN_ID);
-    await this.registry.activate(PELICAN_PLUGIN_ID);
-    await this.pelicanConfig.updateConfig(
-      PelicanConfigUpdateSchema.parse({
-        panelUrl: DEMO_PELICAN_PANEL_URL,
-        apiKey: DEMO_PELICAN_API_KEY,
-      }),
-    );
-    await this.registry.ensureInstalled(VALHEIM_PLUGIN_ID);
-    await this.registry.activate(VALHEIM_PLUGIN_ID);
   }
 }

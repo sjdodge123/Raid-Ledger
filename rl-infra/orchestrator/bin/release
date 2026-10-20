@@ -247,7 +247,7 @@ fi
 
 # Drop the claim record. Also clears expires_at + extends_count (M5a fields).
 state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
-    '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null | .expires_at = null | .extends_count = 0)'
+    '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null | .expires_at = null | .extends_count = 0 | del(.borrowed_for, .borrowed_by))'
 
 # H-VM-4: Also remove ourselves from the queue. Idempotent.
 if [[ -n "${RL_AGENT_ID:-}" ]]; then

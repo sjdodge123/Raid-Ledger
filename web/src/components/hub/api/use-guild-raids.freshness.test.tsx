@@ -17,7 +17,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useViewerCacheScope: () => 1,
 }));
 
-const RAIDS_URL = 'http://localhost:3000/plugins/wow/guilds/11/raids';
+const RAIDS_URL = 'http://localhost:3000/guilds/11/raids';
 
 function wrapperFor(client: QueryClient) {
     return ({ children }: { children: ReactNode }) =>

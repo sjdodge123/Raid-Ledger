@@ -49,3 +49,16 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
     lastSnapshotAt: row.lastSnapshotAt?.toISOString() ?? null,
   };
 }
+
+/**
+ * ROK-1831 L-5: the summary a hub page sends — staff also get `hidden` so the
+ * settings Hide switch reflects (and can clear) `hidden_at`. Non-staff never
+ * reach a hidden hub, so the flag is omitted for them.
+ */
+export function hubSummaryFor(
+  row: schema.GuildSelect,
+  staff: boolean,
+): GuildSummary {
+  const summary = toGuildSummary(row);
+  return staff ? { ...summary, hidden: row.hiddenAt !== null } : summary;
+}

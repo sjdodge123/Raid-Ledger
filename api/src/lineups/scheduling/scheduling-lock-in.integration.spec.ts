@@ -26,6 +26,8 @@ import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findSlotInMatch } from './scheduling-rally.helpers';
 import { at, nonEmpty } from '../../common/testing/narrow';
+import { resolveEventRosterNames } from '../lineup-notification-event-roster.helpers';
+import { findMatchMemberUsers } from '../lineup-notification-targets.helpers';
 
 /** Far enough out that the slot is always "future" (ROK-1610's gate). */
 const FUTURE_SLOT = new Date('2099-10-10T21:00:00.000Z');
@@ -205,6 +207,45 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     for (const row of roster) {
       expect(row.assignmentId).not.toBeNull();
     }
+  });
+
+  // ROK-1624 AC3: the EVENT CREATED card's Players list, read against the real
+  // event this path just created — a group of 4 where only 2 voted for the
+  // locked slot must name exactly those 2, not the group.
+  it('names exactly the rostered voters on the EVENT CREATED card, not the whole group (ROK-1624)', async () => {
+    const voter = await createMember('card-voter');
+    const elsewhere = await createMember('card-elsewhere');
+    const silent = await createMember('card-silent');
+    const poll = await seedExpiredPoll(
+      [FUTURE_SLOT, OTHER_FUTURE_SLOT],
+      [voter.id, elsewhere.id, silent.id],
+    );
+    const winningSlot = at(poll.slotIds, 0);
+    await seedVote(winningSlot, testApp.seed.adminUser.id);
+    await seedVote(winningSlot, voter.id);
+    await seedVote(at(poll.slotIds, 1), elsewhere.id);
+
+    const res = await lockIn(poll, winningSlot, adminToken);
+    expect(res.status).toBe(201);
+    const eventId = res.body.eventId as number;
+
+    const group = await findMatchMemberUsers(testApp.db, poll.matchId);
+    const names = await resolveEventRosterNames(testApp.db, eventId, group);
+    const [admin] = nonEmpty(
+      await testApp.db
+        .select({
+          username: schema.users.username,
+          name: schema.users.displayName,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, testApp.seed.adminUser.id)),
+      'admin',
+    );
+    expect([...names].sort()).toEqual(
+      [admin.name ?? admin.username, 'lockin-card-voter'].sort(),
+    );
+    expect(names).not.toContain('lockin-card-elsewhere');
+    expect(names).not.toContain('lockin-card-silent');
   });
 
   it('moves the poll to its locked-in terminal state', async () => {

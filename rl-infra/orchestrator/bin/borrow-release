@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# ROK-1793 S2 — borrow-release --slot N --parent <task_id>
+# Frees a `borrow-<parent>` claims row and advances that slot's lease queue.
+# Used by gate-fanout's exit trap and by operators; idempotent.
+set -euo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_admission.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_borrow.sh"
+
+SLOT="" PARENT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slot) SLOT="${2:-}"; shift 2 ;;
+        --parent) PARENT="${2:-}"; shift 2 ;;
+        *) echo '{"ok":false,"error":"unknown_arg"}' >&2; exit 2 ;;
+    esac
+done
+[[ "$SLOT" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_slot"}' >&2; exit 2; }
+[[ "$PARENT" =~ ^[a-z0-9]{8,32}$ ]] || { echo '{"ok":false,"error":"invalid_parent"}' >&2; exit 2; }
+borrow::release "$SLOT" "$PARENT"
+jq -nc --argjson s "$SLOT" --arg p "$PARENT" '{ok:true, slot:$s, parent_task_id:$p}'

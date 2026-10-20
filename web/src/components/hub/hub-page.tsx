@@ -30,6 +30,8 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
+import { HubNotifyBell } from './hub-notify-bell';
+import { hubBellVisible } from './hub-notify-bell.helpers';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -81,7 +83,7 @@ interface PanelProps {
 function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
-    if (active === 'events') return <HubEventsTab query={ctx.raids} />;
+    if (active === 'events') return <HubEventsTab query={ctx.raids} kind={ctx.page.guild.kind} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
@@ -160,7 +162,12 @@ function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.El
         <HubSettingsProvider value={s.value}>
             <div className={PAGE}>
                 <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null}
-                    action={canManage ? <HubSettingsTrigger onOpen={s.openSettings} /> : null} />
+                    action={canManage || hubBellVisible(ctx.page.viewer) ? (
+                        <div className="flex items-center gap-2">
+                            <HubNotifyBell page={ctx.page} />
+                            {canManage && <HubSettingsTrigger onOpen={s.openSettings} />}
+                        </div>
+                    ) : null} />
                 <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} mods={mods} />
                 <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />

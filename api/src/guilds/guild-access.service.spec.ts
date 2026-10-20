@@ -43,6 +43,9 @@ function stubHub(
     memberGroupIds: () => Promise.resolve(memberGroupIds),
     rankNames: () => Promise.resolve(new Map<number, string | null>()),
     isLiveMember: () => Promise.resolve(true),
+    memberUserIds: () => Promise.resolve([]),
+    page: () => Promise.reject(new Error('unused')),
+    raids: () => Promise.reject(new Error('unused')),
   };
 }
 

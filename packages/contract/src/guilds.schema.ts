@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CharacterRoleSchema } from './characters.schema.js';
+import { GameServerStateSchema } from './game-servers.schema.js';
 
 /**
  * ROK-1785 (S1 of ROK-1781): guild page `/guilds/:id` — read shapes and the
@@ -33,6 +34,8 @@ export const GuildViewerAccessSchema = z
     role: LadderRoleSchema,
     canEdit: z.boolean(),
     canManageEditors: z.boolean(),
+    /** ROK-1832: viewer muted this group's notifications; absent for non-members. */
+    notificationsMuted: z.boolean().optional(),
   })
   .strict();
 export type GuildViewerAccess = z.infer<typeof GuildViewerAccessSchema>;
@@ -51,9 +54,26 @@ export const GuildSummarySchema = z
     faction: z.string().nullable(),
     memberCount: z.number().int().nonnegative(),
     lastSnapshotAt: isoDate.nullable(),
+    /** ROK-1831 — `guilds.hidden_at` is set; sent to staff only. */
+    hidden: z.boolean().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
+
+/** ROK-1831 — the game-server columns of one hub member (WoW rows omit it). */
+export const GuildMemberServerSchema = z
+  .object({
+    lastSeenAt: isoDate.nullable(),
+    onlineNow: z.boolean(),
+    /** Last in-game character name presence saw on this server. */
+    characterName: z.string().nullable(),
+    /** The last way they qualified: seen on the server, or pressed Join. */
+    source: z.enum(['presence', 'manual']),
+    /** First sighting or Join (`hub_server_members.first_seen_at`); optional so older fixtures parse. */
+    firstSeenAt: isoDate.nullable().optional(),
+  })
+  .strict();
+export type GuildMemberServer = z.infer<typeof GuildMemberServerSchema>;
 
 /** One roster row. Unlinked rows have `characterId: null` and no role. */
 export const GuildMemberRowSchema = z
@@ -69,6 +89,16 @@ export const GuildMemberRowSchema = z
     /** `characters.id` is a UUID; null when no RL character links (D9). */
     characterId: z.string().uuid().nullable(),
     isMain: z.boolean(),
+    server: GuildMemberServerSchema.optional(),
+    /**
+     * ROK-1794 (review): STAFF-ONLY — the RL account linked to this row and
+     * since when, so a grant is never made on the roster name alone. Omitted
+     * for every other viewer.
+     */
+    linkedAccount: z
+      .object({ username: z.string(), linkedSince: isoDate })
+      .strict()
+      .optional(),
   })
   .strict();
 export type GuildMemberRow = z.infer<typeof GuildMemberRowSchema>;
@@ -99,6 +129,37 @@ export const GuildRoleCountsSchema = z
   .strict();
 export type GuildRoleCounts = z.infer<typeof GuildRoleCountsSchema>;
 
+/** ROK-1831 — the game-server hero block of a `game_server` hub page. */
+/** ROK-1831 — one row of the server hub's "Recent arrivals" widget (first-seen only). */
+export const GuildServerArrivalSchema = z
+  .object({
+    memberId: id,
+    name: z.string(),
+    characterName: z.string().nullable(),
+    firstSeenAt: isoDate,
+  })
+  .strict();
+export type GuildServerArrival = z.infer<typeof GuildServerArrivalSchema>;
+
+export const GuildPageServerSchema = z
+  .object({
+    pelicanServerId: id,
+    gameSlug: z.string(),
+    gameIconUrl: z.string().nullable(),
+    state: GameServerStateSchema,
+    /** The viewer pressed Join and has not left. */
+    viewerJoined: z.boolean(),
+    /** Newest five members by first sighting; optional so older fixtures parse. */
+    recentArrivals: z.array(GuildServerArrivalSchema).max(5).optional(),
+    /**
+     * Linked hub members on the server right now — sent to every viewer,
+     * visitors included (they get no rows to count). Optional: older fixtures.
+     */
+    onlineCount: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;
+
 export const GuildPageSchema = z
   .object({
     guild: GuildSummarySchema,
@@ -107,6 +168,7 @@ export const GuildPageSchema = z
     viewer: GuildViewerAccessSchema,
     ranks: z.array(GuildRankGroupSchema),
     roleCounts: GuildRoleCountsSchema,
+    server: GuildPageServerSchema.optional(),
   })
   .strict();
 export type GuildPage = z.infer<typeof GuildPageSchema>;
@@ -118,6 +180,8 @@ export const MyGuildSchema = GuildSummarySchema.extend({
   canEdit: z.boolean(),
   /** ROK-1786 — first line of the GM post (≤120 chars), null when unset. */
   gmPostHeadline: z.string().nullable(),
+  /** ROK-1831 D6 — the hub game's icon (`games.cover_url`) for the nav menu; null/absent = generic crest. */
+  gameIconUrl: z.string().nullable().optional(),
 }).strict();
 export type MyGuild = z.infer<typeof MyGuildSchema>;
 
@@ -165,6 +229,14 @@ export const GuildEditorSchema = z
     memberName: z.string().nullable(),
     grantedBy: z.string().nullable(),
     createdAt: isoDate,
+    /**
+     * ROK-1794: whether the grant confers rights right now — rank grants
+     * never; a member grant only while its row has a link confirmed before
+     * the grant was made.
+     */
+    effective: z.boolean().optional(),
+    /** ROK-1794: the RL account a member grant currently resolves to, if any. */
+    linkedUsername: z.string().nullable().optional(),
   })
   .strict();
 export type GuildEditor = z.infer<typeof GuildEditorSchema>;

@@ -69,6 +69,15 @@ describe('useAddonImportApply', () => {
         expect(invalidate, 'the Quests section reads the imported snapshot (ROK-1758)').toHaveBeenCalledWith({ queryKey: ['character-quests', CHARACTER_ID] });
     });
 
+    it('carries the previewed updateRulesetTo in the apply body (ROK-1739, Codex r2 P2)', async () => {
+        const bodies = captureBodies(201, charResult({ status: 'applied' }));
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useAddonImportApply(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING, confirm: { updateRuleset: true, updateRulesetTo: 'pvp' } });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: false, confirm: { updateRuleset: true, updateRulesetTo: 'pvp' } }]);
+    });
+
     it('does not invalidate when the apply fails', async () => {
         captureBodies(429, { code: 'RATE_LIMITED', message: 'slow down' });
         const { wrapper, invalidate } = setup();

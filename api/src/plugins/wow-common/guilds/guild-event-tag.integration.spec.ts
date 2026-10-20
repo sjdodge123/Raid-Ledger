@@ -1,10 +1,10 @@
 /**
  * ROK-1787 — tagging events to a guild (events.guild_id) through the real
- * HTTP stack: EventGuildTagService → EVENT_GUILD_TAGGER → GuildEventTagger →
+ * HTTP stack: EventGuildTagService → EVENT_GUILD_TAGGER → HubEventTagger (core, ROK-1831) →
  * GuildAccessService.canEdit. GM has no implicit rights; editors are grants.
  */
 import * as bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -138,14 +138,29 @@ beforeAll(async () => {
   await seedUser('gm', 0);
   await seedUser('plain', 3);
   await seedUser('outsider', null);
-  await testApp.db
-    .insert(schema.guildEditors)
-    .values({ guildId, kind: 'rank', rankIndex: 1 });
+  // ROK-1794: rank grants are inert — grant the rank-1 member row directly.
+  const [officerRow] = nonEmpty(
+    await testApp.db
+      .select({ id: schema.guildMembers.id })
+      .from(schema.guildMembers)
+      .where(
+        and(
+          eq(schema.guildMembers.guildId, guildId),
+          eq(schema.guildMembers.rankIndex, 1),
+        ),
+      ),
+    'officer member row',
+  );
+  await testApp.db.insert(schema.guildEditors).values({
+    guildId,
+    kind: 'member',
+    guildMemberId: officerRow.id,
+  });
   tokens.admin = await loginAsAdmin(testApp.request, testApp.seed);
 });
 
 describe('POST /events with guildId', () => {
-  it('editor via rank grant → 201, guild_id stored and returned', async () => {
+  it('editor via member grant → 201, guild_id stored and returned', async () => {
     const res = await post('officer', body({ guildId }));
     expect(res.status).toBe(201);
     expect(res.body.guildId).toBe(guildId);

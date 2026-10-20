@@ -293,4 +293,150 @@ run_test "ac5-skips-active-heartbeat-env" test_sweeper_skips_env_with_active_cla
 run_test "strict-legacy-reaper-gated-by-expires-at" test_sweeper_legacy_age_reaper_gated_by_expires_at
 run_test "legacy-reaper-still-works-when-null" test_sweeper_legacy_reaper_still_works_when_expires_at_null
 
+# Codex r1 P2 — the expiry reaper's preserve-stamp must not overwrite a
+# preserved pinned env of ANOTHER branch with the expiring claim's branch.
+test_sweeper_expiry_keeps_preserved_pin_provenance() {
+    CURRENT_TEST_NAME="expiry reaper: pinned A env keeps created_for_branch when B's claim expires"
+    local now; now=$(date -u +%FT%TZ)
+    jq -n --arg t "$now" '
+        [{slot:1, claimed:true, agent_id:"agent-b", branch:"feat-b", started_at:$t, last_heartbeat:$t,
+          keep_alive:false, expires_at:"2020-01-01T00:00:00Z", extends_count:0},
+         {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null, keep_alive:false}]
+    ' > "$RL_STATE_DIR/claims.json"
+    jq -n --arg t "$now" '
+        [{slug:"pinned-a", slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:true, claimable_by_next:true, created_for_branch:"feat-a"},
+         {slug:"env-b", slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:false, claimable_by_next:false}]
+    ' > "$RL_STATE_DIR/env-registry.json"
+    mkdir -p "$RL_STATE_DIR/lease-queue"
+    jq -n --arg t "$now" '[{agent_id:"waiter", branch:"feat-b", requested_at:$t, last_heartbeat:$t}]' \
+        > "$RL_STATE_DIR/lease-queue/1.json"
+    local shim_dir; shim_dir=$(mktemp -d -t rl-sweeper-shim.XXXXXX)
+    # Every container "exists" so the orphan-env reaper leaves both rows alone.
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$shim_dir/docker"
+    chmod +x "$shim_dir/docker"
+    PATH="$shim_dir:$PATH" STATE_DIR="$RL_STATE_DIR" bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
+    assert_eq "$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json")" "false" "expired claim released"
+    assert_eq "$(jq -r '.[] | select(.slug=="pinned-a") | .created_for_branch' "$RL_STATE_DIR/env-registry.json")" "feat-a" "pinned A keeps its branch"
+    assert_eq "$(jq -r '.[] | select(.slug=="env-b") | .created_for_branch' "$RL_STATE_DIR/env-registry.json")" "feat-b" "B's env stamped B"
+    rm -rf "$shim_dir"
+}
+
+run_test "sweeper-expiry-keeps-pin-provenance" test_sweeper_expiry_keeps_preserved_pin_provenance
+
+# Codex r2 P2 — the expiry reaper keys provenance on created_for_branch, not
+# the pin flag: an unpinned foreign env keeps its own stamp.
+test_sweeper_expiry_keeps_unpinned_foreign_provenance() {
+    CURRENT_TEST_NAME="expiry reaper: unpinned A env keeps created_for_branch when B's claim expires"
+    local now; now=$(date -u +%FT%TZ)
+    jq -n --arg t "$now" '
+        [{slot:1, claimed:true, agent_id:"agent-b", branch:"feat-b", started_at:$t, last_heartbeat:$t,
+          keep_alive:false, expires_at:"2020-01-01T00:00:00Z", extends_count:0},
+         {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null, keep_alive:false}]
+    ' > "$RL_STATE_DIR/claims.json"
+    jq -n --arg t "$now" '
+        [{slug:"unpinned-a", slot:1, image:"test", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:false, claimable_by_next:true, created_for_branch:"feat-a"}]
+    ' > "$RL_STATE_DIR/env-registry.json"
+    mkdir -p "$RL_STATE_DIR/lease-queue"
+    jq -n --arg t "$now" '[{agent_id:"waiter", branch:"feat-b", requested_at:$t, last_heartbeat:$t}]' \
+        > "$RL_STATE_DIR/lease-queue/1.json"
+    local shim_dir; shim_dir=$(mktemp -d -t rl-sweeper-shim.XXXXXX)
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$shim_dir/docker"
+    chmod +x "$shim_dir/docker"
+    PATH="$shim_dir:$PATH" STATE_DIR="$RL_STATE_DIR" bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
+    assert_eq "$(jq -r '.[] | select(.slug=="unpinned-a") | .created_for_branch' "$RL_STATE_DIR/env-registry.json")" "feat-a" "unpinned A keeps its branch"
+    rm -rf "$shim_dir"
+}
+
+# Shim for the dead/hoarded reapers: slot 1 carries three envs; rm calls are
+# recorded in $RL_STATE_DIR/reap.log. Every container "exists" otherwise.
+_install_slot_env_shim() {
+    local shim_dir="$1"
+    cat > "$shim_dir/docker" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    ps)
+        if [[ "\$*" == *"rl.slot=1"* && "\$*" == *"rl.role=env"* ]]; then
+            # Third field = container name; the ROK-1846 forged-label guard
+            # only reaps through the env's own rl-env-<slug>-allinone name.
+            printf 'pinned-a c1 rl-env-pinned-a-allinone\nunpinned-a c2 rl-env-unpinned-a-allinone\nenv-b c3 rl-env-env-b-allinone\n'
+        fi ;;
+    rm|volume) echo "docker \$*" >> "$RL_STATE_DIR/reap.log" ;;
+esac
+exit 0
+EOF
+    chmod +x "$shim_dir/docker"
+}
+
+_seed_three_envs() {
+    local now; now=$(date -u +%FT%TZ)
+    jq -n --arg t "$now" '
+        [{slug:"pinned-a", slot:1, image:"x", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:true, claimable_by_next:true, created_for_branch:"feat-a"},
+         {slug:"unpinned-a", slot:1, image:"x", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:false, claimable_by_next:true, created_for_branch:"feat-a"},
+         {slug:"env-b", slot:1, image:"x", ttl:"24h", created_at:$t, last_touched:$t, public_domain:"x.lan",
+          pinned:false, claimable_by_next:false}]
+    ' > "$RL_STATE_DIR/env-registry.json"
+}
+
+_assert_foreign_envs_survive() {
+    local label="$1"
+    if grep -q 'rl-env-pinned-a\|rl-data-pinned-a\| c1' "$RL_STATE_DIR/reap.log"; then
+        _fail_named "$label: foreign pinned env reaped"
+    else TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1)); fi
+    if grep -q 'rl-env-unpinned-a\|rl-data-unpinned-a\| c2' "$RL_STATE_DIR/reap.log"; then
+        _fail_named "$label: foreign unpinned env reaped"
+    else TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1)); fi
+    assert_contains "$(cat "$RL_STATE_DIR/reap.log")" "rl-data-env-b" "$label: dead claim's own env destroyed"
+    assert_contains "$(cat "$RL_STATE_DIR/audit.log" 2>/dev/null)" "reap_skipped_foreign_pinned" "$label: audit reap_skipped_foreign_pinned"
+    assert_eq "$(jq -r '.[] | select(.slug=="pinned-a") | "\(.created_for_branch) \(.claimable_by_next)"' "$RL_STATE_DIR/env-registry.json")" "feat-a true" "$label: pinned A keeps stamp + claimable"
+    assert_eq "$(jq -r '.[] | select(.slug=="unpinned-a") | "\(.created_for_branch) \(.claimable_by_next)"' "$RL_STATE_DIR/env-registry.json")" "feat-a true" "$label: unpinned A keeps stamp + claimable"
+    assert_eq "$(jq -r '.[] | select(.slot==1) | .claimed' "$RL_STATE_DIR/claims.json")" "false" "$label: slot released"
+}
+
+_fail_named() {
+    TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+    TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: $1")
+    echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] $1"
+}
+
+test_dead_claim_reaper_spares_foreign_envs() {
+    CURRENT_TEST_NAME="dead-claim reaper: B dies → A's preserved envs survive, B's env destroyed"
+    jq -n '[{slot:1, claimed:true, agent_id:"agent-b", branch:"feat-b", started_at:"2020-01-01T00:00:00Z",
+             last_heartbeat:"2020-01-01T00:00:00Z", keep_alive:false},
+            {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null, keep_alive:false}]' \
+        > "$RL_STATE_DIR/claims.json"
+    _seed_three_envs
+    : > "$RL_STATE_DIR/reap.log"
+    local shim_dir; shim_dir=$(mktemp -d -t rl-sweeper-shim.XXXXXX)
+    _install_slot_env_shim "$shim_dir"
+    PATH="$shim_dir:$PATH" STATE_DIR="$RL_STATE_DIR" CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 \
+        bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
+    _assert_foreign_envs_survive "dead-claim"
+    rm -rf "$shim_dir"
+}
+
+test_hoarded_reaper_spares_foreign_envs() {
+    CURRENT_TEST_NAME="hoarded-slot reaper: B hoards → A's preserved envs survive, B's env destroyed"
+    local hb; hb=$(date -u +%FT%TZ)
+    jq -n --arg hb "$hb" '[{slot:1, claimed:true, agent_id:"agent-b", branch:"feat-b", started_at:"2020-01-01T00:00:00Z",
+             last_heartbeat:$hb, keep_alive:false, expires_at:null, extends_count:0},
+            {slot:2, claimed:false, agent_id:null, branch:null, started_at:null, last_heartbeat:null, keep_alive:false}]' \
+        > "$RL_STATE_DIR/claims.json"
+    _seed_three_envs
+    : > "$RL_STATE_DIR/reap.log"
+    local shim_dir; shim_dir=$(mktemp -d -t rl-sweeper-shim.XXXXXX)
+    _install_slot_env_shim "$shim_dir"
+    PATH="$shim_dir:$PATH" STATE_DIR="$RL_STATE_DIR" CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 MAX_CLAIM_AGE_SECONDS=28800 \
+        bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
+    _assert_foreign_envs_survive "hoarded"
+    rm -rf "$shim_dir"
+}
+
+run_test "sweeper-expiry-keeps-unpinned-foreign-provenance" test_sweeper_expiry_keeps_unpinned_foreign_provenance
+run_test "dead-claim-reaper-spares-foreign-envs" test_dead_claim_reaper_spares_foreign_envs
+run_test "hoarded-reaper-spares-foreign-envs" test_hoarded_reaper_spares_foreign_envs
 print_test_summary

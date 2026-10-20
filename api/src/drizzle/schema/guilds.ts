@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { games } from './games';
+import { pelicanServers } from './pelican-servers';
 
 /**
  * ROK-1724 (built for ROK-1170): in-game guilds — plugin-owned.
@@ -44,11 +45,21 @@ export const guilds = pgTable(
     blizzardGuildId: bigint('blizzard_guild_id', { mode: 'number' }),
     faction: varchar('faction', { length: 20 }),
     memberCount: integer('member_count').default(0).notNull(),
-    /** addon_import | blizzard */
+    /** addon_import | blizzard | pelican (ROK-1831 server hubs) */
     source: varchar('source', { length: 20 }).notNull(),
     lastSnapshotAt: timestamp('last_snapshot_at', { withTimezone: true }),
     /** The realm string the addon reported — provenance only, not identity. */
     rawRealm: varchar('raw_realm', { length: 64 }),
+    /**
+     * ROK-1831: the Pelican server a `game_server` hub is keyed to (1:1).
+     * Always null for WoW rows (`guilds_server_kind_check`).
+     */
+    pelicanServerId: integer('pelican_server_id').references(
+      () => pelicanServers.id,
+      { onDelete: 'set null' },
+    ),
+    /** ROK-1831: admin hid the hub — 404 for non-staff, data kept. */
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -57,15 +68,28 @@ export const guilds = pgTable(
       .notNull(),
   },
   (table) => [
-    /** One realm-less guild per (game, region, lower(name)). */
+    /**
+     * One realm-less WoW guild per (game, region, lower(name)). ROK-1831
+     * narrowed it to WoW rows: two servers of one game may share a name.
+     * ON CONFLICT callers must repeat this predicate as `targetWhere`.
+     */
     uniqueIndex('idx_guilds_realmless_name')
       .on(table.gameId, table.region, table.nameKey)
-      .where(sql`${table.realmSlug} IS NULL`),
+      .where(sql`${table.realmSlug} IS NULL AND ${table.kind} = 'wow_guild'`),
+    /** ROK-1831: one hub per Pelican server. */
+    uniqueIndex('idx_guilds_pelican_server')
+      .on(table.pelicanServerId)
+      .where(sql`${table.pelicanServerId} IS NOT NULL`),
     // ROK-1157: FK backing index — the partial unique above does not count.
     index('idx_guilds_game_id').on(table.gameId),
+    index('idx_guilds_pelican_server_id').on(table.pelicanServerId),
     check(
       'guilds_kind_check',
       sql`${table.kind} IN ('wow_guild', 'game_server')`,
+    ),
+    check(
+      'guilds_server_kind_check',
+      sql`${table.pelicanServerId} IS NULL OR ${table.kind} = 'game_server'`,
     ),
   ],
 );

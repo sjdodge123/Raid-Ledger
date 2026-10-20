@@ -17,7 +17,7 @@ import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { WOW_MEMBER_COLUMNS } from '../../plugins/wow/hub/wow-members.helpers';
 import { GuildPage } from './hub-page';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = 'http://localhost:3000/guilds/7';
 const originalMatchMedia = window.matchMedia;
 
 /** Only `DESKTOP_MQ` matches, so a motion- or phone-gated branch stays itself. */

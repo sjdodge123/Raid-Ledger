@@ -10,7 +10,8 @@
  *
  * Never share one `rl_rt` cookie between contexts (e.g. by saving it in
  * storageState): the first boot rotates it and a replay is reuse → family
- * revoke + blockUser(admin), which poisons every worker's admin token.
+ * revoke + an admin token-version bump (ROK-1823), which poisons every worker's
+ * admin token.
  */
 import type { BrowserContext, Page } from '@playwright/test';
 import { getAdminToken } from './api-helpers';

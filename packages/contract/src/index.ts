@@ -15,6 +15,7 @@ export * from './game-registry.schema.js';
 
 // Events
 export * from './events.schema.js';
+export * from './event-report-link.schema.js';
 
 // Signups
 export * from './signups.schema.js';
@@ -212,6 +213,7 @@ export * from './game-identity/index.js';
 // through this barrel.
 export * from './wow-addon-export.schema.js';
 export * from './wow-addon-import.schema.js';
+export * from './wow-forever-realm-rulesets.schema.js';
 export * from './ledgerlink-json-schema.js';
 
 // RL Valheim Link mod push messages — wire contract v1 (ROK-1829).
@@ -219,8 +221,14 @@ export * from './valheim-link-common.schema.js';
 export * from './valheim-link-character.schema.js';
 export * from './valheim-link-map.schema.js';
 export * from './valheim-link-items.schema.js';
+export * from './valheim-link-containers.schema.js';
+export * from './valheim-link-recipes-processing.schema.js';
+export * from './valheim-link-recipes.schema.js';
 export * from './valheim-link-message.schema.js';
 export * from './valheim-link-admin.schema.js';
+export * from './valheim-armory.schema.js';
+export * from './valheim-materials.schema.js';
+export * from './valheim-recipes.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
@@ -236,8 +244,11 @@ export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
 export * from './hub-onboarding.schema.js';
+// Game-server community hub — join, Quick Play list, hide (ROK-1831).
+export * from './hub-server.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';
 // Per-game notification mute — the game-page bell (ROK-1797).
 export * from './game-notification-mutes.schema.js';
+export * from './hub-notification-mutes.schema.js';

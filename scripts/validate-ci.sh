@@ -231,11 +231,19 @@ migrations_changed=false
 container_changed=false
 playwright_relevant=false
 discord_smoke_relevant=false
+# ROK-1793 S2 — parallel fleet gate child modes (see _skip_for_parallel_child).
+# Read once and UNSET: the node:test specs and harnesses spawn validate-ci.sh
+# themselves, and an inherited child mode would turn their runs into children.
+gate_discord="${RL_GATE_DISCORD:-}"
+gate_e2e="${RL_GATE_E2E:-}"
+unset RL_GATE_DISCORD RL_GATE_E2E
 
 # Mode flags
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
+# fleet_e2e (--fleet-e2e): set only on the e2e children of a parallel gate.
+fleet_e2e=false
 # e2e_explicit: true ONLY when --with-e2e was passed. --fleet also sets
 # e2e_mode=on, but that is implied, so it must not override E2E_SCOPE=none.
 e2e_explicit=false
@@ -2135,6 +2143,12 @@ _prepare_playwright_scope() {
 }
 
 run_playwright_e2e() {
+  # ROK-1793 S2: phase-2 child C runs only the Discord smoke; child B already
+  # reported Playwright.
+  if [ "${gate_discord:-}" = "only" ]; then
+    _skip_for_parallel_child "phase 2"
+    return 0
+  fi
   _resolve_e2e_scope >/dev/null
   if [ "$E2E_SCOPE_RESOLVED" = "none" ]; then
     if [ "${e2e_explicit:-false}" = true ]; then
@@ -2170,6 +2184,7 @@ run_playwright_e2e() {
   case "$mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
+      _gate_e2e_off_note
       skip_step
       return 0
       ;;
@@ -2222,6 +2237,54 @@ run_playwright_e2e() {
   fi
 }
 
+# ROK-1793 S2 — parallel fleet gate child modes (rl_validate_ci parallel:true).
+# The orchestrator merges each child's Summary by row ownership, so a row a
+# child does not own is stamped SKIPPED with a note naming where it ran:
+#   RL_GATE_DISCORD=defer  child B (borrowed slot): Playwright runs; an in-scope
+#                          Discord smoke becomes `SKIPPED — deferred to phase 2`
+#                          and prints `[parallel] discord-deferred`.
+#   RL_GATE_DISCORD=only   child C (owning slot, --only-e2e): Discord smoke
+#                          runs; Playwright is `SKIPPED — phase 2`.
+#   RL_GATE_E2E=deferred   child A (--fleet --no-e2e): both e2e rows read
+#                          `SKIPPED — phase 1, see child b`.
+_skip_for_parallel_child() {
+  STEP_SKIP_REASON="$1"
+  echo -e "${YELLOW}Parallel fleet gate: ${1}.${NC}"
+  skip_step
+}
+
+# Under --no-e2e, child A names the child that owns the e2e rows. A plain
+# --no-e2e keeps its bare SKIPPED row.
+_gate_e2e_off_note() {
+  if [ "${gate_e2e:-}" = "deferred" ]; then
+    STEP_SKIP_REASON="phase 1, see child b"
+  fi
+  return 0
+}
+
+# Exit 2 (invocation error) on a child-mode env var that cannot do what it
+# says: an unknown value, `only` outside --only-e2e, `deferred` with e2e on.
+_validate_parallel_child_env() {
+  case "${gate_discord:-}" in
+    ""|defer) ;;
+    only)
+      if ! $only_e2e; then
+        echo -e "${RED}RL_GATE_DISCORD=only requires --only-e2e (phase-2 child of the parallel gate).${NC}" >&2
+        exit 2
+      fi ;;
+    *) echo -e "${RED}RL_GATE_DISCORD must be defer or only (got '${gate_discord}').${NC}" >&2; exit 2 ;;
+  esac
+  case "${gate_e2e:-}" in
+    "") ;;
+    deferred)
+      if [ "$e2e_mode" != "off" ]; then
+        echo -e "${RED}RL_GATE_E2E=deferred requires --no-e2e (child a of the parallel gate).${NC}" >&2
+        exit 2
+      fi ;;
+    *) echo -e "${RED}RL_GATE_E2E must be deferred (got '${gate_e2e}').${NC}" >&2; exit 2 ;;
+  esac
+}
+
 # ROK-1203: report-only light-mode contrast sweep. Replaces the Playwright and
 # Discord-smoke steps under --only-e2e --contrast-audit. Reports violations but
 # never fails on them: PASS = sweep AND aggregator both exit 0.
@@ -2242,6 +2305,7 @@ run_discord_smoke() {
   case "$e2e_mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Discord smoke${NC}"
+      _gate_e2e_off_note
       skip_step
       return 0
       ;;
@@ -2274,6 +2338,16 @@ run_discord_smoke() {
       fi
       ;;
   esac
+
+  # ROK-1793 S2: child B of a parallel gate hands an in-scope Discord smoke to
+  # phase-2 child C on the owning slot (one bot identity per slot, ruling Q6).
+  # The marker is printed ONLY here — past the scope/env checks — so the
+  # orchestrator dispatches C only when the smoke would really have run.
+  if [ "${gate_discord:-}" = "defer" ]; then
+    echo "[parallel] discord-deferred"
+    _skip_for_parallel_child "deferred to phase 2"
+    return 0
+  fi
 
   # A checkout with no companion-bot credentials cannot run this tier, and the
   # tier failing poisons everything downstream of it: validate-ci.sh stops at
@@ -2569,6 +2643,11 @@ main() {
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
       --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
+      # ROK-1793 S2 (Codex r1): the e2e half of a parallel --fleet gate. e2e is
+      # ON exactly as --fleet implies it (an unreachable target FAILs, the diff
+      # gate does not SKIP) but NOT explicit, so a NONE diff still skips
+      # Playwright as serial --fleet does. Only valid with --only-e2e.
+      --fleet-e2e) e2e_mode="on"; e2e_explicit=false; fleet_e2e=true; shift ;;
       --only-e2e) _set_only_mode e2e; shift ;;
       --contrast-audit) contrast_audit=true; shift ;;
       --only-integration) _set_only_mode integration; shift ;;
@@ -2637,6 +2716,11 @@ main() {
     exit 2
   fi
 
+  if $fleet_e2e && ! $only_e2e; then
+    echo -e "${RED}--fleet-e2e is only valid together with --only-e2e (the e2e children of a parallel fleet gate).${NC}" >&2
+    exit 2
+  fi
+
   if $only_e2e && [ "$e2e_mode" = "off" ]; then
     echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}" >&2
     exit 2
@@ -2646,6 +2730,8 @@ main() {
     echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}" >&2
     exit 2
   fi
+
+  _validate_parallel_child_env
 
   # ROK-1792 — an explicit spec list. Validated up front (exit 2, invocation
   # error) and checked against everything that would leave it unrun.

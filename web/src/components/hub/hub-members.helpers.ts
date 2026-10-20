@@ -64,6 +64,14 @@ export function bandMembers(
     });
 }
 
+/**
+ * ROK-1831: the count line for the rows the page carried. A visitor on a
+ * members-first hub gets no rows, so it falls back to the page's member COUNT.
+ */
+export function membersCountFor(shown: number, loaded: number, memberCount: number): string {
+    return loaded === 0 ? membersCountLine(memberCount, memberCount) : membersCountLine(shown, loaded);
+}
+
 /** "142 members", or "7 of 142 members" while the search narrows the list. */
 export function membersCountLine(shown: number, total: number): string {
     const noun = total === 1 ? 'member' : 'members';

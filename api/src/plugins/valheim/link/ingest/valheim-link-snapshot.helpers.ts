@@ -11,10 +11,11 @@ import type {
  * CONTRACT §1 latest-wins key, minus the server (that is the
  * `pelican_server_id` column of `valheim_link_snapshots_key_uq`):
  * character → steamId:playerId; map → steamId:playerId:worldUid;
- * items → gameVersion.
+ * items → gameVersion; containers → worldUid (ROK-1853).
  */
 export function valheimSnapshotKey(msg: ValheimLinkMessage): string {
-  if (msg.kind === 'items') return msg.gameVersion;
+  if (msg.kind === 'items' || msg.kind === 'recipes') return msg.gameVersion;
+  if (msg.kind === 'containers') return msg.worldUid;
   const { steamId, playerId, worldUid } = msg.character;
   return msg.kind === 'map'
     ? `${steamId}:${playerId}:${worldUid}`
@@ -39,6 +40,7 @@ export function valheimBlobRefs(
   const refs: ValheimLinkBlobRefRow[] = [];
   if (msg.kind === 'map' && msg.baseMap)
     refs.push(toRef(msg.baseMap, 'baseMap'));
+  if (msg.kind === 'recipes' && msg.atlas) refs.push(toRef(msg.atlas, 'atlas'));
   if (msg.kind === 'items') {
     if (msg.atlas) refs.push(toRef(msg.atlas, 'atlas'));
     for (const item of msg.items) {
@@ -56,14 +58,18 @@ export function valheimSnapshotRow(
   pelicanServerId: number,
   msg: ValheimLinkMessage,
 ): NewValheimLinkSnapshot {
-  const who = msg.kind === 'items' ? null : msg.character;
+  const who =
+    msg.kind === 'items' || msg.kind === 'containers' || msg.kind === 'recipes'
+      ? null
+      : msg.character;
   return {
     pelicanServerId,
     kind: msg.kind,
     snapshotKey: valheimSnapshotKey(msg),
     steamId: who?.steamId ?? null,
     playerId: who?.playerId ?? null,
-    worldUid: who?.worldUid ?? null,
+    worldUid:
+      msg.kind === 'containers' ? msg.worldUid : (who?.worldUid ?? null),
     gameVersion: msg.gameVersion,
     modVersion: msg.modVersion,
     capturedAt: new Date(msg.capturedAt),

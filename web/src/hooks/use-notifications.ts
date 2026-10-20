@@ -43,6 +43,8 @@ export type NotificationType =
     | 'post_event_followup'
     | 'lfg_invite'
     | 'lfg_player_invite'
+    | 'hub_leader_post'
+    | 'hub_event_tagged'
     | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';
