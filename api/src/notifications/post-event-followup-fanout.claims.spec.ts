@@ -13,12 +13,34 @@ import {
   sendClaimedEventNotice,
 } from './event-notice-plan.helpers';
 import type { FollowupFanoutDeps } from './post-event-followup-fanout.helpers';
+import type {
+  CreateNotificationInput,
+  NotificationDto,
+} from './notification.types';
 
 jest.mock('./post-event-followup.helpers', () => ({
   resolvePostEventFollowupRecipients: jest.fn(),
 }));
 const recipients = jest.mocked(resolvePostEventFollowupRecipients);
 const dialect = new PgDialect();
+
+/** The row `createMany` returns for an input it actually created. */
+function asCreated(i: CreateNotificationInput, n: number): NotificationDto {
+  const { userId, type, title, message } = i;
+  return { id: String(n), userId, type, title, message, createdAt: '' };
+}
+
+/** A dedup service over the same fake table (first claim wins). */
+function dedupOver(held: Set<string>) {
+  return {
+    checkAndMarkSent: jest.fn((key: string) => {
+      const had = held.has(key);
+      held.add(key);
+      return Promise.resolve(had);
+    }),
+    releaseKey: jest.fn(),
+  };
+}
 
 /** A fake `notification_dedup` table: `held` is the set of claimed keys. */
 function setup(held: Set<string> = new Set()) {
@@ -30,6 +52,10 @@ function setup(held: Set<string> = new Set()) {
     if (text.includes('SELECT id, title, creator_id')) {
       return Promise.resolve([{ id: 10, title: 'Raid', creator_id: 9 }]);
     }
+    if (text.includes('DELETE FROM notification_dedup')) {
+      params.forEach((k) => held.delete(String(k)));
+      return Promise.resolve([]);
+    }
     if (text.includes('INSERT INTO notification_dedup')) {
       const keys = params.map(String).filter((p) => p.startsWith('event-'));
       const won = keys.filter((k) => !held.has(k));
@@ -38,7 +64,9 @@ function setup(held: Set<string> = new Set()) {
     }
     return Promise.resolve([]);
   });
-  const createMany = jest.fn().mockResolvedValue([]);
+  const createMany = jest.fn((inputs: CreateNotificationInput[]) =>
+    Promise.resolve(inputs.map(asCreated)),
+  );
   const db = { execute } as unknown as FollowupFanoutDeps['db'];
   return {
     execute,
@@ -48,7 +76,7 @@ function setup(held: Set<string> = new Set()) {
 }
 
 function sentTo(createMany: jest.Mock): number[] {
-  const [inputs] = createMany.mock.calls[0] as [{ userId: number }[]];
+  const [inputs] = createMany.mock.calls[0] as [CreateNotificationInput[]];
   return inputs.map((i) => i.userId);
 }
 
@@ -118,5 +146,31 @@ describe('runFollowupFanout — per-(user, event) notice claims', () => {
     );
     expect(claimCallIndex(s.execute)).toBe(-1);
     expect(sentTo(s.createMany)).toEqual([11, 22]);
+  });
+});
+
+describe('runFollowupFanout — claims kept only for notified recipients (Codex r9)', () => {
+  beforeEach(() => recipients.mockResolvedValue([11, 22]));
+
+  it('keeps the claim of every recipient it notified', async () => {
+    const held = new Set<string>();
+    const s = setup(held);
+    await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
+    expect([...held]).toEqual([eventNoticeKey(55, 11), eventNoticeKey(55, 22)]);
+  });
+
+  it('releases the claim of a recipient createMany filtered out (Codex r9)', async () => {
+    const held = new Set<string>();
+    const s = setup(held);
+    s.createMany.mockImplementation((inputs: CreateNotificationInput[]) =>
+      Promise.resolve(inputs.filter((i) => i.userId !== 22).map(asCreated)),
+    );
+    await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
+    expect([...held]).toEqual([eventNoticeKey(55, 11)]);
+    const send = jest.fn().mockResolvedValue({});
+    expect(await sendClaimedEventNotice(dedupOver(held), 55, 22, send)).toBe(
+      true,
+    );
+    expect(send).toHaveBeenCalledTimes(1);
   });
 });

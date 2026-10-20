@@ -3,7 +3,10 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
 import type { NotificationService } from './notification.service';
-import type { CreateNotificationInput } from './notification.types';
+import type {
+  CreateNotificationInput,
+  NotificationDto,
+} from './notification.types';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 import {
   EVENT_NOTICE_TTL_SECONDS,
@@ -160,7 +163,8 @@ export async function runFollowupFanout(
 /**
  * Resolve recipients, load the event-path start time, and dispatch the DMs via
  * `createMany`. Rolls the fan-out claim (and any per-user notice claims) back
- * and rethrows on failure so a retry (or the other path) can re-attempt.
+ * and rethrows on failure so a retry (or the other path) can re-attempt. On
+ * success only the claims of recipients actually notified are kept.
  */
 async function dispatchFollowupInvites(
   deps: FollowupFanoutDeps,
@@ -169,33 +173,82 @@ async function dispatchFollowupInvites(
   payload: FollowupFanoutPayload,
   actingCreatorId: number,
 ): Promise<void> {
-  const { db, notificationService } = deps;
-  // Event path carries the new follow-up event's id + start time; the poll
-  // path has no fixed time yet (ROK-1422) and no event to claim notices for.
+  // Event path carries the new follow-up event's id; the poll path has no
+  // event yet (ROK-1422) and so no per-user notice claims.
   const eventId = 'eventId' in payload ? payload.eventId : null;
-  let claimed: number[] = [];
+  const claimed: number[] = [];
+  let created: NotificationDto[];
   try {
     const recipients = await resolvePostEventFollowupRecipients(
-      db,
+      deps.db,
       endedEventId,
       actingCreatorId,
     );
-    const startEpoch =
-      eventId !== null ? await loadEventStartEpoch(db, eventId) : null;
-    if (eventId !== null) {
-      claimed = await claimFollowupEventNotices(db, eventId, recipients);
-    }
+    claimed.push(...(await claimForEvent(deps.db, eventId, recipients)));
     const sendTo = eventId !== null ? claimed : recipients;
-    await notificationService.createMany(
-      buildInputs(sendTo, endedTitle, payload, startEpoch),
-    );
+    created = await sendInvites(deps, sendTo, endedTitle, payload);
   } catch (err) {
-    await releaseFanout(db, endedEventId);
-    if (eventId !== null) {
-      await releaseFollowupEventNotices(db, eventId, claimed);
-    }
+    await rollbackFollowup(deps.db, endedEventId, eventId, claimed);
     throw err;
   }
+  if (eventId === null) return;
+  await releaseFollowupEventNotices(
+    deps.db,
+    eventId,
+    unnotified(claimed, created),
+  );
+}
+
+/** Event path: claim the recipients' notices; the poll path claims none. */
+function claimForEvent(
+  db: Db,
+  eventId: number | null,
+  recipients: number[],
+): Promise<number[]> {
+  if (eventId === null) return Promise.resolve([]);
+  return claimFollowupEventNotices(db, eventId, recipients);
+}
+
+/** Create the DMs; the event path appends its start time (ROK-1422). */
+async function sendInvites(
+  deps: FollowupFanoutDeps,
+  sendTo: number[],
+  endedTitle: string,
+  payload: FollowupFanoutPayload,
+): Promise<NotificationDto[]> {
+  const startEpoch =
+    'eventId' in payload
+      ? await loadEventStartEpoch(deps.db, payload.eventId)
+      : null;
+  return deps.notificationService.createMany(
+    buildInputs(sendTo, endedTitle, payload, startEpoch),
+  );
+}
+
+/** A failed send gives back the fan-out claim and every notice claim. */
+async function rollbackFollowup(
+  db: Db,
+  endedEventId: number,
+  eventId: number | null,
+  claimed: readonly number[],
+): Promise<void> {
+  await releaseFanout(db, endedEventId);
+  if (eventId !== null) {
+    await releaseFollowupEventNotices(db, eventId, claimed);
+  }
+}
+
+/**
+ * ROK-1832 (Codex r9): the claimed recipients `createMany` created nothing for
+ * (per-type opt-out, deactivation, rate limit). Their claims are released so
+ * a later group notice or late tag can still reach them.
+ */
+function unnotified(
+  claimed: readonly number[],
+  created: readonly NotificationDto[],
+): number[] {
+  const notified = new Set(created.map((n) => n.userId));
+  return claimed.filter((id) => !notified.has(id));
 }
 
 /**
@@ -233,7 +286,7 @@ async function claimFollowupEventNotices(
   return ids.filter((id) => keys.has(eventNoticeKey(eventId, id)));
 }
 
-/** Give back the notice claims of a fan-out whose send failed. */
+/** Give back notice claims that produced no notification. */
 async function releaseFollowupEventNotices(
   db: Db,
   eventId: number,
