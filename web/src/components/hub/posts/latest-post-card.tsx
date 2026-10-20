@@ -16,7 +16,7 @@ import { Card, Pill } from '../hub-bits';
 import { useGuildProfile } from '../api/use-guild-content';
 import { relayOutcomeNotice, type PostNotice } from './hub-post.helpers';
 import { PostByline } from './post-byline';
-import { PostComposer } from './post-composer';
+import { PostComposer, type PostComposerProps } from './post-composer';
 import { PostEditor } from './post-editor';
 import { useHasPreviousPosts } from './use-hub-posts';
 import { useOverflow } from './use-overflow';
@@ -78,6 +78,24 @@ function Notice({ notice }: { notice: PostNotice | null }): JSX.Element {
     return <p role="status" className={`text-sm empty:hidden ${tone}`} data-testid="hub-post-relay-notice">{notice?.text}</p>;
 }
 
+interface CardBodyProps {
+    state: 'pending' | 'error' | 'ready'; post: HubPost | null; guildId: number; canEdit: boolean;
+    mode: Mode; copy: HubCopy; onCompose: () => void; onDone: () => void;
+}
+
+function CardBody({ state, post, guildId, canEdit, mode, copy, onCompose, onDone }: CardBodyProps): JSX.Element | null {
+    if (state === 'pending') return <PostSkeleton />;
+    if (state === 'error') return <p role="alert" className="text-sm text-danger" data-testid="guild-gm-post-error">Couldn’t load the guild post. Try again later.</p>;
+    if (canEdit && mode === 'edit' && post) return <PostEditor guildId={guildId} post={post} onDone={onDone} />;
+    if (post) return <LatestPost post={post} guildId={guildId} previous={copy.previousPosts} />;
+    return mode === 'compose' ? null : <EmptyPost canEdit={canEdit} copy={copy} onCompose={onCompose} />;
+}
+
+/** W2b — the composer opens inline above the current post. */
+function ComposeSlot(props: PostComposerProps): JSX.Element {
+    return <div className="mb-4 border-b border-edge pb-4"><PostComposer {...props} /></div>;
+}
+
 export interface LatestPostCardProps { guildId: number; canEdit: boolean; isLeader: boolean; kind?: GuildKind | undefined }
 
 /** The newest post (or the empty state) with editor actions and the relay notice. */
@@ -102,16 +120,11 @@ export function LatestPostCard({ guildId, canEdit, isLeader, kind }: LatestPostC
                 </div>
                 <Notice notice={notice} />
                 {canEdit && mode === 'compose' && (
-                    <div className="mb-4 border-b border-edge pb-4">
-                        <PostComposer guildId={guildId} kind={kind} isLeader={isLeader} onCancel={() => setMode('read')}
-                            onPosted={(res, channel) => { setNotice(relayOutcomeNotice(res.relayOutcome, channel)); setMode('read'); }} />
-                    </div>
+                    <ComposeSlot guildId={guildId} kind={kind} isLeader={isLeader} onCancel={() => setMode('read')}
+                        onPosted={(res, channel) => { setNotice(relayOutcomeNotice(res.relayOutcome, channel)); setMode('read'); }} />
                 )}
-                {profile.isPending ? <PostSkeleton />
-                    : profile.isError ? <p role="alert" className="text-sm text-danger" data-testid="guild-gm-post-error">Couldn’t load the guild post. Try again later.</p>
-                    : canEdit && mode === 'edit' && post ? <PostEditor guildId={guildId} post={post} onDone={() => setMode('read')} />
-                    : post ? <LatestPost post={post} guildId={guildId} previous={copy.previousPosts} />
-                    : mode !== 'compose' && <EmptyPost canEdit={canEdit} copy={copy} onCompose={compose} />}
+                <CardBody state={profile.isPending ? 'pending' : profile.isError ? 'error' : 'ready'} post={post} guildId={guildId}
+                    canEdit={canEdit} mode={mode} copy={copy} onCompose={compose} onDone={() => setMode('read')} />
             </Card>
         </section>
     );
