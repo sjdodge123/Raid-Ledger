@@ -18,7 +18,7 @@ import { nativeFetch } from '../../lib/api/native-fetch';
 import { PluginSlot } from '../../plugins';
 import { DrawerYourGuild } from './hub-nav/drawer-your-guild';
 import { DrawerHubsLink } from './hub-nav/hubs-nav-links';
-import { useHubNavActive } from './hub-nav/use-hub-nav-active';
+import { isHubsNavActive } from './hub-nav/use-hub-nav-active';
 
 interface MoreDrawerProps {
     isOpen: boolean;
@@ -245,7 +245,7 @@ function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
     s: Omit<ReturnType<typeof useMoreDrawerState>, 'trapRef'>; onClose: () => void;
     onFeedbackClick?: (() => void) | undefined; onOpenGameTime: () => void;
 }) {
-    const hubsActive = useHubNavActive(s.location.pathname).hubs;
+    const hubsActive = isHubsNavActive(s.location.pathname);
     return (
         <div className="flex-1 overflow-y-auto">
             {s.isAuthenticated && <DrawerYourGuild onClose={onClose} />}

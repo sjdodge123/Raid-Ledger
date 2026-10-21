@@ -11,8 +11,11 @@ import { at } from '../../test/defined';
 import { registerPlugin } from '../../plugins/plugin-registry';
 import { usePluginStore } from '../../stores/plugin-store';
 
-vi.mock('./hub-nav/use-hub-nav-active', () => ({
-    useHubNavActive: (pathname: string) => ({ guild: false, hubs: pathname === '/hubs' }),
+// ROK-1875: the Hubs item reads `/guilds/mine`; its own spec (hubs-nav-menu.test.tsx) drives the real query.
+const hubs = vi.hoisted(() => ({ list: [] as Array<{ id: number; name: string; kind: 'game_server' }> }));
+vi.mock('./hub-nav/my-hubs-queries', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./hub-nav/my-hubs-queries')>()),
+    useMyGuildsQuery: () => ({ data: { guilds: hubs.list.map((h) => ({ ...h, region: 'us', rankName: null, realmName: null, realmSlug: null, gameIconUrl: null })) } }),
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
@@ -40,11 +43,6 @@ vi.mock('../notifications', () => ({
 
 vi.mock('./ThemeToggle', () => ({
     ThemeToggle: () => null,
-}));
-
-// ROK-1870 D9: the core hub link queries `/guilds/mine`; its own spec lives in hub-nav/.
-vi.mock('./hub-nav/nav-guild-link', () => ({
-    NavGuildLink: () => null,
 }));
 
 vi.mock('./UserMenu', () => ({
@@ -90,8 +88,9 @@ describe('Header — plugin nav links (ROK-1785)', () => {
     });
 });
 
-describe('Header — the Hubs link (ROK-1870, operator ruling 2026-10-20)', () => {
-    it('sits right after Games in the main navigation and points at /hubs', () => {
+describe('Header — the Hubs item (ROK-1870, ROK-1875 operator ruling 2026-10-20)', () => {
+    it('no hubs: a plain Hubs link right after Games, pointing at /hubs', () => {
+        hubs.list = [];
         renderHeader();
         const nav = screen.getByRole('navigation', { name: 'Main navigation' });
         const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent);
@@ -100,8 +99,21 @@ describe('Header — the Hubs link (ROK-1870, operator ruling 2026-10-20)', () =
     });
 
     it('takes the active colour on /hubs like its siblings', () => {
+        hubs.list = [];
         render(<MemoryRouter initialEntries={['/hubs']}><Header onMenuClick={vi.fn()} /></MemoryRouter>);
         expect(screen.getByRole('link', { name: 'Hubs' }).className).toContain('text-emerald-400');
         expect(screen.getByRole('link', { name: 'Games' }).className).not.toContain('text-emerald-400');
+    });
+
+    it('with hubs: a Hubs menu button between Games and Events, and no separate "Guild" link', () => {
+        hubs.list = [{ id: 31, name: 'Valheim — Gamernight', kind: 'game_server' }];
+        renderHeader();
+        const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+        const items = Array.from(nav.querySelectorAll('a, button')).map((el) => el.textContent?.trim());
+        expect(items.slice(0, 5)).toEqual(['Calendar', 'Games', 'Hubs', 'Events', 'Players']);
+        expect(screen.getByTestId('nav-hubs-menu-trigger')).toHaveAttribute('aria-haspopup', 'menu');
+        expect(screen.queryByRole('link', { name: 'Guild' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Guild/ })).not.toBeInTheDocument();
+        hubs.list = [];
     });
 });

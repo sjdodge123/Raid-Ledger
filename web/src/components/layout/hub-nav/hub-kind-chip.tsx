@@ -6,13 +6,7 @@
 import type { JSX } from 'react';
 import type { GuildKind } from '@raid-ledger/contract';
 import { StatusChip } from '../../ui/status-chip';
-
-/** The short label each hub kind reads as. */
-export const HUB_KIND_LABEL: Record<GuildKind, string> = {
-    game_server: 'Server',
-    game_community: 'Community',
-    wow_guild: 'Guild',
-};
+import { HUB_KIND_LABEL } from './hub-kind-label';
 
 /** "Server" / "Community" / "Guild" pill; the title spells out "<Kind> hub". */
 export function HubKindChip({ kind }: { kind: GuildKind }): JSX.Element {
@@ -23,3 +17,6 @@ export function HubKindChip({ kind }: { kind: GuildKind }): JSX.Element {
         </span>
     );
 }
+
+/** Re-exported for the directory (L4 imports it from here). */
+export { HUB_KIND_LABEL } from './hub-kind-label';

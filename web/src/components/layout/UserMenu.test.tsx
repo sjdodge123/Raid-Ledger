@@ -78,14 +78,14 @@ describe('UserMenu dropdown (ROK-548)', () => {
         expect(linkEl).toHaveAttribute('href', '/users/42');
     });
 
-    it('offers "Browse hubs" to /hubs in the hub group, hidden from lg (ROK-1870)', async () => {
+    it('carries no hub group: the header Hubs menu covers 768px up (ROK-1875 §9 Q1)', async () => {
         const user = userEvent.setup();
         renderUserMenu();
         await user.click(screen.getByRole('button', { name: /testuser/i }));
-        const link = screen.getByTestId('user-menu-browse-hubs');
-        expect(link).toHaveAttribute('href', '/hubs');
-        expect(link).toHaveTextContent('Browse hubs');
-        expect(link.className).toContain('lg:hidden');
+        expect(screen.getByText('View Profile'), 'the menu is open').toBeInTheDocument();
+        expect(screen.queryByTestId('user-menu-browse-hubs')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('user-menu-guild')).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /browse (all )?hubs/i })).not.toBeInTheDocument();
     });
 
     it('shows "My Settings" link navigating to /profile when dropdown is open', async () => {

@@ -9,9 +9,7 @@ import { API_BASE_URL } from '../../lib/config';
 import { Z_INDEX } from '../../lib/z-index';
 import { PluginSlot } from '../../plugins';
 import { navClass } from './nav-class';
-import { NavGuildLink } from './hub-nav/nav-guild-link';
-import { HUBS_PATH } from './hub-nav/my-hubs-queries';
-import { useHubNavActive } from './hub-nav/use-hub-nav-active';
+import { HubsNavItem } from './hub-nav/hubs-nav-menu';
 
 interface HeaderProps {
     /** Called when the mobile hamburger button is tapped. */
@@ -26,25 +24,23 @@ interface HeaderProps {
  * On mobile, hides on scroll-down and reappears on scroll-up
  * (same pattern as the bottom tab bar).
  */
-const NAV_LINKS = [
-    { to: '/calendar', label: 'Calendar', membersOnly: false },
-    { to: '/games', label: 'Games', membersOnly: false },
-    /* ROK-1870 (operator ruling 17:05Z): the hub directory needs a session, so members only. */
-    { to: HUBS_PATH, label: 'Hubs', membersOnly: true },
-    { to: '/events', label: 'Events', membersOnly: false },
-    { to: '/players', label: 'Players', membersOnly: false },
-];
+const LEADING_LINKS = [{ to: '/calendar', label: 'Calendar' }, { to: '/games', label: 'Games' }];
+const TRAILING_LINKS = [{ to: '/events', label: 'Events' }, { to: '/players', label: 'Players' }];
+
+function NavLinks({ links, pathname }: { links: typeof LEADING_LINKS; pathname: string }) {
+    return <>{links.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}</>;
+}
 
 function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
-    // A community hub page lights "Hubs", not "Guild" (ROK-1870).
-    const hubsActive = useHubNavActive(pathname).hubs;
-    const linkPath = (to: string): string => (to === HUBS_PATH && hubsActive ? HUBS_PATH : pathname);
     return (
         <>
             <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
-                {NAV_LINKS.filter((l) => user || !l.membersOnly).map(({ to, label }) => <Link key={to} to={to} className={navClass(linkPath(to), to)}>{label}</Link>)}
+                <NavLinks links={LEADING_LINKS} pathname={pathname} />
+                {/* ROK-1875: one Hubs item (a link, or the "Your hubs" menu) for members, from md; the directory needs a session. */}
+                {user && <HubsNavItem pathname={pathname} />}
+                <NavLinks links={TRAILING_LINKS} pathname={pathname} />
                 {/* Plugin links show from lg: at md (768) the core links already fill the row (ROK-1785). */}
-                {user && <span className="hidden lg:contents"><NavGuildLink pathname={pathname} /><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
+                {user && <span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
                 {user && (
                     <>
                         <span className="w-px h-5 bg-edge" aria-hidden="true" />
