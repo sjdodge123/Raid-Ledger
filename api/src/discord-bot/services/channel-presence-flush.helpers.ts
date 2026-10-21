@@ -113,17 +113,18 @@ async function recapParticipants(
  * @param deps - Database plus the binding/channel/settings services.
  * @param bindingId - `null` once the binding was deleted; there is then no way
  *   to find the sessions, and the recap degrades to "No session started."
- * @param openedAt - The row's `opened_at`; sessions older than it belong to a
- *   previous, already-closed message.
+ * @param row - The message row. `openedAt`: sessions older than it belong to
+ *   a previous, already-closed message. `id`: its occupancy ledger pulls in a
+ *   session born on another channel that its occupants joined (ROK-1888 OQ3).
  * @returns Embed data per session, in the order `recapEvents` returned them.
  */
 export async function hydrateRecap(
   deps: AdHocNotificationDeps,
   bindingId: string | null,
-  openedAt: Date,
+  row: { openedAt: Date; id: string },
 ): Promise<EmbedEventData[]> {
   if (!bindingId) return [];
-  const events = await recapEvents(deps.db, bindingId, openedAt);
+  const events = await recapEvents(deps.db, bindingId, row.openedAt, row.id);
   const hydrated = await Promise.all(
     events.map((event) =>
       recapParticipants(deps.db, event.id).then((participants) =>

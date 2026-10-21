@@ -74,9 +74,11 @@ async function presenceRow(
     'presence row',
   );
   for (const id of occupants) {
-    await testApp.db
-      .insert(schema.discordChannelPresenceOccupancy)
-      .values({ presenceMessageId: row.id, discordUserId: id, displayName: id });
+    await testApp.db.insert(schema.discordChannelPresenceOccupancy).values({
+      presenceMessageId: row.id,
+      discordUserId: id,
+      displayName: id,
+    });
   }
   return row.id;
 }
@@ -124,7 +126,10 @@ describe('ROK-1888 OQ3 — the recap covers a session fed from two channels', ()
     const { bindingB } = await seedSharedSession();
     const rowB = await presenceRow(bindingB, opened, ['oq3-bravo']);
 
-    const sessions = await hydrateRecap(deps, bindingB, opened, rowB);
+    const sessions = await hydrateRecap(deps, bindingB, {
+      openedAt: opened,
+      id: rowB,
+    });
     const names = sessions.map((s) =>
       (s.signupMentions ?? []).map((m) => m.username).sort(),
     );

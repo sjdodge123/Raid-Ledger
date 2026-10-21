@@ -70,7 +70,11 @@ async function insertOtherRlUser(): Promise<number> {
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
-      .values({ username: 'other-rl', displayName: 'Brakk', steamId: STEAM_LINKED })
+      .values({
+        username: 'other-rl',
+        displayName: 'Brakk',
+        steamId: STEAM_LINKED,
+      })
       .returning(),
     'user',
   );

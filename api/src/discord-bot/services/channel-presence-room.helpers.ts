@@ -16,6 +16,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildMember } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { onBindingChannel } from './ad-hoc-event-channel-scope.helpers';
+import { recapScope } from './channel-presence-recap-scope.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { PresenceGameDetectorService } from './presence-game-detector.service';
@@ -204,6 +205,7 @@ export async function recapEvents(
   db: PostgresJsDatabase<typeof schema>,
   bindingId: string,
   openedAt: Date,
+  presenceRowId?: string,
 ): Promise<LinkedEvent[]> {
   return db
     .select({
@@ -216,7 +218,8 @@ export async function recapEvents(
       and(
         eq(schema.events.isAdHoc, true),
         // ROK-1851: a same-channel monitor's shared Quick Play counts too.
-        onBindingChannel(bindingId),
+        // ROK-1888 OQ3: plus sessions this message's occupants joined.
+        recapScope(db, bindingId, presenceRowId),
         isNull(schema.events.cancelledAt),
         // OVERLAP, not "started after" (P2-3). The ad-hoc events row is
         // written by the voice handler, which runs BEFORE the presence dirty
