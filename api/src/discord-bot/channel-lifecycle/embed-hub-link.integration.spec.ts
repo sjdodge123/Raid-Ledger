@@ -16,6 +16,8 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
 import { SettingsService } from '../../settings/settings.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
 
 const GUILD = 'guild-1872';
 const BASE = 'https://raid.example.com';
@@ -101,7 +103,12 @@ beforeAll(async () => {
   poster = testApp.app.get(EmbedPosterService);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // A game_server hub kind is live only while the Pelican plugin is active
+  // (HubKindRegistry.active(), ROK-1428 r17) — run as the real app does.
+  const plugins = testApp.app.get(PluginRegistryService);
+  await plugins.ensureInstalled(PELICAN_PLUGIN_ID);
+  await plugins.activate(PELICAN_PLUGIN_ID);
   const client = testApp.app.get(DiscordBotClientService);
   jest.spyOn(client, 'isConnected').mockReturnValue(true);
   jest.spyOn(client, 'getGuildId').mockReturnValue(GUILD);
@@ -116,6 +123,9 @@ beforeEach(() => {
 
 afterEach(async () => {
   jest.restoreAllMocks();
+  const plugins = testApp.app.get(PluginRegistryService);
+  if (plugins.isActive(PELICAN_PLUGIN_ID))
+    await plugins.deactivate(PELICAN_PLUGIN_ID);
   testApp.seed = await truncateAllTables(testApp.db);
 });
 

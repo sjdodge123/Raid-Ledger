@@ -18,6 +18,8 @@ import type { GuildActor } from '../../guilds/guild-access.service';
 import { ChannelMirrorService } from '../channel-mirror/channel-mirror.service';
 import type { ChannelMirrorRead } from '../channel-mirror/channel-mirror.read';
 import { HubChannelLinkService } from './hub-channel-link.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
 
 const MANAGED = '478810000000000001';
 const LEADER_PICK = '478810000000000002';
@@ -93,7 +95,12 @@ beforeAll(async () => {
   discord = testApp.app.get(GuildDiscordService);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // A game_server hub kind is live only while the Pelican plugin is active
+  // (HubKindRegistry.active(), ROK-1428 r17) — run as the real app does.
+  const plugins = testApp.app.get(PluginRegistryService);
+  await plugins.ensureInstalled(PELICAN_PLUGIN_ID);
+  await plugins.activate(PELICAN_PLUGIN_ID);
   const mirror = testApp.app.get(ChannelMirrorService);
   jest
     .spyOn(mirror, 'listReadableTextChannels')
@@ -106,6 +113,9 @@ beforeEach(() => {
 
 afterEach(async () => {
   jest.restoreAllMocks();
+  const plugins = testApp.app.get(PluginRegistryService);
+  if (plugins.isActive(PELICAN_PLUGIN_ID))
+    await plugins.deactivate(PELICAN_PLUGIN_ID);
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
