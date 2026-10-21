@@ -50,10 +50,7 @@ function post(path: string, body: object = {}) {
     .send(body);
 }
 
-async function seed(
-  slot = 2,
-  extra: object = {},
-): Promise<ServerHubFixture> {
+async function seed(slot = 2, extra: object = {}): Promise<ServerHubFixture> {
   const res = await post(ROUTE, { slot, ...extra });
   expect(res.status).toBe(200);
   return res.body as ServerHubFixture;

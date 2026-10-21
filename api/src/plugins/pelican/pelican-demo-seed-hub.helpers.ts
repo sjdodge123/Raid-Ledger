@@ -185,7 +185,8 @@ async function resetSchedules(
 ): Promise<void> {
   const s = schema.pelicanSchedules;
   await tx.delete(s).where(eq(s.serverId, serverId));
-  if (withSchedules) await tx.insert(s).values(runningServerSchedules(serverId));
+  if (withSchedules)
+    await tx.insert(s).values(runningServerSchedules(serverId));
 }
 
 async function hubGuildId(tx: PelicanTx, serverId: number): Promise<number> {
