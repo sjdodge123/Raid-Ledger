@@ -8,7 +8,7 @@
  *   - reschedule-vs-create branch: `linkedEventId != null` reschedules the
  *     linked event then `completeStandalonePoll(matchId, eventId, startTime)`
  *     so the backend auto-signs-up/re-rosters the slot's voters (ROK-1031);
- *     otherwise navigate to `/events/new?gameId&startTime&matchId` (verbatim
+ *     otherwise navigate to `/events/new?gameId&startTime&matchId&lineupId` (verbatim
  *     target from `CreateFromSlot::performNavigate`), plus `copyFromEventId`
  *     when this is a follow-up poll so the create form prefills from the
  *     ended event instead of opening blank.
@@ -102,13 +102,16 @@ export interface SchedulingLock {
 /** `/events/new` target for locking an unlinked poll's slot. */
 function createEventUrl(
   match: MatchDetailResponseDto,
-  matchId: number,
+  ids: { matchId: number; lineupId: number },
   slot: ScheduleSlotWithVotesDto,
 ): string {
   const params = new URLSearchParams();
   if (match.gameId) params.set('gameId', String(match.gameId));
   params.set('startTime', slot.proposedTime);
-  params.set('matchId', String(matchId));
+  params.set('matchId', String(ids.matchId));
+  // ROK-1874: the create form re-reads this poll to warn when the slot's
+  // yes-voters overflow the roster.
+  params.set('lineupId', String(ids.lineupId));
   // Follow-up polls carry the ended event so the create form prefills from
   // it. Ordinary polls have no source event and open with defaults.
   if (match.followupForEventId != null) {
@@ -121,6 +124,7 @@ function createEventUrl(
 function useLockCommit(
   match: MatchDetailResponseDto,
   matchId: number,
+  lineupId: number,
 ): (slot: ScheduleSlotWithVotesDto) => void {
   const navigate = useNavigate();
   const reschedule = useRescheduleEvent(match.linkedEventId ?? 0);
@@ -151,7 +155,7 @@ function useLockCommit(
       );
       return;
     }
-    navigate(createEventUrl(match, matchId, slot));
+    navigate(createEventUrl(match, { matchId, lineupId }, slot));
   };
 }
 
@@ -161,7 +165,7 @@ export function useSchedulingLock(
   matchId: number,
   lineupId: number,
 ): SchedulingLock {
-  const commit = useLockCommit(match, matchId);
+  const commit = useLockCommit(match, matchId, lineupId);
   const qc = useQueryClient();
   const inFlight = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
