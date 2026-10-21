@@ -26,22 +26,28 @@ export interface AutoSignupParams {
  * Skips the event creator (already signed up) and deduplicates voters
  * who may appear multiple times across slots.
  * Individual signup failures are caught and swallowed so that one
- * failure does not prevent other voters from being signed up.
+ * failure does not prevent other voters from being signed up — a failed
+ * signup is not counted as benched.
  * @param params - Auto-signup parameters
+ * @returns the voters whose signup landed on the bench (ROK-1874), read from
+ *   each signup's `assignedSlot`, in signup order
  */
 export async function autoSignupSlotVoters(
   params: AutoSignupParams,
-): Promise<void> {
+): Promise<{ benchedUserIds: number[] }> {
   const { eventId, creatorId, voters, signupsService } = params;
   const uniqueUserIds = [...new Set(voters.map((v) => v.userId))].filter(
     (uid) => uid !== creatorId,
   );
 
+  const benchedUserIds: number[] = [];
   for (const userId of uniqueUserIds) {
     try {
-      await signupsService.signup(eventId, userId);
+      const result = await signupsService.signup(eventId, userId);
+      if (result.assignedSlot === 'bench') benchedUserIds.push(userId);
     } catch {
       // Individual signup failures are swallowed intentionally
     }
   }
+  return { benchedUserIds };
 }

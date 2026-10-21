@@ -16,6 +16,7 @@ import { useRegistryGameId } from './shared/use-registry-game-id';
 import { PluginSlot } from '../../plugins';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
+import { SchedulingOverflowNotice } from './scheduling-overflow-notice';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
 import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, buildSubmitDto } from './create-event-form.utils';
@@ -158,7 +159,7 @@ function useCreateEventFormState(
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, followupForEventId, copyFromEvent }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
     const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent);
@@ -172,7 +173,8 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
             <WhenSection form={s.form} errors={s.errors} isEditMode={isEditMode} tzAbbr={s.tzAbbr}
                 endTimePreview={s.endTimePreview} recurrenceCount={s.recurrenceCount} updateField={s.updateField} setErrors={s.setErrors} />
             <div className="border-t border-edge-subtle" />
-            <RosterFormSection form={s.form} errors={s.errors} updateField={s.updateField} setErrors={s.setErrors} />
+            <RosterFormSection form={s.form} errors={s.errors} updateField={s.updateField} setErrors={s.setErrors}
+                poll={!isEditMode && schedulingLineupId && schedulingMatchId && initialStartTime ? { lineupId: schedulingLineupId, matchId: schedulingMatchId, startTime: initialStartTime } : null} />
             <div className="border-t border-edge-subtle" />
             <RemindersFormSection form={s.form} updateField={s.updateField} />
             <div className="border-t border-edge-subtle" />
@@ -231,8 +233,9 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
     );
 }
 
-function RosterFormSection({ form, errors, updateField, setErrors }: {
+function RosterFormSection({ form, errors, updateField, setErrors, poll }: {
     form: FormState; errors: FormErrors;
+    poll: { lineupId: number; matchId: number; startTime: string } | null;
     updateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
     setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
 }) {
@@ -249,6 +252,7 @@ function RosterFormSection({ form, errors, updateField, setErrors }: {
                 onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => { const next = { ...prev }; delete next.maxAttendees; return next; }); }}
                 onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
             />
+            {poll && <SchedulingOverflowNotice {...poll} slotType={form.slotType} slotPlayer={form.slotPlayer} maxAttendees={form.maxAttendees} />}
         </FormSection>
     );
 }
