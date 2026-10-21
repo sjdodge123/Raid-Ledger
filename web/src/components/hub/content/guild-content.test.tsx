@@ -136,13 +136,13 @@ describe('Resources tab visibility', () => {
     it('shows for a viewer once there is content', async () => {
         serve(false, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed' }] });
         renderPage();
-        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids', 'Resources']));
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Resources', 'Raids']));
     });
 
     it('shows for an editor even when empty', async () => {
         serve(true);
         renderPage();
-        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids', 'Resources']));
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Resources', 'Raids']));
     });
 });
 

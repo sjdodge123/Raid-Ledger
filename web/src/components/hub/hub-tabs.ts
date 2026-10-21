@@ -1,7 +1,10 @@
 /**
- * ROK-1830 — the hub's tab frame. Core pins Overview, Members and Events
- * first and Resources last (D7-A); a module's tabs sit between them, ordered
- * by their own `order`. A module cannot take the first or the last slot.
+ * ROK-1830 — the hub's tab frame. Core pins the band Overview, Members,
+ * Events, Resources first; a module's tabs follow it, ordered by their own
+ * `order`. A module cannot take the first slot or break up the core band.
+ * ROK-1876 (operator ruling 2026-10-21) moved Resources from last (D7-A) to
+ * right after Events on every hub kind, so a long module band never pushes
+ * it several swipes away on a phone.
  */
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 
@@ -20,8 +23,8 @@ export function hubTabs(mod: HubModule | undefined, ctx: HubCtx, showResources: 
         { id: 'overview', label: 'Overview', hidden: false },
         { id: 'members', label: 'Members', hidden: false },
         { id: 'events', label: 'Events', hidden: false },
-        ...moduleTabs,
         { id: 'resources', label: 'Resources', hidden: !showResources },
+        ...moduleTabs,
     ];
 }
 
