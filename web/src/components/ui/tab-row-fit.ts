@@ -88,6 +88,18 @@ function sameMeasured(a: Measured | null, b: Measured): boolean {
         && a.tabWidths.join() === b.tabWidths.join() && a.triggerWidths.join() === b.triggerWidths.join();
 }
 
+/** Runs `run` now, on a resize of the row or the measure layer's row, and once fonts load; returns the cleanup. */
+function watchFit(nav: HTMLElement, measure: HTMLElement, run: () => void): () => void {
+    let live = true;
+    const guarded = (): void => { if (live) run(); };
+    guarded();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(guarded);
+    observer?.observe(nav);
+    if (measure.firstElementChild) observer?.observe(measure.firstElementChild);
+    if ('fonts' in document) void document.fonts.ready.then(guarded);
+    return () => { live = false; observer?.disconnect(); };
+}
+
 /**
  * Measures in a layout effect (before paint), so the first frame is already
  * split; the split is derived during render, so picking a tab from More
@@ -109,18 +121,10 @@ export function useTabRowFit(
         const measure = measureRef.current;
         if (!nav || !measure) return undefined;
         const ids = key ? key.split('\n').map((line) => line.split('\t')[0] ?? '') : [];
-        let live = true;
-        const run = (): void => {
-            if (!live) return;
+        return watchFit(nav, measure, () => {
             const next = readMeasured(nav, measure, ids, key);
             setMeasured((prev) => (sameMeasured(prev, next) ? prev : next));
-        };
-        run();
-        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(run);
-        observer?.observe(nav);
-        if (measure.firstElementChild) observer?.observe(measure.firstElementChild);
-        if ('fonts' in document) void document.fonts.ready.then(run);
-        return () => { live = false; observer?.disconnect(); };
+        });
     }, [navRef, measureRef, key]);
     // Not measured for this tab list yet: the plain row (the layout effect re-renders before paint).
     if (!measured || measured.key !== key) return { count: tabs.length, activeHidden: false };

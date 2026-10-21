@@ -18,7 +18,7 @@ import { StatusChip } from '../../components/ui/status-chip';
 import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
-import { TabRowDemo, TabRowMoreDemo } from './tab-row-demo';
+import { TabRowDemo } from './tab-row-demo';
 
 /** Chip geometry per docs/design-system.md §4.3 (its /games adopters were retired by ROK-1659). */
 const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
@@ -185,7 +185,6 @@ export function PrimitivesSection(): JSX.Element {
                 <InputStates />
                 <EmptyAndLoading />
                 <TabRowDemo />
-                <TabRowMoreDemo />
             </StateGrid>
         </Section>
     );
