@@ -61,6 +61,15 @@ function useDirectoryUrl(): [HubsDirectoryParams, (next: HubsDirectoryParams) =>
     return [readDirectoryParams(search), update];
 }
 
+function LoadMore({ query }: { query: ReturnType<typeof useHubsDirectory> }): JSX.Element | null {
+    if (!query.hasNextPage) return null;
+    return (
+        <div className="flex justify-center">
+            <Button variant="secondary" size="sm" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>Load more</Button>
+        </div>
+    );
+}
+
 /** The hub directory page. */
 export function HubsDirectoryPage(): JSX.Element {
     const [params, update] = useDirectoryUrl();
@@ -86,11 +95,7 @@ export function HubsDirectoryPage(): JSX.Element {
             {query.isPending && <div data-testid="hubs-directory-loading" className="flex justify-center py-8"><LoadingSpinner /></div>}
             {query.isError && <p role="alert" className="text-sm text-danger">Couldn’t load hubs. Try again in a moment.</p>}
             {query.isSuccess && (hubs.length === 0 ? <EmptyState filtered={filtered} kind={params.kind} onClear={clear} /> : <HubGrid hubs={hubs} params={params} />)}
-            {query.hasNextPage && (
-                <div className="flex justify-center">
-                    <Button variant="secondary" size="sm" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>Load more</Button>
-                </div>
-            )}
+            <LoadMore query={query} />
         </div>
     );
 }

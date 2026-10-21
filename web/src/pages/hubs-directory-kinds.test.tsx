@@ -42,7 +42,7 @@ const filtersButton = (): HTMLElement => screen.getByRole('button', { name: /^Fi
 
 afterEach(() => { server.resetHandlers(); vi.restoreAllMocks(); });
 
-describe('HubsDirectoryPage — hub kinds', () => {
+describe('HubsDirectoryPage — kind chips and card actions', () => {
     it('a mixed page renders one card per hub with its kind chip, in API order', async () => {
         server.use(...communityHubHandlers({ directory: MIXED }));
         renderPage();
@@ -71,6 +71,9 @@ describe('HubsDirectoryPage — hub kinds', () => {
         expect(within(community).getByText('5 members · Led by Mirelle')).toBeInTheDocument();
     });
 
+});
+
+describe('HubsDirectoryPage — Kind filter and empty states', () => {
     it('picking Server writes ?kind=server, refetches with kind=game_server and badges the funnel', async () => {
         const seen: URLSearchParams[] = [];
         server.use(http.get(`${API}/hubs`, ({ request }) => {
