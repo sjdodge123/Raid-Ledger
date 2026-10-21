@@ -38,6 +38,9 @@ export interface HubPostPeople {
 
 const INVALID_CURSOR = 'Invalid cursor';
 
+/** Largest `integer` (int4) Postgres accepts for `hub_posts.id`. */
+const INT4_MAX = 2147483647;
+
 /** UTC ISO-8601 with 0–6 fractional digits (what `to_char(... .US)` emits). */
 const CURSOR_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 
@@ -66,10 +69,12 @@ export function decodeCursor(cursor: string): HubPostCursor {
   if (parts.length !== 2 || iso === undefined || idText === undefined) {
     throw new BadRequestException(INVALID_CURSOR);
   }
-  if (!/^[1-9]\d{0,9}$/.test(idText) || !isCalendarIso(iso)) {
+  const id = Number(idText);
+  // `hub_posts.id` is int4: a larger id is a Postgres error (500), not a page (Codex r9).
+  if (!/^[1-9]\d{0,9}$/.test(idText) || id > INT4_MAX || !isCalendarIso(iso)) {
     throw new BadRequestException(INVALID_CURSOR);
   }
-  return { createdAt: iso, id: Number(idText) };
+  return { createdAt: iso, id };
 }
 
 /** `${clientUrl}/guilds/<id>?post=<postId>#posts` — the Posts-tab deep link. */

@@ -81,11 +81,21 @@ describe('encodeCursor / decodeCursor', () => {
     ['bad id', Buffer.from(`${AT.toISOString()}|x4`).toString('base64url')],
     ['zero id', Buffer.from(`${AT.toISOString()}|0`).toString('base64url')],
     [
+      'id above int4 max (Codex r9)',
+      Buffer.from(`${AT.toISOString()}|2147483648`).toString('base64url'),
+    ],
+    [
       'extra part',
       Buffer.from(`${AT.toISOString()}|4|5`).toString('base64url'),
     ],
   ])('rejects a %s cursor with 400', (_label, cursor) => {
     expect(() => decodeCursor(cursor)).toThrow(BadRequestException);
+  });
+
+  it('accepts the int4 max id (2147483647)', () => {
+    const iso = AT.toISOString();
+    const cursor = encodeCursor({ createdAt: iso, id: 2147483647 });
+    expect(decodeCursor(cursor)).toEqual({ createdAt: iso, id: 2147483647 });
   });
 });
 

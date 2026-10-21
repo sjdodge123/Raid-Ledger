@@ -108,6 +108,10 @@ describe('P1–P3 — list', () => {
 
   it.each([
     ['garbage cursor', '?cursor=not-a-real-cursor'],
+    [
+      'int4-overflow cursor id (Codex r9)',
+      `?cursor=${Buffer.from('2026-10-20T00:00:00.000Z|2147483648').toString('base64url')}`,
+    ],
     ['limit=51', '?limit=51'],
     ['limit=0', '?limit=0'],
   ])('P3: %s → 400', async (_label, query) => {
