@@ -9,6 +9,7 @@ import type { ChannelLifecycleSettingsDto } from '@raid-ledger/contract';
 import type { Guild } from 'discord.js';
 import * as ops from './channel-lifecycle.discord-ops';
 import * as queries from './channel-lifecycle.store.queries';
+import type { LockedBindingState } from './channel-lifecycle.store.queries';
 import { executePlan } from './channel-lifecycle.run';
 import type { ApplyContext, PlannedGame } from './channel-lifecycle.types';
 import type { GameLifecycleActivityRow } from './game-activity.types';
@@ -53,6 +54,17 @@ const ROW: GameLifecycleActivityRow = {
   binding: null,
 };
 
+/** The new binding as the post-create link re-reads it (still routed). */
+const LOCKED: LockedBindingState = {
+  channelId: 'new-ch',
+  autoManaged: true,
+  pinned: false,
+  lifecycleState: 'active',
+  gameId: 7,
+  bindingPurpose: 'game-announcements',
+  recurrenceGroupId: null,
+};
+
 const CREATE: PlannedGame = { row: ROW, action: 'create', reason: 'activity' };
 
 function makeCtx(
@@ -61,14 +73,19 @@ function makeCtx(
 ): {
   ctx: ApplyContext;
   deleteChannel: jest.Mock;
+  link: jest.Mock;
 } {
   const deleteChannel = jest.fn().mockResolvedValue(undefined);
+  const link = jest.fn().mockRejectedValue(linkError);
   const guild = { id: 'g1', channels: { delete: deleteChannel } };
   const bindings = {
     bind: jest.fn((...args: unknown[]) => {
       const opts = args[7] as { db: FakeTx };
       opts.db.log.push(`bind ${String(args[1])}`);
-      return Promise.resolve({});
+      return Promise.resolve({
+        binding: { id: 'b-new' },
+        replacedChannelIds: [],
+      });
     }),
   };
   const ctx: ApplyContext = {
@@ -77,17 +94,18 @@ function makeCtx(
     bindings: bindings as unknown as ChannelBindingsService,
     settings: {} as ChannelLifecycleSettingsDto,
     categories: { gamesId: null, archiveId: 'cat-arch' },
-    hubLinker: { linkHubsForGame: jest.fn().mockRejectedValue(linkError) },
+    hubLinker: { linkHubsForGame: link },
     clientUrl: 'https://rl.test',
     now: new Date('2026-10-20T00:00:00Z'),
   };
-  return { ctx, deleteChannel };
+  return { ctx, deleteChannel, link };
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(queries.findGameAnnouncementBinding).mockResolvedValue(null);
   jest.mocked(ops.createTextChannel).mockResolvedValue('new-ch');
+  jest.mocked(queries.lockLifecycleBinding).mockResolvedValue(LOCKED);
 });
 
 describe('create then hub-link failure (Codex r5 P1)', () => {
@@ -126,5 +144,46 @@ describe('Codex r16 P2: suppressed since the read', () => {
       ['create', 'deferred', 'deferred: suppressed since the read'],
     ]);
     expect(jest.mocked(queries.isGameSuppressed).mock.calls[0]?.[1]).toBe('g1');
+  });
+});
+
+describe('Codex r18 P2: post-create link re-reads + locks the binding', () => {
+  it('locks the new binding and links nothing when it was reassigned since the create', async () => {
+    jest
+      .mocked(queries.lockLifecycleBinding)
+      .mockResolvedValue({ ...LOCKED, gameId: 99 });
+    const { pool, committed } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('must not link'));
+    const res = await executePlan(ctx, {
+      run: [CREATE],
+      deferred: [],
+      skipped: 0,
+      verify: [],
+    });
+    expect(jest.mocked(queries.lockLifecycleBinding).mock.calls[0]?.[1]).toBe(
+      'b-new',
+    );
+    expect(link).not.toHaveBeenCalled();
+    expect(ops.setTopic).not.toHaveBeenCalled();
+    expect(committed).toEqual(['bind new-ch']);
+    expect(res.items.map((i) => [i.action, i.outcome])).toEqual([
+      ['create', 'done'],
+    ]);
+  });
+
+  it('still links a binding that is unchanged since the create', async () => {
+    const { pool } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('hub link boom'));
+    await executePlan(ctx, {
+      run: [CREATE],
+      deferred: [],
+      skipped: 0,
+      verify: [],
+    });
+    expect(link).toHaveBeenCalledWith(
+      7,
+      'new-ch',
+      expect.anything(),
+    );
   });
 });
