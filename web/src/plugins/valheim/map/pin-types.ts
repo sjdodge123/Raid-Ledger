@@ -2,20 +2,36 @@
  * ROK-1837 D8 — pin type → heroicon + tone. Tone classes are `--color-*`
  * token utilities only (fifteen themes remap them; never a raw colour). The
  * type set is open (`Minimap.PinType.ToString()`, modded types too), so any
- * unknown type falls back to the generic map pin.
+ * unknown type (incl. a modded bare integer like `"17"`) falls back to the
+ * generic map pin. ROK-1880: the five player map markers `Icon0`…`Icon4`
+ * (Valheim's marker-picker order: fire, home, hammer, mine, portal) and the
+ * Hildir quest chests `Hildir1`…`Hildir3` get their own icon + name.
  */
 import type { ComponentType, SVGProps } from 'react';
 import type { ValheimMapPin } from '@raid-ledger/contract';
 import {
+    ArchiveBoxIcon,
+    CubeIcon,
     FireIcon,
     HomeIcon,
     MapPinIcon,
     MegaphoneIcon,
+    SparklesIcon,
+    WrenchIcon,
     XCircleIcon,
 } from '@heroicons/react/24/solid';
+import { cleanPinLabel } from './pin-label';
 
 export type PinIconName =
-    'home' | 'x-circle' | 'fire' | 'megaphone' | 'map-pin';
+    | 'home'
+    | 'x-circle'
+    | 'fire'
+    | 'megaphone'
+    | 'map-pin'
+    | 'wrench'
+    | 'cube'
+    | 'sparkles'
+    | 'archive-box';
 
 export interface PinStyle {
     Icon: ComponentType<SVGProps<SVGSVGElement>>;
@@ -37,8 +53,19 @@ const GENERIC: PinStyle = {
     Icon: MapPinIcon,
     iconName: 'map-pin',
     toneClass: NEUTRAL_TONE,
-    typeLabel: 'Pin',
+    typeLabel: 'Map pin',
 };
+
+/** A player map marker / quest pin: neutral tone, its own icon and name. */
+function marker(
+    Icon: PinStyle['Icon'],
+    iconName: PinIconName,
+    typeLabel: string,
+): PinStyle {
+    return { Icon, iconName, toneClass: NEUTRAL_TONE, typeLabel };
+}
+
+const HILDIR_CHEST = marker(ArchiveBoxIcon, 'archive-box', "Hildir's chest");
 
 const KNOWN: Readonly<Record<string, PinStyle>> = {
     Bed: {
@@ -65,27 +92,35 @@ const KNOWN: Readonly<Record<string, PinStyle>> = {
         toneClass: NEUTRAL_TONE,
         typeLabel: 'Shout',
     },
+    Icon0: marker(FireIcon, 'fire', 'Fire'),
+    Icon1: marker(HomeIcon, 'home', 'Home'),
+    Icon2: marker(WrenchIcon, 'wrench', 'Workshop'),
+    Icon3: marker(CubeIcon, 'cube', 'Mine'),
+    Icon4: marker(SparklesIcon, 'sparkles', 'Portal'),
+    Hildir1: HILDIR_CHEST,
+    Hildir2: HILDIR_CHEST,
+    Hildir3: HILDIR_CHEST,
 };
 
-/** Style for a pin type; `Icon0`…`Icon4` and anything unknown get the generic pin. */
+/** Style for a pin type; anything unknown (modded, numeric) gets the generic pin. */
 export function pinStyleFor(type: string): PinStyle {
     return Object.hasOwn(KNOWN, type) ? (KNOWN[type] ?? GENERIC) : GENERIC;
 }
 
-/** The pin's visible / accessible text: its label, else the type name. */
+/** The pin's visible / accessible text: its cleaned label, else the type name. */
 export function pinDisplayLabel(label: string, type: string): string {
-    const trimmed = label.trim();
-    return trimmed.length > 0 ? trimmed : pinStyleFor(type).typeLabel;
+    return cleanPinLabel(label, pinStyleFor(type).typeLabel);
 }
 
 /**
  * The pin button's accessible name (approved prototype):
- * `<label> (<type>[, cartography table][, checked])`.
+ * `<label> (<type name>[, cartography table][, checked])` — the human type
+ * name, never the raw enum (`Icon3` → "Mine", ROK-1880).
  */
 export function pinAccessibleName(
     pin: Pick<ValheimMapPin, 'label' | 'type' | 'shared' | 'checked'>,
 ): string {
-    const parts = [pin.type];
+    const parts = [pinStyleFor(pin.type).typeLabel];
     if (pin.shared) parts.push('cartography table');
     if (pin.checked) parts.push('checked');
     return `${pinDisplayLabel(pin.label, pin.type)} (${parts.join(', ')})`;
