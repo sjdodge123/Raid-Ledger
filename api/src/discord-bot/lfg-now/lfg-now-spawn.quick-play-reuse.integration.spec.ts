@@ -12,6 +12,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
+import { createMemberAndLogin } from '../../events/signups.integration.spec-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import {
@@ -19,6 +20,9 @@ import {
   findLiveQuickPlayGameIds,
 } from '../services/ad-hoc-game-spawn-lock';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
+import { LfgNowSpawnService } from './lfg-now-spawn.service';
+import { AdHocEventService } from '../services/ad-hoc-event.service';
+import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 
 let testApp: TestApp;
 let gameId: number;
@@ -139,6 +143,52 @@ describe('LFG-now start while the Quick Play is in grace (ROK-1888 m4)', () => {
       .from(schema.events)
       .where(eq(schema.events.id, voiceEvent));
     expect(row?.status).toBe('live');
+  });
+});
+
+describe('LFG-now attach to an in-grace Quick Play nobody is in voice for (ROK-1888)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('re-arms grace with the normal timing, so the session still ends', async () => {
+    // MUTATION: drop the re-arm in LfgNowSpawnService.startNow and the event
+    // stays `live` forever — the old grace job's claimAndEndEvent no-ops.
+    const enqueue = jest
+      .spyOn(testApp.app.get(AdHocGracePeriodQueueService), 'enqueue')
+      .mockResolvedValue(undefined);
+    const voiceEvent = await voiceQuickPlay();
+    await testApp.db
+      .update(schema.events)
+      .set({ adHocStatus: 'grace_period' })
+      .where(eq(schema.events.id, voiceEvent));
+    await testApp.db
+      .update(schema.adHocParticipants)
+      .set({ leftAt: new Date() })
+      .where(eq(schema.adHocParticipants.eventId, voiceEvent));
+
+    const starter = await createMemberAndLogin(
+      testApp,
+      'starter',
+      'starter@reuse-1888.test',
+    );
+    const posted = await testApp.request
+      .post('/lfg')
+      .set('Authorization', `Bearer ${starter.token}`)
+      .send({ gameId, urgency: 'week' });
+    expect(posted.status).toBeLessThan(300);
+
+    const res = await testApp.app
+      .get(LfgNowSpawnService)
+      .startNow(starter.userId, gameId)
+      .catch((err: unknown) => err);
+    expect(res).toMatchObject({ eventId: voiceEvent, spawned: false });
+    expect(enqueue).toHaveBeenCalledWith(voiceEvent, 5 * 60 * 1000);
+
+    await testApp.app.get(AdHocEventService).finalizeEvent(voiceEvent);
+    const [row] = await testApp.db
+      .select({ status: schema.events.adHocStatus })
+      .from(schema.events)
+      .where(eq(schema.events.id, voiceEvent));
+    expect(row?.status).toBe('ended');
   });
 });
 
