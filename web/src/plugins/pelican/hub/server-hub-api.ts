@@ -9,6 +9,7 @@ import { fetchApi } from '../../../lib/api-client';
 import { toast } from '../../../lib/toast';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
 import { guildPageKey } from '../../../components/hub/api/use-guild';
+import { invalidateHubMembership } from '../../../components/hub/community/invalidate-hub-membership';
 
 const base = (guildId: number): string => `/plugins/pelican/hubs/${guildId}`;
 export const QUICK_PLAY_LIMIT = 20;
@@ -40,7 +41,9 @@ export function useHubJoin(guildId: number): UseMutationResult<HubJoinResponse, 
             toast.error('Couldn’t update your membership. Try again.');
             if (ctx?.prev) qc.setQueryData(key, ctx.prev);
         },
-        onSettled: () => qc.invalidateQueries({ queryKey: key, exact: true }),
+        // ROK-1875: /hubs now lists server hubs, so a Join/Leave refreshes the nav, the
+        // directory (any membership filter) and the game cards, not just this page.
+        onSettled: () => invalidateHubMembership(qc, guildId),
     });
 }
 
