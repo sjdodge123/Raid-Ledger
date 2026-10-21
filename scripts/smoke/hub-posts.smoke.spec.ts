@@ -144,7 +144,9 @@ test('S5 member: a ?post deep link opens the Posts tab with that post expanded a
         const linked = page.locator(`article#post-${oldest}`);
         await expect(linked).toHaveAttribute('aria-current', 'true', { timeout: 15_000 });
         await expect(linked).toContainText(LEGACY_LINE);
-        await expect(linked.getByRole('button', { name: 'Show less' }), 'a deep-linked post opens expanded').toBeVisible();
+        // The seeded oldest post is one short line: it opens unclamped, so it offers no Show more/less toggle
+        // (ROK-1868 review MAJOR — a short deep-linked post must not show "Show less").
+        await expect(linked.getByRole('button', { name: /^Show (less|more)$/ }), 'a short deep-linked post opens in full, with no toggle').toHaveCount(0);
         await expect(page.locator('article[aria-current="true"]'), 'only the linked post is highlighted').toHaveCount(1);
     });
 });
