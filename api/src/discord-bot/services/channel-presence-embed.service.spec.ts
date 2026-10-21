@@ -476,11 +476,13 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
     service.markDirty(VOICE);
     await service.flushNow();
 
-    // Hydrated by the channel's binding, over the row's own open window.
+    // Hydrated by the channel's binding, over the row's own open window and
+    // the row's occupancy ledger (ROK-1888 OQ3: cross-channel sessions).
     expect(mocked.recapEvents).toHaveBeenCalledWith(
       expect.anything(),
       BINDING,
       OPENED_AT,
+      'row-1',
     );
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
     const embeds = at(mocked.editEmbeds.mock.calls, 0)[3];
