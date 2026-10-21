@@ -10,10 +10,10 @@
  * earlier run are swept first; teardown deletes every channel it created and
  * restores the lifecycle settings it found.
  *
- * A live reconcile acts on EVERY game with activity, so before each live run
- * the test dry-runs and refuses to continue when the plan touches any other
- * game (createThreshold is raised to 10 and the seed carries 10 events, so
- * ordinary demo games stay below the bar). `serial`: no other test may write
+ * An unfiltered live reconcile acts on EVERY game (plan + gone-sweep), so
+ * every reconcile passes the DEMO_MODE `?gameIds=<seeded game>` filter; as a
+ * second check each live run is preceded by a dry run that must name no other
+ * game (createThreshold is also raised to 10 and the seed carries 10 events). `serial`: no other test may write
  * the lifecycle settings while this one holds them.
  */
 import { ChannelType, type TextChannel } from "discord.js";
@@ -36,7 +36,6 @@ const BASE = "/admin/discord/lifecycle";
 const SEED = "/admin/test/channel-lifecycle/seed";
 const AGE = "/admin/test/channel-lifecycle/age-binding";
 const TIMEOUT_MS = 45_000;
-const LIVE_ACTIONS = new Set(["create", "archive", "unarchive"]);
 
 interface Settings {
   enabled: boolean;
@@ -58,11 +57,16 @@ interface RunState {
   original: Settings | null;
 }
 
-/** POST reconcile, retrying while the cron / a nudge holds the lock (409). */
-async function reconcile(api: ApiClient, dryRun: boolean): Promise<Reconcile> {
+/**
+ * POST reconcile scoped to `gameId` (the DEMO_MODE `gameIds` filter), retrying
+ * while the cron / a nudge holds the lock (409). The filter scopes the rows,
+ * so neither the plan nor the gone-sweep can reach another game.
+ */
+async function reconcile(api: ApiClient, dryRun: boolean, gameId: number): Promise<Reconcile> {
+  const query = `dryRun=${String(dryRun)}&gameIds=${String(gameId)}`;
   return pollForCondition(async () => {
     try {
-      return await api.post<Reconcile>(`${BASE}/reconcile?dryRun=${String(dryRun)}`);
+      return await api.post<Reconcile>(`${BASE}/reconcile?${query}`);
     } catch (err) {
       if (err instanceof Error && err.message.includes("→ 409")) return null;
       throw err;
@@ -70,17 +74,19 @@ async function reconcile(api: ApiClient, dryRun: boolean): Promise<Reconcile> {
   }, TIMEOUT_MS);
 }
 
-/** Dry-run first; refuse a live run that would touch any game but ours. */
+/**
+ * Dry-run first (both runs carry the `gameIds` filter); as a second check,
+ * refuse the live run when the plan names ANY other game — with the filter in
+ * place a foreign item (even `link_hub` / `none`) means the scoping broke.
+ */
 async function reconcileOnlyOurs(api: ApiClient, gameId: number): Promise<Reconcile> {
-  const plan = await reconcile(api, true);
-  const foreign = plan.items.filter(
-    (i) => i.gameId !== gameId && i.outcome === "planned" && LIVE_ACTIONS.has(i.action),
-  );
+  const plan = await reconcile(api, true, gameId);
+  const foreign = plan.items.filter((i) => i.gameId !== gameId);
   if (foreign.length > 0) {
     const names = foreign.map((i) => `${i.gameName}:${i.action}`).join(", ");
     throw new SmokeAssertionError(`refusing live reconcile — it would also change: ${names}`);
   }
-  const live = await reconcile(api, false);
+  const live = await reconcile(api, false, gameId);
   if (live.stoppedReason !== null) {
     throw new SmokeAssertionError(`live reconcile stopped: ${live.stoppedReason}`);
   }
