@@ -127,7 +127,13 @@ export function decideGame(
   const { binding } = row;
   if (!binding) return decideUnbound(row, settings);
   if (!binding.autoManaged) return keepOrLink(row, 'manual binding');
-  if (binding.pinned) return { action: 'none', reason: 'pinned' };
+  // Codex r16 P2: a pin blocks archive / unarchive only — a pinned live
+  // channel still links a hub that became eligible after the pin.
+  if (binding.pinned) {
+    return binding.lifecycleState === 'archived'
+      ? { action: 'none', reason: 'pinned' }
+      : keepOrLink(row, 'pinned');
+  }
   const live = row.itemCount >= 1 || row.hubHold;
   if (binding.lifecycleState === 'archived') {
     return live
