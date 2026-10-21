@@ -49,7 +49,8 @@ const SQUARE = '■'; // ■
 const SEP = '·'; // ·
 const EN_DASH = '–'; // –
 /** ROK-1888 OQ4: the hint's lead-in, before the masked join link. */
-export const JOIN_HINT_LEAD = 'Not on Raid Ledger yet?';
+/** Operator copy ruling 2026-10-21: lead with the link, then the benefit. */
+export const JOIN_HINT_BENEFIT = 'to get event reminders and track your sessions';
 /** The join link's label — the same ↗ as `Open event ↗`. */
 export const JOIN_HINT_LABEL = 'Join Raid Ledger \u2197';
 
@@ -138,7 +139,7 @@ function joinHintLine(
   if (state !== 'live' || !event.discordOnlyPresent || !clientUrl) return null;
   const url = `${clientUrl}${JOIN_POST_LOGIN_PATH}`;
   const link = maskedLink(JOIN_HINT_LABEL, url);
-  return `${JOIN_HINT_LEAD} ${link}`;
+  return `${link} ${JOIN_HINT_BENEFIT}`;
 }
 
 /** `▸ LIVE · Quick Play · 3 playing` / `■ ENDED · Quick Play · 2h 45m`. */

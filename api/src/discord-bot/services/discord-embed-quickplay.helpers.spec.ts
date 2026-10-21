@@ -638,7 +638,7 @@ describe('buildQuickPlayEmbed — unlinked server players (ROK-1888)', () => {
 });
 
 describe('buildQuickPlayEmbed — Join Raid Ledger hint (ROK-1888 OQ4)', () => {
-  const hint = `Not on Raid Ledger yet? [Join Raid Ledger ↗](${CLIENT_URL}/login)`;
+  const hint = `[Join Raid Ledger ↗](${CLIENT_URL}/login) to get event reminders and track your sessions`;
 
   it('adds the hint while a Discord-only member is present', () => {
     const data = event({ discordOnlyPresent: true });
