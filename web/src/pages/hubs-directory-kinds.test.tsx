@@ -130,3 +130,28 @@ describe('HubsDirectoryPage — Kind filter and empty states', () => {
         expect(screen.getByText('Game servers, guilds and community groups for the games we play.')).toBeInTheDocument();
     });
 });
+
+describe('HubsDirectoryPage — Kind radio checked state (smoke hubs-nav:194)', () => {
+    it('the Kind radio reflects ?kind=server, and a new pick stays mounted + checked while its page loads', async () => {
+        let release = (): void => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        let calls = 0;
+        server.use(http.get(`${API}/hubs`, async () => {
+            calls += 1;
+            if (calls > 1) await gate;
+            return HttpResponse.json(MIXED);
+        }));
+        mockDesktop(true);
+        renderPage('/hubs?kind=server');
+        await screen.findByText('Valheim — Gamernight');
+        await userEvent.click(filtersButton());
+        expect(screen.getByRole('radio', { name: 'Server' }), '?kind=server checks the Server radio').toBeChecked();
+        await userEvent.click(screen.getByRole('radio', { name: 'Community' }));
+        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/hubs?kind=community'));
+        expect(screen.queryByRole('radio', { name: 'Community', checked: true }),
+            'the Kind group stays mounted with Community checked while the kind=community page is in flight').not.toBeNull();
+        release();
+        await waitFor(() => expect(calls).toBe(2));
+        expect(await screen.findByRole('radio', { name: 'Community', checked: true })).toBeInTheDocument();
+    });
+});

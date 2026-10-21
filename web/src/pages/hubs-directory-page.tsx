@@ -61,6 +61,17 @@ function useDirectoryUrl(): [HubsDirectoryParams, (next: HubsDirectoryParams) =>
     return [readDirectoryParams(search), update];
 }
 
+/**
+ * The instance's live kinds (D12: independent of the filters). A filter change
+ * is a new query key with no data yet, so keep the last known list meanwhile;
+ * otherwise the Kind group unmounts mid-pick and the new choice never shows checked.
+ */
+function useLiveKinds(kinds: readonly GuildKind[] | undefined): readonly GuildKind[] {
+    const [last, setLast] = useState<readonly GuildKind[]>([]);
+    if (kinds && kinds !== last) setLast(kinds);
+    return kinds ?? last;
+}
+
 function LoadMore({ query }: { query: ReturnType<typeof useHubsDirectory> }): JSX.Element | null {
     if (!query.hasNextPage) return null;
     return (
@@ -78,7 +89,7 @@ export function HubsDirectoryPage(): JSX.Element {
     const query = useHubsDirectory(params);
     const hubs = query.data?.pages.flatMap((p) => p.items) ?? [];
     const gameName = hubs.find((h) => h.gameId === params.gameId)?.gameName;
-    const kinds = query.data?.pages[0]?.kinds ?? [];
+    const kinds = useLiveKinds(query.data?.pages[0]?.kinds);
     const filtered = directoryActiveCount(params) > 0 || Boolean(params.q);
     const clear = (): void => { setText(''); update({ membership: 'all', sort: params.sort }); };
     return (
