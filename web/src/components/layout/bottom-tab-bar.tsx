@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { Z_INDEX } from '../../lib/z-index';
+import { useAuth } from '../../hooks/use-auth';
 import { BottomHubsButton } from './hub-nav/bottom-hubs-button';
 
 const LEFT_TABS = [
@@ -49,12 +50,17 @@ function TabLink({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     );
 }
 
-/** The bar's five even slots; `/dev/design-system` renders it statically at 320 / 375 / 430px. */
+/**
+ * The bar's five even slots; `/dev/design-system` renders it statically at 320 / 375 / 430px.
+ * Signed out there is no Hubs slot (parity with the header and the More drawer), so the
+ * four tabs share four even columns.
+ */
 export function BottomTabGrid({ pathname }: { pathname: string }) {
+    const { isAuthenticated } = useAuth();
     return (
-        <div data-testid="bottom-tab-grid" className="grid grid-cols-5 items-center h-14">
+        <div data-testid="bottom-tab-grid" className={`grid ${isAuthenticated ? 'grid-cols-5' : 'grid-cols-4'} items-center h-14`}>
             {LEFT_TABS.map((tab) => <TabLink key={tab.to} tab={tab} isActive={pathname.startsWith(tab.to)} />)}
-            <BottomHubsButton pathname={pathname} />
+            {isAuthenticated && <BottomHubsButton pathname={pathname} />}
             {RIGHT_TABS.map((tab) => <TabLink key={tab.to} tab={tab} isActive={pathname.startsWith(tab.to)} />)}
         </div>
     );

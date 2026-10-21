@@ -13,9 +13,10 @@ import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { BottomTabBar, TAB_BAR_HIDDEN_CLASS } from './bottom-tab-bar';
 
+const auth = vi.hoisted(() => ({ signedIn: true }));
 vi.mock('../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../hooks/use-auth')>()),
-    useAuth: () => ({ user: { id: 1, role: 'member' }, isAuthenticated: true }),
+    useAuth: () => (auth.signedIn ? { user: { id: 1, role: 'member' }, isAuthenticated: true } : { user: null, isAuthenticated: false }),
 }));
 
 const MINE = 'http://localhost:3000/guilds/mine';
@@ -42,7 +43,7 @@ function renderBar(path = '/calendar'): void {
     renderWithProviders(<BottomTabBar />, { initialEntries: [path] });
 }
 
-beforeEach(() => { server.events.removeAllListeners(); });
+beforeEach(() => { server.events.removeAllListeners(); auth.signedIn = true; });
 
 describe('BottomTabBar — five even slots', () => {
     it('renders Calendar · Events · Hubs · Games · Players in order on a 5-column grid', async () => {
@@ -148,5 +149,17 @@ describe('BottomTabBar — the centre Hubs button', () => {
         renderBar('/calendar');
         await done;
         expect(await screen.findByTestId('bottom-hubs-link')).not.toHaveAttribute('aria-current');
+    });
+});
+
+describe('BottomTabBar — signed out', () => {
+    it('has no Hubs slot: four tabs on a 4-column grid (parity with the header and the More drawer)', () => {
+        auth.signedIn = false;
+        renderBar();
+        const grid = screen.getByTestId('bottom-tab-grid');
+        expect(grid.className).toContain('grid-cols-4');
+        expect(Array.from(grid.children).map((s) => s.textContent)).toEqual(['Calendar', 'Events', 'Games', 'Players']);
+        expect(screen.queryByRole('link', { name: 'Hubs', exact: true })).not.toBeInTheDocument();
+        expect(screen.queryByTestId('bottom-hubs-circle')).not.toBeInTheDocument();
     });
 });
