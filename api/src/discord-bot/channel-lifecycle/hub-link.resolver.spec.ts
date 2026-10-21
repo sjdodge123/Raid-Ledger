@@ -65,6 +65,29 @@ describe('resolveGameHubLink (D15)', () => {
     expect(sql).toContain('"guilds"."kind" in');
   });
 
+  it('H3b (Codex r14 P2): an archived tagged hub falls back — SQL requires status active', async () => {
+    // The DB drops the archived tag (status filter); the game's active hub is left.
+    mock.where.mockResolvedValueOnce([{ id: 5 }]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(whereSql(mock)).toContain('"guilds"."status" = $');
+  });
+
+  it('H3c (Codex r14 P2): an archived tagged hub with no fallback resolves to none', async () => {
+    mock.where.mockResolvedValueOnce([]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toBeNull();
+    expect(whereSql(mock)).toContain('"guilds"."status" = $');
+  });
+
   // TODO(ROK-1873): L11 flips this to the `/hubs?game=` directory once it exists.
   it('H4: two or more hubs link the oldest (lowest id) hub — never a 404 directory', async () => {
     mock.where.mockResolvedValueOnce([{ id: 6 }, { id: 5 }]);

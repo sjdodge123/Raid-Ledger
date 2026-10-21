@@ -20,6 +20,13 @@ type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 type GuildKind = schema.GuildSelect['kind'];
 
 /**
+ * The one `guilds.status` an embed may link (ROK-1870 schema enum). An
+ * archived (or proposed) hub keeps `hidden_at` null but `isHiddenFrom()` 404s
+ * it for non-staff, so linking it would be a dead Hub button (Codex r14 P2).
+ */
+const LINKABLE_STATUS: schema.GuildSelect['status'] = 'active';
+
+/**
  * Hub kinds an embed may link to. ROK-1870 / L11 appends `game_community`
  * (with its `status = 'active'` predicate) once that kind exists.
  */
@@ -49,6 +56,14 @@ function gameHubsWhere(gameIds: number[]): SQL | undefined {
   );
 }
 
+/** A hub a non-staff member can open: not hidden, and `active`. */
+function linkableHub(): SQL | undefined {
+  return and(
+    isNull(schema.guilds.hiddenAt),
+    eq(schema.guilds.status, LINKABLE_STATUS),
+  );
+}
+
 function candidateWhere(
   gameId: number,
   tagged: number | null,
@@ -56,7 +71,7 @@ function candidateWhere(
   const gameHubs = gameHubsWhere([gameId]);
   const scope =
     tagged === null ? gameHubs : or(eq(schema.guilds.id, tagged), gameHubs);
-  return and(isNull(schema.guilds.hiddenAt), scope);
+  return and(linkableHub(), scope);
 }
 
 /** Apply the D15 precedence to the visible candidate hub ids. */
@@ -130,7 +145,7 @@ export async function resolveGameHubLinks(
   const rows = await db
     .select({ id: schema.guilds.id, gameId: schema.guilds.gameId })
     .from(schema.guilds)
-    .where(and(isNull(schema.guilds.hiddenAt), gameHubsWhere(unique)));
+    .where(and(linkableHub(), gameHubsWhere(unique)));
   const byGame = new Map<number, number[]>();
   for (const r of rows)
     byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r.id]);
