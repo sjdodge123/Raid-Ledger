@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { APP_EVENT_EVENTS } from '../discord-bot.constants';
+import { AD_HOC_EVENTS, APP_EVENT_EVENTS } from '../discord-bot.constants';
 import { GameActivityNudge } from './channel-lifecycle.nudge';
 
 /**
@@ -33,6 +33,15 @@ export class ChannelLifecycleNudgeListener {
   /** An edited / rescheduled event may have moved to a different game. */
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
   handleEventUpdated(payload: unknown): void {
+    this.touch(payload);
+  }
+
+  /**
+   * Codex r9 P2: a committed Quick Play spawn (voice or game server) is game
+   * activity too, but bypasses `EventsService` and so never emits `CREATED`.
+   */
+  @OnEvent(AD_HOC_EVENTS.QUICK_PLAY_CREATED)
+  handleQuickPlayCreated(payload: unknown): void {
     this.touch(payload);
   }
 

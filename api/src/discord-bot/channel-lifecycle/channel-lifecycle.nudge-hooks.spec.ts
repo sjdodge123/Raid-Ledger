@@ -3,6 +3,8 @@
  * created/updated listener, and the standalone-poll create fan-out.
  */
 import { Test } from '@nestjs/testing';
+import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
 import { GameActivityNudge } from './channel-lifecycle.nudge';
 import {
   ChannelLifecycleNudgeListener,
@@ -67,6 +69,25 @@ describe('ChannelLifecycleNudgeListener', () => {
     const listener = await build(throwingNudge());
     expect(() => listener.handleEventCreated({ gameId: 3 })).not.toThrow();
     expect(() => listener.handleEventUpdated({ gameId: 3 })).not.toThrow();
+  });
+});
+
+describe('Quick Play creation nudge (Codex r9 P2)', () => {
+  it('a committed Quick Play spawn nudges its game through the emitter', async () => {
+    const nudge = { touch: jest.fn() };
+    const module = await Test.createTestingModule({
+      imports: [EventEmitterModule.forRoot()],
+      providers: [
+        ChannelLifecycleNudgeListener,
+        { provide: GameActivityNudge, useValue: nudge },
+      ],
+    }).compile();
+    await module.init();
+    module
+      .get(EventEmitter2)
+      .emit(AD_HOC_EVENTS.QUICK_PLAY_CREATED, { eventId: 5, gameId: 4 });
+    expect(nudge.touch).toHaveBeenCalledWith(4);
+    await module.close();
   });
 });
 
