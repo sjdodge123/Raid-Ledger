@@ -120,7 +120,13 @@ interface Step {
 
 function expandRecipe(ctx: Ctx, step: Step, recipe: ValheimRecipe): void {
   const { need, taken, alternatives } = step;
-  const steps = recipeSteps(recipe, need.startStep, need.quality, taken.rest);
+  const steps = recipeSteps(
+    recipe,
+    need.startStep,
+    need.quality,
+    taken.rest,
+    ctx.graph.costRule,
+  );
   const via = recipeVia(ctx.graph, recipe, need.quality);
   const id = ctx.b.push({
     ...nodeBase(need, taken),
