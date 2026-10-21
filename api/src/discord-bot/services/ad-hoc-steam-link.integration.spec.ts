@@ -208,6 +208,23 @@ describe('AC9 — Steam-link nudge', () => {
     expect(create).toHaveBeenCalledWith(nudgeFor(user.id, first));
   });
 
+  it('m1: a failed send releases the 30-day cooldown so the next join retries', async () => {
+    const user = await insertUser();
+    create.mockRejectedValueOnce(new Error('send failed'));
+    const first = await insertEvent();
+    await joinServerUnlinked(first);
+    await joinVoice(first, user);
+    await emitJoin(first, user.id, user.discordId ?? undefined);
+
+    const second = await insertEvent();
+    await joinServerUnlinked(second);
+    await joinVoice(second, user);
+    await emitJoin(second, user.id, user.discordId ?? undefined);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenLastCalledWith(nudgeFor(user.id, second));
+  });
+
   it('nudges voice members when the unlinked server row arrives second', async () => {
     const user = await insertUser();
     const eventId = await insertEvent();

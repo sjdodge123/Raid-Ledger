@@ -136,6 +136,37 @@ describe('ROK-1888 OQ3 — the recap covers a session fed from two channels', ()
     expect(names).toEqual([['Alpha', 'Bravo']]);
   });
 
+  it('M1: the recap labels an unlinked server row and never counts or names an anonymous one', async () => {
+    const { bindingB, eventId } = await seedSharedSession();
+    const steamRow = (steamId: string, name: string) => ({
+      eventId,
+      discordUserId: null,
+      discordUsername: name,
+      userId: null,
+      steamId,
+      onServer: true,
+      inVoice: false,
+    });
+    await testApp.db
+      .insert(schema.adHocParticipants)
+      .values([
+        steamRow('76561198000001888', 'Loanati'),
+        steamRow('76561198000002888', '76561198000002888'),
+      ]);
+    const rowB = await presenceRow(bindingB, opened, ['oq3-bravo']);
+
+    const [session] = await hydrateRecap(deps, bindingB, {
+      openedAt: opened,
+      id: rowB,
+    });
+    expect(session?.signupCount).toBe(2);
+    const mentions = session?.signupMentions ?? [];
+    expect(mentions.find((m) => m.username === 'Loanati')).toEqual(
+      expect.objectContaining({ uncounted: true }),
+    );
+    expect(mentions.map((m) => m.username)).not.toContain('76561198000002888');
+  });
+
   it('an occupant who never joined the session does not pull it in', async () => {
     const { bindingB } = await seedSharedSession();
     const rowB = await presenceRow(bindingB, opened, ['oq3-charlie']);
