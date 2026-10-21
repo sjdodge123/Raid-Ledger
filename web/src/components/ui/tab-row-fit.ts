@@ -84,8 +84,10 @@ export function useTabRowFit(
     ids: readonly string[],
     activeId: string,
 ): TabSplit {
-    const [split, setSplit] = useState<TabSplit>({ count: ids.length, activeHidden: false });
     const key = ids.join('\n');
+    // Tagged with the tab list it was measured for, so a list that grows (a plugin's tabs
+    // hydrating) shows every tab until the observer re-measures — never a stale count.
+    const [split, setSplit] = useState<TabSplit & { key: string }>({ key, count: ids.length, activeHidden: false });
     useLayoutEffect(() => {
         const nav = navRef.current;
         const measure = measureRef.current;
@@ -93,11 +95,12 @@ export function useTabRowFit(
         const tabIds = key ? key.split('\n') : [];
         const observer = new ResizeObserver(() => {
             const next = measureSplit(nav, measure, tabIds, activeId);
-            setSplit((prev) => (prev.count === next.count && prev.activeHidden === next.activeHidden ? prev : next));
+            setSplit((prev) => (prev.key === key && prev.count === next.count && prev.activeHidden === next.activeHidden
+                ? prev : { key, ...next }));
         });
         observer.observe(nav);
         return () => observer.disconnect();
     }, [navRef, measureRef, key, activeId]);
-    // Tabs added or removed before the observer reports: never index past the list.
-    return split.count > ids.length ? { count: ids.length, activeHidden: false } : split;
+    if (split.key !== key) return { count: ids.length, activeHidden: false };
+    return { count: split.count, activeHidden: split.activeHidden };
 }
