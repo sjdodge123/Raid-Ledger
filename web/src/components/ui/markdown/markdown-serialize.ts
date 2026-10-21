@@ -9,8 +9,13 @@
  * Code spans are emitted verbatim by TipTap and are left untouched.
  */
 const ENTITY = /&(lt|gt|amp);/g;
-/** A code span: an equal-length backtick run closes it (CommonMark), so ``a `b` c`` stays whole. */
-const CODE_SPAN = /((?<!`)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
+/**
+ * A code span: an equal-length backtick run closes it (CommonMark), so ``a `b` c`` stays whole.
+ * The opening run must not be backslash-escaped (an odd run of `\` before it): TipTap escapes
+ * literal backticks typed as text, and those are ordinary text whose entities must be decoded
+ * (Codex r4). Backslashes inside a span are literal, so the closing run needs no such check.
+ */
+const CODE_SPAN = /((?<!`)(?<!(?:^|[^\\])(?:\\\\)*\\)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
 const LOOKS_LIKE_ENTITY = /^[A-Za-z#][A-Za-z0-9]*;/;
 
 /** Rewrite one non-code segment. */

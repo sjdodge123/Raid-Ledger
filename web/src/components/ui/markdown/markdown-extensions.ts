@@ -25,6 +25,7 @@ import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
 import { isSafeMarkdownHref } from '@raid-ledger/contract';
 import { MD_CLASSES } from './markdown-classes';
+import { LiteralInlineHtml } from './markdown-inline-html';
 
 const LITERAL_BLOCK_TOKENS = ['heading', 'blockquote', 'code', 'hr', 'table', 'html', 'lheading'] as const;
 
@@ -96,6 +97,7 @@ export function buildMarkdownExtensions(opts: { placeholder?: string; onLinkShor
         Placeholder.configure({ placeholder: opts.placeholder ?? '' }),
         LinkShortcut.configure({ onOpen: opts.onLinkShortcut }),
         Markdown.configure({ markedOptions: { breaks: true, gfm: true } }),
+        LiteralInlineHtml,
         ...[...LITERAL_BLOCK_TOKENS, ...LITERAL_INLINE_TOKENS].map(literalBlock),
     ];
 }

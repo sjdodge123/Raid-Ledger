@@ -146,3 +146,28 @@ describe('MarkdownEditor — multi-backtick code spans (Codex r3)', () => {
         expect(code?.textContent, `saved ${JSON.stringify(saved)} must keep the code text`).toBe(CODE);
     });
 });
+
+describe('MarkdownEditor — escaped backticks are not code spans (Codex r4)', () => {
+    it('normalisation decodes entities between backslash-escaped backticks', () => {
+        expect(normalizeEditorMarkdown('\\`a &amp; b &lt;c\\`')).toBe('\\`a & b \\<c\\`');
+    });
+
+    it('a typed literal `a & b` saves with a plain & and displays unchanged', () => {
+        const { editor, last } = setup('');
+        editor.view.dispatch(editor.state.tr.insertText('`a & b`', 1));
+        expect(last(), 'the & must not be saved as an entity').not.toContain('&amp;');
+        expect(render(<MarkdownBlock text={last()} />).container.textContent).toBe('`a & b`');
+    });
+});
+
+describe('MarkdownEditor — stored inline HTML stays literal (Codex r4)', () => {
+    it.each([
+        ['an <img> tag', 'Before <img src=x> after', 'Before \\<img src=x> after'],
+        ['a <b> pair', 'say <b>text</b> now', 'say \\<b>text\\</b> now'],
+    ])('loads %s as text and saves it back as escaped literal text', (_l, md, expected) => {
+        const { editor } = setup(md);
+        expect(editor.getText(), 'the HTML must load as literal text').toBe(md);
+        expect(editor.getHTML(), 'no mark may be applied').not.toContain('<strong');
+        expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe(expected);
+    });
+});
