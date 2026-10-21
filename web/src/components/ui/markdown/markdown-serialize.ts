@@ -85,23 +85,33 @@ function outsideCode(markdown: string, rewrite: (part: string) => string): strin
 }
 
 /**
+ * A GFM task marker opening a list item (`- [x] a`). The editor has no task-list extension, so its
+ * GFM parser would drop the marker; MarkdownBlock shows it as literal text (Codex r9).
+ */
+const TASK_MARKER = /^( {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+)\[([ xX])\](?=[ \t]|$)/gm;
+/** The same marker as TipTap saves the literal text back (`\[x\]`); stored as typed, `[x]`. */
+const ESCAPED_TASK_MARKER = /^( {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+)\\\[([ xX])\\\](?=[ \t]|$)/gm;
+
+/**
  * Stored markdown → what the editor's markdown parser loads (Codex r7). Stored entity text
  * (`&lt;`) is literal — `MarkdownBlock` prints it as written — but the parser would decode it,
  * so a save would rewrite `&lt;raid&gt;` to `<raid>`. Escaping the `&` keeps it literal text
  * (and keeps a destination's `&amp;` as written); code spans are literal already.
  * @param markdown - the stored hub-post body
- * @returns the same document with every unescaped entity-starting `&` written `\&`
+ * @returns the same document with every unescaped entity-starting `&` written `\&`, and a
+ *   list item's leading task marker written `\[x]` so it loads as literal text
  */
 export function prepareEditorMarkdown(markdown: string): string {
-    return outsideCode(markdown, (part: string): string => part.replace(ENTITY_AMP, '\\&'));
+    return outsideCode(markdown.replace(TASK_MARKER, '$1\\[$2]'), (part: string): string => part.replace(ENTITY_AMP, '\\&'));
 }
 
 /**
  * Turn TipTap's serialised markdown into the stored subset form.
  * @param markdown - the raw `editor.getMarkdown()` output
- * @returns markdown with entity-encoded text rewritten (code spans and link destinations untouched)
- *   and empty paragraphs collapsed to a single paragraph break
+ * @returns markdown with entity-encoded text rewritten (code spans and link destinations untouched),
+ *   empty paragraphs collapsed to a single paragraph break, and a list item's task marker as typed
  */
 export function normalizeEditorMarkdown(markdown: string): string {
-    return outsideCode(collapseEmptyParagraphs(markdown), decodeSegment);
+    const restored = collapseEmptyParagraphs(markdown).replace(ESCAPED_TASK_MARKER, '$1[$2]');
+    return outsideCode(restored, decodeSegment);
 }
