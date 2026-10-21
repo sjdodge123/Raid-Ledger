@@ -51,7 +51,7 @@ function counts(counted: number, allConfirmed: boolean) {
     counted,
     allConfirmed,
     confirmedCount: counted,
-  } as Awaited<ReturnType<typeof serverAwareGameCount>>);
+  });
 }
 
 beforeEach(() => jest.clearAllMocks());
