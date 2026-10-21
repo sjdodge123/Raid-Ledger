@@ -14,6 +14,7 @@
 import type { Editor } from '@tiptap/core';
 import { trimUnflankedEmphasis } from './markdown-flanking';
 import { fixLinkMarkBoundaries } from './markdown-link-marks';
+import { guardLineStarts, LINE_START_SENTINEL } from './markdown-line-start';
 
 const ENTITY = /&(lt|gt|amp);/g;
 /**
@@ -132,13 +133,13 @@ export function normalizeEditorMarkdown(markdown: string): string {
 
 /**
  * The editor's document as stored markdown: bold / italic / strike first give up span-edge
- * characters no delimiter can open or close beside (`markdown-flanking.ts`, Codex r10), then the
- * serialised text is normalised.
+ * characters no delimiter can open or close beside (`markdown-flanking.ts`, Codex r10), line-start
+ * list-marker text is escaped (`markdown-line-start.ts`, Codex r13), then the serialised text is normalised.
  * @param editor - the TipTap editor (with the Markdown extension)
  * @returns the stored subset markdown
  */
 export function serializeEditorMarkdown(editor: Editor): string {
     const manager = editor.markdown;
-    const raw = manager === undefined ? editor.getMarkdown() : manager.serialize(trimUnflankedEmphasis(editor.getJSON()));
-    return normalizeEditorMarkdown(raw);
+    const raw = manager === undefined ? editor.getMarkdown() : manager.serialize(guardLineStarts(trimUnflankedEmphasis(editor.getJSON())));
+    return normalizeEditorMarkdown(raw.split(LINE_START_SENTINEL).join('\\'));
 }

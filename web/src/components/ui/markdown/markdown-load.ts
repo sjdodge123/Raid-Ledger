@@ -44,6 +44,9 @@ function manager(): MarkdownManager {
         markedOptions: { breaks: true, gfm: true },
         extensions: buildMarkdownExtensions({ onLinkShortcut: () => undefined }),
     });
+    // MarkdownBlock does not autolink a bare URL, so neither does the load path (Codex r13: a stored
+    // `[x]: https://…` or `!\[img\](https://…)` otherwise gains a link the reader never showed).
+    shared.instance.use({ tokenizer: { url: () => undefined } });
     return shared;
 }
 

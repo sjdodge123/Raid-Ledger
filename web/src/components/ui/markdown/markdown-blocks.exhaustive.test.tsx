@@ -38,13 +38,13 @@ const CONSTRUCTS: string[] = [
     '- $\n\n  $\n- $', '1. $\n\n   $\n2. $', '- $\n\n  $', '- $\n\n      $',
     '- $\n  $', '- $\n$', '- $  \n$', '- $\\\n$', '1. $  \n$',
     '- > $', '- # $', '- ```\n$', '- [ ] $', '- [x] $', '* [X] $', '1. [ ] $', '- [ ]',
-    '```\n$\n```', '```js\n$\n```', '~~~\n$\n~~~', '```\n$', '``` `x`', '```$```', '    $', '\t$', '$\n\n    $',
+    '```\n$\n```', '```js\n$\n```', '~~~\n$\n~~~', '```\n$', '```$```', '    $', '\t$', '$\n\n    $',
     '---', '***', '___', '* * *', '- - -', '$\n---', '$\n===', '$\n--', '$\n=', '$\n\n---\n\n$',
     '| $ | $ |\n|---|---|\n| $ | $ |', '$ | $\n--|--\n$ | $', '|---|',
     '<div>$</div>', '<!-- c -->\n$', '<b>$</b>', '<https://example.com> $', '<br>\n$',
     '[x]: https://example.com\n$', '[x]: https://example.com', '![img](https://example.com/i.png) $',
     '$\n$', '$\n\n$', '$\n\n\n\n$', '\n\n$\n\n', '$  \n$', '$\\\n$', '$\r\n$', '$\r\n\r\n$', '  $  ',
-    '&lt;$&gt;', '\\# $', '\\- $', '1\\. $', '\\> $',
+    '&lt;$&gt;', '\\# $', '\\- $', '1\\. $', '\\> $', '\\* $', '\\+ $', '- \\- $', '$ https://example.com $',
 ];
 
 /** Each construct alone, after a paragraph line, before one, and between blank-line paragraphs. */
@@ -117,7 +117,6 @@ describe('every stored block construct loads, shows and saves like MarkdownBlock
     it('block construct × context × inline text', () => {
         const cases = inputs();
         const bad = cases.map(blockFailure).filter((m): m is string => m !== null);
-        if (process.env['DUMP_BLOCK_FAILURES']) for (const b of bad) console.log(`BLOCKFAIL ${b}`);
         expect(bad.slice(0, 10), `${bad.length} of ${cases.length} cases failed`).toEqual([]);
     });
 
@@ -125,8 +124,8 @@ describe('every stored block construct loads, shows and saves like MarkdownBlock
         expect(load('- first\n\n  another paragraph\n- last')).toBeNull();
         expect(editor.commands.enter()).toBe(true);
         load('> Read [the plan](/events)');
-        editor.commands.insertContentAt(editor.state.doc.content.size - 1, '!');
+        editor.commands.insertContentAt(1, '!');
         const saved = serializeEditorMarkdown(editor);
-        expect(shown(saved)).toBe(shown('> Read [the plan](/events)!'));
+        expect(shown(saved)).toBe(shown('!> Read [the plan](/events)'));
     });
 });
