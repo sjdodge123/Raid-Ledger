@@ -16,6 +16,7 @@ import {
   retrackVoiceGame,
   switchLobbyMemberGame,
 } from './voice-lobby-switch.helpers';
+import { closeStaleVoiceRows } from './voice-state-stale-rows.helpers';
 
 /** Discord member info shape. */
 type DiscordMember = {
@@ -50,6 +51,9 @@ export async function recoverFromVoiceChannels(
       if (!binding) continue;
       await recoverChannel(deps, channelId, channel, binding, handleJoinFn);
     }
+    // ROK-1888 m3: an empty channel cache means "not loaded", never "everyone
+    // left" — closing on it would end every live session's voice rows.
+    if (voiceChannels.size > 0) await closeStaleVoiceRows(deps);
   } catch (err) {
     deps.logger.error(`Voice channel recovery failed: ${err}`);
   }
