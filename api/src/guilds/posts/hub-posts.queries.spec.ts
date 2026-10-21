@@ -15,7 +15,10 @@ import {
 } from './hub-posts.queries';
 
 const db = drizzle.mock({ schema });
-const ORDER = '"hub_posts"."created_at" desc, "hub_posts"."id" desc';
+// Codex r9: bare `desc` is NULLS FIRST, which does not match the index's
+// `DESC NULLS LAST` (migration 0239), so the planner could not walk the index.
+const ORDER =
+  '"hub_posts"."created_at" desc nulls last, "hub_posts"."id" desc nulls last';
 
 function record(id: number): JoinedRow {
   const at = new Date(Date.UTC(2026, 9, 20, 12, 0, 0, id));

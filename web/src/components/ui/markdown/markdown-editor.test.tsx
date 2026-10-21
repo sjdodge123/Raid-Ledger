@@ -34,12 +34,20 @@ const ROUND_TRIP = [
     // Codex r7: stored entity text is literal (MarkdownBlock prints it as typed) — a load + save keeps it.
     'Use &lt;raid&gt;', 'a &amp; b &#39; c &nbsp; d', '**&lt;b&gt;** and `&lt;code&gt;` &copy;',
     '[q](https://example.com/?q=&lt;)', '[both &amp;](https://example.com/?a=1&amp;b=2)',
+    // Codex r9: no task-list extension, so a GFM task marker is literal text — not dropped on load.
+    '- [x] a', '- [ ] b', '- [x] done\n- [ ] todo', '1. [X] first', '- plain\n- [x] checked',
 ];
 
 describe('MarkdownEditor (V10)', () => {
     it.each(ROUND_TRIP)('round-trips %j unchanged', (md) => {
         const { editor } = setup(md);
         expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe(md);
+    });
+
+    it('MarkdownBlock shows a task marker as literal list-item text (Codex r9)', () => {
+        const { container } = render(<MarkdownBlock text={'- [x] a\n- [ ] b'} />);
+        expect([...container.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['[x] a', '[ ] b']);
+        expect(container.querySelector('input')).toBeNull();
     });
 
     it.each([

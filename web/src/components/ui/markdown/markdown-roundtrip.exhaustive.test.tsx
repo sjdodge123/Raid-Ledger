@@ -18,8 +18,9 @@ import { normalizeEditorMarkdown } from './markdown-serialize';
 
 type Segment = [text: string, marks: string];
 
-const MARK_OF: Record<string, string> = { b: 'bold', i: 'italic', s: 'strike', c: 'code' };
-const TAG_OF: Record<string, string> = { STRONG: 'b', EM: 'i', S: 's', DEL: 's', CODE: 'c' };
+const MARK_OF: Record<string, string> = { b: 'bold', i: 'italic', s: 'strike', c: 'code', l: 'link' };
+const TAG_OF: Record<string, string> = { STRONG: 'b', EM: 'i', S: 's', DEL: 's', CODE: 'c', A: 'l' };
+const HREF = 'https://example.com';
 const COMBOS = ['', 'b', 'i', 's', 'bi', 'bs', 'is', 'bis'];
 const editor = new Editor({ extensions: buildMarkdownExtensions({ onLinkShortcut: () => undefined }) });
 
@@ -28,7 +29,7 @@ afterAll(() => { editor.destroy(); });
 /** Build the paragraph in the editor and save it the way `MarkdownEditor` does. */
 function save(segments: Segment[]): string {
     const content: JSONContent[] = segments.map(([text, marks]) => ({
-        type: 'text', text, ...(marks === '' ? {} : { marks: [...marks].map((m) => ({ type: MARK_OF[m] ?? m })) }),
+        type: 'text', text, ...(marks === '' ? {} : { marks: [...marks].map((m) => (m === 'l' ? { type: 'link', attrs: { href: HREF } } : { type: MARK_OF[m] ?? m })) }),
     }));
     editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content }] });
     return normalizeEditorMarkdown(editor.getMarkdown());
@@ -85,11 +86,22 @@ function codeMiddle(): Segment[][] {
     return COMBOS.flatMap((m1) => COMBOS.map((m3): Segment[] => [['a', m1], ['b', 'c'], ['c', m3]]));
 }
 
+/**
+ * Codex r9: a marked link between two segments (8³ = 512). TipTap writes `a**[b](…)c**`, whose
+ * opening `**` sits between a word character and `[` — not left-flanking, so MarkdownBlock showed it.
+ */
+function linkMiddle(): Segment[][] {
+    return COMBOS.flatMap((m1) => COMBOS.flatMap((m2) => COMBOS.map((m3): Segment[] => [
+        ['a', m1], ['b', `${m2}l`], ['c', m3],
+    ])));
+}
+
 describe('every bold/italic/strike overlap round-trips editor → stored markdown → MarkdownBlock (Codex r6)', () => {
     it.each([
         ['adjacent segments (512)', (): Segment[][] => triples(['a', 'b', 'c'])],
         ['space-separated segments (512)', (): Segment[][] => triples(['a ', 'b ', 'c'])],
         ['inline-code middle segment (64)', codeMiddle],
+        ['marked-link middle segment (512)', linkMiddle],
     ])('%s', (_label, build) => {
         const cases = build();
         const bad = failures(cases);
