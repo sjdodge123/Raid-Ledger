@@ -48,6 +48,33 @@ describe('buildServerHours (ROK-1876)', () => {
         expect(hours.restartLine).toBeNull();
     });
 
+    it('splits a multi-day window into one row per local day instead of one overnight span (Codex r1 P2)', () => {
+        // Sun 22:00 → next Sun 06:00 UTC (a daily start paired with a Sunday stop).
+        const long: GameServerCalendarItemDto[] = [
+            { kind: 'window', ...mine, start: '2026-10-11T22:00:00Z', end: '2026-10-18T06:00:00Z', label: 'Week', source: 'schedule' },
+        ];
+        expect(build({ items: long }).days).toEqual([
+            { key: '2026-10-14', day: 'Today', spans: 'All day' },
+            { key: '2026-10-15', day: 'Thu', spans: 'All day' },
+            { key: '2026-10-16', day: 'Fri', spans: 'All day' },
+            { key: '2026-10-17', day: 'Sat', spans: 'All day' },
+            { key: '2026-10-18', day: 'Sun', spans: 'until 6:00 AM' },
+        ]);
+        const fromSat = build({ items: long, now: Date.parse('2026-10-10T12:00:00Z') }).days;
+        expect(fromSat[0]).toEqual({ key: '2026-10-11', day: 'Sun', spans: 'from 10:00 PM' });
+        expect(fromSat.map((d) => d.key)).toEqual(['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18']);
+    });
+
+    it('drops the empty tail when a multi-day window ends exactly at midnight', () => {
+        const toMidnight: GameServerCalendarItemDto[] = [
+            { kind: 'window', ...mine, start: '2026-10-14T18:00:00Z', end: '2026-10-16T00:00:00Z', label: 'Two days', source: 'schedule' },
+        ];
+        expect(build({ items: toMidnight }).days).toEqual([
+            { key: '2026-10-14', day: 'Today', spans: 'from 6:00 PM' },
+            { key: '2026-10-15', day: 'Thu', spans: 'All day' },
+        ]);
+    });
+
     it('asks for seven days from now', () => {
         expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-14T12:00:00.000Z', to: '2026-10-21T12:00:00.000Z' });
     });

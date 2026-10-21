@@ -15,7 +15,9 @@ import { STATE_LABELS, formatLocalTime } from '../calendar/pelican-calendar-item
 
 /** Operator ruling 2026-10-21: the empty copy is always this, whatever the state. */
 export const SERVER_HOURS_EMPTY = 'No set hours';
-const RANGE_MS = 7 * 86_400_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+const RANGE_MS = 7 * DAY_MS;
 
 export interface ServerHoursDay { key: string; day: string; spans: string }
 export interface ServerHours { nowLine: string; days: ServerHoursDay[]; restartLine: string | null }
@@ -67,19 +69,59 @@ function nowLine(state: GameServerState, windows: readonly GameServerWindowItemD
     return next ? `${label} · opens ${whenLabel(next.start, now, tz)}` : label;
 }
 
+/** The instant of the first local midnight after `ms` in `tz`; re-checked against the day key so a 23h/25h DST day lands on midnight. */
+function nextMidnight(ms: number, tz: string): number {
+    const parts = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZone: tz }).formatToParts(ms);
+    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+    const elapsed = ((part('hour') * 60 + part('minute')) * 60 + part('second')) * 1000 + (ms % 1000);
+    const candidate = ms - elapsed + DAY_MS;
+    if (dayKey(candidate, tz) === dayKey(ms, tz)) return candidate + HOUR_MS;
+    if (dayKey(candidate - 1, tz) !== dayKey(ms, tz)) return candidate - HOUR_MS;
+    return candidate;
+}
+
+interface DaySpan { key: string; anchor: number; span: string }
+
+/** A 24h+ window as one span per local day: "from 10:00 PM", "All day", "until 6:00 AM". Days before `from` are skipped. */
+function multiDaySpans(start: number, end: number, from: number, tz: string): DaySpan[] {
+    const spans: DaySpan[] = [];
+    const startKey = dayKey(start, tz);
+    for (let cursor = from; cursor < end;) {
+        const midnight = nextMidnight(cursor, tz);
+        const key = dayKey(cursor, tz);
+        const endsHere = end < midnight;
+        const span = key === startKey ? `from ${clock(start, tz)}` : endsHere ? `until ${clock(end, tz)}` : 'All day';
+        spans.push({ key, anchor: cursor, span });
+        cursor = midnight;
+    }
+    return spans;
+}
+
+function clock(ms: number, tz: string): string {
+    return formatLocalTime(new Date(ms).toISOString(), tz);
+}
+
+/** Under 24h stays one "6:00 PM – 2:00 AM" span on its first (or today's) day; longer windows split per local day (Codex r1). */
+function windowSpans(w: GameServerWindowItemDto, now: number, tz: string): DaySpan[] {
+    const start = Date.parse(w.start);
+    const end = Date.parse(w.end);
+    const from = Math.max(start, now);
+    if (end - start >= DAY_MS) return multiDaySpans(start, end, from, tz);
+    return [{ key: dayKey(from, tz), anchor: from, span: `${clock(start, tz)} – ${clock(end, tz)}` }];
+}
+
 /** One row per day with a window that has not ended; an open window sits under today. */
 function dayRows(windows: readonly GameServerWindowItemDto[], now: number, tz: string): ServerHoursDay[] {
     const rows = new Map<string, ServerHoursDay>();
     for (const w of windows) {
         if (Date.parse(w.end) <= now) continue;
-        const anchor = Math.max(Date.parse(w.start), now);
-        const key = dayKey(anchor, tz);
-        const span = `${formatLocalTime(w.start, tz)} – ${formatLocalTime(w.end, tz)}`;
-        const row = rows.get(key);
-        if (row) row.spans = `${row.spans}, ${span}`;
-        else rows.set(key, { key, day: dayLabel(anchor, now, tz), spans: span });
+        for (const { key, anchor, span } of windowSpans(w, now, tz)) {
+            const row = rows.get(key);
+            if (row) row.spans = `${row.spans}, ${span}`;
+            else rows.set(key, { key, day: dayLabel(anchor, now, tz), spans: span });
+        }
     }
-    return [...rows.values()];
+    return [...rows.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 function restartLine(markers: readonly GameServerMarkerItemDto[], now: number, tz: string): string | null {
