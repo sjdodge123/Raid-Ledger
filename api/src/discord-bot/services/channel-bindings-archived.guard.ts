@@ -10,7 +10,7 @@ import type { BindingUpdatePatch } from './channel-bindings-invariant.helpers';
 
 /** 400 text for a purpose change / game clear on an archived binding. */
 export const ARCHIVED_REROUTE_REFUSED =
-  'This channel is archived. Unarchive it before changing its purpose or clearing its game.';
+  'This channel is archived. It is restored automatically when its game sees activity again — change its purpose or game after that.';
 
 /** Throw 400 when the patch would take an archived binding out of the lifecycle. */
 export function assertArchivedBindingStaysRouted(
