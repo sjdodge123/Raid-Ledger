@@ -10,7 +10,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { GuildDiscordManagedForDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import { HUB_LINK_KINDS, linkableHub } from './hub-link.resolver';
+import { linkableHub, linkableHubKinds } from './hub-link.resolver';
 
 type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 type ChannelSource = 'auto' | 'manual';
@@ -39,12 +39,17 @@ function linkableProfileWhere(): SQL {
 }
 
 /**
- * Active, non-hidden hubs of an auto-linkable kind (optionally for one game).
- * An archived hub 404s for non-staff, so it is never linked (Codex r14 follow-up).
+ * Active, non-hidden hubs of a live auto-linkable kind (optionally for one
+ * game). An archived hub 404s for non-staff, so it is never linked (Codex r14
+ * follow-up); nor is a hub whose plugin is off — it 403s (Codex r17 P2).
+ * Callers skip the query when {@link linkableHubKinds} is empty.
  */
-function eligibleHubsWhere(gameId?: number): SQL | undefined {
+function eligibleHubsWhere(
+  kinds: schema.GuildSelect['kind'][],
+  gameId?: number,
+): SQL | undefined {
   return and(
-    inArray(guilds.kind, [...HUB_LINK_KINDS]),
+    inArray(guilds.kind, kinds),
     linkableHub(),
     gameId === undefined ? undefined : eq(guilds.gameId, gameId),
     linkableProfileWhere(),
@@ -53,11 +58,13 @@ function eligibleHubsWhere(gameId?: number): SQL | undefined {
 
 /** Eligible, channel-less hub ids for a game. */
 async function selectLinkableHubIds(db: Db, gameId: number): Promise<number[]> {
+  const kinds = linkableHubKinds();
+  if (kinds.length === 0) return [];
   const rows = await db
     .select({ id: guilds.id })
     .from(guilds)
     .leftJoin(guildProfiles, eq(guildProfiles.guildId, guilds.id))
-    .where(eligibleHubsWhere(gameId));
+    .where(eligibleHubsWhere(kinds, gameId));
   return rows.map((r) => r.id);
 }
 
@@ -96,11 +103,13 @@ export async function linkHubsForGame(
 
 /** Game ids that have an eligible hub still lacking a channel (L3 seam). */
 export async function selectHubNeedsLinkGameIds(db: Db): Promise<Set<number>> {
+  const kinds = linkableHubKinds();
+  if (kinds.length === 0) return new Set();
   const rows = await db
     .selectDistinct({ gameId: guilds.gameId })
     .from(guilds)
     .leftJoin(guildProfiles, eq(guildProfiles.guildId, guilds.id))
-    .where(eligibleHubsWhere());
+    .where(eligibleHubsWhere(kinds));
   return new Set(rows.map((r) => r.gameId));
 }
 

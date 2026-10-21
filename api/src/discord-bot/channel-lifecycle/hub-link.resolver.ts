@@ -7,7 +7,7 @@
  * TODO(ROK-1873): link the `/hubs?game=<id>` directory for ≥ 2 hubs once
  * ROK-1870's route ships (L11) — until then that URL would be a 404 (D15).
  */
-import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -48,6 +48,25 @@ export function setActiveHubKindsSource(
   activeHubKinds = source;
 }
 
+/** The live kinds, or null when unwired (no filter). */
+function liveKinds(): readonly GuildKind[] | null {
+  return activeHubKinds ? activeHubKinds() : null;
+}
+
+/** {@link HUB_LINK_KINDS} whose adapter is live — the game hubs to link. */
+export function linkableHubKinds(): GuildKind[] {
+  const live = liveKinds();
+  if (live === null) return [...HUB_LINK_KINDS];
+  return HUB_LINK_KINDS.filter((k) => live.includes(k));
+}
+
+/** Any candidate (a tagged hub too) must be of a live kind (403 otherwise). */
+function liveKindWhere(): SQL | undefined {
+  const live = liveKinds();
+  if (live === null) return undefined;
+  return live.length > 0 ? inArray(schema.guilds.kind, [...live]) : sql`false`;
+}
+
 /** Input for {@link resolveGameHubLink}. */
 export interface HubLinkInput {
   gameId: number | null | undefined;
@@ -66,9 +85,11 @@ function trimBase(clientUrl: string): string {
 }
 
 function gameHubsWhere(gameIds: number[]): SQL | undefined {
+  const kinds = linkableHubKinds();
+  if (kinds.length === 0) return sql`false`;
   return and(
     inArray(schema.guilds.gameId, gameIds),
-    inArray(schema.guilds.kind, [...HUB_LINK_KINDS]),
+    inArray(schema.guilds.kind, kinds),
   );
 }
 
@@ -92,7 +113,7 @@ function candidateWhere(
   const gameHubs = gameHubsWhere([gameId]);
   const scope =
     tagged === null ? gameHubs : or(eq(schema.guilds.id, tagged), gameHubs);
-  return and(linkableHub(), scope);
+  return and(linkableHub(), liveKindWhere(), scope);
 }
 
 /** Apply the D15 precedence to the visible candidate hub ids. */
@@ -163,6 +184,7 @@ export async function resolveGameHubLinks(
   const links = new Map<number, HubLink>();
   const unique = [...new Set(gameIds)];
   if (!clientUrl || unique.length === 0) return links;
+  if (linkableHubKinds().length === 0) return links;
   const rows = await db
     .select({ id: schema.guilds.id, gameId: schema.guilds.gameId })
     .from(schema.guilds)
