@@ -206,6 +206,7 @@ describe('useSchedulingLock — commit', () => {
         params.set('gameId', '42');
         params.set('startTime', FUTURE_TIME);
         params.set('matchId', String(MATCH_ID));
+        params.set('lineupId', String(LINEUP_ID));
         expect(navigate).toHaveBeenCalledWith(
             `/events/new?${params.toString()}`,
         );

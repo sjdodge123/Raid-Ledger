@@ -50,7 +50,52 @@ describe('autoSignupSlotVoters', () => {
   let mockSignupsService: { signup: jest.Mock };
 
   beforeEach(() => {
-    mockSignupsService = { signup: jest.fn().mockResolvedValue(undefined) };
+    mockSignupsService = {
+      signup: jest.fn().mockResolvedValue({ assignedSlot: 'player' }),
+    };
+  });
+
+  it('returns the voters whose signup landed on the bench (ROK-1874)', async () => {
+    const voters = makeVoters(3);
+    mockSignupsService.signup
+      .mockResolvedValueOnce({ assignedSlot: 'player' })
+      .mockResolvedValueOnce({ assignedSlot: 'bench' })
+      .mockResolvedValueOnce({ assignedSlot: 'bench' });
+
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters,
+      signupsService: mockSignupsService,
+    });
+
+    expect(result).toEqual({ benchedUserIds: [11, 12] });
+  });
+
+  it('returns no benched voters when every signup took a roster spot', async () => {
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(2),
+      signupsService: mockSignupsService,
+    });
+
+    expect(result).toEqual({ benchedUserIds: [] });
+  });
+
+  it('does not count a failed signup as benched (ROK-1874)', async () => {
+    mockSignupsService.signup
+      .mockRejectedValueOnce(new Error('Event is full'))
+      .mockResolvedValueOnce({ assignedSlot: 'bench' });
+
+    const result = await autoSignupSlotVoters({
+      eventId: EVENT_ID,
+      creatorId: CREATOR_ID,
+      voters: makeVoters(2),
+      signupsService: mockSignupsService,
+    });
+
+    expect(result).toEqual({ benchedUserIds: [11] });
   });
 
   it('signs up each voter who voted for the slot', async () => {
@@ -130,9 +175,9 @@ describe('autoSignupSlotVoters', () => {
   it('continues signing up remaining voters when one signup fails', async () => {
     const voters = makeVoters(3);
     mockSignupsService.signup
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ assignedSlot: 'player' })
       .mockRejectedValueOnce(new Error('Duplicate signup'))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce({ assignedSlot: 'player' });
 
     // Should not throw -- individual signup failures are swallowed
     await expect(

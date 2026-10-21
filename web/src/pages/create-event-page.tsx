@@ -24,6 +24,10 @@ export function CreateEventPage() {
 
     const initialStartTime = searchParams.get('startTime');
     const schedulingMatchId = searchParams.get('matchId') ? parseInt(searchParams.get('matchId')!, 10) : null;
+    // ROK-1874: the poll's lineup, so the form can warn about a roster overflow.
+    const rawLineupId = searchParams.get('lineupId');
+    const parsedLineupId = rawLineupId ? parseInt(rawLineupId, 10) : NaN;
+    const schedulingLineupId = Number.isFinite(parsedLineupId) ? parsedLineupId : null;
     // ROK-1371: post-event follow-up deep-link — links the new event back to the
     // ended event so the server fans out quick-sign-up DMs to its attendees.
     const followupForEventId = searchParams.get('followupForEventId') ? parseInt(searchParams.get('followupForEventId')!, 10) : null;
@@ -53,7 +57,7 @@ export function CreateEventPage() {
                     </p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} />
+                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} schedulingLineupId={schedulingLineupId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} />
                 </div>
             </div>
         </div>

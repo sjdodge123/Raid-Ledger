@@ -156,11 +156,14 @@ export interface NotifyPollVotersDeps {
  * Fire-and-forget DMs to all poll voters (ROK-1031). The chosen time is
  * formatted PER RECIPIENT in their own timezone (ROK-1112) — preference →
  * guild default → 'UTC' — so a 9 PM EDT slot never renders as next-day UTC.
+ * A selected voter whose signup landed on the bench (`benched`, ROK-1874)
+ * gets the "On the bench" DM instead of "Auto-signed up" — never both.
  */
 export async function notifyPollVoters(
   deps: NotifyPollVotersDeps,
   selected: { userId: number }[],
   others: { userId: number }[],
+  benched: readonly number[],
   chosenTime: string,
   eventId: number,
   gameName: string,
@@ -177,7 +180,10 @@ export async function notifyPollVoters(
   );
   for (const uid of selectedIds) {
     const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
-    deps.notifications.notifyAutoSignup(uid, gameName, at, eventId).catch(noop);
+    const sent = benched.includes(uid)
+      ? deps.notifications.notifyAutoBenched(uid, gameName, at, eventId)
+      : deps.notifications.notifyAutoSignup(uid, gameName, at, eventId);
+    sent.catch(noop);
   }
   for (const uid of otherIds) {
     const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);

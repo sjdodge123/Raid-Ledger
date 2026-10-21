@@ -332,3 +332,21 @@ describe('StandalonePollNotificationService (ROK-1016)', () => {
     });
   });
 });
+
+describe('StandalonePollNotificationService.notifyAutoBenched (ROK-1874)', () => {
+  it('DMs the bench copy with the lineup_event_created payload', async () => {
+    const { service, mockNotificationService } = await createTestModule();
+
+    await service.notifyAutoBenched(20, GAME_NAME, 'Sun, May 3, 9:00 PM', 77);
+
+    expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+    expect(mockNotificationService.create).toHaveBeenCalledWith({
+      userId: 20,
+      type: 'community_lineup',
+      title: 'On the bench',
+      message:
+        "You voted for **Sun, May 3, 9:00 PM** — you've been signed up for **Elden Ring**, but the roster was full, so you're on the bench for now.",
+      payload: { subtype: 'lineup_event_created', eventId: 77 },
+    });
+  });
+});
