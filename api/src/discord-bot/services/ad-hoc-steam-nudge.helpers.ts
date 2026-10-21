@@ -71,6 +71,19 @@ function hasOpenUnlinkedRow(db: Db, eventId: number): SQL {
   );
 }
 
+/** Open, in-voice Discord rows of `eventId`, optionally one Discord id. */
+function openVoiceRows(eventId: number, discordUserId?: string) {
+  return and(
+    eq(v.eventId, eventId),
+    isNotNull(v.discordUserId),
+    discordUserId === undefined
+      ? undefined
+      : eq(v.discordUserId, discordUserId),
+    eq(v.inVoice, true),
+    isNull(v.leftAt),
+  );
+}
+
 /**
  * Eligible voice members of `eventId`, narrowed to one Discord id when the
  * trigger was that member's own voice join.
@@ -80,15 +93,6 @@ export async function findSteamNudgeTargets(
   eventId: number,
   discordUserId?: string,
 ): Promise<SteamNudgeTarget[]> {
-  const openVoice = and(
-    eq(v.eventId, eventId),
-    isNotNull(v.discordUserId),
-    discordUserId === undefined
-      ? undefined
-      : eq(v.discordUserId, discordUserId),
-    eq(v.inVoice, true),
-    isNull(v.leftAt),
-  );
   return db
     .selectDistinct({
       userId: u.id,
@@ -101,7 +105,7 @@ export async function findSteamNudgeTargets(
     .leftJoin(schema.games, eq(schema.games.id, e.gameId))
     .where(
       and(
-        openVoice,
+        openVoiceRows(eventId, discordUserId),
         NO_STEAM_ACTIVE_MEMBER,
         LIVE_AD_HOC,
         hasOpenUnlinkedRow(db, eventId),

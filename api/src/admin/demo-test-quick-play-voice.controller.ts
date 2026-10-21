@@ -211,7 +211,9 @@ export class DemoTestQuickPlayVoiceController {
         userId: null,
       };
     }
-    const userId = body.userId ?? 0; // refine guarantees one of the two
+    const { userId } = body;
+    if (userId === undefined)
+      throw new BadRequestException('userId or discordOnly required');
     const linked = await loadLinkedDemoMember(this.usersService, userId);
     return { ...linked, userId };
   }

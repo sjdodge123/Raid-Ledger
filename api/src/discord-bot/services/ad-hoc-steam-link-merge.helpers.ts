@@ -78,7 +78,10 @@ async function foldIntoVoiceRow(
   steamRowId: string,
   voiceRowId: string,
 ): Promise<void> {
-  const [steam] = await tx.delete(p).where(eq(p.id, steamRowId)).returning();
+  const [steam] = await tx
+    .delete(p)
+    .where(and(eq(p.id, steamRowId), UNLINKED_SERVER_ROW_SQL))
+    .returning();
   if (!steam) return;
   await tx
     .update(p)
