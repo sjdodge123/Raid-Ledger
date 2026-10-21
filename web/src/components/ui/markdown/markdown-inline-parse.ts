@@ -2,7 +2,8 @@
  * The inline Markdown tokenizer shared by `MarkdownText` and `MarkdownBlock`
  * (ROK-1868 D15). Pure: text in, a node tree out — never HTML.
  *
- * Grammar: **bold** / __bold__, *italic* / _italic_, ***both***, ~~strike~~
+ * Grammar: **bold** / __bold__, *italic* / _italic_, ***both*** (CommonMark
+ * delimiter runs, so `***a** b*` and `**a***b*` pair — see markdown-emphasis), ~~strike~~
  * (opt-in), `code`, [label](href "optional title"), <https://…> autolinks (opt-in) and `\`
  * escapes of ASCII punctuation. Marks nest (bold inside a link, a link inside
  * bold) up to MAX_DEPTH. A link whose href fails the contract's
@@ -13,6 +14,7 @@
  * cannot trigger catastrophic backtracking.
  */
 import { isSafeMarkdownHref } from '@raid-ledger/contract';
+import { emphasisDelim, resolveEmphasis, type EmphasisItem } from './markdown-emphasis';
 
 /** One node of the parsed inline tree. */
 export type InlineNode =
@@ -43,7 +45,6 @@ const MAX_DEPTH = 4;
 const ESCAPABLE = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
 
 const isSpace = (ch: string | undefined): boolean => ch === undefined || ch.trim() === '';
-const isWordChar = (ch: string | undefined): boolean => ch !== undefined && /[\p{L}\p{N}]/u.test(ch);
 
 /** Length of the run of `ch` starting at i. */
 function runLength(s: string, i: number, ch: string): number {
@@ -64,8 +65,8 @@ function codeSpanEnd(s: string, i: number): number {
     return -1;
 }
 
-/** Index of the delimiter run closing an `n`-long run of `c` opened before `from`, or -1. */
-function findClose(s: string, from: number, c: string, n: number): number {
+/** Index of the `~~` run closing a strike opened before `from`, or -1. */
+function findStrikeClose(s: string, from: number): number {
     let j = from;
     while (j < s.length) {
         const ch = s[j];
@@ -74,32 +75,22 @@ function findClose(s: string, from: number, c: string, n: number): number {
             const end = codeSpanEnd(s, j);
             if (end !== -1) { j = end; continue; }
         }
-        if (ch !== c) { j++; continue; }
-        const m = runLength(s, j, c);
-        const at = m === n ? j : m === 3 && n < 3 ? j + 3 - n : -1;
-        if (at > from && !isSpace(s[at - 1]) && !(c === '_' && isWordChar(s[j + m]))) return at;
+        if (ch !== '~') { j++; continue; }
+        const m = runLength(s, j, '~');
+        if (m === 2 && j > from && !isSpace(s[j - 1])) return j;
         j += m;
     }
     return -1;
 }
 
-/** Wrap `inner` in the mark that an `n`-long run produces. */
-function markNode(n: number, inner: InlineNode[]): InlineNode {
-    if (n === 1) return { kind: 'em', children: inner };
-    if (n === 2) return { kind: 'strong', children: inner };
-    return { kind: 'strong', children: [{ kind: 'em', children: inner }] };
-}
-
-/** `*` / `_` emphasis (1–3 long) or `~~` strike opening at i. */
-function matchMark(ctx: Ctx, i: number, c: string): Hit | null {
+/** `~~strike~~` opening at i (`*` / `_` emphasis is resolved by `markdown-emphasis`). */
+function matchStrike(ctx: Ctx, i: number): Hit | null {
     const { s } = ctx;
-    const n = c === '~' ? 2 : Math.min(3, runLength(s, i, c));
-    if (c === '~' && runLength(s, i, c) !== 2) return null;
-    if (isSpace(s[i + n]) || (c === '_' && isWordChar(s[i - 1]))) return null;
-    const close = findClose(s, i + n, c, n);
+    if (runLength(s, i, '~') !== 2 || isSpace(s[i + 2])) return null;
+    const close = findStrikeClose(s, i + 2);
     if (close === -1) return null;
-    const inner = parseNested(ctx, s.slice(i + n, close), ctx.inLink);
-    return { nodes: [c === '~' ? { kind: 's', children: inner } : markNode(n, inner)], end: close + n };
+    const inner = parseNested(ctx, s.slice(i + 2, close), ctx.inLink);
+    return { nodes: [{ kind: 's', children: inner }], end: close + 2 };
 }
 
 /** Index of the `]` matching the `[` at i (escapes skipped), or -1. */
@@ -180,31 +171,27 @@ function matchAt(ctx: Ctx, i: number): Hit | null {
     if (ch === '!' && s[i + 1] === '[') return { nodes: [{ kind: 'text', value: '![' }], end: i + 2 };
     if (ch === '[' && !ctx.inLink) return matchLink(ctx, i);
     if (ch === '<' && opts.autolink && !ctx.inLink) return matchAutolink(ctx, i);
-    if (ch === '*' || ch === '_' || (ch === '~' && opts.strike)) return matchMark(ctx, i, ch);
+    if (ch === '~' && opts.strike) return matchStrike(ctx, i);
     return null;
-}
-
-/** Append, merging adjacent text so a literal run stays one string. */
-function push(out: InlineNode[], node: InlineNode): void {
-    const last = out[out.length - 1];
-    if (node.kind === 'text' && last?.kind === 'text') last.value += node.value;
-    else out.push(node);
 }
 
 function parseNested(ctx: Ctx, s: string, inLink: boolean): InlineNode[] {
     return parseWith({ s, opts: ctx.opts, depth: ctx.depth + 1, inLink });
 }
 
+/** Scan into nodes + emphasis delimiter runs, then pair the runs (`resolveEmphasis`). */
 function parseWith(ctx: Ctx): InlineNode[] {
-    const out: InlineNode[] = [];
+    const items: EmphasisItem[] = [];
     let i = 0;
     while (i < ctx.s.length) {
+        const delim = ctx.depth < MAX_DEPTH ? emphasisDelim(ctx.s, i, ctx.opts.strike ? '~' : '') : null;
+        if (delim) { items.push(delim); i += delim.count; continue; }
         const hit = matchAt(ctx, i);
-        if (hit) hit.nodes.forEach((n) => push(out, n));
-        else push(out, { kind: 'text', value: ctx.s[i] ?? '' });
+        if (hit) items.push(...hit.nodes);
+        else items.push({ kind: 'text', value: ctx.s[i] ?? '' });
         i = hit ? hit.end : i + 1;
     }
-    return out;
+    return resolveEmphasis(items);
 }
 
 /** Parse one line of inline Markdown into a node tree (see the file header). */
