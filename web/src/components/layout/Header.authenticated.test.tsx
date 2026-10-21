@@ -71,6 +71,18 @@ describe('Header — authenticated member', () => {
         expect(nav).toContainElement(at(insights, 0));
     });
 
+    it('768–1023px (ROK-1875): the row fits — tighter gaps, Insights collapses to its icon (label kept as its name), the brand truncates', () => {
+        renderHeader();
+        const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+        expect(nav.className, 'gap-3 below lg, gap-6 from lg').toMatch(/(^| )gap-3( |$).*lg:gap-6/);
+        const insights = at(screen.getAllByRole('link', { name: 'Insights' }), 0);
+        expect(insights.querySelector('svg')?.getAttribute('class'), 'the icon shows only below lg').toContain('lg:hidden');
+        expect(insights.querySelector('span')?.className, 'the label is visible from lg, screen-reader-only below').toBe('sr-only lg:not-sr-only');
+        const brand = screen.getByTestId('header-brand');
+        expect(brand.className, 'the brand may shrink').toContain('min-w-0');
+        expect(brand.querySelector('span.truncate'), 'the community name truncates instead of wrapping').not.toBeNull();
+    });
+
     it('has no "Event Metrics" link', () => {
         renderHeader();
         expect(screen.queryByRole('link', { name: /event metrics/i })).not.toBeInTheDocument();
