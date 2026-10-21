@@ -34,11 +34,13 @@ function realmOf(guild: MyGuild): string | null {
 }
 
 /**
- * Rank · realm · region for a guild or server. A community hub has no realm or
- * region, and its kind chip already says "Community" (ROK-1875 D6), so only the rank.
+ * Rank · realm · region for a WoW guild. Server and community hubs carry no
+ * real realm/region (their `region` is the kind word), and the kind chip
+ * already says it, so only the rank (ROK-1875 D6; operator 2026-10-21: the kind
+ * showed twice on server rows).
  */
 function hubRowMeta(guild: MyGuild): string {
-    if (guild.kind === 'game_community') return guild.rankName ?? '';
+    if (guild.kind !== 'wow_guild') return guild.rankName ?? '';
     return [guild.rankName, realmOf(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
 }
 

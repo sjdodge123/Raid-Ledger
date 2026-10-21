@@ -89,4 +89,14 @@ describe('kind chips in the drawer rows (ROK-1875 D5/D6)', () => {
         expect(row).not.toHaveTextContent('Community hub');
         expect(row).not.toHaveTextContent('COMMUNITY');
     });
+
+    it('a server hub row says "Server" once — the chip only, no SERVER meta line (operator 2026-10-21)', async () => {
+        server.use(http.get('http://localhost:3000/guilds/mine', () => HttpResponse.json({ guilds: [
+            { ...guild(22, 'Valheim — Gamernight'), kind: 'game_server', region: 'server', realmSlug: null, rankName: null },
+        ] })));
+        renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
+        const row = await screen.findByTestId('guild-entry-row');
+        expect(screen.getByTestId('hub-kind-chip')).toHaveTextContent('Server');
+        expect(row).not.toHaveTextContent('SERVER');
+    });
 });
