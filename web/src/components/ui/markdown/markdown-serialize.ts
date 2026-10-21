@@ -97,16 +97,25 @@ const TASK_MARKER = /^( {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+)\[([ xX])\](?=[ \t]|$)/
 const ESCAPED_TASK_MARKER = /^( {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+)\\\[([ xX])\\\](?=[ \t]|$)/gm;
 
 /**
+ * An indented list marker (`  - child`). The editor's list items hold one paragraph (D14), so the
+ * GFM parser's NESTED list would fail schema validation and break Enter (Codex r12); `MarkdownBlock`
+ * already flattens these into the same list, so the load path drops the indent to match.
+ */
+const INDENTED_LIST_MARKER = /^[ \t]+((?:[-*+]|\d{1,9}[.)])[ \t]+)/gm;
+
+/**
  * Stored markdown → what the editor's markdown parser loads (Codex r7). Stored entity text
  * (`&lt;`) is literal — `MarkdownBlock` prints it as written — but the parser would decode it,
  * so a save would rewrite `&lt;raid&gt;` to `<raid>`. Escaping the `&` keeps it literal text
  * (and keeps a destination's `&amp;` as written); code spans are literal already.
  * @param markdown - the stored hub-post body
- * @returns the same document with every unescaped entity-starting `&` written `\&`, and a
- *   list item's leading task marker written `\[x]` so it loads as literal text
+ * @returns the same document with every unescaped entity-starting `&` written `\&`, a list
+ *   item's leading task marker written `\[x]` so it loads as literal text, and nested list items
+ *   un-indented into sibling items
  */
 export function prepareEditorMarkdown(markdown: string): string {
-    return outsideCode(markdown.replace(TASK_MARKER, '$1\\[$2]'), (part: string): string => part.replace(ENTITY_AMP, '\\&'));
+    const flat = markdown.replace(INDENTED_LIST_MARKER, '$1').replace(TASK_MARKER, '$1\\[$2]');
+    return outsideCode(flat, (part: string): string => part.replace(ENTITY_AMP, '\\&'));
 }
 
 /**

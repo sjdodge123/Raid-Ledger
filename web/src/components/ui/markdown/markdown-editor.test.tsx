@@ -221,3 +221,39 @@ describe('MarkdownEditor — link destinations are not entity-decoded (Codex r7)
         expect(normalizeEditorMarkdown(raw)).toBe(expected);
     });
 });
+
+/** The loaded document's schema error, or null — a nested list under `content: 'paragraph'` items is invalid. */
+function schemaError(editor: Editor): string | null {
+    try { editor.state.doc.check(); return null; } catch (e) { return String(e); }
+}
+
+function listItemCount(editor: Editor): number {
+    let n = 0;
+    editor.state.doc.descendants((node) => { if (node.type.name === 'listItem') n++; });
+    return n;
+}
+
+describe('MarkdownEditor — stored nested lists load flat (Codex r12)', () => {
+    it.each([
+        ['- parent\n  - child', '- parent\n- child', 2],
+        ['- a\n  - b\n    - c\n- d', '- a\n- b\n- c\n- d', 4],
+        ['1. one\n   1. sub\n2. two', '1. one\n2. sub\n3. two', 3],
+    ])('%j loads schema-valid as sibling items and saves stable', (stored, flat, items) => {
+        const { editor } = setup(stored);
+        expect(schemaError(editor), 'the loaded document must pass ProseMirror validation').toBeNull();
+        expect(listItemCount(editor), 'every nested item becomes a sibling item').toBe(items);
+        const saved = normalizeEditorMarkdown(editor.getMarkdown());
+        expect(saved).toBe(flat);
+        expect(normalizeEditorMarkdown(setup(saved).editor.getMarkdown()), 'reloading the save must keep it').toBe(saved);
+        expect(render(<MarkdownBlock text={saved} />).container.textContent)
+            .toBe(render(<MarkdownBlock text={stored} />).container.textContent);
+    });
+
+    it('Enter inside the loaded parent item splits it', () => {
+        const { editor } = setup('- parent\n  - child');
+        editor.commands.setTextSelection(1 + 1 + 1 + 'parent'.length);
+        editor.commands.keyboardShortcut('Enter');
+        expect(listItemCount(editor), 'Enter at the end of "parent" adds an item').toBe(3);
+        expect(schemaError(editor)).toBeNull();
+    });
+});
