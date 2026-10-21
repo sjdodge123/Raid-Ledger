@@ -7,6 +7,7 @@ import {
     deleteCharacter,
 } from '../lib/api-client';
 import type { CreateCharacterDto, UpdateCharacterDto } from '@raid-ledger/contract';
+import { invalidateAllHubMemberships } from '../components/hub/community/invalidate-hub-membership';
 
 /** A caller that shows some errors inline itself opts those out of the generic error toast. */
 export interface CharacterMutationOptions { isHandledError?: (error: Error) => boolean }
@@ -96,6 +97,8 @@ export function useDeleteCharacter() {
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
             queryClient.invalidateQueries({ queryKey: ['characters'] });
             queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+            // ROK-1875: deleting a GUID-linked character can drop a WoW guild hub.
+            void invalidateAllHubMemberships(queryClient);
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to delete character');

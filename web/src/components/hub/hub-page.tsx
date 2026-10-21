@@ -39,7 +39,8 @@ import { hubBellVisible } from './hub-notify-bell.helpers';
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
 const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
-const PAGE = 'max-w-5xl mx-auto px-4 py-8';
+/** Phone: the fixed bottom bar + raised Hubs circle overlay the last card unless the page pads past them (ROK-1876). */
+const PAGE = 'max-w-5xl mx-auto px-4 pt-8 pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-8';
 
 /** Stable identity so the source list doesn't churn while a module is absent. */
 const NO_SECTIONS: readonly HubModSource[] = [];

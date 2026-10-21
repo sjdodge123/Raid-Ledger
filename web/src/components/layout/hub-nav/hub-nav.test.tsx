@@ -1,6 +1,7 @@
 /**
- * ROK-1785 entry E, core since ROK-1870 D9: the header "Guild" link and the
- * drawer "Your guild" block read core `GET /guilds/mine` with no plugin active.
+ * ROK-1785 entry E, core since ROK-1870 D9: the drawer "Your hub(s)" block
+ * reads core `GET /guilds/mine` with no plugin active. (The header's old
+ * "Guild" link became the Hubs menu in ROK-1875 — see hubs-nav-menu.test.tsx.)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -9,7 +10,6 @@ import { http, HttpResponse } from 'msw';
 import type { MyGuild } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { NavGuildLink } from './nav-guild-link';
 import { DrawerYourGuild } from './drawer-your-guild';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -46,33 +46,6 @@ async function expectEmpty(container: HTMLElement, path: string): Promise<void> 
 
 beforeEach(() => { server.events.removeAllListeners(); });
 
-describe('NavGuildLink (nav:primary-links)', () => {
-    it('one guild → a "Guild" link to its page, active on that page', async () => {
-        serve(ONE);
-        renderWithProviders(<NavGuildLink pathname="/guilds/11" />);
-        const link = await screen.findByTestId('nav-guild-link');
-        expect(link).toHaveAttribute('href', '/guilds/11');
-        expect(link).toHaveTextContent('Guild');
-        expect(link.className).toContain('text-emerald-400');
-    });
-
-    it('two guilds → a menu listing both', async () => {
-        serve(TWO);
-        renderWithProviders(<NavGuildLink pathname="/players" />);
-        await userEvent.click(await screen.findByTestId('nav-guild-menu-trigger'));
-        const menu = screen.getByTestId('nav-guild-menu');
-        expect(menu).toHaveTextContent('Iron Vanguard');
-        expect(menu).toHaveTextContent('Dusk Wardens');
-        expect(screen.getAllByTestId('guild-entry-row').map((a) => a.getAttribute('href'))).toEqual(['/guilds/11', '/guilds/12']);
-    });
-
-    it('no guild → nothing', async () => {
-        serve([]);
-        const { container } = renderWithProviders(<NavGuildLink pathname="/" />);
-        await expectEmpty(container, '/guilds/mine');
-    });
-});
-
 describe('DrawerYourGuild (nav:drawer-top)', () => {
     it('one guild → "Your guild"; tapping it closes the drawer', async () => {
         serve(ONE);
@@ -97,13 +70,33 @@ describe('DrawerYourGuild (nav:drawer-top)', () => {
     });
 });
 
-describe('community hubs in the nav (ROK-1870)', () => {
-    it('a community hub row reads "Community hub", not a realm or region', async () => {
+describe('kind chips in the drawer rows (ROK-1875 D5/D6)', () => {
+    it('a WoW guild row carries a "Guild" chip and keeps its rank · realm · region', async () => {
+        serve(ONE);
+        renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
+        const row = await screen.findByTestId('guild-entry-row');
+        expect(row).toHaveTextContent('Raider · Whitemane · US');
+        expect(screen.getByTestId('hub-kind-chip')).toHaveTextContent('Guild');
+    });
+
+    it('a community hub row: the chip says "Community"; the meta no longer repeats it nor shows a realm or region', async () => {
         server.use(http.get('http://localhost:3000/guilds/mine', () => HttpResponse.json({ guilds: [
             { ...guild(21, 'BG3 Crew'), kind: 'game_community', region: 'community', realmSlug: null, rankName: null },
         ] })));
         renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
-        expect(await screen.findByTestId('guild-entry-row')).toHaveTextContent('Community hub');
-        expect(screen.getByTestId('guild-entry-row')).not.toHaveTextContent('COMMUNITY');
+        const row = await screen.findByTestId('guild-entry-row');
+        expect(screen.getByTestId('hub-kind-chip')).toHaveTextContent('Community');
+        expect(row).not.toHaveTextContent('Community hub');
+        expect(row).not.toHaveTextContent('COMMUNITY');
+    });
+
+    it('a server hub row says "Server" once — the chip only, no SERVER meta line (operator 2026-10-21)', async () => {
+        server.use(http.get('http://localhost:3000/guilds/mine', () => HttpResponse.json({ guilds: [
+            { ...guild(22, 'Valheim — Gamernight'), kind: 'game_server', region: 'server', realmSlug: null, rankName: null },
+        ] })));
+        renderWithProviders(<DrawerYourGuild onClose={vi.fn()} />);
+        const row = await screen.findByTestId('guild-entry-row');
+        expect(screen.getByTestId('hub-kind-chip')).toHaveTextContent('Server');
+        expect(row).not.toHaveTextContent('SERVER');
     });
 });

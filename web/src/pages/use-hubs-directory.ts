@@ -1,14 +1,15 @@
 /**
  * ROK-1870 — the `/hubs` directory read (`GET /hubs`, cursor "Load more",
  * key `['hubs-directory', params]`), the URL <-> params mapping
- * (`?game=&q=&membership=&sort=`) and the optimistic inline Join.
+ * (`?game=&q=&membership=&sort=&kind=`) and the optimistic inline Join.
+ * ROK-1875: `?kind=server|community|guild` maps to the contract's `GuildKind`.
  */
 import {
     useInfiniteQuery, useMutation, useQueryClient,
     type InfiniteData, type UseInfiniteQueryResult, type UseMutationResult,
 } from '@tanstack/react-query';
 import {
-    HubDirectoryPageSchema, type CommunityHubJoinResponse, type HubDirectoryPage, type HubDirectoryQuery,
+    GUILD_KINDS, HubDirectoryPageSchema, type CommunityHubJoinResponse, type GuildKind, type HubDirectoryPage, type HubDirectoryQuery,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../lib/api/fetch-api';
 import { toast } from '../lib/toast';
@@ -23,7 +24,13 @@ export interface HubsDirectoryParams {
     q?: string | undefined;
     membership: HubMembershipFilter;
     sort: HubSort;
+    /** ROK-1875: one hub kind; absent = every live kind. */
+    kind?: GuildKind | undefined;
 }
+
+/** URL slug per hub kind (`?kind=server`), kept short and human-readable. */
+export const KIND_SLUGS: Record<GuildKind, string> = { game_server: 'server', game_community: 'community', wow_guild: 'guild' };
+const KIND_BY_SLUG = new Map<string, GuildKind>(GUILD_KINDS.map((k) => [KIND_SLUGS[k], k]));
 
 const MEMBERSHIPS: readonly HubMembershipFilter[] = ['all', 'joined', 'not-joined'];
 const SORTS: readonly HubSort[] = ['members', 'name', 'newest'];
@@ -40,7 +47,8 @@ export function readDirectoryParams(search: URLSearchParams): HubsDirectoryParam
     const membership = MEMBERSHIPS.find((m) => m === search.get('membership')) ?? 'all';
     const sort = SORTS.find((s) => s === search.get('sort')) ?? 'members';
     const q = search.get('q')?.trim();
-    return { gameId: Number.isInteger(game) && game > 0 ? game : undefined, q: q || undefined, membership, sort };
+    const kind = KIND_BY_SLUG.get(search.get('kind') ?? '');
+    return { gameId: Number.isInteger(game) && game > 0 ? game : undefined, q: q || undefined, membership, sort, kind };
 }
 
 /** Write the filters back to the URL, omitting defaults. */
@@ -50,18 +58,20 @@ export function writeDirectoryParams(params: HubsDirectoryParams): URLSearchPara
     if (params.q) out.set('q', params.q);
     if (params.membership !== 'all') out.set('membership', params.membership);
     if (params.sort !== 'members') out.set('sort', params.sort);
+    if (params.kind) out.set('kind', KIND_SLUGS[params.kind]);
     return out;
 }
 
 /** Active filters for the funnel badge (search and sort excluded). */
 export function directoryActiveCount(params: HubsDirectoryParams): number {
-    return (params.gameId ? 1 : 0) + (params.membership !== 'all' ? 1 : 0);
+    return (params.gameId ? 1 : 0) + (params.membership !== 'all' ? 1 : 0) + (params.kind ? 1 : 0);
 }
 
 function apiQuery(params: HubsDirectoryParams, cursor: string): string {
     const out = new URLSearchParams({ membership: params.membership, sort: params.sort });
     if (params.gameId) out.set('gameId', String(params.gameId));
     if (params.q) out.set('q', params.q);
+    if (params.kind) out.set('kind', params.kind);
     if (cursor) out.set('cursor', cursor);
     return out.toString();
 }

@@ -34,10 +34,10 @@ function selectionHours({ startIndex, endIndex }: SlotBlock, hours: number[]): [
  * but cuts off both steppers. Since the stepper is meant to be the precise AND
  * accessible path, either one defeats it.
  *
- * Mobile clears the h-14 bottom tab bar plus its safe-area inset; desktop has no
- * tab bar, so it sits flush. Opaque either way — it overlays the grid.
+ * Mobile clears the bottom tab bar, its raised Hubs circle and the safe-area
+ * inset (`--bottom-nav-clearance`, ROK-1875); desktop has no tab bar, so it sits flush. Opaque either way — it overlays the grid.
  */
-const STICKY = 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 '
+const STICKY = 'sticky bottom-[var(--bottom-nav-clearance)] z-20 '
     + 'bg-panel/95 backdrop-blur-sm shadow-lg md:bottom-0';
 
 /**

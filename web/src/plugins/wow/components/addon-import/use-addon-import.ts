@@ -26,6 +26,7 @@ import {
 } from '@raid-ledger/contract';
 import { fetchWithAuth } from '../../../../lib/api/fetch-api';
 import { resetUnresolvedEquipmentPoll } from '../../../../hooks/unresolved-equipment-poll';
+import { invalidateAllHubMemberships } from '../../../../components/hub/community/invalidate-hub-membership';
 
 export type AddonImportConfirm = NonNullable<AddonImportRequestInput['confirm']>;
 
@@ -120,6 +121,7 @@ export function useAddonImportApply(characterId: string) {
             return Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['characters', characterId] }),
                 queryClient.invalidateQueries({ queryKey: ['character-quests', characterId] }),
+                invalidateAllHubMemberships(queryClient),
             ]);
         },
     });
@@ -154,5 +156,6 @@ function refreshAfterCreate(queryClient: QueryClient) {
         queryClient.invalidateQueries({ queryKey: ['characters'] }),
         queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
         queryClient.invalidateQueries({ queryKey: ['character-quests'] }),
+        invalidateAllHubMemberships(queryClient),
     ]);
 }

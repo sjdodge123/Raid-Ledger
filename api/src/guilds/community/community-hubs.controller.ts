@@ -64,7 +64,7 @@ export class CommunityHubsController {
     @Query() query: unknown,
   ): Promise<HubDirectoryPage> {
     const parsed = parseBody(HubDirectoryQuerySchema, query);
-    return this.hubDirectory.list(req.user.id, parsed);
+    return this.hubDirectory.list(req.user, parsed);
   }
 
   @Get('by-game/:gameId')

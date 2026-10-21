@@ -1,11 +1,12 @@
 /**
- * ROK-1870 — `/hubs`: every active community hub, searchable and filtered
+ * ROK-1870 / ROK-1875 — `/hubs`: every visible hub of every live kind
+ * (community, game server, WoW guild), searchable and filtered
  * through the funnel standard, filters persisted in the URL, "Load more" for
  * the next cursor page (not infinite scroll — ROK-1868 D5 precedent).
  */
 import { useState, type JSX } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { HubDirectoryEntry } from '@raid-ledger/contract';
+import type { GuildKind, HubDirectoryEntry } from '@raid-ledger/contract';
 import { Button } from '../components/ui/button';
 import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { SearchInput } from '../components/ui/search-input';
@@ -16,14 +17,19 @@ import {
 } from './use-hubs-directory';
 import { HubsDirectoryFilters } from './hubs-directory-filters';
 import { HubDirectoryCard } from './hubs-directory-card';
+import { HUB_KIND_LABEL } from '../components/layout/hub-nav/hub-kind-chip';
 
-function EmptyState({ filtered, onClear }: { filtered: boolean; onClear: () => void }): JSX.Element {
+interface EmptyStateProps { filtered: boolean; kind: GuildKind | undefined; onClear: () => void }
+
+/** Filtered: names the kind when one is picked ("No server hubs match"); unfiltered: how to start one. */
+function EmptyState({ filtered, kind, onClear }: EmptyStateProps): JSX.Element {
+    const noun = kind ? `${HUB_KIND_LABEL[kind].toLowerCase()} hubs` : 'hubs';
     return (
         <div className="rounded-lg border border-edge bg-surface p-6 text-center text-sm text-muted">
             {filtered ? (
-                <p>No hubs match — <Button variant="ghost" size="sm" onClick={onClear}>Clear filters</Button></p>
+                <p>No {noun} match — <Button variant="ghost" size="sm" onClick={onClear}>Clear filters</Button></p>
             ) : (
-                <p>No community hubs yet. Start one from a game&apos;s page.</p>
+                <p>No hubs yet. Start a community hub from a game&apos;s page.</p>
             )}
         </div>
     );
@@ -43,19 +49,56 @@ function HubGrid({ hubs, params }: { hubs: HubDirectoryEntry[]; params: HubsDire
 function PageHeader(): JSX.Element {
     return (
         <header>
-            <h1 className="text-2xl font-semibold text-foreground">Community hubs</h1>
-            <p className="text-sm text-muted">Groups for the games we play. Join any of them.</p>
+            <h1 className="text-2xl font-semibold text-foreground">Hubs</h1>
+            <p className="text-sm text-muted">Game servers, guilds and community groups for the games we play.</p>
         </header>
     );
 }
 
+interface PendingParams { from: string; params: HubsDirectoryParams }
+
+/**
+ * The filters live in the URL, but React Router v7 commits every navigation in
+ * a transition — so a control reading only the URL shows its OLD value until a
+ * later task (a radio snaps back unchecked; Playwright's check() fails). Hold
+ * the pick as urgent state until the URL moves off the search it was made on.
+ */
 function useDirectoryUrl(): [HubsDirectoryParams, (next: HubsDirectoryParams) => void] {
     const [search, setSearch] = useSearchParams();
-    const update = (next: HubsDirectoryParams): void => setSearch(writeDirectoryParams(next), { replace: true });
-    return [readDirectoryParams(search), update];
+    const current = search.toString();
+    const [pending, setPending] = useState<PendingParams | null>(null);
+    if (pending && pending.from !== current) setPending(null);
+    const update = (next: HubsDirectoryParams): void => {
+        const out = writeDirectoryParams(next);
+        if (out.toString() === current) return;
+        setPending({ from: current, params: next });
+        setSearch(out, { replace: true });
+    };
+    const live = pending && pending.from === current ? pending.params : readDirectoryParams(search);
+    return [live, update];
 }
 
-/** The community hub directory page. */
+/**
+ * The instance's live kinds (D12: independent of the filters). A filter change
+ * is a new query key with no data yet, so keep the last known list meanwhile;
+ * otherwise the Kind group unmounts mid-pick and the new choice never shows checked.
+ */
+function useLiveKinds(kinds: readonly GuildKind[] | undefined): readonly GuildKind[] {
+    const [last, setLast] = useState<readonly GuildKind[]>([]);
+    if (kinds && kinds !== last) setLast(kinds);
+    return kinds ?? last;
+}
+
+function LoadMore({ query }: { query: ReturnType<typeof useHubsDirectory> }): JSX.Element | null {
+    if (!query.hasNextPage) return null;
+    return (
+        <div className="flex justify-center">
+            <Button variant="secondary" size="sm" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>Load more</Button>
+        </div>
+    );
+}
+
+/** The hub directory page. */
 export function HubsDirectoryPage(): JSX.Element {
     const [params, update] = useDirectoryUrl();
     const [filtersOpen, setFiltersOpen] = useState(false);
@@ -63,6 +106,7 @@ export function HubsDirectoryPage(): JSX.Element {
     const query = useHubsDirectory(params);
     const hubs = query.data?.pages.flatMap((p) => p.items) ?? [];
     const gameName = hubs.find((h) => h.gameId === params.gameId)?.gameName;
+    const kinds = useLiveKinds(query.data?.pages[0]?.kinds);
     const filtered = directoryActiveCount(params) > 0 || Boolean(params.q);
     const clear = (): void => { setText(''); update({ membership: 'all', sort: params.sort }); };
     return (
@@ -75,15 +119,11 @@ export function HubsDirectoryPage(): JSX.Element {
                 </div>
                 <FilterEntryTrigger activeCount={directoryActiveCount(params)} isOpen={filtersOpen} onOpenChange={setFiltersOpen} />
             </div>
-            <HubsDirectoryFilters params={params} onChange={update} gameName={gameName} isOpen={filtersOpen} onOpenChange={setFiltersOpen} />
+            <HubsDirectoryFilters params={params} onChange={update} gameName={gameName} kinds={kinds} isOpen={filtersOpen} onOpenChange={setFiltersOpen} />
             {query.isPending && <div data-testid="hubs-directory-loading" className="flex justify-center py-8"><LoadingSpinner /></div>}
             {query.isError && <p role="alert" className="text-sm text-danger">Couldn’t load hubs. Try again in a moment.</p>}
-            {query.isSuccess && (hubs.length === 0 ? <EmptyState filtered={filtered} onClear={clear} /> : <HubGrid hubs={hubs} params={params} />)}
-            {query.hasNextPage && (
-                <div className="flex justify-center">
-                    <Button variant="secondary" size="sm" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>Load more</Button>
-                </div>
-            )}
+            {query.isSuccess && (hubs.length === 0 ? <EmptyState filtered={filtered} kind={params.kind} onClear={clear} /> : <HubGrid hubs={hubs} params={params} />)}
+            <LoadMore query={query} />
         </div>
     );
 }

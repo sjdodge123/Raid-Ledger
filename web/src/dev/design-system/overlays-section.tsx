@@ -25,6 +25,7 @@ import { useDirtyCloseGuard, type DirtyCloseGuard } from '../../hooks/use-dirty-
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { StretchedCardDemo } from './stretched-card-demo';
 import { StackedSheetDemo } from './stacked-sheet-demo';
+import { BottomNavDemo } from './bottom-nav-demo';
 
 const DEMO_BTN = 'px-3 py-2 rounded-lg text-sm font-medium bg-panel border border-edge text-secondary hover:bg-overlay transition-colors';
 
@@ -197,7 +198,7 @@ export function OverlaysSection(): JSX.Element {
         <Section
             id="overlays"
             title="Overlays and containers"
-            blurb="Modal / BottomSheet (each with a pinned footer and the dirty-close guard) / ScrollCollapsible / stretched-button card / NavChip / CopyButton / MarkdownText / FAB. Buttons below open the real components."
+            blurb="Modal / BottomSheet (each with a pinned footer and the dirty-close guard) / ScrollCollapsible / stretched-button card / NavChip / CopyButton / MarkdownText / FAB / the phone bottom bar's raised Hubs circle. Buttons below open the real components."
         >
             <div data-testid="ds-overlays">
                 <StateGrid>
@@ -210,6 +211,7 @@ export function OverlaysSection(): JSX.Element {
                     <StretchedCardDemo />
                     <ChipsAndText />
                     <FabStatic />
+                    <BottomNavDemo />
                 </StateGrid>
             </div>
         </Section>

@@ -13,8 +13,6 @@ import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { SearchInput } from '../ui/search-input';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { PluginSlot } from '../../plugins';
-import { UserMenuGuild } from './hub-nav/user-menu-guild';
-import { UserMenuBrowseHubs } from './hub-nav/hubs-nav-links';
 
 interface ImpersonateUser {
     id: number;
@@ -62,11 +60,13 @@ function AvatarButton({ avatarUrl, username, isOpen, onClick }: {
 }) {
     return (
         <button onClick={onClick} className="flex items-center gap-2 px-2 min-h-[44px] rounded-lg hover:bg-panel transition-colors"
-            aria-expanded={isOpen} aria-haspopup="true" data-testid="user-menu-trigger">
+            aria-label={username} aria-expanded={isOpen} aria-haspopup="true" data-testid="user-menu-trigger">
             {avatarUrl
                 ? <img src={avatarUrl} alt={username} className="w-8 h-8 rounded-full bg-overlay" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 : <div className="w-8 h-8 rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted">{username.charAt(0).toUpperCase()}</div>}
-            <span className="text-foreground font-medium hidden sm:block">{username}</span>
+            {/* Below lg the name takes no width (ROK-1875: the 768px header row); the button's aria-label keeps it named.
+                Not sr-only + lg:not-sr-only — index.css's unlayered .sr-only beats Tailwind's layered utility. */}
+            <span className="text-foreground font-medium hidden lg:inline">{username}</span>
             <svg className={`w-4 h-4 text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
@@ -213,7 +213,6 @@ function DropdownContent({ user, isImpersonating, onClose, onLogout, onExitImper
         <div ref={trapRef} role="menu" className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
             <ProfileLink username={user.username} role={user.role} isImpersonating={isImpersonating} onClose={onClose} userId={user.id} />
             <div className="py-1">
-                <UserMenuGuild onClose={onClose} /><UserMenuBrowseHubs onClose={onClose} />
                 <PluginSlot name="user-menu:items" context={{ onClose }} />
                 <MySettingsLink onClose={onClose} />
                 {isImpersonating && <ExitImpersonationItem onExit={onExitImpersonation} />}

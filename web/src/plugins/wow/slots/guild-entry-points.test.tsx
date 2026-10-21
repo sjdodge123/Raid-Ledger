@@ -187,7 +187,7 @@ describe('generic slots', () => {
 
     it.each([
         // Hidden below lg so the md (768) header matches main's (ROK-1785 verify flag).
-        ['components/layout/Header.tsx', '<span className="hidden lg:contents"><NavGuildLink pathname={pathname} /><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
+        ['components/layout/Header.tsx', '<span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
         ['components/layout/more-drawer.tsx', '<PluginSlot name="nav:drawer-top" context={{ onClose }} />'],
         ['pages/players-page.tsx', '<PluginSlot name="players:header-cards" />'],
         ['pages/game-detail-page.tsx', '<PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />'],

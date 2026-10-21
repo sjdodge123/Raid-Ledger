@@ -161,6 +161,17 @@ describe('viewerAccess (ROK-1830)', () => {
   });
 });
 
+describe('GuildAccessService.memberHubIds (ROK-1875 D9)', () => {
+  it('returns [] when no live hub kind claims the user', async () => {
+    expect(await service.memberHubIds(42)).toEqual([]);
+  });
+
+  it('de-duplicates the ids every live adapter reports', async () => {
+    build(stubHub('member', [GUILD, 9, GUILD]));
+    expect(await service.memberHubIds(42)).toEqual([GUILD, 9]);
+  });
+});
+
 describe('GuildAccessService.myGuilds', () => {
   it('returns [] and skips the guild query when no hub kind claims the user', async () => {
     expect(await service.myGuilds(42)).toEqual([]);
