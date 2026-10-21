@@ -145,10 +145,15 @@ beforeAll(async () => {
 
 /**
  * CI runs integration specs in randomized order, so every test starts from a
- * blank profile and an empty addon list for the main guild. The other guild's
- * single addon is never written by any test (all writes against it 403/404).
+ * blank profile, no hub posts (the profile's gmPost / latestPost and /mine's
+ * gmPostHeadline derive from the post feed — ROK-1868 A3) and an empty addon
+ * list for the main guild. The other guild's single addon is never written by
+ * any test (all writes against it 403/404).
  */
 beforeEach(async () => {
+  await testApp.db
+    .delete(schema.hubPosts)
+    .where(eq(schema.hubPosts.guildId, guildId));
   await testApp.db
     .delete(schema.guildProfiles)
     .where(eq(schema.guildProfiles.guildId, guildId));
