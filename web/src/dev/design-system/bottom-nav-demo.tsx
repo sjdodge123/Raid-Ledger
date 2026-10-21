@@ -13,8 +13,7 @@ const WIDTHS = [320, 375, 430] as const;
 /** Static replicas of the bottom bar, one per phone width. */
 export function BottomNavDemo(): JSX.Element {
     return (
-        <StateFrame label="Bottom bar — raised centre Hubs (static replica)"
-            note="Five even columns (components/layout/bottom-tab-bar.tsx). The Hubs circle is bg-success + text-white (the solid-status label), 56px, raised 24px; a hub member opens the 'Your hubs' BottomSheet, everyone else links to /hubs. FABs stay at right-4, clear of the centre column.">
+        <StateFrame label="Bottom bar — raised Hubs (static)" note="Five even columns; bg-success circle, 56px, raised 24px (§3.2).">
             <div className="flex flex-col gap-4 overflow-x-auto">
                 {WIDTHS.map((w) => (
                     <div key={w} data-testid={`ds-bottom-nav-${w}`} className="shrink-0 pt-8" style={{ width: w }}>
