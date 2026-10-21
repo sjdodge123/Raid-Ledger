@@ -33,8 +33,10 @@ import {
 } from '../utils/push-content';
 import {
   gameDetailUrl,
+  maskedLink,
   openEventLink,
 } from './discord-embed-event-chrome.helpers';
+import { JOIN_POST_LOGIN_PATH } from '../join-post/join-post.constants';
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import type {
   EmbedContext,
@@ -46,6 +48,10 @@ const OPEN = '▸'; // ▸
 const SQUARE = '■'; // ■
 const SEP = '·'; // ·
 const EN_DASH = '–'; // –
+/** ROK-1888 OQ4: the hint's lead-in, before the masked join link. */
+export const JOIN_HINT_LEAD = 'Not on Raid Ledger yet?';
+/** The join link's label — the same ↗ as `Open event ↗`. */
+export const JOIN_HINT_LABEL = 'Join Raid Ledger \u2197';
 
 /** Which half of the Quick Play lifecycle is being rendered. */
 export type QuickPlayState = 'live' | 'ended';
@@ -107,14 +113,32 @@ function clockRange(event: EmbedEventData, timezone?: string | null): string {
 }
 
 /**
- * Participants still present plus anonymous server players (ROK-1801 Q4: they
- * count) — the head-count the LIVE author line reports.
+ * Participants still present — the head-count the LIVE author line reports.
+ * ROK-1888 ruling 2: unlinked server players (`uncounted`) are left out, and
+ * so are anonymous ones when the card says so (`serverAnonymousUncounted`).
+ * The lobby presence card leaves that unset and keeps ROK-1801 Q4's count.
  */
 function activeCount(event: EmbedEventData): number {
   const present = (event.signupMentions ?? []).filter(
-    (m) => m.status !== 'left',
+    (m) => m.status !== 'left' && !m.uncounted,
   ).length;
+  if (event.serverAnonymousUncounted) return present;
   return present + (event.serverAnonymousCount ?? 0);
+}
+
+/**
+ * ROK-1888 OQ4: the LIVE-only invite shown while a voice member has no Raid
+ * Ledger account. Never names anyone — it is a public line.
+ */
+function joinHintLine(
+  event: EmbedEventData,
+  clientUrl: string | undefined,
+  state: QuickPlayState,
+): string | null {
+  if (state !== 'live' || !event.discordOnlyPresent || !clientUrl) return null;
+  const url = `${clientUrl}${JOIN_POST_LOGIN_PATH}`;
+  const link = maskedLink(JOIN_HINT_LABEL, url);
+  return `${JOIN_HINT_LEAD} ${link}`;
 }
 
 /** `▸ LIVE · Quick Play · 3 playing` / `■ ENDED · Quick Play · 2h 45m`. */
@@ -192,6 +216,8 @@ function description(
 ): string {
   const lines = [rosterBlock(event, state, rosterCap)];
   if (state === 'ended') lines.push(attendanceLine(event));
+  const hint = joinHintLine(event, clientUrl, state);
+  if (hint) lines.push(hint);
   const link = openEventLink(clientUrl, event.id);
   if (link) lines.push(link);
   return lines.join('\n');

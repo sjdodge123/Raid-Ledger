@@ -10,7 +10,12 @@ import {
   toQuickPlayGame,
   type EmbedGame,
 } from './embed-game.helpers';
-import { isAnonymousServerRow } from './ad-hoc-anonymous-row.helpers';
+import {
+  isAnonymousServerRow,
+  isDiscordOnlyRow,
+  isUnlinkedServerRow,
+  UNLINKED_SERVER_SUFFIX,
+} from './ad-hoc-anonymous-row.helpers';
 
 /** Participant with active status for embed building. */
 export interface AdHocParticipant {
@@ -25,6 +30,18 @@ export interface AdHocParticipant {
    * its SteamID64. Never rendered by name — counted into `+N on server`.
    */
   anonymousOnServer?: boolean;
+  /**
+   * ROK-1888 ruling 2: a named, unlinked server player — rendered with
+   * ` · on server`, left out of the card's counts.
+   */
+  unlinkedOnServer?: boolean;
+  /** ROK-1888 OQ4: a voice member with no Raid Ledger account. */
+  discordOnly?: boolean;
+}
+
+/** ROK-1888 ruling 2: does this participant count toward "N signed up"? */
+export function isCountedParticipant(p: AdHocParticipant): boolean {
+  return !p.unlinkedOnServer && !p.anonymousOnServer;
 }
 
 /** Dependencies for ad-hoc notification helper functions. */
@@ -138,8 +155,19 @@ function rosterMentions(
       role: null,
       preferredRoles: null,
       ...(p.isActive ? {} : { status: 'left' }),
-      ...(p.rosterSuffix ? { rosterSuffix: p.rosterSuffix } : {}),
+      ...mentionSuffix(p),
     }));
+}
+
+/** The trusted marker, and ROK-1888's uncounted ` · on server` label. */
+function mentionSuffix(p: AdHocParticipant) {
+  if (p.unlinkedOnServer) {
+    return {
+      rosterSuffix: p.rosterSuffix ?? UNLINKED_SERVER_SUFFIX,
+      uncounted: true,
+    };
+  }
+  return p.rosterSuffix ? { rosterSuffix: p.rosterSuffix } : {};
 }
 
 /** Assemble EmbedEventData from resolved components. */
@@ -156,7 +184,8 @@ function assembleEmbedData(
     startTime: event.duration[0].toISOString(),
     endTime: effectiveEnd.toISOString(),
     // ROK-1243: ROSTER header reflects cumulative participation, not currently-active.
-    signupCount: participants.length,
+    // ROK-1888: unlinked and anonymous server players are not counted.
+    signupCount: participants.filter(isCountedParticipant).length,
     maxAttendees: event.maxAttendees,
     slotConfig: event.slotConfig as Exclude<
       EmbedEventData['slotConfig'],
@@ -170,13 +199,30 @@ function assembleEmbedData(
     // embed re-rendered hours after the session ended (ROK). discordId is dropped
     // here (render-only field) so the shared roster layout falls back to username.
     signupMentions: rosterMentions(participants),
+    ...presenceFlags(participants),
   };
-  const anonymous = participants.filter(
-    (p) => p.anonymousOnServer && p.isActive,
-  ).length;
-  if (anonymous > 0) data.serverAnonymousCount = anonymous;
   if (voiceChannelId) data.voiceChannelId = voiceChannelId;
   return data;
+}
+
+/**
+ * ROK-1801 Q4 `+N on server` (uncounted on this card since ROK-1888) and the
+ * ROK-1888 OQ4 join-hint flag, from the active participants.
+ */
+function presenceFlags(
+  participants: AdHocParticipant[],
+): Pick<
+  EmbedEventData,
+  'serverAnonymousCount' | 'serverAnonymousUncounted' | 'discordOnlyPresent'
+> {
+  const active = participants.filter((p) => p.isActive);
+  const anonymous = active.filter((p) => p.anonymousOnServer).length;
+  return {
+    ...(anonymous > 0
+      ? { serverAnonymousCount: anonymous, serverAnonymousUncounted: true }
+      : {}),
+    ...(active.some((p) => p.discordOnly) ? { discordOnlyPresent: true } : {}),
+  };
 }
 
 /**
@@ -310,6 +356,15 @@ export async function readParticipants(
     discordUserId: r.discordUserId,
     discordUsername: r.discordUsername,
     isActive: !allInactive && !r.leftAt,
-    ...(isAnonymousServerRow(r) ? { anonymousOnServer: true } : {}),
+    ...rowFlags(r),
   }));
+}
+
+/** ROK-1801 Q4 / ROK-1888: the render flags a stored row carries. */
+function rowFlags(
+  r: typeof schema.adHocParticipants.$inferSelect,
+): Partial<AdHocParticipant> {
+  if (isAnonymousServerRow(r)) return { anonymousOnServer: true };
+  if (isUnlinkedServerRow(r)) return { unlinkedOnServer: true };
+  return isDiscordOnlyRow(r) ? { discordOnly: true } : {};
 }
