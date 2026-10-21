@@ -137,9 +137,26 @@ async function bindingIdFor(api: ApiClient, gameId: number): Promise<string> {
   return id;
 }
 
+/**
+ * The PATCH-able keys of `UpdateChannelLifecycleSettingsSchema` (strict). The
+ * GET also returns read-only `lastRunAt` / `lastRunError`, which the interface
+ * does not strip at runtime — copying a spread would make the PATCH 400.
+ */
+function writableSettings(s: Settings): Omit<Settings, "enabled"> {
+  return {
+    recentActivityDays: s.recentActivityDays,
+    createThreshold: s.createThreshold,
+    gamesCategoryId: s.gamesCategoryId,
+    archiveCategoryId: s.archiveCategoryId,
+    hideOnArchive: s.hideOnArchive,
+    maxChangesPerTick: s.maxChangesPerTick,
+  };
+}
+
 async function restoreSettings(api: ApiClient, original: Settings | null): Promise<void> {
   if (!original) return;
-  const { enabled, ...rest } = original;
+  const rest = writableSettings(original);
+  const enabled = original.enabled;
   await api.patch(`${BASE}/settings`, { enabled: false }).catch(() => null);
   await api.patch(`${BASE}/settings`, { ...rest, ...(enabled ? { enabled } : {}) }).catch((err: unknown) => {
     console.warn(`  lifecycle smoke: settings restore failed: ${String(err)}`);
