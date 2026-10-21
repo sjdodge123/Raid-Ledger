@@ -17,6 +17,7 @@ import { isSafeMarkdownHref } from '@raid-ledger/contract';
 import { parseBlocks, type MarkdownBlockNode } from './markdown-block-parse';
 import { buildMarkdownExtensions } from './markdown-extensions';
 import { prepareEditorMarkdown } from './markdown-serialize';
+import { autolinkAt } from './markdown-autolink';
 
 /**
  * A line start the GFM parser reads as a block the reader does not have: ATX heading, quote, code
@@ -38,18 +39,20 @@ export function escapeBlockStart(line: string): string {
     return BLOCK_START.test(line) ? `\\${line}` : line;
 }
 
-/** The reader's autolink (`parseInline`): `<http(s)://…>` up to the first `>`. */
-const READER_AUTOLINK = /^<(https?:\/\/[^>]*)>/;
-
 /** A marked link token (structural — `marked` is a dependency of `@tiptap/markdown`, not of web). */
 interface LinkToken { type: 'link'; raw: string; href: string; text: string; tokens: Array<{ type: 'text'; raw: string; text: string }> }
 
+/** The part of marked's tokenizer `this` the autolink override reads. */
+interface TokenizerThis { lexer: { state: { inLink: boolean } } }
+
 /**
- * `<…>` as the reader reads it (Codex r14): only a safe http(s) URL links, and its href AND text are
- * the stored characters verbatim — TipTap decodes a text token's entities, so `&` goes in as `&amp;`.
+ * `<…>` as the reader reads it (Codex r14, `markdown-autolink.ts`): only a safe http(s) URL links, never
+ * inside a link label (the reader shows it as label text), and its href AND text are the stored
+ * characters verbatim — TipTap decodes a text token's entities, so `&` goes in as `&amp;`.
  */
-function readerAutolink(src: string): LinkToken | undefined {
-    const href = READER_AUTOLINK.exec(src)?.[1];
+function readerAutolink(this: TokenizerThis, src: string): LinkToken | undefined {
+    if (this.lexer.state.inLink) return undefined;
+    const href = autolinkAt(src, 0)?.href;
     if (href === undefined || !isSafeMarkdownHref(href)) return undefined;
     const text = href.replace(/&/g, '&amp;');
     return { type: 'link', raw: `<${href}>`, href, text, tokens: [{ type: 'text', raw: text, text }] };

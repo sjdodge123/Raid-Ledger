@@ -12,10 +12,10 @@
  * TipTap's `&nbsp;` marker for them) collapse to one blank line.
  */
 import type { Editor } from '@tiptap/core';
-import { isSafeMarkdownHref } from '@raid-ledger/contract';
 import { trimUnflankedEmphasis } from './markdown-flanking';
 import { fixLinkMarkBoundaries } from './markdown-link-marks';
 import { guardLineStarts, LINE_START_SENTINEL } from './markdown-line-start';
+import { AUTOLINK_SOURCE, insideLinkLabel } from './markdown-autolink';
 
 const ENTITY = /&(lt|gt|amp);/g;
 /**
@@ -26,11 +26,11 @@ const ENTITY = /&(lt|gt|amp);/g;
  */
 const CODE_SPAN = /((?<!`)(?<!(?:^|[^\\])(?:\\\\)*\\)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
 /**
- * A `<http(s)://…>` autolink as `parseInline` reads it: up to the first `>`, not backslash-escaped, not
- * a link's `(<…>)` destination. Its URL is verbatim — no escapes, no entities — so load and save never
- * rewrite it (Codex r14: `<https://x?a=1&amp;b=2>` loaded with href `…\\&amp;…`).
+ * A `<http(s)://…>` autolink as `parseInline` reads it (`markdown-autolink.ts`: no space, control, `<` or `>`
+ * in the body), not backslash-escaped, not a link's `(<…>)` destination. Its URL is verbatim — no escapes, no
+ * entities — so load and save never rewrite it (Codex r14: `<https://x?a=1&amp;b=2>` loaded with href `…\\&amp;…`).
  */
-const AUTOLINK = /(?<!(?:^|[^\\])(?:\\\\)*\\)(?<!\]\()<(https?:\/\/[^>]*)>/;
+const AUTOLINK = new RegExp(String.raw`(?<!(?:^|[^\\])(?:\\\\)*\\)(?<!\]\()` + AUTOLINK_SOURCE);
 /** A code span or an autolink — the stretches no rewrite may touch. */
 const VERBATIM = new RegExp(`${CODE_SPAN.source}|${AUTOLINK.source}`, 'g');
 /** A run of `~` that is not backslash-escaped; only exactly `~~` is a strike delimiter to the reader. */
@@ -93,15 +93,23 @@ function decodeSegment(segment: string): string {
     return splitDestinations(segment).map((part: string, i: number): string => (i % 2 === 1 ? part : decodeText(part))).join('');
 }
 
-/** Apply `rewrite` outside code spans and reader autolinks (an unsafe `<…>` is not a link, so it is text). */
+/**
+ * Apply `rewrite` outside code spans and reader autolinks. An autolink inside a link label is label text to
+ * the reader, so it is rewritten like text; the scan then resumes just past its `<`, so a code span inside
+ * it keeps its protection (r14 review).
+ */
 function outsideCode(markdown: string, rewrite: (part: string) => string): string {
     let out = '';
     let from = 0;
-    for (const match of markdown.matchAll(VERBATIM)) {
-        const href = match[3];
-        if (href !== undefined && !isSafeMarkdownHref(href)) continue;
+    VERBATIM.lastIndex = 0;
+    for (let match = VERBATIM.exec(markdown); match !== null; match = VERBATIM.exec(markdown)) {
+        const end = match.index + match[0].length;
+        if (match[3] !== undefined && insideLinkLabel(markdown, match.index, end)) {
+            VERBATIM.lastIndex = match.index + 1;
+            continue;
+        }
         out += rewrite(markdown.slice(from, match.index)) + match[0];
-        from = match.index + match[0].length;
+        from = end;
     }
     return out + rewrite(markdown.slice(from));
 }

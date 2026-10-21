@@ -14,6 +14,7 @@
  * cannot trigger catastrophic backtracking.
  */
 import { isSafeMarkdownHref } from '@raid-ledger/contract';
+import { autolinkAt } from './markdown-autolink';
 import { emphasisDelim, resolveEmphasis, type EmphasisItem } from './markdown-emphasis';
 
 /** One node of the parsed inline tree. */
@@ -111,12 +112,11 @@ function matchLink(ctx: Ctx, i: number): Hit | null {
     return { nodes: [{ kind: 'link', href, children: parseNested(ctx, s.slice(i + 1, close), true) }], end: paren + 1 };
 }
 
-/** `<https://…>` at i — absolute http(s) only. */
+/** `<https://…>` at i — absolute http(s) only, the shared grammar (`markdown-autolink.ts`). */
 function matchAutolink(ctx: Ctx, i: number): Hit | null {
-    const gt = ctx.s.indexOf('>', i + 1);
-    const href = gt === -1 ? '' : ctx.s.slice(i + 1, gt);
-    if (!/^https?:\/\//.test(href) || !isSafeMarkdownHref(href)) return null;
-    return { nodes: [{ kind: 'link', href, children: [{ kind: 'text', value: href }] }], end: gt + 1 };
+    const hit = autolinkAt(ctx.s, i);
+    if (hit === null || !isSafeMarkdownHref(hit.href)) return null;
+    return { nodes: [{ kind: 'link', href: hit.href, children: [{ kind: 'text', value: hit.href }] }], end: hit.end };
 }
 
 /** `\x` escape or a `code` span at i. */
