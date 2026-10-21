@@ -6,7 +6,10 @@
  * priors against a fresh API read, so admin-made privacy survives and the bot
  * keeps posting into an archived channel.
  */
+import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import type { Guild } from 'discord.js';
+import { DISCORD_API_TIMEOUT_MS } from '../services/scheduled-event.helpers';
 import type { ArchivedOverwrites } from '../../drizzle/schema/channel-bindings';
 import { lifecycleCall, resolveTextChannel } from './channel-lifecycle.errors';
 import {
@@ -67,6 +70,55 @@ async function bestEffort(fn: () => Promise<void>): Promise<void> {
   }
 }
 
+const logger = new Logger('ChannelLifecycleArchive');
+
+/**
+ * Wait (bounded) for the lock's overwrite edits to settle. `timedDiscordCall`
+ * rejecting does not stop `writeLock`, so a rollback that ran first would be
+ * overwritten by the late edits (Codex r8 P1). A lock that never settles is
+ * logged + reported: the channel may be left locked with no saved record.
+ */
+async function settleLock(
+  lock: Promise<void>,
+  channelId: string,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settled = await Promise.race([
+    lock.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), DISCORD_API_TIMEOUT_MS * 2);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (settled) return;
+  const msg = `Archive lock edits on channel ${channelId} never settled; rollback may be overwritten`;
+  logger.warn(msg);
+  Sentry.captureMessage(msg, { level: 'warning' });
+}
+
+/** Lock then move; a failure settles the lock and restores the priors. */
+async function lockAndMove(
+  guild: Guild,
+  channelId: string,
+  po: Parameters<typeof writeLock>[0],
+  changes: ArchivedOverwriteChange[],
+  categoryId: string,
+): Promise<void> {
+  // Keep the edit promise itself: the timed wrapper only races it.
+  const lock = writeLock(po, idsOf(guild), changes);
+  try {
+    await lifecycleCall('archive.lock', channelId, () => lock);
+    await moveChannel(guild, 'archive.move', channelId, categoryId);
+  } catch (err) {
+    await settleLock(lock, channelId);
+    await bestEffort(() => restoreFresh(guild, channelId, changes));
+    throw err;
+  }
+}
+
 /**
  * Archive (D6): deny `@everyone` SendMessages (+ ViewChannel when `hide`),
  * explicitly allow the same bits for the bot, then move under `categoryId`. A
@@ -83,15 +135,7 @@ export async function archiveChannel(
   const po = channel.permissionOverwrites;
   const previousParentId = channel.parentId;
   const changes = planArchive(po, idsOf(guild), opts.hide);
-  try {
-    await lifecycleCall('archive.lock', channelId, () =>
-      writeLock(po, idsOf(guild), changes),
-    );
-    await moveChannel(guild, 'archive.move', channelId, opts.categoryId);
-  } catch (err) {
-    await bestEffort(() => restoreFresh(guild, channelId, changes));
-    throw err;
-  }
+  await lockAndMove(guild, channelId, po, changes, opts.categoryId);
   const inSeries =
     previousParentId !== null &&
     (opts.seriesIds?.has(previousParentId) ?? false);
