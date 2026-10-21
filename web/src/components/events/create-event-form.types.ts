@@ -52,6 +52,8 @@ export interface EventFormProps {
     initialStartTime?: string | null;
     /** Scheduling poll match to complete after event creation (ROK-977). */
     schedulingMatchId?: number | null;
+    /** ROK-1874: lineup of that poll — lets the form re-read it and warn when the slot's yes-voters overflow the roster. */
+    schedulingLineupId?: number | null;
     /** ROK-1371: ended event this create is a follow-up to. Threaded into the
      *  CreateEvent DTO (create mode only) so the server fans out sign-up DMs. */
     followupForEventId?: number | null;
