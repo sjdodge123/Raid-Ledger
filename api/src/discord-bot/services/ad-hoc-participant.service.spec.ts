@@ -51,12 +51,19 @@ describe('AdHocParticipantService', () => {
     // M5: a voice re-join updates the existing row. Re-announcing it would
     // make LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for one session and
     // spam any future DM consumer.
-    it('stays silent when the same participant re-joins the same session', async () => {
+    // ROK-1888 (Codex r1 P2): the re-join emits ONLY its own event, which
+    // the Steam-link nudge listens to — never PARTICIPANT_JOINED.
+    it('emits only PARTICIPANT_REJOINED when the same participant re-joins', async () => {
       mockDb.returning.mockResolvedValueOnce([{ sessionCount: 2 }]);
 
       await service.addParticipant(42, baseMember);
 
-      expect(emitter.emit).not.toHaveBeenCalled();
+      expect(emitter.emit.mock.calls).toEqual([
+        [
+          AD_HOC_EVENTS.PARTICIPANT_REJOINED,
+          { eventId: 42, userId: 1, discordUserId: 'discord-123' },
+        ],
+      ]);
     });
 
     it('still records the re-join on the participant row', async () => {

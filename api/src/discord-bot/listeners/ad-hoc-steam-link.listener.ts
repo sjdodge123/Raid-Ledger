@@ -68,6 +68,8 @@ export class AdHocSteamLinkListener {
    * voice member) on an event with an open unlinked server row.
    */
   @OnEvent(AD_HOC_EVENTS.PARTICIPANT_JOINED)
+  // Codex r1 P2: a voice re-join too — the 30-day dedup still holds.
+  @OnEvent(AD_HOC_EVENTS.PARTICIPANT_REJOINED)
   async handleParticipantJoined(
     payload: AdHocParticipantJoinedPayload,
   ): Promise<void> {

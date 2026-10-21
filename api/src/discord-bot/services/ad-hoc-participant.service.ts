@@ -89,13 +89,16 @@ export class AdHocParticipantService {
     // ROK-1451 M5: announce a genuinely NEW participation only. A voice
     // re-join updates the existing row, and re-announcing it would make
     // LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for a single session.
-    if (inserted) {
-      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
-        eventId,
-        userId: member.userId,
-        discordUserId: member.discordUserId,
-      });
-    }
+    // ROK-1888 (Codex r1 P2): a re-join gets its own post-commit signal, so
+    // the Steam-link nudge sees it without LFG re-matching the session.
+    const name = inserted
+      ? AD_HOC_EVENTS.PARTICIPANT_JOINED
+      : AD_HOC_EVENTS.PARTICIPANT_REJOINED;
+    this.eventEmitter.emit(name, {
+      eventId,
+      userId: member.userId,
+      discordUserId: member.discordUserId,
+    });
     this.logger.debug(
       `Participant ${member.discordUsername} added to event ${eventId}`,
     );
