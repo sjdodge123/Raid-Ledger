@@ -15,7 +15,7 @@ import { Button } from '../../ui/button';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
 import { ManageMenuSurface, SchedulingSheetRow } from '../../lineups/cycle-4/scheduling-sheet-row';
-import { onMenuKeyDown, useFocusFirstItem } from '../../lineups/cycle-4/scheduling-menu-keys';
+import { onMenuKeyDown, useFocusFirstItem } from '../../ui/menu-keys';
 import { useMenuOpenState } from '../../lineups/use-menu-open-state';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useDisconnectCalendar } from '../../../hooks/use-calendar-sync';

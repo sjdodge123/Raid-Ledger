@@ -1,11 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, isNull, sql, type SQL } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { and, asc, desc, eq, ilike, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   HubDirectoryEntry,
   HubDirectoryPage,
   HubDirectoryQuery,
+  HubViewerState,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
@@ -14,16 +14,22 @@ import {
 } from './community-directory.cursor';
 import { escapeLike, pageOf } from './community-directory.params';
 import { viewerStateOf } from './community-ladder.helpers';
+import {
+  joinedPredicate,
+  viewerRow,
+  visibleKinds,
+  type DirectoryScope,
+} from './community-directory.visibility';
 
 /**
- * ROK-1870 L3 — `GET /hubs`: active, visible community hubs with keyset
- * paging per sort (M12). The viewer's own row rides along as `viewer_row`.
+ * ROK-1870 L3 / ROK-1875 L2 — `GET /hubs`: every hub kind in the scope, each
+ * under its own visibility rule, keyset-paged per sort (M12). The viewer's
+ * own community row rides along as `viewer_row`.
  */
 
 type Db = PostgresJsDatabase<typeof schema>;
 const g = schema.guilds;
 const games = schema.games;
-const viewerRow = alias(schema.hubCommunityMembers, 'viewer_row');
 
 /** `created_at` at microsecond precision — the `newest` cursor key. */
 const CREATED_KEY = sql<string>`to_char(${g.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
@@ -36,8 +42,6 @@ const LEADER_NAME = sql<string | null>`(
     AND lm.banned_at IS NULL AND lu.deactivated_at IS NULL
   LIMIT 1)`;
 
-const VIEWER_LIVE = sql`(${viewerRow.id} IS NOT NULL AND ${viewerRow.leftAt} IS NULL AND ${viewerRow.bannedAt} IS NULL)`;
-
 const ORDER: Record<HubDirectoryQuery['sort'], SQL[]> = {
   members: [desc(g.memberCount), desc(g.id)],
   name: [asc(g.nameKey), asc(g.id)],
@@ -45,18 +49,15 @@ const ORDER: Record<HubDirectoryQuery['sort'], SQL[]> = {
 };
 
 /** The filters shared by the page and its `total`. */
-function filtersOf(query: HubDirectoryQuery): SQL[] {
-  const conds: SQL[] = [
-    eq(g.kind, 'game_community'),
-    eq(g.status, 'active'),
-    isNull(g.hiddenAt),
-  ];
+function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
+  const conds: SQL[] = [visibleKinds(scope)];
   if (query.gameId !== undefined) conds.push(eq(g.gameId, query.gameId));
   if (query.q) {
     conds.push(ilike(g.nameKey, `%${escapeLike(query.q.toLowerCase())}%`));
   }
-  if (query.membership === 'joined') conds.push(VIEWER_LIVE);
-  if (query.membership === 'not-joined') conds.push(sql`NOT ${VIEWER_LIVE}`);
+  const joined = joinedPredicate(scope);
+  if (query.membership === 'joined') conds.push(joined);
+  if (query.membership === 'not-joined') conds.push(sql`NOT ${joined}`);
   return conds;
 }
 
@@ -80,6 +81,7 @@ function selectRows(db: Db, viewerId: number, where: SQL[], order: SQL[]) {
   return db
     .select({
       id: g.id,
+      kind: g.kind,
       gameId: g.gameId,
       gameName: games.name,
       gameIconUrl: games.coverUrl,
@@ -106,21 +108,31 @@ function viewerJoin(viewerId: number): SQL | undefined {
 
 type DirectoryRow = Awaited<ReturnType<typeof selectRows>>[number];
 
-function toEntry(r: DirectoryRow): HubDirectoryEntry {
+/** Community: the ladder state from `viewer_row`; other kinds: D9 ids. */
+function viewerOf(r: DirectoryRow, memberIds: number[]): HubViewerState {
+  if (r.kind !== 'game_community') {
+    return memberIds.includes(r.id) ? 'member' : 'not-member';
+  }
   const own =
     r.vRole === null
       ? null
       : { role: r.vRole, leftAt: r.vLeft, bannedAt: r.vBanned };
+  return viewerStateOf(own);
+}
+
+function toEntry(r: DirectoryRow, memberIds: number[]): HubDirectoryEntry {
+  const community = r.kind === 'game_community';
   return {
     id: r.id,
+    kind: r.kind,
     gameId: r.gameId,
     gameName: r.gameName,
     gameIconUrl: r.gameIconUrl,
     name: r.name,
     blurb: r.blurb,
     memberCount: r.memberCount,
-    leaderName: r.leaderName,
-    viewer: viewerStateOf(own),
+    leaderName: community ? r.leaderName : null,
+    viewer: viewerOf(r, memberIds),
   };
 }
 
@@ -144,19 +156,24 @@ async function countRows(db: Db, viewerId: number, where: SQL[]) {
   return row?.n ?? 0;
 }
 
-/** One directory page for `viewerId` (cursor 400s per M12). */
+/** A directory page before the service adds the live `kinds`. */
+export type DirectoryResult = Omit<HubDirectoryPage, 'kinds'>;
+
+/** One directory page for `viewerId` within `scope` (cursor 400s per M12). */
 export async function listDirectory(
   db: Db,
   viewerId: number,
   query: HubDirectoryQuery,
-): Promise<HubDirectoryPage> {
+  scope: DirectoryScope,
+): Promise<DirectoryResult> {
   const cursor = decodeCursor(query.cursor, query.sort);
-  const where = filtersOf(query);
+  const where = filtersOf(query, scope);
   const paged = cursor === null ? where : [...where, afterCursor(cursor)];
   const [rows, total] = await Promise.all([
     selectRows(db, viewerId, paged, ORDER[query.sort]).limit(query.limit + 1),
     countRows(db, viewerId, where),
   ]);
   const page = pageOf(rows, query.limit, (r) => keyOf(query.sort, r));
-  return { items: page.items.map(toEntry), nextCursor: page.nextCursor, total };
+  const items = page.items.map((r) => toEntry(r, scope.memberIds));
+  return { items, nextCursor: page.nextCursor, total };
 }

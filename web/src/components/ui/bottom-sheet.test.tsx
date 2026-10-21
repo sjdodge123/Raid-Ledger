@@ -637,3 +637,38 @@ describe('BottomSheet — stacked (ROK-1738)', () => {
         expect(layer().style.zIndex).toBe(String(Z_INDEX.MODAL_STACKED));
     });
 });
+
+describe('BottomSheet — closed sheet is inert (ROK-1875 Codex r4)', () => {
+    /** The fixed overlay layer — the portal's root under document.body. */
+    const layerOf = (el: HTMLElement) => el.closest('.fixed.inset-0') as HTMLElement;
+
+    it('a closed sheet is inert + aria-hidden, and its controls are not reachable by role', () => {
+        render(
+            <BottomSheet isOpen={false} onClose={() => {}} title="Actions"><button type="button">Advance</button></BottomSheet>,
+        );
+        const layer = layerOf(screen.getByText('Advance'));
+        expect(layer.hasAttribute('inert'), 'closed layer carries inert').toBe(true);
+        expect(layer).toHaveAttribute('aria-hidden', 'true');
+        expect(screen.queryByRole('button', { name: 'Advance' }), 'closed sheet body is out of the a11y tree').toBeNull();
+        expect(screen.queryByRole('button', { name: 'Close' }), 'closed sheet header is out of the a11y tree').toBeNull();
+    });
+
+    it('an open sheet is neither inert nor aria-hidden, and its controls are reachable', () => {
+        render(
+            <BottomSheet isOpen onClose={() => {}} title="Actions"><button type="button">Advance</button></BottomSheet>,
+        );
+        const layer = layerOf(screen.getByText('Advance'));
+        expect(layer.hasAttribute('inert')).toBe(false);
+        expect(layer).not.toHaveAttribute('aria-hidden');
+        expect(screen.getByRole('button', { name: 'Advance' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    });
+
+    it('closing an open sheet makes it inert again (it stays mounted for the slide-out)', () => {
+        const { rerender } = render(<BottomSheet isOpen onClose={() => {}} title="Actions"><button type="button">Advance</button></BottomSheet>);
+        rerender(<BottomSheet isOpen={false} onClose={() => {}} title="Actions"><button type="button">Advance</button></BottomSheet>);
+        const layer = layerOf(screen.getByText('Advance'));
+        expect(layer.hasAttribute('inert'), 'closed layer carries inert').toBe(true);
+        expect(screen.queryByRole('button', { name: 'Advance' })).toBeNull();
+    });
+});

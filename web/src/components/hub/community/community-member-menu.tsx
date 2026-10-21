@@ -12,7 +12,7 @@ import { Button } from '../../ui/button';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { useAnchoredPopup } from '../../ui/use-anchored-popup';
 import { useMenuOpenState } from '../../lineups/use-menu-open-state';
-import { onMenuKeyDown, useFocusFirstItem } from '../../lineups/cycle-4/scheduling-menu-keys';
+import { onMenuKeyDown, useFocusFirstItem } from '../../ui/menu-keys';
 import type { CommunityRowAction } from './community-access';
 
 const LABEL: Record<CommunityRowAction, string> = {
