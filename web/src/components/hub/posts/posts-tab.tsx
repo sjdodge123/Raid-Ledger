@@ -53,8 +53,24 @@ function useFeed(guildId: number) {
     const feed = useHubPosts(guildId);
     const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
     const onFirstPage = linkedId !== null && (feed.data?.pages[0]?.posts ?? []).some((p) => p.id === linkedId);
-    const fetchLinked = linkedId !== null && feed.isSuccess && !onFirstPage;
-    return { feed, posts, linkedId, highlightId: onFirstPage ? linkedId : null, fetchLinked };
+    // `data` survives a failed "Show older posts" (Codex r9): loaded pages stay mounted.
+    const loaded = feed.data !== undefined;
+    const fetchLinked = linkedId !== null && loaded && !onFirstPage;
+    return { feed, posts, loaded, linkedId, highlightId: onFirstPage ? linkedId : null, fetchLinked };
+}
+
+/** "Show older posts", or an inline retry after a next-page error. */
+function OlderPosts({ feed }: { feed: ReturnType<typeof useHubPosts> }): JSX.Element | null {
+    if (!feed.hasNextPage) return null;
+    const failed = feed.isFetchNextPageError;
+    return (
+        <div className="mt-4 flex flex-col items-center gap-2">
+            {failed && <p role="alert" className="text-sm text-danger">Couldn’t load older posts.</p>}
+            <Button variant="secondary" loading={feed.isFetchingNextPage} onClick={() => { void feed.fetchNextPage(); }}>
+                {failed ? 'Try again' : 'Show older posts'}
+            </Button>
+        </div>
+    );
 }
 
 /** The Posts tab panel (see file docstring). */
@@ -62,7 +78,7 @@ export function HubPostsTab({ guildId, canEdit, isLeader, kind }: HubPostsTabPro
     const copy = hubCopy(kind);
     const [composing, setComposing] = useState(false);
     const [notice, setNotice] = useState<PostNotice | null>(null);
-    const { feed, posts, linkedId, highlightId, fetchLinked } = useFeed(guildId);
+    const { feed, posts, loaded, linkedId, highlightId, fetchLinked } = useFeed(guildId);
     const action = canEdit && !composing
         ? <Button size="sm" onClick={() => { setNotice(null); setComposing(true); }} data-testid="hub-posts-new">New post</Button>
         : undefined;
@@ -78,13 +94,9 @@ export function HubPostsTab({ guildId, canEdit, isLeader, kind }: HubPostsTabPro
             )}
             {fetchLinked && linkedId !== null && <LinkedPost guildId={guildId} postId={linkedId} canEdit={canEdit} removedCopy={copy.postRemoved} />}
             {feed.isPending && <FeedSkeleton />}
-            {feed.isError && <p role="alert" className="text-sm text-danger">Couldn’t load the posts. Try again later.</p>}
-            {feed.isSuccess && <FeedList guildId={guildId} canEdit={canEdit} posts={posts} highlightId={highlightId} hideId={fetchLinked ? linkedId : null} />}
-            {feed.hasNextPage && (
-                <div className="mt-4 flex justify-center">
-                    <Button variant="secondary" loading={feed.isFetchingNextPage} onClick={() => { void feed.fetchNextPage(); }}>Show older posts</Button>
-                </div>
-            )}
+            {feed.isError && !loaded && <p role="alert" className="text-sm text-danger">Couldn’t load the posts. Try again later.</p>}
+            {loaded && <FeedList guildId={guildId} canEdit={canEdit} posts={posts} highlightId={highlightId} hideId={fetchLinked ? linkedId : null} />}
+            <OlderPosts feed={feed} />
         </section>
     );
 }

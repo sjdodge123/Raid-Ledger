@@ -72,6 +72,28 @@ describe('HubPostsTab (V5)', () => {
         expect(await screen.findByText('Fifth post'), 'the feed still renders below the notice').toBeInTheDocument();
     });
 
+    it('a failed "Show older posts" keeps the loaded posts and an open editor, and offers a retry (Codex r9)', async () => {
+        let failOlder = true;
+        server.use(http.get(POSTS, ({ request }) => {
+            if (!new URL(request.url).searchParams.get('cursor')) return HttpResponse.json({ posts: PAGE_1, nextCursor: 'c1' });
+            return failOlder ? HttpResponse.json({ message: 'boom' }, { status: 500 }) : HttpResponse.json({ posts: PAGE_2, nextCursor: null });
+        }));
+        renderTab('/guilds/7', true);
+        await screen.findByText('Fifth post');
+        const first = screen.getAllByTestId('hub-post-item')[0];
+        if (!first) throw new Error('no post item rendered');
+        await userEvent.click(within(first).getByRole('button', { name: /^edit/i }));
+        expect(screen.getByTestId('hub-post-editor')).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: /show older posts/i }));
+        await screen.findByRole('alert');
+        expect(screen.queryByTestId('hub-post-editor'), 'the open editor must survive a next-page error').toBeInTheDocument();
+        expect(screen.queryByText('Fourth post'), 'the loaded posts must stay mounted').toBeInTheDocument();
+        expect(screen.queryByText(/couldn’t load the posts/i), 'a next-page error is not an initial-load error').toBeNull();
+        failOlder = false;
+        await userEvent.click(screen.getByRole('button', { name: /try again/i }));
+        expect(await screen.findByText('Third post')).toBeInTheDocument();
+    });
+
     it('shows an empty state when the hub has no posts', async () => {
         server.use(http.get(POSTS, () => HttpResponse.json({ posts: [], nextCursor: null })));
         renderTab();
