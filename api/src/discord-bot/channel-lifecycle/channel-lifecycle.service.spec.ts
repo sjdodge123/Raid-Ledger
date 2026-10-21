@@ -75,10 +75,26 @@ function row(
     ...o,
   };
 }
+/** Codex r9 P2: what the apply-time binding lock reads back, per binding id. */
+const liveBindings = new Map<
+  string,
+  NonNullable<GameLifecycleActivityRow['binding']>
+>();
+
 function bound(
   gameId: number,
   o: Partial<NonNullable<GameLifecycleActivityRow['binding']>> = {},
   items = 0,
+): GameLifecycleActivityRow {
+  const r = boundRow(gameId, o, items);
+  if (r.binding) liveBindings.set(r.binding.id, r.binding);
+  return r;
+}
+
+function boundRow(
+  gameId: number,
+  o: Partial<NonNullable<GameLifecycleActivityRow['binding']>>,
+  items: number,
 ): GameLifecycleActivityRow {
   return row(gameId, {
     itemCount: items,
@@ -151,6 +167,12 @@ beforeEach(() => {
     added: { everyoneSend: true, everyoneView: false, botView: false },
   });
   jest.mocked(storeQueries.findGameAnnouncementBinding).mockResolvedValue(null);
+  jest
+    .mocked(storeQueries.lockLifecycleBinding)
+    .mockImplementation((_db, id) => {
+      const b = liveBindings.get(id);
+      return Promise.resolve(b ? { ...b } : null);
+    });
   bindings.bind.mockResolvedValue({
     binding: { id: 'b-new' },
     replacedChannelIds: [],

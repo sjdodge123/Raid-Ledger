@@ -25,6 +25,18 @@ jest.mock('@sentry/nestjs', () => ({
 }));
 jest.mock('./channel-lifecycle.discord-ops');
 jest.mock('./game-activity.queries');
+/** Codex r9 P2: the apply-time binding lock answers with the planned binding. */
+jest.mock('./channel-lifecycle.store.queries', () => ({
+  ...jest.requireActual<object>('./channel-lifecycle.store.queries'),
+  lockLifecycleBinding: jest.fn((_db: unknown, id: string) =>
+    Promise.resolve({
+      channelId: id.replace('b-', 'ch-'),
+      autoManaged: true,
+      pinned: false,
+      lifecycleState: 'active',
+    }),
+  ),
+}));
 
 const SETTINGS: ChannelLifecycleSettingsDto = {
   enabled: true,

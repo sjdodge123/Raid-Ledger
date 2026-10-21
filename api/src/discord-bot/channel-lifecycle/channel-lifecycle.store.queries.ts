@@ -46,3 +46,34 @@ export async function countOtherChannelBindings(
     );
   return row?.n ?? 0;
 }
+
+/** The binding columns a reconcile re-validates before acting (Codex r9 P2). */
+export interface LockedBindingState {
+  channelId: string;
+  autoManaged: boolean;
+  pinned: boolean;
+  lifecycleState: string;
+}
+
+/**
+ * Codex r9 P2: re-read one binding on the game's tx and row-lock it
+ * (`FOR UPDATE`) so a concurrent pin / unbind / re-point waits for — or is
+ * seen by — this game's apply. Null when the binding is gone.
+ */
+export async function lockLifecycleBinding(
+  db: LifecycleDb,
+  bindingId: string,
+): Promise<LockedBindingState | null> {
+  const b = schema.channelBindings;
+  const [row] = await db
+    .select({
+      channelId: b.channelId,
+      autoManaged: b.autoManaged,
+      pinned: b.pinned,
+      lifecycleState: b.lifecycleState,
+    })
+    .from(b)
+    .where(eq(b.id, bindingId))
+    .for('update');
+  return row ?? null;
+}

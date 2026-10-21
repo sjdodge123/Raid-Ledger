@@ -16,8 +16,12 @@ import { setLifecycleState } from './channel-lifecycle.store';
 import {
   countOtherChannelBindings,
   findGameAnnouncementBinding,
+  lockLifecycleBinding,
 } from './channel-lifecycle.store.queries';
-import { sharedChannelDetail } from './channel-lifecycle.decide';
+import {
+  sharedChannelDetail,
+  staleBindingDetail,
+} from './channel-lifecycle.decide';
 import type {
   ApplyContext,
   ItemOutcome,
@@ -246,6 +250,32 @@ async function applyUnarchive(
   return { outcome: 'done', detail: game.reason };
 }
 
+/**
+ * Codex r9 P2: re-read + row-lock the binding on the game's tx BEFORE any
+ * Discord mutation. A binding pinned, unbound, re-pointed or flipped since the
+ * activity read (a PATCH is not excluded by the reconcile lease) is left alone.
+ */
+async function staleOutcome(
+  ctx: ApplyContext,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome | null> {
+  const current = await lockLifecycleBinding(ctx.db, binding.id);
+  const detail = staleBindingDetail(binding, current);
+  return detail === null ? null : { outcome: 'deferred', detail };
+}
+
+/** Archive / unarchive, each only after the locked re-validation passes. */
+async function applyStateChange(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome> {
+  const stale = await staleOutcome(ctx, binding);
+  if (stale) return stale;
+  if (game.action === 'archive') return applyArchive(ctx, game, binding);
+  return applyUnarchive(ctx, game, binding);
+}
+
 /** Run one planned game's action against Discord + the DB. */
 export async function applyAction(
   ctx: ApplyContext,
@@ -254,8 +284,8 @@ export async function applyAction(
   const { binding } = game.row;
   if (game.action === 'create') return applyCreate(ctx, game);
   if (!binding) return { outcome: 'failed', detail: 'no binding' };
-  if (game.action === 'archive') return applyArchive(ctx, game, binding);
-  if (game.action === 'unarchive') return applyUnarchive(ctx, game, binding);
+  if (game.action === 'archive' || game.action === 'unarchive')
+    return applyStateChange(ctx, game, binding);
   if (game.action === 'link_hub') {
     const n = await linkHubs(ctx, game, {
       id: binding.channelId,

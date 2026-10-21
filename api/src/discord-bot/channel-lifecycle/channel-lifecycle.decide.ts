@@ -3,6 +3,8 @@ import type {
   LifecycleAction,
 } from '@raid-ledger/contract';
 import type { GameLifecycleActivityRow } from './game-activity.queries';
+import type { LockedBindingState } from './channel-lifecycle.store.queries';
+import type { LifecycleCandidateBinding } from './game-activity.types';
 
 /**
  * ROK-1430 — the pure lifecycle decision (spec §2.4 X1–X12, D3/D4).
@@ -49,6 +51,24 @@ function decideUnbound(
 /** Why a shared channel is not archived (plan + apply use the same words). */
 export function sharedChannelDetail(n: number): string {
   return `shared with ${n} other binding${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * Codex r9 P2: why a binding re-read (row-locked) at apply time no longer
+ * qualifies for the planned archive / unarchive, or null when it still does.
+ */
+export function staleBindingDetail(
+  planned: Pick<LifecycleCandidateBinding, 'channelId' | 'lifecycleState'>,
+  current: LockedBindingState | null,
+): string | null {
+  if (!current) return 'skipped: binding removed since the read';
+  if (current.pinned) return 'skipped: pinned since the read';
+  if (!current.autoManaged) return 'skipped: no longer auto-managed';
+  if (current.channelId !== planned.channelId)
+    return 'skipped: channel changed since the read';
+  if (current.lifecycleState !== planned.lifecycleState)
+    return 'skipped: state changed since the read';
+  return null;
 }
 
 /** The `none` outcome for a live channel, upgraded to `link_hub` when a hub has no channel (D7). */

@@ -85,10 +85,24 @@ function deletedRow(gameId: number): Record<string, unknown> {
   };
 }
 
-function makeTx(txCalls: string[], gameId: number): LifecycleDb {
+type State = 'active' | 'archived';
+
+/** A `select` row answering both the r9 binding lock and the r7 sibling count. */
+function lockedRow(gameId: number, state: State): Record<string, unknown> {
+  const live = { autoManaged: true, pinned: false, lifecycleState: state };
+  return { n: 0, channelId: `ch-${gameId}`, ...live };
+}
+
+function makeTx(
+  txCalls: string[],
+  gameId: number,
+  state: State | undefined,
+): LifecycleDb {
   const answers: Record<string, unknown> = {
     delete: [deletedRow(gameId)],
     insert: [deletedRow(gameId)],
+    // No binding (a create) → the race read finds nothing.
+    select: state ? [lockedRow(gameId, state)] : [],
   };
   const tx: unknown = new Proxy(
     {},
@@ -103,10 +117,10 @@ function makeTx(txCalls: string[], gameId: number): LifecycleDb {
   return tx as LifecycleDb;
 }
 
-function makeHarness(gameId: number): Harness {
+function makeHarness(gameId: number, state?: State): Harness {
   const poolCallsInTx: string[] = [];
   const txCalls: string[] = [];
-  const tx = makeTx(txCalls, gameId);
+  const tx = makeTx(txCalls, gameId, state);
   let open = false;
   let opened = 0;
   const pool: unknown = new Proxy(
@@ -214,7 +228,7 @@ const GONE = { outcome: 'failed', detail: 'channel deleted in Discord' };
 
 describe('reconcile never touches the pool while a game tx is open', () => {
   it('10003 on archive: suppress + unbind + hub clear all run on the tx', async () => {
-    const h = makeHarness(1);
+    const h = makeHarness(1, 'active');
     jest
       .mocked(ops.archiveChannel)
       .mockRejectedValue(new ChannelGoneError('ch-1'));
@@ -230,7 +244,7 @@ describe('reconcile never touches the pool while a game tx is open', () => {
   });
 
   it('10003 on unarchive: suppress + unbind + hub clear all run on the tx', async () => {
-    const h = makeHarness(2);
+    const h = makeHarness(2, 'archived');
     jest
       .mocked(ops.unarchiveChannel)
       .mockRejectedValue(new ChannelGoneError('ch-2'));
