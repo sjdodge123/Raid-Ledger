@@ -36,7 +36,7 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
     return (
         <>
             {/* 768–1023px (ROK-1875): tighter gaps, Insights collapses to its icon and the brand truncates, so the row fits — the username collapses too (UserMenu). */}
-            <nav aria-label="Main navigation" className="hidden md:flex shrink-0 items-center gap-3 lg:gap-6">
+            <nav aria-label="Main navigation" className="hidden md:flex shrink-0 items-center gap-3 lg:gap-4 xl:gap-6">
                 <NavLinks links={LEADING_LINKS} pathname={pathname} />
                 {/* ROK-1875: one Hubs item (a link, or the "Your hubs" menu) for members, from md; the directory needs a session. */}
                 {user && <HubsNavItem pathname={pathname} />}

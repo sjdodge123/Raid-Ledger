@@ -74,7 +74,7 @@ describe('Header — authenticated member', () => {
     it('768–1023px (ROK-1875): the row fits — tighter gaps, Insights collapses to its icon (label kept as its name), the brand truncates', () => {
         renderHeader();
         const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-        expect(nav.className, 'gap-3 below lg, gap-6 from lg').toMatch(/(^| )gap-3( |$).*lg:gap-6/);
+        expect(nav.className, 'gap-3 below lg, gap-4 at lg (the Hubs circle + label must fit at 1024), gap-6 from xl').toMatch(/(^| )gap-3( |$).*lg:gap-4.*xl:gap-6/);
         const insights = at(screen.getAllByRole('link', { name: 'Insights' }), 0);
         expect(insights.querySelector('svg')?.getAttribute('class'), 'the icon shows only below lg').toContain('lg:hidden');
         expect(insights.querySelector('span')?.className, 'the label shows from lg only (never sr-only + lg:not-sr-only: the unlayered .sr-only wins)').toBe('hidden lg:inline');
