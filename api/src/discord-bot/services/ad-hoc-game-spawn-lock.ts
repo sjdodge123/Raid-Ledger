@@ -117,7 +117,11 @@ export async function createVoiceQuickPlay(
   binding: { gameId: number | null | undefined },
   trigger: { userId: number | null },
   resolvedGameName?: string,
+  joinOnly = false,
 ): Promise<{ eventId: number; existing: boolean } | null> {
+  // ROK-1888 m2: `joinOnly` = the caller cleared the gate only because the
+  // game was live; if it ended before the lock, never insert below threshold.
+  if (joinOnly && (binding.gameId ?? null) === null) return null;
   const creatorId = trigger.userId ?? (await findAdminFallback(db));
   if (!creatorId) return null;
   const gameId = binding.gameId ?? null;
@@ -129,8 +133,10 @@ export async function createVoiceQuickPlay(
       : await withGameSpawnLock(db, gameId, async (tx) => {
           const live = await findVoiceSpawnTarget(tx, gameId);
           if (live) return { eventId: live.id, existing: true };
+          if (joinOnly) return null;
           return { eventId: await create(tx), existing: false };
         });
+  if (!result) return null;
   if (!result.existing)
     logger.log(
       `Voice binding ${bindingId} spawned Quick Play ${result.eventId}`,

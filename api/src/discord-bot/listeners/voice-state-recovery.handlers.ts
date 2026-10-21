@@ -122,6 +122,7 @@ export async function handleGameSpecificGroupRoster(
   binding: ResolvedBinding,
   resolvedGameId?: number | null,
   clearance?: SpawnClearance,
+  joinOnly?: boolean,
 ): Promise<boolean> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   if (!channel) return false;
@@ -142,6 +143,7 @@ export async function handleGameSpecificGroupRoster(
       undefined,
       channelId,
       clearance,
+      joinOnly,
     );
     handled = handled || joined;
   }
@@ -240,5 +242,7 @@ async function addGroupMember(
     group.gameId,
     group.gameName,
     channelId,
+    undefined,
+    group.joinOnly,
   );
 }

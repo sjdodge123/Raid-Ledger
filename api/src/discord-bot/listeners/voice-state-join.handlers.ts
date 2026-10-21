@@ -11,7 +11,7 @@ import {
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
 import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
-import { bypassesMinPlayers } from './voice-live-game.helpers';
+import { bypassesMinPlayers, isGameLive } from './voice-live-game.helpers';
 import {
   detectLobbyMemberGame,
   isBotMember,
@@ -183,6 +183,7 @@ async function processLobbyMember(
   // AC10: on a general lobby this IS the sub-threshold drop — the member's game
   // group is short, so no event is minted for it and they are never folded into
   // another game's roster.
+  if (!state && (await joinLiveLobbyGame(ctx, detected.gameId, trace))) return;
   if (!state && count < min)
     return traceGate(deps.logger, 'group-below-threshold', trace);
   if (!state && count >= min && guildMember) {
@@ -190,6 +191,23 @@ async function processLobbyMember(
     return;
   }
   await joinLobbyEvent(ctx, uid, detected, trace);
+}
+
+/**
+ * ROK-1888 Codex P1/P2: the game is live in another channel, so the member's
+ * group is enrolled now — whatever its size, and without the spawn delay.
+ */
+async function joinLiveLobbyGame(
+  ctx: LobbyJoinCtx,
+  gameId: number | null,
+  trace: GateCtx,
+): Promise<boolean> {
+  const { deps, channelId, binding, scheduleFns } = ctx;
+  if (!(await isGameLive(deps, gameId))) return false;
+  scheduleFns.cancelSpawn(gameId);
+  await handleGeneralLobbyGroupDetection(deps, channelId, binding, gameId);
+  traceGate(deps.logger, 'joined-existing', trace);
+  return true;
 }
 
 /** Join the member into the lobby event that already exists for their game. */
@@ -239,6 +257,8 @@ async function handleLobbyThreshold(
 interface ThresholdSpawnDecision {
   shouldSpawn: boolean;
   resolvedGameId: number | null | undefined;
+  /** ROK-1888 m2: cleared only via the live-game bypass — join, never mint. */
+  joinOnly?: boolean;
 }
 
 /**
@@ -266,13 +286,11 @@ async function resolveThresholdSpawnGameId(
     binding,
   );
   // ROK-1888: the bound game is live elsewhere -> join it below threshold.
-  if (
-    counted < minPlayers &&
-    !(await bypassesMinPlayers(deps, binding, confirmedCount))
-  )
+  const short = counted < minPlayers;
+  if (short && !(await bypassesMinPlayers(deps, binding, confirmedCount)))
     return { shouldSpawn: false, resolvedGameId: undefined };
   if (confirmedCount > 0)
-    return { shouldSpawn: true, resolvedGameId: undefined };
+    return { shouldSpawn: true, resolvedGameId: undefined, joinOnly: short };
   deps.logger.warn(
     `[voice-spawn] Degrading spawn to null game for binding ${binding.bindingId} ` +
       `in channel ${channelId}: ${counted} member(s) met threshold but 0 confirmed ` +
@@ -314,6 +332,8 @@ export async function executeDelayedSpawn(
     channelId,
     binding,
     decision.resolvedGameId,
+    undefined,
+    decision.joinOnly,
   );
 }
 

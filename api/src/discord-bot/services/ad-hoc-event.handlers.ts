@@ -105,6 +105,7 @@ export async function spawnNewEvent(
   effectiveGameId: number | null | undefined,
   member: VoiceMemberInfo,
   resolvedGameName?: string,
+  joinOnly?: boolean,
 ): Promise<number | null> {
   const created = await createVoiceQuickPlay(
     deps.db,
@@ -112,6 +113,7 @@ export async function spawnNewEvent(
     effectiveBinding,
     member,
     resolvedGameName,
+    joinOnly,
   );
   if (!created) return null;
   await completeSpawn(deps, created, {

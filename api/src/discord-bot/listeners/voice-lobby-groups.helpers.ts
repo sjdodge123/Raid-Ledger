@@ -46,6 +46,11 @@ export interface LobbyGameGroup {
    * toward the threshold (`groupSize`); `name: null` = anonymous `+N`.
    */
   serverOnly?: ServerRosterEntry[];
+  /**
+   * ROK-1888 m2: qualified only because the game is live elsewhere, so the
+   * spawn may join that event but never mint a new one below `minPlayers`.
+   */
+  joinOnly?: boolean;
 }
 
 /** Groups split by whether they clear the binding's `minPlayers`. */
@@ -115,7 +120,9 @@ export function partitionLobbyGroups(
     groupSize(g) >= minPlayers ||
     (g.gameId !== null && liveGameIds.has(g.gameId));
   return {
-    qualifying: groups.filter(clears),
+    qualifying: groups
+      .filter(clears)
+      .map((g) => (groupSize(g) >= minPlayers ? g : { ...g, joinOnly: true })),
     dropped: groups.filter((g) => !clears(g)),
     minPlayers,
   };

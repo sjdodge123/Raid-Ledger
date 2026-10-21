@@ -26,6 +26,11 @@ jest.mock('./lfg-now-event.helpers', () => ({
 jest.mock('../../lfg/lfg-write.helpers', () => ({
   convertGroup: jest.fn(),
 }));
+// ROK-1888 m4: attaching restores an in-grace Quick Play (covered for real in
+// lfg-now-spawn.quick-play-reuse.integration.spec.ts).
+jest.mock('../services/ad-hoc-event.helpers', () => ({
+  restoreFromGracePeriod: jest.fn(() => Promise.resolve(false)),
+}));
 jest.mock('../services/ad-hoc-event.signup-helpers', () => ({
   autoSignupParticipant: jest.fn(),
 }));

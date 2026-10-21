@@ -115,6 +115,7 @@ export class AdHocEventService implements OnModuleInit {
     resolvedGameName?: string,
     channelId?: string,
     clearance?: SpawnClearance,
+    joinOnly?: boolean,
   ): Promise<boolean> {
     if (!(await this.isEnabled())) {
       // ROK-1417: the kill-switch is the single most common "why didn't Quick
@@ -151,6 +152,7 @@ export class AdHocEventService implements OnModuleInit {
       effectiveGameId,
       member,
       resolvedGameName,
+      joinOnly,
     );
     return true;
   }

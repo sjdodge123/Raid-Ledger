@@ -19,6 +19,7 @@ import { openLfgNowEventWhere } from '../../lfg/lfg-playing.helpers';
 import { lfgGroupLockKey } from '../../lfg/lfg.constants';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
+import { restoreFromGracePeriod } from '../services/ad-hoc-event.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
 import {
   findVoiceSpawnTarget,
@@ -229,6 +230,10 @@ async function manualStart(
 ): Promise<LfgNowSpawnResult> {
   const participants = await listLiveGroupHands(tx, gameId, now);
   const starter = participants.find((p) => p.userId === manual.starterUserId);
+  // ROK-1888 m4: joining a Quick Play in grace restores it to live, so hands
+  // are never signed up to a session about to end (the expiring grace job's
+  // `claimAndEndEvent` only ends a `grace_period` row, so it no-ops).
+  if (open !== null) await restoreFromGracePeriod(tx, open);
   const eventId =
     open ?? (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
   if (starter) await signupNowHands(tx, eventId, [starter]);
@@ -265,6 +270,7 @@ export async function attachToOpenEvent(
   hands: LfgNowHand[],
 ): Promise<LfgNowSpawnResult> {
   if (hands.length > 0) {
+    await restoreFromGracePeriod(tx, eventId); // ROK-1888 m4, see manualStart
     await signupNowHands(tx, eventId, hands);
     await convertGroup(tx, gameId, { eventId });
   }

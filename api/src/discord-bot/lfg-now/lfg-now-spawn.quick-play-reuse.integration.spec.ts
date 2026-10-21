@@ -121,6 +121,58 @@ describe('LFG-now start while a voice Quick Play is live (ROK-1888)', () => {
   });
 });
 
+describe('LFG-now start while the Quick Play is in grace (ROK-1888 m4)', () => {
+  it('restores the in-grace Quick Play to live when the starter attaches', async () => {
+    const voiceEvent = await voiceQuickPlay();
+    await testApp.db
+      .update(schema.events)
+      .set({ adHocStatus: 'grace_period' })
+      .where(eq(schema.events.id, voiceEvent));
+
+    const result = await spawnUnderGroupLock(testApp.db, gameId, new Date(), {
+      manual: { starterUserId: testApp.seed.adminUser.id },
+    });
+
+    expect(result?.eventId).toBe(voiceEvent);
+    const [row] = await testApp.db
+      .select({ status: schema.events.adHocStatus })
+      .from(schema.events)
+      .where(eq(schema.events.id, voiceEvent));
+    expect(row?.status).toBe('live');
+  });
+});
+
+describe('createVoiceQuickPlay joinOnly (ROK-1888 m2)', () => {
+  it('returns null and inserts nothing when no live Quick Play exists', async () => {
+    const result = await createVoiceQuickPlay(
+      testApp.db,
+      bindingId,
+      { gameId },
+      { userId: testApp.seed.adminUser.id },
+      'Valheim',
+      true,
+    );
+
+    expect(result).toBeNull();
+    expect(await liveEventIds(gameId)).toEqual([]);
+  });
+
+  it('joins the live Quick Play when one exists', async () => {
+    const voiceEvent = await voiceQuickPlay();
+
+    const result = await createVoiceQuickPlay(
+      testApp.db,
+      bindingId,
+      { gameId },
+      { userId: testApp.seed.adminUser.id },
+      'Valheim',
+      true,
+    );
+
+    expect(result).toEqual({ eventId: voiceEvent, existing: true });
+  });
+});
+
 describe('findLiveQuickPlayGameIds (ROK-1888)', () => {
   it('returns the ids of games with a live Quick Play from any channel', async () => {
     await voiceQuickPlay();

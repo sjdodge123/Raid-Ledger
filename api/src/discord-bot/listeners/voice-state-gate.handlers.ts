@@ -194,20 +194,15 @@ async function resolveGameBindingSpawn(
     counted,
     confirmed: confirmedCount,
   });
-  if (
-    counted < minPlayers &&
-    !(await bypassesMinPlayers(deps, binding, confirmedCount))
-  )
+  const live = await bypassesMinPlayers(deps, binding, confirmedCount);
+  if (counted < minPlayers && !live)
     return traceGate(deps.logger, 'below-threshold', ctx);
-  if (allConfirmed)
-    return spawnAllConfirmed(
-      deps,
-      channelId,
-      binding,
-      ctx,
-      clearance,
-      spawnFns,
-    );
+  // ROK-1888 Codex P2: a live target is joined now, never via the spawn delay.
+  if (allConfirmed || live)
+    return spawnAllConfirmed(deps, channelId, binding, ctx, clearance, {
+      ...(spawnFns ? { spawnFns } : {}),
+      joinOnly: counted < minPlayers,
+    });
   spawnFns?.scheduleSpawn();
   return traceGate(deps.logger, 'spawn-scheduled', ctx);
 }
@@ -219,8 +214,9 @@ async function spawnAllConfirmed(
   binding: ResolvedBinding,
   ctx: GateCtx,
   clearance: SpawnClearance,
-  spawnFns?: GameSpawnFns,
+  opts: { spawnFns?: GameSpawnFns; joinOnly?: boolean } = {},
 ): Promise<void> {
+  const { spawnFns, joinOnly } = opts;
   {
     spawnFns?.cancelSpawn();
     // ROK-1394 / ROK-1445 review MED-1: the bind may ALREADY hold an active
@@ -242,6 +238,7 @@ async function spawnAllConfirmed(
       binding,
       undefined,
       clearance,
+      joinOnly,
     );
     // Codex P2: a kill-switch-gated roster must not log a false success line —
     // the service already traced feature-disabled (throttled).
