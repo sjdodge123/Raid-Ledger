@@ -208,3 +208,30 @@ it('Codex r7 P1: a shared quiet channel says why it is kept', () => {
     reason: 'shared with 2 other bindings',
   });
 });
+
+describe('Codex r16 P2: pinning blocks archive/unarchive, never link_hub', () => {
+  it('a pinned active binding links a newly eligible hub', () => {
+    const res = decideGame(
+      input({ hubNeedsLink: true, binding: binding({ pinned: true }) }),
+      SETTINGS,
+    );
+    expect(res).toEqual({ action: 'link_hub', reason: 'hub has no channel' });
+  });
+
+  it('a pinned binding never archives or unarchives, whatever the activity', () => {
+    for (const itemCount of [0, 1, 10]) {
+      for (const lifecycleState of ['active', 'archived'] as const) {
+        for (const hubNeedsLink of [false, true]) {
+          const row = input({
+            itemCount,
+            hubNeedsLink,
+            binding: binding({ pinned: true, lifecycleState }),
+          });
+          expect(['none', 'link_hub']).toContain(
+            decideGame(row, SETTINGS).action,
+          );
+        }
+      }
+    }
+  });
+});

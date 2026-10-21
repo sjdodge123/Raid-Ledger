@@ -27,6 +27,26 @@ export async function findGameAnnouncementBinding(
 }
 
 /**
+ * Codex r16 P2 apply-time re-check: whether the game is suppressed (D9). Read
+ * on the game's tx AFTER `findGameAnnouncementBinding`: `unbindById` deletes
+ * the binding and writes the suppression in one transaction, so a reader that
+ * saw the binding gone also sees the suppression.
+ */
+export async function isGameSuppressed(
+  db: LifecycleDb,
+  guildId: string,
+  gameId: number,
+): Promise<boolean> {
+  const t = schema.channelLifecycleSuppressions;
+  const [row] = await db
+    .select({ id: t.id })
+    .from(t)
+    .where(and(eq(t.guildId, guildId), eq(t.gameId, gameId)))
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * Codex r7 P1 apply-time re-check: other bindings on `channelId` besides
  * `bindingId` (one may have appeared since the activity read).
  */

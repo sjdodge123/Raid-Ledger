@@ -13,9 +13,10 @@ import { ARCHIVED_REROUTE_REFUSED } from './channel-bindings-archived.guard';
 
 function buildMockDb() {
   const mockInsertReturning = jest.fn();
-  const mockInsertValues = jest
-    .fn()
-    .mockReturnValue({ returning: mockInsertReturning });
+  const mockInsertValues = jest.fn().mockReturnValue({
+    returning: mockInsertReturning,
+    onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+  });
   const mockInsert = jest.fn().mockReturnValue({ values: mockInsertValues });
   const mockDeleteReturning = jest.fn();
   const mockDeleteWhere = jest
@@ -33,13 +34,25 @@ function buildMockDb() {
   const mockUpdateSet = jest.fn().mockReturnValue({ where: mockUpdateWhere });
   const mockUpdate = jest.fn().mockReturnValue({ set: mockUpdateSet });
 
+  const txDepth = { n: 0 };
+  const mockDb = {
+    insert: mockInsert,
+    delete: mockDelete,
+    select: mockSelect,
+    update: mockUpdate,
+    /** Runs `fn` on the same chain; `inTx` reports whether a call is inside it. */
+    transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      txDepth.n += 1;
+      try {
+        return await fn(mockDb);
+      } finally {
+        txDepth.n -= 1;
+      }
+    }),
+  };
   return {
-    mockDb: {
-      insert: mockInsert,
-      delete: mockDelete,
-      select: mockSelect,
-      update: mockUpdate,
-    },
+    mockDb,
+    inTx: () => txDepth.n > 0,
     mockInsertReturning,
     mockInsert,
     mockDeleteReturning,
@@ -454,6 +467,33 @@ describe('ChannelBindingsService — binding writes announce the channel (cache 
     ]);
     await service.unbindById('uuid-1');
     expect(announcedVia(emitter)).toEqual([{ channelId: 'ch-9' }]);
+  });
+
+  it('Codex r16 P2: unbindById deletes AND suppresses inside one transaction', async () => {
+    const seen: string[] = [];
+    mocks.mockDelete.mockImplementationOnce(() => {
+      seen.push(`delete inTx=${String(mocks.inTx())}`);
+      return { where: () => ({ returning: mocks.mockDeleteReturning }) };
+    });
+    mocks.mockInsert.mockImplementationOnce(() => {
+      seen.push(`suppress inTx=${String(mocks.inTx())}`);
+      return {
+        values: () => ({ onConflictDoNothing: () => Promise.resolve() }),
+      };
+    });
+    mocks.mockDeleteReturning.mockResolvedValueOnce([
+      {
+        id: 'uuid-1',
+        channelId: 'ch-9',
+        guildId: GUILD,
+        gameId: 7,
+        autoManaged: true,
+        recurrenceGroupId: null,
+        bindingPurpose: 'game-announcements',
+      },
+    ]);
+    await service.unbindById('uuid-1');
+    expect(seen).toEqual(['delete inTx=true', 'suppress inTx=true']);
   });
 
   it("updateConfig announces the binding's channel after the write", async () => {

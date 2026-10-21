@@ -108,3 +108,23 @@ describe('create then hub-link failure (Codex r5 P1)', () => {
     expect(res.created).toBe(1);
   });
 });
+
+describe('Codex r16 P2: suppressed since the read', () => {
+  it('re-checks suppression on the game tx and defers instead of recreating', async () => {
+    jest.mocked(queries.isGameSuppressed).mockResolvedValue(true);
+    const { pool, committed } = fakePool();
+    const { ctx } = makeCtx(pool, new Error('unused'));
+    const res = await executePlan(ctx, {
+      run: [CREATE],
+      deferred: [],
+      skipped: 0,
+      verify: [],
+    });
+    expect(ops.createTextChannel).not.toHaveBeenCalled();
+    expect(committed).toEqual([]);
+    expect(res.items.map((i) => [i.action, i.outcome, i.detail])).toEqual([
+      ['create', 'deferred', 'deferred: suppressed since the read'],
+    ]);
+    expect(jest.mocked(queries.isGameSuppressed).mock.calls[0]?.[1]).toBe('g1');
+  });
+});
