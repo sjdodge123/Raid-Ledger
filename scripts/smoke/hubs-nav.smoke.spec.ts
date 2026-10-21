@@ -32,6 +32,14 @@ interface Seed { serverHubId: number; serverHubName: string; crewId: number; gam
 /** Header `md:` — from 768px the header carries the Hubs item; below it the More drawer. */
 const HEADER_HUBS_MIN_WIDTH = 768;
 const PROJECT_SLOT: Record<string, number> = { desktop: 0, mobile: 1, tablet: 2 };
+/**
+ * Where the nav tests start. NOT `/calendar`: its Schedule view smooth-scrolls to
+ * today 100ms after mount (`ScheduleView.tsx`) whenever the events are already
+ * loaded, and below 768px a downward scroll past 100px hides the bottom bar and the
+ * header (`use-scroll-direction.ts`), so a click on either retried "element is
+ * outside of the viewport" until the test timed out. `/players` never scrolls itself.
+ */
+const NAV_START = '/players';
 
 function must<T>(value: T | undefined | null, label: string): T {
     if (value === undefined || value === null) throw new Error(`[hubs-nav] missing ${label}`);
@@ -179,14 +187,14 @@ async function expectHeaderFits(page: Page, viewport: { width: number; height: n
 test.describe('Hubs nav (ROK-1875)', () => {
     test('a member of a server + a community hub: Hubs menu (≥768px) / bottom Hubs sheet + More drawer (phone) list both with kind chips, then Browse all hubs', async ({ page }, testInfo) => {
         const seed = await seedMember(page, testInfo);
-        await page.goto('/calendar');
+        await page.goto(NAV_START);
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) await expectHeaderMenu(page, seed);
         else {
             await expectBottomHubs(page, seed);
             await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
             // The More drawer keeps its "Your hubs" block (discoverability) beside the bottom button.
-            await page.goto('/calendar');
+            await page.goto(NAV_START);
             await expectDrawerHubs(page, seed);
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
@@ -208,7 +216,7 @@ test.describe('Hubs nav (ROK-1875)', () => {
         const server = await seedServerHub(await getAdminToken(), testInfo);
         const outsiderJwt = await signInOnboardedMember(page, server.userIds.outsider);
         expect(await myHubs(outsiderJwt), 'the outsider is in no hub').toEqual([]);
-        await page.goto('/calendar');
+        await page.goto(NAV_START);
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) {
             const nav = page.getByRole('navigation', { name: 'Main navigation' });
