@@ -32,6 +32,22 @@ const LINKABLE_STATUS: schema.GuildSelect['status'] = 'active';
  */
 export const HUB_LINK_KINDS: readonly GuildKind[] = ['game_server'];
 
+/** The kinds whose hub adapter is live (owning plugin active). */
+export type ActiveHubKindsSource = () => readonly GuildKind[];
+
+let activeHubKinds: ActiveHubKindsSource | null = null;
+
+/**
+ * Codex r17 P2: wire the live-kind source (`HubKindRegistry.active()`), so a
+ * hub whose plugin is off — its URL 403s — is never linked. Null (unwired,
+ * e.g. a unit test) applies no kind filter beyond {@link HUB_LINK_KINDS}.
+ */
+export function setActiveHubKindsSource(
+  source: ActiveHubKindsSource | null,
+): void {
+  activeHubKinds = source;
+}
+
 /** Input for {@link resolveGameHubLink}. */
 export interface HubLinkInput {
   gameId: number | null | undefined;

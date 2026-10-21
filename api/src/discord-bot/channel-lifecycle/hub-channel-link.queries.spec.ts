@@ -16,6 +16,7 @@ import {
   linkHubsForGame,
   selectHubNeedsLinkGameIds,
 } from './hub-channel-link.queries';
+import { setActiveHubKindsSource } from './hub-link.resolver';
 
 function asDb(mock: MockDb): PostgresJsDatabase<typeof schema> {
   return mock as unknown as PostgresJsDatabase<typeof schema>;
@@ -57,5 +58,35 @@ describe('hub auto-link eligibility (Codex r14 follow-up)', () => {
     const q = firstWhere(mock);
     expect(q.sql).toContain('"guilds"."hidden_at" is null');
     expect(statusParam(q)).toBe('active');
+  });
+});
+
+describe('auto-link skips disabled hub kinds (Codex r17 P2)', () => {
+  let mock: MockDb;
+  beforeEach(() => {
+    mock = createDrizzleMock();
+  });
+  afterEach(() => setActiveHubKindsSource(null));
+
+  it('linkHubsForGame: a disabled link kind is never linked', async () => {
+    setActiveHubKindsSource(() => ['wow_guild', 'game_community']);
+    await expect(linkHubsForGame(asDb(mock), 7, 'chan-1')).resolves.toBe(0);
+    expect(mock.where).not.toHaveBeenCalled();
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it('selectHubNeedsLinkGameIds: no live link kind → no game needs a link', async () => {
+    setActiveHubKindsSource(() => []);
+    await expect(selectHubNeedsLinkGameIds(asDb(mock))).resolves.toEqual(
+      new Set(),
+    );
+    expect(mock.where).not.toHaveBeenCalled();
+  });
+
+  it('an active link kind is still eligible', async () => {
+    setActiveHubKindsSource(() => ['game_server']);
+    mock.where.mockResolvedValueOnce([]);
+    await linkHubsForGame(asDb(mock), 7, 'chan-1');
+    expect(firstWhere(mock).params).toContain('game_server');
   });
 });

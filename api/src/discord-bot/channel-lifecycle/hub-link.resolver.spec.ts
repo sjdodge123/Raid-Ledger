@@ -11,6 +11,7 @@ import {
   resolveGameHubLink,
   resolveGameHubLinkSafe,
   resolveGameHubLinks,
+  setActiveHubKindsSource,
 } from './hub-link.resolver';
 
 const BASE = 'https://raid.example.com';
@@ -156,5 +157,59 @@ describe('resolveGameHubLinks (batch)', () => {
     expect((await resolveGameHubLinks(asDb(mock), [], BASE)).size).toBe(0);
     expect((await resolveGameHubLinks(asDb(mock), [1], null)).size).toBe(0);
     expect(mock.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('disabled hub kinds (Codex r17 P2)', () => {
+  let mock: MockDb;
+  beforeEach(() => {
+    mock = createDrizzleMock();
+  });
+  afterEach(() => setActiveHubKindsSource(null));
+
+  /** Render the first WHERE clause with its bound params. */
+  function firstWhere(): { sql: string; params: unknown[] } {
+    const arg: unknown = mock.where.mock.calls[0]?.[0];
+    if (!(arg instanceof SQL)) throw new Error('where() got no SQL');
+    return new PgDialect().sqlToQuery(arg);
+  }
+
+  it('a disabled kind is never a candidate — tagged or game hub', async () => {
+    setActiveHubKindsSource(() => ['wow_guild', 'game_community']);
+    mock.where.mockResolvedValueOnce([]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toBeNull();
+    const q = firstWhere();
+    expect(q.params).not.toContain('game_server');
+    expect(q.params).toEqual(
+      expect.arrayContaining(['wow_guild', 'game_community']),
+    );
+  });
+
+  it('a tagged hub of a disabled kind falls back to an active-kind game hub', async () => {
+    setActiveHubKindsSource(() => ['game_server']);
+    mock.where.mockResolvedValueOnce([{ id: 5 }]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    const q = firstWhere();
+    expect(q.params).toContain('game_server');
+    expect(q.params).not.toContain('wow_guild');
+    // The live-kind filter wraps the whole scope, tagged branch included.
+    expect(q.sql).toMatch(/"guilds"\."kind" in \(\$\d+\) and \(/);
+  });
+
+  it('batch: no live link kind → no query, no links', async () => {
+    setActiveHubKindsSource(() => ['wow_guild']);
+    const links = await resolveGameHubLinks(asDb(mock), [1, 2], BASE);
+    expect(links.size).toBe(0);
+    expect(mock.where).not.toHaveBeenCalled();
   });
 });
