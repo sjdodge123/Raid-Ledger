@@ -7,7 +7,6 @@
  */
 import { createHash } from 'node:crypto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { ResolvedBinding } from '../listeners/voice-state.helpers';
 import type { ChannelEmbed } from '../embeds/embed-chrome.helpers';
@@ -20,8 +19,8 @@ import type { ResolvedRoom } from './channel-presence-room.helpers';
 import { recapEvents } from './channel-presence-room.helpers';
 import {
   buildEmbedEventData,
+  readParticipants,
   type AdHocNotificationDeps,
-  type AdHocParticipant,
 } from './ad-hoc-notification.helpers';
 
 /** Default empty-room grace, in minutes, when the binding sets none (D8). */
@@ -82,32 +81,6 @@ export function renderRecapMessage(
 }
 
 /**
- * The stored roster of one finished session, leavers kept (ROK-1243).
- *
- * The recap reads `ad_hoc_participants` directly rather than unioning live
- * voice members the way an evented group does: by definition nobody is in the
- * room any more, so the DB is the only truth left.
- */
-async function recapParticipants(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-): Promise<AdHocParticipant[]> {
-  const rows = await db
-    .select({
-      discordUserId: schema.adHocParticipants.discordUserId,
-      discordUsername: schema.adHocParticipants.discordUsername,
-      leftAt: schema.adHocParticipants.leftAt,
-    })
-    .from(schema.adHocParticipants)
-    .where(eq(schema.adHocParticipants.eventId, eventId));
-  return rows.map((row) => ({
-    discordUserId: row.discordUserId,
-    discordUsername: row.discordUsername,
-    isActive: !row.leftAt,
-  }));
-}
-
-/**
  * Hydrate every ad-hoc session this message has covered since it opened (D8).
  *
  * @param deps - Database plus the binding/channel/settings services.
@@ -127,7 +100,7 @@ export async function hydrateRecap(
   const events = await recapEvents(deps.db, bindingId, row.openedAt, row.id);
   const hydrated = await Promise.all(
     events.map((event) =>
-      recapParticipants(deps.db, event.id).then((participants) =>
+      readParticipants(deps.db, event.id).then((participants) =>
         buildEmbedEventData(deps, event.id, participants),
       ),
     ),
