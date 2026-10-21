@@ -329,3 +329,81 @@ describe('POST /admin/plugins/pelican/sync (ROK-1772)', () => {
     expect((await testApp.request.post(SYNC_ROUTE)).status).toBe(401);
   });
 });
+
+/** Insert a game_server hub for a synced server (the toggle's row shape). */
+async function insertHubFor(uuid: string, hiddenAt: Date | null = null) {
+  const server = await rowFor(uuid);
+  const name = `Hub ${server.identifier}`;
+  const [hub] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId: testApp.seed.game.id,
+        kind: 'game_server',
+        name,
+        nameKey: name.toLowerCase(),
+        region: 'server',
+        source: 'pelican',
+        pelicanServerId: server.id,
+        hiddenAt,
+      })
+      .returning({ id: schema.guilds.id }),
+    `hub for ${uuid}`,
+  );
+  return hub.id;
+}
+
+async function hiddenAtOf(hubId: number): Promise<Date | null> {
+  const [hub] = nonEmpty(
+    await testApp.db
+      .select({ hiddenAt: schema.guilds.hiddenAt })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, hubId)),
+    `hub ${hubId}`,
+  );
+  return hub.hiddenAt;
+}
+
+describe('PelicanSyncService.syncServers — server hub visibility (prod Valheim hub, 2026-10-21)', () => {
+  it('a server still listed after a full sync keeps its hub visible', async () => {
+    const panel = createFakePanel([S1, S2]);
+    stubPanel(testApp, panel);
+    await syncOk();
+    const hubId = await insertHubFor(S1.uuid);
+
+    await syncOk();
+    await syncOk();
+    expect({
+      hub: 'S1 (still listed)',
+      hiddenAt: await hiddenAtOf(hubId),
+    }).toEqual({
+      hub: 'S1 (still listed)',
+      hiddenAt: null,
+    });
+  });
+
+  it('a server missing from a complete listing gets its hub hidden', async () => {
+    const panel = createFakePanel([S1, S2]);
+    stubPanel(testApp, panel);
+    await syncOk();
+    const liveHub = await insertHubFor(S1.uuid);
+    const goneHub = await insertHubFor(S2.uuid);
+
+    panel.servers = [S1];
+    expect((await syncOk()).markedMissing).toBe(1);
+    expect(await hiddenAtOf(goneHub)).toBeInstanceOf(Date);
+    expect(await hiddenAtOf(liveHub)).toBeNull();
+  });
+
+  it('does not overwrite an already-hidden hub when its server goes missing', async () => {
+    const panel = createFakePanel([S1, S2]);
+    stubPanel(testApp, panel);
+    await syncOk();
+    const earlier = new Date('2026-01-02T03:04:05.000Z');
+    const hubId = await insertHubFor(S2.uuid, earlier);
+
+    panel.servers = [S1];
+    expect((await syncOk()).markedMissing).toBe(1);
+    expect(await hiddenAtOf(hubId)).toEqual(earlier);
+  });
+});
