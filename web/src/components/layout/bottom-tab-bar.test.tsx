@@ -159,7 +159,7 @@ describe('BottomTabBar — signed out', () => {
         const grid = screen.getByTestId('bottom-tab-grid');
         expect(grid.className).toContain('grid-cols-4');
         expect(Array.from(grid.children).map((s) => s.textContent)).toEqual(['Calendar', 'Events', 'Games', 'Players']);
-        expect(screen.queryByRole('link', { name: 'Hubs', exact: true })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Hubs' })).not.toBeInTheDocument();
         expect(screen.queryByTestId('bottom-hubs-circle')).not.toBeInTheDocument();
     });
 });
