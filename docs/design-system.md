@@ -938,9 +938,13 @@ every phone width. The bar keeps its `env(safe-area-inset-bottom)` padding (iner
 §4.4). From 768px (landscape phones included) the bar is gone and the header's Hubs menu (§4.14) takes over.
 The More drawer keeps its "Your hubs" block as well — the drawer is the everything-list.
 
+**DO** dock or pad anything above the bar with `--bottom-nav-clearance` (`index.css`: `--bottom-nav-height`
+3.5rem + `--bottom-nav-raise` 1.5rem + the safe-area inset) — e.g. `bottom-[var(--bottom-nav-clearance)]`
+(game-time `SelectedBlockInspector`), `bottom-[calc(var(--bottom-nav-clearance)+0.5rem)]` (`DayBlockEditor`),
+`pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-…` (page bottoms). `bottom-nav-clearance.guard.test.ts` pins it.
+
 **DON'T** add a second raised slot, give a tab a fixed `min-w-[…]` (it overflows at 320px), or dock a fixed
-or sticky element to `bottom: 3.5rem` above the bar without clearing the circle's 24px lift — known: the
-game-time `SelectedBlockInspector` / `DayBlockEditor` inspectors predate it.
+or sticky element to the bare `bottom: 3.5rem` bar height — the circle's 24px lift would cover it.
 
 ### 4.15 Week strip — three bands, two tones, a busy cap
 
