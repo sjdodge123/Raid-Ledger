@@ -55,10 +55,27 @@ function PageHeader(): JSX.Element {
     );
 }
 
+interface PendingParams { from: string; params: HubsDirectoryParams }
+
+/**
+ * The filters live in the URL, but React Router v7 commits every navigation in
+ * a transition — so a control reading only the URL shows its OLD value until a
+ * later task (a radio snaps back unchecked; Playwright's check() fails). Hold
+ * the pick as urgent state until the URL moves off the search it was made on.
+ */
 function useDirectoryUrl(): [HubsDirectoryParams, (next: HubsDirectoryParams) => void] {
     const [search, setSearch] = useSearchParams();
-    const update = (next: HubsDirectoryParams): void => setSearch(writeDirectoryParams(next), { replace: true });
-    return [readDirectoryParams(search), update];
+    const current = search.toString();
+    const [pending, setPending] = useState<PendingParams | null>(null);
+    if (pending && pending.from !== current) setPending(null);
+    const update = (next: HubsDirectoryParams): void => {
+        const out = writeDirectoryParams(next);
+        if (out.toString() === current) return;
+        setPending({ from: current, params: next });
+        setSearch(out, { replace: true });
+    };
+    const live = pending && pending.from === current ? pending.params : readDirectoryParams(search);
+    return [live, update];
 }
 
 /**

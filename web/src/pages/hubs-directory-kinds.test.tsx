@@ -155,3 +155,34 @@ describe('HubsDirectoryPage — Kind radio checked state (smoke hubs-nav:194)', 
         expect(await screen.findByRole('radio', { name: 'Community', checked: true })).toBeInTheDocument();
     });
 });
+
+describe('HubsDirectoryPage — a pick is checked before the router transition commits (smoke hubs-nav:204)', () => {
+    // React Router v7 wraps every navigation in startTransition, so a filter that reads only the URL
+    // keeps the old value until a later scheduler task — and Playwright's check() reads `checked` in
+    // between ("Clicking the checkbox did not change its state"). RTL's act() flushes transitions,
+    // so a userEvent click never sees that window: click natively outside act and read after the
+    // urgent (microtask) flush only.
+    it('clicking Server leaves it checked after the urgent flush, with the URL still to follow', async () => {
+        server.use(...communityHubHandlers({ directory: MIXED }));
+        mockDesktop(true);
+        renderPage('/hubs?membership=joined');
+        await screen.findByText('Valheim — Gamernight');
+        await userEvent.click(filtersButton());
+        const radio = screen.getByRole('radio', { name: 'Server' });
+        if (!(radio instanceof HTMLInputElement)) throw new Error('Server is not an <input>');
+        const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean | undefined };
+        const prev = env.IS_REACT_ACT_ENVIRONMENT;
+        env.IS_REACT_ACT_ENVIRONMENT = false;
+        let checkedAfterUrgentFlush: boolean;
+        try {
+            radio.click();
+            await new Promise<void>((resolve) => queueMicrotask(resolve));
+            checkedAfterUrgentFlush = radio.checked;
+        } finally {
+            env.IS_REACT_ACT_ENVIRONMENT = prev;
+        }
+        expect(checkedAfterUrgentFlush, 'Server must read checked once the click\'s urgent render lands, not only after the URL transition').toBe(true);
+        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/hubs?membership=joined&kind=server'));
+        expect(screen.getByRole('radio', { name: 'Server' })).toBeChecked();
+    });
+});
