@@ -59,13 +59,27 @@ import {
  * channel. `gameId`/`gameName` are the lobby group's game: required for a
  * `general-lobby` bind, refused for a monitor (its game is the bind's own).
  */
-const QuickPlayVoiceSchema = z.object({
-  userId: z.number().int().positive(),
-  bindingId: z.string().uuid(),
-  channelId: snowflakeSchema,
-  gameId: z.number().int().positive().optional(),
-  gameName: z.string().min(1).max(200).optional(),
-});
+const QuickPlayVoiceSchema = z
+  .object({
+    userId: z.number().int().positive().optional(),
+    /**
+     * ROK-1888: a voice member with NO Raid Ledger account (the row keeps
+     * `user_id` NULL), so the smoke can drive the LIVE card's join hint.
+     */
+    discordOnly: z
+      .object({
+        discordUserId: snowflakeSchema,
+        displayName: z.string().min(1).max(64),
+      })
+      .optional(),
+    bindingId: z.string().uuid(),
+    channelId: snowflakeSchema,
+    gameId: z.number().int().positive().optional(),
+    gameName: z.string().min(1).max(200).optional(),
+  })
+  .refine((b) => (b.userId === undefined) !== (b.discordOnly === undefined), {
+    message: 'pass exactly one of userId or discordOnly',
+  });
 type QuickPlayVoiceBody = z.infer<typeof QuickPlayVoiceSchema>;
 
 const VOICE_PURPOSES: ReadonlySet<string> = new Set([
@@ -109,7 +123,7 @@ export class DemoTestQuickPlayVoiceController {
     const { channelId } = parsed;
     const binding = await this.loadVoiceBinding(parsed.bindingId, channelId);
     const gameId = this.effectiveGameId(binding, parsed);
-    const member = await this.loadMember(parsed.userId);
+    const member = await this.loadMember(parsed);
     const svc = this.adHocEventService;
     const clearance = await svc.ensureNotSuppressed(
       binding.bindingId,
@@ -184,8 +198,20 @@ export class DemoTestQuickPlayVoiceController {
     };
   }
 
-  /** The Discord member a real voice state would carry, rostered as `userId`. */
-  private async loadMember(userId: number): Promise<VoiceMemberInfo> {
+  /**
+   * The Discord member a real voice state would carry: rostered as `userId`,
+   * or — `discordOnly` — a guild member with no Raid Ledger account.
+   */
+  private async loadMember(body: QuickPlayVoiceBody): Promise<VoiceMemberInfo> {
+    if (body.discordOnly) {
+      return {
+        discordUserId: body.discordOnly.discordUserId,
+        discordUsername: body.discordOnly.displayName,
+        discordAvatarHash: null,
+        userId: null,
+      };
+    }
+    const userId = body.userId ?? 0; // refine guarantees one of the two
     const linked = await loadLinkedDemoMember(this.usersService, userId);
     return { ...linked, userId };
   }

@@ -13,6 +13,7 @@ import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
 import { DemoTestQuickPlayVoiceController } from './demo-test-quick-play-voice.controller';
+import { DemoTestQuickPlayServerController } from './demo-test-quick-play-server.controller';
 import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
@@ -122,6 +123,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestLfgController,
     DemoTestLfgNowVoiceController,
     DemoTestQuickPlayVoiceController,
+    DemoTestQuickPlayServerController,
     DemoTestThreadMirrorController,
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
