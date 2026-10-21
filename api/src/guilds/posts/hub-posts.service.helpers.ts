@@ -4,6 +4,10 @@
  * pipeline (Zod → `normalizeHubPostBody` → re-check) and the relay timeout.
  */
 import { BadRequestException } from '@nestjs/common';
+import {
+  findHubPostMarkdownViolation,
+  HUB_POST_MARKDOWN_MESSAGES,
+} from '@raid-ledger/contract';
 import type { z } from 'zod';
 import { normalizeHubPostBody } from './hub-post-markdown.helpers';
 
@@ -23,13 +27,22 @@ export function parseOrThrow<S extends z.ZodType>(
 }
 
 /**
- * §2.4: normalise a validated body; normalising only shrinks, so the one
- * re-check needed is "nothing left" (e.g. a zero-width-only body).
+ * §2.4: normalise a validated body, then re-check it. Normalising shrinks the
+ * body but can still CREATE forbidden syntax — dropping a zero-width char
+ * turns `[go](/\u200B/x)` into a protocol-relative link and `<\u200Bb>` into
+ * a tag — so the markdown subset is re-run on the result with the schema's
+ * own 400 message.
  */
 export function finalBody(validated: string): string {
   const body = normalizeHubPostBody(validated);
   if (body.trim() === '') {
     throw new BadRequestException({ body: ['Post cannot be empty'] });
+  }
+  const violation = findHubPostMarkdownViolation(body);
+  if (violation) {
+    throw new BadRequestException({
+      body: [HUB_POST_MARKDOWN_MESSAGES[violation]],
+    });
   }
   return body;
 }

@@ -363,6 +363,27 @@ describe('P22–P23 — rejected markdown', () => {
     expect(res.body).toMatchObject({ body: [LINK_MSG] });
     expect(await postRows(ctx, g)).toHaveLength(0);
   });
+
+  it.each([
+    ['protocol-relative link', '[go](/\u200B/evil.test)', LINK_MSG],
+    ['tag after `<`', 'hi <\u200Bb>x', HTML_MSG],
+  ])(
+    'P23b: zero-width-smuggled %s → 400 on POST and PATCH; nothing stored',
+    async (_l, body, msg) => {
+      const g = await newHub(ctx);
+      const created = await createPost(ctx, g, body);
+      expect(created.status).toBe(400);
+      expect(created.body).toMatchObject({ body: [msg] });
+      const id = await insertPostRow(ctx, g, 'clean body', at(0));
+      const path = `/guilds/${g}/posts/${id}`;
+      const patch = await call(ctx, 'patch', path, 'officerA', { body });
+      expect(patch.status).toBe(400);
+      expect(patch.body).toMatchObject({ body: [msg] });
+      expect((await postRows(ctx, g)).map((p) => p.body)).toEqual([
+        'clean body',
+      ]);
+    },
+  );
 });
 
 describe('P24–P25 — accepted bodies', () => {

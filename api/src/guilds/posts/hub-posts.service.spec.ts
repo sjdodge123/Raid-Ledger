@@ -4,6 +4,10 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  HUB_POST_MARKDOWN_MESSAGES,
+  type HubPostMarkdownViolation,
+} from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { HubPostSelect } from '../../drizzle/schema/hub-posts';
@@ -190,6 +194,39 @@ describe('HubPostsService.create — body pipeline', () => {
       service.create(actor, 7, { body: '​​', relayToDiscord: false }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(insertPost).not.toHaveBeenCalled();
+  });
+});
+
+/** Codex r4: a zero-width char that hides forbidden syntax until normalised. */
+const SMUGGLED: Array<[string, string, HubPostMarkdownViolation]> = [
+  ['protocol-relative link', '[go](/\u200B/evil.test)', 'unsafe-link'],
+  ['tag after `<`', 'hi <\u200Bb>x', 'html'],
+];
+
+describe('HubPostsService — re-validates the normalised body', () => {
+  it.each(SMUGGLED)('create 400s a %s', async (_l, body, kind) => {
+    const { service, emit } = build();
+    const err = await service
+      .create(actor, 7, { body, relayToDiscord: false })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toEqual({
+      body: [HUB_POST_MARKDOWN_MESSAGES[kind]],
+    });
+    expect(insertPost).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it.each(SMUGGLED)('update 400s a %s', async (_l, body, kind) => {
+    const { service } = build();
+    const err = await service
+      .update(actor, 7, 11, { body })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toEqual({
+      body: [HUB_POST_MARKDOWN_MESSAGES[kind]],
+    });
+    expect(updatePostBody).not.toHaveBeenCalled();
   });
 });
 
