@@ -178,10 +178,14 @@ beforeEach(() => {
       };
       return Promise.resolve(b ? { ...b, ...routing } : null);
     });
-  bindings.bind.mockResolvedValue({
-    binding: { id: 'b-new' },
-    replacedChannelIds: [],
-  });
+  // Codex r18 P2: the post-create hub link re-reads (locks) the new binding.
+  bindings.bind.mockImplementation(
+    (_g: string, channelId: string, _t: string, _p: string, gameId: number) => {
+      const { binding } = boundRow(gameId, { channelId }, 0);
+      if (binding) liveBindings.set(binding.id, binding);
+      return Promise.resolve({ binding, replacedChannelIds: [] });
+    },
+  );
   selectRows.mockResolvedValue([]);
 });
 

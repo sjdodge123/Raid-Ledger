@@ -105,6 +105,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(queries.findGameAnnouncementBinding).mockResolvedValue(null);
   jest.mocked(ops.createTextChannel).mockResolvedValue('new-ch');
+  jest.mocked(queries.isGameSuppressed).mockResolvedValue(false);
   jest.mocked(queries.lockLifecycleBinding).mockResolvedValue(LOCKED);
 });
 
@@ -180,10 +181,6 @@ describe('Codex r18 P2: post-create link re-reads + locks the binding', () => {
       skipped: 0,
       verify: [],
     });
-    expect(link).toHaveBeenCalledWith(
-      7,
-      'new-ch',
-      expect.anything(),
-    );
+    expect(link).toHaveBeenCalledWith(7, 'new-ch', expect.anything());
   });
 });

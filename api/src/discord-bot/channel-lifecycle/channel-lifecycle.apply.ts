@@ -102,15 +102,15 @@ async function deleteOrphan(guild: Guild, channelId: string): Promise<void> {
 /**
  * Bind a just-created channel (only through `bind()`), stamping lifecycle
  * ownership in the SAME insert (Codex r3: no half-owned manual-looking row);
- * on failure delete it (R18).
+ * on failure delete it (R18). Returns the new binding's id.
  */
 async function bindNewChannel(
   ctx: ApplyContext,
   gameId: number,
   channelId: string,
-): Promise<void> {
+): Promise<string> {
   try {
-    await ctx.bindings.bind(
+    const { binding } = await ctx.bindings.bind(
       ctx.guild.id,
       channelId,
       'text',
@@ -123,6 +123,7 @@ async function bindNewChannel(
         lifecycle: { autoManaged: true, lifecycleState: 'active' },
       },
     );
+    return binding.id;
   } catch (err) {
     await deleteOrphan(ctx.guild, channelId);
     throw err;
@@ -131,7 +132,7 @@ async function bindNewChannel(
 
 /**
  * Create → bind as auto-managed (one insert, via `bind()`). Hub linking runs
- * AFTER this game's tx commits (`createdChannelId`, Codex r5 P1): a link
+ * AFTER this game's tx commits (`created`, Codex r5 P1): a link
  * failure must not roll back the binding and orphan the new channel.
  */
 async function applyCreate(
@@ -156,11 +157,11 @@ async function applyCreate(
     parentId: await gamesParent(ctx),
     topic: lifecycleTopic(ctx, game),
   });
-  await bindNewChannel(ctx, gameId, channelId);
+  const bindingId = await bindNewChannel(ctx, gameId, channelId);
   return {
     outcome: 'done',
     detail: `#${gameSlug}`,
-    createdChannelId: channelId,
+    created: { channelId, bindingId },
   };
 }
 

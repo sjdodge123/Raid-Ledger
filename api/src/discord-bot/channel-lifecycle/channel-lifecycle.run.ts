@@ -3,6 +3,8 @@ import type { Guild } from 'discord.js';
 import * as Sentry from '@sentry/nestjs';
 import type { ReconcileResultDto } from '@raid-ledger/contract';
 import { applyAction, linkHubs } from './channel-lifecycle.apply';
+import { staleLinkDetail } from './channel-lifecycle.decide';
+import { lockLifecycleBinding } from './channel-lifecycle.store.queries';
 import {
   ChannelGoneError,
   CreateCapacityError,
@@ -22,6 +24,8 @@ import type {
   ItemOutcome,
   PlannedGame,
 } from './channel-lifecycle.types';
+
+type CreatedChannel = NonNullable<ItemOutcome['created']>;
 
 /**
  * ROK-1431 — the live reconcile loop + the D14 error policy (spec §2.5 steps
@@ -97,6 +101,29 @@ async function handleFailure(
 }
 
 /**
+ * Codex r18 P2: re-read + row-lock the new binding before linking, as
+ * `applyLinkHub` does — a binding unbound or re-routed since the create
+ * committed never gets the old game's hubs or topic. Null = skipped (stale).
+ */
+async function linkCreated(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  created: CreatedChannel,
+): Promise<number | null> {
+  const current = await lockLifecycleBinding(ctx.db, created.bindingId);
+  const planned = { channelId: created.channelId, gameId: game.row.gameId };
+  const stale = staleLinkDetail(planned, current);
+  if (stale !== null) {
+    logger.log(`Hub link after create for ${game.row.gameId} ${stale}`);
+    return null;
+  }
+  return linkHubs(ctx, game, {
+    id: created.channelId,
+    autoManaged: current?.autoManaged === true,
+  });
+}
+
+/**
  * Link a just-created channel's hubs in a tx of its own, after the create
  * committed (Codex r5 P1). A failure never undoes the create: the binding
  * stays and the next reconcile retries the link (`link_hub`, spec §2.7).
@@ -104,14 +131,14 @@ async function handleFailure(
 async function linkAfterCreate(
   ctx: ApplyContext,
   game: PlannedGame,
-  created: ItemOutcome & { createdChannelId: string },
+  created: CreatedChannel,
+  item: ItemOutcome,
 ): Promise<ItemOutcome> {
-  const { createdChannelId: id, ...item } = created;
   try {
     const linkedHubs = await ctx.db.transaction((tx) =>
-      linkHubs({ ...ctx, db: tx }, game, { id, autoManaged: true }),
+      linkCreated({ ...ctx, db: tx }, game, created),
     );
-    return { ...item, linkedHubs };
+    return linkedHubs === null ? item : { ...item, linkedHubs };
   } catch (err) {
     if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
     Sentry.captureException(err, {
@@ -206,9 +233,9 @@ async function runOne(
   } catch (err) {
     return cleanupInTx(ctx, game, err);
   }
-  const { createdChannelId } = item;
-  if (createdChannelId === undefined) return item;
-  return linkAfterCreate(ctx, game, { ...item, createdChannelId });
+  const { created, ...rest } = item;
+  if (created === undefined) return item;
+  return linkAfterCreate(ctx, game, created, rest);
 }
 
 /** Detail for creates deferred after the guild hit its channel cap. */
