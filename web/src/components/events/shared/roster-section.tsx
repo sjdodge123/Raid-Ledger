@@ -49,7 +49,10 @@ function SlotSteppers(props: RosterSectionProps) {
                     <SlotStepper label="DPS" value={props.slotDps} onChange={props.onSlotDpsChange} color="bg-red-500" />
                 </>
             ) : (
-                <SlotStepper label="Players" value={props.slotPlayer} onChange={props.onSlotPlayerChange} color="bg-indigo-500" />
+                <>
+                    {/* ROK-1874: min 1 — the API benches every signup (creator included) on a 0-player generic roster. */}
+                    <SlotStepper label="Players" value={props.slotPlayer} onChange={props.onSlotPlayerChange} color="bg-indigo-500" min={1} />
+                </>
             )}
         </div>
     );

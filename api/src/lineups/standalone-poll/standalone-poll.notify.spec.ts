@@ -19,6 +19,7 @@ import {
 
 interface NotifyMock {
   notifyAutoSignup: jest.Mock;
+  notifyAutoBenched: jest.Mock;
   notifyPollOutcome: jest.Mock;
 }
 
@@ -41,6 +42,7 @@ function makeTzDb(tzByUser: Record<number, string | null>) {
 function makeNotifications(): NotifyMock {
   return {
     notifyAutoSignup: jest.fn().mockResolvedValue(undefined),
+    notifyAutoBenched: jest.fn().mockResolvedValue(undefined),
     notifyPollOutcome: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -67,6 +69,7 @@ function callNotifyVoters(
   args: {
     selected: { userId: number }[];
     others: { userId: number }[];
+    benched?: number[];
     chosenTime: string;
   },
 ): Promise<void> {
@@ -74,6 +77,7 @@ function callNotifyVoters(
     deps,
     args.selected,
     args.others,
+    args.benched ?? [],
     args.chosenTime,
     99,
     'Game Night',
@@ -139,5 +143,50 @@ describe('notifyPollVoters timezone (ROK-1112)', () => {
     const [, msg] = notifications.notifyPollOutcome.mock.calls[0];
     expect(msg).toContain('Sun');
     expect(msg).toContain('May 3');
+  });
+});
+
+describe('notifyPollVoters bench routing (ROK-1874)', () => {
+  const CHOSEN = '2026-05-04T01:00:00.000Z';
+
+  /** userIds each mock was called with, in call order. */
+  function recipients(mock: jest.Mock): unknown[] {
+    return mock.mock.calls.map((call: unknown[]) => call[0]);
+  }
+
+  it('sends benched voters "On the bench" and the rest "Auto-signed up" — never both', async () => {
+    const notifications = makeNotifications();
+    const deps = makeDeps(makeTzDb({}), notifications);
+
+    await callNotifyVoters(deps, {
+      selected: [{ userId: 1 }, { userId: 2 }, { userId: 3 }],
+      others: [{ userId: 4 }],
+      benched: [3],
+      chosenTime: CHOSEN,
+    });
+
+    expect(recipients(notifications.notifyAutoBenched)).toEqual([3]);
+    expect(recipients(notifications.notifyAutoSignup)).toEqual([1, 2]);
+    expect(recipients(notifications.notifyPollOutcome)).toEqual([4]);
+    expect(notifications.notifyAutoBenched).toHaveBeenCalledWith(
+      3,
+      'Game Night',
+      expect.stringContaining('May 4'),
+      99,
+    );
+  });
+
+  it('sends nobody the bench DM when nobody was benched', async () => {
+    const notifications = makeNotifications();
+    const deps = makeDeps(makeTzDb({}), notifications);
+
+    await callNotifyVoters(deps, {
+      selected: [{ userId: 1 }, { userId: 2 }],
+      others: [],
+      chosenTime: CHOSEN,
+    });
+
+    expect(notifications.notifyAutoBenched).not.toHaveBeenCalled();
+    expect(recipients(notifications.notifyAutoSignup)).toEqual([1, 2]);
   });
 });
