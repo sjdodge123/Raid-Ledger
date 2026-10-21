@@ -14,7 +14,8 @@ import { Editor, type JSONContent } from '@tiptap/core';
 import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../markdown-block';
 import { buildMarkdownExtensions } from './markdown-extensions';
-import { prepareEditorMarkdown, serializeEditorMarkdown } from './markdown-serialize';
+import { serializeEditorMarkdown } from './markdown-serialize';
+import { loadStoredMarkdown } from './markdown-load';
 
 type Segment = [text: string, marks: string];
 
@@ -153,7 +154,7 @@ function flankFailure(segments: Segment[], want: string): string | null {
     const saved = save(segments);
     const violation = findHubPostMarkdownViolation(saved);
     const got = shown(saved);
-    editor.commands.setContent(prepareEditorMarkdown(saved), { contentType: 'markdown' });
+    editor.commands.setContent(loadStoredMarkdown(saved));
     const reloadedShows = loaded();
     const resaved = saveCurrent();
     if (violation === null && got === want && reloadedShows === got && resaved === saved) return null;
