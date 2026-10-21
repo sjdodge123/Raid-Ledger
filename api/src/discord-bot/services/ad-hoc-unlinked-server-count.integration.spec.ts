@@ -211,11 +211,7 @@ describe('ROK-1888 Codex r1 P2 — the initial spawn card reads stored flags', (
     eventId: number,
     roster: Array<{ discordUserId: string | null; discordUsername: string }>,
   ): Promise<EmbedEventData> {
-    const participants = await spawnCardParticipants(
-      testApp.db,
-      eventId,
-      roster,
-    );
+    const participants = await spawnCardParticipants(deps, eventId, roster);
     const data = await buildEmbedEventData(deps, eventId, participants);
     if (!data) throw new Error(`no embed data for event ${String(eventId)}`);
     return data;

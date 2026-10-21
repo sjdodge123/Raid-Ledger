@@ -66,13 +66,22 @@ export function toActiveParticipants(
   }));
 }
 
-/** WIP stub (ROK-1888 Codex r1 P2): the initial spawn card roster. */
+/**
+ * ROK-1888 (Codex r1 P2): the initial spawn card's roster. Both spawn paths
+ * commit their participant rows before announcing, so the stored rows carry
+ * the identity flags (`unlinkedOnServer`, `anonymousOnServer`, `discordOnly`)
+ * the caller's bare `{id, name}` roster lacks. Falls back to that roster when
+ * no row is stored yet, or the read fails — the announce must still go out.
+ */
 export async function spawnCardParticipants(
-  _db: PostgresJsDatabase<typeof schema>,
-  _eventId: number,
+  { db }: Pick<AdHocNotificationDeps, 'db'>,
+  eventId: number,
   fallback: Array<{ discordUserId: string | null; discordUsername: string }>,
 ): Promise<AdHocParticipant[]> {
-  return Promise.resolve(toActiveParticipants(fallback));
+  const stored = await readParticipants(db, eventId).catch(
+    (): AdHocParticipant[] => [],
+  );
+  return stored.length > 0 ? stored : toActiveParticipants(fallback);
 }
 
 /** Mark all participants as inactive. */

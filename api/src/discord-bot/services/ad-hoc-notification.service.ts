@@ -25,7 +25,7 @@ import {
   isGeneralLobbyBinding,
   readParticipants,
   resolveNotificationChannel,
-  toActiveParticipants,
+  spawnCardParticipants,
 } from './ad-hoc-notification.helpers';
 import {
   markTrackedCompleted,
@@ -148,8 +148,8 @@ export class AdHocNotificationService implements OnModuleDestroy {
       bindingId,
       effectiveGameId,
     );
-    const active = toActiveParticipants(participants);
-    if (qpChannel && (await this.postSpawn(eventId, qpChannel, active))) return;
+    const live = await spawnCardParticipants(this.deps, eventId, participants);
+    if (qpChannel && (await this.postSpawn(eventId, qpChannel, live))) return;
     // D7: a lobby never falls back — its room card already carries the session.
     if (lobby) return;
     // ROK-1390: pass the event's effective game so announce routing follows the
@@ -160,7 +160,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
       effectiveGameId,
     );
     if (!channelId) return;
-    await this.postSpawn(eventId, channelId, active);
+    await this.postSpawn(eventId, channelId, live);
   }
 
   /** Build the LIVE card and post it; true once a message landed. */
