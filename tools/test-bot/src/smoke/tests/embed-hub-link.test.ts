@@ -7,7 +7,10 @@
  * Both games are seeded fresh per run (`smoke-hub <run>` / `smoke-nohub <run>`)
  * via `/admin/test/channel-lifecycle/seed`, so neither has a binding and both
  * cards land in the default notification channel. The hub link needs the
- * API's CLIENT_URL (no CLIENT_URL ⇒ no link, by design).
+ * API's CLIENT_URL (no CLIENT_URL ⇒ no link, by design). The seeded hub is a
+ * `game_server` hub, whose kind belongs to the Pelican plugin: the resolver
+ * skips hubs of an inactive plugin's kind, so the test turns Pelican on for
+ * its run and puts it back afterwards.
  */
 import { pollForEmbed } from "../../helpers/polling.js";
 import type { SimpleComponent, SimpleMessage } from "../../helpers/messages.js";
@@ -17,6 +20,9 @@ import type { SmokeTest, TestContext } from "../types.js";
 
 const SEED = "/admin/test/channel-lifecycle/seed";
 const HUB_LABEL = "Hub";
+const PELICAN = "pelican";
+
+interface PluginRow { slug: string; status: "not_installed" | "active" | "inactive" }
 
 interface SeedResult { gameId: number; hubId: number | null }
 
@@ -43,6 +49,17 @@ async function seed(ctx: TestContext, gameName: string, withHub: boolean): Promi
   return ctx.api.post<SeedResult>(SEED, { gameName, serverHubWithoutChannel: withHub });
 }
 
+/** Activate Pelican (installing it first if needed); returns whether it was already active. */
+async function enablePelican(ctx: TestContext): Promise<boolean> {
+  const { data } = await ctx.api.get<{ data: PluginRow[] }>("/admin/plugins");
+  const status = data.find((p) => p.slug === PELICAN)?.status ?? "not_installed";
+  if (status === "active") return true;
+  // install activates; activate on an installed-but-inactive plugin.
+  const action = status === "not_installed" ? "install" : "activate";
+  await ctx.api.post(`/admin/plugins/${PELICAN}/${action}`);
+  return false;
+}
+
 function expectHubButton(card: SimpleMessage, hubId: number): void {
   const [button, ...extra] = hubButtons(card);
   if (!button || extra.length > 0) {
@@ -56,6 +73,7 @@ function expectHubButton(card: SimpleMessage, hubId: number): void {
 async function eventCardHubLink(ctx: TestContext): Promise<void> {
   const run = Date.now().toString(36);
   const eventIds: number[] = [];
+  const wasActive = await enablePelican(ctx);
   try {
     const hubGame = await seed(ctx, `smoke-hub ${run}`, true);
     if (hubGame.hubId === null) throw new SmokeAssertionError("seed returned no hubId");
@@ -73,6 +91,7 @@ async function eventCardHubLink(ctx: TestContext): Promise<void> {
     }
   } finally {
     for (const id of eventIds) await deleteEvent(ctx.api, id);
+    if (!wasActive) await ctx.api.post(`/admin/plugins/${PELICAN}/deactivate`);
   }
 }
 
