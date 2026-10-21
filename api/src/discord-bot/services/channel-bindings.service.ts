@@ -21,6 +21,10 @@ import {
   resolvePatchedGameId,
   type BindingUpdatePatch,
 } from './channel-bindings-invariant.helpers';
+import {
+  bindingUpdateWhere,
+  refuseIfArchivedRace,
+} from './channel-bindings-archived.guard';
 import { announceBindingChange } from './channel-binding-events';
 import { gameAnnouncementPrecedence } from './channel-binding-precedence';
 import {
@@ -371,9 +375,11 @@ export class ChannelBindingsService {
       this.db
         .update(schema.channelBindings)
         .set(updateSet)
-        .where(eq(schema.channelBindings.id, id))
+        .where(bindingUpdateWhere(id, patch))
         .returning(),
     );
+    if (!result)
+      await refuseIfArchivedRace(patch, () => this.getBindingById(id));
     return this.announced(result ? [existing.channelId] : [], result ?? null);
   }
 
