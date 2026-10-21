@@ -130,20 +130,21 @@ function BoundedNumber({ label, hint, value, min, max, onCommit }: {
 
 /**
  * Section 3 — window days, create threshold, max changes per run. Each box is
- * keyed on its saved value + `resetKey` (bumped per failed PATCH), so a
- * refetch or a rejected save puts the saved number back.
+ * keyed on its setting name + saved value + `resetKey` (bumped per failed
+ * PATCH), so a refetch or a rejected save puts the saved number back, and two
+ * settings with equal values never share a key (Codex r7 P2).
  */
 export function ThresholdsSection({ settings, onSave, error, resetKey }: SectionProps & { resetKey: number }): JSX.Element {
-    const k = (v: number): string => `${v}:${resetKey}`;
+    const k = (name: keyof ChannelLifecycleSettingsDto): string => `${name}:${settings[name]}:${resetKey}`;
     return (
         <section className="bg-surface rounded-xl border border-edge p-6 space-y-4" aria-label="Thresholds">
             <h3 className="text-base font-semibold text-foreground">Thresholds</h3>
             <div className="grid gap-4 sm:grid-cols-3">
-                <BoundedNumber key={k(settings.recentActivityDays)} label="Archive after N days without activity" value={settings.recentActivityDays} min={7} max={180}
+                <BoundedNumber key={k('recentActivityDays')} label="Archive after N days without activity" value={settings.recentActivityDays} min={7} max={180}
                     onCommit={(n) => onSave({ recentActivityDays: n })} />
-                <BoundedNumber key={k(settings.createThreshold)} label="Create a channel after N activities" hint="A single poll never creates a channel"
+                <BoundedNumber key={k('createThreshold')} label="Create a channel after N activities" hint="A single poll never creates a channel"
                     value={settings.createThreshold} min={2} max={10} onCommit={(n) => onSave({ createThreshold: n })} />
-                <BoundedNumber key={k(settings.maxChangesPerTick)} label="Max changes per run" value={settings.maxChangesPerTick} min={1} max={25}
+                <BoundedNumber key={k('maxChangesPerTick')} label="Max changes per run" value={settings.maxChangesPerTick} min={1} max={25}
                     onCommit={(n) => onSave({ maxChangesPerTick: n })} />
             </div>
             {error && <p role="alert" className="text-sm text-danger">{error}</p>}
