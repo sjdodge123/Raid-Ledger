@@ -523,6 +523,17 @@ describe('DELETE + set_by', () => {
     });
   });
 
+  // Codex r10 P2: a new hub has no guild_profiles row; the clear must still
+  // store the manual opt-out, or a later reconcile auto-links a channel.
+  it('unbinding a hub with no profile row stores the manual opt-out', async () => {
+    expect(await profileRow()).toBeUndefined();
+    const res = await call('delete', '/discord/channel', 'admin');
+    expect(res.status).toBe(204);
+    const row = await profileRow();
+    expect(row?.discordChannelSource).toBe('manual');
+    expect(row?.discordChannelId).toBeNull();
+  });
+
   it('deleting the user who set the channel nulls set_by (FK SET NULL)', async () => {
     const [temp] = nonEmpty(
       await testApp.db

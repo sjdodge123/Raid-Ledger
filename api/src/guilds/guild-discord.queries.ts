@@ -80,20 +80,22 @@ export async function saveBinding(
 }
 
 /**
- * Reset the binding columns (no-op without a profile row). The clear is an
- * explicit "no channel" — stamped `'manual'` so auto-link never refills it (D7).
+ * Reset the binding columns. The clear is an explicit "no channel" — stamped
+ * `'manual'` so auto-link never refills it (D7). Codex r10 P2: an upsert, so a
+ * hub with no profile row yet still records the opt-out.
  */
 export async function clearBinding(db: Db, guildId: number): Promise<void> {
+  const set = {
+    discordChannelId: null,
+    discordChannelPrivateAck: false,
+    discordChannelSetBy: null,
+    discordChannelSetAt: null,
+    discordChannelSource: 'manual' as const,
+  };
   await db
-    .update(guildProfiles)
-    .set({
-      discordChannelId: null,
-      discordChannelPrivateAck: false,
-      discordChannelSetBy: null,
-      discordChannelSetAt: null,
-      discordChannelSource: 'manual',
-    })
-    .where(eq(guildProfiles.guildId, guildId));
+    .insert(guildProfiles)
+    .values({ guildId, ...set })
+    .onConflictDoUpdate({ target: guildProfiles.guildId, set });
 }
 
 /** The user's stored `discord_id` (may be a `local:` placeholder). */
