@@ -45,12 +45,15 @@ function HubsMenuPopover({ id, hubs, close }: PopoverProps): JSX.Element {
     };
     return (
         <div ref={menuRef} id={id} role="menu" aria-label="Hubs" onKeyDown={onKeyDown} data-testid="nav-hubs-menu"
-            className="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-lg border border-edge bg-surface shadow-xl">
-            <p role="presentation" className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted">Your hubs</p>
-            <GuildRows guilds={hubs} onNavigate={() => close()} role="menuitem" />
-            <div role="separator" className="border-t border-edge" />
+            className="absolute left-0 top-full z-50 mt-2 flex max-h-[calc(100dvh-5rem)] w-72 flex-col overflow-hidden rounded-lg border border-edge bg-surface shadow-xl">
+            {/* Codex r2: a long hub list scrolls inside the menu; "Browse all hubs" stays pinned below it. */}
+            <div role="presentation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="nav-hubs-menu-list">
+                <p role="presentation" className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted">Your hubs</p>
+                <GuildRows guilds={hubs} onNavigate={() => close()} role="menuitem" />
+            </div>
+            <div role="separator" className="shrink-0 border-t border-edge" />
             <Link to={HUBS_PATH} role="menuitem" onClick={() => close()} data-testid="nav-hubs-browse-all"
-                className="flex min-h-[44px] items-center gap-1 px-4 py-2 text-sm font-medium text-secondary transition-colors hover:bg-overlay hover:text-foreground focus-visible:bg-overlay focus-visible:outline-none">
+                className="flex min-h-[44px] shrink-0 items-center gap-1 px-4 py-2 text-sm font-medium text-secondary transition-colors hover:bg-overlay hover:text-foreground focus-visible:bg-overlay focus-visible:outline-none">
                 Browse all hubs <span aria-hidden="true">→</span>
             </Link>
         </div>

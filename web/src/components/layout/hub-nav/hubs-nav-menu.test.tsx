@@ -94,6 +94,16 @@ describe('HubsNavItem — the menu (D7)', () => {
         expect(screen.getByRole('separator')).toBeInTheDocument();
     });
 
+    it('a long hub list scrolls inside a viewport-bounded menu; "Browse all hubs" stays outside the scroll (Codex r2)', async () => {
+        serve(Array.from({ length: 30 }, (_, i) => hub(100 + i, `Hub ${i}`, i % 2 ? 'game_server' : 'game_community')));
+        const menu = await openMenu();
+        expect(menu.className).toMatch(/max-h-\[calc\(100dvh/);
+        const list = screen.getByTestId('nav-hubs-menu-list');
+        expect(list.className).toContain('overflow-y-auto');
+        expect(list.querySelectorAll('[role="menuitem"]')).toHaveLength(30);
+        expect(list).not.toContainElement(screen.getByTestId('nav-hubs-browse-all'));
+    });
+
     it('a WoW guild row reads "Guild"', async () => {
         serve([hub(11, 'Iron Vanguard', 'wow_guild')]);
         await openMenu();
