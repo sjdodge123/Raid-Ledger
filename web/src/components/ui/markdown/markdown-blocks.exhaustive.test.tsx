@@ -49,6 +49,10 @@ const CONSTRUCTS: string[] = [
     '<https://example.com?x=1&amp;y=2> $', '$ <https://example.com/a&lt;b&#38;c> $', '- <https://example.com/?q=&amp;> $',
     '$ ~20:00~ $', '~x~ $', '$ ~~~x~~~ $', '$ ~ ~~ ~~~ $', '\\~~x~~ $', '~~x~ $', '- ~a~ $',
     '``` `c` $', '$ ``` `c` ``` $',
+    // An unsafe `<https…` (a space before its `>`) is text and must not swallow a code span's protection;
+    // an autolink inside a link label is label text to the reader, so its `&amp;` stays literal.
+    '$ <https://x.com now, run `a~b &amp; c` if 2 > 1', '<https://x.com y `a~b&amp;c`> $',
+    '[<https://example.com/?a&amp;b>](/p) $', '$ [x <https://example.com/~a~&amp;> y](/p)',
 ];
 
 /** Each construct alone, after a paragraph line, before one, and between blank-line paragraphs. */
