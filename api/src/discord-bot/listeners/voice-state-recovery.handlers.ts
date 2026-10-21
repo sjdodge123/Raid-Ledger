@@ -35,11 +35,7 @@ export async function recoverFromVoiceChannels(
     gm?: GuildMember,
   ) => Promise<void>,
 ): Promise<void> {
-  const client = deps.clientService.getClient();
-  if (!client) return;
-  const guildId = deps.clientService.getGuildId();
-  if (!guildId) return;
-  const guild = client.guilds.cache.get(guildId);
+  const guild = resolveGuild(deps);
   if (!guild) return;
   try {
     const voiceChannels = guild.channels.cache.filter((ch) =>
@@ -47,6 +43,7 @@ export async function recoverFromVoiceChannels(
     );
     for (const [channelId, channel] of voiceChannels) {
       if (!channel.isVoiceBased() || channel.members.size === 0) continue;
+      mapPresentMembers(deps, channelId, channel);
       const binding = await resolveBindingFn(channelId);
       if (!binding) continue;
       await recoverChannel(deps, channelId, channel, binding, handleJoinFn);
@@ -57,6 +54,14 @@ export async function recoverFromVoiceChannels(
   } catch (err) {
     deps.logger.error(`Voice channel recovery failed: ${err}`);
   }
+}
+
+/** The bot's configured guild, when the client is up and it is cached. */
+function resolveGuild(deps: VoiceHandlerDeps) {
+  const client = deps.clientService.getClient();
+  const guildId = deps.clientService.getGuildId();
+  if (!client || !guildId) return undefined;
+  return client.guilds.cache.get(guildId);
 }
 
 /** Recover a single voice channel's members. */
@@ -91,6 +96,22 @@ async function recoverChannel(
   // ROK-1446 D6: once per CHANNEL, never per member — the re-render is derived
   // from the whole room (D4), so N members must still cost one dirty mark.
   markLobbyDirty(deps, binding, channelId);
+}
+
+/**
+ * ROK-1888 B4: record WHERE every non-bot member sits, bound channel or not —
+ * the live path maps every channel too (`processVoiceChange`). An LFG-now temp
+ * voice channel has no binding, and skipping it made the stale-row sweep close
+ * the open rows of members still sitting in it on every restart/reconnect.
+ */
+function mapPresentMembers(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  channel: VoiceBasedChannel,
+): void {
+  for (const [memberId, gm] of channel.members) {
+    if (!isBotMember(gm)) deps.userChannelMap.set(memberId, channelId);
+  }
 }
 
 /** Populate channel member tracking maps. */

@@ -49,6 +49,7 @@ import {
   type AdHocHandlerDeps,
   type VoiceJoinBinding,
 } from './ad-hoc-event.handlers';
+import { rearmGraceIfVoiceEmpty } from '../lfg-now/lfg-now-grace.helpers';
 
 @Injectable()
 export class AdHocEventService implements OnModuleInit {
@@ -326,6 +327,11 @@ export class AdHocEventService implements OnModuleInit {
       bindingId,
       member,
     );
+  }
+
+  /** ROK-1888 B4: grace for a live event a recovery sweep left voice-empty. */
+  async armGraceIfVoiceEmpty(eventId: number): Promise<void> {
+    await rearmGraceIfVoiceEmpty(this.getDeps(), this.eventEmitter, eventId);
   }
 
   private async processLeave(
