@@ -34,9 +34,11 @@ import {
 import { traceGate } from '../listeners/voice-gate-trace';
 import { graceUnlessOnServer } from './ad-hoc-voice-leave-server.helpers';
 import {
+  adoptEventState,
   buildEventKey,
   findEventKeyForMember,
 } from './ad-hoc-event-key.helpers';
+import { hasOpenVoiceParticipants } from './ad-hoc-server-presence.helpers';
 import { announceLfgSessionEnd } from '../lfg-now/lfg-now-session-end.helpers';
 import {
   removeActiveSession,
@@ -266,7 +268,8 @@ export class AdHocEventService implements OnModuleInit {
   adoptEvent(bindingId: string, gameId: number, eventId: number): void {
     const key = buildEventKey(bindingId, gameId);
     if (this.activeEvents.has(key)) return;
-    this.activeEvents.set(key, { eventId, memberSet: new Set(), gameId });
+    // ROK-1888: every key of one event shares ONE state (one memberSet).
+    adoptEventState(this.activeEvents, key, eventId, gameId);
   }
 
   /** Check if any active event exists for a binding. */
@@ -343,6 +346,8 @@ export class AdHocEventService implements OnModuleInit {
     );
     // ROK-1800/1821: anyone on the game server (rows or tracker) keeps it alive.
     if (state.memberSet.size > 0) return;
+    // ROK-1888: another channel's open voice row (in-memory drift) keeps it live.
+    if (await hasOpenVoiceParticipants(this.db, state.eventId)) return;
     await graceUnlessOnServer(this.getDeps(), this.eventEmitter, {
       eventId: state.eventId,
       gameId: event.gameId,

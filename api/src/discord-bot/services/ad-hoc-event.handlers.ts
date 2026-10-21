@@ -82,7 +82,9 @@ export async function handleJoinExisting(
   await deps.participantService.addParticipant(state.eventId, member);
   await deps.autoSignupParticipant(state.eventId, member);
 
-  deps.notificationService.queueUpdate(state.eventId, bindingId);
+  // ROK-1888: edit the CREATING binding's card, not the joiner's channel's.
+  const cardBinding = existing.channelBindingId ?? bindingId;
+  deps.notificationService.queueUpdate(state.eventId, cardBinding);
   await emitRosterToClients(deps, state.eventId);
   return true;
 }
