@@ -24,7 +24,9 @@ describe('visibleKinds', () => {
   });
 
   it('a community-only scope has no WoW / server branch', () => {
-    const { params } = render(visibleKinds(scope({ kinds: ['game_community'] })));
+    const { params } = render(
+      visibleKinds(scope({ kinds: ['game_community'] })),
+    );
     expect(params).toContain('game_community');
     expect(params).not.toContain('game_server');
     expect(params).not.toContain('wow_guild');

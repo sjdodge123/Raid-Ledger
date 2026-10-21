@@ -64,6 +64,7 @@ export function directoryKinds(
   kind: GuildKind | undefined,
 ): { live: GuildKind[]; queried: GuildKind[] } {
   const ordered = GUILD_KINDS.filter((k) => live.includes(k));
-  const queried = kind === undefined ? ordered : ordered.filter((k) => k === kind);
+  const queried =
+    kind === undefined ? ordered : ordered.filter((k) => k === kind);
   return { live: ordered, queried };
 }
