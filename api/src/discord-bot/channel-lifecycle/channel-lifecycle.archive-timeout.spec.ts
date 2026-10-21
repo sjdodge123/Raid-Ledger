@@ -92,7 +92,9 @@ function slowChannel(everyoneDelayMs: number | null) {
     channels: {
       cache: new Map(),
       fetch: jest.fn(() => Promise.resolve(ch)),
-      edit: jest.fn(() => Promise.resolve(ch)),
+      edit: jest.fn<Promise<typeof ch>, [string, { parent: string | null }]>(
+        () => Promise.resolve(ch),
+      ),
     },
   };
   return { ch, guild, cache };
@@ -121,5 +123,53 @@ describe('archiveChannel — lock edits that outlive the timeout (Codex r8 P1)',
       expect.stringContaining('ch-1'),
       expect.objectContaining({ level: 'warning' }),
     );
+  });
+});
+
+describe('archiveChannel — a move that lands after its timeout (Codex r10 P2)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  /** A channel whose parent edit lands `moveDelayMs` later (past the 5ms cap). */
+  function slowMove(moveDelayMs: number) {
+    const fx = slowChannel(0);
+    const move = (_id: string, opts: { parent: string | null }) =>
+      wait(moveDelayMs).then(() => {
+        fx.ch.parentId = opts.parent ?? 'none';
+        return fx.ch;
+      });
+    fx.guild.channels.edit.mockImplementationOnce(move);
+    fx.guild.channels.edit.mockImplementation((_id, opts) => {
+      fx.ch.parentId = opts.parent ?? 'none';
+      return Promise.resolve(fx.ch);
+    });
+    return fx;
+  }
+
+  it('moves a late-landing channel back to its original parent', async () => {
+    const { ch, guild } = slowMove(20);
+    await expect(
+      archiveChannel(guild as never, 'ch-1', {
+        categoryId: 'arch',
+        hide: false,
+      }),
+    ).rejects.toThrow(/timeout/);
+    await wait(40); // let any still-pending edit land
+    expect(ch.parentId).toBe('games-cat');
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('ch-1'),
+      expect.objectContaining({ level: 'warning' }),
+    );
+  });
+
+  it('a move that lands after the bounded wait is still moved back', async () => {
+    const { ch, guild } = slowMove(150);
+    await expect(
+      archiveChannel(guild as never, 'ch-1', {
+        categoryId: 'arch',
+        hide: false,
+      }),
+    ).rejects.toThrow(/timeout/);
+    await wait(200);
+    expect(ch.parentId).toBe('games-cat');
   });
 });

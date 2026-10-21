@@ -31,6 +31,18 @@ export interface ArchiveResult {
   added: ArchivedOverwrites;
 }
 
+/** The raw parent edit (no overwrite sync); untimed — callers race it. */
+function editParent(
+  guild: Guild,
+  channelId: string,
+  parentId: string | null,
+): Promise<unknown> {
+  return guild.channels.edit(channelId, {
+    parent: parentId,
+    lockPermissions: false,
+  });
+}
+
 /** Move a channel without syncing its overwrites to the new parent. */
 async function moveChannel(
   guild: Guild,
@@ -39,10 +51,7 @@ async function moveChannel(
   parentId: string | null,
 ): Promise<void> {
   await lifecycleCall(op, channelId, () =>
-    guild.channels.edit(channelId, {
-      parent: parentId,
-      lockPermissions: false,
-    }),
+    editParent(guild, channelId, parentId),
   );
 }
 
@@ -72,6 +81,30 @@ async function bestEffort(fn: () => Promise<void>): Promise<void> {
 
 const logger = new Logger('ChannelLifecycleArchive');
 
+type Settled = 'fulfilled' | 'rejected' | 'pending';
+
+/** Wait (bounded, 2x the call cap) for a raw Discord promise to settle. */
+async function settleWithin(p: Promise<unknown>): Promise<Settled> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settled = await Promise.race([
+    p.then(
+      (): Settled => 'fulfilled',
+      (): Settled => 'rejected',
+    ),
+    new Promise<Settled>((resolve) => {
+      timer = setTimeout(() => resolve('pending'), DISCORD_API_TIMEOUT_MS * 2);
+    }),
+  ]);
+  clearTimeout(timer);
+  return settled;
+}
+
+/** Log + report a lifecycle anomaly that leaves no saved record. */
+function reportWarning(msg: string): void {
+  logger.warn(msg);
+  Sentry.captureMessage(msg, { level: 'warning' });
+}
+
 /**
  * Wait (bounded) for the lock's overwrite edits to settle. `timedDiscordCall`
  * rejecting does not stop `writeLock`, so a rollback that ran first would be
@@ -82,38 +115,63 @@ async function settleLock(
   lock: Promise<void>,
   channelId: string,
 ): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const settled = await Promise.race([
-    lock.then(
-      () => true,
-      () => true,
-    ),
-    new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), DISCORD_API_TIMEOUT_MS * 2);
-    }),
-  ]);
-  clearTimeout(timer);
-  if (settled) return;
-  const msg = `Archive lock edits on channel ${channelId} never settled; rollback may be overwritten`;
-  logger.warn(msg);
-  Sentry.captureMessage(msg, { level: 'warning' });
+  if ((await settleWithin(lock)) !== 'pending') return;
+  reportWarning(
+    `Archive lock edits on channel ${channelId} never settled; rollback may be overwritten`,
+  );
 }
 
-/** Lock then move; a failure settles the lock and restores the priors. */
+/**
+ * Codex r10 P2: a timed-out `archive.move` keeps running; a late success
+ * leaves the channel under Archived with an active binding and no saved
+ * parent. Move it back to `parentId` once it lands — awaited within the
+ * bounded wait, else on its eventual success. Best effort; never rejects.
+ */
+async function compensateMove(
+  guild: Guild,
+  channelId: string,
+  move: Promise<unknown> | undefined,
+  parentId: string | null,
+): Promise<void> {
+  if (!move) return;
+  const back = (): Promise<void> =>
+    bestEffort(() =>
+      moveChannel(guild, 'archive.move.revert', channelId, parentId),
+    );
+  const state = await settleWithin(move);
+  if (state === 'rejected') return;
+  reportWarning(
+    `Archive move on channel ${channelId} landed after its timeout; moving it back`,
+  );
+  if (state === 'fulfilled') return back();
+  void move.then(back, () => undefined);
+}
+
+/** The move target and the parent a failed move is compensated back to. */
+interface MovePlan {
+  categoryId: string;
+  previousParentId: string | null;
+}
+
+/** Lock then move; a failure settles the lock + move and restores the priors. */
 async function lockAndMove(
   guild: Guild,
   channelId: string,
   po: Parameters<typeof writeLock>[0],
   changes: ArchivedOverwriteChange[],
-  categoryId: string,
+  plan: MovePlan,
 ): Promise<void> {
-  // Keep the edit promise itself: the timed wrapper only races it.
+  // Keep the edit promises themselves: the timed wrapper only races them.
   const lock = writeLock(po, idsOf(guild), changes);
+  const pending: { move?: Promise<unknown> } = {};
   try {
     await lifecycleCall('archive.lock', channelId, () => lock);
-    await moveChannel(guild, 'archive.move', channelId, categoryId);
+    const move = editParent(guild, channelId, plan.categoryId);
+    pending.move = move;
+    await lifecycleCall('archive.move', channelId, () => move);
   } catch (err) {
     await settleLock(lock, channelId);
+    await compensateMove(guild, channelId, pending.move, plan.previousParentId);
     await bestEffort(() => restoreFresh(guild, channelId, changes));
     throw err;
   }
@@ -135,7 +193,10 @@ export async function archiveChannel(
   const po = channel.permissionOverwrites;
   const previousParentId = channel.parentId;
   const changes = planArchive(po, idsOf(guild), opts.hide);
-  await lockAndMove(guild, channelId, po, changes, opts.categoryId);
+  await lockAndMove(guild, channelId, po, changes, {
+    categoryId: opts.categoryId,
+    previousParentId,
+  });
   const inSeries =
     previousParentId !== null &&
     (opts.seriesIds?.has(previousParentId) ?? false);
