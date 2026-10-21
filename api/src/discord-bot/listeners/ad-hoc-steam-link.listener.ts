@@ -98,13 +98,20 @@ export class AdHocSteamLinkListener {
       await this.dedup.checkAndMarkSent(key, QUICK_PLAY_STEAM_NUDGE_TTL_SECONDS)
     )
       return;
-    await this.notifications.create({
-      userId: target.userId,
-      type: 'lineup_steam_nudge',
-      title: 'Link your Steam account',
-      message: steamNudgeMessage(target.gameName),
-      payload: { eventId, gameId: target.gameId },
-    });
+    try {
+      // A `null` return (prefs off) keeps the claim — AC9.
+      await this.notifications.create({
+        userId: target.userId,
+        type: 'lineup_steam_nudge',
+        title: 'Link your Steam account',
+        message: steamNudgeMessage(target.gameName),
+        payload: { eventId, gameId: target.gameId },
+      });
+    } catch (err: unknown) {
+      // A failed send must not burn the 30-day cooldown.
+      await this.dedup.releaseKey(key);
+      throw err;
+    }
   }
 
   private async safely(what: string, id: number, fn: () => Promise<void>) {
