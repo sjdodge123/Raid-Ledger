@@ -160,6 +160,22 @@ async function expectDrawerHubs(page: Page, seed: Seed): Promise<void> {
     await browse.click();
 }
 
+/** Tablet / landscape-phone widths where the full header row shows but `lg:` labels are collapsed. */
+const NARROW_HEADER_VIEWPORTS = [{ width: 768, height: 1024 }, { width: 812, height: 375 }];
+
+/** The header row fits its viewport: no sideways overflow, the user menu fully on screen, the brand on one line. */
+async function expectHeaderFits(page: Page, viewport: { width: number; height: number }): Promise<void> {
+    const label = `${viewport.width}x${viewport.height}`;
+    const row = page.locator('header > div').first();
+    const fit = await row.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+    expect(fit.scroll, `${label}: header row scrollWidth ${fit.scroll} must be <= clientWidth ${fit.client}`).toBeLessThanOrEqual(fit.client);
+    const box = must(await page.getByTestId('user-menu-trigger').boundingBox(), `${label} user-menu box`);
+    expect(box.x, `${label}: the user menu starts on screen`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${label}: the user menu's right edge ${box.x + box.width} must sit inside the ${viewport.width}px viewport`).toBeLessThanOrEqual(viewport.width);
+    const brand = must(await page.getByTestId('header-brand').boundingBox(), `${label} brand box`);
+    expect(brand.height, `${label}: the brand must stay on one line (height ${brand.height})`).toBeLessThanOrEqual(40);
+}
+
 test.describe('Hubs nav (ROK-1875)', () => {
     test('a member of a server + a community hub: Hubs menu (≥768px) / bottom Hubs sheet + More drawer (phone) list both with kind chips, then Browse all hubs', async ({ page }, testInfo) => {
         const seed = await seedMember(page, testInfo);
@@ -175,6 +191,17 @@ test.describe('Hubs nav (ROK-1875)', () => {
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
+    });
+
+    test('768–1023px: with the Hubs menu trigger the header row fits — no overflow, user menu on screen, one-line brand', async ({ page }, testInfo) => {
+        await seedMember(page, testInfo);
+        for (const viewport of NARROW_HEADER_VIEWPORTS) {
+            await page.setViewportSize(viewport);
+            await page.goto('/calendar');
+            await expect(page.getByTestId('nav-hubs-menu-trigger'), 'the widest case: a hub member gets the menu trigger').toBeVisible({ timeout: 15_000 });
+            await expect(page.getByTestId('user-menu-trigger')).toBeVisible({ timeout: 15_000 });
+            await expectHeaderFits(page, viewport);
+        }
     });
 
     test('a viewer in no hubs gets a plain Hubs link to /hubs, no menu', async ({ page }, testInfo) => {
