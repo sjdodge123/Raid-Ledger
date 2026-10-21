@@ -2398,12 +2398,27 @@ test.describe('Scheduling poll bottom padding (ROK-1014)', () => {
 
         await goToPoll(page, lineupId, matchId);
 
-        // Verify a container has the pb-20 class (bottom padding to clear
-        // the fixed mobile nav bar). pb-20 = 5rem = 80px clearance.
-        const hasPadding = await page.evaluate(() => {
-            return !!document.querySelector('.pb-20');
+        // ROK-1875: the page pads by --bottom-nav-clearance (bar height + the
+        // raised Hubs circle's lift + safe area) instead of a fixed pb-20, so
+        // assert the contract — the poll's page container pads at least that
+        // much — rather than the old class name.
+        await expect(page.locator('h1', { hasText: 'Scheduling Poll' })).toBeVisible({ timeout: 15_000 });
+        const { clearance, padding } = await page.evaluate(() => {
+            const probe = document.createElement('div');
+            probe.style.height = 'var(--bottom-nav-clearance)';
+            document.body.appendChild(probe);
+            const clearancePx = probe.getBoundingClientRect().height;
+            probe.remove();
+            const h1 = Array.from(document.querySelectorAll('h1')).find((h) => h.textContent?.includes('Scheduling Poll'));
+            let best = 0;
+            for (let el = h1?.parentElement ?? null; el && el !== document.body; el = el.parentElement) {
+                best = Math.max(best, parseFloat(getComputedStyle(el).paddingBottom) || 0);
+            }
+            return { clearance: clearancePx, padding: best };
         });
-        expect(hasPadding).toBe(true);
+        // pb-20 was 80px; the clearance is the 56px bar plus the 24px raise at minimum.
+        expect(clearance, '--bottom-nav-clearance resolves to the bar + circle height').toBeGreaterThanOrEqual(80);
+        expect(padding, 'the poll page container pads past the bar and the raised circle').toBeGreaterThanOrEqual(clearance);
     });
 });
 
