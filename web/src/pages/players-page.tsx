@@ -76,7 +76,7 @@ export function PlayersPage() {
 
     return (
         <PullToRefresh onRefresh={refetch}>
-            <div className="pb-20 md:pb-0">
+            <div className="pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-0">
                 <PlayersMobileToolbar searchQuery={search} onSearchChange={setSearch} hasActiveFilters={activeFilterCount > 0} onFilterToggle={toggleOpen} />
                 <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
                     <div className="flex items-center justify-between flex-wrap gap-4">

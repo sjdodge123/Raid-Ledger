@@ -134,12 +134,17 @@ export class GuildAccessService {
     return ladderCanManageEditors(await this.resolveLadder(actor, guildId));
   }
 
-  /** Groups the user belongs to across every live hub kind, by name. */
-  async myGuilds(userId: number): Promise<GuildSummary[]> {
+  /** ROK-1875 D9: hub ids the user belongs to, unioned over every live kind. */
+  async memberHubIds(userId: number): Promise<number[]> {
     const perKind = await Promise.all(
       this.hubKinds.active().map((hub) => hub.memberGroupIds(userId)),
     );
-    const ids = [...new Set(perKind.flat())];
+    return [...new Set(perKind.flat())];
+  }
+
+  /** Groups the user belongs to across every live hub kind, by name. */
+  async myGuilds(userId: number): Promise<GuildSummary[]> {
+    const ids = await this.memberHubIds(userId);
     if (ids.length === 0) return [];
     const guilds = await this.db
       .select()

@@ -51,7 +51,8 @@ interface DayBlockEditorProps {
  * Everything else is the shipped editor: blocks with handles, `touch-action:
  * pan-y` everywhere except a selected block, and slots as the only state.
  */
-const FIXED_INSPECTOR = 'fixed inset-x-4 z-30 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.5rem)]';
+/** Docks 0.5rem above the bar's raised Hubs circle (`--bottom-nav-clearance`, ROK-1875). */
+const FIXED_INSPECTOR = 'fixed inset-x-4 z-30 bottom-[calc(var(--bottom-nav-clearance)+0.5rem)]';
 
 export function DayBlockEditor({
     slots, onChange, dayOfWeek, hours, dims, inspectorPlacement = 'flow', presets, calendarBusy,

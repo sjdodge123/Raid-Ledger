@@ -202,8 +202,11 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
     useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
 
+    // A closed sheet stays mounted to slide out (and for a lazy consumer's next open), so it is
+    // `inert` + `aria-hidden` while closed: no Tab stop and nothing in the a11y tree (ROK-1875).
     const sheet = createPortal(
-        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: stacked ? Z_INDEX.MODAL_STACKED : Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
+        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: stacked ? Z_INDEX.MODAL_STACKED : Z_INDEX.BOTTOM_SHEET, ...layerSize }}
+            inert={!isOpen} aria-hidden={isOpen ? undefined : 'true'}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={requestClose} aria-hidden="true" />
             <div
                 ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
