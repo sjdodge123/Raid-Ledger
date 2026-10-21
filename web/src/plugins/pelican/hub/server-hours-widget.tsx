@@ -33,8 +33,10 @@ export function ServerHoursWidget({ page }: HubCtx): JSX.Element | null {
     const tz = useTimezoneStore((s) => s.resolved);
     const query = useServerHoursItems(server !== undefined);
     const items = query.data;
+    // "Now" is the fetch time (pure render); it advances with each refetch.
+    const now = query.dataUpdatedAt;
     const hours = useMemo(() => (server === undefined ? null
-        : buildServerHours({ items: items ?? [], pelicanServerId: server.pelicanServerId, state: server.state, now: Date.now(), tz })), [server, items, tz]);
+        : buildServerHours({ items: items ?? [], pelicanServerId: server.pelicanServerId, state: server.state, now, tz })), [server, items, now, tz]);
     if (hours === null) return null;
     return (
         <WidgetCard id="server-hub-hours" title="Server hours">
