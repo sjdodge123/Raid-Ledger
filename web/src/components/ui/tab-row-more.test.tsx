@@ -221,6 +221,7 @@ describe('TabRow — the split never waits for a ResizeObserver report (review M
     it('re-measures when the measure row resizes — a font swap or a label change (M2)', () => {
         mockWidths(330);
         render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        act(() => ManualResizeObserver.fire(screen.getByRole('navigation')));
         expect(rowLabels()).toHaveLength(3);
         mockWidths(330, 55);
         act(() => ManualResizeObserver.fire(measureRow()));
@@ -242,6 +243,8 @@ describe('TabRow — the split never waits for a ResizeObserver report (review M
         Object.defineProperty(document, 'fonts', { configurable: true, value: { ready } });
         mockWidths(330);
         render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        act(() => ManualResizeObserver.fire(screen.getByRole('navigation')));
+        expect(rowLabels()).toHaveLength(3);
         mockWidths(330, 55);
         await act(async () => { release(); await ready; });
         expect(rowLabels(), 'the web font loading must trigger a re-measure').toHaveLength(4);
