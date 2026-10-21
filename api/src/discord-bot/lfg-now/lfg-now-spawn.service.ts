@@ -44,6 +44,11 @@ import {
   LFG_NOW_START_NEEDS_INTENT,
 } from './lfg-now.constants';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
+import type { LfgNowSpawnResult } from './lfg-now-spawn.types';
+import { rearmGraceIfVoiceEmpty } from './lfg-now-grace.helpers';
+import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { dispatchLiveSessionInvites } from './lfg-now-invite.helpers';
 import {
   loadLfgNowEphemeralRow,
@@ -73,6 +78,15 @@ export class LfgNowSpawnService {
     @Optional()
     @Inject(ActiveEventCacheService)
     private readonly eventCache: ActiveEventCacheService | null = null,
+    @Optional()
+    @Inject(AdHocGracePeriodQueueService)
+    private readonly graceQueue: AdHocGracePeriodQueueService | null = null,
+    @Optional()
+    @Inject(ChannelBindingsService)
+    private readonly bindings: ChannelBindingsService | null = null,
+    @Optional()
+    @Inject(AdHocEventsGateway)
+    private readonly gateway: AdHocEventsGateway | null = null,
   ) {}
 
   /**
@@ -105,6 +119,7 @@ export class LfgNowSpawnService {
       // than a silent 200 with a fabricated id.
       throw new InternalServerErrorException('Could not start the session');
     }
+    await this.rearmGrace(result);
     if (result.spawned) {
       await this.refreshEventCache(result.eventId);
       await this.createPublicVoice(result.eventId).catch((err) =>
@@ -200,6 +215,7 @@ export class LfgNowSpawnService {
     try {
       const result = await spawnUnderGroupLock(this.db, gameId);
       if (!result) return;
+      await this.rearmGrace(result);
       // A voice-creation failure must NOT suppress the announcement: the event
       // exists, `ephemeral_voice_channel_id` simply stays NULL and the surfaces
       // render the event link alone (error matrix / D9's nullable channel id).
@@ -259,6 +275,28 @@ export class LfgNowSpawnService {
         `(ephemeral-voice master toggle = ${String(master)}; gate bypassed by Q2)`,
     );
     await this.ephemeralVoice.createForEvent(row);
+  }
+
+  /**
+   * ROK-1888: an attach that revived an in-grace Quick Play nobody is in voice
+   * for re-arms grace, else nothing would ever end it. Post-COMMIT; a failure
+   * is logged, never thrown (this can run on the POST /lfg stack).
+   */
+  private async rearmGrace(result: LfgNowSpawnResult): Promise<void> {
+    if (!result.restoredFromGrace) return;
+    if (!this.graceQueue || !this.bindings || !this.gateway) return;
+    const deps = {
+      db: this.db,
+      gracePeriodQueue: this.graceQueue,
+      channelBindingsService: this.bindings,
+      gateway: this.gateway,
+    };
+    await rearmGraceIfVoiceEmpty(deps, this.eventEmitter, result.eventId).catch(
+      (err) =>
+        this.logger.warn(
+          `${LFG_NOW_LOG_TAG} grace re-arm failed for event ${result.eventId}: ${err}`,
+        ),
+    );
   }
 
   /** Re-emit `playing` for an LFG-born event whose roster moved. */

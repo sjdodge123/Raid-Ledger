@@ -233,7 +233,7 @@ async function manualStart(
   // ROK-1888 m4: joining a Quick Play in grace restores it to live, so hands
   // are never signed up to a session about to end (the expiring grace job's
   // `claimAndEndEvent` only ends a `grace_period` row, so it no-ops).
-  if (open !== null) await restoreFromGracePeriod(tx, open);
+  const restored = open !== null && (await restoreFromGracePeriod(tx, open));
   const eventId =
     open ?? (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
   if (starter) await signupNowHands(tx, eventId, [starter]);
@@ -250,6 +250,7 @@ async function manualStart(
     invitedUserIds: participants
       .filter((p) => p.userId !== manual.starterUserId)
       .map((p) => p.userId),
+    ...(restored ? { restoredFromGrace: true as const } : {}),
   };
 }
 
@@ -269,10 +270,16 @@ export async function attachToOpenEvent(
   eventId: number,
   hands: LfgNowHand[],
 ): Promise<LfgNowSpawnResult> {
-  if (hands.length > 0) {
-    await restoreFromGracePeriod(tx, eventId); // ROK-1888 m4, see manualStart
-    await signupNowHands(tx, eventId, hands);
-    await convertGroup(tx, gameId, { eventId });
-  }
-  return { eventId, spawned: false, invitedUserIds: [] };
+  if (hands.length === 0)
+    return { eventId, spawned: false, invitedUserIds: [] };
+  // ROK-1888 m4, see manualStart
+  const restored = await restoreFromGracePeriod(tx, eventId);
+  await signupNowHands(tx, eventId, hands);
+  await convertGroup(tx, gameId, { eventId });
+  return {
+    eventId,
+    spawned: false,
+    invitedUserIds: [],
+    ...(restored ? { restoredFromGrace: true as const } : {}),
+  };
 }
