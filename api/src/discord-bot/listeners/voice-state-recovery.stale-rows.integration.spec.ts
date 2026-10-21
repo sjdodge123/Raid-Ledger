@@ -12,6 +12,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
+import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { createVoiceQuickPlay } from '../services/ad-hoc-game-spawn-lock';
 import { recoverFromVoiceChannels } from './voice-state-recovery.handlers';
 import type { VoiceHandlerDeps } from './voice-handler-deps';
@@ -20,6 +21,7 @@ import type { ResolvedBinding } from './voice-state.helpers';
 const p = schema.adHocParticipants;
 const GUILD = 'guild-1888-m3';
 const CHANNEL = '1888-m3-voice';
+const LFG_CHANNEL = '1888-m3-lfg-now-voice';
 
 let testApp: TestApp;
 
@@ -28,11 +30,17 @@ const member = (id: string) => ({
   user: { username: id, avatar: null, bot: false },
 });
 
-/** A guild whose one voice channel holds exactly `present`. */
-function fakeClient(present: string[], withChannels = true) {
-  const members = new Collection(present.map((id) => [id, member(id)]));
-  const channel = { isVoiceBased: () => true, members };
-  const channels = new Collection(withChannels ? [[CHANNEL, channel]] : []);
+/** A guild whose voice channels hold exactly the given members. */
+function fakeClient(rooms: Record<string, string[]>) {
+  const channels = new Collection(
+    Object.entries(rooms).map(([id, present]) => [
+      id,
+      {
+        isVoiceBased: () => true,
+        members: new Collection(present.map((m) => [m, member(m)])),
+      },
+    ]),
+  );
   const guild = { channels: { cache: channels } };
   return {
     getClient: () => ({ guilds: { cache: new Map([[GUILD, guild]]) } }),
@@ -40,14 +48,20 @@ function fakeClient(present: string[], withChannels = true) {
   };
 }
 
-function depsFor(present: string[], withChannels = true): VoiceHandlerDeps {
+function depsFor(
+  present: string[],
+  withChannels = true,
+  rooms?: Record<string, string[]>,
+): VoiceHandlerDeps {
+  const layout = rooms ?? (withChannels ? { [CHANNEL]: present } : {});
   return {
     logger: { log: jest.fn(), error: jest.fn(), debug: jest.fn() },
-    clientService: fakeClient(present, withChannels),
+    clientService: fakeClient(layout),
     channelPresence: { markDirty: jest.fn() },
     userChannelMap: new Map(),
     channelMembers: new Map(),
     db: testApp.db,
+    adHocEventService: testApp.app.get(AdHocEventService),
     adHocParticipantService: new AdHocParticipantService(
       testApp.db,
       new EventEmitter2(),
@@ -103,8 +117,22 @@ const binding = {
   gameId: null,
   bindingPurpose: 'game-voice-monitor',
 } as unknown as ResolvedBinding;
+/** Only CHANNEL is bound; the LFG-now temp voice channel has no binding. */
 const recover = (deps: VoiceHandlerDeps) =>
-  recoverFromVoiceChannels(deps, () => Promise.resolve(binding), jest.fn());
+  recoverFromVoiceChannels(
+    deps,
+    (ch) => Promise.resolve(ch === CHANNEL ? binding : null),
+    jest.fn(),
+  );
+
+const statusOf = async (eventId: number) =>
+  nonEmpty(
+    await testApp.db
+      .select({ status: schema.events.adHocStatus })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId)),
+    `event ${eventId}`,
+  )[0].status;
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -149,5 +177,33 @@ describe('ROK-1888 m3 — recovery closes stale in-voice rows', () => {
     await recover(depsFor([], false));
 
     expect((await rowOf(eventId, 'gone-m3')).leftAt).toBeNull();
+  });
+
+  it('keeps the open row of a member sitting in an unbound LFG-now voice channel', async () => {
+    const eventId = await liveEventWith(['lfg-m3']);
+    // An LFG-born session (ROK-1625) has no channel binding.
+    await testApp.db
+      .update(schema.events)
+      .set({ channelBindingId: null })
+      .where(eq(schema.events.id, eventId));
+
+    await recover(
+      depsFor([], true, { [CHANNEL]: [], [LFG_CHANNEL]: ['lfg-m3'] }),
+    );
+
+    const row = await rowOf(eventId, 'lfg-m3');
+    expect({ inVoice: row.inVoice, leftAt: row.leftAt }).toEqual({
+      inVoice: true,
+      leftAt: null,
+    });
+  });
+
+  it('starts grace when the sweep closes the last open voice row of a live event', async () => {
+    const eventId = await liveEventWith(['gone-m3']);
+    expect(await statusOf(eventId)).toBe('live');
+
+    await recover(depsFor([]));
+
+    expect(await statusOf(eventId)).toBe('grace_period');
   });
 });

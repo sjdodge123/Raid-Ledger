@@ -8,6 +8,7 @@
  */
 import { Logger } from '@nestjs/common';
 import { LFG_EVENTS } from '../../lfg/lfg.constants';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
 import { mayStartGroup } from './lfg-now-manual-start.helpers';
@@ -315,5 +316,37 @@ describe('LfgNowSpawnService — the post-commit event-cache refresh', () => {
       reason: 'playing',
       eventId: 900,
     });
+  });
+});
+
+describe('LfgNowSpawnService — roster re-render subscriptions (ROK-1888)', () => {
+  const listenersOf = (event: string): string[] => {
+    const proto = LfgNowSpawnService.prototype as unknown as Record<
+      string,
+      unknown
+    >;
+    return Object.getOwnPropertyNames(proto).filter((name) => {
+      const method = proto[name];
+      if (typeof method !== 'function') return false;
+      const meta = Reflect.getMetadata('EVENT_LISTENER_METADATA', method) as
+        | { event: unknown }[]
+        | undefined;
+      return (meta ?? []).some((m) => m.event === event);
+    });
+  };
+
+  it('re-renders the post on a voice RE-join, not only a first join', () => {
+    expect(listenersOf(AD_HOC_EVENTS.PARTICIPANT_REJOINED)).toEqual([
+      'onParticipantJoined',
+    ]);
+  });
+
+  it('still re-renders on a first join and on a leave', () => {
+    expect(listenersOf(AD_HOC_EVENTS.PARTICIPANT_JOINED)).toEqual([
+      'onParticipantJoined',
+    ]);
+    expect(listenersOf(AD_HOC_EVENTS.PARTICIPANT_LEFT)).toEqual([
+      'onParticipantLeft',
+    ]);
   });
 });
