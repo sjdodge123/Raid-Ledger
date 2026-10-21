@@ -21,6 +21,7 @@ import {
 import {
   sharedChannelDetail,
   staleBindingDetail,
+  staleLinkDetail,
 } from './channel-lifecycle.decide';
 import type {
   ApplyContext,
@@ -287,12 +288,26 @@ export async function applyAction(
   if (!binding) return { outcome: 'failed', detail: 'no binding' };
   if (game.action === 'archive' || game.action === 'unarchive')
     return applyStateChange(ctx, game, binding);
-  if (game.action === 'link_hub') {
-    const n = await linkHubs(ctx, game, {
-      id: binding.channelId,
-      autoManaged: binding.autoManaged,
-    });
-    return { outcome: 'done', detail: game.reason, linkedHubs: n };
-  }
+  if (game.action === 'link_hub') return applyLinkHub(ctx, game, binding);
   return { outcome: 'done', detail: game.reason };
+}
+
+/**
+ * Codex r11 P2: `link_hub` re-reads + row-locks the binding like archive /
+ * unarchive, so a binding re-routed since the read never gets the old game's hubs.
+ */
+async function applyLinkHub(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome> {
+  const current = await lockLifecycleBinding(ctx.db, binding.id);
+  const planned = { channelId: binding.channelId, gameId: game.row.gameId };
+  const stale = staleLinkDetail(planned, current);
+  if (stale !== null) return { outcome: 'deferred', detail: stale };
+  const n = await linkHubs(ctx, game, {
+    id: binding.channelId,
+    autoManaged: current?.autoManaged === true,
+  });
+  return { outcome: 'done', detail: game.reason, linkedHubs: n };
 }

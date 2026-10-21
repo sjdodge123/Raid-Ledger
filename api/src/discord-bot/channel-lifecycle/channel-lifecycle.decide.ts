@@ -53,16 +53,13 @@ export function sharedChannelDetail(n: number): string {
   return `shared with ${n} other binding${n === 1 ? '' : 's'}`;
 }
 
-/**
- * Codex r9 P2: why a binding re-read (row-locked) at apply time no longer
- * qualifies for the planned archive / unarchive, or null when it still does.
- * Codex r10 P2: a binding re-routed to another game / purpose / series since
- * the read is judged on activity that is no longer its own — skip it too.
- */
-export function staleBindingDetail(
-  planned: Pick<LifecycleCandidateBinding, 'channelId' | 'lifecycleState'> & {
-    gameId: number;
-  },
+type PlannedRoute = Pick<LifecycleCandidateBinding, 'channelId'> & {
+  gameId: number;
+};
+
+/** Why a locked binding no longer routes to the planned game's channel. */
+function staleRouteDetail(
+  planned: PlannedRoute,
   current: LockedBindingState | null,
 ): string | null {
   if (!current) return 'skipped: binding removed since the read';
@@ -73,10 +70,37 @@ export function staleBindingDetail(
     current.recurrenceGroupId !== null
   )
     return 'skipped: purpose changed since the read';
-  if (current.pinned) return 'skipped: pinned since the read';
-  if (!current.autoManaged) return 'skipped: no longer auto-managed';
   if (current.channelId !== planned.channelId)
     return 'skipped: channel changed since the read';
+  return null;
+}
+
+/**
+ * Codex r11 P2: why a `link_hub` planned from the snapshot is stale — the
+ * binding was removed, re-pointed or re-routed since the read. Manual and
+ * pinned bindings still link, so only the routing is re-checked.
+ */
+export function staleLinkDetail(
+  planned: PlannedRoute,
+  current: LockedBindingState | null,
+): string | null {
+  return staleRouteDetail(planned, current);
+}
+
+/**
+ * Codex r9 P2: why a binding re-read (row-locked) at apply time no longer
+ * qualifies for the planned archive / unarchive, or null when it still does.
+ * Codex r10 P2: a binding re-routed to another game / purpose / series since
+ * the read is judged on activity that is no longer its own — skip it too.
+ */
+export function staleBindingDetail(
+  planned: PlannedRoute & Pick<LifecycleCandidateBinding, 'lifecycleState'>,
+  current: LockedBindingState | null,
+): string | null {
+  const route = staleRouteDetail(planned, current);
+  if (route !== null || !current) return route;
+  if (current.pinned) return 'skipped: pinned since the read';
+  if (!current.autoManaged) return 'skipped: no longer auto-managed';
   if (current.lifecycleState !== planned.lifecycleState)
     return 'skipped: state changed since the read';
   return null;

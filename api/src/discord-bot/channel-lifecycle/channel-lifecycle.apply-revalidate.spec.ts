@@ -36,7 +36,7 @@ const BINDING: LifecycleCandidateBinding = {
 const TX = { tx: true } as unknown as LifecycleDb;
 
 function planned(
-  action: 'archive' | 'unarchive',
+  action: 'archive' | 'unarchive' | 'link_hub',
   binding: LifecycleCandidateBinding = BINDING,
 ): PlannedGame {
   return {
@@ -160,5 +160,39 @@ describe('apply re-validates the locked binding (Codex r9 P2)', () => {
     const item = await applyAction(makeCtx(), planned('archive'));
     expect(ops.archiveChannel).toHaveBeenCalledTimes(1);
     expect(item.outcome).toBe('done');
+  });
+});
+
+// Codex r11 P2: link_hub re-reads + locks the binding too — a binding
+// re-routed since the snapshot must not be linked to the old game's hubs.
+describe('link_hub re-validates the locked binding (Codex r11 P2)', () => {
+  it.each([
+    [null, 'skipped: binding removed since the read'],
+    [{ ...CURRENT, gameId: 9 }, 'skipped: reassigned to another game'],
+    [
+      { ...CURRENT, bindingPurpose: 'quick-play-announcements' },
+      'skipped: purpose changed since the read',
+    ],
+    [
+      { ...CURRENT, channelId: 'ch-9' },
+      'skipped: channel changed since the read',
+    ],
+  ])('a re-routed binding (%p) is not linked', async (current, detail) => {
+    lock.mockResolvedValue(current);
+    const ctx = makeCtx();
+    const item = await applyAction(ctx, planned('link_hub'));
+    expect(lock).toHaveBeenCalledWith(TX, 'b-7');
+    expect(ctx.hubLinker.linkHubsForGame).not.toHaveBeenCalled();
+    expect(item).toEqual({ outcome: 'deferred', detail });
+  });
+
+  it('a still-routed manual binding is linked without a topic rewrite', async () => {
+    lock.mockResolvedValue({ ...CURRENT, autoManaged: false });
+    const ctx = makeCtx();
+    jest.mocked(ctx.hubLinker.linkHubsForGame).mockResolvedValue(1);
+    const item = await applyAction(ctx, planned('link_hub'));
+    expect(ctx.hubLinker.linkHubsForGame).toHaveBeenCalledWith(7, 'ch-7', TX);
+    expect(ops.setTopic).not.toHaveBeenCalled();
+    expect(item).toEqual({ outcome: 'done', detail: 'planned', linkedHubs: 1 });
   });
 });
