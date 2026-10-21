@@ -87,10 +87,11 @@ function deletedRow(gameId: number): Record<string, unknown> {
 
 type State = 'active' | 'archived';
 
-/** A `select` row answering both the r9 binding lock and the r7 sibling count. */
+/** A `select` row answering the r9/r10 binding lock (state + routing fields) and the r7 sibling count. */
 function lockedRow(gameId: number, state: State): Record<string, unknown> {
   const live = { autoManaged: true, pinned: false, lifecycleState: state };
-  return { n: 0, channelId: `ch-${gameId}`, ...live };
+  const routing = { gameId, bindingPurpose: 'game-announcements', recurrenceGroupId: null };
+  return { n: 0, channelId: `ch-${gameId}`, ...live, ...routing };
 }
 
 function makeTx(
