@@ -1,15 +1,13 @@
 /**
- * Keyboard behaviour shared by the scheduling page's two `role="menu"`
- * popovers (ROK-1618).
+ * Keyboard behaviour shared by every `role="menu"` popover (design-system
+ * §4.14): ArrowDown/ArrowUp wrap, Home/End jump, the first item takes focus
+ * on open.
  *
- * Extracted verbatim from `SchedulingManageDropdown` when the leader card
- * gained its own "Poll actions ⋯" menu (now `SchedulingTimeMenu`, which
- * ROK-1635 puts on every time card): every menu on one page must answer
- * ArrowDown/ArrowUp/Home/End identically, and a copy-paste of the traversal
- * would be the place they drift apart.
- *
- * `SchedulingManageDropdown.test.tsx` is the regression guard for the move —
- * nothing here changed, only where it lives.
+ * Born as `lineups/cycle-4/scheduling-menu-keys.ts` (ROK-1618, extracted from
+ * `SchedulingManageDropdown` so the scheduling page's two menus could not
+ * drift); moved to `ui/` in ROK-1875 once the header Hubs menu, the calendar
+ * menus and the community member menu shared it — a layout → lineups import
+ * would be a cross-feature dependency. Nothing in the logic changed.
  */
 import { useEffect, type KeyboardEvent, type RefObject } from 'react';
 

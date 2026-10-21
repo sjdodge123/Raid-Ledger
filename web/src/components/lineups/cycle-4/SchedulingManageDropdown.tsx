@@ -15,7 +15,7 @@
  */
 import { useRef, type JSX, type MouseEvent } from 'react';
 import { useMenuOpenState } from '../use-menu-open-state';
-import { onMenuKeyDown, useFocusFirstItem } from './scheduling-menu-keys';
+import { onMenuKeyDown, useFocusFirstItem } from '../../ui/menu-keys';
 import { SCHEDULING_ACTION_BUTTON } from './scheduling-action-button';
 import { pendingVoterCount, useCanManagePoll } from './scheduling-manage.helpers';
 import { ManageMenuSurface } from './scheduling-sheet-row';
