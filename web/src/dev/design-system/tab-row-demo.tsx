@@ -42,3 +42,27 @@ export function TabRowDemo(): JSX.Element {
         </StateFrame>
     );
 }
+
+/**
+ * TabRow's "More" menu (ROK-1876, tab-row ruling 2026-10-21 option A). Two
+ * 320px frames (the narrowest phone) over the SAME tabs and hash as the demo
+ * above — sharing them keeps the DesignSystemPage chunk under budget (a lazy
+ * split costs more in preload glue than it saves). The first follows the hash,
+ * so a pick from More moves the underline onto the trigger; the second is
+ * pinned to a hidden active tab ("Resources ▾"). Tokens only.
+ */
+export function TabRowMoreDemo(): JSX.Element {
+    const [active] = useHashTab(IDS, 'overview');
+    return (
+        <StateFrame label="TabRow — More menu (phone)" note="320px wide: the tabs that fit stay, the rest go into More. A hidden active tab names the trigger, underlined.">
+            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="ds-tab-row-more">
+                <div className="w-[320px] max-w-full">
+                    <TabRow tabs={TABS} activeId={active} label="Demo page sections, phone" />
+                </div>
+                <div className="w-[320px] max-w-full">
+                    <TabRow tabs={TABS} activeId="resources" label="Demo page sections, Resources active" />
+                </div>
+            </div>
+        </StateFrame>
+    );
+}

@@ -8,7 +8,7 @@
  * If an example here stops matching production, production changed and this
  * page is the early warning.
  */
-import { lazy, Suspense, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/button';
 import { LoadingSpinner } from '../../components/ui/loading-spinner';
@@ -18,10 +18,7 @@ import { StatusChip } from '../../components/ui/status-chip';
 import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
-import { TabRowDemo } from './tab-row-demo';
-
-/** Lazy so the More-menu demo stays out of the DesignSystemPage chunk (bundle budget, ROK-1876). */
-const TabRowMoreDemo = lazy(() => import('./tab-row-more-demo').then((m) => ({ default: m.TabRowMoreDemo })));
+import { TabRowDemo, TabRowMoreDemo } from './tab-row-demo';
 
 /** Chip geometry per docs/design-system.md §4.3 (its /games adopters were retired by ROK-1659). */
 const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
@@ -188,9 +185,7 @@ export function PrimitivesSection(): JSX.Element {
                 <InputStates />
                 <EmptyAndLoading />
                 <TabRowDemo />
-                <Suspense fallback={null}>
-                    <TabRowMoreDemo />
-                </Suspense>
+                <TabRowMoreDemo />
             </StateGrid>
         </Section>
     );

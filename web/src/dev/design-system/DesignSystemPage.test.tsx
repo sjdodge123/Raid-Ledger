@@ -635,13 +635,12 @@ describe('DesignSystemPage — TabRow demo (ROK-1785)', () => {
         expect(within(demo).getByRole('region', { name: 'Overview' })).toHaveAttribute('id', 'ds-tab-overview');
     });
 
-    it('shows the TabRow More menu demo (ROK-1876) with both hub rows', async () => {
+    it('shows the TabRow More menu demo (ROK-1876) with both phone rows', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
-        // Lazy-loaded (bundle budget), so wait for its chunk.
-        const demo = await screen.findByTestId('ds-tab-row-more');
-        expect(within(demo).getByRole('navigation', { name: 'Demo hub sections' })).toBeInTheDocument();
-        const pinned = within(demo).getByRole('navigation', { name: 'Demo hub sections, Planner active' });
-        expect(within(pinned).getAllByRole('link').length, 'jsdom has no layout, so every tab stays in the row').toBe(7);
+        const demo = screen.getByTestId('ds-tab-row-more');
+        expect(within(demo).getByRole('navigation', { name: 'Demo page sections, phone' })).toBeInTheDocument();
+        const pinned = within(demo).getByRole('navigation', { name: 'Demo page sections, Resources active' });
+        expect(within(pinned).getAllByRole('link').length, 'jsdom has no layout, so every shown tab (Loot is hidden) stays in the row').toBe(5);
     });
 });
