@@ -206,7 +206,10 @@ test.describe('Hubs nav (ROK-1875)', () => {
         for (const viewport of NARROW_HEADER_VIEWPORTS) {
             await page.setViewportSize(viewport);
             await page.goto('/calendar');
-            await expect(page.getByTestId('nav-hubs-menu-trigger'), 'the widest case: a hub member gets the menu trigger').toBeVisible({ timeout: 15_000 });
+            const trigger = page.getByTestId('nav-hubs-menu-trigger');
+            await expect(trigger, 'the widest case: a hub member gets the menu trigger').toBeVisible({ timeout: 15_000 });
+            await expect(trigger.getByTestId('nav-hubs-circle'), `${viewport.width}px: the trigger shows the green Hubs circle`).toBeVisible();
+            await expect(trigger.getByText('Hubs', { exact: true }), `${viewport.width}px: below lg the trigger is circle + chevron only`).toBeHidden();
             await expect(page.getByTestId('user-menu-trigger')).toBeVisible({ timeout: 15_000 });
             await expectHeaderFits(page, viewport);
         }
@@ -220,6 +223,9 @@ test.describe('Hubs nav (ROK-1875)', () => {
             await expect(page.getByTestId('user-menu-trigger')).toBeVisible({ timeout: 15_000 });
             // index.css's unlayered .sr-only once beat lg:not-sr-only and left both labels 0px wide here.
             await expect(page.getByTestId('nav-insights-link').getByText('Insights', { exact: true }), `${viewport.width}px: the Insights label shows`).toBeVisible();
+            const trigger = page.getByTestId('nav-hubs-menu-trigger');
+            await expect(trigger.getByTestId('nav-hubs-circle'), `${viewport.width}px: the trigger leads with the green Hubs circle`).toBeVisible();
+            await expect(trigger.getByText('Hubs', { exact: true }), `${viewport.width}px: from lg the "Hubs" label shows beside the circle`).toBeVisible();
             const menu = must(await page.getByTestId('user-menu-trigger').boundingBox(), `${viewport.width}px user-menu box`);
             expect(menu.width, `${viewport.width}px: the user menu shows the username beside the avatar`).toBeGreaterThan(64);
             await expectHeaderFits(page, viewport);

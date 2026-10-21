@@ -14,6 +14,7 @@ import { Button } from '../../ui/button';
 import { onMenuKeyDown, useFocusFirstItem } from '../../ui/menu-keys';
 import { navClass } from '../nav-class';
 import { GuildRows } from './hub-entry-bits';
+import { HubsCircle } from './hubs-circle';
 import { HUBS_PATH, useMyGuildsQuery } from './my-hubs-queries';
 import { isHubsNavActive } from './use-hub-nav-active';
 
@@ -60,6 +61,20 @@ function HubsMenuPopover({ id, hubs, close }: PopoverProps): JSX.Element {
     );
 }
 
+/**
+ * The trigger / link face (operator ruling 2026-10-21): the shared green circle, then "Hubs" from lg. 768–1023px
+ * shows the circle alone so the tight header fits. Not sr-only + lg:not-sr-only — index.css's unlayered .sr-only
+ * beats Tailwind's layered utilities — so the label hides with `hidden lg:inline` and the host's aria-label names it.
+ */
+function HubsFace({ active }: { active: boolean }): JSX.Element {
+    return (
+        <>
+            <HubsCircle size="inline" active={active} testId="nav-hubs-circle" />
+            <span className="hidden lg:inline" aria-hidden="true">Hubs</span>
+        </>
+    );
+}
+
 function HubsMenu({ hubs, active }: { hubs: MyGuild[]; active: boolean }): JSX.Element {
     const [isOpen, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
@@ -72,10 +87,11 @@ function HubsMenu({ hubs, active }: { hubs: MyGuild[]; active: boolean }): JSX.E
     useOutsidePressClose(rootRef, isOpen, close);
     return (
         <div ref={rootRef} className="relative">
-            <Button ref={triggerRef} variant="ghost" size="sm" className="md:px-1 lg:px-3" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={isOpen}
+            <Button ref={triggerRef} variant="ghost" size="sm" className="md:px-1 lg:px-3" aria-label="Hubs" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={isOpen}
                 aria-controls={isOpen ? menuId : undefined} aria-current={active ? 'page' : undefined} data-testid="nav-hubs-menu-trigger">
-                <span className={`flex items-center gap-1 text-base ${navClass(active ? 'on' : '', 'on')}`}>
-                    Hubs <ChevronDownIcon className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                <span className={`flex items-center gap-1.5 text-base ${navClass(active ? 'on' : '', 'on')}`}>
+                    <HubsFace active={active} />
+                    <ChevronDownIcon className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </span>
             </Button>
             {isOpen && <HubsMenuPopover id={menuId} hubs={hubs} close={close} />}
@@ -89,7 +105,7 @@ export function HubsNavItem({ pathname }: { pathname: string }): JSX.Element {
     const active = isHubsNavActive(pathname);
     if (hubs.length > 0) return <HubsMenu hubs={hubs} active={active} />;
     return (
-        <Link to={HUBS_PATH} aria-current={active ? 'page' : undefined} data-testid="nav-hubs-link"
-            className={navClass(active ? 'on' : '', 'on')}>Hubs</Link>
+        <Link to={HUBS_PATH} aria-label="Hubs" aria-current={active ? 'page' : undefined} data-testid="nav-hubs-link"
+            className={`flex items-center gap-1.5 ${navClass(active ? 'on' : '', 'on')}`}><HubsFace active={active} /></Link>
     );
 }

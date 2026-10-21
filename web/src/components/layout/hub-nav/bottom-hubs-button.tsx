@@ -12,9 +12,9 @@
  */
 import { lazy, Suspense, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
-import { Squares2X2Icon } from '@heroicons/react/24/solid';
 import type { MyGuild } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
+import { HubsCircle } from './hubs-circle';
 import { HUBS_PATH, useMyGuildsQuery } from './my-hubs-queries';
 import { isHubsNavActive } from './use-hub-nav-active';
 
@@ -24,18 +24,11 @@ const BottomHubsSheet = lazy(() => import('./bottom-hubs-sheet'));
 const SLOT_CLASS = 'relative h-14 w-full group';
 /** The link variant adds the layout `Button variant="bare"` already brings. */
 const LINK_SLOT_CLASS = `${SLOT_CLASS} flex items-center justify-center focus-visible:outline-none`;
-/** The raised circle: `bg-success` + `text-white` (painted `--color-status-solid-label` on both families). */
-const CIRCLE_CLASS = 'absolute -top-6 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full '
-    + 'border-4 border-surface bg-success text-white shadow-lg transition-transform duration-75 group-active:scale-95 '
-    + 'group-focus-visible:ring-2 group-focus-visible:ring-success/50';
-const ACTIVE_RING = 'ring-2 ring-success/40 ring-offset-0';
 
 function SlotFace({ active }: { active: boolean }): JSX.Element {
     return (
         <>
-            <span data-testid="bottom-hubs-circle" aria-hidden="true" className={`${CIRCLE_CLASS} ${active ? ACTIVE_RING : ''}`}>
-                <Squares2X2Icon className="h-6 w-6" />
-            </span>
+            <HubsCircle size="raised" active={active} testId="bottom-hubs-circle" />
             <span className={`absolute inset-x-0 bottom-1.5 text-center text-[10px] font-medium ${active ? 'text-success' : 'text-secondary'}`}>Hubs</span>
         </>
     );
