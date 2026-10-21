@@ -227,7 +227,7 @@ describe('TabRow — the split never waits for a ResizeObserver report (review M
         expect(rowLabels(), 'narrower tabs after the swap fit one more in the row').toHaveLength(4);
     });
 
-    it('re-fits when the tab list grows (a plugin's tabs hydrating)', () => {
+    it("re-fits when the tab list grows (a plugin's tabs hydrating)", () => {
         mockWidths(330);
         const { rerender } = render(<TabRow tabs={TABS.slice(0, 3)} activeId="overview" label="Hub sections" />);
         expect(screen.queryByTestId('tab-row-more-trigger')).toBeNull();
