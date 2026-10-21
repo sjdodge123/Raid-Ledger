@@ -106,13 +106,14 @@ export class EventPlansService {
   ): Promise<EventPlanResponseDto> {
     const event = await this.eventsService.findOne(eventId);
     assertEventOwnerOrPrivileged(event, userId, userRole);
-    const { dto } = await executeConversion(
+    const { plan, dto } = await executeConversion(
       this.opsDeps(),
       event,
       userId,
       this.settingsService,
       options,
     );
+    GameActivityNudge.safeTouch(this.nudge, plan.gameId);
     await tryCancelOriginal(
       this.eventsService,
       eventId,
