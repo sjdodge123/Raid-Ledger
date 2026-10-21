@@ -5,9 +5,11 @@
  * entities (`&lt;b&gt;`), which `MarkdownBlock` would print verbatim. Outside
  * code spans we rewrite them to subset markdown instead: `&lt;` → `\<` (an
  * escaped `<` is legal text for `findHubPostMarkdownViolation`), `&gt;` → `>`,
- * `&amp;` → `&` (or `\&` when the `&` would otherwise read as an entity).
- * Code spans are emitted verbatim by TipTap and are left untouched. Empty
- * paragraphs (and TipTap's `&nbsp;` marker for them) collapse to one blank line.
+ * `&amp;` → `&`. Entity-looking text is stored bare (`&lt;`): `MarkdownBlock`
+ * prints it literally, and `prepareEditorMarkdown` escapes it on load so the
+ * editor shows it literally too (Codex r7). Code spans and link destinations
+ * are emitted verbatim by TipTap and are left untouched. Empty paragraphs (and
+ * TipTap's `&nbsp;` marker for them) collapse to one blank line.
  */
 const ENTITY = /&(lt|gt|amp);/g;
 /**
@@ -17,7 +19,8 @@ const ENTITY = /&(lt|gt|amp);/g;
  * (Codex r4). Backslashes inside a span are literal, so the closing run needs no such check.
  */
 const CODE_SPAN = /((?<!`)(?<!(?:^|[^\\])(?:\\\\)*\\)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
-const LOOKS_LIKE_ENTITY = /^[A-Za-z#][A-Za-z0-9]*;/;
+/** An `&` that starts an entity reference and is not already backslash-escaped. */
+const ENTITY_AMP = /(?<!(?:^|[^\\])(?:\\\\)*\\)&(?=[A-Za-z#][A-Za-z0-9]*;)/g;
 /**
  * TipTap's HTML reopen fallback for bold / italic across overlapping marks (`**a*b***<em>c</em>`,
  * Codex r6). Typed `<` is always entity-encoded, so a raw tag outside a code span is the fallback.
@@ -34,26 +37,71 @@ function collapseEmptyParagraphs(markdown: string): string {
     return markdown.replace(EMPTY_PARAGRAPH, '$1').replace(/\n{3,}/g, '\n\n').replace(/^\n{2,}|\n{2,}$/g, '');
 }
 
-/** Rewrite one non-code segment. */
+/** Rewrite the text of one non-code segment (never a link destination). */
+function decodeText(text: string): string {
+    return text.replace(MARK_TAG, (_m: string, tag: string): string => (tag === 'em' ? '*' : '**'))
+        .replace(ENTITY, (_m: string, name: string): string => (name === 'lt' ? '\\<' : name === 'gt' ? '>' : '&'));
+}
+
+/** Index of the `)` closing a destination whose `(` is just before `from` (balanced, `\`-escapes skipped — as MarkdownBlock reads it), or -1. */
+function closeParen(s: string, from: number): number {
+    let depth = 0;
+    for (let j = from; j < s.length; j++) {
+        const ch = s[j];
+        if (ch === '\\') j++;
+        else if (ch === '(') depth++;
+        else if (ch === ')' && depth-- === 0) return j;
+    }
+    return -1;
+}
+
+/** Split a non-code segment into [text, destination, text, …]; a destination is the `(…)` after an unescaped `]` (Codex r7). */
+function splitDestinations(segment: string): string[] {
+    const parts: string[] = [];
+    let from = 0;
+    for (let i = 0; i < segment.length; i++) {
+        if (segment[i] === '\\') { i++; continue; }
+        if (segment[i] !== ']' || segment[i + 1] !== '(') continue;
+        const end = closeParen(segment, i + 2);
+        if (end === -1) continue;
+        parts.push(segment.slice(from, i + 1), segment.slice(i + 1, end + 1));
+        from = end + 1;
+        i = end;
+    }
+    parts.push(segment.slice(from));
+    return parts;
+}
+
+/** Rewrite one non-code segment: text is decoded, link destinations stay byte-for-byte. */
 function decodeSegment(segment: string): string {
-    return segment.replace(MARK_TAG, (_m: string, tag: string): string => (tag === 'em' ? '*' : '**')).replace(ENTITY, (_m: string, name: string, offset: number): string => {
-        if (name === 'lt') return '\\<';
-        if (name === 'gt') return '>';
-        const rest = segment.slice(offset + 5);
-        return LOOKS_LIKE_ENTITY.test(rest) ? '\\&' : '&';
-    });
+    return splitDestinations(segment).map((part: string, i: number): string => (i % 2 === 1 ? part : decodeText(part))).join('');
+}
+
+/** Apply `rewrite` to the non-code parts only (split() with two groups yields [text, span, ticks, …]). */
+function outsideCode(markdown: string, rewrite: (part: string) => string): string {
+    return markdown.split(CODE_SPAN)
+        .flatMap((part: string, i: number): string[] => (i % 3 === 2 ? [] : [i % 3 === 1 ? part : rewrite(part)]))
+        .join('');
+}
+
+/**
+ * Stored markdown → what the editor's markdown parser loads (Codex r7). Stored entity text
+ * (`&lt;`) is literal — `MarkdownBlock` prints it as written — but the parser would decode it,
+ * so a save would rewrite `&lt;raid&gt;` to `<raid>`. Escaping the `&` keeps it literal text
+ * (and keeps a destination's `&amp;` as written); code spans are literal already.
+ * @param markdown - the stored hub-post body
+ * @returns the same document with every unescaped entity-starting `&` written `\&`
+ */
+export function prepareEditorMarkdown(markdown: string): string {
+    return outsideCode(markdown, (part: string): string => part.replace(ENTITY_AMP, '\\&'));
 }
 
 /**
  * Turn TipTap's serialised markdown into the stored subset form.
  * @param markdown - the raw `editor.getMarkdown()` output
- * @returns markdown with entity-encoded text rewritten (code spans untouched)
+ * @returns markdown with entity-encoded text rewritten (code spans and link destinations untouched)
  *   and empty paragraphs collapsed to a single paragraph break
  */
 export function normalizeEditorMarkdown(markdown: string): string {
-    return collapseEmptyParagraphs(markdown)
-        .split(CODE_SPAN)
-        // split() with two groups yields [text, span, ticks, text, span, ticks, …].
-        .flatMap((part: string, i: number): string[] => (i % 3 === 2 ? [] : [i % 3 === 1 ? part : decodeSegment(part)]))
-        .join('');
+    return outsideCode(collapseEmptyParagraphs(markdown), decodeSegment);
 }

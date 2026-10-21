@@ -12,7 +12,7 @@ import { useFieldContext, useFieldControlProps } from '../field-context';
 import { CharCounter } from '../char-counter';
 import { FIELD_FRAME_BASE, FOCUS_WITHIN_RING } from '../form-classes';
 import { buildMarkdownExtensions } from './markdown-extensions';
-import { normalizeEditorMarkdown } from './markdown-serialize';
+import { normalizeEditorMarkdown, prepareEditorMarkdown } from './markdown-serialize';
 import { flattenPastedLists } from './markdown-paste';
 import { MarkdownToolbar } from './markdown-toolbar';
 import { MarkdownLinkRow } from './markdown-link-row';
@@ -59,7 +59,7 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
         onLinkShortcut: () => setLinkOpen(true),
     }), [p.placeholder, setLinkOpen]);
     const editor = useEditor({
-        extensions, content: p.value, contentType: 'markdown', editable: !p.disabled,
+        extensions, content: prepareEditorMarkdown(p.value), contentType: 'markdown', editable: !p.disabled,
         autofocus: p.autoFocus ? 'end' : false, editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists },
         onUpdate: ({ editor: e }) => { const md = normalizeEditorMarkdown(e.getMarkdown()); last.current = md; p.onChange(md); },
     }, [extensions]);
@@ -68,7 +68,7 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
     useEffect(() => {
         if (p.value === last.current) return;
         last.current = p.value;
-        editor.commands.setContent(p.value, { contentType: 'markdown', emitUpdate: false });
+        editor.commands.setContent(prepareEditorMarkdown(p.value), { contentType: 'markdown', emitUpdate: false });
     }, [editor, p.value]);
     return editor;
 }

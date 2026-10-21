@@ -31,6 +31,9 @@ const ROUND_TRIP = [
     'plain words', '**bold** and *italic*', '~~gone~~ `code`', '[plan](https://example.com/a)',
     '[home](/guilds/7?post=3#posts)', '- one\n- two', '1. first\n2. second', 'line one  \nline two',
     'para one\n\npara two', '**Raid night** at 8\n\n- bring flasks\n- be on time',
+    // Codex r7: stored entity text is literal (MarkdownBlock prints it as typed) — a load + save keeps it.
+    'Use &lt;raid&gt;', 'a &amp; b &#39; c &nbsp; d', '**&lt;b&gt;** and `&lt;code&gt;` &copy;',
+    '[q](https://example.com/?q=&lt;)', '[both &amp;](https://example.com/?a=1&amp;b=2)',
 ];
 
 describe('MarkdownEditor (V10)', () => {
@@ -100,7 +103,8 @@ describe('MarkdownEditor (V10) — keyboard, paste, contract', () => {
     it('typed HTML / markdown-looking text never trips the contract scanner', () => {
         const { editor, last } = setup('');
         editor.view.dispatch(editor.state.tr.insertText('<script>x</script> & <b>y</b> **z** # h &lt;', 1));
-        expect(last()).toBe('\\<script>x\\</script> & \\<b>y\\</b> \\*\\*z\\*\\* # h \\&lt;');
+        // Typed `&lt;` is saved bare: the load path escapes entity-like `&` (Codex r7), so it stays literal.
+        expect(last()).toBe('\\<script>x\\</script> & \\<b>y\\</b> \\*\\*z\\*\\* # h &lt;');
         expect(findHubPostMarkdownViolation(last())).toBeNull();
     });
 
@@ -193,7 +197,19 @@ describe('MarkdownEditor — empty-paragraph markers (Codex r5)', () => {
         const { editor } = setup('');
         editor.commands.setContent({ type: 'doc', content });
         const saved = normalizeEditorMarkdown(editor.getMarkdown());
-        expect(saved, 'the typed entity text must survive').toContain('\\&nbsp;');
+        expect(saved, 'the typed entity text must survive').toContain('&nbsp;');
+        expect(saved, 'and must not be saved entity-encoded').not.toContain('&amp;');
+        expect(normalizeEditorMarkdown(setup(saved).editor.getMarkdown()), 'reloading the save must keep it').toBe(saved);
         expect(render(<MarkdownBlock text={saved} />).container.textContent).toBe(shown);
+    });
+});
+
+describe('MarkdownEditor — link destinations are not entity-decoded (Codex r7)', () => {
+    it.each([
+        ['[q](https://example.com/?q=&lt;)', '[q](https://example.com/?q=&lt;)'],
+        ['[a &amp; b](https://example.com/?a=1&amp;b=2)', '[a & b](https://example.com/?a=1&amp;b=2)'],
+        ['[w](https://x.test/Raid_(g&amp;)) &lt;', '[w](https://x.test/Raid_(g&amp;)) \\<'],
+    ])('normalising %j keeps the destination byte-for-byte', (raw, expected) => {
+        expect(normalizeEditorMarkdown(raw)).toBe(expected);
     });
 });
