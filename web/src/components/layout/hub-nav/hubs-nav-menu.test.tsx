@@ -5,7 +5,7 @@
  * they have one.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse, delay } from 'msw';
 import type { GuildKind, MyGuild } from '@raid-ledger/contract';
@@ -169,5 +169,40 @@ describe('HubsNavItem — keyboard (§4.14)', () => {
         await openWithKeys();
         await userEvent.keyboard('{Tab}');
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+});
+
+describe('HubsNavItem — the shared Hubs circle (operator ruling 2026-10-21)', () => {
+    /** The decorative 28px circle + a label that shows only from lg; the name comes from aria-label. */
+    function expectCircleFace(host: HTMLElement): void {
+        expect(host).toHaveAttribute('aria-label', 'Hubs');
+        const circle = within(host).getByTestId('nav-hubs-circle');
+        expect(circle).toHaveAttribute('aria-hidden', 'true');
+        for (const cls of ['h-7', 'w-7', 'rounded-full', 'bg-success', 'text-white']) {
+            expect(circle.className.split(' '), `the desktop circle carries ${cls}`).toContain(cls);
+        }
+        const label = within(host).getByText('Hubs', { exact: true });
+        expect(label.className.split(' '), 'the label hides below lg').toEqual(expect.arrayContaining(['hidden', 'lg:inline']));
+        expect(label.className, 'never sr-only + lg:not-sr-only — the unlayered .sr-only wins').not.toMatch(/sr-only/);
+    }
+
+    it('the menu trigger leads with the circle, then a label that shows from lg', async () => {
+        serve(TWO);
+        renderWithProviders(<HubsNavItem pathname="/players" />);
+        expectCircleFace(await screen.findByTestId('nav-hubs-menu-trigger'));
+    });
+
+    it('the plain link (no hubs) shows the same circle and label', async () => {
+        serve([]);
+        const done = settled();
+        renderWithProviders(<HubsNavItem pathname="/players" />);
+        await done;
+        expectCircleFace(screen.getByTestId('nav-hubs-link'));
+    });
+
+    it('active → the circle takes the phone button\'s ring', async () => {
+        serve([]);
+        renderWithProviders(<HubsNavItem pathname="/hubs" />);
+        expect(screen.getByTestId('nav-hubs-circle').className).toContain('ring-success/40');
     });
 });
