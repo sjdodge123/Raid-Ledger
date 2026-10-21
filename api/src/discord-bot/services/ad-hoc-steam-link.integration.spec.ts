@@ -11,6 +11,7 @@
  * listener), spying on the real singleton `NotificationService.create`.
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import type Redis from 'ioredis';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -67,7 +68,7 @@ async function insertUser(steamId: string | null = null) {
       .returning(),
     'user',
   );
-  await testApp.app.get(REDIS_CLIENT).del(NUDGE_KEY(user.id));
+  await testApp.app.get<Redis>(REDIS_CLIENT).del(NUDGE_KEY(user.id));
   return user;
 }
 
@@ -180,17 +181,17 @@ describe('AC8 — merge-on-link', () => {
   });
 });
 
-describe('AC9 — Steam-link nudge', () => {
-  const nudgeFor = (userId: number, eventId: number) => ({
-    userId,
-    type: 'lineup_steam_nudge',
-    title: 'Link your Steam account',
-    message: expect.stringContaining(
-      'Quick Play and a Steam player is on the game server',
-    ),
-    payload: { eventId, gameId: testApp.seed.game.id },
-  });
+const nudgeFor = (userId: number, eventId: number) => ({
+  userId,
+  type: 'lineup_steam_nudge',
+  title: 'Link your Steam account',
+  message: expect.stringContaining(
+    'Quick Play and a Steam player is on the game server',
+  ),
+  payload: { eventId, gameId: testApp.seed.game.id },
+});
 
+describe('AC9 — Steam-link nudge', () => {
   it('nudges a voice member without Steam once per 30 days', async () => {
     const user = await insertUser();
     const first = await insertEvent();
