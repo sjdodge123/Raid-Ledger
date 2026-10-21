@@ -1,5 +1,6 @@
 /**
- * ROK-1875 — one "Hubs" nav item + the all-kinds `/hubs` directory smoke
+ * ROK-1875 — one "Hubs" nav item (header menu from 768px; the bottom bar's
+ * raised centre Hubs circle + the More drawer below it) + the all-kinds `/hubs` directory smoke
  * (desktop, mobile AND tablet).
  *
  * Seed, per project (the projects run in parallel; tests in a file run in
@@ -131,6 +132,23 @@ async function expectHeaderMenu(page: Page, seed: Seed): Promise<void> {
     await expect(menu, 'picking an item closes the menu').toHaveCount(0);
 }
 
+/** Phone (below 768px): the raised centre Hubs circle of the bottom bar opens "Your hubs" (operator ruling 2026-10-21). */
+async function expectBottomHubs(page: Page, seed: Seed): Promise<void> {
+    const bar = page.getByTestId('bottom-tab-bar');
+    await expect(bar.getByTestId('bottom-tab-grid').locator(':scope > *').nth(2), 'Hubs is the middle of five slots').toHaveAttribute('aria-label', 'Hubs', { timeout: 15_000 });
+    const trigger = bar.getByTestId('bottom-hubs-trigger');
+    await expect(trigger, 'a hub member gets the Hubs sheet trigger').toHaveAttribute('aria-haspopup', 'dialog');
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const sheet = page.getByRole('dialog', { name: 'Your hubs' });
+    await expect(rowFor(sheet, seed.serverHubId).getByTestId('hub-kind-chip'), 'the server row reads "Server"').toContainText('Server');
+    await expect(rowFor(sheet, seed.crewId).getByTestId('hub-kind-chip'), 'the community row reads "Community"').toContainText('Community');
+    const browse = sheet.getByTestId('bottom-hubs-browse-all');
+    await expect(browse).toContainText('Browse all hubs');
+    await browse.click();
+    await expect(trigger, 'Browse closes the sheet').toHaveAttribute('aria-expanded', 'false');
+}
+
 async function expectDrawerHubs(page: Page, seed: Seed): Promise<void> {
     const panel = await openDrawer(page);
     const block = panel.getByTestId('drawer-your-guild');
@@ -143,12 +161,18 @@ async function expectDrawerHubs(page: Page, seed: Seed): Promise<void> {
 }
 
 test.describe('Hubs nav (ROK-1875)', () => {
-    test('a member of a server + a community hub: Hubs menu (≥768px) / More drawer (phone) lists both with kind chips, then Browse all hubs', async ({ page }, testInfo) => {
+    test('a member of a server + a community hub: Hubs menu (≥768px) / bottom Hubs sheet + More drawer (phone) list both with kind chips, then Browse all hubs', async ({ page }, testInfo) => {
         const seed = await seedMember(page, testInfo);
         await page.goto('/calendar');
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) await expectHeaderMenu(page, seed);
-        else await expectDrawerHubs(page, seed);
+        else {
+            await expectBottomHubs(page, seed);
+            await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
+            // The More drawer keeps its "Your hubs" block (discoverability) beside the bottom button.
+            await page.goto('/calendar');
+            await expectDrawerHubs(page, seed);
+        }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
     });
@@ -166,6 +190,9 @@ test.describe('Hubs nav (ROK-1875)', () => {
             await expect(nav.getByTestId('nav-hubs-menu-trigger'), 'no hubs → no menu trigger').toHaveCount(0);
             await link.click();
         } else {
+            const bottom = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-link');
+            await expect(bottom, 'no hubs → the bottom Hubs circle is a plain link').toHaveAttribute('href', '/hubs', { timeout: 15_000 });
+            await expect(page.getByTestId('bottom-hubs-trigger'), 'no hubs → no sheet trigger').toHaveCount(0);
             const panel = await openDrawer(page);
             await expect(panel.getByTestId('drawer-hubs-link')).toBeVisible({ timeout: 15_000 });
             await expect(panel.getByTestId('drawer-your-guild'), 'no hubs → no "Your hubs" block').toHaveCount(0);
