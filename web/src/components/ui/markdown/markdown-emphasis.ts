@@ -30,17 +30,18 @@ export type EmphasisItem = InlineNode | Delim;
 const isSpace = (ch: string | undefined): boolean => ch === undefined || ch.trim() === '';
 const isPunct = (ch: string | undefined): boolean => ch !== undefined && /[\p{P}\p{S}]/u.test(ch);
 
-/** The character at `from` walking by `step`, looking through any `skip` run. */
+/** The character at `from` walking by `step`, looking through any characters in `skip`. */
 function neighbour(s: string, from: number, step: number, skip: string): string | undefined {
     let j = from;
-    while (skip !== '' && s[j] === skip) j += step;
+    for (let ch = s[j]; ch !== undefined && skip.includes(ch); ch = s[j]) j += step;
     return s[j];
 }
 
 /**
  * The `*` / `_` run starting at i with its flanking flags, or null when s[i] is neither.
- * `skip` (`~` when strike is on) is looked through when judging flanking: the editor
- * emits `**~~a~~***b*`, where a strike delimiter must not count as punctuation.
+ * `skip` (`~*` when strike is on) is looked through when judging flanking: the editor
+ * emits `**~~a~~***b*` and `a**~~*b*c~~**`, where neither a strike delimiter nor an
+ * emphasis run nested inside one may count as punctuation (Codex r5/r6).
  */
 export function emphasisDelim(s: string, i: number, skip: string): Delim | null {
     const c = s[i];
@@ -64,11 +65,15 @@ export function pushNode(out: InlineNode[], item: EmphasisItem): void {
     else out.push(node);
 }
 
-/** CommonMark's "multiple of 3" rule: a run that can both open and close may not pair across it. */
+/**
+ * CommonMark's "multiple of 3" rule: a run that can both open and close may not pair across it.
+ * Judged on the REMAINING lengths, not the original runs (Codex r6): after `**a***b**c***`
+ * pairs `**…**` the 3-run left in front of `c` must still pair as strong + em.
+ */
 function compatible(o: Delim, cl: Delim): boolean {
     if (o.c !== cl.c || !o.open || o.count === 0) return false;
     const both = (o.open && o.close) || (cl.open && cl.close);
-    return !both || (o.orig + cl.orig) % 3 !== 0 || (o.orig % 3 === 0 && cl.orig % 3 === 0);
+    return !both || (o.count + cl.count) % 3 !== 0 || (o.count % 3 === 0 && cl.count % 3 === 0);
 }
 
 /** Index of the nearest opener before ci that can pair with the closer at ci, or -1. */

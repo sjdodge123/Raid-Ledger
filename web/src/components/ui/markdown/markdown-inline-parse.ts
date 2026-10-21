@@ -184,7 +184,7 @@ function parseWith(ctx: Ctx): InlineNode[] {
     const items: EmphasisItem[] = [];
     let i = 0;
     while (i < ctx.s.length) {
-        const delim = ctx.depth < MAX_DEPTH ? emphasisDelim(ctx.s, i, ctx.opts.strike ? '~' : '') : null;
+        const delim = ctx.depth < MAX_DEPTH ? emphasisDelim(ctx.s, i, ctx.opts.strike ? '~*' : '') : null;
         if (delim) { items.push(delim); i += delim.count; continue; }
         const hit = matchAt(ctx, i);
         if (hit) items.push(...hit.nodes);

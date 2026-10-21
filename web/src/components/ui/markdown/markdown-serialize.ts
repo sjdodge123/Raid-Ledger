@@ -19,6 +19,11 @@ const ENTITY = /&(lt|gt|amp);/g;
 const CODE_SPAN = /((?<!`)(?<!(?:^|[^\\])(?:\\\\)*\\)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
 const LOOKS_LIKE_ENTITY = /^[A-Za-z#][A-Za-z0-9]*;/;
 /**
+ * TipTap's HTML reopen fallback for bold / italic across overlapping marks (`**a*b***<em>c</em>`,
+ * Codex r6). Typed `<` is always entity-encoded, so a raw tag outside a code span is the fallback.
+ */
+const MARK_TAG = /<\/?(em|strong)>/g;
+/**
  * TipTap writes the 2nd+ of consecutive empty paragraphs as a bare `&nbsp;` line (Codex r5).
  * Text typed as `&nbsp;` is serialised `&amp;nbsp;`, so a bare line is always the marker.
  */
@@ -31,7 +36,7 @@ function collapseEmptyParagraphs(markdown: string): string {
 
 /** Rewrite one non-code segment. */
 function decodeSegment(segment: string): string {
-    return segment.replace(ENTITY, (_m: string, name: string, offset: number): string => {
+    return segment.replace(MARK_TAG, (_m: string, tag: string): string => (tag === 'em' ? '*' : '**')).replace(ENTITY, (_m: string, name: string, offset: number): string => {
         if (name === 'lt') return '\\<';
         if (name === 'gt') return '>';
         const rest = segment.slice(offset + 5);
