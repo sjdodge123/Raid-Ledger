@@ -57,6 +57,10 @@ function slot(voterIds: number[]): ScheduleSlotWithVotesDto {
 
 function renderForm(voterIds: number[], props: Parameters<typeof CreateEventForm>[0] = {}) {
     vi.mocked(getSchedulePoll).mockResolvedValue(partialResult<SchedulePollPageResponseDto>({ slots: [slot(voterIds)] }));
+    return mountForm(props);
+}
+
+function mountForm(props: Parameters<typeof CreateEventForm>[0] = {}) {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
         <QueryClientProvider client={qc}>
@@ -71,7 +75,9 @@ const notice = () => screen.queryByTestId('scheduling-overflow-notice');
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuth>>({ user: partialResult({ id: CREATOR }) }));
+    vi.mocked(useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuth>>({
+        user: partialResult<NonNullable<ReturnType<typeof useAuth>['user']>>({ id: CREATOR }),
+    }));
 });
 
 describe('SchedulingOverflowNotice on the create form', () => {
@@ -123,10 +129,11 @@ describe('SchedulingOverflowNotice on the create form', () => {
         expect(notice()).not.toBeInTheDocument();
     });
 
-    it('stays hidden while the poll errors', async () => {
-        renderForm([1, 2, 3, 4, 5]);
-        vi.mocked(getSchedulePoll).mockReset();
+    it('stays hidden when the poll fetch errors, and the form still renders', async () => {
         vi.mocked(getSchedulePoll).mockRejectedValue(new Error('boom'));
+        mountForm();
+        await waitFor(() => expect(getSchedulePoll).toHaveBeenCalled());
         expect(notice()).not.toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Players slots' })).toBeInTheDocument();
     });
 });
