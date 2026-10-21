@@ -7,6 +7,7 @@ import {
   createTextChannel,
   ensureCategory,
   revertArchive,
+  revertUnarchive,
   setTopic,
   unarchiveChannel,
   type EnsuredCategory,
@@ -241,22 +242,33 @@ async function restoreParent(
   return gamesParent(ctx);
 }
 
-/** Unarchive (D6): move back to `restoreParent`, clear only the bits archive added. */
+/**
+ * Unarchive (D6): move back to `restoreParent`, clear only the bits archive
+ * added. A failed DB write re-locks the channel in Discord, as archive does,
+ * so the still-archived binding matches it (Codex r17 P2).
+ */
 async function applyUnarchive(
   ctx: ApplyContext,
   game: PlannedGame,
   binding: LifecycleCandidateBinding,
 ): Promise<ItemOutcome> {
-  await unarchiveChannel(ctx.guild, binding.channelId, {
+  const added = binding.archivedOverwrites;
+  const res = await unarchiveChannel(ctx.guild, binding.channelId, {
     parentId: await restoreParent(ctx, binding),
-    added: binding.archivedOverwrites,
+    added,
   });
-  await setLifecycleState(ctx.db, binding.id, {
-    lifecycleState: 'active',
-    archivedAt: null,
-    restoreParentId: null,
-    archivedOverwrites: null,
-  });
+  try {
+    await setLifecycleState(ctx.db, binding.id, {
+      lifecycleState: 'active',
+      archivedAt: null,
+      restoreParentId: null,
+      archivedOverwrites: null,
+    });
+  } catch (err) {
+    const parentId = res.previousParentId;
+    await revertUnarchive(ctx.guild, binding.channelId, { parentId, added });
+    throw err;
+  }
   return { outcome: 'done', detail: game.reason };
 }
 

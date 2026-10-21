@@ -74,7 +74,9 @@ beforeEach(async () => {
     restoreParentId: 'old-parent',
     added: ADDED,
   });
-  jest.spyOn(ops, 'unarchiveChannel').mockResolvedValue(undefined);
+  jest.spyOn(ops, 'unarchiveChannel').mockResolvedValue({
+    previousParentId: 'arch-parent',
+  });
   await settings.setChannelLifecycleSettings({
     enabled: true,
     maxChangesPerTick: 10,
