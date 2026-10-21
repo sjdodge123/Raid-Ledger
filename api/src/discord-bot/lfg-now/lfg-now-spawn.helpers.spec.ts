@@ -73,13 +73,17 @@ describe('spawnUnderGroupLock', () => {
   it('takes the LFG group advisory lock before reading anything', async () => {
     const db = mockDb([], [hand(), hand({ userId: 2 })]);
     await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
-    expect(db.execute).toHaveBeenCalledTimes(1);
+    // ROK-1888: the group lock first, then the per-game Quick Play lock.
+    expect(db.execute).toHaveBeenCalledTimes(2);
     const [statement] = db.execute.mock.calls[0] as [
       { queryChunks: unknown[] },
     ];
     const rendered = JSON.stringify(statement);
     expect(rendered).toContain('pg_advisory_xact_lock');
     expect(rendered).toContain('lfg:42');
+    const [gameLock] = db.execute.mock.calls[1] as [{ queryChunks: unknown[] }];
+    expect(JSON.stringify(gameLock)).toContain('pg_advisory_xact_lock');
+    expect(JSON.stringify(gameLock)).toContain('1801');
   });
 
   it('spawns once two now-hands are live, hosted by the EARLIEST hand', async () => {
