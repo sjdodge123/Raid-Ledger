@@ -68,7 +68,7 @@ interface RunFlow {
     preview: () => void; runNow: () => void; confirm: () => void; close: () => void;
 }
 
-/** Preview / Run now / confirm state; the confirm opens only when the plan can and would change something. */
+/** Preview / Run now / confirm state; the confirm opens whenever the plan can go ahead (zero changes still sweeps deleted channels). */
 function useRunFlow(): RunFlow {
     const reconcile = useReconcile();
     const [result, setResult] = useState<ReconcileResultDto | null>(null);

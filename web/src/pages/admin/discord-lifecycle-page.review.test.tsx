@@ -106,13 +106,15 @@ describe('Run now gating + errors (review MAJOR 2 + MINOR)', () => {
         expect(runs).toEqual(['true']);
     });
 
-    it('skips the confirm when the dry run plans zero changes', async () => {
+    it('a zero-change preview still offers the live run, which sweeps deleted channels (Codex r14 P2)', async () => {
         const runs = reconcileReturns({});
         renderWithProviders(<DiscordLifecyclePage />);
         await userEvent.click(await screen.findByRole('button', { name: 'Run now' }));
         expect(await screen.findByText(/Nothing to change/)).toBeInTheDocument();
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        expect(runs).toEqual(['true']);
+        const dialog = await screen.findByRole('dialog');
+        expect(within(dialog).getByText('No changes planned — run anyway to sweep deleted channels?')).toBeInTheDocument();
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Run in Discord' }));
+        await waitFor(() => expect(runs).toEqual(['true', 'false']));
     });
 
     it('a 409 on the confirm path renders inside the dialog, which stays open', async () => {

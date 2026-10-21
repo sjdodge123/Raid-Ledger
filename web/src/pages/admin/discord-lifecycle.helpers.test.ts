@@ -24,8 +24,8 @@ describe('needsConfirm', () => {
         expect(needsConfirm(result({ linkedHubs: 2 }))).toBe(true);
     });
 
-    it('does not confirm a dry run with nothing to do', () => {
-        expect(needsConfirm(result())).toBe(false);
+    it('still confirms a dry run with nothing planned — the live run sweeps deleted channels (Codex r14 P2)', () => {
+        expect(needsConfirm(result())).toBe(true);
     });
 
     it('does not confirm a stopped run, even with hub links planned', () => {
@@ -44,5 +44,9 @@ describe('confirmCopy', () => {
         expect(confirmCopy(result({ created: 2, archived: 1 }))).toBe(
             'Create 2, archive 1, unarchive 0 channels in Discord?',
         );
+    });
+
+    it('offers the gone-channel sweep when nothing is planned (Codex r14 P2)', () => {
+        expect(confirmCopy(result())).toBe('No changes planned — run anyway to sweep deleted channels?');
     });
 });

@@ -95,6 +95,7 @@ export function relativeTime(iso: string | null): string {
 
 /** The confirm prompt: "Create 2, archive 1, unarchive 0 channels [and link 1 hubs] in Discord?" */
 export function confirmCopy(r: ReconcileResultDto): string {
+    if (plannedChanges(r) === 0 && r.linkedHubs === 0) return 'No changes planned — run anyway to sweep deleted channels?';
     const hubs = r.linkedHubs > 0 ? ` and link ${r.linkedHubs} hubs` : '';
     return `Create ${r.created}, archive ${r.archived}, unarchive ${r.unarchived} channels${hubs} in Discord?`;
 }
@@ -104,9 +105,12 @@ export function plannedChanges(r: ReconcileResultDto): number {
     return r.created + r.archived + r.unarchived;
 }
 
-/** Ask to confirm only a dry run that can go ahead and would change something (hub links included). */
+/**
+ * Confirm every dry run that can go ahead — even a zero-change one, because only
+ * the live run sweeps hand-deleted channels (Codex r14 P2). A stopped run never confirms.
+ */
 export function needsConfirm(r: ReconcileResultDto): boolean {
-    return !r.stoppedReason && (plannedChanges(r) > 0 || r.linkedHubs > 0);
+    return !r.stoppedReason;
 }
 
 /** One-line result summary: future tense for a dry run, past for a real one. */
