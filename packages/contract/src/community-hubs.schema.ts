@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GuildKindSchema } from './guilds.schema.js';
 
 /**
  * ROK-1870 — game community hubs: a third hub kind for games with no Pelican
@@ -118,6 +119,8 @@ export const HubDirectoryQuerySchema = z
     sort: z.enum(['members', 'name', 'newest']).default('members'),
     cursor: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(50).default(24),
+    /** ROK-1875: one hub kind only; absent = every kind live on this instance. */
+    kind: GuildKindSchema.optional(),
   })
   .strict();
 export type HubDirectoryQuery = z.infer<typeof HubDirectoryQuerySchema>;
@@ -136,6 +139,8 @@ export const HubDirectoryEntrySchema = z
     memberCount: z.number().int().nonnegative(),
     leaderName: z.string().nullable(),
     viewer: HubViewerStateSchema,
+    /** ROK-1875: the hub's kind — the directory lists community, game-server and WoW guild hubs. */
+    kind: GuildKindSchema,
   })
   .strict();
 export type HubDirectoryEntry = z.infer<typeof HubDirectoryEntrySchema>;
@@ -145,6 +150,8 @@ export const HubDirectoryPageSchema = z
     items: z.array(HubDirectoryEntrySchema),
     nextCursor: z.string().nullable(),
     total: z.number().int().nonnegative(),
+    /** ROK-1875: kinds live on this instance (plugin-active), in `GUILD_KINDS` order; ignores the `kind` filter. */
+    kinds: z.array(GuildKindSchema),
   })
   .strict();
 export type HubDirectoryPage = z.infer<typeof HubDirectoryPageSchema>;

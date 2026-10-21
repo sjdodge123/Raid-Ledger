@@ -18,7 +18,7 @@ vi.mock('../hooks/use-game-search', () => ({
 const BASE: HubsDirectoryParams = { membership: 'all', sort: 'members' };
 
 function filters(params: HubsDirectoryParams, gameName?: string): JSX.Element {
-    return <HubsDirectoryFilters params={params} gameName={gameName} onChange={vi.fn()} isOpen onOpenChange={vi.fn()} />;
+    return <HubsDirectoryFilters params={params} gameName={gameName} kinds={[]} onChange={vi.fn()} isOpen onOpenChange={vi.fn()} />;
 }
 
 const gameBox = (): HTMLElement => screen.getByRole('combobox', { name: 'Game' });

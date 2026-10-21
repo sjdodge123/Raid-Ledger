@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { ChartBarIcon } from '@heroicons/react/24/outline';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from '../notifications';
@@ -9,9 +10,7 @@ import { API_BASE_URL } from '../../lib/config';
 import { Z_INDEX } from '../../lib/z-index';
 import { PluginSlot } from '../../plugins';
 import { navClass } from './nav-class';
-import { NavGuildLink } from './hub-nav/nav-guild-link';
-import { HUBS_PATH } from './hub-nav/my-hubs-queries';
-import { useHubNavActive } from './hub-nav/use-hub-nav-active';
+import { HubsNavItem } from './hub-nav/hubs-nav-menu';
 
 interface HeaderProps {
     /** Called when the mobile hamburger button is tapped. */
@@ -26,29 +25,31 @@ interface HeaderProps {
  * On mobile, hides on scroll-down and reappears on scroll-up
  * (same pattern as the bottom tab bar).
  */
-const NAV_LINKS = [
-    { to: '/calendar', label: 'Calendar', membersOnly: false },
-    { to: '/games', label: 'Games', membersOnly: false },
-    /* ROK-1870 (operator ruling 17:05Z): the hub directory needs a session, so members only. */
-    { to: HUBS_PATH, label: 'Hubs', membersOnly: true },
-    { to: '/events', label: 'Events', membersOnly: false },
-    { to: '/players', label: 'Players', membersOnly: false },
-];
+const LEADING_LINKS = [{ to: '/calendar', label: 'Calendar' }, { to: '/games', label: 'Games' }];
+const TRAILING_LINKS = [{ to: '/events', label: 'Events' }, { to: '/players', label: 'Players' }];
+
+function NavLinks({ links, pathname }: { links: typeof LEADING_LINKS; pathname: string }) {
+    return <>{links.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}</>;
+}
 
 function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
-    // A community hub page lights "Hubs", not "Guild" (ROK-1870).
-    const hubsActive = useHubNavActive(pathname).hubs;
-    const linkPath = (to: string): string => (to === HUBS_PATH && hubsActive ? HUBS_PATH : pathname);
     return (
         <>
-            <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
-                {NAV_LINKS.filter((l) => user || !l.membersOnly).map(({ to, label }) => <Link key={to} to={to} className={navClass(linkPath(to), to)}>{label}</Link>)}
+            {/* 768–1023px (ROK-1875): tighter gaps, Insights collapses to its icon and the brand truncates, so the row fits — the username collapses too (UserMenu). */}
+            <nav aria-label="Main navigation" className="hidden md:flex shrink-0 items-center gap-3 lg:gap-4 xl:gap-6">
+                <NavLinks links={LEADING_LINKS} pathname={pathname} />
+                {/* ROK-1875: one Hubs item (a link, or the "Your hubs" menu) for members, from md; the directory needs a session. */}
+                {user && <HubsNavItem pathname={pathname} />}
+                <NavLinks links={TRAILING_LINKS} pathname={pathname} />
                 {/* Plugin links show from lg: at md (768) the core links already fill the row (ROK-1785). */}
-                {user && <span className="hidden lg:contents"><NavGuildLink pathname={pathname} /><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
+                {user && <span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
                 {user && (
                     <>
                         <span className="w-px h-5 bg-edge" aria-hidden="true" />
-                        <Link to="/insights" className={navClass(pathname, '/insights')}>Insights</Link>
+                        <Link to="/insights" aria-label="Insights" className={`flex items-center ${navClass(pathname, '/insights')}`} data-testid="nav-insights-link">
+                            {/* Not sr-only + lg:not-sr-only: index.css's unlayered .sr-only beats Tailwind's layered lg:not-sr-only. */}
+                            <ChartBarIcon className="h-5 w-5 lg:hidden" aria-hidden="true" /><span className="hidden lg:inline" aria-hidden="true">Insights</span>
+                        </Link>
                     </>
                 )}
             </nav>
@@ -60,7 +61,7 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
 
 function DesktopActions({ user }: { user: User | null }) {
     return (
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex shrink-0 items-center gap-3 lg:gap-4">
             <ThemeToggle />
             {user ? (<><NotificationBell /><UserMenu /></>) : (
                 <Link to="/login" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors text-sm">Login</Link>
@@ -71,9 +72,9 @@ function DesktopActions({ user }: { user: User | null }) {
 
 function CommunityLogo({ logoUrl, name }: { logoUrl: string | null; name: string }) {
     return (
-        <Link to="/" className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors">
-            {logoUrl ? <img src={logoUrl} alt={name} className="w-8 h-8 rounded-lg object-contain" width={32} height={32} /> : <span className="text-2xl">&#x2694;&#xFE0F;</span>}
-            {name}
+        <Link to="/" className="flex min-w-0 items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors" data-testid="header-brand">
+            {logoUrl ? <img src={logoUrl} alt={name} className="w-8 h-8 shrink-0 rounded-lg object-contain" width={32} height={32} /> : <span className="shrink-0 text-2xl">&#x2694;&#xFE0F;</span>}
+            <span className="truncate whitespace-nowrap">{name}</span>
         </Link>
     );
 }

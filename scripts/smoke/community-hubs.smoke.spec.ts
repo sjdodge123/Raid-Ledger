@@ -49,8 +49,8 @@ interface NotificationRow {
     payload?: Record<string, unknown>;
 }
 
-const HEADER_NAV_MIN_WIDTH = 1024;
-const USER_MENU_MIN_WIDTH = 768;
+/** Header `md:` — from 768px the header carries the Hubs item (ROK-1875); below it the More drawer. */
+const HEADER_HUBS_MIN_WIDTH = 768;
 const ADMIN_HUBS_PATH = '/admin/settings/general/hubs';
 const PROJECT_SLOT: Record<string, number> = { desktop: 0, mobile: 1, tablet: 2 };
 
@@ -200,7 +200,7 @@ test.describe('community hubs — member', () => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
         await page.goto(`/hubs?game=${seed.gameId}&membership=not-joined`);
-        await expect(page.getByRole('heading', { name: 'Community hubs', level: 1 })).toBeVisible({ timeout: 20_000 });
+        await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 20_000 });
         const cards = page.getByTestId('hub-directory-card');
         await expect(cards.filter({ hasText: 'Seed Solo' }), 'not-joined lists the hub the actor is outside').toHaveCount(1, {
             timeout: 15_000,
@@ -242,20 +242,19 @@ test.describe('community hubs — member', () => {
         await expect(page.getByTestId('community-hub-join')).toBeVisible({ timeout: 15_000 });
     });
 
-    test('nav: the Hubs item is in the header (≥1024px), user menu (768–1023px) or More drawer (phone)', async ({ page }, testInfo) => {
+    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the More drawer (phone)', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         await signInOnboardedMember(page, actorId(seed, testInfo));
         await page.goto('/calendar');
         const width = page.viewportSize()?.width ?? 0;
-        const headerLink = page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Hubs', exact: true });
-        if (width >= HEADER_NAV_MIN_WIDTH) {
-            await expect(headerLink, 'Hubs sits in the header from 1024px').toBeVisible({ timeout: 15_000 });
-            await headerLink.click();
-        } else if (width >= USER_MENU_MIN_WIDTH) {
-            await page.getByTestId('user-menu-trigger').click();
-            const item = page.getByTestId('user-menu-browse-hubs');
-            await expect(item, '768–1023px: "Browse hubs" in the user menu').toBeVisible({ timeout: 15_000 });
-            await item.click();
+        if (width >= HEADER_HUBS_MIN_WIDTH) {
+            // ROK-1875: the actor is in Seed Crew, so the header Hubs item is a menu (not a plain link).
+            const trigger = page.getByRole('navigation', { name: 'Main navigation' }).getByTestId('nav-hubs-menu-trigger');
+            await expect(trigger, 'a hub member gets the Hubs menu in the header from 768px').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const browse = page.getByRole('menu', { name: 'Hubs' }).getByTestId('nav-hubs-browse-all');
+            await expect(browse, '"Browse all hubs" closes the Hubs menu').toBeVisible({ timeout: 15_000 });
+            await browse.click();
         } else {
             await page.getByRole('button', { name: 'Open menu' }).click();
             const row = page.getByTestId('more-drawer-panel').getByTestId('drawer-hubs-link');
@@ -263,7 +262,7 @@ test.describe('community hubs — member', () => {
             await row.click();
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
-        await expect(page.getByRole('heading', { name: 'Community hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
     });
 });
 

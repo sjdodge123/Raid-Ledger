@@ -56,7 +56,7 @@ function SchedulePollNotFound(): JSX.Element {
 function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
   const eventId = poll.match.linkedEventId;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-12 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       <PollPrivateBar poll={poll} />
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
@@ -91,7 +91,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
 }): JSX.Element {
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-12 space-y-6">
       <PollPrivateBar poll={poll} />
       <SchedulingComposite poll={poll} lineupId={lineupId} matchId={matchId} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
