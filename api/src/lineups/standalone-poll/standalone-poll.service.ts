@@ -203,7 +203,7 @@ export class StandalonePollService {
       allVoters,
       startTime,
     );
-    await autoSignupSlotVoters({
+    const { benchedUserIds } = await autoSignupSlotVoters({
       eventId,
       creatorId: creatorId ?? -1,
       voters: selectedVoters,
@@ -220,6 +220,7 @@ export class StandalonePollService {
       },
       selectedVoters,
       otherVoters,
+      benchedUserIds,
       startTime,
       eventId,
       gameName ?? 'Game Night',
