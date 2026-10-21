@@ -7,7 +7,12 @@
  * Archive/unarchive live in `channel-lifecycle.archive-ops.ts` (re-exported).
  */
 import { Logger } from '@nestjs/common';
-import { ChannelType, type Guild, type GuildBasedChannel } from 'discord.js';
+import {
+  ChannelType,
+  type Guild,
+  type GuildBasedChannel,
+  type OverwriteData,
+} from 'discord.js';
 import { listGuildCategories } from '../discord-bot-client.guild.helpers';
 import {
   isDiscordCode,
@@ -162,13 +167,36 @@ export function categorySeriesIds(guild: Guild, base: string): Set<string> {
   return new Set(overflowSeries(guild, base).series.map((c) => c.id));
 }
 
-/** Create a category; returns it as an `EnsuredCategory`. */
+/**
+ * Codex r11 P1: the permission overwrites of the category an overflow is cut
+ * from, so a private Games / Archived category stays private in `<name> N`.
+ */
+function sourceOverwrites(
+  guild: Guild,
+  sourceId: string | undefined,
+): OverwriteData[] {
+  const src = sourceId ? guild.channels.cache.get(sourceId) : undefined;
+  if (!src || !('permissionOverwrites' in src)) return [];
+  return [...src.permissionOverwrites.cache.values()].map((ow) => ({
+    id: ow.id,
+    type: ow.type,
+    allow: ow.allow.bitfield,
+    deny: ow.deny.bitfield,
+  }));
+}
+
+/** Create a category (with `overwrites`, if any); returns it as an `EnsuredCategory`. */
 async function createCategory(
   guild: Guild,
   name: string,
+  overwrites: OverwriteData[],
 ): Promise<EnsuredCategory> {
   const cat = await lifecycleCall('category.create', null, () =>
-    guild.channels.create({ name, type: ChannelType.GuildCategory }),
+    guild.channels.create({
+      name,
+      type: ChannelType.GuildCategory,
+      ...(overwrites.length > 0 ? { permissionOverwrites: overwrites } : {}),
+    }),
   );
   return { id: cat.id, name, created: true };
 }
@@ -191,5 +219,7 @@ export async function ensureCategory(
   const { series, maxN } = overflowSeries(guild, base);
   const pick = series.find((c) => c.id !== byId?.id && hasRoom(c));
   if (pick) return { ...pick, created: false };
-  return createCategory(guild, maxN === 0 ? base : `${base} ${maxN + 1}`);
+  const overwrites = sourceOverwrites(guild, byId?.id ?? series[0]?.id);
+  const name = maxN === 0 ? base : `${base} ${maxN + 1}`;
+  return createCategory(guild, name, overwrites);
 }
