@@ -9,7 +9,7 @@
  * plain `<a href="#id">` links, so the hash still drives the state; the active
  * one carries `aria-current="page"`.
  */
-import { useCallback, useEffect, useId, useRef, useState, type JSX, type KeyboardEvent, type MouseEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type JSX, type KeyboardEvent, type RefObject } from 'react';
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { FOCUS_RING } from './form-classes';
 import { onMenuKeyDown, useFocusFirstItem } from './menu-keys';
@@ -21,16 +21,16 @@ type Close = (restoreFocus?: boolean) => void;
 const ITEM =
     'flex min-h-[44px] items-center justify-between gap-3 rounded-md px-3 text-sm font-medium transition-colors hover:bg-overlay hover:text-foreground focus-visible:bg-overlay focus-visible:outline-none';
 
-/** Closes the menu on a mousedown outside `root` while it is open. */
+/** Closes the menu on a pointerdown (mouse, touch or pen) outside `root` while it is open. */
 function useOutsidePressClose(root: RefObject<HTMLDivElement | null>, isOpen: boolean, close: Close): void {
     useEffect(() => {
         if (!isOpen) return undefined;
-        const onDown = (e: globalThis.MouseEvent): void => {
+        const onDown = (e: PointerEvent): void => {
             if (e.target instanceof Node && root.current?.contains(e.target)) return;
             close();
         };
-        document.addEventListener('mousedown', onDown);
-        return () => document.removeEventListener('mousedown', onDown);
+        document.addEventListener('pointerdown', onDown);
+        return () => document.removeEventListener('pointerdown', onDown);
     }, [root, isOpen, close]);
 }
 
@@ -45,8 +45,9 @@ function MoreMenu({ id, tabs, activeId, close }: MenuProps): JSX.Element {
         else if (e.key === 'Tab') close(true);
         else onMenuKeyDown(e);
     };
-    // A keyboard pick (detail 0) returns focus to the trigger, which now names the picked tab.
-    const onPick = (e: MouseEvent<HTMLAnchorElement>): void => close(e.detail === 0);
+    // Any pick (keyboard, mouse or touch) returns focus to the trigger, which now names the picked
+    // tab — the focused item unmounts, and focus must not fall to <body>.
+    const onPick = (): void => close(true);
     return (
         <div ref={menuRef} id={id} role="menu" aria-label="More sections" onKeyDown={onKeyDown} data-testid="tab-row-more-menu"
             className="absolute right-0 top-full z-50 mt-1.5 flex min-w-[12rem] flex-col rounded-lg border border-edge bg-surface p-1.5 shadow-xl">
@@ -73,20 +74,22 @@ interface MoreProps {
 }
 
 export function TabRowMore({ tabs, activeId, activeHidden }: MoreProps): JSX.Element {
-    const [isOpen, setOpen] = useState(false);
+    // Open FOR an active tab: a hash change from outside (Back, an in-page link) closes it.
+    const [openFor, setOpenFor] = useState<string | null>(null);
+    const isOpen = openFor === activeId;
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const menuId = useId();
     const close = useCallback<Close>((restoreFocus = false) => {
-        setOpen(false);
+        setOpenFor(null);
         if (restoreFocus) triggerRef.current?.focus();
     }, []);
     useOutsidePressClose(rootRef, isOpen, close);
     const active = activeHidden ? tabs.find((t) => t.id === activeId) : undefined;
     return (
         <div ref={rootRef} className="relative shrink-0 pl-1">
-            <button ref={triggerRef} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={isOpen}
-                aria-controls={isOpen ? menuId : undefined} aria-label={active ? `More sections, current: ${active.label}` : undefined}
+            <button ref={triggerRef} type="button" onClick={() => setOpenFor((o) => (o === activeId ? null : activeId))} aria-haspopup="menu" aria-expanded={isOpen}
+                aria-controls={isOpen ? menuId : undefined} aria-label={active ? `${active.label}, more sections` : undefined}
                 data-testid="tab-row-more-trigger" data-active={active ? 'true' : undefined}
                 className={`${TAB_BASE} gap-1 ${active ? TAB_ON : TAB_OFF} ${FOCUS_RING}`}>
                 {active?.label ?? 'More'}

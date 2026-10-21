@@ -63,44 +63,73 @@ function widthOf(measure: HTMLElement, key: string): number {
     return (measure.querySelector<HTMLElement>(`[data-measure="${key}"]`)?.offsetWidth ?? 0) + 1;
 }
 
-function measureSplit(nav: HTMLElement, measure: HTMLElement, ids: readonly string[], activeId: string): TabSplit {
-    return splitTabs({
+/** Raw widths for one tab list (`key`); the split itself is derived during render. */
+interface Measured {
+    key: string;
+    available: number;
+    tabWidths: number[];
+    moreWidth: number;
+    /** "<label> ▾" trigger width per tab, in `tabWidths` order. */
+    triggerWidths: number[];
+}
+
+function readMeasured(nav: HTMLElement, measure: HTMLElement, ids: readonly string[], key: string): Measured {
+    return {
+        key,
         available: nav.clientWidth,
         tabWidths: ids.map((id) => widthOf(measure, `tab:${id}`)),
         moreWidth: widthOf(measure, 'more'),
-        activeTriggerWidth: widthOf(measure, `trig:${activeId}`),
-        activeIndex: ids.indexOf(activeId),
-    });
+        triggerWidths: ids.map((id) => widthOf(measure, `trig:${id}`)),
+    };
+}
+
+function sameMeasured(a: Measured | null, b: Measured): boolean {
+    return a !== null && a.key === b.key && a.available === b.available && a.moreWidth === b.moreWidth
+        && a.tabWidths.join() === b.tabWidths.join() && a.triggerWidths.join() === b.triggerWidths.join();
 }
 
 /**
- * Re-measures whenever the row resizes, the tabs change or the active tab
- * changes. ResizeObserver reports once on `observe` (between layout and
- * paint), so the first frame is already split — no flash of a clipped row.
+ * Measures in a layout effect (before paint), so the first frame is already
+ * split; the split is derived during render, so picking a tab from More
+ * re-fits in that same render. Re-measures when the row resizes, when the
+ * measure layer's row resizes (a web-font swap, a label change) and once
+ * `document.fonts` is ready.
  */
 export function useTabRowFit(
     navRef: RefObject<HTMLElement | null>,
     measureRef: RefObject<HTMLElement | null>,
-    ids: readonly string[],
+    tabs: readonly { id: string; label: string }[],
     activeId: string,
 ): TabSplit {
-    const key = ids.join('\n');
-    // Tagged with the tab list it was measured for, so a list that grows (a plugin's tabs
-    // hydrating) shows every tab until the observer re-measures — never a stale count.
-    const [split, setSplit] = useState<TabSplit & { key: string }>({ key, count: ids.length, activeHidden: false });
+    // Labels are in the key: a renamed tab (same id) must re-measure too.
+    const key = tabs.map((t) => `${t.id}\t${t.label}`).join('\n');
+    const [measured, setMeasured] = useState<Measured | null>(null);
     useLayoutEffect(() => {
         const nav = navRef.current;
         const measure = measureRef.current;
-        if (!nav || !measure || typeof ResizeObserver === 'undefined') return undefined;
-        const tabIds = key ? key.split('\n') : [];
-        const observer = new ResizeObserver(() => {
-            const next = measureSplit(nav, measure, tabIds, activeId);
-            setSplit((prev) => (prev.key === key && prev.count === next.count && prev.activeHidden === next.activeHidden
-                ? prev : { key, ...next }));
-        });
-        observer.observe(nav);
-        return () => observer.disconnect();
-    }, [navRef, measureRef, key, activeId]);
-    if (split.key !== key) return { count: ids.length, activeHidden: false };
-    return { count: split.count, activeHidden: split.activeHidden };
+        if (!nav || !measure) return undefined;
+        const ids = key ? key.split('\n').map((line) => line.split('\t')[0] ?? '') : [];
+        let live = true;
+        const run = (): void => {
+            if (!live) return;
+            const next = readMeasured(nav, measure, ids, key);
+            setMeasured((prev) => (sameMeasured(prev, next) ? prev : next));
+        };
+        run();
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(run);
+        observer?.observe(nav);
+        if (measure.firstElementChild) observer?.observe(measure.firstElementChild);
+        if ('fonts' in document) void document.fonts.ready.then(run);
+        return () => { live = false; observer?.disconnect(); };
+    }, [navRef, measureRef, key]);
+    // Not measured for this tab list yet: the plain row (the layout effect re-renders before paint).
+    if (!measured || measured.key !== key) return { count: tabs.length, activeHidden: false };
+    const activeIndex = tabs.findIndex((t) => t.id === activeId);
+    return splitTabs({
+        available: measured.available,
+        tabWidths: measured.tabWidths,
+        moreWidth: measured.moreWidth,
+        activeTriggerWidth: measured.triggerWidths[activeIndex] ?? measured.moreWidth,
+        activeIndex,
+    });
 }

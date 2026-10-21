@@ -70,10 +70,9 @@ function useRevealActive(activeId: string) {
 
 export function TabRow({ tabs, activeId, label, className = '' }: TabRowProps): JSX.Element {
     const shown = useMemo(() => tabs.filter((t) => !t.hidden), [tabs]);
-    const ids = useMemo(() => shown.map((t) => t.id), [shown]);
     const navRef = useRef<HTMLElement>(null);
     const measureRef = useRef<HTMLDivElement>(null);
-    const { count, activeHidden } = useTabRowFit(navRef, measureRef, ids, activeId);
+    const { count, activeHidden } = useTabRowFit(navRef, measureRef, shown, activeId);
     const { rowRef, activeRef } = useRevealActive(activeId);
     const overflow = shown.slice(count);
     return (

@@ -34,10 +34,10 @@ function mockWidths(rowWidth: number, tabWidth = 80): void {
 }
 
 /** A ResizeObserver that reports once on observe, as browsers do. */
-class ImmediateResizeObserver {
+class ImmediateResizeObserver implements ResizeObserver {
     private readonly cb: ResizeObserverCallback;
     constructor(cb: ResizeObserverCallback) { this.cb = cb; }
-    observe(): void { this.cb([], this as unknown as ResizeObserver); }
+    observe(): void { this.cb([], this); }
     unobserve(): void {}
     disconnect(): void {}
 }
@@ -104,7 +104,7 @@ describe('TabRow — More menu at a measured width', () => {
         const trigger = screen.getByTestId('tab-row-more-trigger');
         expect(trigger).toHaveTextContent('Planner');
         expect(trigger.className, 'the trigger carries the active underline').toContain('border-success');
-        expect(trigger).toHaveAccessibleName('More sections, current: Planner');
+        expect(trigger).toHaveAccessibleName('Planner, more sections');
         expect(rowLabels(), 'the visible row keeps its order').toEqual(['Overview', 'Members']);
     });
 });
@@ -147,9 +147,32 @@ describe('TabRow — More menu keyboard model (§4.14)', () => {
         expect(document.activeElement).toBe(screen.getByTestId('tab-row-more-trigger'));
     });
 
+    it('Tab closes the menu and returns focus to the trigger first', () => {
+        const menu = openMenu('overview');
+        fireEvent.keyDown(menu, { key: 'Tab' });
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(document.activeElement, 'Tab continues from the trigger').toBe(screen.getByTestId('tab-row-more-trigger'));
+    });
+
+    it.each([['a keyboard', 0], ['a mouse or touch', 1]])('%s pick closes it and returns focus to the trigger', (_how, detail) => {
+        const menu = openMenu('overview');
+        fireEvent.click(within(menu).getByRole('menuitem', { name: 'Planner' }), { detail });
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(document.activeElement, 'focus must not drop to <body>').toBe(screen.getByTestId('tab-row-more-trigger'));
+    });
+
+    it('closes when the active tab changes from outside (Back, an in-page link)', () => {
+        mockWidths(330);
+        const { rerender } = render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        fireEvent.click(screen.getByTestId('tab-row-more-trigger'));
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        rerender(<TabRow tabs={TABS} activeId="members" label="Hub sections" />);
+        expect(screen.queryByRole('menu'), 'a hash change elsewhere closes the menu').toBeNull();
+    });
+
     it('an outside press closes it', () => {
         openMenu('overview');
-        act(() => { fireEvent.mouseDown(document.body); });
+        act(() => { fireEvent.pointerDown(document.body); });
         expect(screen.queryByRole('menu')).toBeNull();
     });
 });
@@ -202,6 +225,15 @@ describe('TabRow — the split never waits for a ResizeObserver report (review M
         mockWidths(330, 55);
         act(() => ManualResizeObserver.fire(measureRow()));
         expect(rowLabels(), 'narrower tabs after the swap fit one more in the row').toHaveLength(4);
+    });
+
+    it('re-fits when the tab list grows (a plugin's tabs hydrating)', () => {
+        mockWidths(330);
+        const { rerender } = render(<TabRow tabs={TABS.slice(0, 3)} activeId="overview" label="Hub sections" />);
+        expect(screen.queryByTestId('tab-row-more-trigger')).toBeNull();
+        rerender(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        expect(rowLabels(), 'the longer list is split, not shown whole').toEqual(['Overview', 'Members', 'Events']);
+        expect(screen.getByTestId('tab-row-more-trigger')).toHaveTextContent('More');
     });
 
     it('re-measures once document.fonts is ready (M2)', async () => {
