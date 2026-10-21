@@ -11,10 +11,9 @@
  * the shared admin's session and preferences are never touched. The seeded
  * users are deleted in `finally`; the guild row stays (disposable env).
  *
- * Entry points, chosen by the live viewport: the header "Guild" text link from
- * 1024px (`lg:`), the guild item in the user (avatar) menu at 768–1023px (the
- * header bar there is unchanged from core), and the More drawer's "Your guild"
- * block below 768px.
+ * Entry points, chosen by the live viewport: the header Hubs menu's guild row
+ * from 768px (`md:`, ROK-1875 — it replaced the "Guild" text link and the
+ * tablet user-menu item), and the More drawer's "Your hubs" block below 768px.
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
@@ -33,10 +32,8 @@ interface SeededGuild {
     users: Record<Role, SeededUser>;
 }
 
-/** Header `lg:` — the "Guild" link shows its text. */
-const HEADER_NAV_MIN_WIDTH = 1024;
-/** Header `md:` — the user menu shows; below lg it carries the guild item. */
-const USER_MENU_MIN_WIDTH = 768;
+/** Header `md:` — from 768px the header Hubs menu lists the viewer's hubs (ROK-1875). */
+const HEADER_HUBS_MIN_WIDTH = 768;
 
 /** A guild name unique to this project, worker and run (fixture: 3-48 chars). */
 function guildName(testInfo: TestInfo): string {
@@ -169,7 +166,7 @@ test('non-member: the "not a member" state, no hero', async ({ page }, testInfo)
     });
 });
 
-test('entry points: header text link / user menu item / drawer "Your guild" reach the page; Players card', async ({ page }, testInfo) => {
+test('entry points: header Hubs menu row / drawer "Your hubs" reach the page; Players card', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInOnboardedMember(page, guild.users.member.userId);
         await page.goto('/players');
@@ -177,18 +174,16 @@ test('entry points: header text link / user menu item / drawer "Your guild" reac
         await expect(card, 'the member sees their guild on Players').toBeVisible({ timeout: 15_000 });
         await expect(card.getByTestId('players-guild-open')).toHaveAttribute('href', `/guilds/${guild.guildId}`);
         const width = page.viewportSize()?.width ?? 0;
-        const headerLink = page.getByRole('navigation', { name: 'Main navigation' })
-            .getByRole('link', { name: 'Guild', exact: true });
-        if (width >= HEADER_NAV_MIN_WIDTH) {
-            await expect(headerLink, 'the header text link').toHaveAttribute('data-testid', 'nav-guild-link');
-            await expect(headerLink, '"Guild" text from 1024px').toBeVisible();
-            await headerLink.click();
-        } else if (width >= USER_MENU_MIN_WIDTH) {
-            await expect(headerLink, 'no guild control in the header bar at 768–1023px').toBeHidden();
-            await page.getByTestId('user-menu-trigger').click();
-            const item = page.getByTestId('user-menu-guild-item');
-            await expect(item, 'the user menu lists the guild at 768–1023px').toBeVisible();
-            await item.click();
+        const nav = page.getByRole('navigation', { name: 'Main navigation' });
+        if (width >= HEADER_HUBS_MIN_WIDTH) {
+            await expect(nav.getByRole('link', { name: 'Guild', exact: true }), 'ROK-1875: no "Guild" link in the header').toHaveCount(0);
+            const trigger = nav.getByTestId('nav-hubs-menu-trigger');
+            await expect(trigger, 'a guild member gets the Hubs menu from 768px').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const row = page.getByRole('menu', { name: 'Hubs' }).locator(`a[href="/guilds/${guild.guildId}"]`);
+            await expect(row, 'the Hubs menu lists the guild').toBeVisible();
+            await expect(row.getByTestId('hub-kind-chip'), 'a WoW guild row reads "Guild"').toContainText('Guild');
+            await row.click();
         } else {
             await page.getByRole('button', { name: 'Open menu' }).click();
             const block = page.getByTestId('more-drawer-panel').getByTestId('drawer-your-guild');

@@ -12,7 +12,7 @@
 import { useRef } from 'react';
 import { Button } from '../../ui/button';
 import { toast } from '../../../lib/toast';
-import { onMenuKeyDown, useFocusFirstItem } from '../../lineups/cycle-4/scheduling-menu-keys';
+import { onMenuKeyDown, useFocusFirstItem } from '../../ui/menu-keys';
 import { useMenuOpenState } from '../../lineups/use-menu-open-state';
 import { EVENT_CALENDAR_COPY as C } from './calendar-sync.copy';
 import { downloadIcs, googleCalendarUrl, outlookCalendarUrl, type AddToCalendarEvent } from './add-to-calendar.helpers';

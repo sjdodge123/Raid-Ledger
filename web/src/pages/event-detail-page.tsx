@@ -213,7 +213,7 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
     isBannerCollapsed: boolean; derived: EventDetailDerived; handlers: EventDetailHandlers; modals: ModalState;
 }) {
     return (
-        <div className="event-detail-page pb-20 md:pb-0">
+        <div className="event-detail-page pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-0">
             <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}
                 canManageRoster={derived.canManageRoster} isCancelled={derived.isCancelled} isEnded={derived.isEnded} eventId={page.eventId}
                 recurrenceGroupId={page.event.recurrenceGroupId} onInvite={() => modals.setShowInviteModal(true)} onReschedule={() => modals.setShowRescheduleModal(true)}

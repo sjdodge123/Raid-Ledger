@@ -73,7 +73,7 @@ describe('HubsDirectoryPage', () => {
     it('shows the no-hubs empty state', async () => {
         server.use(...communityHubHandlers({ directory: createMockHubDirectoryPage({ items: [] }) }));
         renderPage();
-        expect(await screen.findByText("No community hubs yet. Start one from a game's page.")).toBeInTheDocument();
+        expect(await screen.findByText("No hubs yet. Start a community hub from a game's page.")).toBeInTheDocument();
     });
 
     it('offers Clear filters when the filters match nothing', async () => {

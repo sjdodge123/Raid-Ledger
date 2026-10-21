@@ -337,14 +337,14 @@ describe('MoreDrawer (admin user)', () => {
     });
 });
 
-describe('MoreDrawer — the Hubs row (ROK-1870, operator ruling 2026-10-20)', () => {
+describe('MoreDrawer — the "Browse all hubs" row (ROK-1870, ROK-1875)', () => {
     beforeEach(() => { vi.clearAllMocks(); });
 
     it('links to /hubs above the profile block and closes the drawer on tap', () => {
         const { onClose } = renderDrawer();
         const row = screen.getByTestId('drawer-hubs-link');
         expect(row).toHaveAttribute('href', '/hubs');
-        expect(row).toHaveTextContent('Hubs');
+        expect(row).toHaveTextContent('Browse all hubs');
         const profile = screen.getByText(mockUser.username);
         expect(row.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING, 'Hubs sits under "Your hubs", above the profile').toBeTruthy();
         fireEvent.click(row);

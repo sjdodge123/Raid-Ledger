@@ -1,39 +1,29 @@
-/** ROK-1870 — Guild vs Hubs nav highlight is kind-aware. */
-import { describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
-import { hubIdFromPath, useHubNavActive } from './use-hub-nav-active';
+/**
+ * ROK-1875 D4 — one Hubs nav item, so one active rule: `/hubs` and every hub
+ * page (any kind) light it. Replaces the ROK-1870 Guild-vs-Hubs split.
+ */
+import { describe, expect, it } from 'vitest';
+import { hubIdFromPath, isHubsNavActive } from './use-hub-nav-active';
 
-const state = vi.hoisted(() => ({ kind: 'wow_guild' }));
-
-vi.mock('../../hub/api/use-guild', () => ({
-    useGuildPage: (id: number) => ({ data: id > 0 ? { guild: { kind: state.kind } } : undefined }),
-}));
-vi.mock('./my-hubs-queries', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('./my-hubs-queries')>()),
-    useMyGuilds: () => [],
-}));
-
-describe('useHubNavActive', () => {
+describe('isHubsNavActive', () => {
     it('parses the hub id from a hub path only', () => {
         expect(hubIdFromPath('/guilds/310')).toBe(310);
         expect(hubIdFromPath('/guilds/310/settings')).toBe(310);
         expect(hubIdFromPath('/players')).toBe(0);
     });
 
-    it('a community hub page lights Hubs, not Guild', () => {
-        state.kind = 'game_community';
-        const { result } = renderHook(() => useHubNavActive('/guilds/310'));
-        expect(result.current).toEqual({ guild: false, hubs: true });
-    });
-
-    it('a WoW guild page lights Guild, not Hubs', () => {
-        state.kind = 'wow_guild';
-        const { result } = renderHook(() => useHubNavActive('/guilds/11'));
-        expect(result.current).toEqual({ guild: true, hubs: false });
-    });
-
     it('the directory lights Hubs', () => {
-        const { result } = renderHook(() => useHubNavActive('/hubs'));
-        expect(result.current).toEqual({ guild: false, hubs: true });
+        expect(isHubsNavActive('/hubs')).toBe(true);
+    });
+
+    it('every hub page lights Hubs, whatever its kind', () => {
+        expect(isHubsNavActive('/guilds/310')).toBe(true);
+        expect(isHubsNavActive('/guilds/11/settings')).toBe(true);
+    });
+
+    it('other pages do not', () => {
+        expect(isHubsNavActive('/players')).toBe(false);
+        expect(isHubsNavActive('/hubsx')).toBe(false);
+        expect(isHubsNavActive('/guilds')).toBe(false);
     });
 });
