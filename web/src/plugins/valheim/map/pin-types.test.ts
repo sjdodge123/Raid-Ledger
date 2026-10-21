@@ -36,17 +36,34 @@ describe('pinStyleFor (D8)', () => {
         ]);
     });
 
-    it('falls back to the generic pin for IconN, unknown and prototype-named types', () => {
-        for (const t of [
+    it('maps the five map markers and the Hildir chests (ROK-1880)', () => {
+        const got = [
             'Icon0',
+            'Icon1',
+            'Icon2',
             'Icon3',
+            'Icon4',
             'Hildir1',
-            'toString',
-            'SomeMod_Pin',
-        ]) {
+            'Hildir2',
+            'Hildir3',
+        ].map((t) => [pinStyleFor(t).iconName, pinStyleFor(t).typeLabel]);
+        expect(got).toEqual([
+            ['fire', 'Fire'],
+            ['home', 'Home'],
+            ['wrench', 'Workshop'],
+            ['cube', 'Mine'],
+            ['sparkles', 'Portal'],
+            ['archive-box', "Hildir's chest"],
+            ['archive-box', "Hildir's chest"],
+            ['archive-box', "Hildir's chest"],
+        ]);
+    });
+
+    it('falls back to the generic "Map pin" for numeric, unknown and prototype-named types', () => {
+        for (const t of ['17', '0', 'toString', 'SomeMod_Pin', '']) {
             expect(pinStyleFor(t)).toMatchObject({
                 iconName: 'map-pin',
-                typeLabel: 'Pin',
+                typeLabel: 'Map pin',
                 toneClass: 'text-foreground',
             });
         }
@@ -74,7 +91,14 @@ describe('pinDisplayLabel', () => {
     it('uses the label, or the type name when it is blank', () => {
         expect(pinDisplayLabel('Home base', 'Bed')).toBe('Home base');
         expect(pinDisplayLabel('  ', 'Death')).toBe('Death');
-        expect(pinDisplayLabel('', 'Icon2')).toBe('Pin');
+        expect(pinDisplayLabel('', 'Icon2')).toBe('Workshop');
+        expect(pinDisplayLabel('', '17')).toBe('Map pin');
+    });
+
+    it('cleans tokens and rich text from stored labels (ROK-1880)', () => {
+        expect(pinDisplayLabel('$hud_mapday 4', 'Death')).toBe('Day 4');
+        expect(pinDisplayLabel('$enemy_eikthyr', 'Boss')).toBe('Eikthyr');
+        expect(pinDisplayLabel('$hud_whatever', 'Icon4')).toBe('Portal');
     });
 });
 
@@ -86,6 +110,14 @@ describe('pinAccessibleName (prototype naming)', () => {
     it('falls back to the type name when the label is blank', () => {
         expect(pinAccessibleName({ ...base, label: ' ', type: 'Shout' })).toBe(
             'Shout (Shout)',
+        );
+    });
+    it('names the type by its human label, never the enum name (ROK-1880)', () => {
+        expect(
+            pinAccessibleName({ ...base, label: 'Copper', type: 'Icon3' }),
+        ).toBe('Copper (Mine)');
+        expect(pinAccessibleName({ ...base, label: '', type: '17' })).toBe(
+            'Map pin (Map pin)',
         );
     });
     it('appends ", cartography table" then ", checked"', () => {
