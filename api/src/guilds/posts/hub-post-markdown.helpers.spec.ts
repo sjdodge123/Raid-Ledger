@@ -110,6 +110,16 @@ describe('markdownExcerpt — markers, graphemes, links, escapes, bounds', () =>
     );
   });
 
+  it('E15 an escaped `\\]` in the label stays one atomic, absolutised link (Codex r9)', () => {
+    const src = '[Raid \\[plan\\]](/events/5)';
+    const abs = '[Raid \\[plan\\]](https://raid.example/events/5)';
+    // The relative URL is rewritten; the escaped brackets survive.
+    expect(ex(src, 100)).toBe(abs);
+    // Kept whole before the cut; a cut inside the label drops it whole.
+    expect(ex(`${src} and more words`, 17)).toBe(`${abs} and…`);
+    expect(ex(`Read ${src} now`, 9)).toBe('Read…');
+  });
+
   it('E13 no ellipsis when the body is exactly at budget', () => {
     expect(ex('**bold** text', 9)).toBe('**bold** text');
     expect(ex('exactly ten', 11)).toBe('exactly ten');

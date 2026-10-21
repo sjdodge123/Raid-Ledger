@@ -145,9 +145,25 @@ function closeDestination(line: string, from: number): number {
   return -1;
 }
 
+/**
+ * Index of the first UNESCAPED `]` at or after `from`, or -1. The editor
+ * writes `[Raid \[plan\]](…)`, so an escaped `\]` never ends the label
+ * (Codex r9). A miss is memoised like `find`: no later `[` can close either.
+ */
+function closeLabel(ctx: Ctx, from: number): number {
+  if (ctx.missing.has(']')) return -1;
+  const { line } = ctx;
+  for (let j = from; j < line.length; j++) {
+    if (line[j] === '\\') j++;
+    else if (line[j] === ']') return j;
+  }
+  ctx.missing.add(']');
+  return -1;
+}
+
 /** `[text](href)` → one atom; an unsafe href keeps only the escaped text. */
 function link(ctx: Ctx, i: number): number {
-  const j = find(ctx, ']', i + 1);
+  const j = closeLabel(ctx, i + 1);
   const k =
     j === -1 || ctx.line[j + 1] !== '('
       ? -1
