@@ -90,11 +90,14 @@ function closeParen(s: string, i: number): number {
 /**
  * The destination of a `(…)` link body: an optional `"title"`, `'title'` or
  * `(title)` after whitespace (TipTap emits one for a pasted titled link) is
- * dropped, then `\(` / `\)` are unescaped. `\S+\s+` cannot backtrack.
+ * dropped, the optional `<…>` wrapper is stripped (as the contract scanner and the
+ * API relay parser do — Codex r12), then `\(` / `\)` are unescaped. `\S+\s+` cannot backtrack.
  */
 function linkDestination(raw: string): string {
     const titled = /^(\S+)\s+(?:"[^"]*"|'[^']*'|\([^()]*\))\s*$/.exec(raw);
-    return (titled?.[1] ?? raw).replace(/\\([()])/g, '$1');
+    const dest = titled?.[1] ?? raw;
+    const bare = /^<([^<>\n]*)>$/.exec(dest)?.[1] ?? dest;
+    return bare.replace(/\\([()])/g, '$1');
 }
 
 /** `[label](href)` at i — only when the href is safe; balanced `(…)` and escaped `\(` / `\)` stay in the href. */

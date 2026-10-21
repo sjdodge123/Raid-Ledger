@@ -118,6 +118,25 @@ describe('MarkdownBlock — link titles (Codex r3)', () => {
     });
 });
 
+describe('MarkdownBlock — angle-bracket link destinations (Codex r12)', () => {
+    it.each([
+        ['[home](</events>)', '/events', 'home'],
+        ['[Plan](<https://example.com> "Strategy")', 'https://example.com', 'Plan'],
+    ])('%j renders as a link to %s', (md, href, label) => {
+        const root = mount(md);
+        const link = root.querySelector('a');
+        expect(link, `${md} must render as a link, not literal text`).not.toBeNull();
+        expect(link?.getAttribute('href')).toBe(href);
+        expect(root.textContent, 'no destination syntax leaks into the text').toBe(label);
+    });
+
+    it('an unsafe <javascript:…> destination is still literal text', () => {
+        const root = mount('[x](<javascript:alert(1)>)');
+        expect(root.querySelector('a')).toBeNull();
+        expect(root.textContent).toBe('[x](<javascript:alert(1)>)');
+    });
+});
+
 describe('MarkdownBlock — disallowed input is literal', () => {
     it('renders <script> as text, never an element', () => {
         const root = mount('<script>alert(1)</script>');
