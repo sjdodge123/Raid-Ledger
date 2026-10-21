@@ -189,11 +189,14 @@ export class LfgNowSpawnService {
   }
 
   /**
-   * A voice joiner landed on the roster — re-render the post.
+   * A voice joiner landed on the roster — re-render the post. ROK-1888 B4: a
+   * RE-join too, else a leave then re-join left the post showing them gone.
+   * (The LFG match listener stays JOINED-only on purpose.)
    *
-   * @param payload - The PARTICIPANT_JOINED payload.
+   * @param payload - The PARTICIPANT_JOINED / PARTICIPANT_REJOINED payload.
    */
   @OnEvent(AD_HOC_EVENTS.PARTICIPANT_JOINED)
+  @OnEvent(AD_HOC_EVENTS.PARTICIPANT_REJOINED)
   async onParticipantJoined(
     payload: AdHocParticipantJoinedPayload,
   ): Promise<void> {

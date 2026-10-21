@@ -329,8 +329,7 @@ describe('LfgNowSpawnService — roster re-render subscriptions (ROK-1888)', () 
       const method = proto[name];
       if (typeof method !== 'function') return false;
       const meta = Reflect.getMetadata('EVENT_LISTENER_METADATA', method) as
-        | { event: unknown }[]
-        | undefined;
+        { event: unknown }[] | undefined;
       return (meta ?? []).some((m) => m.event === event);
     });
   };
