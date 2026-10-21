@@ -23,6 +23,7 @@ import {
   type ChannelType,
 } from '@raid-ledger/contract';
 import { defined } from '../../common/defined.helpers';
+import { assertArchivedBindingStaysRouted } from './channel-bindings-archived.guard';
 
 const guardLogger = new Logger('BindingInvariant');
 
@@ -125,13 +126,16 @@ export function buildBindingUpdateSet(
   existing: {
     config: ChannelBindingConfig | null;
     bindingPurpose: string;
+    gameId?: number | null;
     autoManaged?: boolean;
+    lifecycleState?: string;
   },
   patchConfig: Partial<ChannelBindingConfig>,
   bindingPurpose: BindingPurpose | undefined,
   patch: BindingUpdatePatch,
 ): Partial<typeof schema.channelBindings.$inferInsert> {
   assertPinnable(existing, patch);
+  assertArchivedBindingStaysRouted(existing, patch);
   const resolvedPurpose =
     bindingPurpose ?? (existing.bindingPurpose as BindingPurpose);
   return {
