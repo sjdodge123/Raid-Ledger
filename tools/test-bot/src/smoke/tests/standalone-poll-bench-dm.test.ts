@@ -191,6 +191,34 @@ function assertBenchSplit(
   return benchedId;
 }
 
+/**
+ * "Lock this time", as the web does it: POST /events on a 2-spot generic
+ * roster with `schedulingMatchId` (signs the creator up first), then complete
+ * the poll, which auto-signs-up the slot's yes-voters and sends their DMs.
+ */
+async function lockIn(
+  api: ApiClient,
+  gameId: number,
+  matchId: number,
+  start: Date,
+): Promise<number> {
+  const event = await api.post<{ id: number }>('/events', {
+    title: `smoke-bench-dm-${matchId}`,
+    startTime: start.toISOString(),
+    endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
+    gameId,
+    slotConfig: { type: 'generic', player: ROSTER_CAP },
+    maxAttendees: ROSTER_CAP,
+    schedulingMatchId: matchId,
+  });
+  await api.post(`/scheduling-polls/${matchId}/complete`, {
+    eventId: event.id,
+    startTime: start.toISOString(),
+  });
+  await awaitProcessing(api);
+  return event.id;
+}
+
 const benchDmForOverCapVoter: SmokeTest = {
   name: 'ROK-1874: a voter benched by an over-cap poll lock-in gets "On the bench"',
   category: 'dm',
@@ -222,21 +250,7 @@ const benchDmForOverCapVoter: SmokeTest = {
       await voteYes(memberB, base, slotId);
       await awaitProcessing(ctx.api);
 
-      const event = await ctx.api.post<{ id: number }>('/events', {
-        title: `smoke-bench-dm-${poll.id}`,
-        startTime: start.toISOString(),
-        endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
-        gameId,
-        slotConfig: { type: 'generic', player: ROSTER_CAP },
-        maxAttendees: ROSTER_CAP,
-        schedulingMatchId: poll.id,
-      });
-      eventId = event.id;
-      await ctx.api.post(`/scheduling-polls/${poll.id}/complete`, {
-        eventId,
-        startTime: start.toISOString(),
-      });
-      await awaitProcessing(ctx.api);
+      eventId = await lockIn(ctx.api, gameId, poll.id, start);
 
       const memberIds = [memberA.userId, memberB.userId];
       const notes = await waitForEveryoneNotified(
