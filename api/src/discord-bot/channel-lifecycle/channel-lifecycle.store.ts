@@ -7,7 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import type Redis from 'ioredis';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
@@ -107,6 +107,20 @@ export async function suppressUnboundAutoBindings(
       reason: 'unbound',
     });
   }
+}
+
+/**
+ * Delete the bindings matching `where` and run the D9 unbind hook on the SAME
+ * handle. Codex r16 P2: callers pass a transaction, so the delete and the
+ * suppression commit together and no reader sees neither row.
+ */
+export async function deleteBindingsAndSuppress(
+  db: LifecycleDb,
+  where: SQL | undefined,
+): Promise<Array<typeof schema.channelBindings.$inferSelect>> {
+  const rows = await db.delete(schema.channelBindings).where(where).returning();
+  await suppressUnboundAutoBindings(db, rows);
+  return rows;
 }
 
 /** Outcome of `withReconcileLock`. */

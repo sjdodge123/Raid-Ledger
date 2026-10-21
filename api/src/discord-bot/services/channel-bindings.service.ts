@@ -43,7 +43,7 @@ import {
   type UpsertBindingOpts,
 } from './channel-bindings-upsert.helpers';
 import {
-  suppressUnboundAutoBindings,
+  deleteBindingsAndSuppress,
   type LifecycleDb,
 } from '../channel-lifecycle/channel-lifecycle.store';
 
@@ -175,17 +175,11 @@ export class ChannelBindingsService {
         : sql`${schema.channelBindings.recurrenceGroupId} IS NULL`,
     );
 
-    // ROK-1431 D9: unbinding a managed channel stops the lifecycle recreating
-    // it. Codex r16 P2: delete + suppress commit together, so no reader sees
-    // the binding gone and the suppression not yet written.
-    const result = await this.db.transaction(async (tx) => {
-      const rows = await tx
-        .delete(schema.channelBindings)
-        .where(and(...conditions))
-        .returning();
-      await suppressUnboundAutoBindings(tx, rows);
-      return rows;
-    });
+    // ROK-1431 D9 + Codex r16 P2: delete + suppress commit together.
+    const where = and(...conditions);
+    const result = await this.db.transaction((tx) =>
+      deleteBindingsAndSuppress(tx, where),
+    );
 
     if (result.length > 0) {
       this.logger.log(
@@ -213,19 +207,11 @@ export class ChannelBindingsService {
     id: string,
     options: { db?: LifecycleDb } = {},
   ): Promise<boolean> {
-    const run = async (db: LifecycleDb) => {
-      const rows = await db
-        .delete(schema.channelBindings)
-        .where(eq(schema.channelBindings.id, id))
-        .returning();
-      await suppressUnboundAutoBindings(db, rows);
-      return rows;
-    };
-    // Codex r16 P2: delete + suppress in ONE transaction (the caller's, or a
-    // fresh one) — a split commit let a racing reconcile see neither row.
+    const where = eq(schema.channelBindings.id, id);
+    // Codex r16 P2: ONE transaction — the caller's, or a fresh one.
     const result = options.db
-      ? await run(options.db)
-      : await this.db.transaction((tx) => run(tx));
+      ? await deleteBindingsAndSuppress(options.db, where)
+      : await this.db.transaction((tx) => deleteBindingsAndSuppress(tx, where));
     const channelIds = result.map((row) => row.channelId);
     return this.announced(channelIds, result.length > 0);
   }
