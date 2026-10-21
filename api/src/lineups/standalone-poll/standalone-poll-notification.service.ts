@@ -144,6 +144,25 @@ export class StandalonePollNotificationService {
     });
   }
 
+  /**
+   * DM a voter that their poll auto-signup landed on the bench because the
+   * roster was full (ROK-1874). Same type + payload as `notifyAutoSignup`.
+   */
+  async notifyAutoBenched(
+    userId: number,
+    gameName: string,
+    eventTime: string,
+    eventId: number,
+  ): Promise<void> {
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'On the bench',
+      message: `You voted for **${eventTime}** — you've been signed up for **${gameName}**, but the roster was full, so you're on the bench for now.`,
+      payload: { subtype: 'lineup_event_created', eventId },
+    });
+  }
+
   /** Find roster members for a linked event. */
   private async findRosterMembers(eventId: number): Promise<number[]> {
     const rows = await this.db.execute<{ userId: number }>(sql`
