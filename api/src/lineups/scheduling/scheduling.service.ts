@@ -153,9 +153,23 @@ export class SchedulingService {
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
     const slot = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId, source);
+    if (userId) await this.autoVoteAndNudge(slot.id, match, userId, source);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
+  }
+
+  /**
+   * Codex r9 P2: a committed auto-vote is a fresh vote, so it nudges the
+   * game's channel lifecycle post-commit exactly as `toggleVote` does.
+   */
+  private async autoVoteAndNudge(
+    slotId: number,
+    match: { id: number; gameId: number | null },
+    userId: number,
+    source: ScheduleVoteSource,
+  ): Promise<void> {
+    if (await this.autoVoteForSlot(slotId, match.id, userId, source))
+      GameActivityNudge.safeTouch(this.nudge, match.gameId);
   }
 
   /**
@@ -164,13 +178,15 @@ export class SchedulingService {
    * membership (they couldn't self-heal: re-suggesting 400s on the 15-min
    * duplicate window). A failure never blocks the suggest itself; the
    * suggester can still tap the slot to vote, which enrolls them.
+   *
+   * @returns true once the vote's transaction committed.
    */
   private async autoVoteForSlot(
     slotId: number,
     matchId: number,
     userId: number,
     source: ScheduleVoteSource = 'web',
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await this.db.transaction(async (tx) => {
         await insertScheduleVote(tx, slotId, userId, 'yes', source);
@@ -179,11 +195,13 @@ export class SchedulingService {
         // on the SAME tx, so the stamp can never outlive a rolled-back vote.
         await syncSchedulingSubmittedAt(tx, matchId, userId);
       });
+      return true;
     } catch (err) {
       this.logger.warn(
         `Auto-vote failed for slot ${slotId} user ${userId}`,
         errorStack(err),
       );
+      return false;
     }
   }
 

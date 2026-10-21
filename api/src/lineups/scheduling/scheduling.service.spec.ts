@@ -228,6 +228,26 @@ describe('SchedulingService', () => {
         );
       });
 
+      // Codex r9 P2: the auto-vote is a fresh vote, so it nudges the game's
+      // channel lifecycle after commit exactly as toggleVote does.
+      it('nudges the match game after a committed auto-vote', async () => {
+        mockSuggestSlotFlow(true);
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        expect(mockNudge.touch).toHaveBeenCalledWith(SCHEDULING_MATCH.gameId);
+      });
+
+      it('does not nudge when the auto-vote rolled back or never ran', async () => {
+        mockSuggestSlotFlow(true);
+        voteSpy.mockRejectedValueOnce(new Error('DB constraint'));
+        const { logger } = service as unknown as { logger: Logger };
+        jest.spyOn(logger, 'warn').mockImplementation(() => {});
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        mockSuggestSlotFlow();
+        await service.suggestSlot(10, SLOT_TIME);
+        expect(mockNudge.touch).not.toHaveBeenCalled();
+      });
+
       it('does not call insertScheduleVote when userId is undefined', async () => {
         mockSuggestSlotFlow();
         await service.suggestSlot(10, SLOT_TIME);
