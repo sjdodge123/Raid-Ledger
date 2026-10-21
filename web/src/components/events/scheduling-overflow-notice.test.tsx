@@ -12,6 +12,7 @@ import { CreateEventForm } from './create-event-form';
 import { getSchedulePoll } from '../../lib/api-client';
 import { useAuth } from '../../hooks/use-auth';
 import { partialResult } from '../../test/partial-result';
+import { createMockEvent } from '../../test/factories';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -120,6 +121,35 @@ describe('SchedulingOverflowNotice on the create form', () => {
         renderForm([1, 2, 3, 4, 5], { schedulingLineupId: null });
         expect(getSchedulePoll).not.toHaveBeenCalled();
         expect(notice()).not.toBeInTheDocument();
+    });
+
+    it('never fetches or shows without a matchId', () => {
+        renderForm([1, 2, 3, 4, 5], { schedulingMatchId: null });
+        expect(getSchedulePoll).not.toHaveBeenCalled();
+        expect(notice()).not.toBeInTheDocument();
+    });
+
+    it('never fetches or shows without an initialStartTime', () => {
+        renderForm([1, 2, 3, 4, 5], { initialStartTime: null });
+        expect(getSchedulePoll).not.toHaveBeenCalled();
+        expect(notice()).not.toBeInTheDocument();
+    });
+
+    it('never fetches or shows in edit mode', () => {
+        renderForm([1, 2, 3, 4, 5], { event: createMockEvent({ id: 77 }) });
+        expect(getSchedulePoll).not.toHaveBeenCalled();
+        expect(notice()).not.toBeInTheDocument();
+    });
+
+    it('keeps the generic Players count at 1 or more, so the banner never hides a 0-spot roster', async () => {
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-overflow-notice');
+        const decrease = screen.getByRole('button', { name: 'Decrease Players' });
+        for (let i = 0; i < 5; i++) fireEvent.click(decrease);
+        expect(screen.getByRole('spinbutton', { name: 'Players slots' })).toHaveValue(1);
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Players slots' }), { target: { value: '0' } });
+        expect(screen.getByRole('spinbutton', { name: 'Players slots' })).toHaveValue(1);
+        expect(screen.getByText('5 people will be signed up for this time, but the roster has 1 spot — 4 will go to the bench.')).toBeInTheDocument();
     });
 
     it('stays hidden for an MMO roster', async () => {

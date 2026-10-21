@@ -7,7 +7,8 @@
  * every yes-voter on the chosen slot; anyone past the cap is benched. The
  * arithmetic mirrors the API: `rostered = 1 + yes-voters excluding the
  * creator`, `cap = min(slotPlayer, maxAttendees)` over whichever is set and
- * > 0, `benched = max(0, rostered - cap)`.
+ * > 0, `benched = max(0, rostered - cap)`. A generic Players count of 0 is
+ * unreachable: the stepper's min is 1 (the API would bench every signup).
  */
 import { useQuery } from '@tanstack/react-query';
 import type {
