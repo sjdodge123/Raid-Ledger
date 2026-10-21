@@ -48,6 +48,7 @@ describe('encodeCursor / decodeCursor', () => {
   it.each([
     ['microsecond', '2026-10-20T12:34:56.789123Z'],
     ['millisecond', AT.toISOString()],
+    ['valid leap-day', '2028-02-29T23:59:59.999999Z'],
   ])('round-trips a %s created_at and id losslessly', (_label, iso) => {
     const cursor = encodeCursor({ createdAt: iso, id: 42 });
     expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -70,6 +71,13 @@ describe('encodeCursor / decodeCursor', () => {
       'impossible date',
       Buffer.from('2026-13-40T12:00:00.000Z|4').toString('base64url'),
     ],
+    ['Feb 31', Buffer.from('2026-02-31T00:00:00Z|1').toString('base64url')],
+    ['Apr 31', Buffer.from('2026-04-31T00:00:00Z|1').toString('base64url')],
+    [
+      'non-leap Feb 29',
+      Buffer.from('2027-02-29T00:00:00Z|1').toString('base64url'),
+    ],
+    ['hour 24', Buffer.from('2026-10-20T24:00:00Z|1').toString('base64url')],
     ['bad id', Buffer.from(`${AT.toISOString()}|x4`).toString('base64url')],
     ['zero id', Buffer.from(`${AT.toISOString()}|0`).toString('base64url')],
     [

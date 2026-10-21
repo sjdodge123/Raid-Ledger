@@ -41,6 +41,18 @@ const INVALID_CURSOR = 'Invalid cursor';
 /** UTC ISO-8601 with 0–6 fractional digits (what `to_char(... .US)` emits). */
 const CURSOR_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 
+/**
+ * A real calendar instant: `new Date` silently rolls `02-31` into March, but
+ * Postgres's `::timestamptz` rejects it (a 500), so the parsed date must
+ * format back to the same Y-M-D h:m:s it was written with (Codex r5).
+ */
+function isCalendarIso(iso: string): boolean {
+  if (!CURSOR_ISO.test(iso)) return false;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return false;
+  return at.toISOString().slice(0, 19) === iso.slice(0, 19);
+}
+
 /** Opaque base64url of `<createdAtISO>|<id>`. */
 export function encodeCursor(pos: HubPostCursor): string {
   return Buffer.from(`${pos.createdAt}|${pos.id}`).toString('base64url');
@@ -54,9 +66,7 @@ export function decodeCursor(cursor: string): HubPostCursor {
   if (parts.length !== 2 || iso === undefined || idText === undefined) {
     throw new BadRequestException(INVALID_CURSOR);
   }
-  const validAt =
-    CURSOR_ISO.test(iso) && !Number.isNaN(new Date(iso).getTime());
-  if (!/^[1-9]\d{0,9}$/.test(idText) || !validAt) {
+  if (!/^[1-9]\d{0,9}$/.test(idText) || !isCalendarIso(iso)) {
     throw new BadRequestException(INVALID_CURSOR);
   }
   return { createdAt: iso, id: Number(idText) };
