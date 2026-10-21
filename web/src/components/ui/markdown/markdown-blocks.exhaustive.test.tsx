@@ -45,6 +45,10 @@ const CONSTRUCTS: string[] = [
     '[x]: https://example.com\n$', '[x]: https://example.com', '![img](https://example.com/i.png) $',
     '$\n$', '$\n\n$', '$\n\n\n\n$', '\n\n$\n\n', '$  \n$', '$\\\n$', '$\r\n$', '$\r\n\r\n$', '  $  ',
     '&lt;$&gt;', '\\# $', '\\- $', '1\\. $', '\\> $', '\\* $', '\\+ $', '- \\- $', '$ https://example.com $',
+    // Codex r14: an autolink's destination is verbatim (no escapes, no entities); only `~~` strikes.
+    '<https://example.com?x=1&amp;y=2> $', '$ <https://example.com/a&lt;b&#38;c> $', '- <https://example.com/?q=&amp;> $',
+    '$ ~20:00~ $', '~x~ $', '$ ~~~x~~~ $', '$ ~ ~~ ~~~ $', '\\~~x~~ $', '~~x~ $', '- ~a~ $',
+    '``` `c` $', '$ ``` `c` ``` $',
 ];
 
 /** Each construct alone, after a paragraph line, before one, and between blank-line paragraphs. */
@@ -71,6 +75,7 @@ function signature(html: string): string {
         }
         if (!(node instanceof Element)) return;
         if (node.tagName === 'BR') { out.push('⏎'); return; }
+        if (node.tagName === 'A') out.push(`href=${node.getAttribute('href') ?? ''}`);
         const block = BLOCK_TAGS.has(node.tagName) && !(node.tagName === 'P' && node.parentElement?.tagName === 'LI');
         if (block) out.push(`<${node.tagName}>`);
         for (const child of node.childNodes) walk(child, marks + (TAG_OF[node.tagName] ?? ''));
