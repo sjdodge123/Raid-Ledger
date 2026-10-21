@@ -39,8 +39,10 @@ const MEMBER_B_SLOT = 9;
 const ROSTER_CAP = 2;
 const TWO_HOURS_MS = 2 * 3_600_000;
 
-const BENCH_TITLE_RE = /on the bench/i;
-const BENCH_MESSAGE_RE = /on the bench/i;
+const BENCH_TITLE = 'On the bench';
+const BENCH_MESSAGE_RE = /roster was full/i;
+/** Gap between the two equal reads that prove the DM total stopped moving. */
+const STABLE_GAP_MS = 2_000;
 const AUTO_TITLE = 'Auto-signed up';
 const AUTO_MESSAGE_RE = /automatically signed up/i;
 
@@ -103,6 +105,44 @@ async function voteYes(
   }
 }
 
+/** Every user's notifications for the event, keyed by user id. */
+async function readNotes(
+  ctx: TestContext,
+  userIds: number[],
+  eventId: number,
+): Promise<Map<number, TestNotification[]>> {
+  const seen = new Map<number, TestNotification[]>();
+  for (const uid of userIds) {
+    seen.set(uid, await notesForEvent(ctx.api, uid, eventId));
+  }
+  return seen;
+}
+
+const totalNotes = (notes: Map<number, TestNotification[]>): number =>
+  [...notes.values()].reduce((sum, n) => sum + n.length, 0);
+
+/**
+ * Re-read until the DM total is the same on two reads STABLE_GAP_MS apart, so
+ * a late second DM (fire-and-forget) lands before the "exactly one" checks.
+ */
+async function waitForStableNotes(
+  ctx: TestContext,
+  userIds: number[],
+  eventId: number,
+): Promise<Map<number, TestNotification[]>> {
+  let lastTotal = -1;
+  return pollForCondition(
+    async () => {
+      const notes = await readNotes(ctx, userIds, eventId);
+      const prev = lastTotal;
+      lastTotal = totalNotes(notes);
+      return lastTotal === prev ? notes : null;
+    },
+    ctx.config.timeoutMs,
+    { intervalMs: STABLE_GAP_MS, backoff: false },
+  );
+}
+
 /** Poll until every user in `userIds` holds a notification for the event. */
 async function waitForEveryoneNotified(
   ctx: TestContext,
@@ -112,10 +152,7 @@ async function waitForEveryoneNotified(
   let seen = new Map<number, TestNotification[]>();
   return pollForCondition(
     async () => {
-      seen = new Map();
-      for (const uid of userIds) {
-        seen.set(uid, await notesForEvent(ctx.api, uid, eventId));
-      }
+      seen = await readNotes(ctx, userIds, eventId);
       const all = [...seen.values()].every((notes) => notes.length > 0);
       return all ? seen : null;
     },
@@ -139,8 +176,11 @@ async function benchedUserIds(api: ApiClient, eventId: number): Promise<number[]
   );
   const rows = [...(roster?.assignments ?? []), ...(roster?.pool ?? [])];
   return rows
-    .filter((r) => r.slot === 'bench' && typeof r.userId === 'number')
-    .map((r) => r.userId as number);
+    .filter(
+      (r): r is RosterRow & { userId: number } =>
+        r.slot === 'bench' && typeof r.userId === 'number',
+    )
+    .map((r) => r.userId);
 }
 
 /** One voter's notes must be exactly one DM matching `kind`. */
@@ -159,7 +199,7 @@ function assertSingleDm(
   const title = note?.title ?? '';
   const message = note?.message ?? '';
   const ok = kind === 'bench'
-    ? BENCH_TITLE_RE.test(title) && BENCH_MESSAGE_RE.test(message)
+    ? title === BENCH_TITLE && BENCH_MESSAGE_RE.test(message)
     : title === AUTO_TITLE && AUTO_MESSAGE_RE.test(message);
   if (!ok) {
     throw new Error(
@@ -176,7 +216,7 @@ function assertBenchSplit(
   memberIds: number[],
 ): number {
   const isBench = (uid: number) =>
-    (notes.get(uid) ?? []).some((n) => BENCH_TITLE_RE.test(n.title ?? ''));
+    (notes.get(uid) ?? []).some((n) => n.title === BENCH_TITLE);
   const benched = memberIds.filter(isBench);
   if (benched.length !== 1) {
     throw new Error(
@@ -184,7 +224,8 @@ function assertBenchSplit(
         `bench" on a ${ROSTER_CAP}-spot roster, got [${benched.join(', ')}]`,
     );
   }
-  const benchedId = benched[0] as number;
+  const [benchedId] = benched;
+  if (benchedId === undefined) throw new Error('No benched voter after the length check');
   for (const uid of [creatorId, ...memberIds]) {
     assertSingleDm(uid, notes.get(uid) ?? [], uid === benchedId ? 'bench' : 'auto');
   }
@@ -253,11 +294,10 @@ const benchDmForOverCapVoter: SmokeTest = {
       eventId = await lockIn(ctx.api, gameId, poll.id, start);
 
       const memberIds = [memberA.userId, memberB.userId];
-      const notes = await waitForEveryoneNotified(
-        ctx,
-        [ctx.testUserId, ...memberIds],
-        eventId,
-      );
+      const voterIds = [ctx.testUserId, ...memberIds];
+      await waitForEveryoneNotified(ctx, voterIds, eventId);
+      // No voter gets both DMs: assert one each only once the total settles.
+      const notes = await waitForStableNotes(ctx, voterIds, eventId);
       const benchedId = assertBenchSplit(notes, ctx.testUserId, memberIds);
 
       // The DM must agree with the roster: the benched voter IS on the bench.
@@ -269,7 +309,8 @@ const benchDmForOverCapVoter: SmokeTest = {
         );
       }
     } finally {
-      // Shared guild — never leave the poll or the event behind.
+      // Shared guild — never leave the poll or the event behind. After a
+      // lock-in the poll is completed, so cancel no-ops; archive + delete clean up.
       await ctx.api
         .post(`${base}/cancel`, { reason: 'smoke cleanup ROK-1874' })
         .catch(() => null);

@@ -41,6 +41,7 @@ const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const ROSTER_CAP = 2;
 /** Bound for the fire-and-forget chain (N signups + N DMs); not a sleep. */
 const CHAIN_DEADLINE_MS = 10_000;
+const STABLE_GAP_MS = 1_000;
 
 /** A member who exists only to carry a vote row — no login needed. */
 async function createMember(tag: string): Promise<number> {
@@ -155,7 +156,35 @@ async function waitForAllNotified(userIds: number[]): Promise<LineupNote[]> {
     const notified = [...new Set(notes.map((n) => n.userId))].sort();
     expect(notified).toEqual([...userIds].sort());
   }, CHAIN_DEADLINE_MS);
+  return waitForStableNotes(userIds);
+}
+
+/**
+ * Re-read until the row total holds across two reads STABLE_GAP_MS apart, so
+ * a late second DM (fire-and-forget) lands before the "exactly one" checks.
+ */
+async function waitForStableNotes(userIds: number[]): Promise<LineupNote[]> {
+  let notes: LineupNote[] = [];
+  let lastTotal = -1;
+  await waitFor(
+    async () => {
+      notes = await lineupNotes(userIds);
+      const prev = lastTotal;
+      lastTotal = notes.length;
+      expect(notes.length).toBe(prev);
+    },
+    CHAIN_DEADLINE_MS,
+    STABLE_GAP_MS,
+  );
   return notes;
+}
+
+/** Rows per voter, in `userIds` order — every entry must be exactly 1. */
+function rowsPerVoter(notes: LineupNote[], userIds: number[]) {
+  return userIds.map((uid) => ({
+    uid,
+    rows: notes.filter((n) => n.userId === uid).length,
+  }));
 }
 
 /** User ids whose roster assignment for `eventId` is the bench. */
@@ -198,6 +227,10 @@ describe('ROK-1874 AC5 — over-cap lock benches the overflow voter', () => {
 
     const eventId = await lockPollWithYesVoters(voters);
     const notes = await waitForAllNotified(voters);
+    // No voter gets both DMs: one row each, after the total stopped moving.
+    expect(rowsPerVoter(notes, voters)).toEqual(
+      voters.map((uid) => ({ uid, rows: 1 })),
+    );
 
     const benched = await benchedUserIds(eventId);
     expect(benched).toHaveLength(1);
@@ -231,6 +264,9 @@ describe('ROK-1874 AC6 — at-cap lock benches nobody', () => {
 
     const eventId = await lockPollWithYesVoters(voters);
     const notes = await waitForAllNotified(voters);
+    expect(rowsPerVoter(notes, voters)).toEqual(
+      voters.map((uid) => ({ uid, rows: 1 })),
+    );
 
     expect(await benchedUserIds(eventId)).toEqual([]);
     expect(notes.map((n) => n.title)).toEqual([
