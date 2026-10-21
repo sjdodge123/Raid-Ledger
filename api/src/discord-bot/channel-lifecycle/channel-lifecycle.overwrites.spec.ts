@@ -14,6 +14,7 @@ import {
   writeLock,
   type OverwriteIds,
 } from './channel-lifecycle.overwrites';
+import { botInvitePermissionsBits } from '../discord-bot-client.helpers';
 
 type FlagName = keyof typeof PermissionFlagsBits;
 interface FakeOw {
@@ -25,11 +26,8 @@ interface FakeOw {
 type Opts = Partial<Record<string, boolean | null>>;
 
 const IDS: OverwriteIds = { everyoneId: 'g1', botId: 'bot' };
-const THREAD_FLAGS = [
-  'SendMessagesInThreads',
-  'CreatePublicThreads',
-  'CreatePrivateThreads',
-] as const;
+/** Codex r15: no CreatePrivateThreads — the bot is never asked for it. */
+const THREAD_FLAGS = ['SendMessagesInThreads', 'CreatePublicThreads'] as const;
 
 function isFlag(f: string): f is FlagName {
   return f in PermissionFlagsBits;
@@ -111,6 +109,55 @@ describe('archive lock covers threads (hideOnArchive:false)', () => {
     expect(cache.get('members')?.allow.bitfield).toBe(allow);
     expect(cache.get('members')?.deny.bitfield).toBe(0n);
     expect(cache.has('g1')).toBe(false);
+  });
+});
+
+describe('archive lock only touches bits the bot is invited with (Codex r15)', () => {
+  const required = botInvitePermissionsBits();
+
+  /** A cache where @everyone, a role and a member Allow every lockable bit. */
+  function openEverywhere(): ReturnType<typeof fakePo> {
+    const fake = fakePo();
+    const all = bits(
+      'ViewChannel',
+      'SendMessages',
+      ...THREAD_FLAGS,
+      'CreatePrivateThreads',
+    );
+    for (const [id, type] of [
+      ['g1', OverwriteType.Role],
+      ['members', OverwriteType.Role],
+      ['u1', OverwriteType.Member],
+    ] as const) {
+      fake.cache.set(id, {
+        id,
+        type,
+        allow: { bitfield: all },
+        deny: { bitfield: 0n },
+      });
+    }
+    return fake;
+  }
+
+  it.each([false, true])(
+    'every bit archive writes (hide=%s) is in REQUIRED_PERMISSIONS',
+    (hide) => {
+      const { po } = openEverywhere();
+      const outside = planArchive(po, IDS, hide)
+        .map((c) => c.flag)
+        .filter((f) => (PermissionFlagsBits[f] & required) === 0n);
+      expect(outside).toEqual([]);
+    },
+  );
+
+  it('never grants (or denies) CreatePrivateThreads — Discord 50013s a bit the bot lacks', async () => {
+    const { po, edit } = openEverywhere();
+    await writeLock(po, IDS, planArchive(po, IDS, true));
+    const written = edit.mock.calls.flatMap(([, opts]) =>
+      Object.keys(opts as Opts),
+    );
+    expect(written).not.toContain('CreatePrivateThreads');
+    expect(written).toContain('CreatePublicThreads');
   });
 });
 

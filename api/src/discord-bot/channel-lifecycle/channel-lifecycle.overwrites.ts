@@ -21,6 +21,7 @@ import type {
   ArchivedOverwrites,
   OverwritePriorState,
 } from '../../drizzle/schema/channel-bindings';
+import { botInvitePermissionsBits } from '../discord-bot-client.helpers';
 
 type Target = ArchivedOverwriteChange['target'];
 type LockFlag = ArchivedOverwriteChange['flag'];
@@ -51,13 +52,30 @@ const ARCHIVED: Record<Target, OverwritePriorState> = {
   member: 'deny',
 };
 
-/** Archive's read-only lock: posting AND thread replies/creation (Codex r4b). */
-const SEND_FLAGS: LockFlag[] = [
-  'SendMessages',
-  'SendMessagesInThreads',
-  'CreatePublicThreads',
-  'CreatePrivateThreads',
-];
+/**
+ * Codex r15: Discord rejects (50013) an overwrite that allows OR denies a bit
+ * the bot does not itself hold, so the lock may only touch bits the bot is
+ * invited with. Derived from REQUIRED_PERMISSIONS so a lock bit can never
+ * drift outside it (CreatePrivateThreads was, and failed every archive).
+ */
+const INVITED = botInvitePermissionsBits();
+const isInvited = (f: LockFlag): boolean =>
+  (PermissionFlagsBits[f] & INVITED) !== 0n;
+
+/**
+ * Archive's read-only lock: posting AND thread replies/creation (Codex r4b).
+ * No CreatePrivateThreads — the bot is never invited with it, and with
+ * SendMessagesInThreads denied a private thread could not be posted in anyway.
+ */
+const SEND_FLAGS: LockFlag[] = (
+  [
+    'SendMessages',
+    'SendMessagesInThreads',
+    'CreatePublicThreads',
+  ] as const satisfies readonly LockFlag[]
+).filter(isInvited);
+const VIEW: LockFlag = 'ViewChannel';
+const HIDE_FLAGS: LockFlag[] = [...SEND_FLAGS, VIEW].filter(isInvited);
 
 /** Discord's "that role/user/member no longer exists" codes. */
 const TARGET_GONE_CODES = new Set([10007, 10011, 10013]);
@@ -125,7 +143,7 @@ export function planArchive(
   ids: OverwriteIds,
   hide: boolean,
 ): ArchivedOverwriteChange[] {
-  const flags: LockFlag[] = hide ? [...SEND_FLAGS, 'ViewChannel'] : SEND_FLAGS;
+  const flags = hide ? HIDE_FLAGS : SEND_FLAGS;
   const changes: ArchivedOverwriteChange[] = [];
   for (const target of ['bot', 'everyone'] as const) {
     const ow = po.cache.get(target === 'bot' ? ids.botId : ids.everyoneId);

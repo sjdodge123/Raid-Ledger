@@ -31,19 +31,20 @@ jest.mock('../services/scheduled-event.helpers', () => ({
 
 const GUILD = 'guild-1';
 const BOT = 'bot-1';
-/** Archive's read-only lock (Codex r4b): posting + thread replies/creation. */
+/**
+ * Archive's read-only lock (Codex r4b): posting + thread replies/creation —
+ * minus CreatePrivateThreads, which the bot is never invited with (Codex r15).
+ */
 const LOCK =
   PermissionFlagsBits.SendMessages |
   PermissionFlagsBits.SendMessagesInThreads |
-  PermissionFlagsBits.CreatePublicThreads |
-  PermissionFlagsBits.CreatePrivateThreads;
-/** The four lock changes archive records for one target, all from inherit. */
+  PermissionFlagsBits.CreatePublicThreads;
+/** The three lock changes archive records for one target, all from inherit. */
 function lockChanges(target: 'bot' | 'everyone') {
   return [
     { target, flag: 'SendMessages', prior: 'inherit' },
     { target, flag: 'SendMessagesInThreads', prior: 'inherit' },
     { target, flag: 'CreatePublicThreads', prior: 'inherit' },
-    { target, flag: 'CreatePrivateThreads', prior: 'inherit' },
   ];
 }
 type FlagName = keyof typeof PermissionFlagsBits;
