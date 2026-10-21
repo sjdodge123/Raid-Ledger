@@ -8,9 +8,14 @@
  * arithmetic mirrors the API: `rostered = 1 + yes-voters excluding the
  * creator`, `cap` = Players when set, else Max Attendees (the backend's
  * `resolveEventCapacity` prefers the generic slotConfig over maxAttendees),
- * `benched = max(0, rostered - cap)`. A generic Players count of 0 is
- * unreachable: the stepper's min is 1 (the API would bench every signup).
+ * `benched = max(0, rostered - cap)`. A Players count of 0 is a real cap: the
+ * stepper's min of 1 only clamps edits, and a saved template or copied event
+ * can still carry 0 — the API then benches every signup, the creator's too.
+ *
+ * The poll stays live while the form is open: the same `lineup:<id>` socket
+ * the poll page uses (ROK-1551), with its 10s fallback while disconnected.
  */
+import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
     SchedulePollPageResponseDto,
@@ -18,6 +23,8 @@ import type {
 } from '@raid-ledger/contract';
 import { getSchedulePoll } from '../../lib/api-client';
 import { useAuth } from '../../hooks/use-auth';
+import { schedulePollKey } from '../../hooks/use-scheduling';
+import { liveRefetchInterval, useSchedulePollRealtime } from '../../hooks/use-schedule-poll-realtime';
 import type { FormState } from './create-event-form.types';
 
 export interface SchedulingOverflow {
@@ -38,11 +45,12 @@ export interface RosterCapInput {
 
 /**
  * Mirrors `resolveEventCapacity` (api/src/events/signups-signup.helpers.ts):
- * the generic slotConfig's `player` wins; `maxAttendees` is the cap only when
- * Players is unset. Null when neither is set.
+ * the generic slotConfig's `player` wins, 0 included (`computeSlotCapacity`
+ * returns it as-is); `maxAttendees` is the cap only when Players is not a
+ * number. Null when neither is set.
  */
 export function resolveRosterCap(slotPlayer: number, maxAttendees: string): number | null {
-    if (Number.isFinite(slotPlayer) && slotPlayer > 0) return slotPlayer;
+    if (Number.isFinite(slotPlayer) && slotPlayer >= 0) return slotPlayer;
     const max = parseInt(maxAttendees, 10);
     return Number.isFinite(max) && max > 0 ? max : null;
 }
@@ -90,11 +98,15 @@ export function useSchedulingOverflow(params: SchedulingOverflowParams): Schedul
     const { lineupId, matchId, startTime } = params;
     const { user } = useAuth();
     const enabled = !!lineupId && !!matchId && !!startTime;
+    const connectedRef = useRef(false);
     const { data } = useQuery({
-        queryKey: ['scheduling', 'poll', lineupId, matchId],
+        queryKey: schedulePollKey(lineupId ?? 0, matchId ?? 0),
         queryFn: () => getSchedulePoll(lineupId ?? 0, matchId ?? 0),
         enabled,
+        refetchInterval: (q) => (enabled ? liveRefetchInterval(q.state.data, connectedRef.current) : false),
+        refetchIntervalInBackground: false,
     });
+    useSchedulePollRealtime(lineupId ?? 0, matchId ?? 0, enabled && data?.pollStatus === 'open', connectedRef);
     if (!enabled || !data || !startTime) return null;
     return computeSchedulingOverflow(findSlotByTime(data, startTime), user?.id ?? null, params);
 }

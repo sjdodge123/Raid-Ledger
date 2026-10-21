@@ -4,10 +4,10 @@
  * player-count fields without a refetch.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { SchedulePollPageResponseDto, ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import { LineupRealtimeEventNames, type SchedulePollPageResponseDto, type ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { CreateEventForm } from './create-event-form';
 import { getSchedulePoll } from '../../lib/api-client';
 import { useAuth } from '../../hooks/use-auth';
@@ -15,6 +15,16 @@ import { partialResult } from '../../test/partial-result';
 import { createMockEvent } from '../../test/factories';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+type Handler = (...args: unknown[]) => void;
+const handlers = new Map<string, Handler[]>();
+const mockSocket = {
+    emit: vi.fn(), disconnect: vi.fn(), connected: false,
+    on: vi.fn((event: string, cb: Handler) => { handlers.set(event, [...(handlers.get(event) ?? []), cb]); }),
+    off: vi.fn((event: string, cb: Handler) => { handlers.set(event, (handlers.get(event) ?? []).filter((h) => h !== cb)); }),
+};
+vi.mock('socket.io-client', () => ({ io: () => mockSocket, Socket: class {} }));
+const fire = (event: string, payload: unknown) => { for (const h of handlers.get(event) ?? []) h(payload); };
 
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual('react-router-dom');
@@ -76,6 +86,7 @@ const notice = () => screen.queryByTestId('scheduling-overflow-notice');
 
 beforeEach(() => {
     vi.clearAllMocks();
+    handlers.clear();
     vi.mocked(useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuth>>({
         user: partialResult<NonNullable<ReturnType<typeof useAuth>['user']>>({ id: CREATOR }),
     }));
@@ -108,6 +119,16 @@ describe('SchedulingOverflowNotice on the create form', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Decrease Players' }));
         expect(notice()).toBeInTheDocument();
         expect(getSchedulePoll).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes when another voter changes their answer while the form is open (Codex r2)', async () => {
+        const poll = (ids: number[]) => partialResult<SchedulePollPageResponseDto>({ pollStatus: 'open', slots: [slot(ids)] });
+        vi.mocked(getSchedulePoll).mockResolvedValue(poll([1, 2, 3, 4, 5]));
+        mountForm();
+        expect(await screen.findByText(/roster has 4 spots — 1 will go to the bench/)).toBeInTheDocument();
+        vi.mocked(getSchedulePoll).mockResolvedValue(poll([1, 2, 3, 4, 5, 6]));
+        act(() => fire(LineupRealtimeEventNames.ScheduleChanged, { lineupId: 7, matchId: 5 }));
+        expect(await screen.findByText('6 people will be signed up for this time, but the roster has 4 spots — 2 will go to the bench.')).toBeInTheDocument();
     });
 
     it('stays hidden when the roster has room', async () => {

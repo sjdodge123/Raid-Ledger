@@ -1,7 +1,7 @@
 /**
  * ROK-1874: the over-cap arithmetic must agree with the API —
  * `rostered = 1 + yes-voters excluding the creator`,
- * `cap = slotPlayer` when set (> 0), else `maxAttendees` — the backend's
+ * `cap = slotPlayer` (0 included) when it is a number, else `maxAttendees` — the backend's
  * `resolveEventCapacity` prefers the generic slotConfig over maxAttendees.
  */
 import { describe, it, expect } from 'vitest';
@@ -24,7 +24,8 @@ const generic = (slotPlayer: number, maxAttendees: string) => ({ slotType: 'gene
 
 describe('resolveRosterCap', () => {
     it.each([
-        [4, '', 4], [0, '6', 6], [4, '3', 4], [5, '8', 5], [5, '2', 5], [0, '', null], [0, '0', null], [3, 'abc', 3],
+        [4, '', 4], [0, '6', 0], [4, '3', 4], [5, '8', 5], [5, '2', 5], [0, '', 0], [0, '0', 0], [3, 'abc', 3],
+        [Number.NaN, '6', 6], [Number.NaN, '', null],
     ])('slotPlayer %s, maxAttendees %j → %s', (player, max, want) => {
         expect(resolveRosterCap(player, max)).toBe(want);
     });
@@ -43,8 +44,14 @@ describe('computeSchedulingOverflow', () => {
         });
     });
 
-    it('takes the cap from maxAttendees when slotPlayer is unset', () => {
-        expect(computeSchedulingOverflow(slot([1, 2, 3, 4]), CREATOR, generic(0, '2'))?.benched).toBe(2);
+    it('takes the cap from maxAttendees when slotPlayer is not a number', () => {
+        expect(computeSchedulingOverflow(slot([1, 2, 3, 4]), CREATOR, generic(Number.NaN, '2'))?.benched).toBe(2);
+    });
+
+    it('a 0-player roster (saved template / copied event) benches everyone, as the API does (Codex r2)', () => {
+        expect(computeSchedulingOverflow(slot([2, 3]), CREATOR, generic(0, '6'))).toEqual({
+            voters: ['User 2', 'User 3'], rostered: 3, cap: 0, benched: 3, creatorVoted: false,
+        });
     });
 
     it('takes the cap from Players when both are set, even when Max Attendees is smaller', () => {
@@ -62,7 +69,7 @@ describe('computeSchedulingOverflow', () => {
     it.each([
         ['nothing benched', slot([1, 2, 3, 4]), generic(4, '4')],
         ['mmo roster', slot([1, 2, 3, 4, 5]), { slotType: 'mmo' as const, slotPlayer: 2, maxAttendees: '2' }],
-        ['no cap set', slot([1, 2, 3, 4, 5]), generic(0, '')],
+        ['no cap set', slot([1, 2, 3, 4, 5]), generic(Number.NaN, '')],
         ['slot not found', undefined, generic(2, '2')],
     ])('null when %s', (_label, s, roster) => {
         expect(computeSchedulingOverflow(s, CREATOR, roster)).toBeNull();
