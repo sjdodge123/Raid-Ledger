@@ -196,3 +196,41 @@ describe('link_hub re-validates the locked binding (Codex r11 P2)', () => {
     expect(item).toEqual({ outcome: 'done', detail: 'planned', linkedHubs: 1 });
   });
 });
+
+describe('unarchive compensates a failed persist (Codex r17 P2)', () => {
+  it('re-locks + moves back to Archived when the DB write throws', async () => {
+    lock.mockResolvedValue({ ...CURRENT, lifecycleState: 'archived' });
+    const added = { everyoneSend: true, everyoneView: false, botView: false };
+    const archived = {
+      ...BINDING,
+      lifecycleState: 'archived' as const,
+      restoreParentId: 'cat-games',
+      archivedOverwrites: added,
+    };
+    jest
+      .mocked(ops.unarchiveChannel)
+      .mockResolvedValue({ previousParentId: 'cat-arch' });
+    const boom = new Error('db down');
+    jest.mocked(store.setLifecycleState).mockRejectedValue(boom);
+    const ctx = makeCtx();
+    await expect(applyAction(ctx, planned('unarchive', archived))).rejects.toBe(
+      boom,
+    );
+    expect(ops.unarchiveChannel).toHaveBeenCalled();
+    expect(ops.revertUnarchive).toHaveBeenCalledWith(ctx.guild, 'ch-7', {
+      parentId: 'cat-arch',
+      added,
+    });
+  });
+
+  it('does not compensate a successful unarchive', async () => {
+    lock.mockResolvedValue({ ...CURRENT, lifecycleState: 'archived' });
+    const archived = { ...BINDING, lifecycleState: 'archived' as const };
+    jest
+      .mocked(ops.unarchiveChannel)
+      .mockResolvedValue({ previousParentId: 'cat-arch' });
+    const item = await applyAction(makeCtx(), planned('unarchive', archived));
+    expect(item.outcome).toBe('done');
+    expect(ops.revertUnarchive).not.toHaveBeenCalled();
+  });
+});

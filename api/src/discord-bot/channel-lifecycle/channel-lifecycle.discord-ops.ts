@@ -23,6 +23,7 @@ import {
 export {
   archiveChannel,
   revertArchive,
+  revertUnarchive,
   unarchiveChannel,
   type ArchiveResult,
 } from './channel-lifecycle.archive-ops';

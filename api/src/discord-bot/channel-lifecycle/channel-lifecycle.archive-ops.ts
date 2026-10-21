@@ -230,8 +230,9 @@ export async function unarchiveChannel(
   guild: Guild,
   channelId: string,
   opts: { parentId: string | null; added?: ArchivedOverwrites | null },
-): Promise<void> {
+): Promise<{ previousParentId: string | null }> {
   const channel = await resolveTextChannel(guild, channelId, { fresh: true });
+  const previousParentId = channel.parentId;
   await moveChannel(guild, 'unarchive.move', channelId, opts.parentId);
   await lifecycleCall('unarchive.unlock', channelId, () =>
     restorePriors(
@@ -240,4 +241,30 @@ export async function unarchiveChannel(
       toChanges(opts.added),
     ),
   );
+  return { previousParentId };
+}
+
+/**
+ * Codex r17 P2: undo a successful `unarchiveChannel` whose DB write failed —
+ * re-apply the archive lock and move back to the Archived parent, so the
+ * still-archived binding matches Discord. Best effort; logged, never throws.
+ */
+export async function revertUnarchive(
+  guild: Guild,
+  channelId: string,
+  opts: { parentId: string | null; added?: ArchivedOverwrites | null },
+): Promise<void> {
+  try {
+    const fresh = await resolveTextChannel(guild, channelId, { fresh: true });
+    const changes = toChanges(opts.added);
+    await lifecycleCall('unarchive.revert.lock', channelId, () =>
+      writeLock(fresh.permissionOverwrites, idsOf(guild), changes),
+    );
+    await moveChannel(guild, 'unarchive.revert', channelId, opts.parentId);
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Unarchive revert on channel ${channelId} failed; it may stay writable: ${reason}`,
+    );
+  }
 }
