@@ -60,12 +60,13 @@ function AvatarButton({ avatarUrl, username, isOpen, onClick }: {
 }) {
     return (
         <button onClick={onClick} className="flex items-center gap-2 px-2 min-h-[44px] rounded-lg hover:bg-panel transition-colors"
-            aria-expanded={isOpen} aria-haspopup="true" data-testid="user-menu-trigger">
+            aria-label={username} aria-expanded={isOpen} aria-haspopup="true" data-testid="user-menu-trigger">
             {avatarUrl
                 ? <img src={avatarUrl} alt={username} className="w-8 h-8 rounded-full bg-overlay" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 : <div className="w-8 h-8 rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted">{username.charAt(0).toUpperCase()}</div>}
-            {/* Below lg the name stays the button's accessible name but takes no width (ROK-1875: the 768px header row). */}
-            <span className="text-foreground font-medium sr-only lg:not-sr-only">{username}</span>
+            {/* Below lg the name takes no width (ROK-1875: the 768px header row); the button's aria-label keeps it named.
+                Not sr-only + lg:not-sr-only — index.css's unlayered .sr-only beats Tailwind's layered utility. */}
+            <span className="text-foreground font-medium hidden lg:inline">{username}</span>
             <svg className={`w-4 h-4 text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>

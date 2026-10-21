@@ -46,8 +46,9 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
                 {user && (
                     <>
                         <span className="w-px h-5 bg-edge" aria-hidden="true" />
-                        <Link to="/insights" className={`flex items-center ${navClass(pathname, '/insights')}`} data-testid="nav-insights-link">
-                            <ChartBarIcon className="h-5 w-5 lg:hidden" aria-hidden="true" /><span className="sr-only lg:not-sr-only">Insights</span>
+                        <Link to="/insights" aria-label="Insights" className={`flex items-center ${navClass(pathname, '/insights')}`} data-testid="nav-insights-link">
+                            {/* Not sr-only + lg:not-sr-only: index.css's unlayered .sr-only beats Tailwind's layered lg:not-sr-only. */}
+                            <ChartBarIcon className="h-5 w-5 lg:hidden" aria-hidden="true" /><span className="hidden lg:inline" aria-hidden="true">Insights</span>
                         </Link>
                     </>
                 )}

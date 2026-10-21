@@ -77,7 +77,7 @@ describe('Header — authenticated member', () => {
         expect(nav.className, 'gap-3 below lg, gap-6 from lg').toMatch(/(^| )gap-3( |$).*lg:gap-6/);
         const insights = at(screen.getAllByRole('link', { name: 'Insights' }), 0);
         expect(insights.querySelector('svg')?.getAttribute('class'), 'the icon shows only below lg').toContain('lg:hidden');
-        expect(insights.querySelector('span')?.className, 'the label is visible from lg, screen-reader-only below').toBe('sr-only lg:not-sr-only');
+        expect(insights.querySelector('span')?.className, 'the label shows from lg only (never sr-only + lg:not-sr-only: the unlayered .sr-only wins)').toBe('hidden lg:inline');
         const brand = screen.getByTestId('header-brand');
         expect(brand.className, 'the brand may shrink').toContain('min-w-0');
         expect(brand.querySelector('span.truncate'), 'the community name truncates instead of wrapping').not.toBeNull();
