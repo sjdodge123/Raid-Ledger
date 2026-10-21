@@ -46,9 +46,7 @@ async function openVoiceRows(
  *
  * @returns How many rows were handed to `markLeave`.
  */
-export async function closeStaleVoiceRows(
-  deps: StaleRowDeps,
-): Promise<number> {
+export async function closeStaleVoiceRows(deps: StaleRowDeps): Promise<number> {
   const { db, adHocParticipantService: svc } = deps;
   if (!db || !svc) return 0;
   let closed = 0;
