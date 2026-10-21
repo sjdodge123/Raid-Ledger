@@ -8,7 +8,7 @@
  * `Date` would round to ms — so the cursor carries `cursorAt`, the DB's own
  * full-precision UTC text, and the comparison stays exact.
  */
-import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -32,8 +32,17 @@ export interface HubPostPage {
   next: HubPostCursor | null;
 }
 
-/** Feed order on the indexed columns (newest first, id breaks ties). */
-const feedOrder = [desc(hubPosts.createdAt), desc(hubPosts.id)] as const;
+/**
+ * Feed order on the indexed columns (newest first, id breaks ties). Spelled
+ * `DESC NULLS LAST` to match `idx_hub_posts_guild_created` exactly (Codex r9):
+ * a bare `DESC` means NULLS FIRST, and the planner matches an index's null
+ * ordering literally — it does not consult NOT NULL — so it could not walk the
+ * index for the keyset feed. Both columns are NOT NULL, so rows order the same.
+ */
+const feedOrder = [
+  sql`${hubPosts.createdAt} desc nulls last`,
+  sql`${hubPosts.id} desc nulls last`,
+] as const;
 
 /** `created_at` as UTC ISO text with microseconds, for the next cursor. */
 const cursorAt = sql<string>`to_char(${hubPosts.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
