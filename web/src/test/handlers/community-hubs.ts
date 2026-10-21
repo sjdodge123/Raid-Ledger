@@ -6,6 +6,7 @@
 import { http, HttpResponse } from 'msw';
 import {
     CreateHubProposalSchema,
+    GUILD_KINDS,
     type GameHubs,
     type HubDirectoryEntry,
     type HubDirectoryPage,
@@ -20,7 +21,7 @@ export function createMockHubEntry(overrides: Partial<HubDirectoryEntry> = {}): 
     return {
         id: 1, gameId: 5, gameName: "Baldur's Gate 3", gameIconUrl: null, name: 'Tavern Regulars',
         blurb: 'Honour-mode runs on Friday nights.', memberCount: 14, leaderName: 'Mirelle',
-        viewer: 'not-member', ...overrides,
+        viewer: 'not-member', kind: 'game_community', ...overrides,
     };
 }
 
@@ -38,10 +39,19 @@ export function createMockGameHubs(overrides: Partial<GameHubs> = {}): GameHubs 
     return { hubs: [], myProposals: [], canPropose: true, proposeBlockedReason: null, ...overrides };
 }
 
-/** `GET /hubs` payload. */
+/** ROK-1875: a game-server hub row (no leader; membership is presence-driven). */
+export function createMockServerHubEntry(overrides: Partial<HubDirectoryEntry> = {}): HubDirectoryEntry {
+    return createMockHubEntry({
+        id: 310, gameId: 7, gameName: 'Valheim', name: 'Valheim — Gamernight', blurb: null,
+        memberCount: 12, leaderName: null, viewer: 'not-member', kind: 'game_server', ...overrides,
+    });
+}
+
+/** `GET /hubs` payload; `kinds` defaults to the kinds of its items in `GUILD_KINDS` order. */
 export function createMockHubDirectoryPage(overrides: Partial<HubDirectoryPage> = {}): HubDirectoryPage {
     const items = overrides.items ?? [createMockHubEntry()];
-    return { items, nextCursor: null, total: items.length, ...overrides };
+    const kinds = GUILD_KINDS.filter((k) => items.some((e) => e.kind === k));
+    return { items, nextCursor: null, total: items.length, kinds, ...overrides };
 }
 
 export interface CommunityHubMockState {
@@ -62,7 +72,11 @@ export function communityHubHandlers(state: CommunityHubMockState = {}) {
     };
     return [
         http.get(`${API}/hubs/by-game/:gameId`, () => HttpResponse.json(gameHubs)),
-        http.get(`${API}/hubs`, () => HttpResponse.json(directory)),
+        http.get(`${API}/hubs`, ({ request }) => {
+            const kind = new URL(request.url).searchParams.get('kind');
+            const items = kind ? directory.items.filter((e) => e.kind === kind) : directory.items;
+            return HttpResponse.json({ ...directory, items, total: items.length });
+        }),
         http.post(`${API}/hubs/proposals`, async ({ request }) => {
             const parsed = CreateHubProposalSchema.safeParse(await request.json());
             if (!parsed.success) return HttpResponse.json({ message: 'Bad request' }, { status: 400 });
