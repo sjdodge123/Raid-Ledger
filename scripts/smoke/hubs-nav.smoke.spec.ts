@@ -205,6 +205,8 @@ test.describe('Hubs nav (ROK-1875)', () => {
         await expect(page).toHaveURL(/[?&]kind=server(?:&|$)/, { timeout: 15_000 });
         await expect(crew, 'Kind = Server drops the community hub').toHaveCount(0, { timeout: 15_000 });
         await expect(server, 'Kind = Server keeps the server hub').toHaveCount(1);
-        await expect(page.getByTestId('hub-kind-chip').filter({ hasNotText: 'Server' }), 'every card left is a server hub').toHaveCount(0);
+        // Scoped to the directory cards: the Hubs nav menu also renders kind chips (one per joined hub).
+        await expect(cards.getByTestId('hub-kind-chip').filter({ hasNotText: 'Server' }), 'every card left is a server hub').toHaveCount(0);
+        await expect(cards.getByTestId('hub-kind-chip').filter({ hasText: 'Server' }).first(), 'the remaining cards carry the Server chip').toBeVisible();
     });
 });
