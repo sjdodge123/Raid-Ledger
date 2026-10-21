@@ -53,6 +53,8 @@ jest.mock('./ad-hoc-notification.helpers', () => ({
   buildContext: jest.fn(),
   resolveNotificationChannel: jest.fn(),
   buildEmbedEventData: jest.fn(),
+  // ROK-1888 M1: the recap reads the card's roster (its flags included).
+  readParticipants: jest.fn(() => Promise.resolve([])),
 }));
 // ROK-1499: the occupancy ledger and the room hydration are pinned by their
 // own specs. Here they would only pull `fakeDb()` (which knows one SELECT) into
