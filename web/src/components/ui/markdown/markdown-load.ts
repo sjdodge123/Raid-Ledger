@@ -13,16 +13,18 @@
  */
 import type { JSONContent } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
+import { isSafeMarkdownHref } from '@raid-ledger/contract';
 import { parseBlocks, type MarkdownBlockNode } from './markdown-block-parse';
 import { buildMarkdownExtensions } from './markdown-extensions';
 import { prepareEditorMarkdown } from './markdown-serialize';
 
 /**
  * A line start the GFM parser reads as a block the reader does not have: ATX heading, quote, code
- * fence (a backtick run with no later backtick — otherwise it is an inline code span), thematic
+ * fence (a backtick run with no later backtick — otherwise it is an inline code span; a `~~~` fence
+ * is already literal, `prepareEditorMarkdown` escapes every `~` of a run that is not `~~`), thematic
  * break, bullet marker, HTML block (not an `<scheme:…>` autolink), link reference definition.
  */
-const BLOCK_START = /^(?:#{1,6}(?=[ \t]|$)|>|`{3,}(?=[^`]*$)|~{3,}|([-*_])(?:[ \t]*\1){2,}[ \t]*$|[-+*](?=[ \t]|$)|<(?![A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>)(?=[A-Za-z/!?])|\[(?=[^\]]*\]:))/;
+const BLOCK_START = /^(?:#{1,6}(?=[ \t]|$)|>|`{3,}(?=[^`]*$)|([-*_])(?:[ \t]*\1){2,}[ \t]*$|[-+*](?=[ \t]|$)|<(?![A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>)(?=[A-Za-z/!?])|\[(?=[^\]]*\]:))/;
 /** An ordered-list marker (`1.` / `1)`); the escape goes before its delimiter. */
 const ORDERED_START = /^(\d{1,9})([.)])(?=[ \t]|$)/;
 
@@ -36,17 +38,35 @@ export function escapeBlockStart(line: string): string {
     return BLOCK_START.test(line) ? `\\${line}` : line;
 }
 
+/** The reader's autolink (`parseInline`): `<http(s)://…>` up to the first `>`. */
+const READER_AUTOLINK = /^<(https?:\/\/[^>]*)>/;
+
+/** A marked link token (structural — `marked` is a dependency of `@tiptap/markdown`, not of web). */
+interface LinkToken { type: 'link'; raw: string; href: string; text: string; tokens: Array<{ type: 'text'; raw: string; text: string }> }
+
+/**
+ * `<…>` as the reader reads it (Codex r14): only a safe http(s) URL links, and its href AND text are
+ * the stored characters verbatim — TipTap decodes a text token's entities, so `&` goes in as `&amp;`.
+ */
+function readerAutolink(src: string): LinkToken | undefined {
+    const href = READER_AUTOLINK.exec(src)?.[1];
+    if (href === undefined || !isSafeMarkdownHref(href)) return undefined;
+    const text = href.replace(/&/g, '&amp;');
+    return { type: 'link', raw: `<${href}>`, href, text, tokens: [{ type: 'text', raw: text, text }] };
+}
+
 let shared: MarkdownManager | undefined;
 
 /** One markdown manager over the editor's own extensions, for inline parsing outside an editor. */
 function manager(): MarkdownManager {
-    shared ??= new MarkdownManager({
+    if (shared) return shared;
+    shared = new MarkdownManager({
         markedOptions: { breaks: true, gfm: true },
         extensions: buildMarkdownExtensions({ onLinkShortcut: () => undefined }),
     });
     // MarkdownBlock does not autolink a bare URL, so neither does the load path (Codex r13: a stored
     // `[x]: https://…` or `!\[img\](https://…)` otherwise gains a link the reader never showed).
-    shared.instance.use({ tokenizer: { url: () => undefined } });
+    shared.instance.use({ tokenizer: { url: () => undefined, autolink: readerAutolink } });
     return shared;
 }
 

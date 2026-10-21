@@ -12,6 +12,7 @@
  * TipTap's `&nbsp;` marker for them) collapse to one blank line.
  */
 import type { Editor } from '@tiptap/core';
+import { isSafeMarkdownHref } from '@raid-ledger/contract';
 import { trimUnflankedEmphasis } from './markdown-flanking';
 import { fixLinkMarkBoundaries } from './markdown-link-marks';
 import { guardLineStarts, LINE_START_SENTINEL } from './markdown-line-start';
@@ -24,6 +25,16 @@ const ENTITY = /&(lt|gt|amp);/g;
  * (Codex r4). Backslashes inside a span are literal, so the closing run needs no such check.
  */
 const CODE_SPAN = /((?<!`)(?<!(?:^|[^\\])(?:\\\\)*\\)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
+/**
+ * A `<http(s)://…>` autolink as `parseInline` reads it: up to the first `>`, not backslash-escaped, not
+ * a link's `(<…>)` destination. Its URL is verbatim — no escapes, no entities — so load and save never
+ * rewrite it (Codex r14: `<https://x?a=1&amp;b=2>` loaded with href `…\\&amp;…`).
+ */
+const AUTOLINK = /(?<!(?:^|[^\\])(?:\\\\)*\\)(?<!\]\()<(https?:\/\/[^>]*)>/;
+/** A code span or an autolink — the stretches no rewrite may touch. */
+const VERBATIM = new RegExp(`${CODE_SPAN.source}|${AUTOLINK.source}`, 'g');
+/** A run of `~` that is not backslash-escaped; only exactly `~~` is a strike delimiter to the reader. */
+const TILDE_RUN = /(?<!(?:^|[^\\])(?:\\\\)*\\)~+/g;
 /** An `&` that starts an entity reference and is not already backslash-escaped. */
 const ENTITY_AMP = /(?<!(?:^|[^\\])(?:\\\\)*\\)&(?=[A-Za-z#][A-Za-z0-9]*;)/g;
 /**
@@ -82,11 +93,22 @@ function decodeSegment(segment: string): string {
     return splitDestinations(segment).map((part: string, i: number): string => (i % 2 === 1 ? part : decodeText(part))).join('');
 }
 
-/** Apply `rewrite` to the non-code parts only (split() with two groups yields [text, span, ticks, …]). */
+/** Apply `rewrite` outside code spans and reader autolinks (an unsafe `<…>` is not a link, so it is text). */
 function outsideCode(markdown: string, rewrite: (part: string) => string): string {
-    return markdown.split(CODE_SPAN)
-        .flatMap((part: string, i: number): string[] => (i % 3 === 2 ? [] : [i % 3 === 1 ? part : rewrite(part)]))
-        .join('');
+    let out = '';
+    let from = 0;
+    for (const match of markdown.matchAll(VERBATIM)) {
+        const href = match[3];
+        if (href !== undefined && !isSafeMarkdownHref(href)) continue;
+        out += rewrite(markdown.slice(from, match.index)) + match[0];
+        from = match.index + match[0].length;
+    }
+    return out + rewrite(markdown.slice(from));
+}
+
+/** Escape every `~` of a run the reader prints literally (any length but 2), so the GFM parser cannot strike `~x~` (Codex r14). */
+function escapeLiteralTildes(part: string): string {
+    return part.replace(TILDE_RUN, (run: string): string => (run.length === 2 ? run : '\\~'.repeat(run.length)));
 }
 
 /**
@@ -110,13 +132,14 @@ const INDENTED_LIST_MARKER = /^[ \t]+((?:[-*+]|\d{1,9}[.)])[ \t]+)/gm;
  * so a save would rewrite `&lt;raid&gt;` to `<raid>`. Escaping the `&` keeps it literal text
  * (and keeps a destination's `&amp;` as written); code spans are literal already.
  * @param markdown - the stored hub-post body
- * @returns the same document with every unescaped entity-starting `&` written `\&`, a list
+ * @returns the same document with every unescaped entity-starting `&` written `\&` (autolinks
+ *   verbatim), every `~` outside a `~~` run written `\~`, a list
  *   item's leading task marker written `\[x]` so it loads as literal text, and nested list items
  *   un-indented into sibling items
  */
 export function prepareEditorMarkdown(markdown: string): string {
     const flat = markdown.replace(INDENTED_LIST_MARKER, '$1').replace(TASK_MARKER, '$1\\[$2]');
-    return outsideCode(flat, (part: string): string => part.replace(ENTITY_AMP, '\\&'));
+    return outsideCode(flat, (part: string): string => escapeLiteralTildes(part.replace(ENTITY_AMP, '\\&')));
 }
 
 /**

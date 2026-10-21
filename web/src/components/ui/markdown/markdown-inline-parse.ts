@@ -127,9 +127,10 @@ function matchLiteral(s: string, i: number): Hit | null {
         return { nodes: [{ kind: 'text', value: next }], end: i + 2 };
     }
     if (ch !== '`') return null;
-    const end = codeSpanEnd(s, i);
-    if (end === -1) return null;
     const n = runLength(s, i, '`');
+    const end = codeSpanEnd(s, i);
+    // An unmatched run is literal as a whole (CommonMark) — not re-scanned from its second backtick.
+    if (end === -1) return { nodes: [{ kind: 'text', value: '`'.repeat(n) }], end: i + n };
     const raw = s.slice(i + n, end - n);
     const value = raw.length > 2 && raw.startsWith(' ') && raw.endsWith(' ') ? raw.slice(1, -1) : raw;
     return { nodes: [{ kind: 'code', value }], end };
