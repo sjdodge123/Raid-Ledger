@@ -634,4 +634,13 @@ describe('DesignSystemPage — TabRow demo (ROK-1785)', () => {
         expect(within(nav).queryByRole('link', { name: 'Loot' })).toBeNull();
         expect(within(demo).getByRole('region', { name: 'Overview' })).toHaveAttribute('id', 'ds-tab-overview');
     });
+
+    it('shows the TabRow More menu demo (ROK-1876) with both hub rows', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-tab-row-more');
+        expect(within(demo).getByRole('navigation', { name: 'Demo hub sections' })).toBeInTheDocument();
+        const pinned = within(demo).getByRole('navigation', { name: 'Demo hub sections, Planner active' });
+        expect(within(pinned).getAllByRole('link').length, 'jsdom has no layout, so every tab stays in the row').toBe(7);
+    });
 });

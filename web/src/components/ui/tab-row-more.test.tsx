@@ -35,7 +35,8 @@ function mockWidths(rowWidth: number): void {
 
 /** A ResizeObserver that reports once on observe, as browsers do. */
 class ImmediateResizeObserver {
-    constructor(private readonly cb: ResizeObserverCallback) {}
+    private readonly cb: ResizeObserverCallback;
+    constructor(cb: ResizeObserverCallback) { this.cb = cb; }
     observe(): void { this.cb([], this as unknown as ResizeObserver); }
     unobserve(): void {}
     disconnect(): void {}
