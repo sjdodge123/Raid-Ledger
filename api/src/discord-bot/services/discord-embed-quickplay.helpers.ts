@@ -48,9 +48,9 @@ const OPEN = '▸'; // ▸
 const SQUARE = '■'; // ■
 const SEP = '·'; // ·
 const EN_DASH = '–'; // –
-/** ROK-1888 OQ4: the hint's lead-in, before the masked join link. */
-/** Operator copy ruling 2026-10-21: lead with the link, then the benefit. */
-export const JOIN_HINT_BENEFIT = 'to get event reminders and track your sessions';
+/** ROK-1888 OQ4 (operator copy ruling 2026-10-21): the masked join link, then the benefit. */
+export const JOIN_HINT_BENEFIT =
+  'to get event reminders and track your sessions';
 /** The join link's label — the same ↗ as `Open event ↗`. */
 export const JOIN_HINT_LABEL = 'Join Raid Ledger \u2197';
 
