@@ -99,6 +99,17 @@ describe('markdownExcerpt — markers, graphemes, links, escapes, bounds', () =>
     expect(out.endsWith('…')).toBe(true);
   });
 
+  it('E14 a destination with balanced or escaped parens stays one indivisible link (Codex r7)', () => {
+    const wiki = '[wiki](https://en.wikipedia.org/wiki/Raid_(gaming))';
+    const out = ex(`${'x'.repeat(295)} ${wiki} tail`, 300);
+    // The excerpt must never end inside the link: the whole link, then the ellipsis.
+    expect(out).toBe(`${'x'.repeat(295)} ${wiki}…`);
+    const escaped = '[w](https://ex.com/a\\)b)';
+    expect(ex(`${'x'.repeat(10)} ${escaped} tail`, 12)).toBe(
+      `${'x'.repeat(10)} ${escaped}…`,
+    );
+  });
+
   it('E13 no ellipsis when the body is exactly at budget', () => {
     expect(ex('**bold** text', 9)).toBe('**bold** text');
     expect(ex('exactly ten', 11)).toBe('exactly ten');

@@ -128,10 +128,30 @@ function absolutise(href: string, clientUrl: string): string {
   return `${base}${href}`;
 }
 
+/**
+ * Index of the `)` closing a link destination that starts at `from`, or -1.
+ * CommonMark: parentheses inside it are balanced or `\`-escaped, so
+ * `(…/Raid_(gaming))` closes at the second `)` (Codex r7) — the rule the
+ * web `MarkdownBlock` renders by. Bounded by the line.
+ */
+function closeDestination(line: string, from: number): number {
+  let depth = 0;
+  for (let j = from; j < line.length; j++) {
+    const ch = line[j];
+    if (ch === '\\') j++;
+    else if (ch === '(') depth++;
+    else if (ch === ')' && depth-- === 0) return j;
+  }
+  return -1;
+}
+
 /** `[text](href)` → one atom; an unsafe href keeps only the escaped text. */
 function link(ctx: Ctx, i: number): number {
   const j = find(ctx, ']', i + 1);
-  const k = j === -1 || ctx.line[j + 1] !== '(' ? -1 : find(ctx, ')', j + 2);
+  const k =
+    j === -1 || ctx.line[j + 1] !== '('
+      ? -1
+      : closeDestination(ctx.line, j + 2);
   if (k === -1) {
     pushText(ctx.out, '[');
     return i + 1;
