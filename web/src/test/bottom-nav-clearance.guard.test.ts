@@ -48,7 +48,7 @@ describe('bottom-nav clearance (ROK-1875)', () => {
 
     it('the variable matches the bar and the circle it describes (h-14 bar, -top-6 circle)', () => {
         expect(source('components/layout/bottom-tab-bar.tsx'), 'bar height changed — update --bottom-nav-height').toContain('h-14');
-        expect(source('components/layout/hub-nav/bottom-hubs-button.tsx'), 'circle raise changed — update --bottom-nav-raise').toContain('absolute -top-6');
+        expect(source('components/layout/hub-nav/hubs-circle.tsx'), 'circle raise changed — update --bottom-nav-raise').toContain('absolute -top-6');
     });
 
     it.each([
