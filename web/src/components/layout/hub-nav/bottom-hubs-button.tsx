@@ -14,13 +14,16 @@ import { lazy, Suspense, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { Squares2X2Icon } from '@heroicons/react/24/solid';
 import type { MyGuild } from '@raid-ledger/contract';
+import { Button } from '../../ui/button';
 import { HUBS_PATH, useMyGuildsQuery } from './my-hubs-queries';
 import { isHubsNavActive } from './use-hub-nav-active';
 
 const BottomHubsSheet = lazy(() => import('./bottom-hubs-sheet'));
 
-/** The slot: fills its column, label pinned to the bar's bottom, ≥56px tall. */
-const SLOT_CLASS = 'relative flex h-14 w-full flex-col items-center justify-end pb-1.5 focus-visible:outline-none group';
+/** The slot: fills its column and the bar's 56px height; circle and label are positioned inside it. */
+const SLOT_CLASS = 'relative h-14 w-full group';
+/** The link variant adds the layout `Button variant="bare"` already brings. */
+const LINK_SLOT_CLASS = `${SLOT_CLASS} flex items-center justify-center focus-visible:outline-none`;
 /** The raised circle: `bg-success` + `text-white` (painted `--color-status-solid-label` on both families). */
 const CIRCLE_CLASS = 'absolute -top-6 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full '
     + 'border-4 border-surface bg-success text-white shadow-lg transition-transform duration-75 group-active:scale-95 '
@@ -33,7 +36,7 @@ function SlotFace({ active }: { active: boolean }): JSX.Element {
             <span data-testid="bottom-hubs-circle" aria-hidden="true" className={`${CIRCLE_CLASS} ${active ? ACTIVE_RING : ''}`}>
                 <Squares2X2Icon className="h-6 w-6" />
             </span>
-            <span className={`text-[10px] font-medium ${active ? 'text-emerald-400' : 'text-secondary'}`}>Hubs</span>
+            <span className={`absolute inset-x-0 bottom-1.5 text-center text-[10px] font-medium ${active ? 'text-success' : 'text-secondary'}`}>Hubs</span>
         </>
     );
 }
@@ -44,10 +47,10 @@ function SheetSlot({ active, hubs }: { active: boolean; hubs: MyGuild[] }): JSX.
     const close = (): void => setOpen(false);
     return (
         <>
-            <button type="button" aria-label="Hubs" aria-haspopup="dialog" aria-expanded={open} aria-current={active ? 'page' : undefined}
+            <Button variant="bare" aria-label="Hubs" aria-haspopup="dialog" aria-expanded={open} aria-current={active ? 'page' : undefined}
                 data-testid="bottom-hubs-trigger" className={SLOT_CLASS} onClick={() => { setLoaded(true); setOpen(true); }}>
                 <SlotFace active={active} />
-            </button>
+            </Button>
             {loaded && <Suspense fallback={null}><BottomHubsSheet isOpen={open} onClose={close} hubs={hubs} /></Suspense>}
         </>
     );
@@ -61,7 +64,7 @@ export function BottomHubsButton({ pathname }: { pathname: string }): JSX.Elemen
         return <SheetSlot active={active} hubs={hubs} />;
     }
     return (
-        <Link to={HUBS_PATH} aria-label="Hubs" aria-current={active ? 'page' : undefined} data-testid="bottom-hubs-link" className={SLOT_CLASS}>
+        <Link to={HUBS_PATH} aria-label="Hubs" aria-current={active ? 'page' : undefined} data-testid="bottom-hubs-link" className={LINK_SLOT_CLASS}>
             <SlotFace active={active} />
         </Link>
     );
