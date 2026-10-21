@@ -34,6 +34,9 @@ jest.mock('./channel-lifecycle.store.queries', () => ({
       autoManaged: true,
       pinned: false,
       lifecycleState: 'active',
+      gameId: Number(id.replace('b-', '')),
+      bindingPurpose: 'game-announcements',
+      recurrenceGroupId: null,
     }),
   ),
 }));

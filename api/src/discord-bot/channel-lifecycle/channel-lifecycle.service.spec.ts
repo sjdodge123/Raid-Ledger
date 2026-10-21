@@ -171,7 +171,12 @@ beforeEach(() => {
     .mocked(storeQueries.lockLifecycleBinding)
     .mockImplementation((_db, id) => {
       const b = liveBindings.get(id);
-      return Promise.resolve(b ? { ...b } : null);
+      const routing = {
+        gameId: Number(id.replace('b-', '')),
+        bindingPurpose: 'game-announcements',
+        recurrenceGroupId: null,
+      };
+      return Promise.resolve(b ? { ...b, ...routing } : null);
     });
   bindings.bind.mockResolvedValue({
     binding: { id: 'b-new' },

@@ -56,12 +56,23 @@ export function sharedChannelDetail(n: number): string {
 /**
  * Codex r9 P2: why a binding re-read (row-locked) at apply time no longer
  * qualifies for the planned archive / unarchive, or null when it still does.
+ * Codex r10 P2: a binding re-routed to another game / purpose / series since
+ * the read is judged on activity that is no longer its own — skip it too.
  */
 export function staleBindingDetail(
-  planned: Pick<LifecycleCandidateBinding, 'channelId' | 'lifecycleState'>,
+  planned: Pick<LifecycleCandidateBinding, 'channelId' | 'lifecycleState'> & {
+    gameId: number;
+  },
   current: LockedBindingState | null,
 ): string | null {
   if (!current) return 'skipped: binding removed since the read';
+  if (current.gameId !== planned.gameId)
+    return 'skipped: reassigned to another game';
+  if (
+    current.bindingPurpose !== 'game-announcements' ||
+    current.recurrenceGroupId !== null
+  )
+    return 'skipped: purpose changed since the read';
   if (current.pinned) return 'skipped: pinned since the read';
   if (!current.autoManaged) return 'skipped: no longer auto-managed';
   if (current.channelId !== planned.channelId)

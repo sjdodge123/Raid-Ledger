@@ -258,9 +258,10 @@ async function applyUnarchive(
 async function staleOutcome(
   ctx: ApplyContext,
   binding: LifecycleCandidateBinding,
+  gameId: number,
 ): Promise<ItemOutcome | null> {
   const current = await lockLifecycleBinding(ctx.db, binding.id);
-  const detail = staleBindingDetail(binding, current);
+  const detail = staleBindingDetail({ ...binding, gameId }, current);
   return detail === null ? null : { outcome: 'deferred', detail };
 }
 
@@ -270,7 +271,7 @@ async function applyStateChange(
   game: PlannedGame,
   binding: LifecycleCandidateBinding,
 ): Promise<ItemOutcome> {
-  const stale = await staleOutcome(ctx, binding);
+  const stale = await staleOutcome(ctx, binding, game.row.gameId);
   if (stale) return stale;
   if (game.action === 'archive') return applyArchive(ctx, game, binding);
   return applyUnarchive(ctx, game, binding);

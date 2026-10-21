@@ -95,6 +95,9 @@ const CURRENT = {
   autoManaged: true,
   pinned: false,
   lifecycleState: 'active',
+  gameId: 7,
+  bindingPurpose: 'game-announcements',
+  recurrenceGroupId: null,
 };
 
 describe('apply re-validates the locked binding (Codex r9 P2)', () => {
@@ -129,6 +132,26 @@ describe('apply re-validates the locked binding (Codex r9 P2)', () => {
     lock.mockResolvedValue(current);
     const item = await applyAction(makeCtx(), planned('archive'));
     expect(ops.archiveChannel).not.toHaveBeenCalled();
+    expect(item).toEqual({ outcome: 'deferred', detail });
+  });
+
+  // Codex r10 P2: a binding reassigned via updateConfig() between the
+  // snapshot and the apply must not be archived on the old game's inactivity.
+  it.each([
+    [{ ...CURRENT, gameId: 9 }, 'skipped: reassigned to another game'],
+    [
+      { ...CURRENT, bindingPurpose: 'general-lfg' },
+      'skipped: purpose changed since the read',
+    ],
+    [
+      { ...CURRENT, recurrenceGroupId: 'series-1' },
+      'skipped: purpose changed since the read',
+    ],
+  ])('a re-routed binding (%p) is skipped', async (current, detail) => {
+    lock.mockResolvedValue(current);
+    const item = await applyAction(makeCtx(), planned('archive'));
+    expect(ops.archiveChannel).not.toHaveBeenCalled();
+    expect(store.setLifecycleState).not.toHaveBeenCalled();
     expect(item).toEqual({ outcome: 'deferred', detail });
   });
 

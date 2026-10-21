@@ -47,12 +47,18 @@ export async function countOtherChannelBindings(
   return row?.n ?? 0;
 }
 
-/** The binding columns a reconcile re-validates before acting (Codex r9 P2). */
+/**
+ * The binding columns a reconcile re-validates before acting (Codex r9 P2),
+ * incl. the routing fields `updateConfig()` can reassign (Codex r10 P2).
+ */
 export interface LockedBindingState {
   channelId: string;
   autoManaged: boolean;
   pinned: boolean;
   lifecycleState: string;
+  gameId: number | null;
+  bindingPurpose: string;
+  recurrenceGroupId: string | null;
 }
 
 /**
@@ -71,6 +77,9 @@ export async function lockLifecycleBinding(
       autoManaged: b.autoManaged,
       pinned: b.pinned,
       lifecycleState: b.lifecycleState,
+      gameId: b.gameId,
+      bindingPurpose: b.bindingPurpose,
+      recurrenceGroupId: b.recurrenceGroupId,
     })
     .from(b)
     .where(eq(b.id, bindingId))
