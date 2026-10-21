@@ -4,8 +4,8 @@
  *
  * Grammar: **bold** / __bold__, *italic* / _italic_, ***both*** (CommonMark
  * delimiter runs, so `***a** b*` and `**a***b*` pair — see markdown-emphasis), ~~strike~~
- * (opt-in), `code`, [label](href "optional title"), <https://…> autolinks (opt-in) and `\`
- * escapes of ASCII punctuation. Marks nest (bold inside a link, a link inside
+ * (opt-in, resolved with emphasis so the two may cross), `code`, [label](href "optional title"),
+ * <https://…> autolinks (opt-in) and `\` escapes of ASCII punctuation. Marks nest (bold inside a link, a link inside
  * bold) up to MAX_DEPTH. A link whose href fails the contract's
  * `isSafeMarkdownHref` is NOT a link — its source stays literal text. `![`
  * (image syntax) is literal. Anything unmatched (`**x`) is literal.
@@ -44,8 +44,6 @@ interface Hit {
 const MAX_DEPTH = 4;
 const ESCAPABLE = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
 
-const isSpace = (ch: string | undefined): boolean => ch === undefined || ch.trim() === '';
-
 /** Length of the run of `ch` starting at i. */
 function runLength(s: string, i: number, ch: string): number {
     let n = 0;
@@ -63,34 +61,6 @@ function codeSpanEnd(s: string, i: number): number {
         j = s.indexOf('`', j + m);
     }
     return -1;
-}
-
-/** Index of the `~~` run closing a strike opened before `from`, or -1. */
-function findStrikeClose(s: string, from: number): number {
-    let j = from;
-    while (j < s.length) {
-        const ch = s[j];
-        if (ch === '\\') { j += 2; continue; }
-        if (ch === '`') {
-            const end = codeSpanEnd(s, j);
-            if (end !== -1) { j = end; continue; }
-        }
-        if (ch !== '~') { j++; continue; }
-        const m = runLength(s, j, '~');
-        if (m === 2 && j > from && !isSpace(s[j - 1])) return j;
-        j += m;
-    }
-    return -1;
-}
-
-/** `~~strike~~` opening at i (`*` / `_` emphasis is resolved by `markdown-emphasis`). */
-function matchStrike(ctx: Ctx, i: number): Hit | null {
-    const { s } = ctx;
-    if (runLength(s, i, '~') !== 2 || isSpace(s[i + 2])) return null;
-    const close = findStrikeClose(s, i + 2);
-    if (close === -1) return null;
-    const inner = parseNested(ctx, s.slice(i + 2, close), ctx.inLink);
-    return { nodes: [{ kind: 's', children: inner }], end: close + 2 };
 }
 
 /** Index of the `]` matching the `[` at i (escapes skipped), or -1. */
@@ -171,7 +141,6 @@ function matchAt(ctx: Ctx, i: number): Hit | null {
     if (ch === '!' && s[i + 1] === '[') return { nodes: [{ kind: 'text', value: '![' }], end: i + 2 };
     if (ch === '[' && !ctx.inLink) return matchLink(ctx, i);
     if (ch === '<' && opts.autolink && !ctx.inLink) return matchAutolink(ctx, i);
-    if (ch === '~' && opts.strike) return matchStrike(ctx, i);
     return null;
 }
 
@@ -184,7 +153,7 @@ function parseWith(ctx: Ctx): InlineNode[] {
     const items: EmphasisItem[] = [];
     let i = 0;
     while (i < ctx.s.length) {
-        const delim = ctx.depth < MAX_DEPTH ? emphasisDelim(ctx.s, i, ctx.opts.strike ? '~*' : '') : null;
+        const delim = ctx.depth < MAX_DEPTH ? emphasisDelim(ctx.s, i, ctx.opts.strike) : null;
         if (delim) { items.push(delim); i += delim.count; continue; }
         const hit = matchAt(ctx, i);
         if (hit) items.push(...hit.nodes);
