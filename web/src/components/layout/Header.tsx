@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { ChartBarIcon } from '@heroicons/react/24/outline';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from '../notifications';
@@ -34,7 +35,8 @@ function NavLinks({ links, pathname }: { links: typeof LEADING_LINKS; pathname: 
 function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
     return (
         <>
-            <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
+            {/* 768–1023px (ROK-1875): tighter gaps, Insights collapses to its icon and the brand truncates, so the row fits — the username collapses too (UserMenu). */}
+            <nav aria-label="Main navigation" className="hidden md:flex shrink-0 items-center gap-3 lg:gap-6">
                 <NavLinks links={LEADING_LINKS} pathname={pathname} />
                 {/* ROK-1875: one Hubs item (a link, or the "Your hubs" menu) for members, from md; the directory needs a session. */}
                 {user && <HubsNavItem pathname={pathname} />}
@@ -44,7 +46,9 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
                 {user && (
                     <>
                         <span className="w-px h-5 bg-edge" aria-hidden="true" />
-                        <Link to="/insights" className={navClass(pathname, '/insights')}>Insights</Link>
+                        <Link to="/insights" className={`flex items-center ${navClass(pathname, '/insights')}`} data-testid="nav-insights-link">
+                            <ChartBarIcon className="h-5 w-5 lg:hidden" aria-hidden="true" /><span className="sr-only lg:not-sr-only">Insights</span>
+                        </Link>
                     </>
                 )}
             </nav>
@@ -56,7 +60,7 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
 
 function DesktopActions({ user }: { user: User | null }) {
     return (
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex shrink-0 items-center gap-3 lg:gap-4">
             <ThemeToggle />
             {user ? (<><NotificationBell /><UserMenu /></>) : (
                 <Link to="/login" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors text-sm">Login</Link>
@@ -67,9 +71,9 @@ function DesktopActions({ user }: { user: User | null }) {
 
 function CommunityLogo({ logoUrl, name }: { logoUrl: string | null; name: string }) {
     return (
-        <Link to="/" className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors">
-            {logoUrl ? <img src={logoUrl} alt={name} className="w-8 h-8 rounded-lg object-contain" width={32} height={32} /> : <span className="text-2xl">&#x2694;&#xFE0F;</span>}
-            {name}
+        <Link to="/" className="flex min-w-0 items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors" data-testid="header-brand">
+            {logoUrl ? <img src={logoUrl} alt={name} className="w-8 h-8 shrink-0 rounded-lg object-contain" width={32} height={32} /> : <span className="shrink-0 text-2xl">&#x2694;&#xFE0F;</span>}
+            <span className="truncate whitespace-nowrap">{name}</span>
         </Link>
     );
 }

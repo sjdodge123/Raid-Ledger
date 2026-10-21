@@ -72,7 +72,7 @@ function HubsMenu({ hubs, active }: { hubs: MyGuild[]; active: boolean }): JSX.E
     useOutsidePressClose(rootRef, isOpen, close);
     return (
         <div ref={rootRef} className="relative">
-            <Button ref={triggerRef} variant="ghost" size="sm" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={isOpen}
+            <Button ref={triggerRef} variant="ghost" size="sm" className="md:px-1 lg:px-3" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={isOpen}
                 aria-controls={isOpen ? menuId : undefined} aria-current={active ? 'page' : undefined} data-testid="nav-hubs-menu-trigger">
                 <span className={`flex items-center gap-1 text-base ${navClass(active ? 'on' : '', 'on')}`}>
                     Hubs <ChevronDownIcon className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
