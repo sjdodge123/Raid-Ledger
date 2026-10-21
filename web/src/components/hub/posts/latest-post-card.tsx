@@ -1,10 +1,11 @@
 /**
  * ROK-1868 W2/W2b — the Overview's newest leader post (replaces the ROK-1786
  * GM post card in the same cell). Body is markdown, height-clamped at 12 lines
- * (D6) with "Read the full post"; editors edit inline or open the composer
+ * (D6) with "Read the full post" (an in-place expand for an overview-only
+ * visitor, who cannot open the member-only Posts tab); editors edit inline or open the composer
  * above it (D9, no overlay). A 403 (members-first visitor) renders nothing.
  */
-import { useRef, useState, type JSX, type MouseEvent } from 'react';
+import { useId, useRef, useState, type JSX, type MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildKind, HubPost } from '@raid-ledger/contract';
@@ -56,16 +57,33 @@ function ReadFullLink({ postId }: { postId: number }): JSX.Element {
     );
 }
 
-function LatestPost({ post, guildId, previous }: { post: HubPost; guildId: number; previous: string }): JSX.Element {
+/** The clamp is `max-h-[15rem]` — measured against this so the answer holds while expanded. */
+const CLAMP_REM = 15;
+
+interface LatestPostProps { post: HubPost; guildId: number; previous: string; canOpenPosts: boolean }
+
+/** A visitor who cannot open Posts (member-only endpoints) expands the overview post in place (Codex r4). */
+function ExpandToggle({ expanded, bodyId, onToggle }: { expanded: boolean; bodyId: string; onToggle: () => void }): JSX.Element {
+    return (
+        <Button variant="ghost" size="sm" className="mb-2" aria-expanded={expanded} aria-controls={bodyId} onClick={onToggle}>
+            {expanded ? 'Show less' : 'Read the full post'}
+        </Button>
+    );
+}
+
+function LatestPost({ post, guildId, previous, canOpenPosts }: LatestPostProps): JSX.Element {
     const bodyRef = useRef<HTMLDivElement>(null);
-    const clamped = useOverflow(bodyRef, [post.body]);
-    const hasPrevious = useHasPreviousPosts(guildId, true);
+    const [expanded, setExpanded] = useState(false);
+    const clamped = useOverflow(bodyRef, [post.body, expanded], CLAMP_REM);
+    const hasPrevious = useHasPreviousPosts(guildId, canOpenPosts);
+    const bodyId = useId();
     return (
         <>
-            <div ref={bodyRef} className="mb-2 max-h-[15rem] overflow-hidden">
+            <div ref={bodyRef} id={bodyId} className={expanded ? 'mb-2' : 'mb-2 max-h-[15rem] overflow-hidden'}>
                 <MarkdownBlock text={post.body} className="text-sm text-secondary" testId="guild-gm-post-body" />
             </div>
-            {clamped && <ReadFullLink postId={post.id} />}
+            {clamped && canOpenPosts && <ReadFullLink postId={post.id} />}
+            {clamped && !canOpenPosts && <ExpandToggle expanded={expanded} bodyId={bodyId} onToggle={() => setExpanded((v) => !v)} />}
             <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
                 <PostByline post={post} testId="guild-gm-post-byline" />
                 {hasPrevious && <JumpLink testId="hub-posts-previous" href="#posts">{previous}</JumpLink>}
@@ -107,13 +125,15 @@ interface CardBodyProps {
     /** The post captured when Edit was pressed — a refetch bringing a newer post must not retarget the draft (Codex P1). */
     editing: HubPost | null;
     mode: Mode; copy: HubCopy; onCompose: () => void; onDone: () => void;
+    /** False for an overview-only visitor: the Posts endpoints are member-only. */
+    canOpenPosts: boolean;
 }
 
-function CardBody({ state, post, guildId, canEdit, editing, mode, copy, onCompose, onDone }: CardBodyProps): JSX.Element | null {
+function CardBody({ state, post, guildId, canEdit, editing, mode, copy, onCompose, onDone, canOpenPosts }: CardBodyProps): JSX.Element | null {
     if (state === 'pending') return <PostSkeleton />;
     if (state === 'error') return <p role="alert" className="text-sm text-danger" data-testid="guild-gm-post-error">Couldn’t load the guild post. Try again later.</p>;
     if (canEdit && mode === 'edit' && editing) return <PostEditor key={editing.id} guildId={guildId} post={editing} onDone={onDone} />;
-    if (post) return <LatestPost post={post} guildId={guildId} previous={copy.previousPosts} />;
+    if (post) return <LatestPost post={post} guildId={guildId} previous={copy.previousPosts} canOpenPosts={canOpenPosts} />;
     return mode === 'compose' ? null : <EmptyPost canEdit={canEdit} copy={copy} onCompose={onCompose} />;
 }
 
@@ -140,10 +160,14 @@ function useCardState(): CardState {
     };
 }
 
-export interface LatestPostCardProps { guildId: number; canEdit: boolean; isLeader: boolean; kind?: GuildKind | undefined }
+export interface LatestPostCardProps {
+    guildId: number; canEdit: boolean; isLeader: boolean; kind?: GuildKind | undefined;
+    /** Whether the viewer may open the Posts tab (a member / staff); an overview-only visitor may not. */
+    canOpenPosts: boolean;
+}
 
 /** The newest post (or the empty state) with editor actions and the relay notice. */
-export function LatestPostCard({ guildId, canEdit, isLeader, kind }: LatestPostCardProps): JSX.Element | null {
+export function LatestPostCard({ guildId, canEdit, isLeader, kind, canOpenPosts }: LatestPostCardProps): JSX.Element | null {
     const { mode, editing, notice, setNotice, compose, edit, done } = useCardState();
     const profile = useGuildProfile(guildId);
     const copy = hubCopy(kind);
@@ -166,7 +190,7 @@ export function LatestPostCard({ guildId, canEdit, isLeader, kind }: LatestPostC
                         onPosted={(res, channel) => { setNotice(relayOutcomeNotice(res.relayOutcome, channel)); done(); }} />
                 )}
                 <CardBody state={profile.isPending ? 'pending' : profile.isError ? 'error' : 'ready'} post={post} guildId={guildId}
-                    canEdit={canEdit} editing={editing} mode={mode} copy={copy} onCompose={compose} onDone={done} />
+                    canEdit={canEdit} editing={editing} mode={mode} copy={copy} onCompose={compose} onDone={done} canOpenPosts={canOpenPosts} />
             </Card>
         </section>
     );

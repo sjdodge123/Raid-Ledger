@@ -45,7 +45,7 @@ describe('members-first core widgets hide on 403 (ROK-1831)', () => {
     it('the leader post renders nothing on a 403', async () => {
         let hit = false;
         server.use(http.get(`${BASE}/profile`, () => { hit = true; return HttpResponse.json({ message: 'no' }, { status: 403 }); }));
-        const { container, queryClient } = renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} kind="game_server" />);
+        const { container, queryClient } = renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} kind="game_server" canOpenPosts />);
         await waitFor(() => expect(hit).toBe(true));
         await waitFor(() => expect(queryClient.getQueryCache().findAll().some((q) => q.state.status === 'error')).toBe(true));
         expect(screen.queryByTestId('guild-gm-post-error')).toBeNull();

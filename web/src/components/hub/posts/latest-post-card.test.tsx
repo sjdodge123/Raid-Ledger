@@ -35,7 +35,7 @@ function withPosts(latest: HubPost | null, total: number): void {
 describe('LatestPostCard', () => {
     it('renders the markdown body (bold + list) with the byline', async () => {
         withPosts(buildHubPost(), 1);
-        renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} />);
+        renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts />);
         const body = await screen.findByTestId('guild-gm-post-body');
         expect(body.querySelector('strong')).toHaveTextContent('Raid night');
         expect(body.querySelectorAll('ul > li')).toHaveLength(2);
@@ -44,13 +44,13 @@ describe('LatestPostCard', () => {
 
     it('links "Previous posts" to the Posts tab once there are two posts', async () => {
         withPosts(buildHubPost(), 2);
-        renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} />);
+        renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts />);
         expect(await screen.findByTestId('hub-posts-previous')).toHaveAttribute('href', '#posts');
     });
 
     it('one post → no "Previous posts"; a member sees no Edit / New post', async () => {
         withPosts(buildHubPost(), 1);
-        renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} />);
+        renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts />);
         await screen.findByTestId('guild-gm-post-body');
         expect(screen.queryByTestId('hub-posts-previous')).toBeNull();
         expect(screen.queryByTestId('hub-post-edit')).toBeNull();
@@ -60,7 +60,7 @@ describe('LatestPostCard', () => {
     it('renders nothing on a 403', async () => {
         let hit = false;
         server.use(http.get(`${CORE}/profile`, () => { hit = true; return HttpResponse.json({ message: 'no' }, { status: 403 }); }));
-        const { container } = renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} />);
+        const { container } = renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts />);
         await waitFor(() => expect(hit).toBe(true));
         await waitFor(() => expect(container.querySelector('[data-testid="guild-gm-post"]')).toBeNull());
     });
@@ -68,7 +68,7 @@ describe('LatestPostCard', () => {
     it('a failed relay leaves a warning status after posting', async () => {
         withPosts(buildHubPost(), 1);
         server.use(http.post(`${CORE}/posts`, () => HttpResponse.json({ post: buildHubPost({ id: 5 }), relayOutcome: 'failed' }, { status: 201 })));
-        renderWithProviders(<LatestPostCard guildId={7} canEdit isLeader />);
+        renderWithProviders(<LatestPostCard guildId={7} canEdit isLeader canOpenPosts />);
         await userEvent.click(await screen.findByTestId('hub-post-new'));
         await userEvent.type(screen.getByTestId('hub-post-body'), 'Raid moved');
         await waitFor(() => expect(screen.getByTestId('hub-post-submit')).toBeEnabled());
@@ -94,7 +94,7 @@ describe('LatestPostCard — review fixes (ROK-1868)', () => {
             http.patch(`${CORE}/posts/:id`, ({ params }) => { patched.push(String(params['id'])); return HttpResponse.json(buildHubPost({ id: 4 })); }),
         );
         const queryClient = createTestQueryClient();
-        renderWithProviders(<LatestPostCard guildId={7} canEdit isLeader />, { queryClient });
+        renderWithProviders(<LatestPostCard guildId={7} canEdit isLeader canOpenPosts />, { queryClient });
         await userEvent.click(await screen.findByTestId('hub-post-edit'));
         await userEvent.type(screen.getByTestId('hub-post-edit-body'), ' moved');
         latest = buildHubPost({ id: 9, body: 'Someone else' });
@@ -110,7 +110,7 @@ describe('LatestPostCard — review fixes (ROK-1868)', () => {
         Object.defineProperty(proto, 'scrollHeight', { configurable: true, get: () => 999 });
         try {
             withPosts(buildHubPost({ id: 5 }), 1);
-            renderWithProviders(<><LatestPostCard guildId={7} canEdit={false} isLeader={false} /><LocationProbe /></>);
+            renderWithProviders(<><LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts /><LocationProbe /></>);
             const link = await screen.findByRole('link', { name: 'Read the full post' });
             expect(link.className, 'the link carries the standard focus ring').toContain('focus-visible:');
             await userEvent.click(link);
@@ -119,6 +119,48 @@ describe('LatestPostCard — review fixes (ROK-1868)', () => {
         } finally {
             if (scroll) Object.defineProperty(proto, 'scrollHeight', scroll);
             window.location.hash = '';
+        }
+    });
+});
+
+describe('LatestPostCard — overview visitors (Codex r4)', () => {
+    function tallBodies(): () => void {
+        const proto = HTMLElement.prototype;
+        const scroll = Object.getOwnPropertyDescriptor(proto, 'scrollHeight');
+        Object.defineProperty(proto, 'scrollHeight', { configurable: true, get: () => 999 });
+        return () => { if (scroll) Object.defineProperty(proto, 'scrollHeight', scroll); };
+    }
+
+    it('a visitor who cannot open Posts expands the clamped post in place — no member-only link or fetch', async () => {
+        const restore = tallBodies();
+        try {
+            withPosts(buildHubPost({ id: 5 }), 2);
+            let listed = 0;
+            server.use(http.get(`${CORE}/posts`, () => { listed += 1; return HttpResponse.json({ message: 'no' }, { status: 403 }); }));
+            renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts={false} />);
+            await screen.findByTestId('guild-gm-post-body');
+            expect(screen.queryByRole('link', { name: 'Read the full post' }), 'a visitor must not be sent to the member-only Posts tab').toBeNull();
+            const toggle = screen.getByRole('button', { name: 'Read the full post' });
+            expect(toggle).toHaveAttribute('aria-expanded', 'false');
+            await userEvent.click(toggle);
+            expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+            const clamp = screen.getByTestId('guild-gm-post-body').parentElement;
+            expect(clamp?.className, 'the clamp is lifted').not.toContain('max-h-');
+            expect(listed, 'the member-only posts list is never requested').toBe(0);
+        } finally {
+            restore();
+        }
+    });
+
+    it('a member who can open Posts keeps the "Read the full post" link', async () => {
+        const restore = tallBodies();
+        try {
+            withPosts(buildHubPost({ id: 5 }), 1);
+            renderWithProviders(<LatestPostCard guildId={7} canEdit={false} isLeader={false} canOpenPosts />);
+            expect(await screen.findByRole('link', { name: 'Read the full post' })).toHaveAttribute('href', '/?post=5#posts');
+            expect(screen.queryByRole('button', { name: 'Read the full post' })).toBeNull();
+        } finally {
+            restore();
         }
     });
 });

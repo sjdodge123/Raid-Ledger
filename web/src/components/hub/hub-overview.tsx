@@ -74,7 +74,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
         : [];
     const cells: Cell[] = [
         ...checklist,
-        { key: 'gm-post', order: 10, span: 1, node: <Suspense fallback={<PostCellSkeleton />}><LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} /></Suspense> },
+        { key: 'gm-post', order: 10, span: 1, node: <Suspense fallback={<PostCellSkeleton />}><LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} canOpenPosts={page.viewer.role !== 'visitor'} /></Suspense> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
     if (!data) return cells;
