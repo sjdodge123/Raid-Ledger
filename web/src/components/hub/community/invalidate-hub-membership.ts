@@ -17,3 +17,19 @@ export async function invalidateHubMembership(qc: QueryClient, hubId: number): P
         qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
     ]);
 }
+
+/** Every hub page AND `/guilds/mine` live under this prefix (see `guildPageKey`). */
+const HUB_PAGES_PREFIX = ['plugins', 'wow', 'guilds'] as const;
+
+/**
+ * ROK-1875 (Codex r5 P2) — a character change (delete, addon import) can add
+ * or drop any hub: WoW guild membership derives from GUID-linked characters,
+ * and the hub it touched is unknown here. Refetch every hub listing and page.
+ */
+export async function invalidateAllHubMemberships(qc: QueryClient): Promise<void> {
+    await Promise.all([
+        qc.invalidateQueries({ queryKey: HUB_PAGES_PREFIX }),
+        qc.invalidateQueries({ queryKey: ['game-hubs'] }),
+        qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
+    ]);
+}

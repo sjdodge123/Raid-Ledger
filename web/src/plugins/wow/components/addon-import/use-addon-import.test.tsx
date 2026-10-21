@@ -12,7 +12,20 @@ function setup() {
     const queryClient = createTestQueryClient();
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    return { wrapper, invalidate };
+    return { wrapper, invalidate, queryClient };
+}
+
+/** ROK-1875 (Codex r5 P2): WoW guild membership derives from GUID-linked characters, so an import can add or drop a hub. */
+const HUB_KEYS: readonly (readonly unknown[])[] = [
+    ['hubs-directory', { membership: 'all', sort: 'members' }],
+    ['plugins', 'wow', 'guilds', 'mine', 'viewer-7'],
+    ['plugins', 'wow', 'guilds', 41],
+    ['game-hubs', 9],
+];
+
+function seedHubKeys(qc: ReturnType<typeof setup>['queryClient']) {
+    for (const key of HUB_KEYS) qc.setQueryData(key, { seeded: true });
+    return () => { for (const key of HUB_KEYS) expect(qc.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true); };
 }
 
 function captureBodies(status = 200, reply: Record<string, unknown> = charResult(), url = IMPORT_URL) {
@@ -69,6 +82,16 @@ describe('useAddonImportApply', () => {
         expect(invalidate, 'the Quests section reads the imported snapshot (ROK-1758)').toHaveBeenCalledWith({ queryKey: ['character-quests', CHARACTER_ID] });
     });
 
+    it('refreshes the /hubs directory, the nav hubs and hub pages on success (ROK-1875)', async () => {
+        captureBodies(201, charResult({ status: 'applied' }));
+        const { wrapper, queryClient } = setup();
+        const expectHubsInvalidated = seedHubKeys(queryClient);
+        const { result } = renderHook(() => useAddonImportApply(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expectHubsInvalidated();
+    });
+
     it('carries the previewed updateRulesetTo in the apply body (ROK-1739, Codex r2 P2)', async () => {
         const bodies = captureBodies(201, charResult({ status: 'applied' }));
         const { wrapper } = setup();
@@ -113,6 +136,16 @@ describe('create route (ROK-1738)', () => {
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters'] });
         expect(invalidate, 'the profile caches the main character too').toHaveBeenCalledWith({ queryKey: ['userProfile'] });
         expect(invalidate, 'every Quests section re-reads its snapshot (ROK-1758)').toHaveBeenCalledWith({ queryKey: ['character-quests'] });
+    });
+
+    it('apply refreshes the /hubs directory, the nav hubs and hub pages (ROK-1875)', async () => {
+        captureBodies(200, newCharResult({ characterId: CREATED_ID }, { status: 'applied' }), NEW_IMPORT_URL);
+        const { wrapper, queryClient } = setup();
+        const expectHubsInvalidated = seedHubKeys(queryClient);
+        const { result } = renderHook(() => useAddonImportNewApply(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expectHubsInvalidated();
     });
 
     it('treats a success body without a target as off-contract', async () => {

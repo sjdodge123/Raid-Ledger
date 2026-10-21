@@ -480,6 +480,14 @@ html {
     --glow-emerald: 0 0 20px rgba(16, 185, 129, 0.4);
     --glow-indigo: 0 0 20px rgba(99, 102, 241, 0.4);
     --glow-epic: 0 0 20px rgba(163, 53, 238, 0.4);
+
+    /* Phone bottom bar (ROK-1875): the 56px (h-14) bar, the raised centre Hubs
+       circle's 24px (-top-6) lift, and the safe-area inset. Anything docked or
+       padded above the bar clears --bottom-nav-clearance, so the circle covers
+       nothing. bottom-nav-clearance.guard.test.ts pins these to the components. */
+    --bottom-nav-height: 3.5rem;
+    --bottom-nav-raise: 1.5rem;
+    --bottom-nav-clearance: calc(var(--bottom-nav-height) + var(--bottom-nav-raise) + env(safe-area-inset-bottom));
 }
 
 /* ============================================

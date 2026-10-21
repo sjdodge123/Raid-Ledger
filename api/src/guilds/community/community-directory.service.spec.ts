@@ -1,0 +1,77 @@
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildKind } from '@raid-ledger/contract';
+import type * as schema from '../../drizzle/schema';
+import type { GuildAccessService } from '../guild-access.service';
+import type { HubKindRegistry } from '../hub-kind.registry';
+import type { HubKindAdapter } from '../../plugins/plugin-host/extension-points';
+import { CommunityDirectoryService } from './community-directory.service';
+import { listDirectory } from './community-directory.queries';
+
+jest.mock('./community-directory.queries', () => ({
+  listDirectory: jest.fn(),
+}));
+
+/** ROK-1875 §4 — the service builds the per-viewer scope and the live kinds. */
+const listMock = jest.mocked(listDirectory);
+const PAGE = { items: [], nextCursor: null, total: 0 };
+const QUERY = {
+  membership: 'all',
+  sort: 'members',
+  limit: 24,
+} as const;
+
+function build(live: GuildKind[], memberIds: number[]) {
+  const adapters = live.map((kind) => ({ kind }) as HubKindAdapter);
+  const registry = { active: () => adapters } as unknown as HubKindRegistry;
+  const memberHubIds = jest.fn().mockResolvedValue(memberIds);
+  const access = { memberHubIds } as unknown as GuildAccessService;
+  const db = {} as PostgresJsDatabase<typeof schema>;
+  return {
+    service: new CommunityDirectoryService(db, registry, access),
+    memberHubIds,
+  };
+}
+
+beforeEach(() => {
+  listMock.mockReset();
+  listMock.mockResolvedValue(PAGE);
+});
+
+describe('CommunityDirectoryService.list', () => {
+  it('scopes to every live kind and returns them in GUILD_KINDS order', async () => {
+    const { service, memberHubIds } = build(
+      ['game_community', 'game_server', 'wow_guild'],
+      [4, 5],
+    );
+    const page = await service.list({ id: 9, role: 'member' }, QUERY);
+    expect(memberHubIds).toHaveBeenCalledWith(9);
+    expect(listMock).toHaveBeenCalledWith(expect.anything(), 9, QUERY, {
+      kinds: ['wow_guild', 'game_server', 'game_community'],
+      memberIds: [4, 5],
+      staff: false,
+    });
+    expect(page.kinds).toEqual(['wow_guild', 'game_server', 'game_community']);
+  });
+
+  it('?kind= narrows the query but not the page kinds', async () => {
+    const { service } = build(['game_community', 'game_server'], []);
+    const query = { ...QUERY, kind: 'game_server' } as const;
+    const page = await service.list({ id: 1, role: 'admin' }, query);
+    const scope = listMock.mock.calls[0]?.[3];
+    expect(scope).toEqual({
+      kinds: ['game_server'],
+      memberIds: [],
+      staff: true,
+    });
+    expect(page.kinds).toEqual(['game_server', 'game_community']);
+  });
+
+  it('a kind whose plugin is inactive queries no kind at all', async () => {
+    const { service } = build(['game_community'], []);
+    await service.list(
+      { id: 1, role: 'member' },
+      { ...QUERY, kind: 'wow_guild' },
+    );
+    expect(listMock.mock.calls[0]?.[3]?.kinds).toEqual([]);
+  });
+});

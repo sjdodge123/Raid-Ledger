@@ -35,7 +35,7 @@ import { BottomSheet } from '../../ui/bottom-sheet';
 import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
 import { SCHEDULING_ICON_TRIGGER } from './scheduling-action-button';
 import { ManageMenuSurface, SchedulingSheetRow } from './scheduling-sheet-row';
-import { onMenuKeyDown, useFocusFirstItem } from './scheduling-menu-keys';
+import { onMenuKeyDown, useFocusFirstItem } from '../../ui/menu-keys';
 import { SchedulingRallyAction } from './SchedulingRallyAction';
 import type { RallyCooldown } from './use-rally-cooldown';
 
