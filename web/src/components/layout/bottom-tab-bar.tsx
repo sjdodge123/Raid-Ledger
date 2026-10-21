@@ -49,6 +49,17 @@ function TabLink({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     );
 }
 
+/** The bar's five even slots; `/dev/design-system` renders it statically at 320 / 375 / 430px. */
+export function BottomTabGrid({ pathname }: { pathname: string }) {
+    return (
+        <div data-testid="bottom-tab-grid" className="grid grid-cols-5 items-center h-14">
+            {LEFT_TABS.map((tab) => <TabLink key={tab.to} tab={tab} isActive={pathname.startsWith(tab.to)} />)}
+            <BottomHubsButton pathname={pathname} />
+            {RIGHT_TABS.map((tab) => <TabLink key={tab.to} tab={tab} isActive={pathname.startsWith(tab.to)} />)}
+        </div>
+    );
+}
+
 /** The phone bottom bar (below 768px); hidden on full-screen wizard routes. */
 export function BottomTabBar() {
     const location = useLocation();
@@ -61,11 +72,7 @@ export function BottomTabBar() {
         <nav data-testid="bottom-tab-bar" className={`fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle will-change-transform md:will-change-auto ${isHidden ? TAB_BAR_HIDDEN_CLASS : 'translate-y-0'}`}
             style={{ zIndex: Z_INDEX.TAB_BAR, paddingBottom: 'env(safe-area-inset-bottom)', transition: 'transform 300ms ease-in-out' }}
             aria-label="Main navigation">
-            <div data-testid="bottom-tab-grid" className="grid grid-cols-5 items-center h-14">
-                {LEFT_TABS.map((tab) => <TabLink key={tab.to} tab={tab} isActive={location.pathname.startsWith(tab.to)} />)}
-                <BottomHubsButton pathname={location.pathname} />
-                {RIGHT_TABS.map((tab) => <TabLink key={tab.to} tab={tab} isActive={location.pathname.startsWith(tab.to)} />)}
-            </div>
+            <BottomTabGrid pathname={location.pathname} />
         </nav>
     );
 }
