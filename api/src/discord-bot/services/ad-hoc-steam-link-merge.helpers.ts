@@ -71,7 +71,8 @@ async function findVoiceRow(db: Db, eventId: number, userId: number) {
  * the `(event_id, steam_id)` unique index forbids two rows holding the
  * SteamID, and the identity CHECK forbids clearing it on a Discord-less row.
  * Two ordered statements, neither of which can violate (no catch-and-retry
- * inside a transaction — CLAUDE.md).
+ * inside a transaction — CLAUDE.md). The delete's RETURNING gates the fold,
+ * so a replayed link finds nothing and changes nothing.
  */
 async function foldIntoVoiceRow(
   tx: Db,
@@ -91,10 +92,31 @@ async function foldIntoVoiceRow(
       pelicanServerId: steam.pelicanServerId,
       characterName: steam.characterName,
       characterOwnerId: steam.characterOwnerId,
-      // Still on the server keeps the merged row open (closes on both false).
-      ...(steam.leftAt === null ? { leftAt: null } : {}),
+      ...mergedAttendance(steam),
     })
     .where(eq(p.id, voiceRowId));
+}
+
+/**
+ * Codex r1 P2 — both rows' attendance, each counted once. Banked totals and
+ * session counts add up. An open steam session keeps the merged row open; its
+ * clock starts at the union of the two open sessions, or — when the voice row
+ * had closed — at the steam session's start, never before the voice leave
+ * (that time is already banked). A closed steam row leaves the voice clock.
+ */
+function mergedAttendance(steam: typeof p.$inferSelect) {
+  const banked = steam.totalDurationSeconds ?? 0;
+  const base = {
+    totalDurationSeconds: sql`COALESCE(${p.totalDurationSeconds}, 0) + ${banked}`,
+    sessionCount: sql`${p.sessionCount} + ${steam.sessionCount}`,
+  };
+  if (steam.leftAt !== null) return base;
+  const start = sql.param(steam.joinedAt, p.joinedAt);
+  return {
+    ...base,
+    leftAt: null,
+    joinedAt: sql`CASE WHEN ${p.leftAt} IS NULL THEN LEAST(${p.joinedAt}, ${start}) ELSE GREATEST(${start}, ${p.leftAt}) END`,
+  };
 }
 
 /** Claim the steam row for the user; it renders and counts as linked. */
