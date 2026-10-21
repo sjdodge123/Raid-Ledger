@@ -56,8 +56,13 @@ function gameHubsWhere(gameIds: number[]): SQL | undefined {
   );
 }
 
-/** A hub a non-staff member can open: not hidden, and `active`. */
-function linkableHub(): SQL | undefined {
+/**
+ * A hub a non-staff member can open: not hidden, and `active`. Shared by the
+ * embed link and the channel auto-link (hub-channel-link.queries). Safe for
+ * every {@link HUB_LINK_KINDS} kind: `guilds_status_kind_check` pins each
+ * non-community kind to `active`.
+ */
+export function linkableHub(): SQL | undefined {
   return and(
     isNull(schema.guilds.hiddenAt),
     eq(schema.guilds.status, LINKABLE_STATUS),

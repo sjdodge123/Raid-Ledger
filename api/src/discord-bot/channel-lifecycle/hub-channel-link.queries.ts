@@ -5,12 +5,12 @@
  * never overwritten. Only {@link HUB_LINK_KINDS} are linked (OQ-3: WoW
  * guild hubs never are).
  */
-import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { GuildDiscordManagedForDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import { HUB_LINK_KINDS } from './hub-link.resolver';
+import { HUB_LINK_KINDS, linkableHub } from './hub-link.resolver';
 
 type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
 type ChannelSource = 'auto' | 'manual';
@@ -38,11 +38,14 @@ function linkableProfileWhere(): SQL {
   return sql`(${channel} IS NULL AND (${source} IS NULL OR ${source} = 'auto'))`;
 }
 
-/** Visible hubs of an auto-linkable kind (optionally for one game). */
+/**
+ * Active, non-hidden hubs of an auto-linkable kind (optionally for one game).
+ * An archived hub 404s for non-staff, so it is never linked (Codex r14 follow-up).
+ */
 function eligibleHubsWhere(gameId?: number): SQL | undefined {
   return and(
     inArray(guilds.kind, [...HUB_LINK_KINDS]),
-    isNull(guilds.hiddenAt),
+    linkableHub(),
     gameId === undefined ? undefined : eq(guilds.gameId, gameId),
     linkableProfileWhere(),
   );
