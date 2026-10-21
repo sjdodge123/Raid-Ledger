@@ -6,7 +6,8 @@
  * code spans we rewrite them to subset markdown instead: `&lt;` → `\<` (an
  * escaped `<` is legal text for `findHubPostMarkdownViolation`), `&gt;` → `>`,
  * `&amp;` → `&` (or `\&` when the `&` would otherwise read as an entity).
- * Code spans are emitted verbatim by TipTap and are left untouched.
+ * Code spans are emitted verbatim by TipTap and are left untouched. Empty
+ * paragraphs (and TipTap's `&nbsp;` marker for them) collapse to one blank line.
  */
 const ENTITY = /&(lt|gt|amp);/g;
 /**
@@ -17,6 +18,16 @@ const ENTITY = /&(lt|gt|amp);/g;
  */
 const CODE_SPAN = /((?<!`)(?<!(?:^|[^\\])(?:\\\\)*\\)(`+)(?!`)[^\n]*?(?<!`)\2(?!`))/;
 const LOOKS_LIKE_ENTITY = /^[A-Za-z#][A-Za-z0-9]*;/;
+/**
+ * TipTap writes the 2nd+ of consecutive empty paragraphs as a bare `&nbsp;` line (Codex r5).
+ * Text typed as `&nbsp;` is serialised `&amp;nbsp;`, so a bare line is always the marker.
+ */
+const EMPTY_PARAGRAPH = /(^|\n)&nbsp;(?=\n|$)/g;
+
+/** Drop empty-paragraph markers; extra blank lines collapse to one paragraph break (MarkdownBlock shows them so). */
+function collapseEmptyParagraphs(markdown: string): string {
+    return markdown.replace(EMPTY_PARAGRAPH, '$1').replace(/\n{3,}/g, '\n\n').replace(/^\n{2,}|\n{2,}$/g, '');
+}
 
 /** Rewrite one non-code segment. */
 function decodeSegment(segment: string): string {
@@ -32,9 +43,10 @@ function decodeSegment(segment: string): string {
  * Turn TipTap's serialised markdown into the stored subset form.
  * @param markdown - the raw `editor.getMarkdown()` output
  * @returns markdown with entity-encoded text rewritten (code spans untouched)
+ *   and empty paragraphs collapsed to a single paragraph break
  */
 export function normalizeEditorMarkdown(markdown: string): string {
-    return markdown
+    return collapseEmptyParagraphs(markdown)
         .split(CODE_SPAN)
         // split() with two groups yields [text, span, ticks, text, span, ticks, …].
         .flatMap((part: string, i: number): string[] => (i % 3 === 2 ? [] : [i % 3 === 1 ? part : decodeSegment(part)]))

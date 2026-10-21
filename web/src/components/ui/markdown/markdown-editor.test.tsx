@@ -171,3 +171,29 @@ describe('MarkdownEditor — stored inline HTML stays literal (Codex r4)', () =>
         expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe(expected);
     });
 });
+
+describe('MarkdownEditor — empty-paragraph markers (Codex r5)', () => {
+    const para = (text?: string) => (text ? { type: 'paragraph', content: [{ type: 'text', text }] } : { type: 'paragraph' });
+
+    it.each([
+        ['two', [para('before'), para(), para(), para('after')]],
+        ['three', [para('before'), para(), para(), para(), para('after')]],
+    ])('%s consecutive empty paragraphs save as one paragraph break, no &nbsp;', (_l, content) => {
+        const { editor } = setup('');
+        editor.commands.setContent({ type: 'doc', content });
+        const saved = normalizeEditorMarkdown(editor.getMarkdown());
+        expect(saved).toBe('before\n\nafter');
+        expect(render(<MarkdownBlock text={saved} />).container.textContent).toBe('beforeafter');
+    });
+
+    it.each([
+        ['inline', [para('a &nbsp; b')], 'a &nbsp; b'],
+        ['as its own paragraph', [para('before'), para('&nbsp;'), para('after')], 'before&nbsp;after'],
+    ])('a typed literal &nbsp; (%s) is kept and displays as typed', (_l, content, shown) => {
+        const { editor } = setup('');
+        editor.commands.setContent({ type: 'doc', content });
+        const saved = normalizeEditorMarkdown(editor.getMarkdown());
+        expect(saved, 'the typed entity text must survive').toContain('\\&nbsp;');
+        expect(render(<MarkdownBlock text={saved} />).container.textContent).toBe(shown);
+    });
+});
