@@ -20,13 +20,13 @@ const TABS: TabRowTab[] = [
     { id: 'map', label: 'Map' },
 ];
 
-/** Every tab measures 80px, "More ▾" 70px, "<label> ▾" 90px; the row is `rowWidth` wide. */
-function mockWidths(rowWidth: number): void {
+/** Every tab measures `tabWidth` (80px), "More ▾" 70px, "<label> ▾" 90px; the row is `rowWidth` wide. */
+function mockWidths(rowWidth: number, tabWidth = 80): void {
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
         const key = this.dataset.measure ?? '';
         if (key === 'more') return 70;
         if (key.startsWith('trig:')) return 90;
-        return key.startsWith('tab:') ? 80 : 0;
+        return key.startsWith('tab:') ? tabWidth : 0;
     });
     vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
         return this.tagName === 'NAV' ? rowWidth : 0;
@@ -151,5 +151,67 @@ describe('TabRow — More menu keyboard model (§4.14)', () => {
         openMenu('overview');
         act(() => { fireEvent.mouseDown(document.body); });
         expect(screen.queryByRole('menu')).toBeNull();
+    });
+});
+
+/** A ResizeObserver that never reports on its own; `fire(el)` reports to every instance observing `el`. */
+class ManualResizeObserver implements ResizeObserver {
+    static instances: ManualResizeObserver[] = [];
+    private readonly targets: Element[] = [];
+    private readonly cb: ResizeObserverCallback;
+    constructor(cb: ResizeObserverCallback) { this.cb = cb; ManualResizeObserver.instances.push(this); }
+    observe(target: Element): void { this.targets.push(target); }
+    unobserve(): void {}
+    disconnect(): void { this.targets.length = 0; }
+    static fire(el: Element): void {
+        for (const o of ManualResizeObserver.instances) if (o.targets.includes(el)) o.cb([], o);
+    }
+}
+
+function measureRow(): Element {
+    const row = screen.getByTestId('tab-row-measure').firstElementChild;
+    if (!row) throw new Error('the measure layer has no inner row');
+    return row;
+}
+
+describe('TabRow — the split never waits for a ResizeObserver report (review M1/M2)', () => {
+    beforeEach(() => {
+        ManualResizeObserver.instances = [];
+        vi.stubGlobal('ResizeObserver', ManualResizeObserver);
+    });
+    afterEach(() => { Reflect.deleteProperty(document, 'fonts'); });
+
+    it('is already split on the first render, before any observer report (M1)', () => {
+        mockWidths(330);
+        render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        expect(rowLabels(), 'the first paint must not flash the full row').toEqual(['Overview', 'Members', 'Events']);
+    });
+
+    it('re-fits in the same render a pick moves the active tab into More (M1)', () => {
+        mockWidths(330);
+        const { rerender } = render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        rerender(<TabRow tabs={TABS} activeId="planner" label="Hub sections" />);
+        expect(screen.getByTestId('tab-row-more-trigger'), 'the trigger must name the picked tab at once').toHaveTextContent('Planner');
+        expect(rowLabels(), 'the row re-fits against the wider trigger').toEqual(['Overview', 'Members']);
+    });
+
+    it('re-measures when the measure row resizes — a font swap or a label change (M2)', () => {
+        mockWidths(330);
+        render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        expect(rowLabels()).toHaveLength(3);
+        mockWidths(330, 55);
+        act(() => ManualResizeObserver.fire(measureRow()));
+        expect(rowLabels(), 'narrower tabs after the swap fit one more in the row').toHaveLength(4);
+    });
+
+    it('re-measures once document.fonts is ready (M2)', async () => {
+        let release: () => void = () => undefined;
+        const ready = new Promise<void>((resolve) => { release = resolve; });
+        Object.defineProperty(document, 'fonts', { configurable: true, value: { ready } });
+        mockWidths(330);
+        render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        mockWidths(330, 55);
+        await act(async () => { release(); await ready; });
+        expect(rowLabels(), 'the web font loading must trigger a re-measure').toHaveLength(4);
     });
 });
