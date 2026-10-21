@@ -11,7 +11,7 @@ import type { HubCtx } from '../../hub-module';
 import { WidgetCard } from '../../../components/hub/hub-bits';
 import { useTimezoneStore } from '../../../stores/timezone-store';
 import { SERVER_HOURS_EMPTY, buildServerHours, type ServerHoursDay } from './server-hours.helpers';
-import { useServerHoursItems } from './use-server-hours';
+import { useServerHours } from './use-server-hours';
 
 function DayRows({ days }: { days: readonly ServerHoursDay[] }): JSX.Element {
     if (days.length === 0) return <p className="py-2 text-sm text-muted" data-testid="server-hub-hours-empty">{SERVER_HOURS_EMPTY}</p>;
@@ -31,10 +31,8 @@ function DayRows({ days }: { days: readonly ServerHoursDay[] }): JSX.Element {
 export function ServerHoursWidget({ page }: HubCtx): JSX.Element | null {
     const server = page.server;
     const tz = useTimezoneStore((s) => s.resolved);
-    const query = useServerHoursItems(server !== undefined);
+    const { query, now } = useServerHours(server !== undefined);
     const items = query.data;
-    // "Now" is the fetch time (pure render); it advances with each refetch.
-    const now = query.dataUpdatedAt;
     const hours = useMemo(() => (server === undefined ? null
         : buildServerHours({ items: items ?? [], pelicanServerId: server.pelicanServerId, state: server.state, now, tz })), [server, items, now, tz]);
     if (hours === null) return null;

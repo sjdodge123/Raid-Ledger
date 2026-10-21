@@ -1,6 +1,6 @@
 /** ROK-1876 L3 — the "Server hours" Overview widget on the game-server hub, fed by GET /game-servers/calendar. */
-import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import type { GameServerCalendarItemDto, GuildPage } from '@raid-ledger/contract';
@@ -50,6 +50,7 @@ function renderWidget(p: GuildPage = page()) {
 }
 
 beforeEach(() => { useTimezoneStore.setState({ resolved: 'UTC' }); });
+afterEach(() => { vi.useRealTimers(); });
 
 describe('ServerHoursWidget (ROK-1876)', () => {
     it("renders this server's windows and the next restart, not another server's", async () => {
@@ -73,6 +74,15 @@ describe('ServerHoursWidget (ROK-1876)', () => {
         expect(await screen.findByTestId('server-hub-hours-empty')).toHaveTextContent('No set hours');
         expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent('Online');
         expect(screen.queryByTestId('server-hub-hours-row')).not.toBeInTheDocument();
+    });
+
+    it('keeps its clock ticking while mounted, so a window that opens flips the now line (Codex r1 P2)', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        serve([{ kind: 'window', ...base, serverKey: '4', start: at(90_000), end: at(2 * H), label: 'Open', source: 'schedule' }]);
+        renderWidget();
+        await waitFor(() => expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · opens /));
+        await act(async () => { await vi.advanceTimersByTimeAsync(3 * 60_000); });
+        expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · closes /);
     });
 
     it('is an Overview widget before Recent arrivals, visible to every viewer of a server hub only', () => {
