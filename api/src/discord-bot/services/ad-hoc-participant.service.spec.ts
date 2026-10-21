@@ -296,4 +296,11 @@ describe('AdHocParticipantService', () => {
       expect(count).toBe(0);
     });
   });
+
+  describe('getOpenRowCount (ROK-1888)', () => {
+    it('returns the open-row count, unlinked server rows included', async () => {
+      mockDb.where.mockResolvedValueOnce([{ count: 3 }]);
+      expect(await service.getOpenRowCount(42)).toBe(3);
+    });
+  });
 });

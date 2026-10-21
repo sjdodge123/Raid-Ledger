@@ -608,3 +608,52 @@ describe('buildQuickPlayEmbed — anonymous server players (ROK-1801 Q4)', () =>
     expect(embed.data.author?.name).toBe('▸ LIVE · Quick Play · 3 playing');
   });
 });
+
+describe('buildQuickPlayEmbed — unlinked server players (ROK-1888)', () => {
+  const unlinked = {
+    ...player('Loanati'),
+    rosterSuffix: ' · on server',
+    uncounted: true,
+  };
+
+  it('renders the unlinked row as `**Name** · on server`, not counted', () => {
+    const data = event({ signupMentions: [player('Ana'), unlinked] });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
+    expect(bodyLines(embed.data.description)[0]).toBe(
+      '**Ana** · **Loanati** · on server',
+    );
+    expect(embed.data.author?.name).toBe('▸ LIVE · Quick Play · 1 playing');
+  });
+
+  it('leaves anonymous server players out of the card count when flagged', () => {
+    const data = event({
+      signupMentions: [player('Ana')],
+      serverAnonymousCount: 2,
+      serverAnonymousUncounted: true,
+    });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
+    expect(embed.data.author?.name).toBe('▸ LIVE · Quick Play · 1 playing');
+    expect(bodyLines(embed.data.description)[0]).toBe('**Ana** · +2 on server');
+  });
+});
+
+describe('buildQuickPlayEmbed — Join Raid Ledger hint (ROK-1888 OQ4)', () => {
+  const hint = `Not on Raid Ledger yet? [Join Raid Ledger ↗](${CLIENT_URL}/login)`;
+
+  it('adds the hint while a Discord-only member is present', () => {
+    const data = event({ discordOnlyPresent: true });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
+    expect(bodyLines(embed.data.description)).toContain(hint);
+  });
+
+  it('omits the hint with no Discord-only member', () => {
+    const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live');
+    expect(embed.data.description).not.toContain('Join Raid Ledger');
+  });
+
+  it('omits the hint once the session has ended', () => {
+    const data = event({ discordOnlyPresent: true });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'ended');
+    expect(embed.data.description).not.toContain('Join Raid Ledger');
+  });
+});

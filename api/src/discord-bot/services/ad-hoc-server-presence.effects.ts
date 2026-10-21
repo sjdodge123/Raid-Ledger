@@ -78,7 +78,7 @@ export async function afterServerLeave(
 ): Promise<void> {
   await refreshLive(deps, live);
   if (live.adHocStatus !== 'live') return;
-  if ((await deps.participantService.getActiveCount(live.id)) > 0) return;
+  if ((await deps.participantService.getOpenRowCount(live.id)) > 0) return;
   await startGracePeriod(
     {
       db: deps.db,
