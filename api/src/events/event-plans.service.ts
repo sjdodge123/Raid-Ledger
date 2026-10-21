@@ -201,7 +201,9 @@ export class EventPlansService {
         `Can only restart cancelled/expired/draft plans, got "${plan.status}"`,
       );
     }
-    return restartPlan(this.opsDeps(), plan);
+    const restarted = await restartPlan(this.opsDeps(), plan);
+    GameActivityNudge.safeTouch(this.nudge, plan.gameId);
+    return restarted;
   }
 
   /** Job handler: processes poll close. */
