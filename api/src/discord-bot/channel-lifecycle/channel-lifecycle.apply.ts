@@ -16,6 +16,7 @@ import { setLifecycleState } from './channel-lifecycle.store';
 import {
   countOtherChannelBindings,
   findGameAnnouncementBinding,
+  isGameSuppressed,
   lockLifecycleBinding,
 } from './channel-lifecycle.store.queries';
 import {
@@ -140,6 +141,14 @@ async function applyCreate(
   const guildId = ctx.guild.id;
   if (await findGameAnnouncementBinding(ctx.db, guildId, gameId)) {
     return { outcome: 'failed', detail: 'a binding appeared since the read' };
+  }
+  // Codex r16 P2: an unbind racing the activity read leaves neither row in
+  // the snapshot; re-read the suppression (after the binding check) on this tx.
+  if (await isGameSuppressed(ctx.db, guildId, gameId)) {
+    return {
+      outcome: 'deferred',
+      detail: 'deferred: suppressed since the read',
+    };
   }
   const channelId = await createTextChannel(ctx.guild, {
     name: gameSlug,

@@ -175,12 +175,17 @@ export class ChannelBindingsService {
         : sql`${schema.channelBindings.recurrenceGroupId} IS NULL`,
     );
 
-    const result = await this.db
-      .delete(schema.channelBindings)
-      .where(and(...conditions))
-      .returning();
-    // ROK-1431 D9: unbinding a managed channel stops the lifecycle recreating it.
-    await suppressUnboundAutoBindings(this.db, result);
+    // ROK-1431 D9: unbinding a managed channel stops the lifecycle recreating
+    // it. Codex r16 P2: delete + suppress commit together, so no reader sees
+    // the binding gone and the suppression not yet written.
+    const result = await this.db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(schema.channelBindings)
+        .where(and(...conditions))
+        .returning();
+      await suppressUnboundAutoBindings(tx, rows);
+      return rows;
+    });
 
     if (result.length > 0) {
       this.logger.log(
@@ -201,18 +206,26 @@ export class ChannelBindingsService {
    * @param options.db - The caller's open transaction (the reconcile lock's
    *   `tx`). The delete AND the D9 suppression hook run on it: from inside the
    *   lock, a pool query here waits on the tx's own uncommitted suppression row
-   *   while the tx waits on this call — a self-deadlock (ROK-1428 R9).
+   *   while the tx waits on this call — a self-deadlock (ROK-1428 R9). Without
+   *   it, the delete and the suppression share a fresh transaction (r16 P2).
    */
   async unbindById(
     id: string,
     options: { db?: LifecycleDb } = {},
   ): Promise<boolean> {
-    const db = options.db ?? this.db;
-    const result = await db
-      .delete(schema.channelBindings)
-      .where(eq(schema.channelBindings.id, id))
-      .returning();
-    await suppressUnboundAutoBindings(db, result);
+    const run = async (db: LifecycleDb) => {
+      const rows = await db
+        .delete(schema.channelBindings)
+        .where(eq(schema.channelBindings.id, id))
+        .returning();
+      await suppressUnboundAutoBindings(db, rows);
+      return rows;
+    };
+    // Codex r16 P2: delete + suppress in ONE transaction (the caller's, or a
+    // fresh one) — a split commit let a racing reconcile see neither row.
+    const result = options.db
+      ? await run(options.db)
+      : await this.db.transaction((tx) => run(tx));
     const channelIds = result.map((row) => row.channelId);
     return this.announced(channelIds, result.length > 0);
   }

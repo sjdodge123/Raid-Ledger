@@ -41,20 +41,23 @@ function buildMockDb() {
     select: mockSelect,
     update: mockUpdate,
     /** Runs `fn` on the same chain; `inTx` reports whether a call is inside it. */
-    transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
-      txDepth.n += 1;
-      try {
-        return await fn(mockDb);
-      } finally {
-        txDepth.n -= 1;
-      }
-    }),
+    transaction: jest.fn(
+      async (fn: (tx: unknown) => Promise<unknown>): Promise<unknown> => {
+        txDepth.n += 1;
+        try {
+          return await fn(mockDb);
+        } finally {
+          txDepth.n -= 1;
+        }
+      },
+    ),
   };
   return {
     mockDb,
     inTx: () => txDepth.n > 0,
     mockInsertReturning,
     mockInsert,
+    mockDelete,
     mockDeleteReturning,
     mockSelect,
     mockSelectFrom,
