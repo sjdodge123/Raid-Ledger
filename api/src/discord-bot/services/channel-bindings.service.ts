@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -262,7 +262,8 @@ export class ChannelBindingsService {
 
   /**
    * Game-specific text binding (event routing). Same precedence as the
-   * lifecycle reconcile (manual over auto, oldest, id) — Codex r6 P2.
+   * lifecycle reconcile (manual over auto, oldest, id) — Codex r6 P2 — and
+   * the same non-series candidate set (series rows excluded — Codex r8 P2).
    */
   async getChannelForGame(
     guildId: string,
@@ -277,6 +278,8 @@ export class ChannelBindingsService {
           eq(cb.guildId, guildId),
           eq(cb.gameId, gameId),
           eq(cb.bindingPurpose, 'game-announcements'),
+          // Series rows have their own lookup (Codex r8 P2).
+          isNull(cb.recurrenceGroupId),
         ),
       )
       .orderBy(...gameAnnouncementPrecedence())

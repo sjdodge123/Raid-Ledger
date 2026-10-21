@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { ChannelBindingConfig } from '@raid-ledger/contract';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -270,7 +271,7 @@ describe('ChannelBindingsService', () => {
         .mockReturnValue({ limit: limitMock, orderBy: orderByMock });
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
-      return { orderByMock };
+      return { orderByMock, whereMock };
     }
 
     // ROK-1428 Codex r6 P2: a manual binding can coexist with an auto one;
@@ -279,6 +280,16 @@ describe('ChannelBindingsService', () => {
       const { orderByMock } = mockSelectChain([{ channelId: 'manual-1' }]);
       await service.getChannelForGame('guild-123', 42);
       expect(orderByMock).toHaveBeenCalledWith(...gameAnnouncementPrecedence());
+    });
+
+    // ROK-1428 Codex r8 P2: a manual SERIES row sorts first under manual-first
+    // precedence, so it must be excluded — else ordinary game announcements
+    // land in the series channel instead of the managed game channel.
+    it('excludes series bindings (recurrence_group_id is null), like the lifecycle candidates', async () => {
+      const { whereMock } = mockSelectChain([{ channelId: 'managed-1' }]);
+      await service.getChannelForGame('guild-123', 42);
+      const text = new PgDialect().sqlToQuery(whereMock.mock.calls[0][0]).sql;
+      expect(text).toContain('"recurrence_group_id" is null');
     });
 
     it('should return channel ID when a game binding exists', async () => {
