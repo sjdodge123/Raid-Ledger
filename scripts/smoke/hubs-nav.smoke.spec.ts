@@ -212,6 +212,20 @@ test.describe('Hubs nav (ROK-1875)', () => {
         }
     });
 
+    test('≥1024px: the lg labels come back — Insights text + username show, and the row still fits', async ({ page }, testInfo) => {
+        await seedMember(page, testInfo);
+        for (const viewport of [{ width: 1024, height: 768 }, { width: 1280, height: 800 }]) {
+            await page.setViewportSize(viewport);
+            await page.goto(NAV_START);
+            await expect(page.getByTestId('user-menu-trigger')).toBeVisible({ timeout: 15_000 });
+            // index.css's unlayered .sr-only once beat lg:not-sr-only and left both labels 0px wide here.
+            await expect(page.getByTestId('nav-insights-link').getByText('Insights', { exact: true }), `${viewport.width}px: the Insights label shows`).toBeVisible();
+            const menu = must(await page.getByTestId('user-menu-trigger').boundingBox(), `${viewport.width}px user-menu box`);
+            expect(menu.width, `${viewport.width}px: the user menu shows the username beside the avatar`).toBeGreaterThan(64);
+            await expectHeaderFits(page, viewport);
+        }
+    });
+
     test('a viewer in no hubs gets a plain Hubs link to /hubs, no menu', async ({ page }, testInfo) => {
         const server = await seedServerHub(await getAdminToken(), testInfo);
         const outsiderJwt = await signInOnboardedMember(page, server.userIds.outsider);
