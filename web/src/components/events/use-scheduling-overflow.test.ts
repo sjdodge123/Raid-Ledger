@@ -1,7 +1,8 @@
 /**
  * ROK-1874: the over-cap arithmetic must agree with the API —
  * `rostered = 1 + yes-voters excluding the creator`,
- * `cap = min(slotPlayer, maxAttendees)` over whichever is set and > 0.
+ * `cap = slotPlayer` when set (> 0), else `maxAttendees` — the backend's
+ * `resolveEventCapacity` prefers the generic slotConfig over maxAttendees.
  */
 import { describe, it, expect } from 'vitest';
 import type { SchedulePollPageResponseDto, ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
@@ -23,7 +24,7 @@ const generic = (slotPlayer: number, maxAttendees: string) => ({ slotType: 'gene
 
 describe('resolveRosterCap', () => {
     it.each([
-        [4, '', 4], [0, '6', 6], [4, '3', 3], [5, '8', 5], [0, '', null], [0, '0', null], [3, 'abc', 3],
+        [4, '', 4], [0, '6', 6], [4, '3', 4], [5, '8', 5], [5, '2', 5], [0, '', null], [0, '0', null], [3, 'abc', 3],
     ])('slotPlayer %s, maxAttendees %j → %s', (player, max, want) => {
         expect(resolveRosterCap(player, max)).toBe(want);
     });
@@ -46,8 +47,12 @@ describe('computeSchedulingOverflow', () => {
         expect(computeSchedulingOverflow(slot([1, 2, 3, 4]), CREATOR, generic(0, '2'))?.benched).toBe(2);
     });
 
-    it('takes the smaller of the two caps', () => {
-        expect(computeSchedulingOverflow(slot([1, 2, 3, 4]), CREATOR, generic(10, '3'))?.cap).toBe(3);
+    it('takes the cap from Players when both are set, even when Max Attendees is smaller', () => {
+        expect(computeSchedulingOverflow(slot([1, 2, 3, 4]), CREATOR, generic(3, '10'))?.cap).toBe(3);
+    });
+
+    it('no banner when Players covers everyone even though Max Attendees is smaller (Codex r1)', () => {
+        expect(computeSchedulingOverflow(slot([1, 2, 3]), CREATOR, generic(5, '2'))).toBeNull();
     });
 
     it('counts a duplicated voter once', () => {

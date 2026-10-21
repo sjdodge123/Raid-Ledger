@@ -5,8 +5,8 @@
  * Locking a slot opens `/events/new?gameId&startTime&matchId&lineupId`.
  * POST /events signs the creator up first and completing the poll then signs
  * up every yes-voter on that slot, so `rostered = 1 + yes-voters excluding
- * the creator`. When that exceeds `cap = min(slotPlayer, maxAttendees)` (over
- * whichever is set) the form shows the `scheduling-overflow-notice` status
+ * the creator`. When that exceeds `cap` (Players when set, else Max
+ * Attendees — the API's `resolveEventCapacity` order) the form shows the `scheduling-overflow-notice` status
  * banner; it goes away, live, as soon as the cap covers everyone.
  *
  * Seed (every test owns its poll, deleted in `finally`): a standalone poll
@@ -17,7 +17,8 @@
  *   1. Players = 2, no Max Attendees ⇒ banner with the spec's exact copy
  *      (3 people / 2 spots / 1 benched) and both voters' names, creator
  *      omitted; Increase Players ⇒ gone (at cap 3); Decrease ⇒ back (AC3).
- *   2. Max Attendees is the cap: Players 5 + Max 2 ⇒ banner; Max 3 ⇒ gone.
+ *   2. Players overrides Max Attendees: Players 2 + Max 5 ⇒ banner (cap 2);
+ *      Players 5 + Max 2 ⇒ gone (all 3 get player slots).
  *
  * The create form is never submitted — nothing here should create an event.
  * Runs in every viewport project (desktop / mobile / tablet); the banner sits
@@ -188,18 +189,18 @@ test.describe('Scheduling lock — over-cap warning (ROK-1874)', () => {
         }
     });
 
-    test('Max Attendees is the cap when it is the smaller one', async ({ page }) => {
+    test('Players is the cap even when Max Attendees is smaller', async ({ page }) => {
         const token = await getAdminToken();
         let seeded: Seeded | null = null;
         try {
             seeded = await seedOverCapPoll(token, 14);
             await openLockForm(page, seeded);
 
-            await setCaps(page, 5, '2');
+            await setCaps(page, 2, '5');
             await expectBanner(page, seeded, 2);
 
-            await maxAttendeesInput(page).fill('3');
-            await expect(maxAttendeesInput(page)).toHaveValue('3');
+            // Players 5 covers all 3; the smaller Max Attendees benches nobody.
+            await setCaps(page, 5, '2');
             await expect(notice(page)).toHaveCount(0);
         } finally {
             await cleanup(token, seeded);

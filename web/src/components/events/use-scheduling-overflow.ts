@@ -6,8 +6,9 @@
  * POST /events signs the creator up first, then completing the poll signs up
  * every yes-voter on the chosen slot; anyone past the cap is benched. The
  * arithmetic mirrors the API: `rostered = 1 + yes-voters excluding the
- * creator`, `cap = min(slotPlayer, maxAttendees)` over whichever is set and
- * > 0, `benched = max(0, rostered - cap)`. A generic Players count of 0 is
+ * creator`, `cap` = Players when set, else Max Attendees (the backend's
+ * `resolveEventCapacity` prefers the generic slotConfig over maxAttendees),
+ * `benched = max(0, rostered - cap)`. A generic Players count of 0 is
  * unreachable: the stepper's min is 1 (the API would bench every signup).
  */
 import { useQuery } from '@tanstack/react-query';
@@ -35,11 +36,15 @@ export interface RosterCapInput {
     maxAttendees: string;
 }
 
-/** Smallest positive cap among `slotPlayer` and `maxAttendees`; null when neither is set. */
+/**
+ * Mirrors `resolveEventCapacity` (api/src/events/signups-signup.helpers.ts):
+ * the generic slotConfig's `player` wins; `maxAttendees` is the cap only when
+ * Players is unset. Null when neither is set.
+ */
 export function resolveRosterCap(slotPlayer: number, maxAttendees: string): number | null {
+    if (Number.isFinite(slotPlayer) && slotPlayer > 0) return slotPlayer;
     const max = parseInt(maxAttendees, 10);
-    const caps = [slotPlayer, max].filter((n) => Number.isFinite(n) && n > 0);
-    return caps.length > 0 ? Math.min(...caps) : null;
+    return Number.isFinite(max) && max > 0 ? max : null;
 }
 
 /** Find the slot by instant, the same rule as the backend's slot match. */

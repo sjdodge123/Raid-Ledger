@@ -99,12 +99,11 @@ describe('SchedulingOverflowNotice on the create form', () => {
         expect(await screen.findByText('That count includes you — the organizer is always signed up.')).toBeInTheDocument();
     });
 
-    it('hides when both caps are raised and returns when one is lowered, with no refetch', async () => {
+    it('follows Players over a smaller Max Attendees, live, with no refetch', async () => {
         renderForm([1, 2, 3, 4, 5]);
         await screen.findByTestId('scheduling-overflow-notice');
+        fireEvent.change(screen.getByLabelText('Max Attendees'), { target: { value: '2' } });
         fireEvent.click(screen.getByRole('button', { name: 'Increase Players' }));
-        expect(notice()).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Max Attendees'), { target: { value: '5' } });
         expect(notice()).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Decrease Players' }));
         expect(notice()).toBeInTheDocument();
