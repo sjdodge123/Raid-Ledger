@@ -32,6 +32,7 @@ import {
   serverGameOf,
 } from './voice-lobby-server-merge.helpers';
 import { gateCtx, traceGate } from './voice-gate-trace';
+import { liveGameIdsOf } from './voice-live-game.helpers';
 
 /** A detected game group inside a general-lobby channel. */
 export interface LobbyGameGroup {
@@ -106,11 +107,16 @@ export function partitionLobbyGroups(
   detected: LobbyGameGroup[],
   allowJustChatting: boolean,
   minPlayers: number,
+  liveGameIds: ReadonlySet<number> = new Set(),
 ): LobbyGroupSplit {
   const groups = applyNullPolicy(detected, allowJustChatting);
+  // ROK-1888: a game already live anywhere qualifies whatever its size.
+  const clears = (g: LobbyGameGroup) =>
+    groupSize(g) >= minPlayers ||
+    (g.gameId !== null && liveGameIds.has(g.gameId));
   return {
-    qualifying: groups.filter((g) => groupSize(g) >= minPlayers),
-    dropped: groups.filter((g) => groupSize(g) < minPlayers),
+    qualifying: groups.filter(clears),
+    dropped: groups.filter((g) => !clears(g)),
     minPlayers,
   };
 }
@@ -183,6 +189,7 @@ export async function resolveLobbyGroups(
       detected,
       binding.config?.allowJustChatting ?? false,
       minPlayers,
+      await liveGameIdsOf(deps, detected),
     ),
     channelMemberCount: members.length,
   };

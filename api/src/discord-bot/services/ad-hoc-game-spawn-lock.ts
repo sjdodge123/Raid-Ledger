@@ -32,11 +32,19 @@ export async function withGameSpawnLock<T>(
   fn: (tx: Db) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${AD_HOC_GAME_SPAWN_LOCK_CLASS}::int4, ${gameId}::int4)`,
-    );
+    await lockGameSpawn(tx, gameId);
     return fn(tx);
   });
+}
+
+/**
+ * Take the game's spawn lock inside a transaction the caller already holds
+ * (ROK-1888: the LFG-now spawn, which also holds its own group lock).
+ */
+export async function lockGameSpawn(tx: Db, gameId: number): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${AD_HOC_GAME_SPAWN_LOCK_CLASS}::int4, ${gameId}::int4)`,
+  );
 }
 
 /**
@@ -52,6 +60,24 @@ export function liveQuickPlayFilter(gameFilter: SQL): SQL | undefined {
     inArray(e.adHocStatus, ['live', 'grace_period']),
     isNull(e.cancelledAt),
   );
+}
+
+/**
+ * ROK-1888: which of `gameIds` already have a live Quick Play anywhere. Read
+ * only and unlocked — the voice gates use it to skip `minPlayers` for a game
+ * that is already live, so a lone player in another channel joins it.
+ */
+export async function findLiveQuickPlayGameIds(
+  db: Db,
+  gameIds: readonly number[],
+): Promise<Set<number>> {
+  if (gameIds.length === 0) return new Set();
+  const e = schema.events;
+  const rows = await db
+    .select({ gameId: e.gameId })
+    .from(e)
+    .where(liveQuickPlayFilter(inArray(e.gameId, [...gameIds])));
+  return new Set(rows.flatMap((r) => (r.gameId === null ? [] : [r.gameId])));
 }
 
 /**

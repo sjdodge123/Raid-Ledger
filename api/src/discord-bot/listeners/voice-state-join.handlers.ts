@@ -11,6 +11,7 @@ import {
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
 import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
+import { bypassesMinPlayers } from './voice-live-game.helpers';
 import {
   detectLobbyMemberGame,
   isBotMember,
@@ -264,7 +265,11 @@ async function resolveThresholdSpawnGameId(
     channelId,
     binding,
   );
-  if (counted < minPlayers)
+  // ROK-1888: the bound game is live elsewhere -> join it below threshold.
+  if (
+    counted < minPlayers &&
+    !(await bypassesMinPlayers(deps, binding, confirmedCount))
+  )
     return { shouldSpawn: false, resolvedGameId: undefined };
   if (confirmedCount > 0)
     return { shouldSpawn: true, resolvedGameId: undefined };

@@ -21,6 +21,10 @@ import { convertGroup } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
 import {
+  findVoiceSpawnTarget,
+  lockGameSpawn,
+} from '../services/ad-hoc-game-spawn-lock';
+import {
   convertStarterIntent,
   listLiveGroupHands,
   type ManualStart,
@@ -115,6 +119,16 @@ export async function findOpenLfgNowEvent(
 }
 
 /**
+ * The session a now-group joins (ROK-1888): its open LFG-born event, else the
+ * game's live Quick Play from any channel or the game server.
+ */
+async function findOpenSession(tx: Db, gameId: number): Promise<number | null> {
+  const lfgBorn = await findOpenLfgNowEvent(tx, gameId);
+  if (lfgBorn !== null) return lfgBorn;
+  return (await findVoiceSpawnTarget(tx, gameId))?.id ?? null;
+}
+
+/**
  * Roster the given hands onto an event.
  *
  * A hand with no linked Discord account is skipped: the roster row is keyed by
@@ -164,7 +178,12 @@ export function spawnUnderGroupLock(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
     );
-    const open = await findOpenLfgNowEvent(tx, gameId);
+    // ROK-1888: also the per-game Quick Play lock (voice + server spawns take
+    // it), so "one live Quick Play per game" holds across every spawn path.
+    // Order is always group lock -> game lock; the Quick Play paths never take
+    // the group lock, so the two cannot deadlock.
+    await lockGameSpawn(tx, gameId);
+    const open = await findOpenSession(tx, gameId);
     // The manual branch shares the lock, the guard read and every insert shape
     // with the threshold path below; what it does NOT share is the now-hand
     // count (AC1) or the creator (spec finding 2).

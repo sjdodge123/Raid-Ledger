@@ -15,6 +15,7 @@ import {
 } from './voice-state.helpers';
 import { type VoiceHandlerDeps } from './voice-state.handlers';
 import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
+import { bypassesMinPlayers } from './voice-live-game.helpers';
 import { handleGameSpecificGroupRoster } from './voice-state-recovery.handlers';
 import { humanMembers } from './voice-lobby-groups.helpers';
 import {
@@ -193,7 +194,10 @@ async function resolveGameBindingSpawn(
     counted,
     confirmed: confirmedCount,
   });
-  if (counted < minPlayers)
+  if (
+    counted < minPlayers &&
+    !(await bypassesMinPlayers(deps, binding, confirmedCount))
+  )
     return traceGate(deps.logger, 'below-threshold', ctx);
   if (allConfirmed)
     return spawnAllConfirmed(

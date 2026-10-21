@@ -18,6 +18,7 @@ import {
 } from './voice-threshold-count.helpers';
 import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 import { unanimousLobbySize } from './voice-threshold-server-count.helpers';
+import { isGameLive } from './voice-live-game.helpers';
 
 // ROK-1801 Q10: the deps bundle lives in its own file; re-exported so every
 // existing `from './voice-state.handlers'` import keeps compiling.
@@ -299,6 +300,7 @@ async function switchClearsThreshold(
     ? await lobbyGroupSize(deps, channelId, binding, gameId)
     : 0;
   if (count >= minPlayers) return true;
+  if (count > 0 && (await isGameLive(deps, gameId))) return true; // ROK-1888
   traceGate(
     deps.logger,
     'group-below-threshold',

@@ -11,7 +11,7 @@
  * door into the room, which is what keeps bots out of every roster and every
  * count (AC3).
  */
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildMember } from 'discord.js';
 import * as schema from '../../drizzle/schema';
@@ -162,11 +162,19 @@ export interface RoomResolveDeps extends AdHocNotificationDeps {
   serverRoster?: ServerRosterSource | null;
 }
 
-/** Ad-hoc events under a binding that are still live or in grace (D4). */
+/**
+ * Ad-hoc events still live or in grace (D4): the binding's own, plus (ROK-1888
+ * OQ1) the one live Quick Play of each game in `gameIds`, wherever it was born.
+ */
 export async function findLinkedEvents(
   db: PostgresJsDatabase<typeof schema>,
   bindingId: string,
+  gameIds: readonly number[] = [],
 ): Promise<LinkedEvent[]> {
+  const byGame =
+    gameIds.length > 0
+      ? inArray(schema.events.gameId, [...gameIds])
+      : undefined;
   return db
     .select({
       id: schema.events.id,
@@ -178,7 +186,7 @@ export async function findLinkedEvents(
       and(
         eq(schema.events.isAdHoc, true),
         // ROK-1851: a same-channel monitor's shared Quick Play counts too.
-        onBindingChannel(bindingId),
+        or(onBindingChannel(bindingId), byGame),
         inArray(schema.events.adHocStatus, LIVE_AD_HOC_STATUSES),
         isNull(schema.events.cancelledAt),
       ),
@@ -334,17 +342,21 @@ async function buildGroups(
   source: RoomSource,
   opts: { allowJustChatting: boolean; minPlayers: number },
 ): Promise<RoomGroup[]> {
+  const gameIds = source.detected.flatMap((g) =>
+    g.gameId === null ? [] : [g.gameId],
+  );
+  const linked = await findLinkedEvents(deps.db, binding.bindingId, gameIds);
   const split = partitionLobbyGroups(
     source.detected,
     opts.allowJustChatting,
     opts.minPlayers,
+    new Set(linked.flatMap((e) => (e.gameId === null ? [] : [e.gameId]))),
   );
   const pending = [
     ...split.qualifying.map((g) => ({ group: g, qualifying: true })),
     ...split.dropped.map((g) => ({ group: g, qualifying: false })),
   ];
   if (pending.length === 0) return [];
-  const linked = await findLinkedEvents(deps.db, binding.bindingId);
   const groups = await Promise.all(
     pending.map((p) =>
       toRoomGroup(deps, p.group, p.qualifying, source, linked),
