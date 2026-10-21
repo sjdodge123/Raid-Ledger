@@ -22,6 +22,7 @@ import { AdHocParticipantService } from './ad-hoc-participant.service';
 import {
   buildEmbedEventData,
   readParticipants,
+  spawnCardParticipants,
   type AdHocNotificationDeps,
 } from './ad-hoc-notification.helpers';
 import { ChannelBindingsService } from './channel-bindings.service';
@@ -202,5 +203,49 @@ describe('ROK-1888 AC6 — linked server rows count, anonymous rows do not', () 
     expect(live.description).toContain('+1 on server');
     // Voice + linked; the anonymous row is unlinked too, so it is not "playing".
     expect(await service.getActiveCount(eventId)).toBe(2);
+  });
+});
+
+describe('ROK-1888 Codex r1 P2 — the initial spawn card reads stored flags', () => {
+  async function spawnCard(
+    eventId: number,
+    roster: Array<{ discordUserId: string | null; discordUsername: string }>,
+  ): Promise<EmbedEventData> {
+    const participants = await spawnCardParticipants(
+      testApp.db,
+      eventId,
+      roster,
+    );
+    const data = await buildEmbedEventData(deps, eventId, participants);
+    if (!data) throw new Error(`no embed data for event ${String(eventId)}`);
+    return data;
+  }
+
+  it('a server-born spawn card suffixes the unlinked player and counts nobody', async () => {
+    const eventId = await insertEvent();
+    await service.addServerParticipant(eventId, {
+      steamId: STEAM_UNLINKED,
+      displayName: 'Loanati',
+      userId: null,
+    });
+    const data = await spawnCard(eventId, [
+      { discordUserId: null, discordUsername: 'Loanati' },
+    ]);
+    expect({
+      signupCount: data.signupCount,
+      description: render(data, 'live').description,
+    }).toEqual({
+      signupCount: 0,
+      description: expect.stringContaining('**Loanati** · on server'),
+    });
+  });
+
+  it('a voice-born spawn card carries the Discord-only join hint', async () => {
+    const eventId = await insertEvent();
+    await insertVoiceMember(eventId);
+    const data = await spawnCard(eventId, [
+      { discordUserId: VOICE_DISCORD_ID, discordUsername: 'Rok' },
+    ]);
+    expect(data.discordOnlyPresent).toBe(true);
   });
 });

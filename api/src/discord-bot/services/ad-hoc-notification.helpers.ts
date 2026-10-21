@@ -66,6 +66,15 @@ export function toActiveParticipants(
   }));
 }
 
+/** WIP stub (ROK-1888 Codex r1 P2): the initial spawn card roster. */
+export async function spawnCardParticipants(
+  _db: PostgresJsDatabase<typeof schema>,
+  _eventId: number,
+  fallback: Array<{ discordUserId: string | null; discordUsername: string }>,
+): Promise<AdHocParticipant[]> {
+  return Promise.resolve(toActiveParticipants(fallback));
+}
+
 /** Mark all participants as inactive. */
 export function toInactiveParticipants(
   participants: Array<{

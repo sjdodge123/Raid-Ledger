@@ -36,6 +36,13 @@ export const AD_HOC_EVENTS = {
    * DB write, never before — a consumer that re-reads must see the row closed.
    */
   PARTICIPANT_LEFT: 'ad-hoc.participant.left',
+  /**
+   * ROK-1888 (Codex r1 P2): a voice RE-join of an existing row. Kept apart
+   * from PARTICIPANT_JOINED, which announces a NEW participation only (ROK-1451
+   * M5 — LFG must not re-match a single session). Emitted after the write.
+   * Same payload as PARTICIPANT_JOINED.
+   */
+  PARTICIPANT_REJOINED: 'ad-hoc.participant.rejoined',
 } as const;
 
 export interface AdHocParticipantJoinedPayload {

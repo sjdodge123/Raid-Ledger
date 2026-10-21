@@ -12,7 +12,7 @@
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type Redis from 'ioredis';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
@@ -266,5 +266,98 @@ describe('AC9 — Steam-link nudge', () => {
     await emitJoin(noServer, plain.id, plain.discordId ?? undefined);
 
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-1888 Codex r1 P2 — merge-on-link keeps attendance', () => {
+  const ago = (ms: number) => new Date(Date.now() - ms);
+
+  /** A voice row closed at t1 (600s banked) + an open server row since t2. */
+  async function seedClosedVoiceOpenServer(userId: number, eventId: number) {
+    const t2 = ago(1_200_000);
+    await testApp.db
+      .update(t)
+      .set({
+        joinedAt: ago(3_600_000),
+        leftAt: ago(2_400_000),
+        inVoice: false,
+        totalDurationSeconds: 600,
+      })
+      .where(and(eq(t.eventId, eventId), eq(t.userId, userId)));
+    await joinServerUnlinked(eventId);
+    await testApp.db
+      .update(t)
+      .set({ joinedAt: t2, totalDurationSeconds: 120 })
+      .where(and(eq(t.eventId, eventId), eq(t.steamId, STEAM)));
+    return t2;
+  }
+
+  const clock = async (eventId: number) => {
+    const [row, ...rest] = await rowsOf(eventId);
+    if (!row || rest.length > 0) throw new Error('expected exactly one row');
+    return {
+      leftAt: row.leftAt,
+      joinedAt: row.joinedAt.toISOString(),
+      totalDurationSeconds: row.totalDurationSeconds,
+      sessionCount: row.sessionCount,
+    };
+  };
+
+  it('a reopened voice row starts its clock at the server session and banks both totals', async () => {
+    const eventId = await insertEvent();
+    const user = await insertUser();
+    await joinVoice(eventId, user);
+    const t2 = await seedClosedVoiceOpenServer(user.id, eventId);
+
+    await linkSteam(user.id);
+
+    expect(await clock(eventId)).toEqual({
+      leftAt: null,
+      joinedAt: t2.toISOString(),
+      totalDurationSeconds: 720,
+      sessionCount: 2,
+    });
+  });
+
+  it('a second link event changes nothing — no row is counted twice', async () => {
+    const eventId = await insertEvent();
+    const user = await insertUser();
+    await joinVoice(eventId, user);
+    await seedClosedVoiceOpenServer(user.id, eventId);
+    await linkSteam(user.id);
+    const once = await clock(eventId);
+
+    await linkSteam(user.id);
+
+    expect(await clock(eventId)).toEqual(once);
+  });
+});
+
+describe('ROK-1888 Codex r1 P2 — a voice REJOIN triggers the nudge', () => {
+  it('nudges a member who left, then rejoined after the unlinked row arrived', async () => {
+    const user = await insertUser();
+    const eventId = await insertEvent();
+    await joinVoice(eventId, user);
+    await rows.markLeave(eventId, user.discordId ?? 'missing');
+    await joinServerUnlinked(eventId);
+    // Capture what the REAL service emits on the rejoin, then deliver it to
+    // the app's emitter with emitAsync so every listener is awaited.
+    const relay = new EventEmitter2({ wildcard: false });
+    const seen: Array<[string, unknown]> = [];
+    relay.onAny((name, payload) => {
+      seen.push([String(name), payload]);
+    });
+    await new AdHocParticipantService(testApp.db, relay).addParticipant(
+      eventId,
+      {
+        discordUserId: user.discordId ?? 'missing',
+        discordUsername: `voice-${user.id}`,
+        discordAvatarHash: null,
+        userId: user.id,
+      },
+    );
+    for (const [name, payload] of seen) await emitter.emitAsync(name, payload);
+
+    expect(create).toHaveBeenCalledWith(nudgeFor(user.id, eventId));
   });
 });
