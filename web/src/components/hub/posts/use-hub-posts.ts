@@ -17,6 +17,11 @@ export function hubPostsKey(guildId: number): readonly unknown[] {
     return ['hub-posts', guildId] as const;
 }
 
+/** The composer's relay + linked-channel state; channel bind / unbind invalidates it (Codex r8). */
+export function hubPostComposerKey(guildId: number): readonly unknown[] {
+    return [...hubPostsKey(guildId), 'composer'] as const;
+}
+
 /** The feed, newest first, paged by `nextCursor` ("Show older posts"). */
 export function useHubPosts(guildId: number, enabled = true): UseInfiniteQueryResult<InfiniteData<HubPostList>, Error> {
     const viewer = useViewerCacheScope();
@@ -44,7 +49,7 @@ export function useHubPost(guildId: number, postId: number | null): UseQueryResu
 /** Relay default + channel state; fetched only for editors (`enabled = canEdit`). */
 export function useHubPostComposer(guildId: number, enabled: boolean): UseQueryResult<HubPostComposer, Error> {
     return useQuery({
-        queryKey: [...hubPostsKey(guildId), 'composer'],
+        queryKey: hubPostComposerKey(guildId),
         queryFn: () => fetchHubPostComposer(guildId),
         enabled: enabled && guildId > 0,
         retry: false,
