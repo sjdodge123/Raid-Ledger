@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, ne } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { LifecycleDb } from './channel-lifecycle.store';
 
@@ -24,4 +24,25 @@ export async function findGameAnnouncementBinding(
     )
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Codex r7 P1 apply-time re-check: other bindings on `channelId` besides
+ * `bindingId` (one may have appeared since the activity read).
+ */
+export async function countOtherChannelBindings(
+  db: LifecycleDb,
+  channelId: string,
+  bindingId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(schema.channelBindings)
+    .where(
+      and(
+        eq(schema.channelBindings.channelId, channelId),
+        ne(schema.channelBindings.id, bindingId),
+      ),
+    );
+  return row?.n ?? 0;
 }

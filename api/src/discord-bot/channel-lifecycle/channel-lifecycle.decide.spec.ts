@@ -108,6 +108,16 @@ const CASES: ReadonlyArray<[string, DecideGameInput, LifecycleAction]> = [
     'archive',
   ],
   [
+    'Codex r7 P1: auto active, quiet, channel shared with another binding → none',
+    input({ binding: binding({ sharedWith: 1 }) }),
+    'none',
+  ],
+  [
+    'Codex r7 P1: a shared archived channel still unarchives on activity',
+    input({ itemCount: 1, binding: binding({ ...ARCHIVED, sharedWith: 2 }) }),
+    'unarchive',
+  ],
+  [
     'X8 auto archived with activity → unarchive',
     input({ itemCount: 1, binding: binding(ARCHIVED) }),
     'unarchive',
@@ -185,5 +195,16 @@ describe('decideGame — threshold and reasons', () => {
         );
       }
     }
+  });
+});
+
+it('Codex r7 P1: a shared quiet channel says why it is kept', () => {
+  const res = decideGame(
+    input({ binding: binding({ sharedWith: 2 }) }),
+    SETTINGS,
+  );
+  expect(res).toEqual({
+    action: 'none',
+    reason: 'shared with 2 other bindings',
   });
 });

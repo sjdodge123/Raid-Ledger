@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  count,
   eq,
   inArray,
   isNotNull,
@@ -128,11 +129,27 @@ async function selectCandidateBindings(
       ),
     )
     .orderBy(...gameAnnouncementPrecedence());
+  const counts = await selectChannelBindingCounts(db, guildId);
   const out = new Map<number, LifecycleCandidateBinding>();
   for (const { gameId, ...binding } of rows) {
-    if (gameId !== null && !out.has(gameId)) out.set(gameId, binding);
+    if (gameId === null || out.has(gameId)) continue;
+    const sharedWith = (counts.get(binding.channelId) ?? 1) - 1;
+    out.set(gameId, { ...binding, sharedWith });
   }
   return out;
+}
+
+/** Bindings per channel (every purpose, series included) — Codex r7 P1. */
+async function selectChannelBindingCounts(
+  db: Db,
+  guildId: string | undefined,
+): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ channelId: cb.channelId, n: count() })
+    .from(cb)
+    .where(guildId === undefined ? undefined : eq(cb.guildId, guildId))
+    .groupBy(cb.channelId);
+  return new Map(rows.map((r) => [r.channelId, r.n]));
 }
 
 /** Game ids with a suppression row (D9). */

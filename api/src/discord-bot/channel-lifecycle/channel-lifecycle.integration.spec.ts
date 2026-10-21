@@ -15,6 +15,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import * as ops from './channel-lifecycle.discord-ops';
+import * as activity from './game-activity.queries';
 import {
   ChannelGoneError,
   LifecyclePermissionError,
@@ -365,4 +366,49 @@ it('R18: bind() conflicting after create → channel deleted, failed, no binding
   expect(channelDelete).toHaveBeenCalledWith('ch-' + seq, expect.any(String));
   expect(res.items[0]).toMatchObject({ gameId: id, outcome: 'failed' });
   expect(await gameBindings(id)).toHaveLength(0);
+});
+
+/** Bind `otherGameId` to the same channel as `gameId`'s auto binding (allowed by bind()). */
+async function shareChannel(gameId: number): Promise<number> {
+  const other = await game();
+  await bindings.bind(
+    GUILD,
+    `pre-${gameId}`,
+    'text',
+    'game-announcements',
+    other,
+  );
+  return other;
+}
+
+it('Codex r7 P1: a quiet auto channel another game shares is not archived (live + dry run)', async () => {
+  const id = await game();
+  await autoBinding(id);
+  await shareChannel(id);
+  const dry = await svc.reconcile({ dryRun: true, trigger: 'manual' });
+  expect(dry.items.filter((i) => i.action === 'archive')).toEqual([]);
+  await svc.reconcile(live);
+  expect(ops.archiveChannel).not.toHaveBeenCalled();
+  expect((await gameBindings(id))[0]?.lifecycleState).toBe('active');
+});
+
+it('Codex r7 P1: a sibling bound after the activity read defers the archive', async () => {
+  const id = await game();
+  await autoBinding(id);
+  const read = activity.selectGameLifecycleActivity;
+  jest
+    .spyOn(activity, 'selectGameLifecycleActivity')
+    .mockImplementationOnce(async (...args) => {
+      const rows = await read(...args);
+      await shareChannel(id);
+      return rows;
+    });
+  const res = await svc.reconcile(live);
+  expect(res.items.find((i) => i.gameId === id)).toMatchObject({
+    action: 'archive',
+    outcome: 'deferred',
+    detail: 'shared with 1 other binding',
+  });
+  expect(ops.archiveChannel).not.toHaveBeenCalled();
+  expect((await gameBindings(id))[0]?.lifecycleState).toBe('active');
 });

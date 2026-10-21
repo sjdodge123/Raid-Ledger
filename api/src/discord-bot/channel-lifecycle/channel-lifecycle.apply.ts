@@ -13,7 +13,11 @@ import {
 } from './channel-lifecycle.discord-ops';
 import { lifecycleCall } from './channel-lifecycle.errors';
 import { setLifecycleState } from './channel-lifecycle.store';
-import { findGameAnnouncementBinding } from './channel-lifecycle.store.queries';
+import {
+  countOtherChannelBindings,
+  findGameAnnouncementBinding,
+} from './channel-lifecycle.store.queries';
+import { sharedChannelDetail } from './channel-lifecycle.decide';
 import type {
   ApplyContext,
   ItemOutcome,
@@ -160,16 +164,32 @@ function archiveSeries(
   return ids;
 }
 
+/** Codex r7 P1: a channel another binding now shares is not archived. */
+async function sharedOutcome(
+  ctx: ApplyContext,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome | null> {
+  const n = await countOtherChannelBindings(
+    ctx.db,
+    binding.channelId,
+    binding.id,
+  );
+  return n > 0 ? { outcome: 'deferred', detail: sharedChannelDetail(n) } : null;
+}
+
 /**
  * Archive (D6): lock + move into Archived (overflow-aware), recording the old
  * parent and the bits added. A failed DB write undoes the Discord side, so a
- * retry starts again from the pre-archive state.
+ * retry starts again from the pre-archive state. A channel another binding
+ * shares (bound since the read) is left alone (Codex r7 P1).
  */
 async function applyArchive(
   ctx: ApplyContext,
   game: PlannedGame,
   binding: LifecycleCandidateBinding,
 ): Promise<ItemOutcome> {
+  const shared = await sharedOutcome(ctx, binding);
+  if (shared) return shared;
   const category = await ensureCategory(ctx.guild, {
     id: ctx.categories.archiveId,
     name: LIFECYCLE_DEFAULTS.archiveCategoryName,

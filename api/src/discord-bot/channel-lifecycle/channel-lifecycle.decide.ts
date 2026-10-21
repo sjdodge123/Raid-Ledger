@@ -46,6 +46,11 @@ function decideUnbound(
   return { action: 'none', reason: `${itemCount} of ${threshold} activities` };
 }
 
+/** Why a shared channel is not archived (plan + apply use the same words). */
+export function sharedChannelDetail(n: number): string {
+  return `shared with ${n} other binding${n === 1 ? '' : 's'}`;
+}
+
 /** The `none` outcome for a live channel, upgraded to `link_hub` when a hub has no channel (D7). */
 function keepOrLink(row: DecideGameInput, reason: string): LifecycleDecision {
   if (row.hubNeedsLink)
@@ -75,6 +80,9 @@ export function decideGame(
       : { action: 'none', reason: 'archived, still quiet' };
   }
   if (live) return keepOrLink(row, 'active');
+  const shared = binding.sharedWith ?? 0;
+  if (shared > 0)
+    return { action: 'none', reason: sharedChannelDetail(shared) };
   const days = settings.recentActivityDays;
   return { action: 'archive', reason: `no activity in ${days} days` };
 }

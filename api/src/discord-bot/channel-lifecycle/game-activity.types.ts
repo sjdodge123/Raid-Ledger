@@ -19,6 +19,11 @@ export interface LifecycleCandidateBinding {
   restoreParentId: string | null;
   /** D6: the overwrite bits the archive added (null = not recorded). */
   archivedOverwrites: ArchivedOverwrites | null;
+  /**
+   * Other bindings on the same channel (another game, a series, any purpose;
+   * Codex r7 P1). A shared channel is never archived. Absent ⇒ 0.
+   */
+  sharedWith?: number;
 }
 
 /** One signal kind's contribution for a game. */
