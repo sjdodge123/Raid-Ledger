@@ -20,9 +20,19 @@
  * tab is clipped by the row (a deep link to the last tab on a phone), it is
  * scrolled into view on mount and on every change. An unclipped tab is left
  * alone, so a row far down the page never drags the page to it on load.
+ *
+ * More menu (ROK-1876, tab-row ruling 2026-10-21 option A): when the tabs do
+ * not fit at the row's measured width (any viewport), the first ones that fit
+ * stay and the rest go behind a "More ▾" §4.14 menu (`tab-row-more.tsx`,
+ * split by `useTabRowFit` in `tab-row-fit.ts`). A hidden active tab names the
+ * trigger ("Planner ▾", underlined); the row never reorders. The sideways
+ * scroll stays as the fallback for a row too narrow even for one tab + More.
  */
-import { useEffect, useRef, type JSX } from 'react';
+import { useEffect, useMemo, useRef, type JSX } from 'react';
 import { FOCUS_RING } from './form-classes';
+import { useTabRowFit } from './tab-row-fit';
+import { TabRowMeasure, TabRowMore } from './tab-row-more';
+import { ROW_SCROLL, TAB_BASE, TAB_OFF, TAB_ON } from './tab-row.classes';
 
 export interface TabRowTab {
     id: string;
@@ -39,13 +49,6 @@ export interface TabRowProps {
     className?: string;
 }
 
-const TAB_BASE =
-    'inline-flex min-h-[44px] items-center whitespace-nowrap border-b-2 px-3 text-sm font-medium transition-colors -mb-px rounded-t focus-visible:ring-inset';
-const TAB_ON = 'border-success text-foreground';
-const TAB_OFF = 'border-transparent text-muted hover:border-edge-strong hover:text-foreground';
-const ROW_SCROLL =
-    'overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-edge-strong';
-
 function isClipped(tab: HTMLElement, row: HTMLElement): boolean {
     const t = tab.getBoundingClientRect();
     const r = row.getBoundingClientRect();
@@ -54,7 +57,7 @@ function isClipped(tab: HTMLElement, row: HTMLElement): boolean {
 
 /** Scrolls the active tab into the row's view when the row clips it. */
 function useRevealActive(activeId: string) {
-    const rowRef = useRef<HTMLElement>(null);
+    const rowRef = useRef<HTMLUListElement>(null);
     const activeRef = useRef<HTMLAnchorElement>(null);
     useEffect(() => {
         const row = rowRef.current;
@@ -66,11 +69,17 @@ function useRevealActive(activeId: string) {
 }
 
 export function TabRow({ tabs, activeId, label, className = '' }: TabRowProps): JSX.Element {
+    const shown = useMemo(() => tabs.filter((t) => !t.hidden), [tabs]);
+    const ids = useMemo(() => shown.map((t) => t.id), [shown]);
+    const navRef = useRef<HTMLElement>(null);
+    const measureRef = useRef<HTMLDivElement>(null);
+    const { count, activeHidden } = useTabRowFit(navRef, measureRef, ids, activeId);
     const { rowRef, activeRef } = useRevealActive(activeId);
+    const overflow = shown.slice(count);
     return (
-        <nav ref={rowRef} aria-label={label} className={`border-b border-edge ${ROW_SCROLL} ${className}`}>
-            <ul className="flex w-max gap-1">
-                {tabs.filter((t) => !t.hidden).map((t) => {
+        <nav ref={navRef} aria-label={label} className={`relative flex border-b border-edge ${className}`}>
+            <ul ref={rowRef} data-testid="tab-row-scroller" className={`flex min-w-0 flex-1 gap-1 ${ROW_SCROLL}`}>
+                {shown.slice(0, count).map((t) => {
                     const on = t.id === activeId;
                     return (
                         <li key={t.id} className="shrink-0">
@@ -82,6 +91,8 @@ export function TabRow({ tabs, activeId, label, className = '' }: TabRowProps): 
                     );
                 })}
             </ul>
+            {overflow.length > 0 && <TabRowMore tabs={overflow} activeId={activeId} activeHidden={activeHidden} />}
+            <TabRowMeasure tabs={shown} measureRef={measureRef} />
         </nav>
     );
 }
