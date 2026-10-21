@@ -10,7 +10,7 @@ import { SERVER_MEMBER_COLUMNS } from './server-member-columns';
 import { QuickPlayTab } from './quick-play-tab';
 import { serverHubGameTabs } from './server-hub-game-tabs';
 import { RecentArrivalsWidget } from './recent-arrivals-widget';
-import { ServerHoursWidget } from './server-hours-widget';
+import { LazyServerHoursWidget } from './server-hours-widget-lazy';
 
 /** A visitor gets no member rows (server-side), so the empty line invites a Join. */
 export const SERVER_MEMBERS_VISITOR_EMPTY = 'Join to see who plays here';
@@ -31,7 +31,7 @@ export const pelicanHubModule: HubModule = {
     },
     overviewWidgets: [
         // ROK-1876: every viewer (operator ruling 2026-10-21) — hours are not sensitive.
-        { id: 'server-hours', order: 50, component: ServerHoursWidget, visible: ({ page }) => page.server !== undefined },
+        { id: 'server-hours', order: 50, component: LazyServerHoursWidget, visible: ({ page }) => page.server !== undefined },
         { id: 'recent-arrivals', order: 55, component: RecentArrivalsWidget, visible: ({ page }) => page.server !== undefined },
     ],
     coreWidgetVisible: serverCoreWidgetVisible,
