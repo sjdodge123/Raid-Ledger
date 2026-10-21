@@ -3,7 +3,7 @@
  * time. For three adjacent text segments, every combination of
  * {bold, italic, strike} per segment (8³ = 512) is built in the real editor
  * (production extensions), saved through the production path
- * (`getMarkdown()` → `normalizeEditorMarkdown`), and must
+ * (`serializeEditorMarkdown`), and must
  *   (a) pass `findHubPostMarkdownViolation` — the editor never emits HTML, and
  *   (b) render through `MarkdownBlock` with the same marks on every character.
  * Variants: segments separated by spaces, and an inline-code middle segment.
@@ -14,7 +14,7 @@ import { Editor, type JSONContent } from '@tiptap/core';
 import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../markdown-block';
 import { buildMarkdownExtensions } from './markdown-extensions';
-import { normalizeEditorMarkdown, prepareEditorMarkdown } from './markdown-serialize';
+import { prepareEditorMarkdown, serializeEditorMarkdown } from './markdown-serialize';
 
 type Segment = [text: string, marks: string];
 
@@ -28,7 +28,7 @@ afterAll(() => { editor.destroy(); });
 
 /** Save the editor's current document the way `MarkdownEditor` does. */
 function saveCurrent(): string {
-    return normalizeEditorMarkdown(editor.getMarkdown());
+    return serializeEditorMarkdown(editor);
 }
 
 /** Build the paragraph in the editor and save it the way `MarkdownEditor` does. */
@@ -117,7 +117,7 @@ describe('every bold/italic/strike overlap round-trips editor → stored markdow
 /**
  * Codex r10: one marked span in every left / right context. TipTap writes bold `(raid)` in
  * `a(raid)c` as `a**(raid)**c`; that `**` is not left-flanking, so no CommonMark reader opens it.
- * Such a span is unrepresentable, so bold / italic give up the edge punctuation that touches a
+ * Such a span is unrepresentable, so bold / italic / strike give up the edge punctuation that touches a
  * letter (`a(**raid**)c`). Each case must (i) pass the subset check, (ii) render the marks the
  * reloaded editor shows — the editor's marks minus exactly that edge punctuation — and (iii)
  * reload and save again byte-for-byte.
@@ -129,21 +129,22 @@ const FLANK_MARKS = ['b', 'i', 's', 'c', 'bi'];
 const PUNCT = /[\p{P}\p{S}]/u;
 const LETTER_OF: Record<string, string> = Object.fromEntries(Object.entries(MARK_OF).map(([k, v]) => [v, k]));
 
-/** The span as a CommonMark reader can show it: bold / italic leave punctuation that touches a letter. */
+/** The span as a CommonMark reader can show it: bold / italic / strike leave punctuation that touches a letter. */
 function representable(text: string, marks: string, left: string, right: string): Segment[] {
-    if (!/[bi]/.test(marks)) return [[text, marks]];
+    if (!/[bis]/.test(marks)) return [[text, marks]];
     const chars = [...text];
     let s = 0;
     let e = chars.length;
     if (left === 'letter') while (s < e && PUNCT.test(chars[s] ?? '')) s++;
     if (right === 'letter') while (e > s && PUNCT.test(chars[e - 1] ?? '')) e--;
-    const rest = marks.replace(/[bi]/g, '');
+    const rest = marks.replace(/[bis]/g, '');
     return [[chars.slice(0, s).join(''), rest], [chars.slice(s, e).join(''), marks], [chars.slice(e).join(''), rest]];
 }
 
 /** The signature the editor currently holds. */
 function loaded(): string {
-    const nodes = editor.getJSON().content?.[0]?.content ?? [];
+    const doc: JSONContent = editor.getJSON();
+    const nodes = doc.content?.[0]?.content ?? [];
     return signature(nodes.flatMap((n) => [...(n.text ?? '')].map((ch): [string, string] => [ch, (n.marks ?? []).map((m) => LETTER_OF[m.type] ?? m.type).join('')])));
 }
 

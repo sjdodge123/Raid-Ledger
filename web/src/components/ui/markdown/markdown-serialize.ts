@@ -11,6 +11,8 @@
  * are emitted verbatim by TipTap and are left untouched. Empty paragraphs (and
  * TipTap's `&nbsp;` marker for them) collapse to one blank line.
  */
+import type { Editor } from '@tiptap/core';
+import { trimUnflankedEmphasis } from './markdown-flanking';
 import { fixLinkMarkBoundaries } from './markdown-link-marks';
 
 const ENTITY = /&(lt|gt|amp);/g;
@@ -117,4 +119,17 @@ export function prepareEditorMarkdown(markdown: string): string {
 export function normalizeEditorMarkdown(markdown: string): string {
     const restored = collapseEmptyParagraphs(markdown).replace(ESCAPED_TASK_MARKER, '$1[$2]');
     return outsideCode(restored, (part: string): string => decodeSegment(fixLinkMarkBoundaries(part)));
+}
+
+/**
+ * The editor's document as stored markdown: bold / italic / strike first give up span-edge
+ * characters no delimiter can open or close beside (`markdown-flanking.ts`, Codex r10), then the
+ * serialised text is normalised.
+ * @param editor - the TipTap editor (with the Markdown extension)
+ * @returns the stored subset markdown
+ */
+export function serializeEditorMarkdown(editor: Editor): string {
+    const manager = editor.markdown;
+    const raw = manager === undefined ? editor.getMarkdown() : manager.serialize(trimUnflankedEmphasis(editor.getJSON()));
+    return normalizeEditorMarkdown(raw);
 }

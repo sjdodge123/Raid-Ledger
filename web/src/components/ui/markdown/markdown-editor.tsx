@@ -12,7 +12,7 @@ import { useFieldContext, useFieldControlProps } from '../field-context';
 import { CharCounter } from '../char-counter';
 import { FIELD_FRAME_BASE, FOCUS_WITHIN_RING } from '../form-classes';
 import { buildMarkdownExtensions } from './markdown-extensions';
-import { normalizeEditorMarkdown, prepareEditorMarkdown } from './markdown-serialize';
+import { prepareEditorMarkdown, serializeEditorMarkdown } from './markdown-serialize';
 import { flattenPastedLists } from './markdown-paste';
 import { MarkdownToolbar } from './markdown-toolbar';
 import { MarkdownLinkRow } from './markdown-link-row';
@@ -61,7 +61,7 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
     const editor = useEditor({
         extensions, content: prepareEditorMarkdown(p.value), contentType: 'markdown', editable: !p.disabled,
         autofocus: p.autoFocus ? 'end' : false, editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists },
-        onUpdate: ({ editor: e }) => { const md = normalizeEditorMarkdown(e.getMarkdown()); last.current = md; p.onChange(md); },
+        onUpdate: ({ editor: e }) => { const md = serializeEditorMarkdown(e); last.current = md; p.onChange(md); },
     }, [extensions]);
     useEffect(() => { editor.setOptions({ editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists } }); }, [editor, attrs]);
     useEffect(() => { editor.setEditable(!p.disabled); }, [editor, p.disabled]);
