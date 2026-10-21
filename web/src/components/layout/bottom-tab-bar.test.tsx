@@ -122,6 +122,20 @@ describe('BottomTabBar — the centre Hubs button', () => {
         await waitFor(() => expect(screen.getByTestId('bottom-hubs-trigger')).toHaveAttribute('aria-expanded', 'false'));
     });
 
+    it('open → close: the still-mounted sheet\'s links leave the accessibility tree (Codex r4)', async () => {
+        serve(TWO);
+        renderBar();
+        await userEvent.click(await screen.findByTestId('bottom-hubs-trigger'));
+        const sheet = await screen.findByRole('dialog', { name: 'Your hubs' });
+        expect(within(sheet).getAllByRole('link').length, 'open sheet exposes its links').toBeGreaterThan(0);
+        await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(screen.getByTestId('bottom-hubs-trigger')).toHaveAttribute('aria-expanded', 'false'));
+        expect(screen.getByTestId('bottom-hubs-sheet'), 'the sheet stays mounted after close').toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /Browse all hubs/ }), 'closed sheet: Browse all hubs is not reachable').toBeNull();
+        expect(screen.queryByRole('link', { name: /Valheim — Gamernight/ }), 'closed sheet: hub rows are not reachable').toBeNull();
+        expect(screen.queryByRole('button', { name: 'Close' }), 'closed sheet: Close is not reachable').toBeNull();
+    });
+
     it('is active (aria-current="page") on a hub page and on /hubs, not elsewhere', async () => {
         serve(TWO);
         renderBar('/guilds/31');
