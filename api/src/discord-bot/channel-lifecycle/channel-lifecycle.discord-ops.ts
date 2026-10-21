@@ -6,6 +6,7 @@
  *
  * Archive/unarchive live in `channel-lifecycle.archive-ops.ts` (re-exported).
  */
+import { Logger } from '@nestjs/common';
 import { ChannelType, type Guild, type GuildBasedChannel } from 'discord.js';
 import { listGuildCategories } from '../discord-bot-client.guild.helpers';
 import {
@@ -36,20 +37,50 @@ export interface EnsuredCategory {
   created: boolean;
 }
 
-/** Create a text channel (name ≤100, topic ≤1024); returns its id. */
+const logger = new Logger('ChannelLifecycleOps');
+
+/**
+ * A create that lands after `lifecycleCall` already failed it (the timeout
+ * won the race, Codex r7 P2): the run counted it failed and nothing will bind
+ * or clean up the new id, so delete it. Best effort; never rejects.
+ */
+function deleteIfLate(guild: Guild, pending: Promise<{ id: string }>): void {
+  pending
+    .then(async (late) => {
+      logger.warn(`Deleting channel ${late.id}: its create timed out`);
+      await guild.channels.delete(late.id, 'Raid Ledger: create timed out');
+    })
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.debug(`Late-create cleanup skipped: ${msg}`);
+    });
+}
+
+/**
+ * Create a text channel (name ≤100, topic ≤1024); returns its id. If the call
+ * fails while Discord's request is still in flight, a late success is deleted.
+ */
 export async function createTextChannel(
   guild: Guild,
   opts: { name: string; parentId: string | null; topic: string },
 ): Promise<string> {
-  const channel = await lifecycleCall('create', null, () =>
-    guild.channels.create({
-      name: opts.name.slice(0, MAX_CHANNEL_NAME),
-      type: ChannelType.GuildText,
-      ...(opts.parentId !== null ? { parent: opts.parentId } : {}),
-      topic: opts.topic.slice(0, MAX_CHANNEL_TOPIC),
-    }),
-  );
-  return channel.id;
+  let pending: Promise<{ id: string }> | undefined;
+  try {
+    const channel = await lifecycleCall('create', null, () => {
+      const p = guild.channels.create({
+        name: opts.name.slice(0, MAX_CHANNEL_NAME),
+        type: ChannelType.GuildText,
+        ...(opts.parentId !== null ? { parent: opts.parentId } : {}),
+        topic: opts.topic.slice(0, MAX_CHANNEL_TOPIC),
+      });
+      pending = p;
+      return p;
+    });
+    return channel.id;
+  } catch (err) {
+    if (pending) deleteIfLate(guild, pending);
+    throw err;
+  }
 }
 
 /** Set a managed channel's topic (≤1024 chars). */
