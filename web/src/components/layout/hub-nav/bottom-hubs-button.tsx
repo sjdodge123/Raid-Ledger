@@ -7,7 +7,7 @@
  * every hub page (`isHubsNavActive`).
  *
  * Layout: the slot fills its grid column; the 56px circle sits absolutely,
- * raised 20px above the bar's top edge and centred, so it never widens the
+ * raised 24px above the bar's top edge and centred, so it never widens the
  * column and never covers a neighbour. The label sits at the bar's bottom.
  */
 import { lazy, Suspense, useState, type JSX } from 'react';
@@ -22,7 +22,7 @@ const BottomHubsSheet = lazy(() => import('./bottom-hubs-sheet'));
 /** The slot: fills its column, label pinned to the bar's bottom, ≥56px tall. */
 const SLOT_CLASS = 'relative flex h-14 w-full flex-col items-center justify-end pb-1.5 focus-visible:outline-none group';
 /** The raised circle: `bg-success` + `text-white` (painted `--color-status-solid-label` on both families). */
-const CIRCLE_CLASS = 'absolute -top-5 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full '
+const CIRCLE_CLASS = 'absolute -top-6 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full '
     + 'border-4 border-surface bg-success text-white shadow-lg transition-transform duration-75 group-active:scale-95 '
     + 'group-focus-visible:ring-2 group-focus-visible:ring-success/50';
 const ACTIVE_RING = 'ring-2 ring-success/40 ring-offset-0';

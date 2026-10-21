@@ -21,9 +21,9 @@ type Tab = (typeof LEFT_TABS)[number] | (typeof RIGHT_TABS)[number];
 
 /**
  * Off-screen while scrolling down: the bar's own height plus the raised Hubs
- * circle's 20px lift (and a little shadow), so the circle never peeks above the edge.
+ * circle's 24px lift (and a little shadow), so the circle never peeks above the edge.
  */
-export const TAB_BAR_HIDDEN_CLASS = 'translate-y-[calc(100%+1.75rem)]';
+export const TAB_BAR_HIDDEN_CLASS = 'translate-y-[calc(100%+2rem)]';
 
 /**
  * Mobile bottom tab bar — persistent navigation for the primary sections.

@@ -64,6 +64,14 @@ describe('BottomTabBar — five even slots', () => {
         }
     });
 
+    it('the circle is at least 48px (w-14 h-14)', async () => {
+        serve([]);
+        renderBar();
+        const circle = screen.getByTestId('bottom-hubs-circle');
+        expect(circle.className).toContain('h-14');
+        expect(circle.className).toContain('w-14');
+    });
+
     it('the hidden bar slides far enough to tuck the raised circle away too', () => {
         expect(TAB_BAR_HIDDEN_CLASS).toMatch(/translate-y-\[calc\(100%\+/);
     });
@@ -126,13 +134,5 @@ describe('BottomTabBar — the centre Hubs button', () => {
         renderBar('/calendar');
         await done;
         expect(await screen.findByTestId('bottom-hubs-link')).not.toHaveAttribute('aria-current');
-    });
-
-    it('the circle is at least 48px (w-14 h-14)', async () => {
-        serve([]);
-        renderBar();
-        const circle = screen.getByTestId('bottom-hubs-circle');
-        expect(circle.className).toContain('h-14');
-        expect(circle.className).toContain('w-14');
     });
 });
