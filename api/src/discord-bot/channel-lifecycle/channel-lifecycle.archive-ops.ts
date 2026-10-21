@@ -222,25 +222,76 @@ export async function revertArchive(
   });
 }
 
+/** Where an unarchive moves to and which recorded priors it restores. */
+interface UnarchiveOpts {
+  parentId: string | null;
+  added?: ArchivedOverwrites | null;
+}
+
+/** The raw unarchive edits still in flight when the Discord phase failed. */
+interface UnarchivePending {
+  move?: Promise<unknown>;
+  unlock?: Promise<void>;
+}
+
+/** Move then unlock; keep the raw edit promises (the timed wrapper only races them). */
+async function moveAndUnlock(
+  guild: Guild,
+  channelId: string,
+  po: Parameters<typeof restorePriors>[0],
+  opts: UnarchiveOpts,
+  pending: UnarchivePending,
+): Promise<void> {
+  const move = editParent(guild, channelId, opts.parentId);
+  pending.move = move;
+  await lifecycleCall('unarchive.move', channelId, () => move);
+  const unlock = restorePriors(po, idsOf(guild), toChanges(opts.added));
+  pending.unlock = unlock;
+  await lifecycleCall('unarchive.unlock', channelId, () => unlock);
+}
+
+/**
+ * Wait (bounded) for the failed unarchive's in-flight edits, so a late move or
+ * unlock cannot land on top of the revert (as `settleLock` does for archive).
+ */
+async function settleUnarchive(
+  channelId: string,
+  pending: UnarchivePending,
+): Promise<void> {
+  const inFlight = [pending.move, pending.unlock].flatMap((p) =>
+    p === undefined ? [] : [settleWithin(p)],
+  );
+  if (!(await Promise.all(inFlight)).includes('pending')) return;
+  reportWarning(
+    `Unarchive edits on channel ${channelId} never settled; the revert may be overwritten`,
+  );
+}
+
 /**
  * Unarchive (D6): move back to `parentId`, then restore the recorded priors
- * (a v1 record clears its bits; null → the legacy send lock only).
+ * (a v1 record clears its bits; null → the legacy send lock only). Codex r18
+ * P2: a Discord-phase failure (move or unlock throws / times out, possibly
+ * after `@everyone` was already unlocked) settles the in-flight edits, then
+ * re-locks + moves back to the Archived parent before rethrowing — the
+ * binding stays archived, so Discord must too.
  */
 export async function unarchiveChannel(
   guild: Guild,
   channelId: string,
-  opts: { parentId: string | null; added?: ArchivedOverwrites | null },
+  opts: UnarchiveOpts,
 ): Promise<{ previousParentId: string | null }> {
   const channel = await resolveTextChannel(guild, channelId, { fresh: true });
   const previousParentId = channel.parentId;
-  await moveChannel(guild, 'unarchive.move', channelId, opts.parentId);
-  await lifecycleCall('unarchive.unlock', channelId, () =>
-    restorePriors(
-      channel.permissionOverwrites,
-      idsOf(guild),
-      toChanges(opts.added),
-    ),
-  );
+  const pending: UnarchivePending = {};
+  const po = channel.permissionOverwrites;
+  try {
+    await moveAndUnlock(guild, channelId, po, opts, pending);
+  } catch (err) {
+    await settleUnarchive(channelId, pending);
+    const back = { ...opts, parentId: previousParentId };
+    await revertUnarchive(guild, channelId, back);
+    throw err;
+  }
   return { previousParentId };
 }
 
@@ -252,7 +303,7 @@ export async function unarchiveChannel(
 export async function revertUnarchive(
   guild: Guild,
   channelId: string,
-  opts: { parentId: string | null; added?: ArchivedOverwrites | null },
+  opts: UnarchiveOpts,
 ): Promise<void> {
   try {
     const fresh = await resolveTextChannel(guild, channelId, { fresh: true });
