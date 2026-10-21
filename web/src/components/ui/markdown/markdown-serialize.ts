@@ -11,6 +11,8 @@
  * are emitted verbatim by TipTap and are left untouched. Empty paragraphs (and
  * TipTap's `&nbsp;` marker for them) collapse to one blank line.
  */
+import { fixLinkMarkBoundaries } from './markdown-link-marks';
+
 const ENTITY = /&(lt|gt|amp);/g;
 /**
  * A code span: an equal-length backtick run closes it (CommonMark), so ``a `b` c`` stays whole.
@@ -109,9 +111,10 @@ export function prepareEditorMarkdown(markdown: string): string {
  * Turn TipTap's serialised markdown into the stored subset form.
  * @param markdown - the raw `editor.getMarkdown()` output
  * @returns markdown with entity-encoded text rewritten (code spans and link destinations untouched),
- *   empty paragraphs collapsed to a single paragraph break, and a list item's task marker as typed
+ *   empty paragraphs collapsed to a single paragraph break, a list item's task marker as typed, and
+ *   mark delimiters at a link's edges moved inside its label (Codex r9)
  */
 export function normalizeEditorMarkdown(markdown: string): string {
     const restored = collapseEmptyParagraphs(markdown).replace(ESCAPED_TASK_MARKER, '$1[$2]');
-    return outsideCode(restored, decodeSegment);
+    return outsideCode(restored, (part: string): string => decodeSegment(fixLinkMarkBoundaries(part)));
 }

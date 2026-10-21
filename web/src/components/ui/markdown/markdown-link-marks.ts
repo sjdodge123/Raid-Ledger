@@ -1,47 +1,56 @@
 /**
  * Mark delimiters at a link's edges (ROK-1868, Codex r9).
  *
- * TipTap keeps a mark open across a link: bold `b` (a link) + bold `c` after
- * plain `a` serialises as `a**[b](https://x)c**`. That opening `**` sits
- * between a word character and `[` — not left-flanking — so `MarkdownBlock`
- * (CommonMark rules) prints it literally. The mirror case is a closer after
- * `)` followed by a word character (`**a[b](https://x)**c`).
+ * TipTap keeps a mark open across a link: plain `a`, then bold `b` (a link)
+ * and bold `c` serialise as `a**[b](https://x)c**`. That opening `**` sits
+ * between a word character and `[`, so it is not left-flanking and
+ * `MarkdownBlock` (CommonMark rules) prints it literally. The mirror case is a
+ * closer after `)` followed by a word character (`**a[b](https://x)**c`).
  *
- * The fix moves such delimiters inside the link label: `a[**b**](https://x)**c**`
- * and `**a**[**b**](https://x)c` carry the same marks on every character, and
- * every delimiter now has punctuation (`[`, `]`, `(`, `)`) on its open side.
- * A small stack of open delimiters (`**`, `*`, `~~`) splits a run into the
- * marks it closes and the marks it opens, as TipTap writes them (closers first).
+ * A line holding a link is read into characters with their marks (bold,
+ * italic, strike), then written back so that every delimiter at a link edge
+ * can open or close: a mark stays outside the link only when it covers the
+ * character before, the whole label and the character after (or the line
+ * edge); any other mark is closed before `[`, written inside the label, and
+ * reopened after `)`. `a[**b**](https://x)**c**` carries the same marks on
+ * every character. A line that does not read cleanly is returned unchanged.
  */
-type Stack = string[];
+type Mark = '**' | '*' | '~~';
+interface TextAtom { kind: 'text'; s: string; marks: Mark[] }
+interface LinkAtom { kind: 'link'; label: TextAtom[]; dest: string }
+type Atom = TextAtom | LinkAtom;
 
-const isWord = (ch: string | undefined): boolean =>
-    ch !== undefined && ch.trim() !== '' && !/[\p{P}\p{S}]/u.test(ch);
+const ALL: Mark[] = ['**', '*', '~~'];
+const TAG = /^<(\/?)(em|strong)>/;
 
-/** End (exclusive) of the delimiter run of `*` / `~` starting at i. */
-function runEnd(s: string, i: number): number {
-    let j = i;
-    while (s[j] === '*' || s[j] === '~') j++;
-    return j;
+/** Open (or close) `m`; false when the stack is already in that state. */
+function toggle(stack: Mark[], m: Mark, open: boolean): boolean {
+    const at = stack.indexOf(m);
+    if (open === (at !== -1)) return false;
+    if (open) stack.push(m);
+    else stack.splice(at, 1);
+    return true;
 }
 
-/** Split `run` into the tokens it closes (popped from `stack`) and the tokens it opens (pushed). */
-function splitRun(run: string, stack: Stack): { closers: string[]; openers: string[] } {
-    const closers: string[] = [];
-    let k = 0;
-    for (let top = stack.at(-1); top !== undefined && run.startsWith(top, k); top = stack.at(-1)) {
-        closers.push(top);
-        k += top.length;
-        stack.pop();
-    }
-    const openers: string[] = [];
-    while (k < run.length) {
-        const tok = run.startsWith('~~', k) ? '~~' : run.startsWith('**', k) ? '**' : run.slice(k, k + 1);
-        openers.push(tok);
-        k += tok.length;
-    }
-    stack.push(...openers);
-    return { closers, openers };
+/** Apply a run of `k` stars as TipTap writes them: closers first, then openers. */
+function applyStars(k: number, stack: Mark[]): boolean {
+    let left = k;
+    const bold = stack.includes('**');
+    const italic = stack.includes('*');
+    if (bold && italic && left >= 3) { toggle(stack, '**', false); toggle(stack, '*', false); left -= 3; }
+    else if (bold && left >= 2) { toggle(stack, '**', false); left -= 2; }
+    else if (italic && left % 2 === 1) { toggle(stack, '*', false); left -= 1; }
+    if (left === 0) return true;
+    if (left === 1) return toggle(stack, '*', true);
+    if (left === 2) return toggle(stack, '**', true);
+    return left === 3 && toggle(stack, '**', true) && toggle(stack, '*', true);
+}
+
+/** Apply a run of `k` tildes (pairs toggle strike). */
+function applyTildes(k: number, stack: Mark[]): boolean {
+    if (k % 2 === 1) return false;
+    for (let n = 0; n < k; n += 2) toggle(stack, '~~', !stack.includes('~~'));
+    return true;
 }
 
 /** Index of the `]` matching the `[` at i (escapes skipped), or -1. */
@@ -67,59 +76,108 @@ function linkEnd(s: string, rb: number): number {
     return -1;
 }
 
-const closeAll = (toks: string[]): string => [...toks].reverse().join('');
+const isText = (a: Atom): a is TextAtom => a.kind === 'text';
 
-/** One link at `lb` (its `[`), given the run just before it already split into `before`. */
-function rewriteLink(s: string, lb: number, rb: number, end: number, before: { closers: string[]; openers: string[] }, prevCh: string | undefined, stack: Stack): { out: string; next: number } {
-    const moveOpen = isWord(prevCh) ? before.openers : [];
-    const rEnd = runEnd(s, end);
-    const after = splitRun(s.slice(end, rEnd), [...stack]);
-    // Closers after `)` that close marks opened before the link, when a word character follows.
-    const pending = moveOpen.length;
-    const shut = after.closers.slice(Math.min(pending, after.closers.length));
-    const moveClose = isWord(s[rEnd]) && pending <= after.closers.length ? shut : [];
-    const keptOpen = before.openers.slice(0, before.openers.length - moveOpen.length);
-    const outside = [...moveClose];
-    while (outside.length > 0 && keptOpen.at(-1) === outside[0]) { keptOpen.pop(); outside.shift(); }
-    let out = before.closers.join('') + keptOpen.join('') + outside.join('');
-    const inner = [...[...moveClose].reverse(), ...moveOpen];
-    out += `[${inner.join('')}${fixLinkMarkBoundaries(s.slice(lb + 1, rb))}${closeAll(inner)}${s.slice(rb, end)}`;
-    // Reopen moved openers that the run after `)` does not close; drop the closers we moved.
-    const closedOpen = Math.min(pending, after.closers.length);
-    const reopen = moveOpen.slice(0, pending - closedOpen);
-    const restClosers = after.closers.slice(closedOpen, after.closers.length - moveClose.length);
-    out += reopen.join('') + restClosers.join('') + after.openers.join('');
-    stack.splice(stack.length - after.closers.length, after.closers.length, ...after.openers);
-    return { out, next: rEnd };
+/** A link at `i` (its `[`), its label read with the marks open so far; undefined when `i` starts none, null on a bad read. */
+function readLink(s: string, i: number, stack: Mark[]): { atom: LinkAtom; next: number } | null | undefined {
+    const rb = closeBracket(s, i);
+    const end = rb === -1 ? -1 : linkEnd(s, rb);
+    if (end === -1) return undefined;
+    const label = readInline(s.slice(i + 1, rb), stack, false);
+    if (label === null) return null;
+    return { atom: { kind: 'link', label: label.filter(isText), dest: s.slice(rb + 1, end) }, next: end };
+}
+
+/** Read `s` into marked characters (and links when `links`); null when a delimiter does not fit. */
+function readInline(s: string, stack: Mark[], links: boolean): Atom[] | null {
+    const out: Atom[] = [];
+    for (let i = 0; i < s.length;) {
+        const ch = s[i] ?? '';
+        let j = i;
+        while (s[j] === ch && (ch === '*' || ch === '~')) j++;
+        if (j > i) {
+            if (!(ch === '*' ? applyStars(j - i, stack) : applyTildes(j - i, stack))) return null;
+            i = j;
+            continue;
+        }
+        const tag = ch === '<' ? TAG.exec(s.slice(i)) : null;
+        if (tag) {
+            if (!toggle(stack, tag[2] === 'em' ? '*' : '**', tag[1] === '')) return null;
+            i += tag[0].length;
+            continue;
+        }
+        const link = links && ch === '[' ? readLink(s, i, stack) : undefined;
+        if (link === null) return null;
+        if (link !== undefined) { out.push(link.atom); i = link.next; continue; }
+        const len = ch === '\\' ? 2 : 1;
+        out.push({ kind: 'text', s: s.slice(i, i + len), marks: [...stack] });
+        i += len;
+    }
+    return out;
+}
+
+const isStar = (m: Mark | undefined): boolean => m === '*' || m === '**';
+
+/**
+ * Delimiters that turn the open `stack` into `want`. Closers go in reverse open order, except
+ * that `*` and `**` may close out of order (CommonMark matches `***a**b*`), so no `****` run
+ * appears; any other mark above a closer is closed and reopened.
+ */
+function transition(stack: Mark[], want: Mark[]): string {
+    const toClose = new Set(stack.filter((m: Mark): boolean => !want.includes(m)));
+    const reopen: Mark[] = [];
+    let out = '';
+    while (toClose.size > 0) {
+        const top = stack.at(-1);
+        const below = stack.at(-2);
+        if (top === undefined) break;
+        if (toClose.has(top)) { stack.pop(); toClose.delete(top); out += top; }
+        else if (isStar(top) && below !== undefined && isStar(below) && toClose.has(below)) { stack.splice(-2, 1); toClose.delete(below); out += below; }
+        else { stack.pop(); reopen.unshift(top); out += top; }
+    }
+    for (const m of [...reopen, ...want]) if (!stack.includes(m)) { stack.push(m); out += m; }
+    return out;
+}
+
+/** Write one link: marks that span it stay outside, the rest live inside the label. */
+function writeLink(link: LinkAtom, stack: Mark[], prev: Mark[], next: Mark[]): string {
+    const span = ALL.filter((m: Mark): boolean => prev.includes(m) && next.includes(m)
+        && link.label.every((t: TextAtom): boolean => t.marks.includes(m)));
+    let out = `${transition(stack, stack.filter((m: Mark): boolean => span.includes(m)).concat(span.filter((m: Mark): boolean => !stack.includes(m))))}[`;
+    const inner: Mark[] = [];
+    for (const t of link.label) out += transition(inner, t.marks.filter((m: Mark): boolean => !span.includes(m))) + t.s;
+    return `${out}${transition(inner, [])}]${link.dest}`;
+}
+
+/** Write a read line back with link-safe delimiters. */
+function writeLine(atoms: Atom[]): string {
+    const stack: Mark[] = [];
+    let out = '';
+    atoms.forEach((a: Atom, idx: number): void => {
+        if (a.kind === 'text') { out += transition(stack, a.marks) + a.s; return; }
+        const after = atoms[idx + 1];
+        const next = after === undefined ? ALL : after.kind === 'text' ? after.marks : [];
+        out += writeLink(a, stack, idx === 0 ? ALL : [...stack], next);
+    });
+    return out + transition(stack, []);
+}
+
+/** One line: rewritten when it holds a link and reads cleanly, else unchanged. */
+function fixLine(line: string): string {
+    if (!line.includes('](')) return line;
+    const stack: Mark[] = [];
+    const atoms = readInline(line, stack, true);
+    if (atoms === null || stack.length > 0 || !atoms.some((a: Atom): boolean => a.kind === 'link')) return line;
+    return writeLine(atoms);
 }
 
 /**
- * Rewrite delimiters that cannot open / close at a link edge so `MarkdownBlock` renders the marks
- * the editor holds. Text without such a boundary is returned unchanged.
- * @param s - one non-code segment of serialised markdown
- * @returns the segment with edge delimiters moved inside the link labels
+ * Rewrite mark delimiters around links so `MarkdownBlock` renders the marks the editor holds.
+ * Runs on TipTap's raw output (its `<em>` / `<strong>` reopen fallback included) before entity
+ * decoding. A line without a link, or one that does not read cleanly, is returned unchanged.
+ * @param segment - one non-code segment of serialised markdown
+ * @returns the segment with link-edge delimiters placed where they can open and close
  */
-export function fixLinkMarkBoundaries(s: string): string {
-    if (!s.includes('](')) return s;
-    const stack: Stack = [];
-    let out = '';
-    for (let i = 0; i < s.length;) {
-        const ch = s[i];
-        if (ch === '\\') { out += s.slice(i, i + 2); i += 2; continue; }
-        const isRun = ch === '*' || ch === '~';
-        const j = isRun ? runEnd(s, i) : i;
-        const rb = s[j] === '[' ? closeBracket(s, j) : -1;
-        const end = rb === -1 ? -1 : linkEnd(s, rb);
-        if (end !== -1) {
-            const before = splitRun(s.slice(i, j), stack);
-            const r = rewriteLink(s, j, rb, end, before, s[i - 1], stack);
-            out += r.out;
-            i = r.next;
-            continue;
-        }
-        if (isRun) splitRun(s.slice(i, j), stack);
-        out += s.slice(i, Math.max(j, i + 1));
-        i = Math.max(j, i + 1);
-    }
-    return out;
+export function fixLinkMarkBoundaries(segment: string): string {
+    return segment.split('\n').map(fixLine).join('\n');
 }
