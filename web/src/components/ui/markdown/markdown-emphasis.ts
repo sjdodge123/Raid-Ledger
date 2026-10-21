@@ -18,7 +18,10 @@
  *   where it crosses an enclosing one. A match only retires the unmatched
  *   delimiters of its own family (`*`/`_` or `~`) between its two runs.
  *
- * Linear scans over a bounded post (4000 chars) — no regex over the body.
+ * Linear scans over a bounded post (4000 chars) — no regex over the body. A
+ * pair that would nest deeper than `MAX_EMPHASIS_DEPTH` is refused and its
+ * delimiters stay literal, so a body like 1999 `*`, `x`, 1999 `*` cannot build
+ * a thousand-deep tree that overflows the stack in `nest` or the renderer.
  */
 import type { InlineNode } from './markdown-inline-parse';
 
@@ -41,7 +44,12 @@ interface Range {
     to: number;
     kind: 'strong' | 'em' | 's';
     seq: number;
+    /** Marks this pair would stack at its deepest point: 1 + the tallest range overlapping it. */
+    height: number;
 }
+
+/** Deepest em / strong / s chain one span may build; a pair past it stays literal (Codex r8). */
+export const MAX_EMPHASIS_DEPTH = 6;
 
 const isSpace = (ch: string | undefined): boolean => ch === undefined || ch.trim() === '';
 const isPunct = (ch: string | undefined): boolean => ch !== undefined && /[\p{P}\p{S}]/u.test(ch);
@@ -115,16 +123,23 @@ function findOpener(items: EmphasisItem[], ci: number, cl: Delim): number {
 }
 
 /** Pair opener oi with closer ci: consume characters, record the range, retire same-family runs between. */
-function applyMatch(items: EmphasisItem[], ranges: Range[], [oi, ci]: [number, number], [o, cl]: [Delim, Delim]): void {
+function applyMatch(items: EmphasisItem[], ranges: Range[], [oi, ci]: [number, number], [o, cl]: [Delim, Delim], height: number): void {
     const strike = o.c === '~';
     const use = strike ? 2 : o.count >= 3 && cl.count >= 3 ? 1 : o.count >= 2 && cl.count >= 2 ? 2 : 1;
     o.count -= use;
     cl.count -= use;
-    ranges.push({ from: oi + 1, to: ci, kind: strike ? 's' : use === 2 ? 'strong' : 'em', seq: ranges.length });
+    ranges.push({ from: oi + 1, to: ci, kind: strike ? 's' : use === 2 ? 'strong' : 'em', seq: ranges.length, height });
     for (let j = oi + 1; j < ci; j++) {
         const it = items[j];
         if (it?.kind === 'delim' && (it.c === '~') === strike) it.dead = true;
     }
+}
+
+/** The height a pair over items [oi + 1, ci) would have (conservative: any overlap counts as inside). */
+function heightOf(ranges: Range[], oi: number, ci: number): number {
+    let tallest = 0;
+    for (const r of ranges) if (r.from < ci && r.to > oi + 1) tallest = Math.max(tallest, r.height);
+    return tallest + 1;
 }
 
 const outerFirst = (a: Range, b: Range): number => a.from - b.from || b.to - a.to || b.seq - a.seq;
@@ -177,7 +192,10 @@ export function resolveEmphasis(items: EmphasisItem[]): InlineNode[] {
         const oi = live ? findOpener(items, ci, cl) : -1;
         const o = items[oi];
         if (cl?.kind !== 'delim' || o?.kind !== 'delim') { ci++; continue; }
-        applyMatch(items, ranges, [oi, ci], [o, cl]);
+        const height = heightOf(ranges, oi, ci);
+        // Past the cap the closer stops closing; its characters render literal.
+        if (height > MAX_EMPHASIS_DEPTH) { cl.close = false; ci++; continue; }
+        applyMatch(items, ranges, [oi, ci], [o, cl], height);
         // A closer with characters left is retried in place.
         if (cl.count === 0) ci++;
     }

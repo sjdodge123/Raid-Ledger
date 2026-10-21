@@ -18,6 +18,7 @@ import Code from '@tiptap/extension-code';
 import { Markdown } from '@tiptap/markdown';
 import { MarkdownBlock } from '../markdown-block';
 import { normalizeEditorMarkdown } from './markdown-serialize';
+import { MAX_EMPHASIS_DEPTH } from './markdown-emphasis';
 
 const EXT = [Document, Paragraph, Text, HardBreak, Bold, Italic, Strike, Code, Markdown];
 const MARK_OF: Record<string, string> = { b: 'bold', i: 'italic', s: 'strike' };
@@ -77,5 +78,45 @@ describe('MarkdownBlock renders every toolbar mark combination (Codex r5)', () =
         const saved = save(segments);
         const expected = segments.map(([t, m]) => `${t}[${[...m].sort().join('')}]`).join('|');
         expect(shown(saved), `saved ${JSON.stringify(saved)}`).toBe(expected);
+    });
+});
+
+/** Deepest chain of em / strong / s elements in a rendered tree. */
+function markDepth(el: Element): number {
+    let max = 0;
+    for (const child of el.children) max = Math.max(max, markDepth(child));
+    return max + (TAG_OF[el.tagName] ? 1 : 0);
+}
+
+/** Render, catching the throw so a stack overflow fails as an assertion, not a crash. */
+function tryRender(body: string): { root: HTMLElement | null; error: unknown } {
+    try {
+        return { root: render(<MarkdownBlock text={body} />).container, error: null };
+    } catch (error) {
+        return { root: null, error };
+    }
+}
+
+describe('emphasis nesting is bounded (Codex r8)', () => {
+    it('a 3999-char run of asterisks around one letter renders without overflowing the stack', () => {
+        const body = `${'*'.repeat(1999)}x${'*'.repeat(1999)}`;
+        const { root: shownRoot, error } = tryRender(body);
+        expect(error, 'render error').toBeNull();
+        expect(shownRoot?.textContent).toContain('x');
+        expect(markDepth(shownRoot ?? document.body), 'mark nesting depth').toBeLessThanOrEqual(MAX_EMPHASIS_DEPTH);
+        // Every delimiter not spent on a capped pair stays literal text.
+        expect(shownRoot?.textContent?.length).toBe(body.length - 2 * MAX_EMPHASIS_DEPTH);
+    });
+
+    it('alternating * and _ runs nest only to the cap', () => {
+        const body = `${'*_'.repeat(500)}x${'_*'.repeat(500)}`;
+        const { root: shownRoot, error } = tryRender(body);
+        expect(error, 'render error').toBeNull();
+        expect(markDepth(shownRoot ?? document.body), 'mark nesting depth').toBeLessThanOrEqual(MAX_EMPHASIS_DEPTH);
+    });
+
+    it('legit nesting below the cap still renders every mark', () => {
+        expect(shown('*a **b ~~c~~ b** a*')).toBe('a [i]|b [bi]|c[bis]| b[bi]| a[i]');
+        expect(shown('***~~x~~***')).toBe('x[bis]');
     });
 });
