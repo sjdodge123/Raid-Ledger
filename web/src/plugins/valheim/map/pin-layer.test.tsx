@@ -43,7 +43,7 @@ describe('PinLayer (ROK-1837 D8)', () => {
             screen.getByRole('button', { name: 'Death (Death)' }),
         ).toBeTruthy();
         expect(
-            screen.getByRole('button', { name: 'Portal (Icon2, checked)' }),
+            screen.getByRole('button', { name: 'Portal (Workshop, checked)' }),
         ).toBeTruthy();
     });
 
@@ -78,7 +78,7 @@ describe('PinLayer (ROK-1837 D8)', () => {
     it('strikes through a checked pin', () => {
         renderLayer();
         const portal = screen.getByRole('button', {
-            name: 'Portal (Icon2, checked)',
+            name: 'Portal (Workshop, checked)',
         });
         expect(portal.getAttribute('data-checked')).toBe('true');
         // The label is absolutely positioned: a decoration on the button never
