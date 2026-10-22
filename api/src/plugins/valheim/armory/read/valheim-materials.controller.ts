@@ -25,6 +25,10 @@ import {
   parseIncludeVehicles,
   parsePrefabFilter,
 } from './valheim-materials.mappers';
+import {
+  parseChestFocusQuery,
+  type ValheimChestFocus,
+} from './valheim-chest-focus.helpers';
 import { ValheimMaterialsService } from './valheim-materials.service';
 
 const BASE = 'plugins/valheim/armory/servers/:serverId';
@@ -80,5 +84,17 @@ export class ValheimMaterialsController {
     const vehicles = parseIncludeVehicles(includeVehicles);
     const k = parseContainerKey(key);
     return this.materials.container(serverId, k, req.user, vehicles);
+  }
+
+  /** ROK-1889 GET — the Map tab's chest focus by `?prefab=&x=&z=[&y=][&item=]`. */
+  @Get(`${BASE}/chest-focus`)
+  @Header('Cache-Control', NO_STORE)
+  chestFocus(
+    @Param('serverId', armoryIdPipe) serverId: number,
+    @Query() query: Record<string, unknown>,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimChestFocus> {
+    const q = parseChestFocusQuery(query);
+    return this.materials.chestAt(serverId, req.user, q);
   }
 }

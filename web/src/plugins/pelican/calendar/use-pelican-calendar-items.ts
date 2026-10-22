@@ -11,7 +11,7 @@
  * in the same order on every render.
  */
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import type { GameServerCalendarItemDto, GameServerStatusDto } from '@raid-ledger/contract';
 import { useTimezoneStore } from '../../../stores/timezone-store';
 import { useGameFilterStore, type GameInfo } from '../../../stores/game-filter-store';
@@ -30,13 +30,17 @@ async function loadLazy(): Promise<LazyModule> {
     return lazyModule;
 }
 
-function useServerCalendar(range: CalendarLayerRange, enabled: boolean) {
-    return useQuery<GameServerCalendarItemDto[]>({
+/** The schedule-items query for `range` — one key + fetch policy, shared with the server hub's hours card (ROK-1876). */
+export function serverCalendarQuery(range: CalendarLayerRange) {
+    return queryOptions<GameServerCalendarItemDto[]>({
         queryKey: ['game-servers', 'calendar', range.from, range.to],
         queryFn: async () => (await loadLazy()).fetchServerCalendar(range),
-        enabled,
         staleTime: 60_000,
     });
+}
+
+function useServerCalendar(range: CalendarLayerRange, enabled: boolean) {
+    return useQuery({ ...serverCalendarQuery(range), enabled });
 }
 
 function useServerStatus(enabled: boolean) {

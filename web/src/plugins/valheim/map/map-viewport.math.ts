@@ -26,14 +26,20 @@ export interface ViewportState {
     view: Size;
     content: number;
     vp: Viewport;
+    /** ROK-1889: a centre requested before the surface was measured. */
+    pending?: Point;
 }
+
+/** ROK-1889: a chest focus zooms to this multiple of the fit scale. */
+export const CENTRE_FIT_MULTIPLE = 4;
 
 export type ViewportAction =
     | { type: 'resize'; view: Size }
     | { type: 'pan'; dx: number; dy: number }
     | { type: 'zoomBy'; factor: number; anchor?: Point }
     | { type: 'pinch'; before: PinchGeometry; after: PinchGeometry }
-    | { type: 'fit' };
+    | { type: 'fit' }
+    | { type: 'centre'; point: Point };
 
 export function clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
@@ -174,6 +180,30 @@ export function pinchActions(
     return [{ type: 'pinch', before, after }];
 }
 
+/** Texture point `p` at the view's centre, zoomed in (clamped like every move). */
+export function centreVp(state: ViewportState, p: Point): Viewport {
+    const { view, content } = state;
+    const min = fitScale(view, content);
+    const max = Math.max(min, MAX_NATIVE_SCALE);
+    const scale = clamp(min * CENTRE_FIT_MULTIPLE, min, max);
+    const vp = {
+        scale,
+        x: view.width / 2 - p.x * scale,
+        y: view.height / 2 - p.y * scale,
+    };
+    return clampViewport(vp, view, content);
+}
+
+const measured = (v: Size): boolean => v.width > 0 && v.height > 0;
+
+function resizeState(state: ViewportState, view: Size): ViewportState {
+    const { pending, ...rest } = state;
+    const next = { ...rest, view, vp: resizeVp(state, view) };
+    if (pending === undefined) return next;
+    if (!measured(view)) return { ...next, pending };
+    return { ...next, vp: centreVp(next, pending) };
+}
+
 export function viewportReducer(
     state: ViewportState,
     action: ViewportAction,
@@ -181,11 +211,10 @@ export function viewportReducer(
     const { view, content } = state;
     switch (action.type) {
         case 'resize':
-            return {
-                ...state,
-                view: action.view,
-                vp: resizeVp(state, action.view),
-            };
+            return resizeState(state, action.view);
+        case 'centre':
+            if (!measured(view)) return { ...state, pending: action.point };
+            return { ...state, vp: centreVp(state, action.point) };
         case 'fit':
             return { ...state, vp: fitViewport(view, content) };
         case 'pan':

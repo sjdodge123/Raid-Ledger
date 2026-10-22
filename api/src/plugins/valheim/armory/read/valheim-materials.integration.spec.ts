@@ -678,3 +678,57 @@ describe('hub + scan states (R14/R15/R16/R18/R19)', () => {
     expect(totalsOf(r.shared)).toContain('Stone:1=20/1');
   });
 });
+
+describe('chest focus (ROK-1889)', () => {
+  beforeEach(() => importMsg(server, world()));
+  const focus = (t: string, q: string) =>
+    get(`${base(server)}/chest-focus?${q}`, t);
+
+  it('a shared chest by prefab + position: display fields + item count, no ids', async () => {
+    const res = await focus(
+      tokens.member,
+      'prefab=piece_chest&x=0.0&z=0&item=Wood',
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      prefab: 'piece_chest',
+      x: 0,
+      y: 30,
+      z: 0,
+      privacy: 'shared',
+      vehicle: false,
+      slots: 30,
+      usedSlots: 1,
+      held: { prefab: 'Wood', count: 50 },
+    });
+  });
+
+  it('a personal chest: its owner sees it, a member gets the missing-chest 404', async () => {
+    const q = 'prefab=piece_chest_private&x=5&z=5&item=Gold';
+    const mine = await focus(tokens.owner, q);
+    expect(mine.status).toBe(200);
+    expect(mine.body).toMatchObject({
+      privacy: 'personal',
+      held: { prefab: 'Gold', count: 3 },
+    });
+    const hidden = await focus(tokens.member, q);
+    const missing = await focus(
+      tokens.member,
+      'prefab=piece_chest_private&x=50&z=5&item=Gold',
+    );
+    expect(hidden.status).toBe(404);
+    expect(hidden.body).toEqual(missing.body);
+  });
+
+  it('a cart that moved is a 404; a malformed position is a 400', async () => {
+    expect((await focus(tokens.member, 'prefab=Cart&x=9&z=0')).status).toBe(
+      200,
+    );
+    expect((await focus(tokens.member, 'prefab=Cart&x=9.5&z=0')).status).toBe(
+      404,
+    );
+    expect((await focus(tokens.member, 'prefab=Cart&x=abc&z=0')).status).toBe(
+      400,
+    );
+  });
+});
