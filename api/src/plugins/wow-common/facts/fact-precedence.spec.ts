@@ -120,7 +120,10 @@ describe('resolveField — rule 3: newest asOf', () => {
   it('stale blizzard still beats an older roster value', () => {
     const got = resolveField(
       'class',
-      [fact('roster', 'r', ago(72 * HOUR)), fact('blizzard', 'b', ago(48 * HOUR))],
+      [
+        fact('roster', 'r', ago(72 * HOUR)),
+        fact('blizzard', 'b', ago(48 * HOUR)),
+      ],
       NOW,
     );
     expect(got?.source).toBe('blizzard');
@@ -136,9 +139,9 @@ describe('resolveField — rule 3: newest asOf', () => {
   });
 
   it('an undated value is used when it is the only one', () => {
-    expect(resolveField('lockouts', [fact('addon', 'a', null)], NOW)?.source).toBe(
-      'addon',
-    );
+    expect(
+      resolveField('lockouts', [fact('addon', 'a', null)], NOW)?.source,
+    ).toBe('addon');
   });
 });
 

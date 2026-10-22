@@ -82,7 +82,9 @@ export function resolveField<T>(
   const manual = allowed.filter((c) => c.source === 'manual');
   const others = allowed.filter((c) => c.source !== 'manual');
   if (rule.manualOverride && manual.length > 0) return newest(manual);
-  const fresh = others.filter((c) => c.source === 'blizzard' && isFresh(c, now));
+  const fresh = others.filter(
+    (c) => c.source === 'blizzard' && isFresh(c, now),
+  );
   if (fresh.length > 0) return newest(fresh);
   return newest(others) ?? newest(manual);
 }
