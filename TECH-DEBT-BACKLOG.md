@@ -3487,3 +3487,14 @@ same day (#1278, #1279, #1280).
 
 - **[low]** `api/src/lineups/standalone-poll/standalone-poll-voter.helpers.ts:181` + `api/src/lineups/scheduling/scheduling-auto-signup.helpers.ts:47` — a voter whose auto-signup throws is still DM'd "Auto-signed up": `autoSignupSlotVoters` swallows the failure, and `notifyPollVoters` iterates the intended `selectedIds`, not the signup results. Pre-existing (the swallow predates ROK-1874; ROK-1874 only added the bench branch). Not fixed in ROK-1874 by design (spec OQ5).
   Suggested: return `signedUpUserIds` alongside `benchedUserIds` from `autoSignupSlotVoters` and DM only those.
+
+### 2026-10-22 — Lead session ag (review MINORs carried from #1722, #1728, #1729, #1731)
+
+- **[low]** `api/src/discord-bot/services/ad-hoc-event.handlers.ts:288-294` — `startGracePeriod` enqueues the grace job and emits `grace_period` even when the guarded update matched no row (no-op), so a duplicate trigger produces a spurious event. Surfaced in the #1729 (ROK-1888) review; not a regression of that PR. Suggested: return early when the guarded update's `rowCount` is 0.
+- **[low]** ROK-1888 Quick Play merge (#1729) — merging overlapping voice + server past sessions double-counts the overlap; a player moved between two bound channels leaves the first row open. Surfaced in review. Suggested: clamp merged intervals before summing; close the prior row on a bound-channel move.
+- **[low]** `web/src/components/ui/markdown/markdown-load.ts:80` (#1722 ROK-1868) — where the reader and `marked` disagree on code-span vs link precedence (e.g. ``[a`](/p) [b` ``), the inserted `\` escape lands inside marked's code span as a visible backslash. Stable after one save. Suggested: skip the escape when an odd backtick run precedes the `[` on that line.
+- **[low]** `web/src/components/ui/markdown/markdown-load.ts:30` (pre-existing) — `BLOCK_START` `\[(?=[^\]]*\]:)` matches `[[x]: y](/p)`, which the reader renders as a link; load escapes the line start and the link is lost. Suggested: `\[(?=[^\[\]]*\]:)`.
+- **[nit]** #1731 hub review — an operator may approve their own hub proposal (self-approval). Operator ruled operators may create hubs, so this is allowed by intent; flagging in case an audit trail wants a second approver.
+- **[low]** `api/src/plugins/valheim/armory/read/valheim-recipes.service.ts:172` (#1728 ROK-1894) — no test sends a 1.x recipe set through the service, so dropping `gameVersion: set.gameVersion` passes every test. Suggested: one service/integration case with a "1.0.20" set.
+- **[nit]** `api/src/plugins/valheim/armory/read/valheim-recipes.cost-rule.spec.ts:107` — add "garbage", "1.1.0" and "0.217" cases to `costRuleFor`.
+- **[nit]** `web/src/test/mocks/valheim-recipes-handlers.ts:94` — the MSW mock uses a third per-quality formula (`amount + perLevel·(q−1)`); align it with `amountAt` so DEMO_MODE and the Planner tests match prod.
