@@ -59,6 +59,13 @@ describe('bottom-nav clearance (ROK-1875)', () => {
         expect(source(path)).toContain('var(--bottom-nav-clearance)');
     });
 
+    it('the hub page also pads past a tab\'s Filters FAB (ROK-1889)', () => {
+        const css = readFileSync(join(WEB_SRC, 'index.css'), 'utf8');
+        expect(css).toContain(':root[data-filter-fab] { --filter-fab-clearance: 9rem; }');
+        expect(css).toContain(':root[data-filter-fab] { --filter-fab-clearance: 9.75rem; }');
+        expect(source('components/hub/hub-page.tsx')).toContain('var(--filter-fab-clearance)');
+    });
+
     it('no shipped file docks or pads against the flat bar height', () => {
         const offenders = SCANNED_ROOTS.flatMap((root) => sourceFiles(join(WEB_SRC, root)))
             .filter((file) => BANNED.some((re) => re.test(stripComments(readFileSync(file, 'utf8')))))

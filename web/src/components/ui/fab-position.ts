@@ -18,6 +18,7 @@
  *   Page padding at 768–1023px therefore clears 84 + 56 = 140px (`md:pb-40`).
  * - The page's bottom padding must clear the whole stack, not just the tab bar.
  */
+import { useEffect } from 'react';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 
@@ -62,4 +63,27 @@ export function useFilterFabBottom(stackAboveCreate: boolean): number {
     const noTabBar = useMediaQuery(NO_TAB_BAR_MQ);
     if (noTabBar) return FAB_BOTTOM_ABOVE_FEEDBACK;
     return stackAboveCreate ? createBottom + FAB_SIZE_PX + FAB_STACK_GAP_PX : createBottom;
+}
+
+/** `<html>` attribute set while any Filters FAB is mounted (ROK-1889). */
+export const FILTER_FAB_ATTR = 'data-filter-fab';
+let mountedFilterFabs = 0;
+
+/**
+ * ROK-1889 — while a Filters FAB is on the page, flag `<html>` so
+ * `--filter-fab-clearance` (`index.css`) resolves to the FAB's top edge plus a
+ * gap below 1024px: 144px (72 + 56 + 16) under 768px, 156px (84 + 56 + 16) at
+ * 768–1023px, `0px` otherwise. A page that hosts a `FilterEntry` pads its
+ * bottom by at least that much, so the last row can scroll clear of the FAB.
+ * Counted, so two FABs unmounting in either order leave the flag right.
+ */
+export function useFilterFabClearance(): void {
+    useEffect(() => {
+        mountedFilterFabs += 1;
+        document.documentElement.setAttribute(FILTER_FAB_ATTR, '');
+        return () => {
+            mountedFilterFabs -= 1;
+            if (mountedFilterFabs === 0) document.documentElement.removeAttribute(FILTER_FAB_ATTR);
+        };
+    }, []);
 }

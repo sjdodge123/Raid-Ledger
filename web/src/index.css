@@ -488,6 +488,19 @@ html {
     --bottom-nav-height: 3.5rem;
     --bottom-nav-raise: 1.5rem;
     --bottom-nav-clearance: calc(var(--bottom-nav-height) + var(--bottom-nav-raise) + env(safe-area-inset-bottom));
+
+    /* Filters FAB (ROK-1889): its top edge + a 16px gap while one is mounted
+       (FilterFab sets html[data-filter-fab], fab-position.ts) — 0 otherwise.
+       Pages hosting a FilterEntry pad max(their own bottom, this). */
+    --filter-fab-clearance: 0px;
+}
+
+@media (max-width: 767.98px) {
+    :root[data-filter-fab] { --filter-fab-clearance: 9rem; } /* 72 + 56 + 16 */
+}
+
+@media (min-width: 768px) and (max-width: 1023.98px) {
+    :root[data-filter-fab] { --filter-fab-clearance: 9.75rem; } /* 84 + 56 + 16 */
 }
 
 /* ============================================
