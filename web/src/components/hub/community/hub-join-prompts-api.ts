@@ -4,7 +4,9 @@
  * (ruling §8d: `suggest` asks the person who signed up, `auto` tells them
  * once) and `PATCH /hubs/:id/auto-membership` (Leader or staff).
  */
-import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import {
+    useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationResult, type UseQueryResult,
+} from '@tanstack/react-query';
 import {
     HubInviteJoinResponseSchema, HubJoinPromptListSchema,
     type HubAutoMembershipMode, type HubInviteJoinResponse, type HubJoinPrompt, type HubJoinPromptList,
@@ -19,12 +21,39 @@ export const HUB_JOIN_PROMPTS_KEY = ['hub-join-prompts'] as const;
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-/** The signed-in user's pending prompts; only fetched when `enabled` (signed in). */
-export function useHubJoinPrompts(enabled: boolean): UseQueryResult<HubJoinPromptList, Error> {
+/** Poll cadence + window after a signup: the API raises prompts in a post-commit listener. */
+export const PROMPT_POLL_MS = 1_000;
+export const PROMPT_WATCH_MS = 8_000;
+
+const promptWatchKey = (eventId: number) => ['hub-join-prompts-watch', eventId] as const;
+
+/** Open the bounded post-signup watch for `eventId`'s prompt (called on signup success). */
+export function watchHubJoinPrompts(qc: QueryClient, eventId: number): void {
+    qc.setQueryData<number>(promptWatchKey(eventId), Date.now() + PROMPT_WATCH_MS);
+}
+
+/** Poll while the watch is open and no signup prompt for `eventId` has arrived yet. */
+export function promptPollInterval(
+    deadline: number | undefined, data: HubJoinPromptList | undefined, eventId: number, now: number,
+): number | false {
+    if (deadline === undefined || now >= deadline) return false;
+    const arrived = (data?.items ?? []).some((p) => p.source === 'signup' && p.sourceRef === eventId);
+    return arrived ? false : PROMPT_POLL_MS;
+}
+
+/**
+ * The signed-in user's pending prompts; only fetched when `enabled` (signed in).
+ * `watchEventId` (a hub-tagged event's page) polls briefly after a signup there.
+ */
+export function useHubJoinPrompts(enabled: boolean, watchEventId?: number): UseQueryResult<HubJoinPromptList, Error> {
+    const qc = useQueryClient();
     return useQuery({
         queryKey: HUB_JOIN_PROMPTS_KEY,
         queryFn: () => fetchApi('/users/me/hub-join-prompts', {}, HubJoinPromptListSchema),
         enabled,
+        refetchInterval: (query) => (watchEventId === undefined ? false : promptPollInterval(
+            qc.getQueryData<number>(promptWatchKey(watchEventId)), query.state.data, watchEventId, Date.now(),
+        )),
     });
 }
 

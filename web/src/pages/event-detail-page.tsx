@@ -178,6 +178,18 @@ function useModalState() {
 type PageState = ReturnType<typeof useEventDetailPageState>;
 type VoiceState = ReturnType<typeof useEventDetailVoice>;
 
+/** The viewer's overlapping signups for this event's time, if any. */
+function EventConflictsNotice({ conflicts }: { conflicts: EventResponseDto['myConflicts'] }) {
+    if (!conflicts || conflicts.length === 0) return null;
+    return (
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4">
+            <p className="text-sm text-warning">
+                {conflicts.map(c => `You're already signed up for ${c.title} at this time`).join('. ')}
+            </p>
+        </div>
+    );
+}
+
 function EventDetailBodySections({ page, voice, derived, handlers }: {
     page: PageState & { event: EventResponseDto }; voice: VoiceState; derived: EventDetailDerived; handlers: EventDetailHandlers;
 }) {
@@ -186,19 +198,13 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
             <EventReportLinkCard event={page.event} canManage={derived.canManageRoster} isCancelled={derived.isCancelled} />
             <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
-            {page.event.myConflicts && page.event.myConflicts.length > 0 && (
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-warning">
-                        {page.event.myConflicts.map(c => `You're already signed up for ${c.title} at this time`).join('. ')}
-                    </p>
-                </div>
-            )}
+            <EventConflictsNotice conflicts={page.event.myConflicts} />
             <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
                 isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
             <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
-            <HubJoinPrompts eventId={page.eventId} enabled={page.isAuthenticated} />
+            <HubJoinPrompts eventId={page.eventId} enabled={page.isAuthenticated} hubTagged={page.event.guildId != null} />
             {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}
             {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />

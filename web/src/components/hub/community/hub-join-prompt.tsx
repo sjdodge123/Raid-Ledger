@@ -41,9 +41,14 @@ function AutoJoinedNotice({ prompt, onDismiss, pending }: { prompt: HubJoinPromp
     );
 }
 
-/** The signed-in user's prompts raised by signing up for `eventId`. */
-export function HubJoinPrompts({ eventId, enabled }: { eventId: number; enabled: boolean }): JSX.Element | null {
-    const prompts = useHubJoinPrompts(enabled);
+/**
+ * The signed-in user's prompts raised by signing up for `eventId`. `hubTagged`
+ * (the event has a hub) lets the list poll briefly after a signup here.
+ */
+export function HubJoinPrompts({ eventId, enabled, hubTagged = false }: {
+    eventId: number; enabled: boolean; hubTagged?: boolean;
+}): JSX.Element | null {
+    const prompts = useHubJoinPrompts(enabled, hubTagged ? eventId : undefined);
     const accept = useAcceptHubJoinPrompt();
     const dismiss = useDismissHubJoinPrompt();
     const items = (prompts.data?.items ?? []).filter((p) => p.source === 'signup' && p.sourceRef === eventId);
