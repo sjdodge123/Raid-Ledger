@@ -24,6 +24,12 @@ export interface HubLinker {
   ): Promise<number>;
   /** Games with an eligible hub that has no channel yet (L8); absent ⇒ none. */
   hubNeedsLinkGameIds?(db?: LifecycleDb): Promise<ReadonlySet<number>>;
+  /** Games an active community hub holds open (L11, D8); absent ⇒ none. */
+  hubHoldGameIds?(
+    now: Date,
+    windowDays: number,
+    db?: LifecycleDb,
+  ): Promise<ReadonlySet<number>>;
 }
 
 /** The default seam until L8: links nothing. */
