@@ -153,9 +153,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerHubModule(module) {
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
         },
-        registerHubWidget(widget) {
-            addHubGameWidget(slug, widget);
-        },
+        registerHubWidget: (widget) => addHubGameWidget(slug, widget),
     };
 }
 
