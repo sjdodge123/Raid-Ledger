@@ -25,6 +25,7 @@ type OpenVoiceRow = {
   eventId: number;
   discordUserId: string | null;
   status: string | null;
+  channelBindingId: string | null;
 };
 
 /** Open voice rows on live / grace-period ad-hoc events. */
@@ -36,6 +37,7 @@ async function openVoiceRows(
       eventId: p.eventId,
       discordUserId: p.discordUserId,
       status: e.adHocStatus,
+      channelBindingId: e.channelBindingId,
     })
     .from(p)
     .innerJoin(e, eq(e.id, p.eventId))
@@ -70,7 +72,7 @@ export async function closeStaleVoiceRows(deps: StaleRowDeps): Promise<number> {
     const id = row.discordUserId;
     if (!id || deps.userChannelMap.has(id)) continue;
     await svc.markLeave(row.eventId, id);
-    if (row.status === 'live') emptiedLive.add(row.eventId);
+    if (graceable(row)) emptiedLive.add(row.eventId);
     closed++;
   }
   if (closed > 0) {
@@ -78,6 +80,15 @@ export async function closeStaleVoiceRows(deps: StaleRowDeps): Promise<number> {
   }
   await armGraceForEmptied(deps, emptiedLive);
   return closed;
+}
+
+/**
+ * ROK-1888 B5: only bound events, as on the live path (`processLeave` is reached
+ * through bound channels only). An LFG-born session (no binding) is never
+ * graced live, and its temp-channel rejoin never cancels grace.
+ */
+function graceable(row: OpenVoiceRow): boolean {
+  return row.status === 'live' && row.channelBindingId !== null;
 }
 
 /**
