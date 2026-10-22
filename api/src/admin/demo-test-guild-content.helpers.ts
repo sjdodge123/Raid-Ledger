@@ -1,8 +1,9 @@
 /**
  * ROK-1786 L4 — the optional `withContent: true` half of the DEMO_MODE
  * `POST /admin/test/wow/seed-guild` fixture: a `guild_profiles` row (GM post,
- * two multi-line rule sections, one link group) and two recommended addons
- * (CurseForge required + GitHub optional).
+ * two multi-line rule sections, one link group), two recommended addons
+ * (CurseForge required + GitHub optional) and, ROK-1868, three hub posts
+ * (`demo-test-hub-posts.helpers.ts`).
  *
  * Idempotent and restoring: a re-call rewrites the profile, upserts the two
  * addons back to sort 0/1 on their `(guild, source, slug)` key (same ids) and
@@ -19,6 +20,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
+import { seedHubPosts } from './demo-test-hub-posts.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -82,6 +84,8 @@ export interface SeedGuildContent {
   gmPost: string;
   /** In display order (sort 0, 1). */
   addonIds: number[];
+  /** ROK-1868: the seeded hub posts, newest first. */
+  postIds: number[];
 }
 
 /** Rewrite the guild's profile row to the seeded GM post, rules and links. */
@@ -144,6 +148,11 @@ export async function seedGuildContent(
   now: Date,
 ): Promise<SeedGuildContent> {
   await upsertProfile(db, guildId, gmUserId, now);
+  const postIds = await seedHubPosts(
+    db,
+    { guildId, gmUserId, legacyBody: SEED_GUILD_GM_POST },
+    now,
+  );
   const addonIds: number[] = [];
   for (const [i, addon] of SEED_GUILD_ADDONS.entries()) {
     addonIds.push(await upsertAddon(db, guildId, addon, i, gmUserId));
@@ -152,5 +161,5 @@ export async function seedGuildContent(
   await db
     .delete(ga)
     .where(and(eq(ga.guildId, guildId), notInArray(ga.id, addonIds)));
-  return { gmPost: SEED_GUILD_GM_POST, addonIds };
+  return { gmPost: SEED_GUILD_GM_POST, addonIds, postIds };
 }

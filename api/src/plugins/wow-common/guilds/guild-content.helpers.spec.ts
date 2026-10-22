@@ -32,6 +32,15 @@ describe('gmPostHeadline', () => {
     expect(gmPostHeadline('  \n \n')).toBeNull();
   });
 
+  it('strips hub-post markdown before picking the line (ROK-1868 D11)', () => {
+    expect(gmPostHeadline('**Raid night** moved\n- bring flasks')).toBe(
+      'Raid night moved',
+    );
+    expect(gmPostHeadline('\n[Read the plan](https://x.y) *now*')).toBe(
+      'Read the plan now',
+    );
+  });
+
   it('caps a long first line with an ellipsis', () => {
     const headline = gmPostHeadline('x'.repeat(300));
     expect(headline).toHaveLength(GM_POST_HEADLINE_MAX);
