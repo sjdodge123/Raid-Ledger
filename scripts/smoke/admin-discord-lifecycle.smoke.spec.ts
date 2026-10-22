@@ -15,7 +15,8 @@
  * shared guild), and only the dry run ("Preview changes") is clicked — never
  * "Run in Discord".
  */
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page, Route, TestInfo } from '@playwright/test';
+import type { ChannelBindingDto, ChannelBindingListDto } from '@raid-ledger/contract';
 import { test, expect } from './base';
 import { API_BASE, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { isDesktop } from './helpers';
@@ -26,8 +27,9 @@ const BOT_STATUS = /\/admin\/settings\/discord-bot$/;
 const ENABLE_REFUSED = 'Choose or allow an Archived category before enabling';
 const PIN_REFUSED = 'Only Raid Ledger-managed channels can be pinned';
 const ENABLE_LABEL = 'Create and archive game channels automatically';
+const BINDINGS = /\/admin\/discord\/bindings$/;
 
-interface Seeded { gameId: number; gameName: string; bindingId: string | null }
+interface Seeded { gameId: number; gameName: string; guildId: string; bindingId: string | null; channelId: string | null }
 
 let token: string;
 let seeds: Record<'create' | 'manual' | 'managed' | 'blocked', Seeded>;
@@ -149,13 +151,57 @@ test.describe('Admin Discord — channel automation (ROK-1428)', () => {
     });
 
     test('the bindings list shows the Lifecycle cell and toggles Pin', async ({ page }) => {
+        // CI has no connected bot, so GET /admin/discord/bindings lists nothing
+        // (no guild). Serve the two seeded bindings in the contract shape; the
+        // Pin PATCH goes to the real API and its response drives the next list.
+        const rows = { managed: bindingRow(seeds.managed, true), manual: bindingRow(seeds.manual, false) };
+        await page.route((url) => BINDINGS.test(url.pathname), async (route) => {
+            if (route.request().method() !== 'GET') { await route.continue(); return; }
+            await fulfilBindings(route, [rows.managed, rows.manual]);
+        });
+        // The real PATCH answers before the list refetches, so the refetch
+        // serves the binding exactly as the API saved it.
+        await page.route((url) => url.pathname.endsWith(`/admin/discord/bindings/${rows.managed.id}`), async (route) => {
+            if (route.request().method() !== 'PATCH') { await route.continue(); return; }
+            const response = await route.fetch();
+            const saved = (await response.json().catch(() => null)) as { data?: ChannelBindingDto } | null;
+            if (saved?.data) rows.managed = { ...rows.managed, ...saved.data };
+            await route.fulfill({ response });
+        });
         await page.goto('/admin/settings/discord/channels');
         const row = page.getByTestId('channel-binding-row').filter({ hasText: seeds.managed.gameName });
         const cell = row.getByTestId('binding-lifecycle-cell');
         await expect(cell).toContainText('Managed', { timeout: 15_000 });
+        await expect(cell).not.toContainText('Pinned');
+        const patched = page.waitForResponse((r) => r.request().method() === 'PATCH'
+            && r.url().endsWith(`/admin/discord/bindings/${rows.managed.id}`));
         await cell.getByRole('button', { name: 'Pin' }).click();
-        await expect(cell.getByRole('button', { name: 'Unpin' })).toBeVisible({ timeout: 15_000 });
+        const res = await patched;
+        expect(res.status()).toBe(200);
+        const body = (await res.json()) as { data: ChannelBindingDto };
+        expect(body.data).toMatchObject({ id: rows.managed.id, autoManaged: true, pinned: true });
+        await expect(cell.getByRole('button', { name: /^Unpin/ })).toBeVisible({ timeout: 15_000 });
+        await expect(cell).toContainText('Pinned');
         await expect(page.getByTestId('channel-binding-row').filter({ hasText: seeds.manual.gameName })
             .getByTestId('binding-lifecycle-cell')).toHaveCount(0);
     });
 });
+
+/** A seeded binding as GET /admin/discord/bindings would list it (contract shape). */
+function bindingRow(s: Seeded, autoManaged: boolean): ChannelBindingDto {
+    if (s.bindingId === null || s.channelId === null) throw new Error(`seed ${s.gameName} has no binding`);
+    const now = new Date().toISOString();
+    return {
+        id: s.bindingId, guildId: s.guildId, channelId: s.channelId, channelType: 'text',
+        bindingPurpose: 'game-announcements', gameId: s.gameId, gameName: s.gameName,
+        recurrenceGroupId: null, config: null, lifecycleState: 'active', autoManaged,
+        pinned: false, archivedAt: null, createdAt: now, updatedAt: now,
+    };
+}
+
+/** Answer the list from the real response (keeps its CORS headers) with these rows. */
+async function fulfilBindings(route: Route, data: ChannelBindingDto[]): Promise<void> {
+    const response = await route.fetch();
+    const json: ChannelBindingListDto = { data };
+    await route.fulfill({ response, status: 200, json });
+}
