@@ -8,7 +8,7 @@
  */
 import { Logger } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import { startGracePeriod } from './ad-hoc-event.handlers';
+import { startGracePeriod } from './ad-hoc-event-end.helpers';
 import { hasOpenServerPlayers } from './ad-hoc-server-presence.helpers';
 
 /** Asks the server-presence service to enrol the tracker's players. */

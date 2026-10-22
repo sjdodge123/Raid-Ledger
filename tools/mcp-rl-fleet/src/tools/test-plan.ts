@@ -233,15 +233,19 @@ const curlOnVM = async (
   const stdinPrefix = stdinTokens
     .map(({ envVar }) => `read -r ${envVar}; export ${envVar}; `)
     .join('');
+  // DOCKER_HOST must prefix `docker run` itself: as a prefix of the whole
+  // string it bound only to the first command, which is the `read` when a
+  // token is piped in, so docker fell back to the unix socket rl-agent cannot
+  // open (2026-10-22, the first time RL_AGENT_TOKEN was ever set).
   const remote =
-    `${stdinPrefix}docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
+    `${stdinPrefix}DOCKER_HOST=tcp://127.0.0.1:2375 docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
     `curl -s -X ${method} ${bodyArgs}${headerArgs} ` +
     `-w '\\nRL_STATUS:%{http_code}' ` +
     `${quotedUrl}`;
   const host = await sshHost();
   const sshArgList = [
     '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${host}`,
-    `DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`,
+    remote,
   ];
   let stdout: string;
   if (stdinTokens.length > 0) {

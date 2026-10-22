@@ -232,8 +232,14 @@ test.describe('Scheduling poll live votes (ROK-1551 S2-AC1)', () => {
             await openPoll(member.page, pollUrl(fx));
             const b = slotParts(member.page, fx.slotId);
             await expect(b.count).toHaveText('1 vote', { timeout: 15_000 });
+            // The toggle must retract the suggester's auto-vote, not cast one:
+            // pin the persisted state before toggling.
+            await waitForSlotVotes(token, fx, 1);
 
             await toggleVoteApi(token, fx);
+            // Start the live bound only once the retraction is persisted, so
+            // B's assertion measures delivery, not the write racing the read.
+            await waitForSlotVotes(token, fx, 0);
 
             await expect(b.count).toHaveText('0 votes', { timeout: LIVE_BOUND_MS });
         } finally {

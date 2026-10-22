@@ -27,8 +27,16 @@ export interface QuickPlayVoiceResult {
 
 /** A seeded user, the voice binding (monitor or lobby) and its channel. */
 export interface QuickPlayVoiceTarget {
-  /** `users.id` of a Discord-linked user (e.g. a `seedFixtureUser` slot). */
-  userId: number;
+  /**
+   * `users.id` of a Discord-linked user (e.g. a `seedFixtureUser` slot).
+   * Pass exactly one of `userId` / `discordOnly`.
+   */
+  userId?: number;
+  /**
+   * ROK-1888: a voice member with NO Raid Ledger account (`user_id` NULL) —
+   * the only way the smoke can make the LIVE card show its join hint.
+   */
+  discordOnly?: { discordUserId: string; displayName: string };
   /** The `game-voice-monitor` binding's id. */
   bindingId: string;
   /** The bound voice channel's snowflake. */
@@ -62,6 +70,40 @@ export function quickPlayVoiceJoin(
     "/admin/test/quick-play/voice-join",
     target,
   );
+}
+
+/** `POST /admin/test/quick-play/server-join` body (ROK-1888). */
+export interface QuickPlayServerJoin {
+  /** The game whose LIVE Quick Play the player joins (409 when none is live). */
+  gameId: number;
+  /** A SteamID64 that belongs to NO Raid Ledger account (400 otherwise). */
+  steamId: string;
+  /** The in-game name the card renders as `**name** · on server`. */
+  displayName: string;
+}
+
+/**
+ * Put an UNLINKED game-server player into the game's live Quick Play.
+ *
+ * The companion bot can never be on a Pelican server, so this seam calls the
+ * real presence sink (`AdHocServerPresenceService.playerJoined`) the Pelican
+ * reader calls. It only attaches — it never spawns an event.
+ *
+ * @param api - An ADMIN client (admin-guarded, DEMO_MODE only).
+ * @param join - The game, the unlinked SteamID64 and its display name.
+ * @returns The live event the row was attached to.
+ */
+export function quickPlayServerJoin(
+  api: ApiClient,
+  join: QuickPlayServerJoin,
+): Promise<{ eventId: number }> {
+  return api.post<{ eventId: number }>("/admin/test/quick-play/server-join", join);
+}
+
+/** A random SteamID64-shaped id (`7656119` + 10 digits) for a smoke run. */
+export function randomUnlinkedSteamId(): string {
+  const tail = String(Math.floor(Math.random() * 1e10)).padStart(10, "0");
+  return `7656119${tail}`;
 }
 
 /** ROK-293's product gate: `AdHocEventService.isEnabled` reads this setting. */
