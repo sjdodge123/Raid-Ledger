@@ -4,7 +4,8 @@
  * Suspense skeleton around its lazy body and two error boundaries: one inside
  * the card (a throwing body says so in place) and one around the whole cell (a
  * throwing `useVisible` or header action drops just that card). Either way the
- * rest of the Overview keeps rendering.
+ * rest of the Overview keeps rendering. The cell is keyed by guild id, so moving
+ * to another hub resets both boundaries and the Suspense.
  */
 import type { ReactNode } from 'react';
 import type { HubCtx } from '../../plugins/hub-module';
@@ -34,7 +35,8 @@ export function gameWidgetCells(ctx: HubCtx, activeSlugs: ReadonlySet<string>): 
         return {
             key: `plugin:${reg.pluginSlug}:${reg.widget.id}`,
             order: reg.widget.order,
-            node: <WidgetBoundary fallback={null}>{card}</WidgetBoundary>,
+            // Keyed by hub: `GuildPage` is not, so without this hub B would inherit hub A's failed boundary.
+            node: <WidgetBoundary key={ctx.page.guild.id} fallback={null}>{card}</WidgetBoundary>,
         };
     });
 }

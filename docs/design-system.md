@@ -1507,10 +1507,14 @@ renders its own card or heading.
   The body is `lazy` (keeps plugin `register.ts` files and the app entry light).
 - **Containment.** An error boundary inside the card swaps a throwing body for a `role="alert"` `text-sm
   text-muted` "Couldn't load this widget."; a second one around the cell drops the card if `useVisible`
-  or the header action throws. The rest of the Overview always renders.
+  or the header action throws. The rest of the Overview always renders. Each cell is keyed by the hub's guild id,
+  so moving to another hub resets both boundaries and the Suspense.
 - **Gating.** Plugin active **and** `games` contains `page.guild.gameSlug` **and** `kinds` (default: every
   kind) contains the hub's kind **and** `audience` allows the viewer (`everyone`; `members` = not a visitor;
   `editors` = `viewer.canEdit`) **and** `useVisible` (a hook; use it to self-hide with no data) is true.
+  The gate runs before mount: a widget the viewer may not see never loads its lazy body or calls `useVisible`.
+  **Audience is a client-side display filter; members-only data endpoints MUST also enforce access
+  server-side.**
 - **Layout.** Merged into the bento by `order` with the core cells (10/20/30/40/70) and the module's
   `overviewWidgets`; v1 order is fixed (no leader hide/reorder yet). `span` 1/2/3 at ≥1024px; 3 clamps to 2
   at ≥768px; phone is one column. A hidden widget renders nothing, so it leaves no empty grid item.
@@ -1520,5 +1524,6 @@ renders its own card or heading.
 owning `HubModule.overviewWidgets`.
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
-(declare `audience`), or eager-import the body from `register.ts`. Rendered: the hub Overview itself
-(`/guilds/:id`); no separate `/dev/design-system` demo — the chrome is the existing `WidgetCard`.
+(declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
+(`web/src/dev/design-system/hub-widgets-section.tsx`) — sample widgets through the real `gameWidgetCells`
+in the ready, skeleton and contained-error states; live on the hub Overview (`/guilds/:id`).

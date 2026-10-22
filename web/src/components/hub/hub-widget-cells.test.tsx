@@ -68,6 +68,35 @@ describe('gameWidgetCells', () => {
         expect(screen.getByRole('heading', { name: 'Class breakdown' })).toBeInTheDocument();
     });
 
+});
+
+describe('gameWidgetCells — mounting, reset and containment', () => {
+    it('never mounts a members widget for a visitor: no lazy load, no useVisible call (gate before mount)', () => {
+        const load = vi.fn(() => Promise.resolve({ default: Body }));
+        const probe = vi.fn(() => true);
+        register({ audience: 'members', component: lazy(load), useVisible: probe });
+        renderWithProviders(<Harness p={page('visitor')} />);
+        expect(screen.queryByRole('heading', { name: 'Class breakdown' })).toBeNull();
+        expect(load).not.toHaveBeenCalled();
+        expect(probe).not.toHaveBeenCalled();
+    });
+
+    it('resets a failed card when the same cell moves to another hub', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const FailsOnHubA: ComponentType<HubWidgetCtx> = ({ page: p }) => {
+            if (p.guild.id === 7) throw new Error('hub A only');
+            return <p data-testid="forever-body">Hub {p.guild.id}</p>;
+        };
+        register({ component: lazyOf(FailsOnHubA) });
+        const hubA = page();
+        const hubB: GuildPage = { ...hubA, guild: { ...hubA.guild, id: 8 } };
+        const { rerender } = renderWithProviders(<Harness p={hubA} />);
+        expect(await screen.findByText(/couldn't load this widget/i)).toBeInTheDocument();
+        rerender(<Harness p={hubB} />);
+        expect(await screen.findByTestId('forever-body')).toHaveTextContent('Hub 8');
+        expect(screen.queryByText(/couldn't load this widget/i)).toBeNull();
+    });
+
     it('hides the card when useVisible says false', () => {
         register({ useVisible: () => false });
         renderWithProviders(<Harness p={page()} />);

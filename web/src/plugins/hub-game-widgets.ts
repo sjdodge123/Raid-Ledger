@@ -18,6 +18,10 @@ export type HubWidgetAudience = 'everyone' | 'members' | 'editors';
 /** What a game widget receives: the hub context plus the matched game slug. */
 export type HubWidgetCtx = HubCtx & { gameSlug: string };
 
+/**
+ * A plugin's game-scoped hub Overview card. `audience` is a client-side display
+ * filter; members-only data endpoints MUST also enforce access server-side.
+ */
 export interface HubGameWidget {
     /** Unique per plugin; the card's DOM id is `hub-widget-<pluginSlug>-<id>`. */
     id: string;
@@ -31,6 +35,10 @@ export interface HubGameWidget {
     order: number;
     /** Columns at ≥1024px. 3 clamps to 2 at ≥768px; everything is 1 on phone. Default 1. */
     span?: 1 | 2 | 3;
+    /**
+     * Audience is a client-side display filter; members-only data endpoints MUST
+     * also enforce access server-side.
+     */
     audience: HubWidgetAudience;
     /** Lazy, so a plugin's `register.ts` stays light (app-entry budget). */
     component: LazyExoticComponent<ComponentType<HubWidgetCtx>>;

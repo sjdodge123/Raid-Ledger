@@ -1,0 +1,73 @@
+/**
+ * Plugin hub widgets for /dev/design-system (ROK-1909, design-system §4.27).
+ *
+ * Registers three sample `HubGameWidget`s for a demo-only plugin + game slug
+ * (`ds-demo` — never an active plugin or a real hub's game) and renders them
+ * through the REAL cell builder `gameWidgetCells`, so the chrome, the Suspense
+ * skeleton and the contained-error state are the shipped ones.
+ */
+import { lazy, type ComponentType, type JSX } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import { addHubGameWidget, type HubGameWidget, type HubWidgetCtx } from '../../plugins/hub-game-widgets';
+import { gameWidgetCells } from '../../components/hub/hub-widget-cells';
+import { Section } from './design-system-bits';
+
+const DEMO = 'ds-demo';
+const ACTIVE: ReadonlySet<string> = new Set([DEMO]);
+const CLASSES = [['Warrior', 6], ['Priest', 4], ['Mage', 3]] as const;
+
+const ReadyBody: ComponentType<HubWidgetCtx> = () => (
+    <ul className="space-y-1 text-sm" data-testid="ds-hub-widget-body">
+        {CLASSES.map(([name, n]) => (
+            <li key={name} className="flex justify-between text-secondary"><span>{name}</span><span className="text-foreground">{n}</span></li>
+        ))}
+    </ul>
+);
+
+const BrokenBody: ComponentType<HubWidgetCtx> = () => {
+    throw new Error('Demo widget failed on purpose');
+};
+
+const SeeAll: ComponentType<HubWidgetCtx> = () => <a href="#hub-widgets" className="text-xs text-secondary hover:text-foreground hover:underline">See all</a>;
+
+function lazyOf(c: ComponentType<HubWidgetCtx>): HubGameWidget['component'] {
+    return lazy(() => Promise.resolve({ default: c }));
+}
+
+const BASE = { games: [DEMO], audience: 'everyone' } as const;
+addHubGameWidget(DEMO, { ...BASE, id: 'classes', title: 'Class breakdown', order: 1, component: lazyOf(ReadyBody), action: SeeAll });
+addHubGameWidget(DEMO, { ...BASE, id: 'loading', title: 'Loading (skeleton)', order: 2, component: lazy(() => new Promise<never>(() => undefined)) });
+addHubGameWidget(DEMO, { ...BASE, id: 'broken', title: 'Contained error', order: 3, component: lazyOf(BrokenBody) });
+
+const PAGE: GuildPage = {
+    guild: { id: -1, gameId: 0, kind: 'wow_guild', name: 'Demo hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 12, lastSnapshotAt: null, gameSlug: DEMO },
+    importedBy: null,
+    viewer: { role: 'member', canEdit: false, canManageEditors: false },
+    ranks: [],
+    roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
+};
+
+/** The demo bento: the three sample widgets as real Overview cells. */
+function DemoGrid(): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['ds-hub-widget-raids'], queryFn: () => new Promise(() => undefined), enabled: false });
+    const cells = gameWidgetCells({ page: PAGE, raids }, ACTIVE);
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="ds-hub-widgets">
+            {cells.map((c) => <div key={c.key} className="contents">{c.node}</div>)}
+        </div>
+    );
+}
+
+/** §4.27 — a plugin's game-scoped Overview card in its three states. */
+export function HubWidgetsSection(): JSX.Element {
+    return (
+        <Section
+            id="hub-widgets"
+            title="Pattern — plugin hub widgets"
+            blurb="registerHubWidget cards on a hub Overview: core draws the WidgetCard chrome, a Suspense skeleton and an error boundary that keeps a throwing body inside its own card. Audience is a client-side display filter; members-only data endpoints must also enforce access server-side."
+        >
+            <DemoGrid />
+        </Section>
+    );
+}
