@@ -41,6 +41,7 @@ scripts/*
 !scripts/check-migration-snapshot-chain.spec.mjs
 !scripts/scoped-gate-plan.mjs
 !scripts/scoped-gate-plan.spec.mjs
+!scripts/scoped-gate-changed-files.spec.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs

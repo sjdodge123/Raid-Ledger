@@ -2633,10 +2633,15 @@ run_default_gate() {
 SCOPED_TARGETS=""
 
 # The branch's own changes: merge-base diff + uncommitted + untracked files.
+# --no-renames: a rename lists BOTH paths, so moving a file out of
+# packages/contract/** still escalates. Any git failure returns non-zero —
+# the caller refuses rather than planning from a partial file list.
 _scoped_changed_files() {
-  { git diff --name-only origin/main...HEAD 2>/dev/null || true
-    git diff --name-only HEAD 2>/dev/null || true
-    git ls-files --others --exclude-standard 2>/dev/null || true; } | sort -u
+  local committed uncommitted untracked
+  committed=$(git diff --no-renames --name-only origin/main...HEAD) || return 1
+  uncommitted=$(git diff --no-renames --name-only HEAD) || return 1
+  untracked=$(git ls-files --others --exclude-standard) || return 1
+  printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | sort -u
 }
 
 _scoped_has() {
@@ -2699,8 +2704,18 @@ run_scoped_lint() {
 }
 
 run_scoped_gate() {
-  local plan rc=0
-  plan=$(_scoped_changed_files | node "$REPO_ROOT/scripts/scoped-gate-plan.mjs") || rc=$?
+  local files plan rc=0
+  # Fail closed, like scripts/smoke/surface-hash.sh: without the base the plan
+  # would see only uncommitted files and could vouch for a contract/web commit.
+  if ! git rev-parse --verify -q 'origin/main^{commit}' >/dev/null; then
+    echo -e "${RED}--scoped refused: origin/main does not resolve — run 'git fetch origin main' and rerun.${NC}" >&2
+    exit 2
+  fi
+  if ! files=$(_scoped_changed_files); then
+    echo -e "${RED}--scoped refused: git could not list the branch's changed files.${NC}" >&2
+    exit 2
+  fi
+  plan=$(printf '%s\n' "$files" | node "$REPO_ROOT/scripts/scoped-gate-plan.mjs") || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo -e "${RED}--scoped refused (selector exit $rc) — see the reason above and rerun with the tier it names.${NC}" >&2
     exit 2
