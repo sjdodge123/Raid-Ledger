@@ -1709,6 +1709,13 @@
       "when": 1792520502617,
       "tag": "0244_schedule_votes_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 245,
+      "version": "7",
+      "when": 1792650349176,
+      "tag": "0245_community_lineups_guild_id",
+      "breakpoints": true
     }
   ]
 }
