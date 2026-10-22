@@ -549,6 +549,17 @@ await expect(page.getByText(/seeded row/)).toBeVisible({ timeout: 15_000 });
 
 Background: `feedback_smoke_polling_for_async_writes.md` (ROK-1156, the original incident). Default to API polling for any smoke assertion that depends on a `useQuery`-backed value.
 
+### Smoke specs and the Discord bot
+
+GitHub CI runs the Playwright suite with **no connected Discord bot**, so every endpoint that reads the bot's guild answers empty, `null` or 503 there — `GET /admin/discord/bindings` returns `{ data: [] }`, `GET /discord/channels` is a 503, `GET /discord/members/list` is `[]`. A fleet env or laptop with a bot returns real rows, so a spec asserting them passes locally and fails in every CI project (PR #1721, `admin-discord-lifecycle`).
+
+Pick one, in this order:
+
+1. **Fixture the endpoint with `page.route`** (preferred — the spec asserts everywhere). Route the exact endpoint before `page.goto`; examples: `admin-discord-join-post.smoke.spec.ts`, `admin-game-roles.smoke.spec.ts`.
+2. **`requireDiscordBot(test, token, reason)`** from `scripts/smoke/discord-bot.ts` when the spec needs the real guild — it skips with the reason when the bot is offline. `discordBotConnected(token)` is the boolean behind it.
+
+`scripts/smoke-discord-bot-guard.spec.mjs` (node:test, run by CI's `scripts/*.spec.mjs` step) fails when a `*.smoke.spec.ts` references a bot-dependent endpoint with neither. Its `BOT_DEPENDENT_ENDPOINTS` list is built from the `api/src/discord-bot/**` controllers that return empty/503 without a guild — add to it when a new one appears.
+
 ## Smoke Test Authoring Standards (Discord Companion Bot)
 
 Discord smoke tests live in `tools/test-bot/src/smoke/tests/`. These rules ensure reliability and eliminate flaky timing issues.
