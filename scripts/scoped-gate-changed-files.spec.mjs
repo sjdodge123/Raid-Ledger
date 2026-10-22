@@ -14,10 +14,14 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REAL_ROOT = dirname(HERE);
 const SCRIPT = join(HERE, 'validate-ci.sh');
+// The validate-ci scope-skip harness runs this spec with a stub `git` first on
+// PATH that fakes `diff --name-only` / `ls-files --others`; it exports the real
+// binary as REAL_GIT. This spec needs real git answers from its temp repo.
+const GIT = process.env.REAL_GIT ?? 'git';
 
 /** Run git in `cwd`; throws with git's stderr on failure. */
 function git(cwd, ...args) {
-  const r = spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' });
+  const r = spawnSync(GIT, ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' });
   assert.equal(r.status, 0, `git ${args.join(' ')} failed: ${r.stderr}`);
   return r.stdout;
 }
@@ -41,10 +45,11 @@ function makeRepo(t, { withBase }) {
 }
 
 /** Source validate-ci.sh in `cwd` and run `snippet`; REPO_ROOT → the real
- *  checkout so run_scoped_gate finds the real selector. */
+ *  checkout so run_scoped_gate finds the real selector. A `git` shell function
+ *  (functions beat PATH) pins the script's git calls to the real binary. */
 function inScript(cwd, snippet) {
-  const body = `source "$1"; REPO_ROOT="$2"; ${snippet}`;
-  return spawnSync('bash', ['-c', body, 'spec', SCRIPT, REAL_ROOT], {
+  const body = `SPEC_REAL_GIT="$3"; git() { command "$SPEC_REAL_GIT" "$@"; }; source "$1"; REPO_ROOT="$2"; ${snippet}`;
+  return spawnSync('bash', ['-c', body, 'spec', SCRIPT, REAL_ROOT, GIT], {
     cwd,
     encoding: 'utf8',
     env: { ...process.env, RL_VALIDATE_CI_DRY: '1', RL_TARGET: 'local' },
