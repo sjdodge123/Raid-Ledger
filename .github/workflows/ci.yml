@@ -832,16 +832,25 @@ jobs:
 
       # ROK-1904: this step hung 25 min once (#1741). Each attempt gets its
       # own cap; the second runs only if the first failed or timed out.
+      # ROK-1904: a second apt/dpkg run must WAIT for a lock (120s) instead
+      # of failing instantly; this file also covers apt run by install-deps.
+      - name: Make apt wait for the dpkg lock
+        run: echo 'DPkg::Lock::Timeout "120";' | sudo tee /etc/apt/apt.conf.d/99-rl-lock-timeout
+
       - name: Install postgresql-client (pg_dump/pg_restore for backup tests)
         id: pgclient
         continue-on-error: true
         timeout-minutes: 6
-        run: sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
+        run: sudo apt-get -o DPkg::Lock::Timeout=120 update -o Acquire::Retries=3 && sudo apt-get -o DPkg::Lock::Timeout=120 install -y postgresql-client
 
+      # The timed-out attempt may still hold the dpkg lock: kill it (exact
+      # names, disposable runner), finish any half-configured packages, retry.
       - name: Install postgresql-client (retry)
         if: steps.pgclient.outcome == 'failure'
         timeout-minutes: 6
-        run: sudo dpkg --configure -a; sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
+        run: |
+          sudo pkill -x apt-get || true; sudo pkill -x apt || true; sudo pkill -x dpkg || true; sudo dpkg --configure -a || true
+          sudo apt-get -o DPkg::Lock::Timeout=120 update -o Acquire::Retries=3 && sudo apt-get -o DPkg::Lock::Timeout=120 install -y postgresql-client
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1058,18 +1067,48 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ steps.pw-cache.outputs.cache-primary-key }}
 
-      # OS libraries for chromium: always (apt, distro mirror only), with one
-      # retry under its own cap.
+      # ROK-1904: ubuntu-24.04 ships Chrome, so chromium's shared libs are
+      # usually present and the apt install (which hung 6 min on run
+      # 39859382178) is pure risk. ldd every binary/.so of the cached chromium
+      # + headless shell; install-deps runs only if a lib is "not found" (or
+      # no browser is found to check).
+      - name: Check Playwright OS dependencies
+        id: pw-ldd
+        run: |
+          dirs=$(find ~/.cache/ms-playwright -maxdepth 1 -type d \( -name 'chromium-*' -o -name 'chromium_headless_shell-*' \))
+          if [ -z "$dirs" ]; then
+            echo "no cached chromium found; will run install-deps"
+            echo "missing=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          missing=$(for d in $dirs; do
+            find "$d" -type f \( -name '*.so*' -o -perm -u+x \) -exec ldd {} \; 2>/dev/null
+          done | grep 'not found' | sort -u || true)
+          if [ -n "$missing" ]; then
+            echo "missing libs:"; echo "$missing"
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "all deps present, skipping install-deps"
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ROK-1904: a second apt/dpkg run must WAIT for a lock (120s) instead
+      # of failing instantly; this file also covers apt run by install-deps.
+      - name: Make apt wait for the dpkg lock
+        run: echo 'DPkg::Lock::Timeout "120";' | sudo tee /etc/apt/apt.conf.d/99-rl-lock-timeout
+
       - name: Install Playwright OS dependencies
         id: pw-deps
+        if: steps.pw-ldd.outputs.missing == 'true'
         continue-on-error: true
         timeout-minutes: 6
         run: npx playwright install-deps chromium
 
       - name: Install Playwright OS dependencies (retry)
-        if: steps.pw-deps.outcome == 'failure'
+        if: steps.pw-ldd.outputs.missing == 'true' && steps.pw-deps.outcome == 'failure'
         timeout-minutes: 6
-        run: sudo dpkg --configure -a; npx playwright install-deps chromium
+        run: |
+          sudo pkill -x apt-get || true; sudo pkill -x apt || true; sudo pkill -x dpkg || true; sudo dpkg --configure -a || true
+          npx playwright install-deps chromium
 
       - name: Build contract
         run: npm run build -w packages/contract
