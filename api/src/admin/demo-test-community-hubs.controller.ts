@@ -33,6 +33,8 @@ import {
   resolveSeedGame,
   seedActiveHub,
   seedArchivedHub,
+  seedHubEvent,
+  type SeedHubEvent,
   seedProposal,
   type CommunityHubsSeedResult,
 } from './demo-test-community-hubs.helpers';
@@ -86,6 +88,7 @@ export class DemoTestCommunityHubsController {
     leaderUserId: number;
     memberUserIds: number[];
     bannedUserId: number;
+    hubEvent: SeedHubEvent;
   }> {
     const leaderUserId = await ensureSeedUser(this.db, 'community-leader');
     const crew = await seedActiveHub(
@@ -102,7 +105,8 @@ export class DemoTestCommunityHubsController {
       bannedBy: leaderUserId,
       reason: 'Seeded ban',
     });
-    return { crew, leaderUserId, memberUserIds, bannedUserId };
+    const hubEvent = await seedHubEvent(this.db, gameId, crew, leaderUserId);
+    return { crew, leaderUserId, memberUserIds, bannedUserId, hubEvent };
   }
 
   private async seedCrew(hubId: number): Promise<number[]> {

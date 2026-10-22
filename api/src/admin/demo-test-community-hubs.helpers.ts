@@ -4,9 +4,10 @@
  * member), one `proposed` by `demo-member`, one archived. Idempotent: the
  * previous fixture is reset first (demo-test-community-hubs.reset.ts). No `games`
  * INSERT — an existing game is reused, so the name-dedup guard is moot.
+ * ROK-1893 P4: plus one event tagged (`guild_id`) to "Seed Crew" (`hubEvent`).
  */
 import { NotFoundException } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, like } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../drizzle/schema';
@@ -29,6 +30,14 @@ export interface CommunityHubsSeedResult {
   memberUserIds: number[];
   bannedUserId: number;
   proposalId: number;
+  /** ROK-1893 P4: the event tagged to the crew hub, starting within ~2h. */
+  hubEvent: SeedHubEvent;
+}
+
+export interface SeedHubEvent {
+  id: number;
+  title: string;
+  startTime: string;
 }
 
 export const SEED_HUB_NAMES = {
@@ -182,4 +191,58 @@ export async function seedArchivedHub(
   const id = await seedActiveHub(db, gameId, SEED_HUB_NAMES.archived, leaderId);
   await archiveHub(db, id, 'admin');
   return id;
+}
+
+const HOUR_MS = 3_600_000;
+const HUB_EVENT_PREFIX = 'Hub calendar night #';
+
+/** The fixture's earlier hub events by `creatorId` on the game. */
+async function deleteOldHubEvents(
+  db: Db,
+  gameId: number,
+  creatorId: number,
+): Promise<void> {
+  const ev = schema.events;
+  await db
+    .delete(ev)
+    .where(
+      and(
+        eq(ev.creatorId, creatorId),
+        eq(ev.gameId, gameId),
+        like(ev.title, `${HUB_EVENT_PREFIX}%`),
+      ),
+    );
+}
+
+/**
+ * ROK-1893 P4: one event tagged to `hubId`, starting on a whole hour 1–2h
+ * from now (so it sits in the current calendar week except late on a Saturday —
+ * smoke specs deep-link `?date=` from `startTime`). The title carries the hub
+ * id, so it is unique per seed. Earlier fixture events by `creatorId` on the
+ * game are deleted first: the reset deletes their hub, which only nulls
+ * `guild_id`, so they would linger as untagged duplicates.
+ */
+export async function seedHubEvent(
+  db: Db,
+  gameId: number,
+  hubId: number,
+  creatorId: number,
+): Promise<SeedHubEvent> {
+  await deleteOldHubEvents(db, gameId, creatorId);
+  const ev = schema.events;
+  const start = new Date((Math.floor(Date.now() / HOUR_MS) + 2) * HOUR_MS);
+  const end = new Date(start.getTime() + 2 * HOUR_MS);
+  const title = `${HUB_EVENT_PREFIX}${hubId}`;
+  const [row] = await db
+    .insert(ev)
+    .values({
+      title,
+      gameId,
+      creatorId,
+      duration: [start, end],
+      guildId: hubId,
+    })
+    .returning({ id: ev.id });
+  if (!row) throw new Error(`seed hub event for hub ${hubId} returned no row`);
+  return { id: row.id, title, startTime: start.toISOString() };
 }
