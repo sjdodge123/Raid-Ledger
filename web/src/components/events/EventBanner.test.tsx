@@ -152,7 +152,25 @@ describe('memoization (ROK-343)', () => {
 
 }
 
+function eventbannerHubGroup() {
+describe('hub link (ROK-1893 V5)', () => {
+        it('renders a HubBadge linking /guilds/:id with the kind noun', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={{ id: 7, name: 'BG3 Friends', kind: 'game_community' }} />);
+            const link = screen.getByTestId('event-banner-hub');
+            expect(link.getAttribute('href')).toBe('/guilds/7');
+            expect(link.textContent).toContain('BG3 Friends · Community');
+            expect(link.className).toContain('event-banner__game--link');
+        });
+
+        it('renders no hub link when hub is null', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={null} />);
+            expect(screen.queryByTestId('event-banner-hub')).not.toBeInTheDocument();
+        });
+    });
+}
+
 describe('EventBanner', () => {
+    eventbannerHubGroup();
     eventbannerGroup1();
     eventbannerGroup2();
     eventbannerGroup3();

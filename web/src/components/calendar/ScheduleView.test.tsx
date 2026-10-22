@@ -462,3 +462,28 @@ describe('ScheduleView — part 6', () => {
     });
 
 });
+
+describe('ScheduleView — hub suffix (ROK-1893 V4)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const start = new Date('2026-02-12T10:00:00');
+    const end = new Date('2026-02-12T12:00:00');
+
+    it('shows "<game> · <hub>" on the agenda row game line', () => {
+        const hub = { id: 7, name: 'BG3 Friends', kind: 'game_community' as const };
+        render(<ScheduleView {...defaultProps} events={[makeCalendarEvent(1, 'Raid night', start, end, { hub })]} />);
+        expect(screen.getByTestId('event-hub-label').parentElement?.textContent).toBe('World of Warcraft · BG3 Friends');
+    });
+
+    it('shows no hub suffix for an untagged event', () => {
+        render(<ScheduleView {...defaultProps} events={[makeCalendarEvent(1, 'Raid night', start, end, { hub: null })]} />);
+        expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
+        expect(screen.queryByTestId('event-hub-label')).not.toBeInTheDocument();
+    });
+});
