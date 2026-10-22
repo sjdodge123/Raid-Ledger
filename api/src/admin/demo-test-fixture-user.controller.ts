@@ -80,7 +80,12 @@ export function parseFixtureSlot(body: unknown): number {
  * deactivation candidates, ROK-1749).
  */
 export function parseFixtureGuildMember(body: unknown): boolean {
-  return (body as { guildMember?: unknown } | null)?.guildMember === true;
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'guildMember' in body &&
+    body.guildMember === true
+  );
 }
 
 export interface SeedFixtureUserResponse {
