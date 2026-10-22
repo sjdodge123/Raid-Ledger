@@ -126,7 +126,7 @@ test.describe('calendar — hub provenance (ROK-1893 P4)', () => {
 
         const entry = entryOf(page, testInfo, seed);
         await expect(entry).toHaveCount(1, { timeout: 15_000 });
-        await expect(entry).toContainText(`· ${HUB_NAME}`);
+        await expect(entry.getByTestId('event-hub-label')).toHaveText(`· ${HUB_NAME}`);
 
         const panel = await openFilters(page, testInfo);
         const hubBox = panel.getByTestId(`calendar-hub-toggle-${seed.hubIds.crew}`);
@@ -142,9 +142,11 @@ test.describe('calendar — hub provenance (ROK-1893 P4)', () => {
         const seed = await seedHubEvent(testInfo);
         await signInOnboardedMember(page, seed.leaderUserId);
         await page.goto(`/events/${seed.hubEvent.id}`);
-        const link = page.locator(`a[href="/guilds/${seed.hubIds.crew}"]`).filter({ hasText: HUB_NAME });
-        await expect(link.first()).toBeVisible({ timeout: 15_000 });
-        await link.first().click();
+        const link = page.getByTestId('event-banner-hub').filter({ visible: true }).first();
+        await expect(link).toBeVisible({ timeout: 15_000 });
+        await expect(link).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
+        await expect(link).toContainText(`${HUB_NAME} hub`);
+        await link.click();
         await expect(page).toHaveURL(new RegExp(`/guilds/${seed.hubIds.crew}(?:[/?#]|$)`), { timeout: 15_000 });
     });
 });
