@@ -202,22 +202,26 @@ describe('FilterFab', () => {
     });
 });
 
-describe('FilterFab — page clearance flag (ROK-1889)', () => {
-    it('flags <html> while a Filters FAB is mounted so --filter-fab-clearance applies', () => {
+describe('FilterFab — page clearance marker (ROK-1889)', () => {
+    // index.css keys --filter-fab-clearance off `:root:has([data-filter-fab])`, so the
+    // marker must exist exactly while a Filters FAB is in the document.
+    const marked = (): number => document.querySelectorAll('[data-filter-fab]').length;
+
+    it('renders [data-filter-fab] while a Filters FAB is mounted so --filter-fab-clearance applies', () => {
         mockViewportWidth(390);
         const first = renderWithProviders(<FilterFab activeCount={0} isOpen={false} onClick={vi.fn()} />);
         const second = renderWithProviders(<FilterFab activeCount={0} isOpen={false} onClick={vi.fn()} />);
-        expect(document.documentElement.hasAttribute('data-filter-fab')).toBe(true);
+        expect(marked(), 'both FABs carry the marker').toBe(2);
         first.unmount();
-        expect(document.documentElement.hasAttribute('data-filter-fab'), 'one FAB still mounted').toBe(true);
+        expect(marked(), 'one FAB still mounted').toBe(1);
         second.unmount();
-        expect(document.documentElement.hasAttribute('data-filter-fab'), 'no FAB left').toBe(false);
+        expect(marked(), 'no FAB left').toBe(0);
     });
 
-    it('does not flag <html> at 1024px and up, where FilterEntry renders no FAB', () => {
+    it('renders no [data-filter-fab] at 1024px and up, where FilterEntry renders no FAB', () => {
         mockViewportWidth(1280);
         const { unmount } = renderEntry();
-        expect(document.documentElement.hasAttribute('data-filter-fab')).toBe(false);
+        expect(marked()).toBe(0);
         unmount();
     });
 });

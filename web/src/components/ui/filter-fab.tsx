@@ -17,7 +17,7 @@ import { FunnelIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { FilterCountBadge } from './filter-count-badge';
 import type { DescribeFilterCount } from './filter-count-badge.helpers';
-import { FILTER_FAB_FACE_CLASS, useFilterFabBottom, useFilterFabClearance } from './fab-position';
+import { FILTER_FAB_FACE_CLASS, useFilterFabBottom } from './fab-position';
 
 export interface FilterFabProps {
     /** Active filters (values differing from the page defaults). Badge hidden at 0. */
@@ -37,7 +37,6 @@ const FAB_CLASS = `fixed right-4 md:right-5 lg:hidden ${FILTER_FAB_FACE_CLASS}`;
 export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = false, describeCount }: FilterFabProps): JSX.Element {
     const countId = useId();
     const bottom = useFilterFabBottom(stackAboveCreate);
-    useFilterFabClearance();
     return createPortal(
         <button
             type="button"
@@ -46,6 +45,7 @@ export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = fal
             aria-expanded={isOpen}
             aria-describedby={activeCount > 0 ? countId : undefined}
             data-testid="filter-fab"
+            data-filter-fab=""
             className={FAB_CLASS}
             style={{ zIndex: Z_INDEX.FAB, bottom }}
         >
