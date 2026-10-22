@@ -48,7 +48,13 @@ describe('hub notification types — maps (ROK-1832 D1/§6)', () => {
 });
 
 describe('hub notification types — buttons', () => {
-  it('gives a leader post a "View group" link to the hub', () => {
+  it('deep-links "View group" to the post when the payload carries a postId', () => {
+    const btn = primaryJson('hub_leader_post', { guildId: 7, postId: 42 });
+    expect(btn?.label).toBe('View group');
+    expect(btn?.url).toBe(`${CLIENT}/guilds/7?post=42#posts`);
+  });
+
+  it('falls back to the hub for a pre-ROK-1868 leader post (no postId)', () => {
     const btn = primaryJson('hub_leader_post', { guildId: 7 });
     expect(btn?.label).toBe('View group');
     expect(btn?.url).toBe(`${CLIENT}/guilds/7`);

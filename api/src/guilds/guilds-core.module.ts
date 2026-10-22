@@ -1,5 +1,6 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
+import { SettingsModule } from '../settings/settings.module';
 import { GuildAccessService } from './guild-access.service';
 import { GuildDiscordController } from './guild-discord.controller';
 import { GuildDiscordService } from './guild-discord.service';
@@ -18,6 +19,9 @@ import { HubNotificationMuteController } from './hub-notification-mute.controlle
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
 import { HubVisibleGuard } from './hub-visible.guard';
+import { HubPostRelayService } from './posts/hub-post-relay.service';
+import { HubPostsController } from './posts/hub-posts.controller';
+import { HubPostsService } from './posts/hub-posts.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
@@ -32,7 +36,7 @@ import {
  * `guilds/:id` (ROK-1831); `/plugins/wow/guilds/**` stay as WoW aliases.
  */
 @Module({
-  imports: [ChannelMirrorModule],
+  imports: [ChannelMirrorModule, SettingsModule],
   // Order matters (ROK-1831): the literal `guilds/onboarding` and
   // `guilds/mine` must register before `guilds/:id`.
   controllers: [
@@ -41,6 +45,7 @@ import {
     HubController,
     HubNotificationMuteController,
     GuildDiscordController,
+    HubPostsController,
   ],
   providers: [
     GuildAccessService,
@@ -55,6 +60,8 @@ import {
     HubService,
     HubVisibleGuard,
     HubEventTagger,
+    HubPostRelayService,
+    HubPostsService,
     CommunityHubKindAdapter,
   ],
   exports: [
@@ -67,6 +74,7 @@ import {
     HubOnboardingService,
     HubService,
     HubVisibleGuard,
+    HubPostsService,
     CommunityHubKindAdapter,
   ],
 })
