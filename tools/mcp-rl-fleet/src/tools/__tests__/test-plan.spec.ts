@@ -135,6 +135,10 @@ describe('AC7 — RL_AGENT_TOKEN does not appear in docker run argv', () => {
       // The remote bash prelude reads the value from stdin into the env.
       expect(remote).toContain('read -r RL_AGENT_TOKEN_VALUE');
       expect(remote).toContain('export RL_AGENT_TOKEN_VALUE');
+      // DOCKER_HOST must bind to `docker run`, not to the leading `read`
+      // (a whole-string prefix only applies to the first command).
+      expect(remote).toMatch(/export RL_AGENT_TOKEN_VALUE; DOCKER_HOST=tcp:\/\/127\.0\.0\.1:2375 docker run /);
+      expect(remote.startsWith('DOCKER_HOST=')).toBe(false);
       // The curl -H arg references the env var; container-side bash
       // expands it AFTER docker parses argv → still no argv leak.
       expect(remote).toContain('$RL_AGENT_TOKEN_VALUE');
