@@ -79,7 +79,22 @@ export class DemoTestCommunityHubsController {
       await refreshMemberCount(this.db, id);
     }
     const { crew, ...rest } = main;
-    return { gameId, hubIds: { crew, solo, archived }, ...rest, proposalId };
+    const hubIds = { crew, solo, archived };
+    const event = input.withEvent
+      ? await this.hubEvent(gameId, crew, rest.leaderUserId)
+      : {};
+    return { gameId, hubIds, ...rest, proposalId, ...event };
+  }
+
+  /** ROK-1893 P4: the crew hub's tagged event, only when requested. */
+  private async hubEvent(
+    gameId: number,
+    crew: number,
+    leaderUserId: number,
+  ): Promise<{ hubEvent: SeedHubEvent }> {
+    return {
+      hubEvent: await seedHubEvent(this.db, gameId, crew, leaderUserId),
+    };
   }
 
   /** "Seed Crew": leader + officer + 4 members live, one banned user. */
@@ -88,7 +103,6 @@ export class DemoTestCommunityHubsController {
     leaderUserId: number;
     memberUserIds: number[];
     bannedUserId: number;
-    hubEvent: SeedHubEvent;
   }> {
     const leaderUserId = await ensureSeedUser(this.db, 'community-leader');
     const crew = await seedActiveHub(
@@ -105,8 +119,7 @@ export class DemoTestCommunityHubsController {
       bannedBy: leaderUserId,
       reason: 'Seeded ban',
     });
-    const hubEvent = await seedHubEvent(this.db, gameId, crew, leaderUserId);
-    return { crew, leaderUserId, memberUserIds, bannedUserId, hubEvent };
+    return { crew, leaderUserId, memberUserIds, bannedUserId };
   }
 
   private async seedCrew(hubId: number): Promise<number[]> {

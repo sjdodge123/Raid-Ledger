@@ -4,7 +4,8 @@
  * member), one `proposed` by `demo-member`, one archived. Idempotent: the
  * previous fixture is reset first (demo-test-community-hubs.reset.ts). No `games`
  * INSERT — an existing game is reused, so the name-dedup guard is moot.
- * ROK-1893 P4: plus one event tagged (`guild_id`) to "Seed Crew" (`hubEvent`).
+ * ROK-1893 P4: with `withEvent: true`, plus one event tagged (`guild_id`) to
+ * "Seed Crew" (`hubEvent`); omitted, the seed creates no events.
  */
 import { NotFoundException } from '@nestjs/common';
 import { and, asc, eq, like } from 'drizzle-orm';
@@ -18,7 +19,11 @@ import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.help
 type Db = PostgresJsDatabase<typeof schema>;
 
 export const CommunityHubsSeedSchema = z
-  .object({ gameId: z.number().int().positive().optional() })
+  .object({
+    gameId: z.number().int().positive().optional(),
+    /** ROK-1893 P4: also seed the crew hub's tagged event (`hubEvent`). */
+    withEvent: z.boolean().optional(),
+  })
   .strict();
 
 /** The seed's ids for smoke specs + the fleet plan. */
@@ -30,8 +35,8 @@ export interface CommunityHubsSeedResult {
   memberUserIds: number[];
   bannedUserId: number;
   proposalId: number;
-  /** ROK-1893 P4: the event tagged to the crew hub, starting within ~2h. */
-  hubEvent: SeedHubEvent;
+  /** ROK-1893 P4: the event tagged to the crew hub (only with `withEvent`). */
+  hubEvent?: SeedHubEvent;
 }
 
 export interface SeedHubEvent {

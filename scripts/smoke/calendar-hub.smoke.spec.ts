@@ -1,7 +1,7 @@
 /**
  * ROK-1893 P4 — calendar entries show their hub (desktop + mobile).
  *
- * Seed: `POST /admin/test/community-hubs/seed {gameId}` (DEMO_MODE) recreates
+ * Seed: `POST /admin/test/community-hubs/seed {gameId, withEvent: true}` (DEMO_MODE) recreates
  * the community-hub fixture and ONE event tagged (`guild_id`) to "Seed Crew",
  * 3h long (the Week card's `compact` tier, which shows the hub), starting 1–2h
  * from now (or 18:00 UTC tomorrow if it would cross UTC midnight); its title
@@ -66,7 +66,7 @@ const isHubSeed = (b: unknown): b is HubSeed => {
 async function seedHubEvent(testInfo: TestInfo): Promise<HubSeed> {
     const token = await getAdminToken();
     const gameId = await projectGameId(token, testInfo);
-    const body: unknown = await apiPost(token, '/admin/test/community-hubs/seed', { gameId });
+    const body: unknown = await apiPost(token, '/admin/test/community-hubs/seed', { gameId, withEvent: true });
     if (!isHubSeed(body)) throw new Error(`[calendar-hub] seed: ${JSON.stringify(body)}`);
     await pollForCondition(async () => {
         const ev = (await apiGet(token, `/events/${body.hubEvent.id}`)) as { hub?: { id?: number } | null } | null;
@@ -114,6 +114,8 @@ async function openFilters(page: Page, testInfo: TestInfo): Promise<Locator> {
 
 test.describe('calendar — hub provenance (ROK-1893 P4)', () => {
     test.use({ storageState: { cookies: [], origins: [] } });
+    // A non-UTC browser could push the 3h event across local midnight, off the Week grid's timed column.
+    test.use({ timezoneId: 'UTC' });
 
     test.beforeEach(({}, testInfo) => {
         test.skip(isTablet(testInfo), 'desktop + phone only; the fleet test plan covers tablet');
