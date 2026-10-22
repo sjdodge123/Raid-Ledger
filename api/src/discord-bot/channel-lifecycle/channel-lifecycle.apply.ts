@@ -1,0 +1,335 @@
+import { LIFECYCLE_DEFAULTS } from '@raid-ledger/contract';
+import type { Guild } from 'discord.js';
+import {
+  archiveChannel,
+  categoryHasRoom,
+  categorySeriesIds,
+  createTextChannel,
+  ensureCategory,
+  revertArchive,
+  revertUnarchive,
+  setTopic,
+  unarchiveChannel,
+  type EnsuredCategory,
+} from './channel-lifecycle.discord-ops';
+import { lifecycleCall } from './channel-lifecycle.errors';
+import { setLifecycleState } from './channel-lifecycle.store';
+import {
+  countOtherChannelBindings,
+  findGameAnnouncementBinding,
+  isGameSuppressed,
+  lockLifecycleBinding,
+} from './channel-lifecycle.store.queries';
+import {
+  sharedChannelDetail,
+  staleBindingDetail,
+  staleLinkDetail,
+} from './channel-lifecycle.decide';
+import type {
+  ApplyContext,
+  ItemOutcome,
+  PlannedGame,
+} from './channel-lifecycle.types';
+import type { LifecycleCandidateBinding } from './game-activity.types';
+import { resolveGameHubLink } from './hub-link.resolver';
+
+/**
+ * ROK-1431 — the per-action executors of a live reconcile (spec §2.5 steps
+ * 3–5). Each throws on failure; `channel-lifecycle.run.ts` owns the D14 error
+ * policy. Pinned / manual bindings never reach here (`decideGame` → `none`).
+ */
+
+/** D10 topic: `<Game> on Raid Ledger — events, polls and hub posts. <hub or game url>`. */
+export function lifecycleTopic(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  hubUrl?: string,
+): string {
+  const gameUrl = `${ctx.clientUrl.replace(/\/$/, '')}/games/${game.row.gameId}`;
+  return `${game.row.gameName} on Raid Ledger — events, polls and hub posts. ${hubUrl ?? gameUrl}`;
+}
+
+/** D10/OQ-7: after a hub link, point the topic at the hub. */
+async function refreshTopic(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  channelId: string,
+): Promise<void> {
+  const link = await resolveGameHubLink(ctx.db, {
+    gameId: game.row.gameId,
+    clientUrl: ctx.clientUrl,
+  });
+  await setTopic(ctx.guild, channelId, lifecycleTopic(ctx, game, link?.url));
+}
+
+/**
+ * Link the game's hubs to `channelId`. Only an auto-managed channel's topic is
+ * refreshed (Codex r3 P1): a manual binding's topic is the admin's.
+ */
+export async function linkHubs(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  channel: { id: string; autoManaged: boolean },
+): Promise<number> {
+  const { gameId } = game.row;
+  const n = await ctx.hubLinker.linkHubsForGame(gameId, channel.id, ctx.db);
+  if (n > 0 && channel.autoManaged) await refreshTopic(ctx, game, channel.id);
+  return n;
+}
+
+/** The Games parent for a create; a full category overflows (D5 / §2.13). */
+async function gamesParent(ctx: ApplyContext): Promise<string | null> {
+  if (ctx.categories.gamesId === null) return null;
+  const cat = await ensureCategory(ctx.guild, {
+    id: ctx.categories.gamesId,
+    name: LIFECYCLE_DEFAULTS.gamesCategoryName,
+    needsRoom: true,
+  });
+  return cat.id;
+}
+
+/** Best-effort delete of a channel we just created (R18); never throws. */
+async function deleteOrphan(guild: Guild, channelId: string): Promise<void> {
+  try {
+    await lifecycleCall('delete', channelId, () =>
+      guild.channels.delete(channelId, 'Raid Ledger: binding failed'),
+    );
+  } catch {
+    // Best effort (§2.9: never Sentry a cleanup failure).
+  }
+}
+
+/**
+ * Bind a just-created channel (only through `bind()`), stamping lifecycle
+ * ownership in the SAME insert (Codex r3: no half-owned manual-looking row);
+ * on failure delete it (R18). Returns the new binding's id.
+ */
+async function bindNewChannel(
+  ctx: ApplyContext,
+  gameId: number,
+  channelId: string,
+): Promise<string> {
+  try {
+    const { binding } = await ctx.bindings.bind(
+      ctx.guild.id,
+      channelId,
+      'text',
+      'game-announcements',
+      gameId,
+      undefined,
+      undefined,
+      {
+        db: ctx.db,
+        lifecycle: { autoManaged: true, lifecycleState: 'active' },
+      },
+    );
+    return binding.id;
+  } catch (err) {
+    await deleteOrphan(ctx.guild, channelId);
+    throw err;
+  }
+}
+
+/**
+ * Create → bind as auto-managed (one insert, via `bind()`). Hub linking runs
+ * AFTER this game's tx commits (`created`, Codex r5 P1): a link
+ * failure must not roll back the binding and orphan the new channel.
+ */
+async function applyCreate(
+  ctx: ApplyContext,
+  game: PlannedGame,
+): Promise<ItemOutcome> {
+  const { gameId, gameSlug } = game.row;
+  const guildId = ctx.guild.id;
+  if (await findGameAnnouncementBinding(ctx.db, guildId, gameId)) {
+    return { outcome: 'failed', detail: 'a binding appeared since the read' };
+  }
+  // Codex r16 P2: an unbind racing the activity read leaves neither row in
+  // the snapshot; re-read the suppression (after the binding check) on this tx.
+  if (await isGameSuppressed(ctx.db, guildId, gameId)) {
+    return {
+      outcome: 'deferred',
+      detail: 'deferred: suppressed since the read',
+    };
+  }
+  const channelId = await createTextChannel(ctx.guild, {
+    name: gameSlug,
+    parentId: await gamesParent(ctx),
+    topic: lifecycleTopic(ctx, game),
+  });
+  const bindingId = await bindNewChannel(ctx, gameId, channelId);
+  return {
+    outcome: 'done',
+    detail: `#${gameSlug}`,
+    created: { channelId, bindingId },
+  };
+}
+
+/** The Archived series (default + configured names, overflow) — never a restore target. */
+function archiveSeries(
+  ctx: ApplyContext,
+  category: EnsuredCategory,
+): Set<string> {
+  const ids = categorySeriesIds(
+    ctx.guild,
+    LIFECYCLE_DEFAULTS.archiveCategoryName,
+  );
+  for (const id of categorySeriesIds(ctx.guild, category.name)) ids.add(id);
+  ids.add(category.id);
+  if (ctx.categories.archiveId !== null) ids.add(ctx.categories.archiveId);
+  return ids;
+}
+
+/** Codex r7 P1: a channel another binding now shares is not archived. */
+async function sharedOutcome(
+  ctx: ApplyContext,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome | null> {
+  const n = await countOtherChannelBindings(
+    ctx.db,
+    binding.channelId,
+    binding.id,
+  );
+  return n > 0 ? { outcome: 'deferred', detail: sharedChannelDetail(n) } : null;
+}
+
+/**
+ * Archive (D6): lock + move into Archived (overflow-aware), recording the old
+ * parent and the bits added. A failed DB write undoes the Discord side, so a
+ * retry starts again from the pre-archive state. A channel another binding
+ * shares (bound since the read) is left alone (Codex r7 P1).
+ */
+async function applyArchive(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome> {
+  const shared = await sharedOutcome(ctx, binding);
+  if (shared) return shared;
+  const category = await ensureCategory(ctx.guild, {
+    id: ctx.categories.archiveId,
+    name: LIFECYCLE_DEFAULTS.archiveCategoryName,
+    needsRoom: true,
+  });
+  const res = await archiveChannel(ctx.guild, binding.channelId, {
+    categoryId: category.id,
+    hide: ctx.settings.hideOnArchive,
+    seriesIds: archiveSeries(ctx, category),
+  });
+  try {
+    await setLifecycleState(ctx.db, binding.id, {
+      lifecycleState: 'archived',
+      archivedAt: ctx.now,
+      restoreParentId: res.restoreParentId,
+      archivedOverwrites: res.added,
+    });
+  } catch (err) {
+    await revertArchive(ctx.guild, binding.channelId, res);
+    throw err;
+  }
+  return { outcome: 'done', detail: game.reason };
+}
+
+/**
+ * The unarchive parent: `restore_parent_id` while it exists with room, else a
+ * Games category with room (overflow-aware, D5 / §2.13), or none.
+ */
+async function restoreParent(
+  ctx: ApplyContext,
+  binding: LifecycleCandidateBinding,
+): Promise<string | null> {
+  const saved = binding.restoreParentId;
+  if (saved !== null && (await categoryHasRoom(ctx.guild, saved))) return saved;
+  return gamesParent(ctx);
+}
+
+/**
+ * Unarchive (D6): move back to `restoreParent`, clear only the bits archive
+ * added. A failed DB write re-locks the channel in Discord, as archive does,
+ * so the still-archived binding matches it (Codex r17 P2).
+ */
+async function applyUnarchive(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome> {
+  const added = binding.archivedOverwrites;
+  const res = await unarchiveChannel(ctx.guild, binding.channelId, {
+    parentId: await restoreParent(ctx, binding),
+    added,
+  });
+  try {
+    await setLifecycleState(ctx.db, binding.id, {
+      lifecycleState: 'active',
+      archivedAt: null,
+      restoreParentId: null,
+      archivedOverwrites: null,
+    });
+  } catch (err) {
+    const parentId = res.previousParentId;
+    await revertUnarchive(ctx.guild, binding.channelId, { parentId, added });
+    throw err;
+  }
+  return { outcome: 'done', detail: game.reason };
+}
+
+/**
+ * Codex r9 P2: re-read + row-lock the binding on the game's tx BEFORE any
+ * Discord mutation. A binding pinned, unbound, re-pointed or flipped since the
+ * activity read (a PATCH is not excluded by the reconcile lease) is left alone.
+ */
+async function staleOutcome(
+  ctx: ApplyContext,
+  binding: LifecycleCandidateBinding,
+  gameId: number,
+): Promise<ItemOutcome | null> {
+  const current = await lockLifecycleBinding(ctx.db, binding.id);
+  const detail = staleBindingDetail({ ...binding, gameId }, current);
+  return detail === null ? null : { outcome: 'deferred', detail };
+}
+
+/** Archive / unarchive, each only after the locked re-validation passes. */
+async function applyStateChange(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome> {
+  const stale = await staleOutcome(ctx, binding, game.row.gameId);
+  if (stale) return stale;
+  if (game.action === 'archive') return applyArchive(ctx, game, binding);
+  return applyUnarchive(ctx, game, binding);
+}
+
+/** Run one planned game's action against Discord + the DB. */
+export async function applyAction(
+  ctx: ApplyContext,
+  game: PlannedGame,
+): Promise<ItemOutcome> {
+  const { binding } = game.row;
+  if (game.action === 'create') return applyCreate(ctx, game);
+  if (!binding) return { outcome: 'failed', detail: 'no binding' };
+  if (game.action === 'archive' || game.action === 'unarchive')
+    return applyStateChange(ctx, game, binding);
+  if (game.action === 'link_hub') return applyLinkHub(ctx, game, binding);
+  return { outcome: 'done', detail: game.reason };
+}
+
+/**
+ * Codex r11 P2: `link_hub` re-reads + row-locks the binding like archive /
+ * unarchive, so a binding re-routed since the read never gets the old game's hubs.
+ */
+async function applyLinkHub(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  binding: LifecycleCandidateBinding,
+): Promise<ItemOutcome> {
+  const current = await lockLifecycleBinding(ctx.db, binding.id);
+  const planned = { channelId: binding.channelId, gameId: game.row.gameId };
+  const stale = staleLinkDetail(planned, current);
+  if (stale !== null) return { outcome: 'deferred', detail: stale };
+  const n = await linkHubs(ctx, game, {
+    id: binding.channelId,
+    autoManaged: current?.autoManaged === true,
+  });
+  return { outcome: 'done', detail: game.reason, linkedHubs: n };
+}

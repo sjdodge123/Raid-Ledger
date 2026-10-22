@@ -11,13 +11,19 @@
  * tie underneath the readiness card, which is the exact operator-reported bug
  * ROK-1374 shipped to fix.
  */
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { assertVoteOpen } from './lineups-actions.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import { findLineupById } from './lineups-query.helpers';
@@ -30,6 +36,7 @@ export class LineupStarService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly botClient: DiscordBotClientService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -54,13 +61,17 @@ export class LineupStarService {
       gameId,
       callerRole,
     );
-    await setStar(
+    const action = await setStar(
       this.db,
       lineupId,
       userId,
       gameId,
       lineup.maxVotesPerPlayer ?? 3,
     );
+    // ROK-1428 Codex r10 P2: a star may insert the vote row (implicit
+    // approval) that `lineupVoteSignal` counts — nudge post-commit, as
+    // `toggleVote` does. A clear adds no activity.
+    if (action === 'set') GameActivityNudge.safeTouch(this.nudge, gameId);
     // ROK-1474 (D14 REVERSED by the operator ruling of 2026-09-06): a star is
     // NOT logged to the activity timeline. `GET /lineups/:id/activity` is
     // any-authenticated and returns `actor.{id,displayName}` plus the raw

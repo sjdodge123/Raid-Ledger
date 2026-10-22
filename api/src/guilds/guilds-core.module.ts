@@ -11,6 +11,7 @@ import { HubKindActiveGuard } from './hub-kind-active.guard';
 import { HubOnboardingController } from './hub-onboarding.controller';
 import { HubOnboardingService } from './hub-onboarding.service';
 import { HubKindRegistry } from './hub-kind.registry';
+import { setActiveHubKindsSource } from '../discord-bot/channel-lifecycle/hub-link.resolver';
 import { HubEventTagger } from './hub-event-tagger';
 import { HubMineController } from './hub-mine.controller';
 import { HubNotificationMuteController } from './hub-notification-mute.controller';
@@ -74,6 +75,7 @@ export class GuildsCoreModule implements OnModuleInit {
     private readonly plugins: PluginRegistryService,
     private readonly tagger: HubEventTagger,
     private readonly communityHubs: CommunityHubKindAdapter,
+    private readonly hubKinds: HubKindRegistry,
   ) {}
 
   /** ROK-1831 Q2: core owns event tagging for every hub kind (no owner plugin). */
@@ -89,5 +91,8 @@ export class GuildsCoreModule implements OnModuleInit {
       'game_community',
       this.communityHubs,
     );
+    // ROK-1428 Codex r17 P2: embeds + channel auto-link skip a hub kind whose
+    // plugin is off (its URLs 403 via `HubKindRegistry.require`).
+    setActiveHubKindsSource(() => this.hubKinds.active().map((a) => a.kind));
   }
 }

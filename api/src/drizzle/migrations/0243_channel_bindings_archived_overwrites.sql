@@ -1,0 +1,1 @@
+ALTER TABLE "channel_bindings" ADD COLUMN "archived_overwrites" jsonb;
