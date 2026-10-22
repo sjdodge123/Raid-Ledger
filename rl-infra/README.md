@@ -407,19 +407,29 @@ drop-ins keep the control plane off the reclaim and kill lists.
    deployed. Do it only when `rl status` shows slot 4 unclaimed.
 
    ```bash
-   cd /srv/rl-infra && ./orchestrator/bin/slots-resize 3   # flocked; refuses if slot 4 is claimed or queued
+   cd /srv/rl-infra && sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=3/' .env   # first: stops new claims/queues on slot 4
+   ./orchestrator/bin/slots-resize 3   # flocked; refuses if slot 4 is claimed or queued
    docker compose stop runner-4
-   sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=3/' .env
    ```
+
+   Order matters: keep `RUNNER_SLOTS` at or below the number of `claims.json`
+   rows at every moment. `claim --slot 4` and the unpinned enqueue path
+   (`lease::pick_enqueue_slot`) range over `1..RUNNER_SLOTS`, so if the rows
+   shrink first a claim can still land in `lease-queue/4.json` for a slot that
+   no longer exists, and nothing ever advances that queue. `.env` is sourced on
+   every orchestrator invocation, so the `sed` takes effect at once and there
+   is nothing to restart. If `slots-resize 3` refuses, set `RUNNER_SLOTS=4`
+   back, wait for slot 4 to drain, and start again.
 
    `init-state` alone does not do this: `claim` hands out the rows of
    `claims.json`, and `init-state` only creates that file when it is missing.
-   Check that `rl status` lists 3 slots. Revert once the ledger is live:
+   Check that `rl status` lists 3 slots. Revert once the ledger is live, in the
+   reverse order (rows first, `RUNNER_SLOTS` last):
 
    ```bash
-   cd /srv/rl-infra && sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=4/' .env
-   docker compose --profile extra-slots up -d runner-4   # profiled: a bare `up -d` never starts it
+   cd /srv/rl-infra && docker compose --profile extra-slots up -d runner-4   # profiled: a bare `up -d` never starts it
    ./orchestrator/bin/slots-resize 4
+   sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=4/' .env   # last: slot 4 now exists to claim and queue on
    ```
 
 ## Task tracking (ROK-1331 M1)
