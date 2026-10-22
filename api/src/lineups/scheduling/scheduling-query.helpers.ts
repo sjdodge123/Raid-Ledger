@@ -189,7 +189,7 @@ export function updateScheduleVoteStance(
 ) {
   return db
     .update(schema.communityLineupScheduleVotes)
-    .set({ stance, source })
+    .set({ stance, source, updatedAt: new Date() })
     .where(
       and(
         eq(schema.communityLineupScheduleVotes.slotId, slotId),

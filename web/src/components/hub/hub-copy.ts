@@ -14,6 +14,13 @@ export interface HubCopy {
     scheduleEmpty: string;
     attendanceEmpty: string;
     editorsEmpty: string;
+    /** ROK-1868 — leader posts. */
+    postsTab: string;
+    previousPosts: string;
+    composerLabel: string;
+    composerHint: string;
+    postRemoved: string;
+    postsBlurb: string;
     /** Events card empty states (ROK-1870: a community hub has no "guild"). */
     upcomingEmpty: string;
     recentEmpty: string;
@@ -29,6 +36,12 @@ const WOW_COPY: HubCopy = {
     scheduleEmpty: 'No recurring raids yet. A guild editor can pick this guild when creating a repeating event.',
     attendanceEmpty: "No attendance recorded yet. It fills in once a guild raid's attendance is taken.",
     editorsEmpty: 'No one yet. Add a rank or a member below — start with your Guild Master.',
+    postsTab: 'Posts',
+    previousPosts: 'Previous posts',
+    composerLabel: 'New post',
+    composerHint: 'Members see this at the top of the guild page.',
+    postRemoved: 'This post was removed.',
+    postsBlurb: 'Everything the guild master and officers have posted, newest first.',
     upcomingEmpty: 'No upcoming guild events. A guild editor can pick this guild when creating an event.',
     recentEmpty: 'No guild events in the last 8 weeks.',
     settingsTitle: 'Guild settings',
@@ -42,6 +55,12 @@ const SERVER_COPY: HubCopy = {
     scheduleEmpty: 'No sessions scheduled yet.',
     attendanceEmpty: "No attendance recorded yet. It fills in once a session's attendance is taken.",
     editorsEmpty: 'No one yet — start with your server leader.',
+    postsTab: 'Posts',
+    previousPosts: 'Previous posts',
+    composerLabel: 'New post',
+    composerHint: 'Members see this at the top of the server page.',
+    postRemoved: 'This post was removed.',
+    postsBlurb: 'Everything the server leader and officers have posted, newest first.',
     upcomingEmpty: 'No upcoming guild events. A guild editor can pick this guild when creating an event.',
     recentEmpty: 'No guild events in the last 8 weeks.',
     settingsTitle: 'Guild settings',
@@ -56,6 +75,12 @@ const COMMUNITY_COPY: HubCopy = {
     scheduleEmpty: 'No sessions scheduled yet.',
     attendanceEmpty: "No attendance recorded yet. It fills in once a session's attendance is taken.",
     editorsEmpty: 'No one yet — start with your hub leader.',
+    postsTab: 'Posts',
+    previousPosts: 'Previous posts',
+    composerLabel: 'New post',
+    composerHint: 'Members see this at the top of the hub page.',
+    postRemoved: 'This post was removed.',
+    postsBlurb: 'Everything the hub leader and editors have posted, newest first.',
     upcomingEmpty: 'No upcoming hub events. A hub editor can pick this hub when creating an event.',
     recentEmpty: 'No hub events in the last 8 weeks.',
     settingsTitle: 'Hub settings',

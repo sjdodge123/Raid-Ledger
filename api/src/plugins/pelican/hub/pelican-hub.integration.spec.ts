@@ -383,3 +383,66 @@ describe('ROK-1831 fix r1 — visitor privacy + server sync', () => {
     expect((await toggle(serverId, true)).status).toBe(400);
   });
 });
+
+describe('hidden server hub — staff keep every hub-page endpoint (prod 2026-10-21)', () => {
+  async function hiddenHubWithQuickPlay(): Promise<{
+    guildId: number;
+    eventId: number;
+  }> {
+    const { serverId, guildId } = await enabledHub();
+    const eventId = await insertQuickPlay(serverId, 'live');
+    await testApp.db.insert(schema.adHocParticipants).values({
+      eventId,
+      steamId: '76561190000000021',
+      discordUsername: 'hidden-qp',
+      source: 'steam',
+      pelicanServerId: serverId,
+    });
+    expect((await toggle(serverId, false)).body).toMatchObject({
+      communityHub: { guildId, hidden: true },
+    });
+    return { guildId, eventId };
+  }
+
+  it('an admin reads Quick Play, Joins and Leaves a hidden hub exactly as a visible one', async () => {
+    const { guildId, eventId } = await hiddenHubWithQuickPlay();
+    const base = `/plugins/pelican/hubs/${guildId}`;
+    const qp = await testApp.request
+      .get(`${base}/quick-play`)
+      .set(auth(adminToken));
+    expect({ status: qp.status, body: qp.body }).toMatchObject({
+      status: 200,
+      body: { data: [{ eventId, status: 'live', participantCount: 1 }] },
+    });
+    const join = await testApp.request
+      .post(`${base}/join`)
+      .set(auth(adminToken));
+    expect({ status: join.status, body: join.body }).toEqual({
+      status: 201,
+      body: { joined: true },
+    });
+    const leave = await testApp.request
+      .delete(`${base}/join`)
+      .set(auth(adminToken));
+    expect({ status: leave.status, body: leave.body }).toEqual({
+      status: 200,
+      body: { joined: false },
+    });
+  });
+
+  it('a member still gets 404 on Quick Play, Join and Leave of a hidden hub', async () => {
+    const { guildId } = await hiddenHubWithQuickPlay();
+    const u = await member('hidden-hub-member');
+    const base = `/plugins/pelican/hubs/${guildId}`;
+    const statuses = [
+      (await testApp.request.get(`${base}/quick-play`).set(auth(u.token)))
+        .status,
+      (await testApp.request.post(`${base}/join`).set(auth(u.token))).status,
+      (await testApp.request.delete(`${base}/join`).set(auth(u.token))).status,
+    ];
+    expect(statuses).toEqual([404, 404, 404]);
+    expect(
+      await testApp.db.select().from(schema.hubServerMembers),
+    ).toHaveLength(0);
+  });
+});

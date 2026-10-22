@@ -250,10 +250,16 @@ Process: `processor` resolving to `processors[].prefab`; `inputs[]` 1–8 of
 `seconds` 0–604 800 \| `null` (null for the obliterator); `priority` int
 −10 000–10 000.
 
-**Per-quality formula** (Raid Ledger side; from the 0.221.4 IL):
+**Per-quality formula** (Raid Ledger side). It depends on the message's
+`gameVersion` (ROK-1894): **0.221.x** follows the 0.221.4 IL; **1.0.x**
+(major version ≥ 1) was measured on a 1.0.20 server, where all 3 982 live
+`Requirement.GetAmount(q)` values of the 272 recipes the 0.221 rule missed fit
+the 1.0.x rule below. Station and station level are the same in both.
 
 ```
-amount(r, q)       = q <= 1 ? r.amount : (q - 1) * r.amountPerLevel          // r = one resource
+amount(r, q), 0.221.x = q <= 1 ? r.amount : (q - 1) * r.amountPerLevel         // r = one resource
+amount(r, q), 1.0.x   = r.upgraderResource ? r.amount                            // upgrade item: every quality step
+                      : q <= 1 ? r.amount : r.amountPerLevel * 2^(q - 2)         // ×1, ×2, ×4 for q = 2, 3, 4
 stationLevel(R, q) = max(1, R.minStationLevel) + (q - 1)                       // R = the recipe
 station(R, q)      = R.station ?? (q > 1 ? R.repairStation : null)
 craft to quality Q from scratch  = Σ_{q=1..Q}  amount(r, q)  per resource, one step per q (station(R,q) at stationLevel(R,q))
@@ -261,6 +267,13 @@ upgrade q0 → Q                   = Σ_{q=q0+1..Q} amount(r, q)
 items produced per craft         = R.amount at q = 1; 1 per upgrade step
 smelter fuel                     = fuelPerProduct × outputs (when fuel ≠ null); cooking fuel = estimate only (burns per second lit)
 ```
+
+For q ≤ 3 the two `amount` rules agree for ordinary resources. Vanilla 1.0.20
+has no quality above 4 and every upgrade item there is `amount 1,
+amountPerLevel 0`, so the 1.0.x rule beyond q4, or for other upgrade-item
+amounts, is extrapolated (`formula: "custom"` flags any recipe whose live
+values differ). Whether a fresh q1 craft consumes the upgrade item is
+**UNVERIFIED in game**: `GetAmount(1)` returns its amount, and the planner follows it.
 
 `maxQuality` comes from the `items` catalogue. `formula: "custom"` makes the
 web say "upgrade cost may differ in game". For `anyOneOf` recipes the

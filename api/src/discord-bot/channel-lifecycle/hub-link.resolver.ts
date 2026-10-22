@@ -1,0 +1,200 @@
+/**
+ * Resolve the game-hub link an embed shows — ROK-1872 (ROK-1428 §2.8, D15).
+ *
+ * Precedence: the event's tagged hub (if visible) → the game's single visible
+ * hub → ≥ 2 hubs → the OLDEST one (lowest id; deterministic, and the first
+ * hub a game got) → none → null. Only kinds in {@link HUB_LINK_KINDS} count.
+ * TODO(ROK-1873): link the `/hubs?game=<id>` directory for ≥ 2 hubs once
+ * ROK-1870's route ships (L11) — until then that URL would be a 404 (D15).
+ */
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
+import * as schema from '../../drizzle/schema';
+import {
+  HUB_LINK_LABEL,
+  type HubLink,
+} from '../embeds/hub-link-button.helpers';
+
+type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
+type GuildKind = schema.GuildSelect['kind'];
+
+/**
+ * The one `guilds.status` an embed may link (ROK-1870 schema enum). An
+ * archived (or proposed) hub keeps `hidden_at` null but `isHiddenFrom()` 404s
+ * it for non-staff, so linking it would be a dead Hub button (Codex r14 P2).
+ */
+const LINKABLE_STATUS: schema.GuildSelect['status'] = 'active';
+
+/**
+ * Hub kinds an embed may link to. ROK-1870 / L11 appends `game_community`
+ * (with its `status = 'active'` predicate) once that kind exists.
+ */
+export const HUB_LINK_KINDS: readonly GuildKind[] = ['game_server'];
+
+/** The kinds whose hub adapter is live (owning plugin active). */
+export type ActiveHubKindsSource = () => readonly GuildKind[];
+
+let activeHubKinds: ActiveHubKindsSource | null = null;
+
+/**
+ * Codex r17 P2: wire the live-kind source (`HubKindRegistry.active()`), so a
+ * hub whose plugin is off — its URL 403s — is never linked. Null (unwired,
+ * e.g. a unit test) applies no kind filter beyond {@link HUB_LINK_KINDS}.
+ */
+export function setActiveHubKindsSource(
+  source: ActiveHubKindsSource | null,
+): void {
+  activeHubKinds = source;
+}
+
+/** The live kinds, or null when unwired (no filter). */
+function liveKinds(): readonly GuildKind[] | null {
+  return activeHubKinds ? activeHubKinds() : null;
+}
+
+/** {@link HUB_LINK_KINDS} whose adapter is live — the game hubs to link. */
+export function linkableHubKinds(): GuildKind[] {
+  const live = liveKinds();
+  if (live === null) return [...HUB_LINK_KINDS];
+  return HUB_LINK_KINDS.filter((k) => live.includes(k));
+}
+
+/** Any candidate (a tagged hub too) must be of a live kind (403 otherwise). */
+function liveKindWhere(): SQL | undefined {
+  const live = liveKinds();
+  if (live === null) return undefined;
+  return live.length > 0 ? inArray(schema.guilds.kind, [...live]) : sql`false`;
+}
+
+/** Input for {@link resolveGameHubLink}. */
+export interface HubLinkInput {
+  gameId: number | null | undefined;
+  /** `events.guild_id` — the hub the event is tagged to. */
+  taggedGuildId?: number | null | undefined;
+  clientUrl: string | null | undefined;
+}
+
+/** Minimal logger surface for the best-effort wrapper. */
+export interface HubLinkLogger {
+  warn(message: string): void;
+}
+
+function trimBase(clientUrl: string): string {
+  return clientUrl.replace(/\/+$/, '');
+}
+
+function gameHubsWhere(gameIds: number[]): SQL | undefined {
+  const kinds = linkableHubKinds();
+  if (kinds.length === 0) return sql`false`;
+  return and(
+    inArray(schema.guilds.gameId, gameIds),
+    inArray(schema.guilds.kind, kinds),
+  );
+}
+
+/**
+ * A hub a non-staff member can open: not hidden, and `active`. Shared by the
+ * embed link and the channel auto-link (hub-channel-link.queries). Safe for
+ * every {@link HUB_LINK_KINDS} kind: `guilds_status_kind_check` pins each
+ * non-community kind to `active`.
+ */
+export function linkableHub(): SQL | undefined {
+  return and(
+    isNull(schema.guilds.hiddenAt),
+    eq(schema.guilds.status, LINKABLE_STATUS),
+  );
+}
+
+function candidateWhere(
+  gameId: number,
+  tagged: number | null,
+): SQL | undefined {
+  const gameHubs = gameHubsWhere([gameId]);
+  const scope =
+    tagged === null ? gameHubs : or(eq(schema.guilds.id, tagged), gameHubs);
+  return and(linkableHub(), liveKindWhere(), scope);
+}
+
+/** Apply the D15 precedence to the visible candidate hub ids. */
+function pickHubLink(
+  ids: number[],
+  tagged: number | null,
+  gameId: number,
+  base: string,
+): HubLink | null {
+  const oldest = ids.length > 0 ? Math.min(...ids) : undefined;
+  const target = tagged !== null && ids.includes(tagged) ? tagged : oldest;
+  if (target === undefined) return null;
+  // TODO(ROK-1873): ids.length >= 2 → `${base}/hubs?game=${gameId}` (HUBS_LINK_LABEL).
+  void gameId;
+  return { url: `${base}/guilds/${target}`, label: HUB_LINK_LABEL };
+}
+
+/**
+ * Resolve one event / poll / lineup's hub link.
+ *
+ * @returns The absolute link, or null (no hub, no game, no `CLIENT_URL`).
+ */
+export async function resolveGameHubLink(
+  db: Db,
+  input: HubLinkInput,
+): Promise<HubLink | null> {
+  const { gameId, clientUrl } = input;
+  if (!clientUrl || gameId === null || gameId === undefined) return null;
+  const tagged = input.taggedGuildId ?? null;
+  const rows = await db
+    .select({ id: schema.guilds.id })
+    .from(schema.guilds)
+    .where(candidateWhere(gameId, tagged));
+  const ids = rows.map((r) => r.id);
+  return pickHubLink(ids, tagged, gameId, trimBase(clientUrl));
+}
+
+/**
+ * {@link resolveGameHubLink}, best-effort: a failure logs and yields null so
+ * the embed renders without the link (§2.9 — never fail an embed post).
+ */
+export async function resolveGameHubLinkSafe(
+  db: Db,
+  input: HubLinkInput,
+  logger: HubLinkLogger,
+): Promise<HubLink | null> {
+  try {
+    return await resolveGameHubLink(db, input);
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Hub link resolution failed for game ${input.gameId}: ${reason}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Batch variant (no tagged hub): one query for many games.
+ *
+ * @returns Game id → link; games without a hub are absent.
+ */
+export async function resolveGameHubLinks(
+  db: Db,
+  gameIds: number[],
+  clientUrl: string | null | undefined,
+): Promise<Map<number, HubLink>> {
+  const links = new Map<number, HubLink>();
+  const unique = [...new Set(gameIds)];
+  if (!clientUrl || unique.length === 0) return links;
+  if (linkableHubKinds().length === 0) return links;
+  const rows = await db
+    .select({ id: schema.guilds.id, gameId: schema.guilds.gameId })
+    .from(schema.guilds)
+    .where(and(linkableHub(), gameHubsWhere(unique)));
+  const byGame = new Map<number, number[]>();
+  for (const r of rows)
+    byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r.id]);
+  for (const [gameId, ids] of byGame) {
+    const link = pickHubLink(ids, null, gameId, trimBase(clientUrl));
+    if (link) links.set(gameId, link);
+  }
+  return links;
+}

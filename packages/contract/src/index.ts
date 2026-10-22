@@ -95,6 +95,7 @@ export * from './discord-bot.schema.js';
 
 // Channel Bindings (ROK-348)
 export * from './channel-bindings.schema.js';
+export * from './channel-lifecycle.schema.js';
 
 // Bot invite URL + LFG forum board settings (ROK-1471)
 export * from './discord-bot-invite.schema.js';
@@ -242,6 +243,8 @@ export * from './discord-join-post.schema.js';
 
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';
+export * from './hub-posts.schema.js';
+export * from './hub-post-markdown.js';
 export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).

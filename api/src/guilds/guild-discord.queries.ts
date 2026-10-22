@@ -31,24 +31,36 @@ export async function findBoundChannelId(
   return row?.channelId ?? null;
 }
 
+/** A bound channel: its ack, and how it got there (ROK-1871, D7). */
+export interface BoundChannel {
+  channelId: string;
+  privateAck: boolean;
+  source: 'auto' | 'manual' | null;
+}
+
 /** The bound channel and whether a private-channel ack is on record, or null. */
 export async function findBinding(
   db: Db,
   guildId: number,
-): Promise<{ channelId: string; privateAck: boolean } | null> {
+): Promise<BoundChannel | null> {
   const [row] = await db
     .select({
       channelId: guildProfiles.discordChannelId,
       privateAck: guildProfiles.discordChannelPrivateAck,
+      source: guildProfiles.discordChannelSource,
     })
     .from(guildProfiles)
     .where(eq(guildProfiles.guildId, guildId))
     .limit(1);
   if (!row?.channelId) return null;
-  return { channelId: row.channelId, privateAck: row.privateAck };
+  return {
+    channelId: row.channelId,
+    privateAck: row.privateAck,
+    source: row.source ?? null,
+  };
 }
 
-/** Insert-or-update the binding columns only. */
+/** Insert-or-update the binding columns only; a Leader's set is `'manual'` (D7). */
 export async function saveBinding(
   db: Db,
   guildId: number,
@@ -59,6 +71,7 @@ export async function saveBinding(
     discordChannelPrivateAck: binding.privateAck,
     discordChannelSetBy: binding.setBy,
     discordChannelSetAt: binding.setAt,
+    discordChannelSource: 'manual' as const,
   };
   await db
     .insert(guildProfiles)
@@ -66,17 +79,23 @@ export async function saveBinding(
     .onConflictDoUpdate({ target: guildProfiles.guildId, set });
 }
 
-/** Reset the 4 binding columns (no-op without a profile row). */
+/**
+ * Reset the binding columns. The clear is an explicit "no channel" — stamped
+ * `'manual'` so auto-link never refills it (D7). Codex r10 P2: an upsert, so a
+ * hub with no profile row yet still records the opt-out.
+ */
 export async function clearBinding(db: Db, guildId: number): Promise<void> {
+  const set = {
+    discordChannelId: null,
+    discordChannelPrivateAck: false,
+    discordChannelSetBy: null,
+    discordChannelSetAt: null,
+    discordChannelSource: 'manual' as const,
+  };
   await db
-    .update(guildProfiles)
-    .set({
-      discordChannelId: null,
-      discordChannelPrivateAck: false,
-      discordChannelSetBy: null,
-      discordChannelSetAt: null,
-    })
-    .where(eq(guildProfiles.guildId, guildId));
+    .insert(guildProfiles)
+    .values({ guildId, ...set })
+    .onConflictDoUpdate({ target: guildProfiles.guildId, set });
 }
 
 /** The user's stored `discord_id` (may be a `local:` placeholder). */

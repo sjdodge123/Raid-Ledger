@@ -37,6 +37,12 @@ jest.mock('./ad-hoc-server-presence.helpers', () => ({
 jest.mock('./ad-hoc-server-presence.effects', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.effects'),
   attachServerPlayer: jest.fn(),
+  // Codex r9 P2: a created spawn's post-commit side effects stay inert here.
+  announceServerSpawn: jest.fn(),
+}));
+jest.mock('./ad-hoc-server-enrol.helpers', () => ({
+  ...jest.requireActual<object>('./ad-hoc-server-enrol.helpers'),
+  enrolGame: jest.fn(),
 }));
 jest.mock('./ad-hoc-server-spawn.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-spawn.helpers'),
@@ -65,8 +71,10 @@ function serviceWith(
 ): {
   svc: AdHocServerPresenceService;
   countFor: jest.Mock;
+  emit: jest.Mock;
 } {
   const countFor = jest.fn().mockResolvedValue({ counted: voice, unconfirmed });
+  const emit = jest.fn();
   const tally = { countFor } as unknown as ServerPathVoiceTally;
   const deps = [
     {} as PostgresJsDatabase<typeof schema>,
@@ -76,10 +84,10 @@ function serviceWith(
     {},
     {},
     {},
-    { emit: jest.fn() },
+    { emit },
     tally,
   ] as unknown as ConstructorParameters<typeof AdHocServerPresenceService>;
-  return { svc: new AdHocServerPresenceService(...deps), countFor };
+  return { svc: new AdHocServerPresenceService(...deps), countFor, emit };
 }
 
 beforeEach(() => {
@@ -114,6 +122,33 @@ describe('AdHocServerPresenceService.joinPending — merge order', () => {
     const { svc } = serviceWith(1);
     await svc.playerJoined(SOURCE, PLAYER);
     expect(buildServerSpawnInput).toHaveBeenCalledTimes(1);
+  });
+
+  // Codex r9 P2: a created (not joined) server Quick Play is announced
+  // post-commit so the channel lifecycle nudge hears about it.
+  it('announces a created server Quick Play for the lifecycle nudge', async () => {
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      );
+    jest.mocked(buildServerSpawnInput).mockResolvedValue({
+      gameId: 10,
+      pelicanServerId: 1,
+      bindingId: null,
+      creatorId: 7,
+      players: [],
+      ids: [],
+    });
+    jest
+      .mocked(spawnOrFindServerQuickPlay)
+      .mockResolvedValue({ kind: 'created', eventId: 55, joined: [] });
+    const { svc, emit } = serviceWith(1);
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(emit).toHaveBeenCalledWith('ad-hoc.quick-play.created', {
+      eventId: 55,
+      gameId: 10,
+    });
   });
 
   it('holds when 1 server player + 0 voice is under minPlayers 2', async () => {
