@@ -30,6 +30,8 @@ const KNOWN = [
 ];
 const SET = selectEventQuests(KNOWN, [63]);
 const AT = new Date('2026-10-01T12:00:00.000Z');
+const C1 = '11111111-1111-4111-8111-111111111111';
+const C2 = '22222222-2222-4222-8222-222222222222';
 
 const signup = (
   userId: number,
@@ -75,12 +77,8 @@ function stateOf(
 
 const BODY = buildQuestReadiness({
   quests: SET,
-  signups: [
-    signup(1, 'c1'),
-    signup(2, 'c2'),
-    signup(3, null, { charRace: null }),
-  ],
-  snapshots: new Map([['c1', snap([100], [200])]]),
+  signups: [signup(1, C1), signup(2, C2), signup(3, null, { charRace: null })],
+  snapshots: new Map([[C1, snap([100], [200])]]),
   manual: [manual(2, 300, true), manual(1, 200, true)],
 });
 
@@ -112,8 +110,8 @@ describe('buildQuestReadiness addon-only (ROK-1911)', () => {
   it('addon have state carries source addon', () => {
     const only = buildQuestReadiness({
       quests: SET,
-      signups: [signup(1, 'c1')],
-      snapshots: new Map([['c1', snap([100], [200])]]),
+      signups: [signup(1, C1)],
+      snapshots: new Map([[C1, snap([100], [200])]]),
       manual: [],
     });
     expect(stateOf(only, 1, 200)).toMatchObject({
@@ -138,6 +136,11 @@ describe('buildQuestReadiness roster (ROK-1911)', () => {
       prereqsMet: true,
       source: null,
     });
+  });
+
+  it("sends each signup's character uuid (ROK-1911)", () => {
+    expect(body.signups.find((s) => s.userId === 1)?.characterId).toBe(C1);
+    expect(body.signups.find((s) => s.userId === 2)?.characterId).toBe(C2);
   });
 
   it('a signup without a character is listed by username, all unknown', () => {

@@ -177,6 +177,8 @@ async function signUp(eventId: number, userId: number, characterId: string) {
     .values({ eventId, userId, characterId, status: 'signed_up' });
 }
 
+let charIds: { ready: string; ticker: string };
+
 /** ready: snapshot (100 done, 200 in log). ticker: no snapshot, manual 300 done. */
 async function seedRoster(): Promise<void> {
   const ready = await seedUser('ready');
@@ -191,7 +193,9 @@ async function seedRoster(): Promise<void> {
   });
   await signUp(foreverEvent, ready, readyChar);
   await signUp(classicEvent, ready, readyChar);
-  await signUp(foreverEvent, ticker, await seedForeverChar(ticker, 'Ticka'));
+  const tickerChar = await seedForeverChar(ticker, 'Ticka');
+  await signUp(foreverEvent, ticker, tickerChar);
+  charIds = { ready: readyChar, ticker: tickerChar };
   await testApp.db.insert(schema.wowClassicQuestProgress).values({
     eventId: foreverEvent,
     userId: ticker,
@@ -264,6 +268,14 @@ describe('GET quest-readiness — payload (ROK-1911)', () => {
 
   it('lists every active signup by character name', () => {
     expect(body.signups.map((s) => s.name).sort()).toEqual(['Readya', 'Ticka']);
+  });
+
+  it("sends each signup's character uuid", () => {
+    const idOf = (who: Who) =>
+      body.signups.find((s) => s.userId === users[who].id)?.characterId;
+    expect(idOf('ready')).toBe(charIds.ready);
+    expect(idOf('ticker')).toBe(charIds.ticker);
+    expect(charIds.ready).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('addon snapshot: in-log = have (addon), chain met, untouched = missing', () => {

@@ -128,8 +128,8 @@ function signupRow(
   );
   return {
     userId: s.userId,
-    // The contract's characterId is numeric; characters.id is a uuid.
-    characterId: null,
+    // The character the signup uses for this event (null = no character).
+    characterId: s.characterId,
     name: (s.characterName ?? s.username).slice(0, 64),
     perQuest: usable.map((q) => perQuestFor(q, progress, input.quests.lookup)),
   };
