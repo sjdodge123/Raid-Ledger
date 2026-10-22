@@ -1,10 +1,15 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
+import { hubLinkButton, type HubLink } from '../embeds/hub-link-button.helpers';
 
-/** Build the standard signup action row (Sign Up, Tentative, Decline, View Event). */
+/**
+ * Build the standard signup action row (Sign Up, Tentative, Decline, View
+ * Event), plus a trailing `Hub` link button when a hub link resolved (D16).
+ */
 export function buildSignupButtons(
   eventId: number,
   clientUrl?: string | null,
+  hubLink?: HubLink | null,
 ): ActionRowBuilder<ButtonBuilder> {
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -20,7 +25,17 @@ export function buildSignupButtons(
       .setLabel('Decline')
       .setStyle(ButtonStyle.Danger),
   );
-  const baseUrl = clientUrl || process.env.CLIENT_URL;
+  appendLinkButtons(row, eventId, clientUrl || process.env.CLIENT_URL, hubLink);
+  return row;
+}
+
+/** `View Event` (when a base URL is known), then `Hub` (when one resolved). */
+function appendLinkButtons(
+  row: ActionRowBuilder<ButtonBuilder>,
+  eventId: number,
+  baseUrl: string | undefined,
+  hubLink: HubLink | null | undefined,
+): void {
   if (baseUrl) {
     row.addComponents(
       new ButtonBuilder()
@@ -29,5 +44,6 @@ export function buildSignupButtons(
         .setURL(`${baseUrl}/events/${eventId}`),
     );
   }
-  return row;
+  const hub = hubLinkButton(hubLink);
+  if (hub) row.addComponents(hub);
 }

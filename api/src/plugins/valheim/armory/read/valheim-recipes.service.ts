@@ -165,8 +165,13 @@ export class ValheimRecipesService {
 
   /** D5: keyed on `imported_at`, which every re-import bumps. */
   private graph(r: RecipesReader, set: ValheimRecipeSetRow) {
-    return this.graphs.getOrLoad(set.id, set.importedAt.getTime(), async () =>
-      toRecipeGraphRows(await r.loadRows(set.id)),
+    return this.graphs.getOrLoad(
+      set.id,
+      set.importedAt.getTime(),
+      async () => ({
+        ...toRecipeGraphRows(await r.loadRows(set.id)),
+        gameVersion: set.gameVersion,
+      }),
     );
   }
 

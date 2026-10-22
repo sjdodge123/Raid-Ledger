@@ -50,6 +50,14 @@ export const guildProfiles = pgTable(
     discordChannelSetAt: timestamp('discord_channel_set_at', {
       withTimezone: true,
     }),
+    /**
+     * ROK-1429 (D7): who set the channel — 'auto' (the lifecycle reconciler
+     * linked a managed game channel) or 'manual' (a Leader set or cleared it,
+     * which the reconciler never overwrites). NULL = never set.
+     */
+    discordChannelSource: varchar('discord_channel_source', {
+      length: 6,
+    }).$type<'auto' | 'manual'>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -61,6 +69,10 @@ export const guildProfiles = pgTable(
     check(
       'guild_profiles_gm_post_length',
       sql`char_length(${table.gmPost}) <= 4000`,
+    ),
+    check(
+      'guild_profiles_discord_channel_source_check',
+      sql`${table.discordChannelSource} IN ('auto', 'manual')`,
     ),
     // ROK-1157: FK backing index (guild_id is the PK).
     index('idx_guild_profiles_gm_post_updated_by').on(table.gmPostUpdatedBy),
