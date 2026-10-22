@@ -87,8 +87,10 @@ function getChip(): HTMLElement {
     return screen.getByTestId('filter-panel-trigger');
 }
 
-function openModalViaChip() {
+/** Opens the panel and waits for the lazy-loaded game controls (ROK-1893 P4 bundle split). */
+async function openModalViaChip(): Promise<void> {
     fireEvent.click(getChip());
+    await screen.findByTestId('calendar-game-list');
 }
 
 /** A checkbox row's accessible name: its aria-labelledby text minus aria-hidden decoration (the emoji). */
@@ -140,12 +142,12 @@ function accumulatorTestsGroup1() {
 }
 
 function accumulatorTestsGroup2() {
-    it('accumulates games across multiple calls (no duplicates)', () => {
+    it('accumulates games across multiple calls (no duplicates)', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('ff14', 'Final Fantasy XIV')]);
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('gw2', 'Guild Wars 2')]);
 
-        openModalViaChip();
+        await openModalViaChip();
         const gameNames = checkboxNames();
         expect(gameNames).toContain('World of Warcraft');
         expect(gameNames).toContain('Final Fantasy XIV');
@@ -153,16 +155,16 @@ function accumulatorTestsGroup2() {
         expect(gameNames.length).toBe(3);
     });
 
-    it('does not duplicate games when same slug appears multiple times', () => {
+    it('does not duplicate games when same slug appears multiple times', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        openModalViaChip();
+        await openModalViaChip();
         expect(within(screen.getByTestId('filter-panel')).getAllByRole('checkbox')).toHaveLength(1);
     });
 
-    it('sorts games alphabetically inside the filter panel', () => {
+    it('sorts games alphabetically inside the filter panel', async () => {
         render_page();
         deliver([
             makeGame('wow', 'World of Warcraft'),
@@ -170,7 +172,7 @@ function accumulatorTestsGroup2() {
             makeGame('ff14', 'Final Fantasy XIV'),
         ]);
 
-        openModalViaChip();
+        await openModalViaChip();
         expect(checkboxNames()).toEqual(['Apex Legends', 'Final Fantasy XIV', 'World of Warcraft']);
     });
 }
@@ -193,24 +195,24 @@ describe('CalendarPage — auto-select behaviour', () => {
         activeQueryClient?.clear();
     });
 
-    it('auto-selects all games on first delivery', () => {
+    it('auto-selects all games on first delivery', async () => {
         mockRegistryGames = [
             makeRegistryGame('wow', 'World of Warcraft', 1),
             makeRegistryGame('apex', 'Apex Legends', 2),
         ];
         render_page();
 
-        openModalViaChip();
+        await openModalViaChip();
         const checkboxes = within(screen.getByTestId('filter-panel')).getAllByRole('checkbox');
         expect(checkboxes).toHaveLength(2);
         checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });
 
-    it('does NOT auto-select new games from subsequent deliveries', () => {
+    it('does NOT auto-select new games from subsequent deliveries', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        openModalViaChip();
+        await openModalViaChip();
         const panel = screen.getByTestId('filter-panel');
         const wowCheckbox = within(panel).getByRole('checkbox', { name: 'World of Warcraft' });
         fireEvent.click(wowCheckbox);
@@ -237,11 +239,11 @@ describe('CalendarPage — funnel badge (games hidden)', () => {
         expect(getChip()).not.toHaveAttribute('aria-describedby');
     });
 
-    it('badge = every game after "None" (CalendarView shows zero events)', () => {
+    it('badge = every game after "None" (CalendarView shows zero events)', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openModalViaChip();
+        await openModalViaChip();
         fireEvent.click(within(screen.getByTestId('filter-panel')).getByRole('button', { name: 'None' }));
         fireEvent.click(getChip());
 
@@ -249,11 +251,11 @@ describe('CalendarPage — funnel badge (games hidden)', () => {
         expect(getChip()).toHaveAccessibleDescription('2 games hidden');
     });
 
-    it('badge = number of games hidden on a partial selection', () => {
+    it('badge = number of games hidden on a partial selection', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends'), makeGame('ff14', 'FFXIV')]);
 
-        openModalViaChip();
+        await openModalViaChip();
         fireEvent.click(within(screen.getByTestId('filter-panel')).getByRole('checkbox', { name: 'Apex Legends' }));
         fireEvent.click(getChip());
 
@@ -261,13 +263,13 @@ describe('CalendarPage — funnel badge (games hidden)', () => {
         expect(getChip()).toHaveAccessibleDescription('1 game hidden');
     });
 
-    it('clicking the funnel opens the filter panel', () => {
+    it('clicking the funnel opens the filter panel', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
         expect(getChip()).toHaveAttribute('aria-expanded', 'false');
         expect(screen.getByTestId('filter-panel')).toHaveAttribute('aria-hidden', 'true');
-        openModalViaChip();
+        await openModalViaChip();
         expect(getChip()).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByTestId('filter-panel')).not.toHaveAttribute('aria-hidden');
     });
@@ -298,45 +300,47 @@ function setupWithGames() {
     ]);
 }
 
-function openModal() {
+async function openModal(): Promise<void> {
     setupWithGames();
-    openModalViaChip();
+    await openModalViaChip();
 }
 
 function panelTestsGroup1() {
-    it('filter panel is collapsed initially', () => {
+    it('filter panel is collapsed initially', async () => {
         setupWithGames();
+        // The controls are mounted (lazy chunk loaded) yet hidden while collapsed.
+        await screen.findByTestId('calendar-game-list');
         expect(getChip()).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('checkbox', { name: 'Alpha' })).toBeNull();
     });
 
-    it('opens the filter panel when the funnel is clicked', () => {
-        openModal();
+    it('opens the filter panel when the funnel is clicked', async () => {
+        await openModal();
         expect(screen.getByRole('checkbox', { name: 'Alpha' })).toBeInTheDocument();
     });
 
-    it('panel shows all games', () => {
-        openModal();
+    it('panel shows all games', async () => {
+        await openModal();
         expect(checkboxNames()).toHaveLength(6);
     });
 }
 
 function panelTestsGroup2() {
-    it('panel heading is "Filters"', () => {
-        openModal();
+    it('panel heading is "Filters"', async () => {
+        await openModal();
         const panel = screen.getByTestId('filter-panel');
         expect(within(panel).getByRole('heading', { name: 'Filters' })).toBeInTheDocument();
     });
 
-    it('panel collapses when the funnel is clicked again', () => {
-        openModal();
+    it('panel collapses when the funnel is clicked again', async () => {
+        await openModal();
         fireEvent.click(getChip());
         expect(getChip()).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('checkbox', { name: 'Alpha' })).toBeNull();
     });
 
-    it('Escape collapses the panel and returns focus to the funnel', () => {
-        openModal();
+    it('Escape collapses the panel and returns focus to the funnel', async () => {
+        await openModal();
         const alpha = screen.getByRole('checkbox', { name: 'Alpha' });
         alpha.focus();
         expect(document.activeElement).toBe(alpha);
@@ -349,8 +353,8 @@ function panelTestsGroup2() {
 }
 
 function panelTestsGroup3() {
-    it('"Clear all" shows only while a game is hidden; "None" is always there', () => {
-        openModal();
+    it('"Clear all" shows only while a game is hidden; "None" is always there', async () => {
+        await openModal();
         const panel = screen.getByTestId('filter-panel');
         expect(within(panel).getByRole('button', { name: 'None' })).toBeInTheDocument();
         expect(within(panel).queryByRole('button', { name: 'Clear all' })).toBeNull();
@@ -359,8 +363,8 @@ function panelTestsGroup3() {
         expect(within(panel).getByRole('button', { name: 'Clear all' })).toBeInTheDocument();
     });
 
-    it('panel shows games sorted alphabetically', () => {
-        openModal();
+    it('panel shows games sorted alphabetically', async () => {
+        await openModal();
         expect(checkboxNames()).toEqual(['Alpha', 'Beta', 'Delta', 'Epsilon', 'Foxtrot', 'Gamma']);
     });
 }

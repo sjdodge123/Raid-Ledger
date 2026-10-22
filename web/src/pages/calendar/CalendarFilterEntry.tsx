@@ -11,16 +11,29 @@
  * "Clear all" shows every game and every layer again. Neither renders until
  * there is something to filter: a known game or a togglable calendar layer.
  */
-import type { JSX } from 'react';
+import { lazy, Suspense, type JSX } from 'react';
 import { FilterEntry, FilterEntryTrigger } from '../../components/ui/filter-entry';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
-import { CalendarGameFilterControls } from './CalendarGameFilter';
 import { CalendarHubFilterList } from './CalendarHubFilter';
 import { CalendarLayerToggleList } from './CalendarLayerToggleList';
 import type { CalendarGameFilter } from './use-calendar-game-filter';
 import type { CalendarLayerToggles } from './use-calendar-layer-toggles';
 import { useCalendarHubFilter, type CalendarHubFilter } from './use-calendar-hub-filter';
+
+// Lazy: the game list only shows inside the Filters panel / sheet, so it stays out of the calendar-page chunk.
+const CalendarGameFilterControls = lazy(() =>
+    import('./CalendarGameFilter').then((m) => ({ default: m.CalendarGameFilterControls })));
+
+/** Holds the game controls' space while their chunk loads (search field + list). */
+function GameFilterSkeleton(): JSX.Element {
+    return (
+        <div className="animate-pulse space-y-3" aria-hidden="true" data-testid="calendar-game-filter-skeleton">
+            <div className="h-10 rounded-lg bg-panel" />
+            <div className="h-24 rounded-lg bg-panel" />
+        </div>
+    );
+}
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
@@ -69,9 +82,11 @@ export function CalendarFilterEntry({ filter, layers, isOpen, onOpenChange }: Ca
             onClearAll={clearAll} describeCount={describeHidden(filter, layers, hubs)}>
             <div className="space-y-4">
                 {filter.allKnownGames.length > 0 && (
-                    <CalendarGameFilterControls allKnownGames={filter.allKnownGames} selectedGames={filter.selectedGames}
-                        toggleGame={filter.toggleGame} deselectAllGames={filter.deselectAllGames}
-                        likedSlugs={filter.likedSlugs} layout={isDesktop ? 'panel' : 'sheet'} />
+                    <Suspense fallback={<GameFilterSkeleton />}>
+                        <CalendarGameFilterControls allKnownGames={filter.allKnownGames} selectedGames={filter.selectedGames}
+                            toggleGame={filter.toggleGame} deselectAllGames={filter.deselectAllGames}
+                            likedSlugs={filter.likedSlugs} layout={isDesktop ? 'panel' : 'sheet'} />
+                    </Suspense>
                 )}
                 <CalendarHubFilterList hubs={hubs} />
                 <CalendarLayerToggleList layers={layers} />

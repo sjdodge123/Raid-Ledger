@@ -88,8 +88,10 @@ function getFunnel(): HTMLElement {
     return screen.getByTestId('filter-panel-trigger');
 }
 
-function openFilters() {
+/** Opens the panel and waits for the lazy-loaded game controls (ROK-1893 P4 bundle split). */
+async function openFilters(): Promise<void> {
     fireEvent.click(getFunnel());
+    await screen.findByTestId('calendar-game-list');
 }
 
 /** The desktop inline filter panel. */
@@ -134,11 +136,11 @@ describe('CalendarPage — game toggle', () => {
         activeQueryClient?.clear();
     });
 
-    it('unchecking a game in the panel deselects it', () => {
+    it('unchecking a game in the panel deselects it', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        openFilters();
+        await openFilters();
         const checkbox = gameCheckbox('World of Warcraft');
         expect(checkbox).toBeChecked();
 
@@ -146,11 +148,11 @@ describe('CalendarPage — game toggle', () => {
         expect(checkbox).not.toBeChecked();
     });
 
-    it('checking an unchecked game re-selects it', () => {
+    it('checking an unchecked game re-selects it', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        openFilters();
+        await openFilters();
         const checkbox = gameCheckbox('World of Warcraft');
         fireEvent.click(checkbox);
         expect(checkbox).not.toBeChecked();
@@ -159,11 +161,11 @@ describe('CalendarPage — game toggle', () => {
         expect(checkbox).toBeChecked();
     });
 
-    it('toggling a game updates the funnel badge to the hidden count', () => {
+    it('toggling a game updates the funnel badge to the hidden count', async () => {
         render_page();
         deliver(SIX_GAMES());
 
-        openFilters();
+        await openFilters();
         expect(gameCheckbox('Alpha')).toBeChecked();
         expect(screen.queryByTestId('filter-count-badge')).not.toBeInTheDocument();
 
@@ -188,11 +190,11 @@ describe('CalendarPage — Clear all / None buttons', () => {
         activeQueryClient?.clear();
     });
 
-    it('"Clear all" in the panel header selects all known games', () => {
+    it('"Clear all" in the panel header selects all known games', async () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
-        openFilters();
+        await openFilters();
         const dialog = getDialog();
         expect(within(dialog).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument();
 
@@ -205,11 +207,11 @@ describe('CalendarPage — Clear all / None buttons', () => {
         expect(within(dialog).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument();
     });
 
-    it('"None" button in the panel deselects all games', () => {
+    it('"None" button in the panel deselects all games', async () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
-        openFilters();
+        await openFilters();
         const dialog = getDialog();
 
         fireEvent.click(within(dialog).getByRole('button', { name: 'None' }));
@@ -217,11 +219,11 @@ describe('CalendarPage — Clear all / None buttons', () => {
         within(dialog).getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
     });
 
-    it('"Clear all" restores every game after "None", badge = total hidden in between', () => {
+    it('"Clear all" restores every game after "None", badge = total hidden in between', async () => {
         render_page();
         deliver(SIX_GAMES());
 
-        openFilters();
+        await openFilters();
         const dialog = getDialog();
         fireEvent.click(within(dialog).getByRole('button', { name: 'None' }));
 
@@ -246,11 +248,11 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
         activeQueryClient?.clear();
     });
 
-    it('filter selections persist across re-renders with same games', () => {
+    it('filter selections persist across re-renders with same games', async () => {
         const { rerender } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openFilters();
+        await openFilters();
         fireEvent.click(gameCheckbox(/World/));
         expect(gameCheckbox(/World/)).not.toBeChecked();
 
@@ -267,7 +269,7 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
         );
 
         // The store retained the deselection — verify by opening the panel again.
-        openFilters();
+        await openFilters();
         expect(gameCheckbox(/World/)).not.toBeChecked();
         expect(gameCheckbox(/Apex/)).toBeChecked();
     });
@@ -282,11 +284,11 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
         activeQueryClient?.clear();
     });
 
-    it('filter selections survive component unmount/remount (ROK-372 regression)', () => {
+    it('filter selections survive component unmount/remount (ROK-372 regression)', async () => {
         const { unmount } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openFilters();
+        await openFilters();
         fireEvent.click(gameCheckbox(/World/));
         expect(gameCheckbox(/World/)).not.toBeChecked();
 
@@ -294,16 +296,16 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openFilters();
+        await openFilters();
         expect(gameCheckbox(/World/)).not.toBeChecked();
         expect(gameCheckbox(/Apex/)).toBeChecked();
     });
 
-    it('filter selections persist when same games are re-reported (month change scenario)', () => {
+    it('filter selections persist when same games are re-reported (month change scenario)', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openFilters();
+        await openFilters();
         fireEvent.click(gameCheckbox(/World/));
 
         deliver([]);
@@ -323,12 +325,12 @@ describe('CalendarPage — filter persistence when view changes — part 3', () 
         activeQueryClient?.clear();
     });
 
-    it('games do not get removed from allKnownGames when a different date range is loaded', () => {
+    it('games do not get removed from allKnownGames when a different date range is loaded', async () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('apex', 'Apex Legends')]);
 
-        openFilters();
+        await openFilters();
         expect(gameCheckbox('Apex Legends')).toBeInTheDocument();
         expect(gameCheckbox('World of Warcraft')).toBeInTheDocument();
     });
@@ -373,11 +375,12 @@ describe('CalendarPage — Filters FAB and BottomSheet (below 1024px)', () => {
         expect(screen.getByTestId('bottom-sheet')).toHaveAttribute('data-open', 'false');
     });
 
-    it('bottom sheet lists every game as a pressed tap row', () => {
+    it('bottom sheet lists every game as a pressed tap row', async () => {
         render_page();
         deliver(SIX_GAMES());
         // A closed sheet's body is inert + aria-hidden (ROK-1659), so open it first.
         fireEvent.click(screen.getByTestId('filter-fab'));
+        await screen.findByTestId('calendar-game-list');
 
         const sheet = screen.getByTestId('bottom-sheet');
         for (const name of ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Foxtrot']) {
@@ -385,10 +388,11 @@ describe('CalendarPage — Filters FAB and BottomSheet (below 1024px)', () => {
         }
     });
 
-    it('bottom sheet shows count of selected vs total games; FAB badge = games hidden', () => {
+    it('bottom sheet shows count of selected vs total games; FAB badge = games hidden', async () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
         fireEvent.click(screen.getByTestId('filter-fab'));
+        await screen.findByTestId('calendar-game-list');
 
         const sheet = screen.getByTestId('bottom-sheet');
         expect(sheet).toHaveTextContent(/3 of 3 selected/i);
@@ -412,7 +416,7 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         activeQueryClient?.clear();
     });
 
-    it('populates game filter from game registry on mount', () => {
+    it('populates game filter from game registry on mount', async () => {
         mockRegistryGames = [
             makeRegistryGame('wow', 'World of Warcraft', 1),
             makeRegistryGame('ff14', 'Final Fantasy XIV', 2),
@@ -420,7 +424,7 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         ];
         render_page();
 
-        openFilters();
+        await openFilters();
         const dialog = getDialog();
         const gameNames = within(dialog).getAllByRole('checkbox').map(
             nameOf,
@@ -431,7 +435,7 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         expect(gameNames.length).toBe(3);
     });
 
-    it('shows all registry games even when no events exist for some games', () => {
+    it('shows all registry games even when no events exist for some games', async () => {
         mockRegistryGames = [
             makeRegistryGame('wow', 'World of Warcraft', 1),
             makeRegistryGame('ff14', 'Final Fantasy XIV', 2),
@@ -439,7 +443,7 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         ];
         render_page();
 
-        openFilters();
+        await openFilters();
         const dialog = getDialog();
         const checkboxes = within(dialog).getAllByRole('checkbox');
         expect(checkboxes).toHaveLength(3);
