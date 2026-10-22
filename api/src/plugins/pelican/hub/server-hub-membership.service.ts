@@ -12,7 +12,7 @@ import {
   type ServerRosterPlayer,
 } from '../presence/server-presence.reader';
 import {
-  findVisibleServerHub,
+  findServerHub,
   joinManual,
   leaveManual,
 } from './server-hub-join.queries';
@@ -118,9 +118,9 @@ export class ServerHubMembershipService {
     );
   }
 
-  /** Manual Join (idempotent); 404 for a hidden or non-server hub. */
+  /** Manual Join (idempotent); 404 for a non-server hub (hidden-for-non-staff is `HubVisibleGuard`'s). */
   async join(guildId: number, userId: number): Promise<HubJoinResponse> {
-    await findVisibleServerHub(this.db, guildId);
+    await findServerHub(this.db, guildId);
     const now = new Date();
     await joinManual(this.db, guildId, userId, now);
     await refreshMemberCount(this.db, guildId, now);
@@ -129,7 +129,7 @@ export class ServerHubMembershipService {
 
   /** Manual Leave; the next arrival on the server re-adds them. */
   async leave(guildId: number, userId: number): Promise<HubJoinResponse> {
-    await findVisibleServerHub(this.db, guildId);
+    await findServerHub(this.db, guildId);
     const now = new Date();
     await leaveManual(this.db, guildId, userId, now);
     await refreshMemberCount(this.db, guildId, now);

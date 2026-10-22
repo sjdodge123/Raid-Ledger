@@ -6,9 +6,10 @@
  * Flow: seed a WoW guild (`POST /admin/test/wow/seed-guild`, unique name per
  * run, so the per-guild post cooldown never carries over), make the DM
  * recipient a live member through the kind-aware `POST /admin/test/hub-member`,
- * enable its Discord notifications, then PATCH the GM post as the admin. The
- * recipient's notification row is polled (no sleep) for "New post in <Group>"
- * with this guild's id in its payload.
+ * enable its Discord notifications, then create a hub post as the admin
+ * (ROK-1868: `POST /guilds/:id/posts`, relay off — only a NEW post notifies).
+ * The recipient's notification row is polled (no sleep) for "New post in
+ * <Group>" with this guild's id in its payload and the post's deep link.
  *
  * The DM itself cannot be read here: the companion is a bot and Discord refuses
  * bot-to-bot DMs (50007 — see `dm-embed-render.test.ts`). The embed is pinned
@@ -100,8 +101,8 @@ function buttons(res: RenderedDm): RenderedButton[][] {
   return res.components.map((r) => (r.components ?? []).filter((b) => b.type === BUTTON_COMPONENT_TYPE));
 }
 
-/** The primary (last) row: "View group" → /guilds/<id>, then Adjust Notifications last. */
-function assertButtons(res: RenderedDm, guildId: number): void {
+/** The primary (last) row: "View group" → the post's deep link, then Adjust Notifications last. */
+function assertButtons(res: RenderedDm, guildId: number, postId: number): void {
   const rows = buttons(res);
   const primary = rows[rows.length - 1] ?? [];
   const labels = primary.map((b) => b.label ?? "");
@@ -110,13 +111,19 @@ function assertButtons(res: RenderedDm, guildId: number): void {
     fail(`expected the last button "${ADJUST_LABEL}" → settings row, got ${JSON.stringify(primary)}`);
   }
   const view = rows.flat().find((b) => b.label === VIEW_GROUP_LABEL);
-  if (!view?.url?.endsWith(`/guilds/${guildId}`)) {
-    fail(`expected a "${VIEW_GROUP_LABEL}" link to /guilds/${guildId}, got rows ${JSON.stringify(labels)}`);
+  const deepLink = `/guilds/${guildId}?post=${postId}#posts`;
+  if (!view?.url?.endsWith(deepLink)) {
+    fail(`expected a "${VIEW_GROUP_LABEL}" link to ${deepLink}, got ${JSON.stringify(view?.url)} in rows ${JSON.stringify(labels)}`);
   }
 }
 
 /** Render the stored notification through the real DM builder and check it. */
-async function assertDmEmbed(ctx: TestContext, n: HubNotification, guildId: number, name: string): Promise<void> {
+async function assertDmEmbed(
+  ctx: TestContext,
+  n: HubNotification,
+  ids: { guildId: number; postId: number },
+  name: string,
+): Promise<void> {
   const res = await ctx.api.post<RenderedDm>("/admin/test/render-dm-embed", {
     type: TYPE,
     title: n.title ?? "",
@@ -127,22 +134,38 @@ async function assertDmEmbed(ctx: TestContext, n: HubNotification, guildId: numb
   if (res.embed.title !== expected) {
     fail(`expected the DM title "${expected}", got "${res.embed.title}"`);
   }
-  assertButtons(res, guildId);
+  assertButtons(res, ids.guildId, ids.postId);
+}
+
+/** ROK-1868: the leader post is a hub post; returns the new post's id. */
+async function createPost(ctx: TestContext, guildId: number): Promise<number> {
+  const body = await ctx.api.post<{ post?: { id?: unknown } }>(`/guilds/${guildId}/posts`, {
+    body: `Smoke **leader** post ${Date.now().toString(36)}\nSecond line.`,
+    relayToDiscord: false,
+  });
+  const id = body.post?.id;
+  if (typeof id !== "number") fail(`create post: no post.id in ${JSON.stringify(body)}`);
+  return id;
 }
 
 async function leaderPostNotifiesMembers(ctx: TestContext): Promise<void> {
   const { guildId, name } = await seedGroup(ctx);
   await addMember(ctx, guildId, ctx.dmRecipientUserId);
   await ctx.api.post("/admin/test/enable-discord-notifications", { userId: ctx.dmRecipientUserId });
-  await ctx.api.patch(`/guilds/${guildId}/profile`, {
-    gmPost: `Smoke leader post ${Date.now().toString(36)}\nSecond line.`,
-  });
+  const postId = await createPost(ctx, guildId);
   await awaitProcessing(ctx.api);
   const n = await waitForLeaderPost(ctx, guildId);
   if (n.title !== `New post in ${name}`) {
     fail(`expected the notification title "New post in ${name}", got "${n.title}"`);
   }
-  await assertDmEmbed(ctx, n, guildId, name);
+  if (!n.message?.startsWith("Smoke leader post ")) {
+    fail(`expected the markdown-stripped headline "Smoke leader post …", got "${n.message}"`);
+  }
+  const deepLink = `/guilds/${guildId}?post=${postId}#posts`;
+  if (n.payload?.url !== deepLink) {
+    fail(`expected payload.url "${deepLink}", got ${JSON.stringify(n.payload?.url)}`);
+  }
+  await assertDmEmbed(ctx, n, { guildId, postId }, name);
 }
 
 export const hubNotificationsDmTests: SmokeTest[] = [

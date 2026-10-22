@@ -26,6 +26,11 @@ jest.mock('./lfg-now-event.helpers', () => ({
 jest.mock('../../lfg/lfg-write.helpers', () => ({
   convertGroup: jest.fn(),
 }));
+// ROK-1888 m4: attaching restores an in-grace Quick Play (covered for real in
+// lfg-now-spawn.quick-play-reuse.integration.spec.ts).
+jest.mock('../services/ad-hoc-event.helpers', () => ({
+  restoreFromGracePeriod: jest.fn(() => Promise.resolve(false)),
+}));
 jest.mock('../services/ad-hoc-event.signup-helpers', () => ({
   autoSignupParticipant: jest.fn(),
 }));
@@ -73,13 +78,17 @@ describe('spawnUnderGroupLock', () => {
   it('takes the LFG group advisory lock before reading anything', async () => {
     const db = mockDb([], [hand(), hand({ userId: 2 })]);
     await spawnUnderGroupLock(asDb(db), GAME_ID, NOW);
-    expect(db.execute).toHaveBeenCalledTimes(1);
+    // ROK-1888: the group lock first, then the per-game Quick Play lock.
+    expect(db.execute).toHaveBeenCalledTimes(2);
     const [statement] = db.execute.mock.calls[0] as [
       { queryChunks: unknown[] },
     ];
     const rendered = JSON.stringify(statement);
     expect(rendered).toContain('pg_advisory_xact_lock');
     expect(rendered).toContain('lfg:42');
+    const [gameLock] = db.execute.mock.calls[1] as [{ queryChunks: unknown[] }];
+    expect(JSON.stringify(gameLock)).toContain('pg_advisory_xact_lock');
+    expect(JSON.stringify(gameLock)).toContain('1801');
   });
 
   it('spawns once two now-hands are live, hosted by the EARLIEST hand', async () => {

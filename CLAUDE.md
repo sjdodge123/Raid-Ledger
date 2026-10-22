@@ -55,6 +55,10 @@ The WoW: Forever addon **LedgerLink** lives in its own repo (`github.com/sjdodge
 - **LedgerLink agents never change the format on their own.** They request a change through a Raid Ledger story; the addon pins a copy of `vN/` and validates against it in its own CI.
 - Real beta strings become fixtures only after anonymisation (no real names, GUIDs or guild names).
 
+## Pending operator approval lives in one place (STRICT — applies to ALL agents)
+
+Operator ruling 2026-10-22: every design, mockup, prototype or product ruling that waits on the operator goes in **`planning-artifacts/pending-approval/`** in the MAIN checkout, never only in chat. Use one folder per item, `ROK-XXXX-<slug>/` (`mockup.html` and/or screenshots plus `ITEM.md` with the numbered questions and a recommendation for each), and add a row to `INDEX.md`. When the operator asks "what's pending?", answer from `INDEX.md`. Once ruled, move the folder to `_approved/` (or `_rejected/`), record the ruling in the story's spec and in Linear, and move the row to "Decided". Worktree sessions write it via Bash `cp` (memory `reference_worktree_session_main_planning_writes_via_bash`). The fleet dashboard's "Pending approval" page (ROK-1900) replaces this folder once it ships.
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**.) The operator regularly approves simplified-flow targets, wireframes or design specs ahead of implementation — follow-up work should be **implementing the approved target, not redesigning it**.
@@ -227,6 +231,7 @@ The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared reso
 ### Migration Generation Rules
 
 - **Always run `./scripts/fix-migration-order.sh --check`** after generating a migration — concurrent branches produce out-of-order journal timestamps that Drizzle silently skips.
+- **Two PRs claimed the same migration number?** `git fetch origin && ./scripts/renumber-branch-migrations.sh` renumbers the branch's new migrations after `origin/main` (files, journal, snapshot `prevId` chain; never the SQL). The index-collision guard in CI and `validate-ci.sh` names it. Runbook: `docs/runbooks/migrations-and-backups.md`.
 - **Validate against a real Postgres before pushing:** `./scripts/validate-migrations.sh` (also run automatically by `validate-ci.sh` when migration files appear in the diff).
 - **Never hand-edit migration SQL** unless fixing a known Drizzle codegen bug. If you must, document the edit in the commit message.
 - **One migration per schema change.** Do not combine unrelated schema changes into one file.

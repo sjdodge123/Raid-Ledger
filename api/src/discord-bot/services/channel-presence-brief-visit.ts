@@ -106,7 +106,7 @@ export async function loadEndedSession(
   row: PresenceRow,
   ended: { bindingId: string; emptySince: Date; now: number },
 ): Promise<EndedSession> {
-  const events = await hydrateRecap(flush.deps, ended.bindingId, row.openedAt);
+  const events = await hydrateRecap(flush.deps, ended.bindingId, row);
   const room = await roomRecapFor(flush, row, ended.emptySince, ended.now);
   const live = await findLinkedEvents(flush.deps.db, ended.bindingId);
   return { events, live, room };

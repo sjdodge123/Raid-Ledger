@@ -77,6 +77,21 @@ test('an overflow marker fails the exact-count check', () => {
   assert.equal(rosterHasExactly(liveDescription(six), 6), true);
 });
 
+// --- ROK-1888: the unlinked server suffix and the LIVE join hint ---
+
+test('an unlinked "· on server" row is ONE roster entry, not two', () => {
+  const desc = liveDescription('**Ana** · **Loanati** · on server');
+  assert.deepEqual(rosterEntries(desc), ['**Ana**', '**Loanati**']);
+  assert.equal(rosterHasExactly(desc, 2), true);
+});
+
+test('the "Join Raid Ledger" hint line adds no roster entry', () => {
+  const hint =
+    '[Join Raid Ledger ↗](http://localhost:5173/login) to get event reminders and track your sessions';
+  const desc = ['🔊 <#100200300>', '', '**Ana** · **Wren**', '', hint].join('\n');
+  assert.deepEqual(rosterEntries(desc), ['**Ana**', '**Wren**']);
+});
+
 // --- rosterEntries ignores chrome, timing, voice and link lines ---
 
 test('the timing, voice and Open event lines are not roster entries', () => {
