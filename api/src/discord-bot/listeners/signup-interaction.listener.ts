@@ -24,6 +24,7 @@ import {
   type EmbedContext,
 } from '../services/discord-embed.factory';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import {
@@ -259,7 +260,7 @@ export class SignupInteractionListener {
       const records = await this.getEmbedRecords(eventId);
       if (records.length === 0) return;
 
-      const context = await this.buildEmbedContext();
+      const context = await this.buildEmbedContext(eventId);
       for (const record of records) {
         await this.updateSingleEmbed(record, eventData, context);
       }
@@ -287,16 +288,22 @@ export class SignupInteractionListener {
       );
   }
 
-  private async buildEmbedContext(): Promise<EmbedContext> {
-    const [branding, timezone] = await Promise.all([
+  /**
+   * Settings context + the card's hub link (ROK-1872, best-effort). The client
+   * URL comes from settings, like the poster and embed-sync (Codex r6 P2).
+   */
+  private async buildEmbedContext(eventId: number): Promise<EmbedContext> {
+    const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
-    return {
+    const ctx = {
       communityName: branding.communityName,
-      clientUrl: process.env.CLIENT_URL ?? null,
+      clientUrl,
       timezone,
     };
+    return withEventHubLink(this.db, ctx, eventId, this.logger);
   }
 
   /** Update a single embed message record. */

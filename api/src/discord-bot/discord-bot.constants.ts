@@ -36,7 +36,27 @@ export const AD_HOC_EVENTS = {
    * DB write, never before — a consumer that re-reads must see the row closed.
    */
   PARTICIPANT_LEFT: 'ad-hoc.participant.left',
+  /**
+   * ROK-1888 (Codex r1 P2): a voice RE-join of an existing row. Kept apart
+   * from PARTICIPANT_JOINED, which announces a NEW participation only (ROK-1451
+   * M5 — LFG must not re-match a single session). Emitted after the write.
+   * Same payload as PARTICIPANT_JOINED.
+   */
+  PARTICIPANT_REJOINED: 'ad-hoc.participant.rejoined',
+  /**
+   * ROK-1428 Codex r9 P2: a Quick Play row was INSERTED and its transaction
+   * committed (voice or game-server spawn; never a join of a live one). Quick
+   * Play bypasses `EventsService`, so `event.created` (embeds, reminders)
+   * deliberately does not fire; this one only feeds the lifecycle nudge.
+   */
+  QUICK_PLAY_CREATED: 'ad-hoc.quick-play.created',
 } as const;
+
+/** Payload emitted with {@link AD_HOC_EVENTS.QUICK_PLAY_CREATED}. */
+export interface AdHocQuickPlayCreatedPayload {
+  eventId: number;
+  gameId: number | null;
+}
 
 export interface AdHocParticipantJoinedPayload {
   eventId: number;

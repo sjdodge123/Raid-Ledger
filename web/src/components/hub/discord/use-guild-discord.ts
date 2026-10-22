@@ -13,6 +13,7 @@ import {
     deleteGuildDiscordChannel, fetchGuildDiscord, fetchGuildDiscordChannels, putGuildDiscordChannel,
 } from './guild-discord-api';
 import { guildPageKey } from '../api/use-guild';
+import { hubPostComposerKey } from '../posts/use-hub-posts';
 
 export const GUILD_DISCORD_REFRESH_MS = 60_000;
 
@@ -48,18 +49,27 @@ export function useGuildDiscordChannels(guildId: number, enabled: boolean): UseQ
     });
 }
 
-export function useSetGuildDiscordChannel(guildId: number): UseMutationResult<GuildDiscordMirrorDto, Error, SetGuildDiscordChannelDto> {
+/** A bind / unbind changes the mirror AND the post composer's relay switch + channel hint. */
+function useRefreshChannel(guildId: number): () => Promise<unknown> {
     const queryClient = useQueryClient();
+    return () => Promise.all([
+        queryClient.invalidateQueries({ queryKey: guildDiscordKey(guildId) }),
+        queryClient.invalidateQueries({ queryKey: hubPostComposerKey(guildId) }),
+    ]);
+}
+
+export function useSetGuildDiscordChannel(guildId: number): UseMutationResult<GuildDiscordMirrorDto, Error, SetGuildDiscordChannelDto> {
+    const onSuccess = useRefreshChannel(guildId);
     return useMutation<GuildDiscordMirrorDto, Error, SetGuildDiscordChannelDto>({
         mutationFn: (body) => putGuildDiscordChannel(guildId, body),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: guildDiscordKey(guildId) }),
+        onSuccess,
     });
 }
 
 export function useClearGuildDiscordChannel(guildId: number): UseMutationResult<void, Error, void> {
-    const queryClient = useQueryClient();
+    const onSuccess = useRefreshChannel(guildId);
     return useMutation<void, Error, void>({
         mutationFn: () => deleteGuildDiscordChannel(guildId),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: guildDiscordKey(guildId) }),
+        onSuccess,
     });
 }

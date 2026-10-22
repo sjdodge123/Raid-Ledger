@@ -3,6 +3,7 @@
  * per-process LRU. Pure: no Nest, no DB. L3b maps the stored rows (which
  * mirror the wire types field-for-field) into `RecipeGraphRows`.
  */
+import { costRuleFor, type ValheimCostRule } from './valheim-recipes.cost-rule';
 import type {
   ValheimCraftingStation,
   ValheimPiece,
@@ -18,9 +19,13 @@ export interface RecipeGraphRows {
   stations: ValheimCraftingStation[];
   processors: ValheimProcessor[];
   processes: ValheimProcess[];
+  /** The set's `gameVersion`; picks the per-quality cost rule (ROK-1894). Absent → 0.221 rule. */
+  gameVersion?: string;
 }
 
 export interface RecipeGraph {
+  /** Per-quality cost rule of this set's game version (CONTRACT §5b, ROK-1894). */
+  costRule: ValheimCostRule;
   /** Result prefab → recipes, sorted by `id` (D9 tie order). */
   recipesByResult: Map<string, ValheimRecipe[]>;
   /** Output prefab → processes, sorted by processor prefab, then priority desc. */
@@ -67,6 +72,7 @@ export function buildRecipeGraph(rows: RecipeGraphRows): RecipeGraph {
   const processesByOutput = groupBy(rows.processes, (p) => p.output.prefab);
   for (const list of processesByOutput.values()) list.sort(compareProcess);
   return {
+    costRule: costRuleFor(rows.gameVersion),
     recipesByResult,
     processesByOutput,
     processors: byPrefab(rows.processors),

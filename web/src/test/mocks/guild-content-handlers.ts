@@ -10,6 +10,6 @@ const CORE = 'http://localhost:3000/guilds';
 
 export const guildContentHandlers = [
     http.get(`${CORE}/:id/profile`, ({ params }) =>
-        HttpResponse.json({ guildId: Number(params.id), gmPost: null, rules: [], links: [] })),
+        HttpResponse.json({ guildId: Number(params.id), gmPost: null, latestPost: null, rules: [], links: [] })),
     http.get(`${GUILDS}/:id/addons`, () => HttpResponse.json({ pinned: [], addons: [] })),
 ];

@@ -10,6 +10,8 @@ import {
 } from './ad-hoc-event.service.spec-helpers';
 import type { AdHocEventService } from './ad-hoc-event.service';
 import * as helpers from './ad-hoc-event.helpers';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
 
 describe('AdHocEventService — voice', () => {
   let service: AdHocEventService;
@@ -107,6 +109,20 @@ describe('AdHocEventService — voice', () => {
         100,
         baseMember,
       );
+    });
+
+    // Codex r9 P2: Quick Play bypasses EventsService, so the lifecycle nudge
+    // hears about a new one through its own post-commit emit.
+    it('announces the committed Quick Play for the lifecycle nudge', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(100, 'binding-1', 'World of Warcraft');
+      const { eventEmitter } = service as unknown as {
+        eventEmitter: EventEmitter2;
+      };
+      const heard = jest.fn();
+      eventEmitter.on(AD_HOC_EVENTS.QUICK_PLAY_CREATED, heard);
+      await service.handleVoiceJoin('binding-1', baseMember, baseBinding);
+      expect(heard).toHaveBeenCalledWith({ eventId: 100, gameId: 1 });
     });
 
     it('creates event with "Gaming" title when no game is bound', async () => {
@@ -313,6 +329,48 @@ describe('AdHocEventService — voice', () => {
         expect.objectContaining({ extendedUntil: null }),
       );
       spy.mockRestore();
+    });
+  });
+
+  describe('ROK-1888 — one event across channels', () => {
+    it('adoptEvent shares the live state (one memberSet) with the existing key', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(210, 'binding-a', 'WoW');
+      await service.handleVoiceJoin('binding-a', baseMember, baseBinding);
+
+      service.adoptEvent('binding-b', 1, 210);
+
+      const a = service.getActiveState('binding-a', 1);
+      const b = service.getActiveState('binding-b', 1);
+      expect(b).toBe(a);
+      expect([...(b?.memberSet ?? [])]).toEqual(['discord-123']);
+    });
+
+    it("a join from channel B edits the creating binding's card", async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(220, 'binding-a', 'WoW');
+      await service.handleVoiceJoin('binding-a', baseMember, baseBinding);
+      service.adoptEvent('binding-b', 1, 220);
+      mocks.notificationService.queueUpdate.mockClear();
+      mocks.db.limit.mockResolvedValueOnce([
+        { id: 220, adHocStatus: 'live', channelBindingId: 'binding-a' },
+      ]);
+      mocks.db.returning.mockResolvedValueOnce([]);
+
+      await service.handleVoiceJoin(
+        'binding-b',
+        { ...baseMember, discordUserId: 'discord-b' },
+        baseBinding,
+      );
+
+      expect(mocks.notificationService.queueUpdate).toHaveBeenCalledWith(
+        220,
+        'binding-a',
+      );
+      expect(mocks.notificationService.queueUpdate).not.toHaveBeenCalledWith(
+        220,
+        'binding-b',
+      );
     });
   });
 

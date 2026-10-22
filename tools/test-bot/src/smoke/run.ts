@@ -55,6 +55,7 @@ import { recruitmentBumpSyncTests } from "./tests/recruitment-bump-sync.test.js"
 import { weeklyDigestTests } from "./tests/weekly-digest.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { quickPlayAnnouncementsTests } from "./tests/quick-play-announcements.test.js";
+import { quickPlayOnePerGameTests } from "./tests/quick-play-one-per-game.test.js";
 import { bindQuickPlayTests } from "./tests/bind-quick-play.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 import { privateVoiceAccessTests } from "./tests/private-voice-access.test.js";
@@ -65,7 +66,10 @@ import { lfgInviteTests } from "./tests/lfg-invite.test.js";
 import { gameRoleTests } from "./tests/game-role.test.js";
 import { joinPostTests } from "./tests/join-post.test.js";
 import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
+import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
+import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
 import { hubNotificationsDmTests } from "./tests/hub-notifications-dm.test.js";
+import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
 // to keep the bundle clean; the test file is kept for local runs + re-registration.
@@ -212,6 +216,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...weeklyDigestTests,
     ...seriesDualBindingTests,
     ...quickPlayAnnouncementsTests,
+    ...quickPlayOnePerGameTests,
     ...bindQuickPlayTests,
     ...ephemeralVoiceTests,
     ...privateVoiceAccessTests,
@@ -222,7 +227,10 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...gameRoleTests,
     ...joinPostTests,
     ...guildDiscordMirrorTests,
+    ...channelLifecycleTests,
+    ...embedHubLinkTests,
     ...hubNotificationsDmTests,
+    ...hubPostRelayTests,
     ...hubProposalNotificationsTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
     // The M4 DM-delivery flow it covers is verified by 97 api integration tests

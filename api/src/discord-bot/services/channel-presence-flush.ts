@@ -320,7 +320,7 @@ async function closeUnbound(state: FlushState): Promise<void> {
       `Presence row ${row.id} lost its binding; closing without rewriting its last render`,
     );
   } else {
-    const events = await hydrateRecap(flush.deps, row.bindingId, row.openedAt);
+    const events = await hydrateRecap(flush.deps, row.bindingId, row);
     // No `empty_since` means the room never emptied — the BINDING went away
     // under a live room. There is no stable instant to span to, and falling
     // back to `now` would make the title's duration read the wall clock (S-5).
