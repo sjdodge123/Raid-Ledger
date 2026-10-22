@@ -146,11 +146,17 @@ export class GuildPageService {
     return { data: { ...found, viewerCanOpen } };
   }
 
-  /** Guilds of a game the viewer can open: staff all, members theirs. */
+  /**
+   * WoW guilds of a game the viewer can open: staff all, members theirs.
+   * ROK-1883: `wow_guild` only — the event-create guild picker must never
+   * offer a server or community hub (`mine` spans every hub kind).
+   */
   async listForGame(actor: GuildActor, gameId: number): Promise<MyGuilds> {
     const mine = await this.mine(actor);
     if (!isStaff(actor)) {
-      return { guilds: mine.guilds.filter((g) => g.gameId === gameId) };
+      const ofGame = (g: MyGuild) =>
+        g.gameId === gameId && g.kind === 'wow_guild';
+      return { guilds: mine.guilds.filter(ofGame) };
     }
     const own = new Map(mine.guilds.map((g) => [g.id, g]));
     const all = await listGuildsOfGame(this.db, gameId); // staff: hidden included
