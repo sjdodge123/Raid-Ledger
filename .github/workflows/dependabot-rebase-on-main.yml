@@ -2,7 +2,7 @@ name: Rebase open PRs after main update
 
 # When main moves, branch protection's "up to date" requirement causes any open
 # PR to become BEHIND and stop auto-merging. This workflow rebases the oldest
-# BEHIND PR via the REST update-branch endpoint, one per trigger fire (sequential
+# merge-ready BEHIND PR via the REST update-branch endpoint, one per trigger fire (sequential
 # queue — see the rebase job below for rationale).
 #
 # Scope: ALL open PRs, regardless of author. Originally this was Dependabot-only
@@ -51,7 +51,7 @@ jobs:
        github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Update branch on the oldest BEHIND open PR
+      - name: Update branch on the oldest merge-ready BEHIND open PR
         env:
           # Use REBASE_PAT (fine-grained personal access token, contents+PRs
           # read/write on this repo) instead of GITHUB_TOKEN. The merge commit
@@ -75,19 +75,32 @@ jobs:
           # instead of overlapping).
           #
           # Selection: smallest PR number among ALL open PRs (not just
-          # Dependabot's) with mergeStateStatus = BEHIND. We deliberately skip:
+          # Dependabot's) that is BEHIND *and merge-ready*: auto-merge enabled,
+          # not a draft, and no failing checks (pending is fine). Rebasing a
+          # PR that is still mid-review just burns a full extra CI run, so
+          # those wait until their author enables auto-merge. We deliberately skip:
           #   - MERGEABLE: already current with main, no rebase needed
           #   - BLOCKED: failing CI or missing review — needs a human
           #   - DIRTY: merge conflict — needs a human
+          #   - drafts / no auto-merge / failing checks: not ready to land
           #
           # If nothing's BEHIND, exit clean. The next merge event refires
           # this workflow and the cascade continues.
           target=$(gh pr list \
             --state open \
-            --json number,mergeStateStatus \
-            --jq '[.[] | select(.mergeStateStatus == "BEHIND") | .number] | sort | .[0] // empty')
+            --json number,mergeStateStatus,autoMergeRequest,isDraft,statusCheckRollup \
+            --jq '[.[]
+              | select(.mergeStateStatus == "BEHIND"
+                  and .autoMergeRequest != null
+                  and (.isDraft | not)
+                  and ([.statusCheckRollup[]?
+                        | (.conclusion // .state)
+                        | select(. == "FAILURE" or . == "ERROR" or . == "CANCELLED"
+                                 or . == "TIMED_OUT" or . == "ACTION_REQUIRED")]
+                       | length == 0))
+              | .number] | sort | .[0] // empty')
           if [ -z "$target" ]; then
-            echo "No BEHIND open PRs — nothing to rebase."
+            echo "No merge-ready BEHIND open PRs — nothing to rebase."
             exit 0
           fi
           echo "Updating branch on PR #$target (sequential queue)"
