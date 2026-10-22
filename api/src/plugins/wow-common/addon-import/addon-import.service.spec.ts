@@ -4,6 +4,7 @@
  * thrown, and one audit row per attempt. DB-backed behaviour lives in
  * `addon-import.integration.spec.ts`.
  */
+import type { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
 import { ForbiddenException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
@@ -83,12 +84,16 @@ function setup() {
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
   const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
+  const insightsCache = {
+    invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new AddonImportService(
     makeDb(),
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
     itemMeta as unknown as WowItemMetaService,
     realmRulesets as unknown as ForeverRealmRulesetsService,
+    insightsCache as unknown as RosterInsightsCache,
   );
   return { service, characters, audit, itemMeta };
 }

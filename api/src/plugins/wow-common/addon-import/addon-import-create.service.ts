@@ -31,6 +31,10 @@ import {
   recordPasteFacts,
   type AttemptOutcome,
 } from './addon-import.finish';
+import {
+  RosterInsightsCache,
+  invalidateRosterInsights,
+} from '../guilds/roster-insights/roster-insights.cache';
 import { pasteSections } from './addon-import.paste-run';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
@@ -61,6 +65,7 @@ export class AddonImportCreateService {
     private readonly audit: AddonImportAuditService,
     private readonly itemMeta: WowItemMetaService,
     private readonly realmRulesets: ForeverRealmRulesetsService,
+    private readonly insightsCache: RosterInsightsCache,
   ) {}
 
   async importNew(
@@ -122,6 +127,12 @@ export class AddonImportCreateService {
     // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
     if (!request.dryRun) {
       enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+      // ROK-1913: the guild's roster insights are stale.
+      await invalidateRosterInsights(
+        this.insightsCache,
+        outcome.characterId,
+        this.logger,
+      );
     }
     return res;
   }
