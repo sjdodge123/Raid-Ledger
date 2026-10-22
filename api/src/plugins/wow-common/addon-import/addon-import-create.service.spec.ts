@@ -5,6 +5,7 @@
  * resolver, decoder and per-character run are mocked; DB-backed behaviour
  * lives in `addon-import-create.integration.spec.ts` (L3).
  */
+import type { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
 import { ConflictException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AddonWho } from '@raid-ledger/contract';
@@ -107,12 +108,16 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
   const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
+  const insightsCache = {
+    invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new AddonImportCreateService(
     db as unknown as PostgresJsDatabase<typeof schema>,
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
     itemMeta as unknown as WowItemMetaService,
     realmRulesets as unknown as ForeverRealmRulesetsService,
+    insightsCache as unknown as RosterInsightsCache,
   );
   return { service, tx, characters, audit, itemMeta };
 }

@@ -23,6 +23,10 @@ import {
   recordPasteFacts,
 } from './addon-import.finish';
 import {
+  RosterInsightsCache,
+  invalidateRosterInsights,
+} from '../guilds/roster-insights/roster-insights.cache';
+import {
   parseImportRequest,
   rawFacts,
   withRulesetInference,
@@ -58,6 +62,7 @@ export class AddonImportService {
     private readonly audit: AddonImportAuditService,
     private readonly itemMeta: WowItemMetaService,
     private readonly realmRulesets: ForeverRealmRulesetsService,
+    private readonly insightsCache: RosterInsightsCache,
   ) {}
 
   async importString(
@@ -113,11 +118,25 @@ export class AddonImportService {
       await this.run(userId, character, paste, binding, request),
       inference,
     );
-    // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
-    if (!request.dryRun) {
-      enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
-    }
+    if (!request.dryRun) await this.afterApply(paste, res, characterId);
     return res;
+  }
+
+  /**
+   * AFTER the tx committed: fire-and-forget gear resolution (ROK-1727) and
+   * drop the guild's cached roster insights (ROK-1913).
+   */
+  private async afterApply(
+    paste: DecodedAddonPaste,
+    res: AddonImportResultDto,
+    characterId: string,
+  ): Promise<void> {
+    enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    await invalidateRosterInsights(
+      this.insightsCache,
+      characterId,
+      this.logger,
+    );
   }
 
   /** Preview/apply every section + the binding's writes, in ONE tx. */
