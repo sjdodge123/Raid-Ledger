@@ -25,6 +25,10 @@ import {
   isEventFkViolation,
   discardOrphanEmbedMessage,
 } from './embed-poster.helpers';
+import {
+  hubLinkPart,
+  resolveEventHubLink,
+} from '../channel-lifecycle/embed-hub-link.helpers';
 
 interface ChannelOpts {
   gameId?: number | null | undefined;
@@ -128,13 +132,25 @@ export class EmbedPosterService {
     return { channelId, guildId };
   }
 
-  private async buildContext(): Promise<EmbedContext> {
+  /** Settings-backed context + the event's hub link (ROK-1872, best-effort). */
+  private async buildContext(eventId: number): Promise<EmbedContext> {
     const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
-    return { communityName: branding.communityName, clientUrl, timezone };
+    const hub = await resolveEventHubLink(
+      this.db,
+      eventId,
+      clientUrl,
+      this.logger,
+    );
+    return {
+      communityName: branding.communityName,
+      clientUrl,
+      timezone,
+      ...hubLinkPart(hub),
+    };
   }
 
   private async postOrEditEmbed(
@@ -147,7 +163,7 @@ export class EmbedPosterService {
     const existing = await findExistingEmbedRecord(this.db, eventId, guildId);
     const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
     await this.applyVoiceChannel(enrichedEvent, opts);
-    const context = await this.buildContext();
+    const context = await this.buildContext(eventId);
     // ROK-1622: derive the state HERE. Defaulting to POSTED made every first
     // post cyan `announcing`, so an event created inside the 2h window relied
     // on a later embed-sync pass to correct itself — and that correction was

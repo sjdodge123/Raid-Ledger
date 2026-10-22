@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -13,6 +13,7 @@ import {
   mappingConflicts,
 } from './channel-bindings-uniqueness.helpers';
 import {
+  type BindingLifecycleColumns,
   assertResolvedUpdateTriple,
   assertUpsertTriple,
   buildBindingUpdateSet,
@@ -20,7 +21,12 @@ import {
   resolvePatchedGameId,
   type BindingUpdatePatch,
 } from './channel-bindings-invariant.helpers';
+import {
+  bindingUpdateWhere,
+  refuseIfArchivedRace,
+} from './channel-bindings-archived.guard';
 import { announceBindingChange } from './channel-binding-events';
+import { gameAnnouncementPrecedence } from './channel-binding-precedence';
 import {
   selectBindingsWithGameNames,
   type BindingWithGameName,
@@ -30,9 +36,18 @@ import type {
   ChannelType,
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
-import { defined } from '../../common/defined.helpers';
+import {
+  insertBindingRow,
+  updateBindingRow,
+  type BindOptions,
+  type UpsertBindingOpts,
+} from './channel-bindings-upsert.helpers';
+import {
+  deleteBindingsAndSuppress,
+  type LifecycleDb,
+} from '../channel-lifecycle/channel-lifecycle.store';
 
-export interface BindingRecord {
+export interface BindingRecord extends BindingLifecycleColumns {
   id: string;
   guildId: string;
   channelId: string;
@@ -43,16 +58,6 @@ export interface BindingRecord {
   config: ChannelBindingConfig | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-interface UpsertBindingOpts {
-  guildId: string;
-  channelId: string;
-  channelType: ChannelType;
-  bindingPurpose: BindingPurpose;
-  gameId: number | null;
-  config?: ChannelBindingConfig;
-  recurrenceGroupId?: string | null;
 }
 
 @Injectable()
@@ -82,15 +87,17 @@ export class ChannelBindingsService {
     gameId: number | null,
     config?: ChannelBindingConfig,
     recurrenceGroupId?: string | null,
+    options: BindOptions = {},
   ): Promise<{ binding: BindingRecord; replacedChannelIds: string[] }> {
+    const db = options.db ?? this.db;
     const replacedChannelIds = await cleanupSeriesBindings(
-      this.db,
+      db,
       guildId,
       channelId,
       channelType,
       recurrenceGroupId,
     );
-    const binding = await this.upsertBinding({
+    const binding = await this.upsertBinding(db, {
       guildId,
       channelId,
       channelType,
@@ -98,6 +105,7 @@ export class ChannelBindingsService {
       gameId,
       ...(config !== undefined ? { config } : {}),
       ...(recurrenceGroupId !== undefined ? { recurrenceGroupId } : {}),
+      ...(options.lifecycle ? { lifecycle: options.lifecycle } : {}),
     });
     this.logger.log(
       `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
@@ -120,49 +128,21 @@ export class ChannelBindingsService {
    * the UPDATE leaves the stored config untouched. An explicit object
    * (including `{}`) replaces it. A new row still defaults to `{}`.
    */
-  private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
+  private async upsertBinding(
+    db: LifecycleDb,
+    opts: UpsertBindingOpts,
+  ): Promise<BindingRecord> {
     // ROK-1415: covers BOTH branches — the UPDATE branch never writes gameId,
     // and findExistingBinding matches on gameId, so opts.gameId IS the stored
     // value there. This closes the second, undocumented route into the inert
     // (voice, game-voice-monitor, NULL) triple.
     assertUpsertTriple(opts);
-    await assertQuickPlayGameFree(this.db, opts); // ROK-1766 D3
-    const existing = await findExistingBinding(this.db, opts);
+    await assertQuickPlayGameFree(db, opts); // ROK-1766 D3
+    const existing = await findExistingBinding(db, opts);
     if (existing) {
-      const [result] = await mappingConflicts(() =>
-        this.db
-          .update(schema.channelBindings)
-          .set({
-            channelType: opts.channelType,
-            bindingPurpose: opts.bindingPurpose,
-            // ROK-1462: omit the column entirely when the caller supplied no
-            // config, so the stored tuning survives. `/bind` re-binds with no
-            // config at all; coercing that to `{}` wiped autoClose /
-            // minPlayers / gracePeriod set from the admin form. An explicit
-            // `{}` still means "clear it" and IS written.
-            ...(opts.config !== undefined && { config: opts.config }),
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.channelBindings.id, existing.id))
-          .returning(),
-      );
-      return defined(result, 'updated channel binding');
+      return updateBindingRow(db, existing.id, opts);
     }
-    const [result] = await mappingConflicts(() =>
-      this.db
-        .insert(schema.channelBindings)
-        .values({
-          guildId: opts.guildId,
-          channelId: opts.channelId,
-          channelType: opts.channelType,
-          bindingPurpose: opts.bindingPurpose,
-          gameId: opts.gameId,
-          recurrenceGroupId: opts.recurrenceGroupId ?? null,
-          config: opts.config ?? {},
-        })
-        .returning(),
-    );
-    return defined(result, 'inserted channel binding');
+    return insertBindingRow(db, opts);
   }
 
   /**
@@ -189,18 +169,17 @@ export class ChannelBindingsService {
       eq(schema.channelBindings.channelId, channelId),
     ];
 
-    if (recurrenceGroupId) {
-      conditions.push(
-        eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-      );
-    } else {
-      conditions.push(sql`${schema.channelBindings.recurrenceGroupId} IS NULL`);
-    }
+    conditions.push(
+      recurrenceGroupId
+        ? eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId)
+        : sql`${schema.channelBindings.recurrenceGroupId} IS NULL`,
+    );
 
-    const result = await this.db
-      .delete(schema.channelBindings)
-      .where(and(...conditions))
-      .returning();
+    // ROK-1431 D9 + Codex r16 P2: delete + suppress commit together.
+    const where = and(...conditions);
+    const result = await this.db.transaction((tx) =>
+      deleteBindingsAndSuppress(tx, where),
+    );
 
     if (result.length > 0) {
       this.logger.log(
@@ -217,12 +196,22 @@ export class ChannelBindingsService {
    * Remove a SINGLE binding by id (ROK-1419). The admin Remove button uses this
    * so deleting one binding never drops a sibling on the same channel — contrast
    * unbind(), which deletes EVERY non-series binding on the channel.
+   *
+   * @param options.db - The caller's open transaction (the reconcile lock's
+   *   `tx`). The delete AND the D9 suppression hook run on it: from inside the
+   *   lock, a pool query here waits on the tx's own uncommitted suppression row
+   *   while the tx waits on this call — a self-deadlock (ROK-1428 R9). Without
+   *   it, the delete and the suppression share a fresh transaction (r16 P2).
    */
-  async unbindById(id: string): Promise<boolean> {
-    const result = await this.db
-      .delete(schema.channelBindings)
-      .where(eq(schema.channelBindings.id, id))
-      .returning();
+  async unbindById(
+    id: string,
+    options: { db?: LifecycleDb } = {},
+  ): Promise<boolean> {
+    const where = eq(schema.channelBindings.id, id);
+    // Codex r16 P2: ONE transaction — the caller's, or a fresh one.
+    const result = options.db
+      ? await deleteBindingsAndSuppress(options.db, where)
+      : await this.db.transaction((tx) => deleteBindingsAndSuppress(tx, where));
     const channelIds = result.map((row) => row.channelId);
     return this.announced(channelIds, result.length > 0);
   }
@@ -274,17 +263,31 @@ export class ChannelBindingsService {
     return row?.channelId ?? null;
   }
 
-  /** Game-specific text binding (event routing). */
+  /**
+   * Game-specific text binding (event routing). Same precedence as the
+   * lifecycle reconcile (manual over auto, oldest, id) — Codex r6 P2 — and
+   * the same non-series candidate set (series rows excluded — Codex r8 P2).
+   */
   async getChannelForGame(
     guildId: string,
     gameId: number,
   ): Promise<string | null> {
     const cb = schema.channelBindings;
-    return this.findChannel(
-      eq(cb.guildId, guildId),
-      eq(cb.gameId, gameId),
-      eq(cb.bindingPurpose, 'game-announcements'),
-    );
+    const [row] = await this.db
+      .select({ channelId: cb.channelId })
+      .from(cb)
+      .where(
+        and(
+          eq(cb.guildId, guildId),
+          eq(cb.gameId, gameId),
+          eq(cb.bindingPurpose, 'game-announcements'),
+          // Series rows have their own lookup (Codex r8 P2).
+          isNull(cb.recurrenceGroupId),
+        ),
+      )
+      .orderBy(...gameAnnouncementPrecedence())
+      .limit(1);
+    return row?.channelId ?? null;
   }
 
   /** ROK-1766: the game's Quick Play Announcements channel (oldest row wins). */
@@ -347,7 +350,7 @@ export class ChannelBindingsService {
     id: string,
     config: Partial<ChannelBindingConfig>,
     bindingPurpose?: BindingPurpose,
-    gameIdPatch?: { gameIdProvided: boolean; gameId: number | null },
+    gameIdPatch?: Omit<BindingUpdatePatch, 'bindingPurpose'>,
   ): Promise<BindingRecord | null> {
     const existing = await this.getBindingById(id);
     if (!existing) return null;
@@ -371,9 +374,11 @@ export class ChannelBindingsService {
       this.db
         .update(schema.channelBindings)
         .set(updateSet)
-        .where(eq(schema.channelBindings.id, id))
+        .where(bindingUpdateWhere(id, patch))
         .returning(),
     );
+    if (!result)
+      await refuseIfArchivedRace(patch, () => this.getBindingById(id));
     return this.announced(result ? [existing.channelId] : [], result ?? null);
   }
 

@@ -21,6 +21,7 @@ import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SignupsService } from '../../events/signups.service';
 import { NotificationService } from '../../notifications/notification.service';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 
 jest.mock('../lineups-notify-hooks.helpers', () => ({
   fireEventCreated: jest.fn(),
@@ -108,11 +109,13 @@ describe('SchedulingService', () => {
   let mockDb: MockDb;
   let mockEventsService: { create: jest.Mock };
   let mockUnanimous: { checkMatch: jest.Mock };
+  let mockNudge: { touch: jest.Mock };
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
     mockEventsService = { create: jest.fn() };
     mockUnanimous = { checkMatch: jest.fn().mockResolvedValue(0) };
+    mockNudge = { touch: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -137,6 +140,7 @@ describe('SchedulingService', () => {
         },
         // ROK-1632 AC3: the post-commit "everyone's in" hook.
         { provide: SchedulingUnanimousService, useValue: mockUnanimous },
+        { provide: GameActivityNudge, useValue: mockNudge },
       ],
     }).compile();
 
@@ -224,6 +228,26 @@ describe('SchedulingService', () => {
         );
       });
 
+      // Codex r9 P2: the auto-vote is a fresh vote, so it nudges the game's
+      // channel lifecycle after commit exactly as toggleVote does.
+      it('nudges the match game after a committed auto-vote', async () => {
+        mockSuggestSlotFlow(true);
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        expect(mockNudge.touch).toHaveBeenCalledWith(SCHEDULING_MATCH.gameId);
+      });
+
+      it('does not nudge when the auto-vote rolled back or never ran', async () => {
+        mockSuggestSlotFlow(true);
+        voteSpy.mockRejectedValueOnce(new Error('DB constraint'));
+        const { logger } = service as unknown as { logger: Logger };
+        jest.spyOn(logger, 'warn').mockImplementation(() => {});
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        mockSuggestSlotFlow();
+        await service.suggestSlot(10, SLOT_TIME);
+        expect(mockNudge.touch).not.toHaveBeenCalled();
+      });
+
       it('does not call insertScheduleVote when userId is undefined', async () => {
         mockSuggestSlotFlow();
         await service.suggestSlot(10, SLOT_TIME);
@@ -233,6 +257,26 @@ describe('SchedulingService', () => {
   });
 
   describe('toggleVote', () => {
+    function primeNewVote(): void {
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: 1, slotId: 5, userId: 10 },
+      ]);
+    }
+
+    it('nudges the match game; a throwing nudge never fails the vote (ROK-1431)', async () => {
+      primeNewVote();
+      await service.toggleVote(5, 10, 10);
+      expect(mockNudge.touch).toHaveBeenCalledWith(SCHEDULING_MATCH.gameId);
+      mockNudge.touch.mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+      primeNewVote();
+      await expect(service.toggleVote(5, 10, 10)).resolves.toBeDefined();
+    });
+
     it('creates a vote when none exists and enrolls the voter as a member', async () => {
       // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
