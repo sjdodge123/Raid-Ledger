@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+  Optional,
+} from '@nestjs/common';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -52,6 +59,7 @@ import {
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { togglePublicShare } from './lineups-public-share.helpers';
 import { LineupsGateway } from './lineups.gateway';
+import { invalidateAiCacheSafely } from './lineups-ai-cache.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -63,24 +71,9 @@ export interface CallerIdentity {
 export class LineupsService {
   private readonly logger = new Logger(LineupsService.name);
 
-  /**
-   * Defensive wrapper around `AiSuggestionsCacheInvalidator` calls
-   * (ROK-931 reviewer finding). The invalidator already swallows
-   * errors in its own implementation, but a test mock or future
-   * reimplementation could throw — wrapping at the service boundary
-   * guarantees the parent mutation's return value is never blocked
-   * by cache hygiene.
-   */
-  private async invalidateAiCache(lineupId: number): Promise<void> {
-    try {
-      await this.aiSuggestionsCache.invalidateForLineup(lineupId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `AI suggestions cache invalidation failed for lineup ${lineupId}: ${msg}`,
-      );
-    }
-  }
+  /** ROK-931: cache hygiene never blocks the parent mutation (see helper). */
+  // prettier-ignore
+  private invalidateAiCache = (lineupId: number): Promise<void> => invalidateAiCacheSafely(this.aiSuggestionsCache, this.logger, lineupId);
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -100,6 +93,7 @@ export class LineupsService {
     private readonly embedSyncQueue: EmbedSyncQueueService,
     /** ROK-1473: carries the entered-scheduling hook (poll card post). */
     private readonly eventEmitter: EventEmitter2,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -187,6 +181,7 @@ export class LineupsService {
     // ROK-1316: votes change the voter set → debounced pre-gen refresh.
     await this.invalidateAiCache(lineupId);
     await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    GameActivityNudge.safeTouch(this.nudge, gameId);
     return result;
   }
 

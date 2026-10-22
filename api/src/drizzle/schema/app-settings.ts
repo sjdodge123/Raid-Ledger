@@ -202,6 +202,32 @@ export const SETTING_KEYS = {
     'ephemeral_voice_create_buffer_minutes',
   /** ROK-1352: Minutes a channel must sit empty post-event before delete (default 30). */
   EPHEMERAL_VOICE_IDLE_MINUTES: 'ephemeral_voice_idle_minutes',
+  /** ROK-1429: Master toggle for Discord channel lifecycle automation. Unset ⇒ off. */
+  DISCORD_CHANNEL_LIFECYCLE_ENABLED: 'discord_channel_lifecycle_enabled',
+  /** ROK-1429: Activity window in days (default 30, range 7–180). */
+  DISCORD_CHANNEL_LIFECYCLE_RECENT_DAYS:
+    'discord_channel_lifecycle_recent_days',
+  /** ROK-1429: Items in the window before a channel is created (default 2, 2–10). */
+  DISCORD_CHANNEL_LIFECYCLE_CREATE_THRESHOLD:
+    'discord_channel_lifecycle_create_threshold',
+  /** ROK-1429: Category for active game channels (unset ⇒ find/create "Games"). */
+  DISCORD_CHANNEL_LIFECYCLE_GAMES_CATEGORY_ID:
+    'discord_channel_lifecycle_games_category_id',
+  /** ROK-1429: Category for archived game channels (unset ⇒ find/create "Archived"). */
+  DISCORD_CHANNEL_LIFECYCLE_ARCHIVE_CATEGORY_ID:
+    'discord_channel_lifecycle_archive_category_id',
+  /** ROK-1429: Also deny ViewChannel on archive. Default off. */
+  DISCORD_CHANNEL_LIFECYCLE_HIDE_ON_ARCHIVE:
+    'discord_channel_lifecycle_hide_on_archive',
+  /** ROK-1429: Max create/archive/unarchive changes per tick (default 10, 1–25). */
+  DISCORD_CHANNEL_LIFECYCLE_MAX_CHANGES_PER_TICK:
+    'discord_channel_lifecycle_max_changes_per_tick',
+  /** ROK-1429: ISO timestamp of the last reconcile run (internal). */
+  DISCORD_CHANNEL_LIFECYCLE_LAST_RUN_AT:
+    'discord_channel_lifecycle_last_run_at',
+  /** ROK-1429: Last reconcile error (unset ⇒ the last run was clean; internal). */
+  DISCORD_CHANNEL_LIFECYCLE_LAST_RUN_ERROR:
+    'discord_channel_lifecycle_last_run_error',
   /** ROK-1435: Master toggle for the weekly Discord digest. Unset ⇒ off. */
   WEEKLY_DIGEST_ENABLED: 'weekly_digest_enabled',
   /** ROK-1435: Digest channel; unset ⇒ DISCORD_BOT_DEFAULT_CHANNEL. */

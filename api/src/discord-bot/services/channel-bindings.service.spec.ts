@@ -1,17 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { ChannelBindingConfig } from '@raid-ledger/contract';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CHANNEL_BINDING_EVENTS } from './channel-binding-events';
+import { gameAnnouncementPrecedence } from './channel-binding-precedence';
+import { ARCHIVED_REROUTE_REFUSED } from './channel-bindings-archived.guard';
 
 // ─── Mock DB chain ──────────────────────────────────────────────────────────
 
 function buildMockDb() {
   const mockInsertReturning = jest.fn();
-  const mockInsertValues = jest
-    .fn()
-    .mockReturnValue({ returning: mockInsertReturning });
+  const mockInsertValues = jest.fn().mockReturnValue({
+    returning: mockInsertReturning,
+    onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+  });
   const mockInsert = jest.fn().mockReturnValue({ values: mockInsertValues });
   const mockDeleteReturning = jest.fn();
   const mockDeleteWhere = jest
@@ -29,20 +34,36 @@ function buildMockDb() {
   const mockUpdateSet = jest.fn().mockReturnValue({ where: mockUpdateWhere });
   const mockUpdate = jest.fn().mockReturnValue({ set: mockUpdateSet });
 
+  const txDepth = { n: 0 };
+  const mockDb = {
+    insert: mockInsert,
+    delete: mockDelete,
+    select: mockSelect,
+    update: mockUpdate,
+    /** Runs `fn` on the same chain; `inTx` reports whether a call is inside it. */
+    transaction: jest.fn(
+      async (fn: (tx: unknown) => Promise<unknown>): Promise<unknown> => {
+        txDepth.n += 1;
+        try {
+          return await fn(mockDb);
+        } finally {
+          txDepth.n -= 1;
+        }
+      },
+    ),
+  };
   return {
-    mockDb: {
-      insert: mockInsert,
-      delete: mockDelete,
-      select: mockSelect,
-      update: mockUpdate,
-    },
+    mockDb,
+    inTx: () => txDepth.n > 0,
     mockInsertReturning,
     mockInsert,
+    mockDelete,
     mockDeleteReturning,
     mockSelect,
     mockSelectFrom,
     mockSelectLimit,
     mockUpdateSet,
+    mockUpdateWhere,
     mockUpdateReturning,
   };
 }
@@ -210,10 +231,22 @@ describe('ChannelBindingsService', () => {
   describe('gameExists', () => {
     function mockSelectChain(resolvedRows: any[]) {
       const limitMock = jest.fn().mockResolvedValue(resolvedRows);
-      const whereMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const orderByMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const whereMock = jest
+        .fn()
+        .mockReturnValue({ limit: limitMock, orderBy: orderByMock });
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
+      return { orderByMock };
     }
+
+    // ROK-1428 Codex r6 P2: a manual binding can coexist with an auto one;
+    // routing must apply the reconcile's precedence, not an unordered LIMIT 1.
+    it('orders candidates manual-first, oldest, then id (shared precedence)', async () => {
+      const { orderByMock } = mockSelectChain([{ channelId: 'manual-1' }]);
+      await service.getChannelForGame('guild-123', 42);
+      expect(orderByMock).toHaveBeenCalledWith(...gameAnnouncementPrecedence());
+    });
 
     it('should return true when the game exists', async () => {
       mockSelectChain([{ id: 42 }]);
@@ -251,10 +284,32 @@ describe('ChannelBindingsService', () => {
   describe('getChannelForGame', () => {
     function mockSelectChain(resolvedRows: any[]) {
       const limitMock = jest.fn().mockResolvedValue(resolvedRows);
-      const whereMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const orderByMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const whereMock = jest
+        .fn()
+        .mockReturnValue({ limit: limitMock, orderBy: orderByMock });
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
+      return { orderByMock, whereMock };
     }
+
+    // ROK-1428 Codex r6 P2: a manual binding can coexist with an auto one;
+    // routing must apply the reconcile's precedence, not an unordered LIMIT 1.
+    it('orders candidates manual-first, oldest, then id (shared precedence)', async () => {
+      const { orderByMock } = mockSelectChain([{ channelId: 'manual-1' }]);
+      await service.getChannelForGame('guild-123', 42);
+      expect(orderByMock).toHaveBeenCalledWith(...gameAnnouncementPrecedence());
+    });
+
+    // ROK-1428 Codex r8 P2: a manual SERIES row sorts first under manual-first
+    // precedence, so it must be excluded — else ordinary game announcements
+    // land in the series channel instead of the managed game channel.
+    it('excludes series bindings (recurrence_group_id is null), like the lifecycle candidates', async () => {
+      const { whereMock } = mockSelectChain([{ channelId: 'managed-1' }]);
+      await service.getChannelForGame('guild-123', 42);
+      const text = new PgDialect().sqlToQuery(whereMock.mock.calls[0][0]).sql;
+      expect(text).toContain('"recurrence_group_id" is null');
+    });
 
     it('should return channel ID when a game binding exists', async () => {
       mockSelectChain([{ channelId: 'channel-789' }]);
@@ -417,6 +472,33 @@ describe('ChannelBindingsService — binding writes announce the channel (cache 
     expect(announcedVia(emitter)).toEqual([{ channelId: 'ch-9' }]);
   });
 
+  it('Codex r16 P2: unbindById deletes AND suppresses inside one transaction', async () => {
+    const seen: string[] = [];
+    mocks.mockDelete.mockImplementationOnce(() => {
+      seen.push(`delete inTx=${String(mocks.inTx())}`);
+      return { where: () => ({ returning: mocks.mockDeleteReturning }) };
+    });
+    mocks.mockInsert.mockImplementationOnce(() => {
+      seen.push(`suppress inTx=${String(mocks.inTx())}`);
+      return {
+        values: () => ({ onConflictDoNothing: () => Promise.resolve() }),
+      };
+    });
+    mocks.mockDeleteReturning.mockResolvedValueOnce([
+      {
+        id: 'uuid-1',
+        channelId: 'ch-9',
+        guildId: GUILD,
+        gameId: 7,
+        autoManaged: true,
+        recurrenceGroupId: null,
+        bindingPurpose: 'game-announcements',
+      },
+    ]);
+    await service.unbindById('uuid-1');
+    expect(seen).toEqual(['delete inTx=true', 'suppress inTx=true']);
+  });
+
   it("updateConfig announces the binding's channel after the write", async () => {
     // A series row skips the sibling-conflict query.
     const stored = { ...seedRow(), recurrenceGroupId: 'series-1' };
@@ -424,5 +506,67 @@ describe('ChannelBindingsService — binding writes announce the channel (cache 
     mocks.mockUpdateReturning.mockResolvedValueOnce([stored]);
     await service.updateConfig('uuid-1', { minPlayers: 3 });
     expect(announcedVia(emitter)).toEqual([{ channelId: CHANNEL }]);
+  });
+});
+
+/**
+ * ROK-1428 Codex r12 P2 — the archived guard's pre-read is unlocked, so the
+ * UPDATE re-asserts it atomically: a re-point racing the reconcile's archive
+ * matches no row and gets the same 400 instead of committing after it.
+ */
+describe('ChannelBindingsService.updateConfig — archive race (Codex r12 P2)', () => {
+  let service: ChannelBindingsService;
+  let mocks: ReturnType<typeof buildMockDb>;
+
+  /** Read unlocked as ACTIVE; a series row skips the sibling-conflict query. */
+  const ACTIVE_GAME_ROW = {
+    ...seedRow(),
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameId: 7,
+    autoManaged: true,
+    lifecycleState: 'active',
+    recurrenceGroupId: 'series-1',
+  };
+
+  /** The SQL text of the WHERE the UPDATE was issued with. */
+  function updateWhereSql(): string {
+    const where: unknown = mocks.mockUpdateWhere.mock.calls[0]?.[0];
+    if (!(where instanceof SQL)) throw new Error('UPDATE WHERE is not SQL');
+    return new PgDialect().sqlToQuery(where).sql;
+  }
+
+  beforeEach(async () => {
+    mocks = buildMockDb();
+    service = await buildService(mocks, { emit: jest.fn() });
+  });
+
+  it('a re-point archived under it matches no row and 400s', async () => {
+    mocks.mockSelectLimit.mockResolvedValue([ACTIVE_GAME_ROW]);
+    mocks.mockUpdateReturning.mockResolvedValueOnce([]);
+    await expect(
+      service.updateConfig('uuid-1', {}, 'quick-play-announcements'),
+    ).rejects.toThrow(ARCHIVED_REROUTE_REFUSED);
+    expect(updateWhereSql()).toContain(`"lifecycle_state" <> 'archived'`);
+  });
+
+  it('a game clear is guarded the same way', async () => {
+    mocks.mockSelectLimit.mockResolvedValue([ACTIVE_GAME_ROW]);
+    mocks.mockUpdateReturning.mockResolvedValueOnce([]);
+    await expect(
+      service.updateConfig('uuid-1', {}, undefined, {
+        gameIdProvided: true,
+        gameId: null,
+      }),
+    ).rejects.toThrow(ARCHIVED_REROUTE_REFUSED);
+  });
+
+  it('a config-only patch is unguarded and a vanished row is null', async () => {
+    mocks.mockSelectLimit.mockResolvedValueOnce([ACTIVE_GAME_ROW]);
+    mocks.mockUpdateReturning.mockResolvedValueOnce([]);
+    await expect(
+      service.updateConfig('uuid-1', { minPlayers: 3 }),
+    ).resolves.toBeNull();
+    expect(updateWhereSql()).not.toContain('lifecycle_state');
   });
 });
