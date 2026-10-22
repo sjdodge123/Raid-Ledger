@@ -35,7 +35,7 @@ export function CommunityAutoMembershipSection({ ctx }: { ctx: HubCtx }): JSX.El
     const allowed = ctx.page.viewer.role === 'leader' || isOperatorOrAdmin(user);
     if (mode === undefined || !allowed) return null;
     return (
-        <SettingsSection title="Membership" blurb="Existing hubs start on Off." testId="community-settings-auto-membership">
+        <SettingsSection title="Membership" blurb="New hubs start on Suggest; hubs made before this setting start on Off." testId="community-settings-auto-membership">
             <ModePicker hubId={ctx.page.guild.id} mode={mode} />
         </SettingsSection>
     );

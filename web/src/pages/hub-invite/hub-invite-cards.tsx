@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import type { HubInvitePreview, HubInviteState } from '@raid-ledger/contract';
 import { Button } from '../../components/ui/button';
 import { buttonClass } from '../../components/ui/button-classes';
+import { useDiscordLinkAction } from '../../hooks/use-discord-link';
 
 type PreviewHub = NonNullable<HubInvitePreview['hub']>;
 
@@ -95,6 +96,20 @@ export function DiscordFirstBlock({ inviteUrl, onRetry, retrying }: {
                 )}
                 <Button variant="secondary" size="sm" disabled={retrying} onClick={onRetry}>I&apos;ve joined — try again</Button>
             </div>
+        </div>
+    );
+}
+
+/** Signed in without a linked Discord account: hub membership is checked by Discord id. */
+export function LinkDiscordFirstBlock(): JSX.Element {
+    const { linkDiscord, isPending } = useDiscordLinkAction();
+    return (
+        <div className="space-y-2 rounded-lg border border-warning/30 bg-warning/10 p-3" data-testid="hub-invite-link-discord">
+            <p className="text-sm font-semibold text-foreground">Link your Discord account first</p>
+            <p className="text-xs text-secondary">
+                Hub members have to be in the community&apos;s Discord server, so your account needs Discord linked. Link it, then come back to this link.
+            </p>
+            <Button variant="primary" size="sm" disabled={isPending} onClick={linkDiscord}>Link Discord</Button>
         </div>
     );
 }

@@ -261,8 +261,9 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // row, so the claim stays pointed at the banned user there.
   schema.valheimProfiles,
   schema.valheimProfileClaimEvents,
-  // ROK-1893: `hub_invites.created_by` is SET NULL; a share link belongs to
-  // the hub and outlives its maker on a hard delete.
+  // ROK-1893: `hub_invites.created_by` is SET NULL; the row stays as the
+  // hub's history, but the community wipe (community-user-wipe.helpers)
+  // revokes every open link the user made first, so none keeps working.
   schema.hubInvites,
 ];
 

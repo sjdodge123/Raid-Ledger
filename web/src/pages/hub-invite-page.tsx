@@ -5,6 +5,8 @@
  *   token): one card per reason + "Browse hubs".
  * - Signed out: preview + "Sign in with Discord to join"; the auth redirect
  *   brings them back here (same mechanism as `/p/poll/:token`).
+ * - Signed in without a linked Discord account: "Link your Discord account"
+ *   (joining the server would not help — membership is checked by Discord id).
  * - Signed in, not in the hub's Discord server (R2): "Join the Discord server
  *   first" with the bot-made server invite when there is one, else text only.
  * - Signed in, already a member: "Open hub". Otherwise Join → the hub page.
@@ -13,6 +15,7 @@ import { useState, type JSX } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { HubInvitePreview } from '@raid-ledger/contract';
 import { useAuth } from '../hooks/use-auth';
+import { isDiscordLinked } from '../lib/avatar';
 import { saveAuthRedirect } from '../lib/auth-redirect';
 import { AUTH_DISCORD_URL } from '../constants/api';
 import { toast } from '../lib/toast';
@@ -20,7 +23,7 @@ import { tryEncodePathSegment } from '../lib/api/path-segment';
 import { Button } from '../components/ui/button';
 import { useHubInvitePreview, useJoinHubInvite } from '../components/hub/community/hub-invites-api';
 import {
-    DiscordFirstBlock, HubInviteCard, HubInviteDeadCard, HubInviteLoadingCard, type DeadReason,
+    DiscordFirstBlock, HubInviteCard, LinkDiscordFirstBlock, HubInviteDeadCard, HubInviteLoadingCard, type DeadReason,
 } from './hub-invite/hub-invite-cards';
 import { deadReasonFromError, hubInvitePath, hubPath } from './hub-invite/hub-invite-helpers';
 
@@ -34,11 +37,13 @@ function JoinAction({ token, preview, onRetry, retrying, onDead }: {
 }): JSX.Element {
     const navigate = useNavigate();
     const join = useJoinHubInvite();
+    const { user } = useAuth();
     const hub = preview.hub;
     if (!hub) return <></>;
     if (preview.alreadyMember) {
-        return <Button fullWidth onClick={() => navigate(hubPath(hub.id))} data-testid="hub-invite-open">Open {hub.name}</Button>;
+        return <Button fullWidth onClick={() => navigate(hubPath(hub.id))} data-testid="hub-invite-open-hub">Open {hub.name}</Button>;
     }
+    if (!isDiscordLinked(user?.discordId)) return <LinkDiscordFirstBlock />;
     if (preview.inDiscordServer === false) {
         return <DiscordFirstBlock inviteUrl={preview.discordServerInviteUrl} onRetry={onRetry} retrying={retrying} />;
     }
