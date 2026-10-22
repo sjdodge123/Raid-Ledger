@@ -183,6 +183,8 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.hubCommunityMembers,
     column: schema.hubCommunityMembers.userId,
   },
+  // ROK-1893: hub join prompts are personal UI state (CASCADE).
+  { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {

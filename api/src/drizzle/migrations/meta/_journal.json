@@ -1674,6 +1674,13 @@
       "when": 1792644701916,
       "tag": "0239_hub_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1792644776709,
+      "tag": "0240_hub_auto_membership_join_prompts",
+      "breakpoints": true
     }
   ]
 }

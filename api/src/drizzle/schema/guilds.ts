@@ -86,6 +86,20 @@ export const guilds = pgTable(
     }),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /**
+     * ROK-1893 P1 (M3, spec §8d): what a signup/vote by a non-member does —
+     * `off` nothing, `suggest` asks them to join, `auto` joins them and tells
+     * them. Community hubs only (`guilds_auto_membership_kind_check`). The DB
+     * default keeps existing hubs `off`.
+     * TODO(ROK-1893 P1 API lane): new community hubs are inserted with
+     * `suggest` explicitly by the create/propose service, not via this default.
+     */
+    autoMembership: varchar('auto_membership', {
+      length: 8,
+      enum: ['off', 'suggest', 'auto'],
+    })
+      .default('off')
+      .notNull(),
     /** ROK-1870: admin | leader | empty (D13 auto-archive). */
     archivedReason: varchar('archived_reason', {
       length: 10,
@@ -143,6 +157,14 @@ export const guilds = pgTable(
     check(
       'guilds_community_server_check',
       sql`${table.kind} <> 'game_community' OR ${table.pelicanServerId} IS NULL`,
+    ),
+    check(
+      'guilds_auto_membership_check',
+      sql`${table.autoMembership} IN ('off', 'suggest', 'auto')`,
+    ),
+    check(
+      'guilds_auto_membership_kind_check',
+      sql`${table.kind} = 'game_community' OR ${table.autoMembership} = 'off'`,
     ),
   ],
 );

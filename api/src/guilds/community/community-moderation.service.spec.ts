@@ -77,6 +77,7 @@ const HUB: schema.GuildSelect = {
   reviewedAt: null,
   archivedAt: null,
   archivedReason: null,
+  autoMembership: 'off',
   createdAt: AT,
   updatedAt: AT,
 };
