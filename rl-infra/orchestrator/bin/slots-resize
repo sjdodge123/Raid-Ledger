@@ -43,14 +43,18 @@ FILTER='
                  started_at: null, last_heartbeat: null} ])
         | sort_by(.slot)
     end'
-if ! state::mutate_with_precondition "$RL_CLAIMS_FILE" --argjson n "$N" "$FILTER"; then
-    # Unchanged: either already N slots (fine) or a claimed slot blocked it.
-    if jq -e --argjson n "$N" 'any(.[]; .slot > $n and .claimed == true)' "$RL_CLAIMS_FILE" >/dev/null; then
-        jq -c --argjson n "$N" '{ok:false, error:"slot_claimed",
-            slots: [.[] | select(.slot > $n and .claimed == true) | {slot, agent_id}]}' \
-            "$RL_CLAIMS_FILE" >&2
-        exit 1
-    fi
+# The mutate's own result is not trusted: "unchanged" can mean already-N or a
+# refusal, and a byte-level difference (a writer using another jq format) can
+# rewrite the file with slot N+1 still in it. Judge by what the file now holds.
+state::mutate_with_precondition "$RL_CLAIMS_FILE" --argjson n "$N" "$FILTER" || true
+if ! jq -e --argjson n "$N" '[.[].slot] == [range(1; $n + 1)]' "$RL_CLAIMS_FILE" >/dev/null 2>&1; then
+    jq -c --argjson n "$N" '{ok:false,
+        error: (if any(.[]; .slot > $n and .claimed == true) then "slot_claimed" else "not_resized" end),
+        slots: [.[].slot],
+        claimed: [.[] | select(.slot > $n and .claimed == true) | {slot, agent_id}]}' \
+        "$RL_CLAIMS_FILE" >&2 2>/dev/null \
+        || echo '{"ok":false,"error":"not_resized"}' >&2
+    exit 1
 fi
 audit::log slots-resize ok "$(jq -nc --argjson n "$N" '{slots:$n}')" 2>/dev/null || true
 jq -c '{ok: true, slots: [.[].slot]}' "$RL_CLAIMS_FILE"

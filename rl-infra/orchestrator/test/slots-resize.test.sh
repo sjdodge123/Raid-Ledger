@@ -57,9 +57,21 @@ test_grow_restores_slot_4() {
     assert_eq "$?" "0" "resizing to the current count succeeds"
 }
 
+test_refusal_never_reports_ok() {
+    CURRENT_TEST_NAME="S5: a refusal is reported as one even when claims.json is not in jq's default format"
+    _seed4 4
+    jq -c . "$RL_CLAIMS_FILE" > "$RL_CLAIMS_FILE.tmp" && mv "$RL_CLAIMS_FILE.tmp" "$RL_CLAIMS_FILE"
+    local out rc
+    out=$(bash "$BIN_DIR/slots-resize" 3 2>&1); rc=$?
+    assert_eq "$rc" "1" "exit 1 while slot 4 is claimed"
+    assert_eq "$(echo "$out" | jq -r '.error' 2>/dev/null | head -1)" "slot_claimed" "error names the claimed slot, not ok:true"
+    assert_eq "$(jq -c '[.[].slot]' "$RL_CLAIMS_FILE")" "[1,2,3,4]" "slot 4 still present"
+}
+
 run_test "s1-shrink" test_shrink_drops_slot_4
 run_test "s2-claimed" test_shrink_refuses_claimed_slot
 run_test "s3-queued" test_shrink_refuses_queued_slot
 run_test "s4-grow" test_grow_restores_slot_4
+run_test "s5-refusal-not-ok" test_refusal_never_reports_ok
 
 print_test_summary
