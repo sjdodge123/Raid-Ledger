@@ -1,6 +1,6 @@
 /**
  * ROK-1785: data for the guild entry points (nav link, drawer block, Players
- * card, character badge, game page list). Signed-out viewers never fetch.
+ * card, character badge, event-create guild picker). Signed-out viewers never fetch.
  * Every key ends in the viewer scope (ROK-1314 `useViewerCacheScope`): the
  * payloads are membership-gated, so a shared key would show the previous
  * viewer's guilds after a sign-out + sign-in on the same browser.
