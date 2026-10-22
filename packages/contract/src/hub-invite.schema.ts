@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * ROK-1893 P1 — community-hub invite links + auto-membership.
@@ -51,14 +51,26 @@ export type HubInviteList = z.infer<typeof HubInviteListSchema>;
 export const CreateHubInviteSchema = z
   .object({
     /** Omitted ⇒ 7 days; null ⇒ never expires. */
-    expiresInHours: z.number().int().min(1).max(HUB_INVITE_MAX_EXPIRY_HOURS).nullable().optional(),
+    expiresInHours: z
+      .number()
+      .int()
+      .min(1)
+      .max(HUB_INVITE_MAX_EXPIRY_HOURS)
+      .nullable()
+      .optional(),
     /** Omitted or null ⇒ unlimited. */
     maxUses: z.number().int().min(1).max(1000).nullable().optional(),
   })
   .strict();
 export type CreateHubInviteDto = z.infer<typeof CreateHubInviteSchema>;
 
-export const HubInviteStateSchema = z.enum(['ok', 'expired', 'revoked', 'exhausted', 'hub-unavailable']);
+export const HubInviteStateSchema = z.enum([
+  "ok",
+  "expired",
+  "revoked",
+  "exhausted",
+  "hub-unavailable",
+]);
 export type HubInviteState = z.infer<typeof HubInviteStateSchema>;
 
 /** Public preview behind `GET /hubs/invites/:token` (no auth). */
@@ -97,14 +109,23 @@ export const HubInviteJoinResponseSchema = z
   .strict();
 export type HubInviteJoinResponse = z.infer<typeof HubInviteJoinResponseSchema>;
 
-export const HubAutoMembershipModeSchema = z.enum(['off', 'suggest', 'auto']);
+export const HubAutoMembershipModeSchema = z.enum(["off", "suggest", "auto"]);
 export type HubAutoMembershipMode = z.infer<typeof HubAutoMembershipModeSchema>;
 
-export const UpdateHubAutoMembershipSchema = z.object({ mode: HubAutoMembershipModeSchema }).strict();
-export type UpdateHubAutoMembershipDto = z.infer<typeof UpdateHubAutoMembershipSchema>;
+export const UpdateHubAutoMembershipSchema = z
+  .object({ mode: HubAutoMembershipModeSchema })
+  .strict();
+export type UpdateHubAutoMembershipDto = z.infer<
+  typeof UpdateHubAutoMembershipSchema
+>;
 
 /** How a member joined; null on rows that predate ROK-1893. */
-export const HubJoinSourceSchema = z.enum(['manual', 'invite', 'auto', 'prompt']);
+export const HubJoinSourceSchema = z.enum([
+  "manual",
+  "invite",
+  "auto",
+  "prompt",
+]);
 export type HubJoinSource = z.infer<typeof HubJoinSourceSchema>;
 
 /**
@@ -114,11 +135,11 @@ export type HubJoinSource = z.infer<typeof HubJoinSourceSchema>;
 export const HubJoinPromptSchema = z
   .object({
     id,
-    kind: z.enum(['suggest', 'auto-joined']),
+    kind: z.enum(["suggest", "auto-joined"]),
     hubId: id,
     hubName: z.string(),
     /** What triggered it: an event signup (P1) or a hub poll vote (P3). */
-    source: z.enum(['signup', 'vote']),
+    source: z.enum(["signup", "vote"]),
     /** The event id (signup) or lineup id (vote). */
     sourceRef: id.nullable(),
     createdAt: isoDate,
@@ -126,5 +147,7 @@ export const HubJoinPromptSchema = z
   .strict();
 export type HubJoinPrompt = z.infer<typeof HubJoinPromptSchema>;
 
-export const HubJoinPromptListSchema = z.object({ items: z.array(HubJoinPromptSchema) }).strict();
+export const HubJoinPromptListSchema = z
+  .object({ items: z.array(HubJoinPromptSchema) })
+  .strict();
 export type HubJoinPromptList = z.infer<typeof HubJoinPromptListSchema>;
