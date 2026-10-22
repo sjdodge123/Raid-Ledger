@@ -47,12 +47,13 @@ function WeekEventHeader({ title, tier, overlaps, isSeries }: { title: string; t
     );
 }
 
-/** ROK-1893 R23: `<game> · <hub>` on compact/standard; the minimal tier keeps the game alone (hub in the block's title). */
+/** ROK-1893 R23: `<game> · <hub>` on compact/standard; the minimal tier keeps the game alone (hub in the block's title + sr-only text). */
 function WeekEventGameLine({ event, tier }: { event: CalendarEvent; tier: Tier }) {
     const hub = tier === 'minimal' ? null : event.resource?.hub;
     return (
         <span className={hub ? 'week-event-game truncate' : 'week-event-game'}>
             {event.resource?.game?.name || 'Event'}<EventHubLabel hub={hub} className="opacity-80" />
+            {tier === 'minimal' && <MinimalHubSrText event={event} />}
         </span>
     );
 }
@@ -98,7 +99,6 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
             backgroundSize: 'cover', backgroundPosition: 'center', borderLeft: `3px solid ${colors.border}`,
         }}>
             <WeekEventHeader title={event.title} tier={tier} overlaps={overlaps} isSeries={!!event.resource?.recurrenceGroupId} />
-            {tier === 'minimal' && <MinimalHubSrText event={event} />}
             <div className="week-event-details">
                 <WeekEventGameLine event={event} tier={tier} />
                 <span className="week-event-time">{format(event.start, 'h:mm a')}{event.end ? ` - ${format(event.end, 'h:mm a')}` : ''}</span>
