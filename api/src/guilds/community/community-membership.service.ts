@@ -16,6 +16,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { isStaff, type GuildActor } from '../guild-access.service';
 import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
+import { revokeUserInvites } from './invites/hub-invites.queries';
 import {
   archiveHub,
   countLiveMembers,
@@ -120,6 +121,8 @@ export class CommunityMembershipService {
       } else {
         await markLeft(tx, hubId, actor.id, null);
       }
+      // ROK-1893: a former member's links into the hub stop working.
+      await revokeUserInvites(tx, actor.id, hubId);
     });
     return {
       joined: false,
@@ -157,6 +160,8 @@ export class CommunityMembershipService {
         throw new ForbiddenException("You can't remove this member");
       }
       await markLeft(tx, hubId, userId, actor.id);
+      // ROK-1893: a removed member's links stop working (they can't revoke them).
+      await revokeUserInvites(tx, userId, hubId);
     });
     await refreshMemberCount(this.db, hubId);
   }

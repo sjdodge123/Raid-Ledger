@@ -181,6 +181,32 @@ describe('I1 cap under concurrency', () => {
   });
 });
 
+describe('leaving or being removed revokes your links', () => {
+  it('a member who leaves, and one who is removed, lose their live links', async () => {
+    const [leader, quitter, removed] = [
+      await mkUser(),
+      await mkUser(),
+      await mkUser(),
+    ];
+    const hub = await mkHub(leader, [quitter, removed]);
+    const q = await mkInvite(hub, quitter);
+    const r = await mkInvite(hub, removed);
+    const kept = await mkInvite(hub, leader);
+    expect((await call('delete', `/hubs/${hub}/join`, quitter)).status).toBe(
+      200,
+    );
+    const rm = await call(
+      'delete',
+      `/hubs/${hub}/members/${removed.id}`,
+      leader,
+    );
+    expect([200, 204]).toContain(rm.status);
+    expect((await inviteRow(q.id)).revokedAt).not.toBeNull();
+    expect((await inviteRow(r.id)).revokedAt).not.toBeNull();
+    expect((await inviteRow(kept.id)).revokedAt).toBeNull();
+  });
+});
+
 describe('I1 list / revoke', () => {
   it('a member lists only their own links; the Leader lists all, with tokens', async () => {
     const [leader, a, b] = [await mkUser(), await mkUser(), await mkUser()];
