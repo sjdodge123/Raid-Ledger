@@ -11,10 +11,14 @@
  * in-context shortcut and only renders it when `onChangeChannel` is given, so
  * an Officer (who can still edit content) sees none.
  */
-import type { JSX, ReactNode } from 'react';
+import { useMemo, type JSX, type ReactNode } from 'react';
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import type { GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
+import type {
+    GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, ThreadMessageMentionDto,
+} from '@raid-ledger/contract';
 import { ThreadMessageRow } from '../../discord/ThreadMessageRow';
+import { DiscordMarkup } from '../../discord/DiscordMarkup';
+import type { DiscordChannelName } from '../../discord/discord-markup.parse';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle } from '../hub-bits';
@@ -24,23 +28,37 @@ import { httpStatusOf } from '../../../lib/api/api-error';
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
-function EmbedBlock({ embed }: { embed: GuildDiscordEmbedDto }): JSX.Element {
+/** ROK-1878: every Discord text field renders through `DiscordMarkup`, never raw. */
+interface MarkupCtx { mentions: ThreadMessageMentionDto[]; channels: DiscordChannelName[] }
+
+function EmbedBlock({ embed, ctx }: { embed: GuildDiscordEmbedDto; ctx: MarkupCtx }): JSX.Element {
     return (
         <div data-testid="guild-discord-embed" className="mt-2 rounded-md border border-edge border-l-4 border-l-success bg-panel px-3 py-2">
-            {embed.title && <p className="text-sm font-semibold text-foreground">{embed.title}</p>}
-            {embed.description && <p className="whitespace-pre-line break-words text-xs text-muted">{embed.description}</p>}
+            {embed.title && <p className="break-words text-sm font-semibold text-foreground"><DiscordMarkup text={embed.title} {...ctx} /></p>}
+            {embed.description && <p className="whitespace-pre-line break-words text-xs text-muted"><DiscordMarkup text={embed.description} {...ctx} /></p>}
         </div>
     );
 }
 
-function MessageList({ messages, name }: { messages: GuildDiscordMessageDto[]; name: string }): JSX.Element {
+function MessageItem({ message, channels }: { message: GuildDiscordMessageDto; channels: DiscordChannelName[] }): JSX.Element {
+    const ctx: MarkupCtx = { mentions: message.mentions, channels };
+    const body = (
+        <div data-testid="discord-text" className="whitespace-pre-wrap break-words text-sm text-foreground">
+            <DiscordMarkup text={message.content} {...ctx} />
+        </div>
+    );
     return (
-        <ul aria-label={`Latest messages in #${name}`} className="flex flex-col gap-2" data-testid="guild-discord-messages">
-            {messages.map((m) => (
-                <ThreadMessageRow key={m.messageId} message={m}>
-                    {m.embed && <EmbedBlock embed={m.embed} />}
-                </ThreadMessageRow>
-            ))}
+        <ThreadMessageRow message={message} body={body}>
+            {message.embed && <EmbedBlock embed={message.embed} ctx={ctx} />}
+        </ThreadMessageRow>
+    );
+}
+
+function MessageList({ messages, channel }: { messages: GuildDiscordMessageDto[]; channel: OkMirror['channel'] }): JSX.Element {
+    const channels = useMemo((): DiscordChannelName[] => [{ id: channel.id, name: channel.name }], [channel.id, channel.name]);
+    return (
+        <ul aria-label={`Latest messages in #${channel.name}`} className="flex flex-col gap-2" data-testid="guild-discord-messages">
+            {messages.map((m) => <MessageItem key={m.messageId} message={m} channels={channels} />)}
         </ul>
     );
 }
@@ -64,7 +82,7 @@ function OkBody({ mirror }: { mirror: OkMirror }): JSX.Element {
     return (
         <>
             {shown.length > 0
-                ? <MessageList messages={shown} name={mirror.channel.name} />
+                ? <MessageList messages={shown} channel={mirror.channel} />
                 : <p className="py-6 text-center text-sm text-muted" data-testid="guild-discord-state-empty">No messages in #{mirror.channel.name} yet.</p>}
             <MirrorFooter url={mirror.channel.url} />
         </>

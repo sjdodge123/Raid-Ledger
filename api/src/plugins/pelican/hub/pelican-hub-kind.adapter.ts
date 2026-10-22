@@ -10,6 +10,7 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { isStaff, type GuildActor } from '../../../guilds/guild-access.service';
 import { findGuild, hubSummaryFor } from '../../../guilds/guild-core.queries';
+import { loadCommunityHubEvents } from '../../../guilds/community/community-events.queries';
 import type { HubKindAdapter } from '../../plugin-host/extension-points';
 import { PELICAN_PLUGIN_ID } from '../pelican.constants';
 import {
@@ -20,16 +21,6 @@ import {
 import { ServerHubMembershipService } from './server-hub-membership.service';
 import { buildServerHubPage } from './server-hub-page.helpers';
 import { loadServerBlock, loadServerMembers } from './server-hub-page.queries';
-
-/** A server hub has no raid roster: every Raids widget is empty (contract shape). */
-export const EMPTY_SERVER_HUB_RAIDS: GuildRaidsDto = {
-  upcoming: [],
-  recent: [],
-  schedule: [],
-  composition: null,
-  attendance: { windowWeeks: 8, rows: [] },
-  nextRaid: null,
-};
 
 /**
  * ROK-1831 L-1: Pelican owns the `game_server` hub kind. Ladder (v1, no
@@ -94,11 +85,17 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
     });
   }
 
-  async raids(_actor: GuildActor, guildId: number): Promise<GuildRaidsDto> {
+  /**
+   * Events tagged to the hub (`events.guild_id`), same lists as a community
+   * hub. A server hub still has no roster, schedule or attendance widgets.
+   * Before this it always answered empty, so a tagged Valheim session never
+   * showed on its hub (prod, event 283, 2026-10-22).
+   */
+  async raids(actor: GuildActor, guildId: number): Promise<GuildRaidsDto> {
     if (!(await findGuild(this.db, guildId))) {
       throw new NotFoundException('Guild not found');
     }
-    return EMPTY_SERVER_HUB_RAIDS;
+    return loadCommunityHubEvents(this.db, guildId, actor.id);
   }
 
   // No `mineRanks`: server hubs have no ranks, and answering null for every

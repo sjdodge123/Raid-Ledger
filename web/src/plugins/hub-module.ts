@@ -32,7 +32,7 @@ export interface HubCtx {
 export interface HubTab {
     id: string;
     label: string;
-    /** Within the module band only — core pins Overview/Members first and Resources last (D7-A). */
+    /** Within the module band only — core pins Overview/Members/Events/Resources first (ROK-1876). */
     order: number;
     component: ComponentType<HubCtx>;
     /** Omitted = always shown. A hidden tab keeps its slot in the frame but is not rendered. */

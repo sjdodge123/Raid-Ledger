@@ -73,6 +73,21 @@ describe('GuildDiscordMirror — ok', () => {
         expect(screen.getByTestId('thread-message-row')).toContainElement(embed);
     });
 
+    it('ROK-1878: renders Discord markup in the embed and the content — never raw', async () => {
+        const description = '**Wrennarök** · **pariah\\_\\_\\_**\n[Open event ↗](https://raid.gamernight.net/events/281)\n📆 <t:1792890900:f> (<t:1792890900:R>) · 3h\n🔊 <#1509358710139387985> <#111111111111111111>';
+        serve(okMirror([discordMessage(1, { content: '**roknua** __u__', embed: { title: '**Raid** <t:1792890900:R>', description } })]));
+        renderCard(false);
+        const embed = await screen.findByTestId('guild-discord-embed');
+        expect([...embed.querySelectorAll('strong')].map((s) => s.textContent)).toEqual(['Raid', 'Wrennarök', 'pariah___']);
+        expect(within(embed).getByRole('link', { name: 'Open event ↗' })).toHaveAttribute('href', 'https://raid.gamernight.net/events/281');
+        expect(embed.querySelectorAll('time')).toHaveLength(3);
+        expect(embed).toHaveTextContent('🔊 #channel #announcements');
+        const row = screen.getByTestId('thread-message-row');
+        expect(row.querySelector('strong')?.textContent).toBe('roknua');
+        expect(row.querySelector('u')?.textContent).toBe('u');
+        expect(row.textContent).not.toMatch(/\*\*|<t:|<#|\\_|\d{17,20}/);
+    });
+
     it('shows an in-card empty state when the channel has no messages', async () => {
         serve(okMirror([]));
         renderCard(false);
