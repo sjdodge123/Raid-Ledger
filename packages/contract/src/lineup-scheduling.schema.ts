@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import { z } from "zod";
 import {
   LineupScheduleSlotSchema,
   MatchDetailResponseSchema,
-} from './lineup-match.schema.js';
+} from "./lineup-match.schema.js";
 
 // ============================================================
 // Request Schemas (ROK-965)
@@ -13,7 +13,7 @@ import {
  * of this enum — it is the absence of a vote row, which is what pressing the
  * same stance twice restores.
  */
-export const ScheduleVoteStanceSchema = z.enum(['yes', 'no']);
+export const ScheduleVoteStanceSchema = z.enum(["yes", "no"]);
 
 export type ScheduleVoteStance = z.infer<typeof ScheduleVoteStanceSchema>;
 
@@ -29,7 +29,7 @@ export type ScheduleVoteStance = z.infer<typeof ScheduleVoteStanceSchema>;
  * Declared ahead of the request bodies below because both of them — the vote
  * AND the suggestion, whose auto-vote is a real vote row — carry it.
  */
-export const ScheduleVoteSourceSchema = z.enum(['web', 'discord']);
+export const ScheduleVoteSourceSchema = z.enum(["web", "discord"]);
 
 export type ScheduleVoteSource = z.infer<typeof ScheduleVoteSourceSchema>;
 
@@ -46,7 +46,7 @@ export type ScheduleVoteSource = z.infer<typeof ScheduleVoteSourceSchema>;
  */
 export const SuggestSlotSchema = z.object({
   proposedTime: z.string().datetime({ offset: true }),
-  source: ScheduleVoteSourceSchema.default('web'),
+  source: ScheduleVoteSourceSchema.default("web"),
 });
 
 export type SuggestSlotDto = z.infer<typeof SuggestSlotSchema>;
@@ -65,8 +65,8 @@ export type SuggestSlotDto = z.infer<typeof SuggestSlotSchema>;
  */
 export const ToggleScheduleVoteSchema = z.object({
   slotId: z.number().int().positive(),
-  stance: ScheduleVoteStanceSchema.default('yes'),
-  source: ScheduleVoteSourceSchema.default('web'),
+  stance: ScheduleVoteStanceSchema.default("yes"),
+  source: ScheduleVoteSourceSchema.default("web"),
 });
 
 /**
@@ -122,7 +122,9 @@ export const RemindVotersResponseSchema = z.object({
   skipped: z.number().int().nonnegative(),
 });
 
-export type RemindVotersResponseDto = z.infer<typeof RemindVotersResponseSchema>;
+export type RemindVotersResponseDto = z.infer<
+  typeof RemindVotersResponseSchema
+>;
 
 /**
  * Request body for the organiser "Rally" nudge (ROK-1635).
@@ -211,9 +213,9 @@ export function summariseRally(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   skipped: number,
 ): string {
-  if (pending === 0) return 'Everyone has answered this time — nobody to rally';
-  if (nudged > 0) return `Nudged ${nudged} member${nudged === 1 ? '' : 's'}`;
-  return 'Everyone left was already rallied recently';
+  if (pending === 0) return "Everyone has answered this time — nobody to rally";
+  if (nudged > 0) return `Nudged ${nudged} member${nudged === 1 ? "" : "s"}`;
+  return "Everyone left was already rallied recently";
 }
 
 // ============================================================
@@ -227,6 +229,8 @@ export const ScheduleVoteVoterSchema = z.object({
   avatar: z.string().nullable(),
   discordId: z.string().nullable(),
   customAvatarUrl: z.string().nullable(),
+  /** ROK-1893 P3: on a hub-tagged poll, whether this voter is a live hub member. */
+  isHubMember: z.boolean().optional(),
 });
 
 /** Enriched slot with voter details. */
@@ -241,7 +245,9 @@ export const ScheduleSlotWithVotesSchema = LineupScheduleSlotSchema.extend({
   noVotes: z.array(ScheduleVoteVoterSchema).default([]),
 });
 
-export type ScheduleSlotWithVotesDto = z.infer<typeof ScheduleSlotWithVotesSchema>;
+export type ScheduleSlotWithVotesDto = z.infer<
+  typeof ScheduleSlotWithVotesSchema
+>;
 
 /** Full scheduling poll page response. */
 export const SchedulePollPageResponseSchema = z.object({
@@ -277,7 +283,7 @@ export const SchedulePollPageResponseSchema = z.object({
    * disagree. `closed` is the expired poll — the deadline passed (or the
    * parent lineup was archived by the phase job) with no lock-in.
    */
-  pollStatus: z.enum(['open', 'locked_in', 'cancelled', 'closed']),
+  pollStatus: z.enum(["open", "locked_in", "cancelled", "closed"]),
   /**
    * ROK-1545: ISO start time the lock-in selected (the linked event's start,
    * falling back to the winning slot). Null unless `pollStatus` is
@@ -324,15 +330,30 @@ export const SchedulePollPageResponseSchema = z.object({
    */
   lockInSlotId: z.number().int().nullable().default(null),
   /** ROK-1750: the poll's lineup visibility. */
-  visibility: z.enum(['public', 'private']).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
   /**
    * ROK-1750: private-poll share token. Non-null only for a viewer who may
    * participate (creator / invitee / admin) on a private poll.
    */
   shareToken: z.string().nullable().optional(),
+  /**
+   * ROK-1893 P3: the community hub the poll is tagged to — null when untagged
+   * or the hub is hidden/archived. `viewerIsMember` drives the "Join hub" button.
+   */
+  hub: z
+    .object({
+      id: z.number().int(),
+      name: z.string(),
+      memberCount: z.number().int().nonnegative(),
+      viewerIsMember: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 
-export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;
+export type SchedulePollPageResponseDto = z.infer<
+  typeof SchedulePollPageResponseSchema
+>;
 
 /** Lightweight banner for the events page. */
 export const SchedulingBannerSchema = z.object({
