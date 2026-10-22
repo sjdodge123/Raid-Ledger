@@ -1,7 +1,8 @@
 /**
  * Resolve the game-hub link an embed shows — ROK-1872 (ROK-1428 §2.8, D15).
  *
- * Precedence: the event's tagged hub (if visible) → the game's single visible
+ * Precedence: the event's tagged hub (if visible; the link then carries its
+ * name — ROK-1895) → the game's single visible
  * hub → ≥ 2 hubs → the OLDEST one (lowest id; deterministic, and the first
  * hub a game got) → none → null. Only kinds in {@link HUB_LINK_KINDS} count.
  * TODO(ROK-1873): link the `/hubs?game=<id>` directory for ≥ 2 hubs once
@@ -116,19 +117,34 @@ function candidateWhere(
   return and(linkableHub(), liveKindWhere(), scope);
 }
 
-/** Apply the D15 precedence to the visible candidate hub ids. */
+/** A visible candidate hub: its id and display name. */
+interface HubCandidate {
+  id: number;
+  name: string;
+}
+
+/**
+ * Apply the D15 precedence to the visible candidate hubs. ROK-1895: when the
+ * link targets the event's explicit tag, it carries the hub's name so the
+ * card body can say which hub the event belongs to.
+ */
 function pickHubLink(
-  ids: number[],
+  rows: HubCandidate[],
   tagged: number | null,
   gameId: number,
   base: string,
 ): HubLink | null {
+  const taggedRow = rows.find((r) => r.id === tagged);
+  if (taggedRow) {
+    const url = `${base}/guilds/${taggedRow.id}`;
+    return { url, label: HUB_LINK_LABEL, hubName: taggedRow.name };
+  }
+  const ids = rows.map((r) => r.id);
   const oldest = ids.length > 0 ? Math.min(...ids) : undefined;
-  const target = tagged !== null && ids.includes(tagged) ? tagged : oldest;
-  if (target === undefined) return null;
+  if (oldest === undefined) return null;
   // TODO(ROK-1873): ids.length >= 2 → `${base}/hubs?game=${gameId}` (HUBS_LINK_LABEL).
   void gameId;
-  return { url: `${base}/guilds/${target}`, label: HUB_LINK_LABEL };
+  return { url: `${base}/guilds/${oldest}`, label: HUB_LINK_LABEL };
 }
 
 /**
@@ -144,11 +160,10 @@ export async function resolveGameHubLink(
   if (!clientUrl || gameId === null || gameId === undefined) return null;
   const tagged = input.taggedGuildId ?? null;
   const rows = await db
-    .select({ id: schema.guilds.id })
+    .select({ id: schema.guilds.id, name: schema.guilds.name })
     .from(schema.guilds)
     .where(candidateWhere(gameId, tagged));
-  const ids = rows.map((r) => r.id);
-  return pickHubLink(ids, tagged, gameId, trimBase(clientUrl));
+  return pickHubLink(rows, tagged, gameId, trimBase(clientUrl));
 }
 
 /**
@@ -186,14 +201,18 @@ export async function resolveGameHubLinks(
   if (!clientUrl || unique.length === 0) return links;
   if (linkableHubKinds().length === 0) return links;
   const rows = await db
-    .select({ id: schema.guilds.id, gameId: schema.guilds.gameId })
+    .select({
+      id: schema.guilds.id,
+      name: schema.guilds.name,
+      gameId: schema.guilds.gameId,
+    })
     .from(schema.guilds)
     .where(and(linkableHub(), gameHubsWhere(unique)));
-  const byGame = new Map<number, number[]>();
+  const byGame = new Map<number, HubCandidate[]>();
   for (const r of rows)
-    byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r.id]);
-  for (const [gameId, ids] of byGame) {
-    const link = pickHubLink(ids, null, gameId, trimBase(clientUrl));
+    byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r]);
+  for (const [gameId, hubs] of byGame) {
+    const link = pickHubLink(hubs, null, gameId, trimBase(clientUrl));
     if (link) links.set(gameId, link);
   }
   return links;
