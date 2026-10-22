@@ -11,13 +11,15 @@
  * ROK-1893 P3: a community hub (`game_community`) also lists its open
  * scheduling polls above the events, with "New poll" for live members.
  */
-import type { JSX } from 'react';
+import { lazy, Suspense, type JSX } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { GuildKind, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { GuildAttendance } from './guild-attendance';
 import { GuildEvents } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
-import { HubPollsSection } from './hub-polls-section';
+
+/** Community hubs only — its own chunk, so the hub page bundle stays in budget. */
+const HubPollsSection = lazy(() => import('./hub-polls-section').then((m) => ({ default: m.HubPollsSection })));
 
 interface EventsTabProps {
     query: UseQueryResult<GuildRaidsDto, Error>;
@@ -29,7 +31,11 @@ interface EventsTabProps {
 function CommunityPolls({ page }: { page: GuildPage | undefined }): JSX.Element | null {
     if (page?.guild.kind !== 'game_community') return null;
     const { guild } = page;
-    return <HubPollsSection hubId={guild.id} hubName={guild.name} gameId={guild.gameId} canCreate={page.community?.viewerJoined === true} />;
+    return (
+        <Suspense fallback={null}>
+            <HubPollsSection hubId={guild.id} hubName={guild.name} gameId={guild.gameId} canCreate={page.community?.viewerJoined === true} />
+        </Suspense>
+    );
 }
 
 export function HubEventsTab({ query, kind, page }: EventsTabProps): JSX.Element {
