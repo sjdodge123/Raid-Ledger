@@ -122,6 +122,41 @@ describe('join', () => {
   });
 });
 
+describe('joinVia (ROK-1893 D3)', () => {
+  it('writes the join source + invite id and reports a new live row', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'active' });
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
+    await expect(
+      svc.joinVia(1, 7, 'invite', { inviteId: 9, requireDiscord: false }),
+    ).resolves.toEqual({ joined: true, memberCount: 4 });
+    expect(mq.upsertJoin).toHaveBeenCalledWith(TX, 7, 1, 'member', {
+      joinSource: 'invite',
+      inviteId: 9,
+    });
+    expect(lookup.assertInDiscord).not.toHaveBeenCalled();
+  });
+
+  it('an already-live member is a no-op join (joined: false)', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({}));
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'active' });
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
+    const out = await svc.joinVia(1, 7, 'invite', { inviteId: 9 });
+    expect(out.joined).toBe(false);
+  });
+
+  it('checks Discord by default for a non-member', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest
+      .mocked(lookup.assertInDiscord)
+      .mockRejectedValueOnce(new ForbiddenException('discord'));
+    await expect(svc.joinVia(1, 7, 'auto')).rejects.toThrow('discord');
+    expect(mq.upsertJoin).not.toHaveBeenCalled();
+  });
+});
+
 describe('role-sensitive writes serialise with transfers (M22)', () => {
   beforeEach(() => {
     jest.mocked(mq.findMembership).mockImplementation(() => {

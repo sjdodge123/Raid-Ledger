@@ -39,6 +39,16 @@ export async function findMembership(
   return row ?? null;
 }
 
+/** ROK-1893 — how a join happened; written only on insert / revival. */
+export interface JoinProvenance {
+  joinSource?: HubCommunityMemberRow['joinSource'];
+  inviteId?: number | null;
+}
+
+function provenanceFields(p: JoinProvenance) {
+  return { joinSource: p.joinSource ?? null, inviteId: p.inviteId ?? null };
+}
+
 /**
  * Join (idempotent). Inserts a live row, or revives a left/removed one
  * (same `id`, fresh `joined_at`). A banned row and an already-live row are
@@ -50,11 +60,13 @@ export async function upsertJoin(
   guildId: number,
   userId: number,
   role: CommunityRole = 'member',
+  provenance: JoinProvenance = {},
 ): Promise<HubCommunityMemberRow> {
   const now = new Date();
+  const how = provenanceFields(provenance);
   const [row] = await db
     .insert(m)
-    .values({ guildId, userId, role, joinedAt: now })
+    .values({ guildId, userId, role, joinedAt: now, ...how })
     .onConflictDoUpdate({
       target: [m.guildId, m.userId],
       set: {
@@ -63,6 +75,7 @@ export async function upsertJoin(
         removedBy: null,
         joinedAt: now,
         updatedAt: now,
+        ...how,
       },
       setWhere: sql`${m.bannedAt} IS NULL AND ${m.leftAt} IS NOT NULL`,
     })

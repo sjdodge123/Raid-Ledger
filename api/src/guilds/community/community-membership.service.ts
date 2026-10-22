@@ -8,21 +8,26 @@ import {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   CommunityHubJoinResponse,
+  HubJoinSource,
   HubMemberRoleUpdateDto,
   LadderRole,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { isStaff, type GuildActor } from '../guild-access.service';
-import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
 import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
 import {
   archiveHub,
-  assertInDiscord,
   countLiveMembers,
   isLive,
   requireCommunityHub,
 } from './community-hub.lookup';
+import {
+  assertMayJoin,
+  joinLocked,
+  type JoinViaOptions,
+  type JoinViaResult,
+} from './community-join.helpers';
 import { liveCommunityRole } from './community-hub.reads';
 import { mayModerate } from './community-ladder.helpers';
 import {
@@ -31,7 +36,6 @@ import {
   markLeft,
   refreshMemberCount,
   setRole,
-  upsertJoin,
   type DbOrTx,
   type HubCommunityMemberRow,
 } from './community-membership.queries';
@@ -77,22 +81,29 @@ export class CommunityMembershipService {
     actor: GuildActor,
     hubId: number,
   ): Promise<CommunityHubJoinResponse> {
-    await requireCommunityHub(this.db, hubId, true);
-    const existing = await findMembership(this.db, hubId, actor.id);
-    if (existing?.bannedAt)
-      throw new ForbiddenException("You can't join this hub");
-    if (!isLive(existing))
-      await assertInDiscord(this.db, actor.id, isStaff(actor));
-    const row = await this.db.transaction(async (tx) => {
-      if ((await lockHubRow(tx, hubId))?.status !== 'active')
-        throw new NotFoundException(HUB_NOT_FOUND);
-      return upsertJoin(tx, hubId, actor.id, 'member');
+    const { memberCount } = await this.joinVia(actor.id, hubId, 'manual', {
+      requireDiscord: !isStaff(actor),
     });
-    if (row.bannedAt) throw new ForbiddenException("You can't join this hub");
-    return {
-      joined: true,
-      memberCount: await refreshMemberCount(this.db, hubId),
-    };
+    return { joined: true, memberCount };
+  }
+
+  /**
+   * ROK-1893 D3 — every join path (manual, invite, auto, prompt): ban → 403,
+   * hub must be active, Discord check unless `requireDiscord: false`, then
+   * upsert with `join_source` / `invite_id` and recount. `joined` is false
+   * when the user was already a live member.
+   */
+  async joinVia(
+    actorId: number,
+    hubId: number,
+    source: HubJoinSource,
+    opts: JoinViaOptions = {},
+  ): Promise<JoinViaResult> {
+    await assertMayJoin(this.db, actorId, hubId, opts.requireDiscord ?? true);
+    const joined = await this.db.transaction((tx) =>
+      joinLocked(tx, hubId, actorId, source, opts.inviteId ?? null),
+    );
+    return { joined, memberCount: await refreshMemberCount(this.db, hubId) };
   }
 
   /** DELETE /hubs/:id/join — D13: a Leader with company must transfer first. */
