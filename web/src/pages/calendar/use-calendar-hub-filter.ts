@@ -6,6 +6,7 @@
 import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 import type { EventHubRef, EventResponseDto } from '@raid-ledger/contract';
+import { onViewerChange } from '../../stores/viewer-reset-registry';
 
 export const NO_HUB = 'none';
 /** A hub id, or `NO_HUB` for untagged events. */
@@ -39,6 +40,9 @@ export const useCalendarHubFilterStore = create<HubFilterState>((set) => ({
     showAll: () => set({ hidden: new Set<HubKey>() }),
     clearViewer: () => set({ known: [], hidden: new Set<HubKey>() }),
 }));
+
+// The viewer changed: forget the previous viewer's hubs (run by useThemeSync).
+onViewerChange(() => useCalendarHubFilterStore.getState().clearViewer());
 
 export const hubKeyOf = (e: Pick<EventResponseDto, 'hub'>): HubKey => e.hub?.id ?? NO_HUB;
 

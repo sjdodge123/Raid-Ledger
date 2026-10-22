@@ -8,7 +8,7 @@ import { useTimezoneStore } from '../stores/timezone-store';
 import { useCalendarViewStore } from '../stores/calendar-view-store';
 import { useGameFilterStore } from '../stores/game-filter-store';
 import { CALENDAR_HIDDEN_LAYERS_PREF, useCalendarLayerFilterStore } from '../stores/calendar-layer-filter-store';
-import { useCalendarHubFilterStore } from '../pages/calendar/use-calendar-hub-filter';
+import { runViewerChangeResets } from '../stores/viewer-reset-registry';
 
 const VALID_MODES: ThemeModePreference[] = ['light', 'dark', 'auto'];
 
@@ -90,7 +90,7 @@ function useResetOnViewerChange(viewer: number | 'anon'): void {
         if (departing === viewer) return;
         previous.current = viewer;
         useCalendarLayerFilterStore.getState().clearViewer();
-        useCalendarHubFilterStore.getState().clearViewer();
+        runViewerChangeResets();
         queryClient.removeQueries({ queryKey: ['user-preferences'], exact: true });
         queryClient.removeQueries({ queryKey: ['user-preferences', departing], exact: true });
     }, [viewer, queryClient]);
