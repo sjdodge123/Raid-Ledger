@@ -35,6 +35,8 @@ interface Ctx {
     opts: InlineOptions;
     depth: number;
     inLink: boolean;
+    /** When set (top level only), every link the scan forms records its label's `[from, to)` here. */
+    labels?: Array<[number, number]>;
 }
 
 interface Hit {
@@ -109,6 +111,7 @@ function matchLink(ctx: Ctx, i: number): Hit | null {
     const paren = closeParen(s, close + 2);
     const href = paren === -1 ? '' : linkDestination(s.slice(close + 2, paren));
     if (href === '' || !isSafeMarkdownHref(href)) return null;
+    ctx.labels?.push([i + 1, close]);
     return { nodes: [{ kind: 'link', href, children: parseNested(ctx, s.slice(i + 1, close), true) }], end: paren + 1 };
 }
 
@@ -170,4 +173,25 @@ function parseWith(ctx: Ctx): InlineNode[] {
 /** Parse one line of inline Markdown into a node tree (see the file header). */
 export function parseInline(text: string, opts: InlineOptions): InlineNode[] {
     return parseWith({ s: text, opts, depth: 0, inLink: false });
+}
+
+/** The options `MarkdownBlock` reads a hub post with. */
+const READER_OPTS: InlineOptions = { strike: true, autolink: true };
+
+/**
+ * Whether the stretch `[from, to)` of `s` sits inside the label of a link the reader actually forms
+ * (r14b review) — the label's `]` must be followed by a `(…)` that closes on a safe destination, so
+ * `[a <https://…> b](/p` (no `)`) is not a label and its autolink stays a link. Decided by the reader's
+ * own scan of the stretch's line, so load, save and `MarkdownBlock` cannot disagree.
+ * @param s - the markdown (one line on load, the whole body on save)
+ * @param from - the stretch's first index
+ * @param to - the index just past it
+ * @returns true when a reader link's label covers the stretch
+ */
+export function insideLinkLabel(s: string, from: number, to: number): boolean {
+    const start = s.lastIndexOf('\n', from - 1) + 1;
+    const stop = s.indexOf('\n', to);
+    const labels: Array<[number, number]> = [];
+    parseWith({ s: s.slice(start, stop === -1 ? s.length : stop), opts: READER_OPTS, depth: 0, inLink: false, labels });
+    return labels.some(([a, b]: [number, number]): boolean => from - start >= a && to - start <= b);
 }

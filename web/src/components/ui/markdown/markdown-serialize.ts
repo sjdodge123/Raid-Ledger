@@ -15,7 +15,8 @@ import type { Editor } from '@tiptap/core';
 import { trimUnflankedEmphasis } from './markdown-flanking';
 import { fixLinkMarkBoundaries } from './markdown-link-marks';
 import { guardLineStarts, LINE_START_SENTINEL } from './markdown-line-start';
-import { AUTOLINK_SOURCE, insideLinkLabel } from './markdown-autolink';
+import { AUTOLINK_SOURCE } from './markdown-autolink';
+import { insideLinkLabel } from './markdown-inline-parse';
 
 const ENTITY = /&(lt|gt|amp);/g;
 /**
