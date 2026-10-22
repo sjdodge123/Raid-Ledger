@@ -1527,3 +1527,12 @@ owning `HubModule.overviewWidgets`.
 (declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
 (`web/src/dev/design-system/hub-widgets-section.tsx`, demo lazy-loaded from `hub-widgets-demo.tsx`) — sample widgets through the real `gameWidgetCells`
 in the ready, skeleton and contained-error states; live on the hub Overview (`/guilds/:id`).
+
+**Game tabs (sibling, ROK-1912).** A whole-view feature (a map, a planner, a character list) is a tab, not a
+widget: `PluginHandle.registerHubGameTab(gameSlugs, tab)` (`web/src/plugins/hub-game-tabs.ts`) adds a `HubTab`
+to the module band of every hub kind whose `page.guild.gameSlug` is in `gameSlugs`, while the registering
+plugin is active (the tab's own `visible` still applies). Core merges them after the kind module's tabs
+(`hubModuleTabs` in `web/src/components/hub/hub-tabs.ts`), ordered by `order`, with the usual `#<id>` hash
+routing; a gated-out tab never renders. Pelican's `registerServerHubGameTab` is a deprecated alias. Valheim's
+Characters / Map / Materials / Planner use it. No visual change, so there is no `/dev/design-system` demo; the
+tab row is the §4 `TabRow`.
