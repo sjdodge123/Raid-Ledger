@@ -109,6 +109,8 @@ test.describe("Valheim hub — chest → Map link (ROK-1889)", () => {
 
     await expect(page).toHaveURL(/#map\?.*focus=chest%3A[A-Za-z0-9_]+%40/);
     expect(page.url()).toContain("item=Wood");
+    // The link names the chest's height so a stacked chest resolves to itself.
+    expect(page.url()).toMatch(/[?&]y=-?\d+\.\d(&|$)/);
     const focus = page.getByTestId("valheim-chest-focus");
     await expect(focus).toContainText(/\d+\/\d+ slots · Wood ×\d+/);
 
