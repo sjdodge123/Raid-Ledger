@@ -33,6 +33,7 @@ import * as task from './task.js';
 import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
 import { resolveWorktreeShortSha, resolveWorktreeSurfaceHash } from './worktree-sha.js';
 import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
+import { dispatchWithWeightFallback } from './task-weight-fallback.js';
 import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
 import { parallelParentTimeout, parallelTarget } from './validate-ci-parallel.js';
 
@@ -242,20 +243,25 @@ export async function execute(
   const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   // ROK-1470: heavy runs wait on host MemAvailable inside task-start before the
   // pipeline launches, which is what makes the over-subscribed 6g runner caps safe.
-  const weight = fanout ? 'light' : resolveValidateCiWeight(resolveArgs(params), params.weight);
-  const remote =
+  const wantWeight = fanout ? 'light' : resolveValidateCiWeight(resolveArgs(params), params.weight);
+  const remoteFor = (w: TaskWeight): string =>
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
-    `--tool rl_validate_ci ${slotFlag}${weightFlag(weight)}${timeoutFlag}` +
+    `--tool rl_validate_ci ${slotFlag}${weightFlag(w)}${timeoutFlag}` +
     `-- ${targetCmd}`;
-
+  // A VM older than #1699 rejects `medium` before creating the task → one `light` retry.
+  let weight: TaskWeight = wantWeight;
   let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
   try {
-    const { stdout } = await execFileP(
-      'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remote],
-      { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 },
+    const sent = await dispatchWithWeightFallback(wantWeight, (w) =>
+      execFileP(
+        'ssh',
+        ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remoteFor(w)],
+        { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 },
+      ),
     );
+    weight = sent.weight;
+    const { stdout } = sent.value;
     try {
       dispatch = JSON.parse(stdout.trim()) as typeof dispatch;
     } catch {
