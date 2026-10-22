@@ -1,6 +1,7 @@
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth, isAdmin as isAdminCheck } from '../../hooks/use-auth';
-import { AdminSidebar } from './admin-sidebar';
+import { useAuth, isAdmin as isAdminCheck, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { AdminSidebar, OperatorSidebar } from './admin-sidebar';
+import { isOperatorSettingsPath } from './admin-nav-data';
 import { UpdateBanner } from './UpdateBanner';
 import { BuildFixesNotice } from './BuildFixesNotice';
 
@@ -29,6 +30,24 @@ function AccessDenied() {
     );
 }
 
+/** Operator shell: no update/build banners, a sidebar holding only Hubs. */
+function OperatorSettingsShell() {
+    return (
+        <div className="max-w-6xl mx-auto px-4 py-6">
+            <div className="mb-6 mt-4">
+                <h1 className="text-2xl font-bold text-foreground">Admin Settings</h1>
+                <p className="text-sm text-muted mt-0.5">Review community hubs</p>
+            </div>
+            <div className="flex gap-6">
+                <aside className="hidden md:block w-56 flex-shrink-0">
+                    <div className="sticky top-24"><OperatorSidebar /></div>
+                </aside>
+                <main className="flex-1 min-w-0"><Outlet /></main>
+            </div>
+        </div>
+    );
+}
+
 /**
  * Admin Settings layout -- sidebar + content area with nested <Outlet />.
  * Desktop: fixed sidebar on the left, content scrolls independently.
@@ -41,7 +60,11 @@ export function AdminSettingsLayout() {
 
     if (location.pathname === '/admin/settings') return <Navigate to="/admin/settings/general" replace />;
     if (isLoading) return <LoadingSkeleton />;
-    if (!isAdminCheck(user)) return <AccessDenied />;
+    if (!isAdminCheck(user)) {
+        // Operators may open only OPERATOR_SETTINGS_PATHS (Hubs review).
+        if (isOperatorOrAdmin(user) && isOperatorSettingsPath(location.pathname)) return <OperatorSettingsShell />;
+        return <AccessDenied />;
+    }
 
     return (
         <div className="max-w-6xl mx-auto px-4 py-6">
