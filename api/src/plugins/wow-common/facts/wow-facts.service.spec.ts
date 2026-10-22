@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { WOW_FOREVER_NAMESPACE_PREFIX_KEY } from '../forever.settings';
 import { WowFactsService } from './wow-facts.service';
 import {
@@ -54,7 +55,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
     const { service, settings } = build('classicforever1');
     service.registerBlizzardSource(blizzardAt(ago(20 * HOUR)));
     const got = await service.resolveFacts([REF], NOW);
-    expect(got.get('m1')?.level).toEqual({
+    expect(got.facts.get('m1')?.level).toEqual({
       value: 60,
       source: 'blizzard',
       asOf: ago(20 * HOUR),
@@ -66,7 +67,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
     const { service } = build('classicforever1');
     service.registerBlizzardSource(blizzardAt(ago(30 * HOUR)));
     const got = await service.resolveFacts([REF], NOW);
-    expect(got.get('m1')?.level?.source).toBe('addon');
+    expect(got.facts.get('m1')?.level?.source).toBe('addon');
   });
 
   it('is not consulted while the namespace is the default alias', async () => {
@@ -75,7 +76,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
     service.registerBlizzardSource(blizzard);
     const got = await service.resolveFacts([REF], NOW);
     expect(blizzard.load).not.toHaveBeenCalled();
-    expect(got.get('m1')?.level?.source).toBe('addon');
+    expect(got.facts.get('m1')?.level?.source).toBe('addon');
   });
 
   it('no blizzard source is registered by default', async () => {
@@ -97,6 +98,9 @@ describe('WowFactsService — Blizzard registration seam', () => {
 
 describe('WowFactsService.resolveFacts — batching', () => {
   it('calls each source once per batch and caps it at MAX_ROSTER_ROWS', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     const { service, roster, addon, chars } = build(null);
     const refs = Array.from({ length: MAX_ROSTER_ROWS + 5 }, (_, i) => ({
       key: `m${i}`,
@@ -108,7 +112,10 @@ describe('WowFactsService.resolveFacts — batching', () => {
       expect(s.load).toHaveBeenCalledTimes(1);
       expect(s.load.mock.calls[0]?.[0]).toHaveLength(MAX_ROSTER_ROWS);
     }
-    expect(got.size).toBe(MAX_ROSTER_ROWS);
+    expect(got.facts.size).toBe(MAX_ROSTER_ROWS);
+    expect(got.truncated).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it('resolves a row no source knows to all-unknown facts', async () => {
@@ -116,6 +123,40 @@ describe('WowFactsService.resolveFacts — batching', () => {
     roster.load.mockResolvedValue(new Map());
     addon.load.mockResolvedValue(new Map());
     const got = await service.resolveFacts([REF], NOW);
-    expect(got.get('m1')?.level).toBeNull();
+    expect(got.facts.get('m1')?.level).toBeNull();
+  });
+});
+
+describe('WowFactsService — fresh-blizzard override needs the registered seam', () => {
+  /** A CharacterRow-style Armory row: blizzard-labelled, synced 2h ago. */
+  function withArmoryRow(prefix: string | null) {
+    const ctx = build(prefix);
+    ctx.chars.load.mockResolvedValue(
+      new Map([
+        [
+          'm1',
+          { level: { value: 60, source: 'blizzard', asOf: ago(2 * HOUR) } },
+        ],
+      ]),
+    );
+    return ctx;
+  }
+
+  it('seam off: a recent blizzard-labelled row loses to a newer addon snapshot', async () => {
+    const { service } = withArmoryRow('classicforever1');
+    const got = await service.resolveFacts([REF], NOW);
+    expect(got.facts.get('m1')?.level?.source).toBe('addon');
+  });
+
+  it('seam on: the fresh blizzard fact wins', async () => {
+    const { service } = withArmoryRow('classicforever1');
+    service.registerBlizzardSource(fakeSource('blizzard', {}));
+    const got = await service.resolveFacts([REF], NOW);
+    expect(got.facts.get('m1')?.level?.source).toBe('blizzard');
+  });
+
+  it('a small batch is not truncated', async () => {
+    const { service } = build(null);
+    expect((await service.resolveFacts([REF], NOW)).truncated).toBe(false);
   });
 });

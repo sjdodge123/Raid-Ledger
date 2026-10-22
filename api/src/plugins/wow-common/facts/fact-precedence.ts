@@ -4,7 +4,11 @@
  *
  * 1. A `manual` value wins for the fields a user can edit (roleOverride,
  *    professions).
- * 2. Otherwise a `blizzard` value fresher than {@link FRESH_WINDOW_MS} wins.
+ * 2. Otherwise, only while the REGISTERED Blizzard seam is live
+ *    (`blizzardFresh`), a `blizzard` value fresher than {@link FRESH_WINDOW_MS}
+ *    wins. With the seam off, blizzard-labelled facts (e.g. an Armory-synced
+ *    `characters` row) compete on newest `asOf` only — a stale-in-reality row
+ *    stamped at sync time must not beat a newer addon snapshot.
  * 3. Otherwise the newest `asOf` among addon, roster and blizzard wins (an
  *    unknown `asOf` sorts last). A `manual` value of a non-editable field is
  *    only the fallback after that.
@@ -68,12 +72,14 @@ function isFresh(f: Fact<unknown>, now: Date): boolean {
 
 /**
  * Pick the winning fact for one field.
+ * @param blizzardFresh the registered Blizzard seam is live; enables rule 2.
  * @returns the winner, or null when no source knows the field.
  */
 export function resolveField<T>(
   field: WowFactField,
   candidates: Fact<T>[],
   now: Date,
+  blizzardFresh: boolean,
 ): Fact<T> | null {
   const rule = FIELD_PRECEDENCE[field];
   const allowed = candidates.filter(
@@ -82,9 +88,9 @@ export function resolveField<T>(
   const manual = allowed.filter((c) => c.source === 'manual');
   const others = allowed.filter((c) => c.source !== 'manual');
   if (rule.manualOverride && manual.length > 0) return newest(manual);
-  const fresh = others.filter(
-    (c) => c.source === 'blizzard' && isFresh(c, now),
-  );
+  const fresh = blizzardFresh
+    ? others.filter((c) => c.source === 'blizzard' && isFresh(c, now))
+    : [];
   if (fresh.length > 0) return newest(fresh);
   return newest(others) ?? newest(manual);
 }
@@ -94,25 +100,28 @@ function resolveOne<F extends WowFactField>(
   field: F,
   perSource: WowFactCandidates[],
   now: Date,
+  blizzardFresh: boolean,
 ): Fact<WowFactValues[F]> | null {
   const candidates: Fact<WowFactValues[F]>[] = [];
   for (const c of perSource) {
     const f = c[field];
     if (f) candidates.push(f);
   }
-  return resolveField(field, candidates, now);
+  return resolveField(field, candidates, now, blizzardFresh);
 }
 
 /**
  * Resolve every field of one roster row.
  * @param perSource what each source knows about the row.
+ * @param blizzardFresh the registered Blizzard seam is live (see rule 2).
  */
 export function resolveFacts(
   perSource: WowFactCandidates[],
   now: Date,
+  blizzardFresh: boolean,
 ): ResolvedWowFacts {
   const r = <F extends WowFactField>(f: F): Fact<WowFactValues[F]> | null =>
-    resolveOne(f, perSource, now);
+    resolveOne(f, perSource, now, blizzardFresh);
   return {
     level: r('level'),
     class: r('class'),

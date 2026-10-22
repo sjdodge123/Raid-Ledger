@@ -47,6 +47,7 @@ describe('resolveField — rule 1: manual override', () => {
         field,
         [fact('blizzard', 'bz', ago(HOUR)), fact('addon', 'ad', NOW), manual],
         NOW,
+        true,
       );
       expect(got).toEqual(manual);
     },
@@ -57,12 +58,13 @@ describe('resolveField — rule 1: manual override', () => {
       'level',
       [fact('manual', 'm', NOW), fact('blizzard', 'b', ago(HOUR))],
       NOW,
+      true,
     );
     expect(got?.source).toBe('blizzard');
   });
 
   it('level: a manual value is still the fallback when nothing else is known', () => {
-    const got = resolveField('level', [fact('manual', 'm', null)], NOW);
+    const got = resolveField('level', [fact('manual', 'm', null)], NOW, true);
     expect(got?.source).toBe('manual');
   });
 });
@@ -79,6 +81,7 @@ describe('resolveField — rule 2: fresh blizzard', () => {
         field,
         [fact('addon', 'ad', NOW), fact('blizzard', 'bz', ago(23 * HOUR))],
         NOW,
+        true,
       );
       expect(got?.source).toBe('blizzard');
     },
@@ -92,13 +95,14 @@ describe('resolveField — rule 2: fresh blizzard', () => {
         fact('addon', 'ad', ago(HOUR)),
       ],
       NOW,
+      true,
     );
     expect(got?.source).toBe('addon');
   });
 
   it('professions: a fresh blizzard value is dropped entirely', () => {
     expect(
-      resolveField('professions', [fact('blizzard', 'bz', NOW)], NOW),
+      resolveField('professions', [fact('blizzard', 'bz', NOW)], NOW, true),
     ).toBeNull();
   });
 });
@@ -113,6 +117,7 @@ describe('resolveField — rule 3: newest asOf', () => {
         fact('addon', 'a', ago(2 * HOUR)),
       ],
       NOW,
+      true,
     );
     expect(got?.value).toBe('a');
   });
@@ -125,6 +130,7 @@ describe('resolveField — rule 3: newest asOf', () => {
         fact('blizzard', 'b', ago(48 * HOUR)),
       ],
       NOW,
+      true,
     );
     expect(got?.source).toBe('blizzard');
   });
@@ -134,20 +140,21 @@ describe('resolveField — rule 3: newest asOf', () => {
       'level',
       [fact('addon', 'a', null), fact('roster', 'r', ago(400 * HOUR))],
       NOW,
+      true,
     );
     expect(got?.source).toBe('roster');
   });
 
   it('an undated value is used when it is the only one', () => {
     expect(
-      resolveField('lockouts', [fact('addon', 'a', null)], NOW)?.source,
+      resolveField('lockouts', [fact('addon', 'a', null)], NOW, true)?.source,
     ).toBe('addon');
   });
 });
 
 describe('resolveField — rule 4: unknown', () => {
   it.each(WOW_FACT_FIELDS)('%s: no candidates resolves to null', (field) => {
-    expect(resolveField(field, [], NOW)).toBeNull();
+    expect(resolveField(field, [], NOW, true)).toBeNull();
   });
 });
 
@@ -163,10 +170,60 @@ describe('resolveFacts', () => {
         { role: { value: 'tank', source: 'manual', asOf: null } },
       ],
       NOW,
+      true,
     );
     expect(got.level).toEqual({ value: 60, source: 'addon', asOf: NOW });
     expect(got.role).toEqual({ value: 'tank', source: 'manual', asOf: null });
     expect(got.professions).toBeNull();
     expect(Object.keys(got).sort()).toEqual([...WOW_FACT_FIELDS].sort());
+  });
+});
+
+describe('resolveField — blizzardFresh off (no registered Blizzard seam)', () => {
+  it('a recent blizzard-labelled row loses to a newer addon snapshot', () => {
+    const got = resolveField(
+      'level',
+      [
+        fact('blizzard', 'armory', ago(2 * HOUR)),
+        fact('addon', 'ad', ago(HOUR)),
+      ],
+      NOW,
+      false,
+    );
+    expect(got?.source).toBe('addon');
+  });
+
+  it('a blizzard-labelled value still wins on newest asOf alone', () => {
+    const got = resolveField(
+      'level',
+      [fact('addon', 'ad', ago(2 * HOUR)), fact('blizzard', 'bz', ago(HOUR))],
+      NOW,
+      false,
+    );
+    expect(got?.source).toBe('blizzard');
+  });
+
+  it('with the seam on, the same fresh blizzard value wins', () => {
+    const got = resolveField(
+      'level',
+      [
+        fact('blizzard', 'armory', ago(2 * HOUR)),
+        fact('addon', 'ad', ago(HOUR)),
+      ],
+      NOW,
+      true,
+    );
+    expect(got?.source).toBe('blizzard');
+  });
+
+  it('resolveFacts threads the flag to every field', () => {
+    const perSource = [
+      {
+        level: { value: 60, source: 'blizzard' as const, asOf: ago(2 * HOUR) },
+      },
+      { level: { value: 59, source: 'addon' as const, asOf: ago(HOUR) } },
+    ];
+    expect(resolveFacts(perSource, NOW, false).level?.source).toBe('addon');
+    expect(resolveFacts(perSource, NOW, true).level?.source).toBe('blizzard');
   });
 });

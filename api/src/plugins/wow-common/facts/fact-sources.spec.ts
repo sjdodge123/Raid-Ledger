@@ -128,6 +128,7 @@ describe('CharacterRowFactSource', () => {
       asOf: null,
     });
     expect(got?.professions?.source).toBe('manual');
+    expect(got?.professions?.asOf).toBeNull();
     expect(got?.level).toEqual({ value: 60, source: 'addon', asOf: T });
     expect(got?.ilvl).toEqual({ value: 66, source: 'addon', asOf: T });
     expect(got?.race?.value).toBe('Human');

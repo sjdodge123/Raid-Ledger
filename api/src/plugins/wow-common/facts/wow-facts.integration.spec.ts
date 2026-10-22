@@ -6,6 +6,7 @@
  */
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import * as schema from '../../../drizzle/schema';
 import { WowFactsService } from './wow-facts.service';
 
@@ -135,16 +136,20 @@ beforeAll(async () => {
   await seedLinkedCharacter();
 });
 
+afterAll(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+});
+
 describe('WowFactsService.resolveForGuild (real DB)', () => {
   it('covers every roster row, linked or not', async () => {
     const got = await facts.resolveForGuild(guildId, NOW);
-    expect([...got.keys()].sort()).toEqual(
+    expect([...got.facts.keys()].sort()).toEqual(
       [`m${memberIds.linked}`, `m${memberIds.unlinked}`].sort(),
     );
   });
 
   it('resolves an unlinked row from the roster alone', async () => {
-    const got = (await facts.resolveForGuild(guildId, NOW)).get(
+    const got = (await facts.resolveForGuild(guildId, NOW)).facts.get(
       `m${memberIds.unlinked}`,
     );
     expect(got?.level).toEqual({ value: 41, source: 'roster', asOf: SNAP });
@@ -159,7 +164,7 @@ describe('WowFactsService.resolveForGuild (real DB)', () => {
   });
 
   it('resolves the linked row: manual role, addon gear/quests/lockouts, roster level', async () => {
-    const got = (await facts.resolveForGuild(guildId, NOW)).get(
+    const got = (await facts.resolveForGuild(guildId, NOW)).facts.get(
       `m${memberIds.linked}`,
     );
     expect(got?.role).toEqual({
@@ -177,5 +182,61 @@ describe('WowFactsService.resolveForGuild (real DB)', () => {
     expect(got?.lockouts?.value).toEqual(SNAPSHOT.lockouts);
     expect(got?.level).toEqual({ value: 60, source: 'roster', asOf: SNAP });
     expect(got?.professions).toBeNull();
+  });
+});
+
+/** An Armory-synced row (externalId) whose sync is newer-ish but older than its addon snapshot. */
+async function seedArmoryCharacter(): Promise<string> {
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: 'facts-armory', username: 'armory', role: 'member' })
+      .returning(),
+    'armory user',
+  );
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId: user.id,
+        gameId: testApp.seed.game.id,
+        name: 'Stoneward',
+        class: 'Warrior',
+        level: 60,
+        itemLevel: 61,
+        externalId: 'armory-1910',
+        lastSyncedAt: new Date(NOW.getTime() - 2 * 3600 * 1000),
+        addonGuid: 'Player-7-0000A4B0',
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+      })
+      .returning(),
+    'armory character',
+  );
+  await testApp.db.insert(schema.characterAddonSnapshots).values({
+    characterId: char.id,
+    section: 'char',
+    schema: 2,
+    data: SNAPSHOT,
+    capturedAt: new Date(NOW.getTime() - 3600 * 1000),
+    payloadSha256: 'e'.repeat(64),
+  });
+  return char.id;
+}
+
+describe('WowFactsService.resolveFacts — CharacterRow Armory row (real DB)', () => {
+  it('a recent blizzard-labelled row loses to a newer addon snapshot while the seam is off', async () => {
+    const characterId = await seedArmoryCharacter();
+    const got = await facts.resolveFacts(
+      [{ key: 'armory', memberId: null, characterId }],
+      NOW,
+    );
+    expect(got.truncated).toBe(false);
+    expect(got.facts.get('armory')?.ilvl).toEqual({
+      value: 73,
+      source: 'addon',
+      asOf: new Date(NOW.getTime() - 3600 * 1000),
+    });
+    expect(got.facts.get('armory')?.class?.source).toBe('blizzard');
   });
 });

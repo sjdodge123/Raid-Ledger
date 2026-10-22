@@ -39,15 +39,15 @@ function rowOrigin(row: CharRow): HubFactSource {
   return row.addonGuid ? 'addon' : 'manual';
 }
 
-/** The user-editable facts: roleOverride and professions are `manual`. */
+/** The user-editable facts: roleOverride and professions are `manual` (asOf
+ * unknown — a hand edit has no capture time; lastSyncedAt is the Armory sync). */
 function editableFacts(row: CharRow, out: WowFactCandidates): void {
   const override = toRole(row.roleOverride);
   const synced = toRole(row.role);
   if (override) out.role = fact(override, 'manual', null);
   else if (synced) out.role = fact(synced, rowOrigin(row), row.lastSyncedAt);
   const prof = CharacterProfessionsSchema.safeParse(row.professions);
-  if (prof.success)
-    out.professions = fact(prof.data, 'manual', row.lastSyncedAt);
+  if (prof.success) out.professions = fact(prof.data, 'manual', null);
 }
 
 /** One `characters` row as facts; asOf = lastSyncedAt. */

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -22,17 +22,31 @@ import {
 /** Resolved facts per roster key. */
 export type ResolvedRoster = Map<RosterKey, ResolvedWowFacts>;
 
+/** One resolve call's result. */
+export interface ResolvedRosterResult {
+  facts: ResolvedRoster;
+  /** True when rows past {@link MAX_ROSTER_ROWS} were dropped (H5 surfaces it). */
+  truncated: boolean;
+}
+
 /**
  * ROK-1910 — runs every active {@link WowFactSource} once per batch and
  * resolves each roster row through the per-field precedence table.
  *
  * Blizzard seam (H23): no Blizzard source ships yet. One registers through
- * {@link registerBlizzardSource} and is consulted only while the admin has
- * set a real Forever namespace (`wow_forever_namespace_prefix` ≠ the
- * `classicforever` alias, ROK-1716/1717).
+ * {@link registerBlizzardSource} and is consulted only while the seam is
+ * live: a source is registered AND `wow_forever_namespace_prefix` is set and
+ * isn't the `classicforever` alias (the same test as
+ * `forever-config.service.ts::namespacePrefixIsDefault`). That prefix check is
+ * a PROXY for "the admin set the prefix after the ROK-1716 probe" — it is not
+ * proof the probe currently reports the namespace live. Only while the seam
+ * is live do blizzard facts get the fresh-window override
+ * (`fact-precedence.ts` rule 2); otherwise blizzard-labelled facts (an
+ * Armory-synced `characters` row) compete on newest `asOf` only.
  */
 @Injectable()
 export class WowFactsService {
+  private readonly logger = new Logger(WowFactsService.name);
   private blizzard: WowFactSource | null = null;
 
   constructor(
@@ -57,40 +71,44 @@ export class WowFactsService {
 
   /** The sources a resolve consults right now. */
   async activeSources(): Promise<WowFactSource[]> {
-    const core: WowFactSource[] = [this.roster, this.addon, this.characterRows];
-    if (this.blizzard && (await this.isForeverNamespaceLive())) {
-      return [...core, this.blizzard];
-    }
-    return core;
+    return this.sourcesFor(await this.isBlizzardSeamLive());
   }
 
   /**
-   * Resolve facts for up to {@link MAX_ROSTER_ROWS} roster rows (extra rows
-   * are dropped). One `load` (one query) per active source.
+   * Resolve facts for up to {@link MAX_ROSTER_ROWS} roster rows. Extra rows
+   * are dropped, flagged `truncated` and logged once. One `load` (one query)
+   * per active source.
    */
   async resolveFacts(
     refs: RosterCharRef[],
     now: Date = new Date(),
-  ): Promise<ResolvedRoster> {
+  ): Promise<ResolvedRosterResult> {
+    const truncated = refs.length > MAX_ROSTER_ROWS;
+    if (truncated) {
+      this.logger.warn(
+        `Fact resolve capped at ${MAX_ROSTER_ROWS} of ${refs.length} roster rows`,
+      );
+    }
     const batch = refs.slice(0, MAX_ROSTER_ROWS);
-    const sources = await this.activeSources();
+    const live = await this.isBlizzardSeamLive();
+    const sources = this.sourcesFor(live);
     const loaded = await Promise.all(sources.map((s) => s.load(batch)));
-    const out: ResolvedRoster = new Map();
+    const facts: ResolvedRoster = new Map();
     for (const ref of batch) {
       const perSource: WowFactCandidates[] = loaded.flatMap((m) => {
         const c = m.get(ref.key);
         return c ? [c] : [];
       });
-      out.set(ref.key, resolveFacts(perSource, now));
+      facts.set(ref.key, resolveFacts(perSource, now, live));
     }
-    return out;
+    return { facts, truncated };
   }
 
   /** Resolve every latest-snapshot roster row of one guild, keyed `m<memberId>`. */
   async resolveForGuild(
     guildId: number,
     now: Date = new Date(),
-  ): Promise<ResolvedRoster> {
+  ): Promise<ResolvedRosterResult> {
     return this.resolveFacts(await this.guildRefs(guildId), now);
   }
 
@@ -107,6 +125,17 @@ export class WowFactsService {
       });
     }
     return [...refs.values()];
+  }
+
+  /** The core sources, plus Blizzard while the seam is live. */
+  private sourcesFor(blizzardLive: boolean): WowFactSource[] {
+    const core: WowFactSource[] = [this.roster, this.addon, this.characterRows];
+    return blizzardLive && this.blizzard ? [...core, this.blizzard] : core;
+  }
+
+  /** A Blizzard source is registered and the namespace prefix looks live. */
+  private async isBlizzardSeamLive(): Promise<boolean> {
+    return this.blizzard !== null && (await this.isForeverNamespaceLive());
   }
 
   private async isForeverNamespaceLive(): Promise<boolean> {
