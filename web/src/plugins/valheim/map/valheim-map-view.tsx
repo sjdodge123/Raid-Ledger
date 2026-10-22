@@ -4,7 +4,7 @@
  * composes MapViewport → base <img> + FogCanvas + PinLayer, and owns the layer
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import type { ValheimMapMeta } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import {
@@ -19,6 +19,8 @@ import { PinLayer } from './pin-layer';
 import { MapControls, type MapLayerState } from './map-controls';
 import { MapError } from './map-error';
 import { MapLegend, MapSnapshotFooter } from './map-legend';
+import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
+import { ChestFocusMarker } from './chest-focus-marker';
 
 export interface ValheimMapViewProps {
     characterId: number;
@@ -218,6 +220,9 @@ interface MapFrameProps {
 /** Viewport + status chip + overlay controls in the sized frame (D10). */
 function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
+    const chest = useContext(ChestFocusContext);
+    const grid = layers.meta.grid;
+    useCentreOnChest(commands, grid, chest);
     return (
         <div className={className ? `${FRAME} ${className}` : FRAME}>
             <MapViewport
@@ -226,7 +231,18 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
                 onCommands={setCommands}
                 className="absolute inset-0"
             >
-                {(vp) => <MapLayers layers={layers} scale={vp.scale} />}
+                {(vp) => (
+                    <>
+                        <MapLayers layers={layers} scale={vp.scale} />
+                        {chest && (
+                            <ChestFocusMarker
+                                grid={grid}
+                                scale={vp.scale}
+                                chest={chest}
+                            />
+                        )}
+                    </>
+                )}
             </MapViewport>
             <MapStatus {...status} />
             <MapLegend />

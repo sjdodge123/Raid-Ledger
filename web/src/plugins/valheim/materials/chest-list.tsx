@@ -4,12 +4,43 @@ import type { ValheimContainerSummary } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { StatusChip } from '../../../components/ui/status-chip';
 import type { ItemIconContext } from '../character/use-item-icons';
+import { MapPinIcon } from '@heroicons/react/24/outline';
+import { chestFocusHash } from '../map/chest-focus';
 import { chestLabel, formatCoords } from './materials.helpers';
 
 interface ChestListProps {
     containers: readonly ValheimContainerSummary[];
     ctx: ItemIconContext;
     onOpen: (chest: ValheimContainerSummary) => void;
+    /** ROK-1889: the filtered item's prefab — carried into the map link. */
+    holding?: string | null;
+}
+
+const MAP_LINK_CLASS =
+    'flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg px-3 text-sm text-success underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success';
+
+/** ROK-1889: a plain hash link (TabRow rule) to the Map tab centred on the chest. */
+function MapLink({
+    chest,
+    holding,
+    ctx,
+}: {
+    chest: ValheimContainerSummary;
+    holding: string | null;
+    ctx: ItemIconContext;
+}): JSX.Element {
+    const { prefab, x, z } = chest;
+    return (
+        <a
+            href={chestFocusHash({ prefab, x, z, item: holding })}
+            aria-label={`Show ${chestLabel(chest, ctx)} at ${formatCoords(x, z)} on the map`}
+            data-testid="valheim-chest-map-link"
+            className={MAP_LINK_CLASS}
+        >
+            <MapPinIcon aria-hidden="true" className="h-4 w-4" />
+            Map
+        </a>
+    );
 }
 
 function ChestChips({
@@ -45,6 +76,7 @@ export function ChestList({
     containers,
     ctx,
     onOpen,
+    holding = null,
 }: ChestListProps): JSX.Element {
     if (containers.length === 0)
         return (
@@ -55,12 +87,12 @@ export function ChestList({
     return (
         <ul className="divide-y divide-edge" aria-label="Chests">
             {containers.map((c) => (
-                <li key={c.key}>
+                <li key={c.key} className="flex items-center gap-1">
                     <Button
                         variant="ghost"
                         fullWidth
                         onClick={() => onOpen(c)}
-                        className="justify-start text-left"
+                        className="min-w-0 flex-1 justify-start text-left"
                     >
                         <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm text-foreground">
@@ -73,6 +105,7 @@ export function ChestList({
                         </span>
                         <ChestChips chest={c} />
                     </Button>
+                    <MapLink chest={c} holding={holding} ctx={ctx} />
                 </li>
             ))}
         </ul>

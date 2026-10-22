@@ -148,6 +148,7 @@ function MaterialsBody({
                 includeVehicles={filters.includeVehicles}
                 chests={chests}
                 holdingLabel={holdingLabel}
+                holding={selected}
                 onClear={() => setSelected(null)}
                 ctx={ctx}
             />
