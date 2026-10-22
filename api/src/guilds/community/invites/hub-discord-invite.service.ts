@@ -6,7 +6,9 @@ import * as schema from '../../../drizzle/schema';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import {
   FAILURE_CACHE_MS,
+  MINT_TIMEOUT_MS,
   inviteCacheTtlMs,
+  withinMs,
 } from './hub-discord-invite.helpers';
 
 /** A minted invite lives 24h on Discord. */
@@ -41,10 +43,27 @@ export class HubDiscordInviteService {
     private readonly client: DiscordBotClientService,
   ) {}
 
-  /** The hub's cached server invite URL, minting one when needed. */
+  private readonly inflight = new Map<number, Promise<string | null>>();
+
+  /**
+   * The hub's cached server invite URL, minting one when needed. Waits at
+   * most {@link MINT_TIMEOUT_MS} for a mint; a slower one still lands in the
+   * cache for the next view, and concurrent views share one mint.
+   */
   async serverInviteUrl(hubId: number): Promise<string | null> {
     const hit = this.cache.get(hubId);
     if (hit && hit.until > Date.now()) return hit.url;
+    let pending = this.inflight.get(hubId);
+    if (!pending) {
+      pending = this.mintAndCache(hubId).finally(() =>
+        this.inflight.delete(hubId),
+      );
+      this.inflight.set(hubId, pending);
+    }
+    return withinMs(pending, MINT_TIMEOUT_MS);
+  }
+
+  private async mintAndCache(hubId: number): Promise<string | null> {
     let minted = await this.mint(hubId, false);
     // `unique: false` may reuse the bot's invite on its last legs — mint anew.
     if (minted && inviteCacheTtlMs(minted.expiresAt, Date.now()) === 0) {

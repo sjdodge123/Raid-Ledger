@@ -23,3 +23,20 @@ export function inviteCacheTtlMs(expiresAt: Date | null, now: number): number {
   const left = expiresAt.getTime() - now - EXPIRY_MARGIN_MS;
   return Math.max(0, Math.min(MAX_CACHE_MS, left));
 }
+
+/**
+ * How long the public preview waits for a mint. discord.js QUEUES a
+ * rate-limited request until the bucket resets (invite creation has a tight
+ * one), so an unbounded await held `GET /hubs/invites/:token` open for most
+ * of a minute; past this the preview answers without the Discord link.
+ */
+export const MINT_TIMEOUT_MS = 3_000;
+
+/** `work`'s value, or null when it has not settled within `ms` (the work itself keeps running). */
+export function withinMs<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
