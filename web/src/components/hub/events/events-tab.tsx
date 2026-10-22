@@ -7,17 +7,32 @@
  * Game-agnostic by construction: it reads only the core raids payload, so a
  * hub of any `kind` gets the same tab. The WoW module's Raids tab keeps the
  * WoW-only half (role composition) and no longer repeats these three widgets.
+ *
+ * ROK-1893 P3: a community hub (`game_community`) also lists its open
+ * scheduling polls above the events, with "New poll" for live members.
  */
 import type { JSX } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { GuildKind, GuildRaidsDto } from '@raid-ledger/contract';
+import type { GuildKind, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { GuildAttendance } from './guild-attendance';
 import { GuildEvents } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
+import { HubPollsSection } from './hub-polls-section';
 
-interface EventsTabProps { query: UseQueryResult<GuildRaidsDto, Error>; kind?: GuildKind | undefined }
+interface EventsTabProps {
+    query: UseQueryResult<GuildRaidsDto, Error>;
+    kind?: GuildKind | undefined;
+    /** ROK-1893 P3: the hub page payload — a community hub shows its open polls. */
+    page?: GuildPage | undefined;
+}
 
-export function HubEventsTab({ query, kind }: EventsTabProps): JSX.Element {
+function CommunityPolls({ page }: { page: GuildPage | undefined }): JSX.Element | null {
+    if (page?.guild.kind !== 'game_community') return null;
+    const { guild } = page;
+    return <HubPollsSection hubId={guild.id} hubName={guild.name} gameId={guild.gameId} canCreate={page.community?.viewerJoined === true} />;
+}
+
+export function HubEventsTab({ query, kind, page }: EventsTabProps): JSX.Element {
     if (query.error) {
         return (
             <div className="py-12 text-center" data-testid="guild-events-error">
@@ -29,6 +44,7 @@ export function HubEventsTab({ query, kind }: EventsTabProps): JSX.Element {
     if (!raids) return <div aria-busy="true" data-testid="guild-events-loading" className="h-64 animate-pulse rounded-lg border border-edge bg-surface" />;
     return (
         <div className="flex flex-col gap-8" data-testid="guild-events-tab">
+            <CommunityPolls page={page} />
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <GuildRaidSchedule schedule={raids.schedule} kind={kind} />
                 <GuildAttendance attendance={raids.attendance} kind={kind} />

@@ -127,11 +127,14 @@ function useCreateEventFormState(
     editEvent?: EventResponseDto, seriesScope?: SeriesScope,
     initialGame?: EventFormProps['initialGame'], initialStartTime?: string | null,
     schedulingMatchId?: number | null, copyFromEvent?: EventResponseDto | null,
+    initialGuildId: number | null = null,
 ) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
     const [form, setForm] = useState<FormState>(() => {
         const state = getInitialState(editEvent, resolved, initialStartTime, copyFromEvent);
+        // ROK-1893 P3: a hub poll's lock-in preselects its hub.
+        if (!editEvent && initialGuildId !== null) state.guildId = initialGuildId;
         if (!editEvent && initialGame) {
             state.game = initialGame as FormState['game'];
             // A copy source already carries the previous event's own slot count
@@ -159,10 +162,10 @@ function useCreateEventFormState(
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent, initialGuildId }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent);
+    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null);
 
     return (
         <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null); }} className="space-y-4 sm:space-y-8">

@@ -11,6 +11,10 @@
  * success state with the share link + Open poll. Reschedule/LFG polls never
  * open this modal and send no `visibility`, so ruling R3 (they can't be
  * private) is enforced by the contract refine + the API, not a UI prop.
+ *
+ * ROK-1893 P3: opened from a hub's Events tab with `hubId` + `initialGameId`
+ * the game is locked to the hub's game, a "Tagged to <hub>" line replaces
+ * the search, and the request carries `hubId`.
  */
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -28,10 +32,16 @@ import { MinVoteThresholdSlider } from './min-vote-threshold-slider';
 import { getPlayers } from '../../lib/api-client';
 import { CreatePollVisibility } from './create-poll-visibility';
 import { CreatePollSuccess, CreatePollSuccessFooter } from './create-poll-success';
+import { CreatePollHubLine, resolvePollHubLock, type PollHubLock } from './create-poll-hub-line';
 
 interface CreatePollModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** ROK-1893 P3: the hub's game — used (and locked) together with `hubId`. */
+  initialGameId?: number;
+  /** ROK-1893 P3: tag the poll to this community hub. */
+  hubId?: number;
+  hubName?: string;
 }
 
 /** A created private poll, shown in the success state. */
@@ -78,14 +88,16 @@ function useCreatePollForm() {
 }
 
 /** Create the poll. Public: close (unguarded: nothing is lost) and open it. Private: show the link. */
-function useSubmitPoll(form: ReturnType<typeof useCreatePollForm>, close: () => void) {
+function useSubmitPoll(form: ReturnType<typeof useCreatePollForm>, close: () => void, lock: PollHubLock | null) {
   const navigate = useNavigate();
   const mutation = useCreateSchedulingPoll();
   const [created, setCreated] = useState<CreatedPrivatePoll | null>(null);
   const handleSubmit = async () => {
-    if (!form.selectedGame) return;
+    const gameId = lock?.gameId ?? form.selectedGame?.id;
+    if (gameId === undefined) return;
     const result = await mutation.mutateAsync({
-      gameId: form.selectedGame.id,
+      gameId,
+      ...(lock ? { hubId: lock.hubId } : {}),
       memberUserIds: form.memberIds.length > 0 ? form.memberIds : undefined,
       minVoteThreshold: form.minVoteThreshold > 0 ? form.minVoteThreshold : undefined,
       durationHours: form.durationHours,
@@ -112,8 +124,9 @@ function useSubmitPoll(form: ReturnType<typeof useCreatePollForm>, close: () => 
  * Modal for creating a standalone scheduling poll.
  * Contains a game picker (search) and an optional member picker.
  */
-export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
+export function CreatePollModal({ isOpen, onClose, initialGameId, hubId, hubName }: CreatePollModalProps) {
   const form = useCreatePollForm();
+  const lock = resolvePollHubLock(hubId, initialGameId, hubName);
   const { reset } = form;
   const handleClose = useCallback(() => {
     reset();
@@ -121,7 +134,7 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   }, [reset, onClose]);
   // Escape, backdrop and × ask first; Create Poll's own close stays unguarded.
   const guard = useDirtyCloseGuard(form.isDirty, handleClose);
-  const submit = useSubmitPoll(form, handleClose);
+  const submit = useSubmitPoll(form, handleClose, lock);
   const { created, clearCreated } = submit;
   const closeAfterCreate = useCallback(() => { clearCreated(); handleClose(); }, [clearCreated, handleClose]);
 
@@ -135,11 +148,11 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
       discardMessage="Your poll hasn't been created yet."
       footer={created
         ? <CreatePollSuccessFooter onOpen={submit.openCreated} />
-        : <CreatePollSubmit disabled={!form.selectedGame} isPending={submit.isPending} onSubmit={submit.handleSubmit} />}
+        : <CreatePollSubmit disabled={!lock && !form.selectedGame} isPending={submit.isPending} onSubmit={submit.handleSubmit} />}
     >
       {created
         ? <CreatePollSuccess token={created.shareToken} />
-        : <CreatePollFormBody form={form} />}
+        : <CreatePollFormBody form={form} lock={lock} />}
     </Modal>
   );
 }
@@ -156,16 +169,16 @@ function useThresholdSliderMax(pickedCount: number): number {
 }
 
 /** Form body extracted to stay within function line limits. */
-function CreatePollFormBody({ form }: {
+function CreatePollFormBody({ form, lock }: {
   form: ReturnType<typeof useCreatePollForm>;
+  lock: PollHubLock | null;
 }) {
   const sliderMax = useThresholdSliderMax(form.memberIds.length);
   return (
     <div className="space-y-3">
-      <PollGameSearch
-        value={form.selectedGame}
-        onChange={form.setSelectedGame}
-      />
+      {lock
+        ? <CreatePollHubLine lock={lock} />
+        : <PollGameSearch value={form.selectedGame} onChange={form.setSelectedGame} />}
       <MemberPicker
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}

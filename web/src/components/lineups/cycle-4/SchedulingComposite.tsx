@@ -44,6 +44,7 @@ import { useSchedulingLock } from './use-scheduling-lock';
 import { useExpiredLockIn } from './use-expired-lock-in';
 import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
+import { SchedulingHubPanel } from './SchedulingHubPanel';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
@@ -92,7 +93,7 @@ export function SchedulingComposite(
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
-  const lock = useSchedulingLock(poll.match, matchId, lineupId);
+  const lock = useSchedulingLock(poll.match, matchId, lineupId, poll.hub?.id ?? null);
   // ROK-1610: an expired poll the viewer may still finish. Its lock-in is a
   // different write (no refetch-must-be-open guard, no create form), so when
   // it is live the ladder's per-row lock routes here instead.
@@ -215,6 +216,7 @@ export function SchedulingComposite(
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
       />
+      <SchedulingHubPanel poll={poll} lineupId={lineupId} matchId={matchId} />
       <SchedulingTerminalBanner
         pollStatus={pollStatus}
         lockedInTime={poll.lockedInTime ?? null}
