@@ -54,8 +54,10 @@ export function resolveCommandWeight(command: string, explicit?: TaskWeight): Ta
 /**
  * Weight for a validate-ci.sh invocation (rl_validate_ci).
  *
- * Heavy by default — a bare run is the full pipeline. A `--static` run with no
- * forced e2e flag is `medium` (no-RAM memory plan 2026-10-22, item 3): build +
+ * Heavy by default — a bare run is the full pipeline. A `--scoped` run with no
+ * forced e2e flag is `light`: it does strictly less than `--static` (only the
+ * changed workspaces), so it fits alongside another heavy run. A `--static` run
+ * with no forced e2e flag is `medium` (no-RAM memory plan 2026-10-22, item 3): build +
  * typecheck + lint peaks at ~3 GiB, and on 2026-10-22 03:20Z several ungated
  * statics next to an image build and jest runs stalled the VM. Medium holds a
  * ledger reservation for its whole run but is not bound by the heavy cap.
@@ -67,6 +69,7 @@ export function resolveValidateCiWeight(args: string[], explicit?: TaskWeight): 
   if (explicit) return explicit;
   const hasHeavyFlag = args.some((a) => VALIDATE_CI_HEAVY_FLAGS.includes(a));
   if (hasHeavyFlag) return 'heavy';
+  if (args.includes('--scoped')) return 'light';
   return args.includes('--static') ? 'medium' : 'heavy';
 }
 
