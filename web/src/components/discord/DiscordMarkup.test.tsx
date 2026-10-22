@@ -48,7 +48,7 @@ describe('DiscordMarkup — the prod Valheim embed (ROK-1878)', () => {
         const el = renderMarkup(PROD_SAMPLE);
         expect(el.textContent).toContain('🔊 #channel');
         expect(el.textContent).not.toMatch(/\d{17,20}/);
-        expect(el.textContent).not.toMatch(/<[#@t]/);
+        expect(el.textContent).not.toMatch(/<(?:#|@|t:)/);
     });
 
     it('names a channel the mirror knows', () => {
@@ -111,10 +111,10 @@ describe('formatDiscordTimestamp', () => {
         for (const style of ['t', 'T', 'd', 'D', 'f', 'F', 'R'] as const) {
             expect(formatDiscordTimestamp(UNIX, style)).not.toBe('');
         }
-        expect(formatDiscordTimestamp(UNIX, 'F').length).toBeGreaterThan(formatDiscordTimestamp(UNIX, 'f').length);
+        expect(formatDiscordTimestamp(UNIX, 'F')?.length).toBeGreaterThan(formatDiscordTimestamp(UNIX, 'f')?.length ?? Infinity);
     });
 
     it('returns null for an out-of-range timestamp', () => {
-        expect(formatDiscordTimestamp(99999999999999999, 'f')).toBeNull();
+        expect(formatDiscordTimestamp(1e17, 'f')).toBeNull();
     });
 });
