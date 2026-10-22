@@ -113,8 +113,14 @@ export async function insertCommunityHub(
   return row;
 }
 
-function proposalWhere(extra?: SQL): SQL | undefined {
-  return and(eq(g.kind, COMMUNITY), eq(g.status, 'proposed'), extra);
+/** ROK-1892: a staff proposal is read back `active` (auto-approved). */
+export type ProposalStatus = 'proposed' | 'active';
+
+function proposalWhere(
+  extra?: SQL,
+  status: ProposalStatus = 'proposed',
+): SQL | undefined {
+  return and(eq(g.kind, COMMUNITY), eq(g.status, status), extra);
 }
 
 /** A proposed row, locked `FOR UPDATE` when called inside a transaction. */
@@ -133,7 +139,7 @@ export async function lockProposal(
 /** Proposals as the contract `HubProposal`, oldest first. */
 export async function listProposals(
   db: DbOrTx,
-  filter?: { proposedBy?: number; ids?: number[] },
+  filter?: { proposedBy?: number; ids?: number[]; status?: ProposalStatus },
 ): Promise<HubProposal[]> {
   const extra: SQL[] = [];
   if (filter?.proposedBy !== undefined)
@@ -144,7 +150,7 @@ export async function listProposals(
     .from(g)
     .innerJoin(games, eq(games.id, g.gameId))
     .innerJoin(u, eq(u.id, g.proposedBy))
-    .where(proposalWhere(and(...extra)))
+    .where(proposalWhere(and(...extra), filter?.status))
     .orderBy(asc(g.createdAt), asc(g.id));
   return rows.map(({ hub, game, user }) => ({
     id: hub.id,

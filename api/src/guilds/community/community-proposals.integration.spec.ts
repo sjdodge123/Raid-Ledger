@@ -340,6 +340,58 @@ describe('operator review (prod 2026-10-21: notices reach operators)', () => {
   });
 });
 
+describe('ROK-1892 staff proposals skip review', () => {
+  it.each(['admin', 'operator'] as const)(
+    'P16 a %s proposal lands active, self-reviewed, led by them — no queue, no notices',
+    async (role) => {
+      const staff = await seedUser(`p16-${role}`, { role });
+      const peer = await seedUser(`p16-peer-${role}`, { role: 'operator' });
+      const res = await propose(staff, { gameId: gameG(), name: 'P16 Crew' });
+      expect(res.status).toBe(201);
+      const id = res.body.id as number;
+      expect(res.body).toEqual(
+        expect.objectContaining({
+          name: 'P16 Crew',
+          proposedBy: expect.objectContaining({ userId: staff.user.id }),
+        }),
+      );
+
+      const row = await hubRow(id);
+      expect(row?.status).toBe('active');
+      expect(row?.proposedBy).toBe(staff.user.id);
+      expect(row?.reviewedBy).toBe(staff.user.id);
+      expect(row?.reviewedAt).not.toBeNull();
+      expect(row?.memberCount).toBe(1);
+      const members = await membersOf(id);
+      expect(members.map((m) => [m.userId, m.role])).toEqual([
+        [staff.user.id, 'leader'],
+      ]);
+
+      const queue = await testApp.request
+        .get('/admin/hubs/proposals')
+        .set(peer.auth);
+      expect(queue.body.items).toEqual([]);
+      for (const userId of [
+        testApp.seed.adminUser.id,
+        peer.user.id,
+        staff.user.id,
+      ]) {
+        expect(await noticesFor(userId, 'hub_proposal_submitted')).toEqual([]);
+        expect(await noticesFor(userId, 'hub_proposal_reviewed')).toEqual([]);
+      }
+    },
+  );
+
+  it('P17 a member proposal is still proposed with no reviewer', async () => {
+    const proposer = await seedUser('p17-proposer');
+    const id = await proposeOk(proposer, { gameId: gameG(), name: 'P17 Crew' });
+    const row = await hubRow(id);
+    expect(row?.status).toBe('proposed');
+    expect(row?.reviewedBy).toBeNull();
+    expect(await membersOf(id)).toHaveLength(0);
+  });
+});
+
 describe('POST /admin/hubs/proposals/:id/approve|reject', () => {
   it('P7 approve with rename: 200, active, proposer is leader, member_count 1, proposer notified', async () => {
     const proposer = await seedUser('p7-proposer');

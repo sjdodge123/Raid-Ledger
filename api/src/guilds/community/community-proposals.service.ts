@@ -67,7 +67,11 @@ export class CommunityProposalsService {
     private readonly notifications: NotificationService,
   ) {}
 
-  /** A2 → game → D12 limits → D11 name → insert `proposed` → notify staff. */
+  /**
+   * A2 → game → D12 limits → D11 name → insert `proposed` → notify staff.
+   * ROK-1892: a staff proposer's hub is approved in the same transaction
+   * (reviewed by themselves) — no review queue, no notices.
+   */
   async propose(
     actor: GuildActor,
     dto: CreateHubProposalDto,
@@ -78,10 +82,12 @@ export class CommunityProposalsService {
       throw new ForbiddenException(PROPOSAL_ERRORS.notInDiscord);
     }
     await this.requireGame(dto.gameId);
+    const autoApprove = isStaff(actor);
     const row = await conflictOnUnique(
-      () => this.insertProposalTx(actor.id, dto),
+      () => this.insertProposalTx(actor.id, dto, autoApprove),
       PROPOSAL_ERRORS.nameTaken,
     );
+    if (autoApprove) return this.findProposal(row.id, 'active');
     const proposal = await this.findProposal(row.id);
     const staff = await staffUserIds(this.db);
     const facts = factsOf(proposal);
@@ -91,21 +97,27 @@ export class CommunityProposalsService {
     return proposal;
   }
 
-  /** P14: D12 limits + D11 name + insert, under the proposer's xact lock. */
+  /**
+   * P14: D12 limits + D11 name + insert, under the proposer's xact lock.
+   * `autoApprove` (ROK-1892) runs the D8 approval on the new row in-tx.
+   */
   private insertProposalTx(
     userId: number,
     dto: CreateHubProposalDto,
+    autoApprove: boolean,
   ): Promise<schema.GuildSelect> {
     return this.db.transaction(async (tx) => {
       await q.lockProposer(tx, userId);
       await this.assertWithinLimits(tx, userId, dto.gameId);
       await this.assertNameFree(tx, dto.gameId, dto.name, null);
-      return q.insertCommunityHub(tx, {
+      const row = await q.insertCommunityHub(tx, {
         ...dto,
         status: 'proposed',
         proposedBy: userId,
         reviewedBy: null,
       });
+      if (!autoApprove) return row;
+      return (await this.activateInTx(tx, userId, row.id, {})).row;
     });
   }
 
@@ -151,21 +163,29 @@ export class CommunityProposalsService {
     dto: ApproveHubProposalDto,
   ): Promise<{ row: schema.GuildSelect; proposerId: number }> {
     const run = () =>
-      this.db.transaction(async (tx) => {
-        const locked = await q.lockProposal(tx, id);
-        if (!locked) throw new NotFoundException(PROPOSAL_ERRORS.notFound);
-        const proposer = await this.activeProposer(tx, locked.proposedBy);
-        if (dto.name !== undefined)
-          await this.assertNameFree(tx, locked.gameId, dto.name, id);
-        const active = await q.activateProposal(tx, id, {
-          reviewedBy: adminId,
-          ...dto,
-        });
-        await upsertJoin(tx, id, proposer, 'leader');
-        const memberCount = await refreshMemberCount(tx, id);
-        return { row: { ...active, memberCount }, proposerId: proposer };
-      });
+      this.db.transaction((tx) => this.activateInTx(tx, adminId, id, dto));
     return conflictOnUnique(run, PROPOSAL_ERRORS.nameTaken);
+  }
+
+  /** D8 inside `tx`: lock, activate, seat the proposer as Leader, count. */
+  private async activateInTx(
+    tx: DbOrTx,
+    reviewerId: number,
+    id: number,
+    dto: ApproveHubProposalDto,
+  ): Promise<{ row: schema.GuildSelect; proposerId: number }> {
+    const locked = await q.lockProposal(tx, id);
+    if (!locked) throw new NotFoundException(PROPOSAL_ERRORS.notFound);
+    const proposer = await this.activeProposer(tx, locked.proposedBy);
+    if (dto.name !== undefined)
+      await this.assertNameFree(tx, locked.gameId, dto.name, id);
+    const active = await q.activateProposal(tx, id, {
+      reviewedBy: reviewerId,
+      ...dto,
+    });
+    await upsertJoin(tx, id, proposer, 'leader');
+    const memberCount = await refreshMemberCount(tx, id);
+    return { row: { ...active, memberCount }, proposerId: proposer };
   }
 
   /**
@@ -258,8 +278,11 @@ export class CommunityProposalsService {
     return user.id;
   }
 
-  private async findProposal(id: number): Promise<HubProposal> {
-    const [proposal] = await q.listProposals(this.db, { ids: [id] });
+  private async findProposal(
+    id: number,
+    status: q.ProposalStatus = 'proposed',
+  ): Promise<HubProposal> {
+    const [proposal] = await q.listProposals(this.db, { ids: [id], status });
     if (!proposal) throw new NotFoundException(PROPOSAL_ERRORS.notFound);
     return proposal;
   }

@@ -104,6 +104,13 @@ beforeEach(async () => {
   mocked(q.listProposals).mockResolvedValue([proposal]);
 });
 
+/** The D8 reads/writes a staff proposal runs inside its insert tx. */
+function stageAutoApprove(): void {
+  mocked(q.lockProposal).mockResolvedValue(proposedRow);
+  mocked(q.activateProposal).mockResolvedValue(hubRow);
+  mocked(members.refreshMemberCount).mockResolvedValue(1);
+}
+
 describe('propose', () => {
   it('403 when the user is not in the Discord guild', async () => {
     mocked(users.findProposalUser).mockResolvedValue({
@@ -118,6 +125,7 @@ describe('propose', () => {
       ...inGuild,
       discordId: null,
     });
+    stageAutoApprove();
     await expect(svc.propose({ id: 5, role: 'admin' }, dto)).resolves.toEqual(
       proposal,
     );
@@ -264,5 +272,39 @@ describe('approve / reject / withdraw / createDirect', () => {
     await expect(
       svc.createDirect(1, { ...dto, leaderUserId: 5 }),
     ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('ROK-1892 staff proposals skip review', () => {
+  it.each(['admin', 'operator'] as const)(
+    'ROK-1892: a %s proposal is approved in-tx by themselves — no notices',
+    async (role) => {
+      stageAutoApprove();
+      await svc.propose({ id: 5, role }, dto);
+      expect(q.insertCommunityHub).toHaveBeenCalledTimes(1);
+      expect(q.activateProposal).toHaveBeenCalledTimes(1);
+      expect(q.activateProposal).toHaveBeenCalledWith(tx, 40, {
+        reviewedBy: 5,
+      });
+      expect(members.upsertJoin).toHaveBeenCalledTimes(1);
+      expect(members.upsertJoin).toHaveBeenCalledWith(tx, 40, 5, 'leader');
+      expect(members.refreshMemberCount).toHaveBeenCalledTimes(1);
+      expect(q.listProposals).toHaveBeenCalledWith(expect.anything(), {
+        ids: [40],
+        status: 'active',
+      });
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('ROK-1892: a member proposal is never auto-approved', async () => {
+    await svc.propose(member, dto);
+    expect(q.lockProposal).not.toHaveBeenCalled();
+    expect(q.activateProposal).not.toHaveBeenCalled();
+    expect(members.upsertJoin).not.toHaveBeenCalled();
+    expect(q.listProposals).toHaveBeenCalledWith(expect.anything(), {
+      ids: [40],
+      status: 'proposed',
+    });
   });
 });
