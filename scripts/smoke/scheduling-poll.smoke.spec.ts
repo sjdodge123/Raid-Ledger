@@ -3275,11 +3275,18 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         // drawer reveals the page's ladder, and that the ladder is ONE ballot
         // and not two — would have had no row at all to land on.
         //
-        // The decoy is earlier and keeps the suggester's auto-YES, so it holds
-        // the card whether or not a case toggles the row's own vote.
+        // The decoy is earlier and must hold the card whether or not a case
+        // toggles the row's own vote. The admin suggests BOTH times, so each
+        // starts on one auto-YES. When the admin was the viewer, its toggle
+        // only ever took the row from 1 to 0. The checker is not the
+        // suggester, so its toggle takes the row from 1 to 2, which out-votes
+        // a 1-vote decoy (`sortSlots`: votes desc, then time asc). The lead
+        // then moves, and the ladder's one row becomes the decoy, which the
+        // checker never voted on. So the checker backs the decoy too. That
+        // leaves 2 to 1, at worst a 2-2 tie, and the earlier decoy wins a tie.
         const decoyTime = new Date(Date.now() + 86_400_000);
         decoyTime.setHours(20, 0, 0, 0);
-        await seedDecoyLeader(checkLineupId, checkMatchId, decoyTime);
+        const decoySlotId = await seedDecoyLeader(checkLineupId, checkMatchId, decoyTime);
         const when = new Date(Date.now() + 2 * 86_400_000);
         when.setHours(20, 0, 0, 0);
         await apiPost(
@@ -3288,6 +3295,29 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
             { proposedTime: when.toISOString() },
         );
         await pollSchedulingPollHasSlot(adminToken, checkLineupId, checkMatchId);
+        await apiPost(
+            checker.jwt,
+            `/lineups/${checkLineupId}/schedule/${checkMatchId}/vote`,
+            { slotId: decoySlotId, stance: 'yes' },
+        );
+        await expect
+            .poll(
+                async () => {
+                    const res = await apiGet(
+                        checker.jwt,
+                        `/lineups/${checkLineupId}/schedule/${checkMatchId}`,
+                    );
+                    const slots = ((res?.data ?? res)?.slots ?? []) as {
+                        id: number;
+                        votes: { userId: number }[];
+                    }[];
+                    return slots
+                        .find((s) => s.id === decoySlotId)
+                        ?.votes.some((v) => v.userId === checker.userId);
+                },
+                { timeout: 15_000, message: 'the checker\'s YES on the decoy never landed' },
+            )
+            .toBe(true);
     });
 
     test.beforeEach(async ({ page }) => {
