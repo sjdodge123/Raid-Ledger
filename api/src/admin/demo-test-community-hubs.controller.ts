@@ -41,6 +41,7 @@ import {
   muteSeedDiscordDms,
   resetSeedFixture,
 } from './demo-test-community-hubs.reset';
+import { seedOtherKindHubs } from './demo-test-community-hubs.other-kinds';
 
 const CREW = ['officer', 'member-1', 'member-2', 'member-3', 'member-4'];
 
@@ -76,8 +77,10 @@ export class DemoTestCommunityHubsController {
     for (const id of [main.crew, solo, archived]) {
       await refreshMemberCount(this.db, id);
     }
+    const { server, guild } = await seedOtherKindHubs(this.db, gameId);
     const { crew, ...rest } = main;
-    return { gameId, hubIds: { crew, solo, archived }, ...rest, proposalId };
+    const hubIds = { crew, solo, archived, server, guild };
+    return { gameId, hubIds, ...rest, proposalId };
   }
 
   /** "Seed Crew": leader + officer + 4 members live, one banned user. */
