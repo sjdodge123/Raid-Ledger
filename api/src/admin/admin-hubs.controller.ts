@@ -23,7 +23,8 @@ import {
   type GuildSummary,
   type HubProposalList,
 } from '@raid-ledger/contract';
-import { AdminGuard } from '../auth/admin.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import type { AuthenticatedRequest } from '../auth/types';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -34,9 +35,15 @@ import {
 import { parseBody } from '../guilds/community/community-proposals.body';
 import { CommunityProposalsService } from '../guilds/community/community-proposals.service';
 
-/** ROK-1870 — Admin → Hubs: the proposal queue, review, direct create, list. */
+/**
+ * ROK-1870 — Admin → Hubs: the proposal queue, review, direct create, list.
+ * Operators review hubs too (operator ruling 2026-10-21): the
+ * `hub_proposal_submitted` notice reaches every admin AND operator, so this
+ * controller is `@Roles('operator')` (operator + admin), not AdminGuard.
+ */
 @Controller('admin/hubs')
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), RolesGuard)
+@Roles('operator')
 export class AdminHubsController {
   constructor(
     private readonly proposals: CommunityProposalsService,
