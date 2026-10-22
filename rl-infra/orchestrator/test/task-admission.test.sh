@@ -53,6 +53,7 @@ EOF
 fast_admission_env() {
     export RL_HEAVY_TASK_POLL_SECONDS=1
     export RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS="${1:-3}"
+    export RL_LEDGER_ADMISSION_TIMEOUT_SECONDS="${1:-3}"
     export RL_HEAVY_TASK_MIN_FREE_MB="${2:-5120}"
 }
 
