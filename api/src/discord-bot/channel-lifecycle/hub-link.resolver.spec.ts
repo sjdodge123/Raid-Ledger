@@ -34,7 +34,11 @@ describe('resolveGameHubLink (D15)', () => {
   });
 
   it('H1: a visible tagged hub wins over the game hubs', async () => {
-    mock.where.mockResolvedValueOnce([{ id: 3 }, { id: 9 }, { id: 4 }]);
+    mock.where.mockResolvedValueOnce([
+      { id: 3, kind: 'game_server' },
+      { id: 9, kind: 'game_server' },
+      { id: 4, kind: 'game_server' },
+    ]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 1,
       taggedGuildId: 9,
@@ -45,7 +49,7 @@ describe('resolveGameHubLink (D15)', () => {
   });
 
   it("H2: untagged, the game's single visible hub resolves to it", async () => {
-    mock.where.mockResolvedValueOnce([{ id: 5 }]);
+    mock.where.mockResolvedValueOnce([{ id: 5, kind: 'game_server' }]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 1,
       clientUrl: `${BASE}/`,
@@ -54,7 +58,7 @@ describe('resolveGameHubLink (D15)', () => {
   });
 
   it('H3: hidden hubs are filtered in SQL; a hidden tag falls back', async () => {
-    mock.where.mockResolvedValueOnce([{ id: 5 }]);
+    mock.where.mockResolvedValueOnce([{ id: 5, kind: 'game_server' }]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 1,
       taggedGuildId: 9,
@@ -68,7 +72,7 @@ describe('resolveGameHubLink (D15)', () => {
 
   it('H3b (Codex r14 P2): an archived tagged hub falls back — SQL requires status active', async () => {
     // The DB drops the archived tag (status filter); the game's active hub is left.
-    mock.where.mockResolvedValueOnce([{ id: 5 }]);
+    mock.where.mockResolvedValueOnce([{ id: 5, kind: 'game_server' }]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 1,
       taggedGuildId: 9,
@@ -89,14 +93,40 @@ describe('resolveGameHubLink (D15)', () => {
     expect(whereSql(mock)).toContain('"guilds"."status" = $');
   });
 
-  // TODO(ROK-1873): L11 flips this to the `/hubs?game=` directory once it exists.
-  it('H4: two or more hubs link the oldest (lowest id) hub — never a 404 directory', async () => {
-    mock.where.mockResolvedValueOnce([{ id: 6 }, { id: 5 }]);
+  it('H4: two or more server hubs link the /hubs?game= directory', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 6, kind: 'game_server' },
+      { id: 5, kind: 'game_server' },
+    ]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 12,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs?game=12`, label: 'Hubs' });
+  });
+
+  it('H8: two community hubs link the /hubs?game= directory "Hubs"', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 7, kind: 'game_community' },
+      { id: 8, kind: 'game_community' },
+    ]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 4,
+      clientUrl: `${BASE}/`,
+    });
+    expect(link).toEqual({ url: `${BASE}/hubs?game=4`, label: 'Hubs' });
+  });
+
+  it('D15: a single community hub wins over a server hub', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 2, kind: 'game_server' },
+      { id: 9, kind: 'game_community' },
+    ]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 4,
+      clientUrl: BASE,
+    });
+    expect(link).toEqual({ url: `${BASE}/guilds/9`, label: 'Hub' });
   });
 
   it('H5: no hub, no game or no CLIENT_URL resolves to null', async () => {
@@ -116,8 +146,8 @@ describe('resolveGameHubLink (D15)', () => {
 });
 
 describe('HUB_LINK_KINDS', () => {
-  it('links only game_server hubs until L11 adds game_community', () => {
-    expect(HUB_LINK_KINDS).toEqual(['game_server']);
+  it('links server and community hubs (L11), never WoW guild hubs', () => {
+    expect(HUB_LINK_KINDS).toEqual(['game_server', 'game_community']);
   });
 });
 
@@ -139,16 +169,19 @@ describe('resolveGameHubLinkSafe', () => {
 });
 
 describe('resolveGameHubLinks (batch)', () => {
-  it('groups hubs per game; ≥ 2 hubs → the oldest (TODO(ROK-1873))', async () => {
+  it('groups hubs per game; ≥ 2 hubs → the /hubs?game= directory', async () => {
     const mock = createDrizzleMock();
     mock.where.mockResolvedValueOnce([
-      { id: 5, gameId: 1 },
-      { id: 7, gameId: 2 },
-      { id: 6, gameId: 2 },
+      { id: 5, gameId: 1, kind: 'game_server' },
+      { id: 7, gameId: 2, kind: 'game_server' },
+      { id: 6, gameId: 2, kind: 'game_server' },
     ]);
     const links = await resolveGameHubLinks(asDb(mock), [1, 2, 3, 1], BASE);
     expect(links.get(1)).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
-    expect(links.get(2)).toEqual({ url: `${BASE}/guilds/6`, label: 'Hub' });
+    expect(links.get(2)).toEqual({
+      url: `${BASE}/hubs?game=2`,
+      label: 'Hubs',
+    });
     expect(links.has(3)).toBe(false);
   });
 
@@ -192,7 +225,7 @@ describe('disabled hub kinds (Codex r17 P2)', () => {
 
   it('a tagged hub of a disabled kind falls back to an active-kind game hub', async () => {
     setActiveHubKindsSource(() => ['game_server']);
-    mock.where.mockResolvedValueOnce([{ id: 5 }]);
+    mock.where.mockResolvedValueOnce([{ id: 5, kind: 'game_server' }]);
     const link = await resolveGameHubLink(asDb(mock), {
       gameId: 1,
       taggedGuildId: 9,
