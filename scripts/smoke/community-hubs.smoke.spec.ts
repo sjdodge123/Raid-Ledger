@@ -22,7 +22,8 @@ import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
     gameId: number;
-    hubIds: { crew: number; solo: number; archived: number };
+    /** ROK-1883: `server` is a HIDDEN game-server hub, `guild` a member-less WoW guild hub. */
+    hubIds: { crew: number; solo: number; archived: number; server: number; guild: number };
     leaderUserId: number;
     /** `[officer, member-1, member-2, member-3, member-4]`. */
     memberUserIds: number[];
@@ -112,8 +113,10 @@ async function withdrawAll(jwt: string): Promise<void> {
 
 async function openGamePage(page: Page, gameId: number): Promise<Locator> {
     await page.goto(`/games/${gameId}`);
-    const card = page.locator('section[aria-labelledby="community-hubs-heading"]');
-    await expect(card, 'the game page renders the Community hubs card').toBeVisible({ timeout: 20_000 });
+    const card = page.locator('section[aria-labelledby="game-hubs-heading"]');
+    await expect(card, 'the game page renders the one Hubs card').toBeVisible({ timeout: 20_000 });
+    await expect(card, 'exactly one Hubs card (ROK-1883)').toHaveCount(1);
+    await expect(page.getByTestId('game-detail-guilds'), 'the WoW "Guilds" card is gone (ROK-1883)').toHaveCount(0);
     return card;
 }
 
@@ -156,6 +159,9 @@ test.describe('community hubs — member', () => {
         await expect(card.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
         await expect(card.getByRole('link', { name: 'Seed Old Guard' }), 'archived hubs are not listed').toHaveCount(0);
         await expect(card.getByRole('link', { name: 'Seed Hopefuls' }), 'proposed hubs are not listed').toHaveCount(0);
+        await expect(card.getByRole('link', { name: 'Seed Server', exact: true }), 'a member never sees a hidden server hub').toHaveCount(0);
+        await expect(card.getByRole('link', { name: 'Seed Guild', exact: true }), 'a non-member never sees a WoW guild hub').toHaveCount(0);
+        await expect(card.getByText('Hidden', { exact: true }), 'non-staff never see the Hidden chip').toHaveCount(0);
 
         await card.getByRole('button', { name: 'Join Seed Solo' }).click();
         await expect.poll(() => viewerOf(jwt, seed.gameId, seed.hubIds.solo), {
@@ -331,7 +337,45 @@ test.describe('community hubs — leader', () => {
     });
 });
 
+/** Each rendered Hubs-card row's hub id — ROK-1883 AC3: no id twice. */
+async function cardRowIds(card: Locator): Promise<string[]> {
+    return card.getByTestId('game-hub-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-hub-id') ?? ''));
+}
+
+/** The `/hubs` directory card whose name link is exactly `name`. */
+function directoryCard(page: Page, name: string): Locator {
+    return page.getByTestId('hub-directory-card').filter({ has: page.getByRole('link', { name, exact: true }) });
+}
+
 test.describe('community hubs — admin', () => {
+    test('one Hubs card lists every kind once; staff see the hidden server hub marked Hidden (ROK-1883)', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        const admin = await getAdminToken();
+        const body = (await apiGet(admin, `/hubs/by-game/${seed.gameId}`)) as { hubs?: Array<DirectoryEntry & { kind?: string; hidden?: boolean }> } | null;
+        const hubs = must(body?.hubs, 'admin by-game hubs');
+        const byId = (id: number): (DirectoryEntry & { kind?: string; hidden?: boolean }) | undefined => hubs.find((h) => h.id === id);
+        expect(new Set(hubs.map((h) => h.id)).size, 'by-game lists each hub once').toBe(hubs.length);
+        expect(byId(seed.hubIds.server), 'staff get the hidden server hub').toMatchObject({ kind: 'game_server', hidden: true });
+        expect(byId(seed.hubIds.guild), 'staff get the WoW guild hub').toMatchObject({ kind: 'wow_guild', hidden: false });
+        expect(byId(seed.hubIds.crew), 'the community hub is listed').toMatchObject({ kind: 'game_community', hidden: false });
+
+        const card = await openGamePage(page, seed.gameId);
+        const ids = await cardRowIds(card);
+        expect(ids.length, 'the card renders rows').toBeGreaterThan(0);
+        expect(new Set(ids).size, 'no hub renders twice on the game page').toBe(ids.length);
+        await card.getByRole('link', { name: `See all ${hubs.length} hubs` }).click();
+        await expect(page).toHaveURL(new RegExp(`/hubs\\?game=${seed.gameId}`));
+
+        const kinds: Array<[string, string]> = [['Seed Server', 'Server'], ['Seed Guild', 'Guild'], ['Seed Crew', 'Community']];
+        for (const [name, kind] of kinds) {
+            const dirCard = directoryCard(page, name);
+            await expect(dirCard, `${name} is listed once on /hubs`).toHaveCount(1, { timeout: 20_000 });
+            await expect(dirCard.getByTestId('hub-kind-chip')).toHaveText(kind);
+        }
+        await expect(directoryCard(page, 'Seed Server').getByText('Hidden', { exact: true }), 'the hidden server hub is marked').toBeVisible();
+        await expect(directoryCard(page, 'Seed Crew').getByText('Hidden', { exact: true }), 'a visible hub is not marked').toHaveCount(0);
+    });
+
     test('Admin → Hubs approves the seeded proposal; the proposer gets the notification', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
