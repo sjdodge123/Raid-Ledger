@@ -18,6 +18,8 @@ This file shadows Anthropic's built-in `/security-review` skill at the project l
 - After landing a third-party dependency that surfaces in request handling.
 - Operator-triggered ad-hoc security audit.
 
+**Codex policy (operator 2026-10-22, supersedes "run until clean"):** Codex runs **once, on the final candidate**. Intermediate fix rounds get an Opus `devedup-rl:reviewer` pass on the delta only. Cap at **~3 review rounds**, then ask the operator instead of looping.
+
 If the diff doesn't touch any sensitive area, you don't need this — `/code-review` or the Codex pass in `/build` step-4b is enough.
 
 ---
