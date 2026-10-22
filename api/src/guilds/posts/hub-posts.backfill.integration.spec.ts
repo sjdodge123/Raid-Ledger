@@ -1,10 +1,10 @@
 /**
- * ROK-1868 B1 — migration 0238 copies each guild's legacy GM post into
+ * ROK-1868 B1 — the hub_posts backfill migration copies each guild's legacy GM post into
  * `hub_posts` once: text → one row (body byte-identical, author = last
  * editor, not "Edited"); blank / NULL → nothing; a guild that already has a
  * post → untouched; a re-run inserts nothing.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { asc, eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -42,11 +42,22 @@ async function insertGuild(name: string): Promise<number> {
   return g.id;
 }
 
-async function runBackfill(): Promise<void> {
-  const file = join(
-    __dirname,
-    '../../drizzle/migrations/0240_hub_posts_backfill.sql',
+/** Found by suffix, not number: a migration renumber must not break this spec. */
+function backfillMigrationPath(): string {
+  const dir = join(__dirname, '../../drizzle/migrations');
+  const matches = readdirSync(dir).filter((f) =>
+    f.endsWith('_hub_posts_backfill.sql'),
   );
+  if (matches.length !== 1 || matches[0] === undefined) {
+    throw new Error(
+      `expected one *_hub_posts_backfill.sql, found ${matches.length}`,
+    );
+  }
+  return join(dir, matches[0]);
+}
+
+async function runBackfill(): Promise<void> {
+  const file = backfillMigrationPath();
   const statements = readFileSync(file, 'utf8')
     .split('--> statement-breakpoint')
     .map((s) => s.trim())
@@ -96,7 +107,7 @@ function postsOf(guildId: number) {
     .orderBy(asc(schema.hubPosts.id));
 }
 
-describe('migration 0238 hub_posts backfill (ROK-1868 B1)', () => {
+describe('migration hub_posts backfill (ROK-1868 B1)', () => {
   it('copies the legacy text verbatim, once, as an unedited post', async () => {
     const ids = await seedProfiles();
     await runBackfill();
