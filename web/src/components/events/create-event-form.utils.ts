@@ -197,7 +197,12 @@ export function guildIdForSubmit(
     originalGuildId: number | null,
     pollHubId: number | null = null,
 ): { guildId?: number | null } {
-    if (!isEditMode) return guildId === null || guildId === pollHubId ? {} : { guildId };
+    if (!isEditMode) {
+        // From a hub poll (ROK-1893 P3): the poll's own hub is inherited server-side (omit);
+        // clearing it sends an explicit null so the event is NOT tagged.
+        if (guildId === null) return pollHubId === null ? {} : { guildId: null };
+        return guildId === pollHubId ? {} : { guildId };
+    }
     return guildId === originalGuildId ? {} : { guildId };
 }
 
