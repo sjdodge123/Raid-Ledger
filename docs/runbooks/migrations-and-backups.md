@@ -34,7 +34,11 @@ Copy `api/scripts/run-migrations-with-sentry.ts::reportBootFailure`. Boot-time s
 
 ## Two PRs claimed the same migration number
 
-Two open PRs each generate "the next" migration on the same main, so both add `0239_*.sql`, journal idx 239 and `meta/0239_snapshot.json`. Whichever lands second collides. **`scripts/check-migration-index-collision.mjs`** catches it: the `Migration index-collision guard` step in `.github/workflows/ci.yml` (vs `HEAD^1`, the main tip on the merge ref) and `validate-ci.sh` → "Migration validation" (vs the `origin/main` tip, so it fires before you push). It fails when a branch-only journal entry's idx is at or below the base's newest, or the journal/folder has a duplicate idx or `NNNN` prefix, and prints the fix:
+Two open PRs each generate "the next" migration on the same main, so both add `0239_*.sql`, journal idx 239 and `meta/0239_snapshot.json`. Whichever lands second collides.
+
+**The usual signal is the PR itself:** GitHub reports merge conflicts in `api/src/drizzle/migrations/meta/_journal.json` (and `meta/NNNN_snapshot.json`), and `rebase-on-main.yml` fails on the same conflict. With a conflicted merge ref GitHub runs no `pull_request` CI, so the CI guard below never sees it — a journal conflict on its own is the cue to run the tool.
+
+**`scripts/check-migration-index-collision.mjs`** is the backstop: `validate-ci.sh` → "Migration validation" (vs the `origin/main` tip, so it fires before you push) and the `Migration index-collision guard` step in `.github/workflows/ci.yml` (vs `HEAD^1`; on CI it catches a bad hand-merge, not the two-PR race). It fails when a branch-only journal entry's idx is at or below the base's newest, the journal/folder has a duplicate idx or `NNNN` prefix, or an entry the branch already merged (in the journal at merge-base(HEAD, base)) is missing from the branch journal — a bad "keep ours" that dropped one of main's entries. It prints the fix:
 
 ```bash
 git fetch origin && ./scripts/renumber-branch-migrations.sh   # --base <ref>, --no-fetch
@@ -47,11 +51,12 @@ It takes the branch's **new** migrations (journal tags not on `origin/main`) and
 - renames each branch snapshot and repoints its `prevId` — the first at main's last snapshot id, each next at the branch snapshot before it. Only the `"prevId"` line changes;
 - writes any main migration file missing from the tree, so the folder matches main + the branch.
 
-It refuses a dirty tree (commit first; never stash) and is idempotent — a branch already numbered after main prints `nothing to renumber`. Then:
+It refuses a dirty tree (commit first; never stash) and is idempotent — a branch already numbered after main prints `nothing to renumber` and changes no bytes. After the fetch it **pins the base to a commit SHA** and prints it. Then:
 
-1. Commit (`chore(migrations): renumber after origin/main`), then `git merge origin/main`. `_journal.json` **always** conflicts (both sides appended); keep ours, it already holds main's entries plus the branch's: `git checkout --ours api/src/drizzle/migrations/meta/_journal.json && git add` it. Every `.sql` and snapshot merges cleanly.
-2. Re-run `./scripts/validate-migrations.sh`. A renumbered migration now runs **after** main's new ones; if its SQL depends on schema main changed, the real-Postgres run shows it.
-3. **If both migrations changed `schema.ts`**, the branch's renumbered snapshot predates main's change, so the drift check (`validate-migrations.sh --drift-only`) wants main's DDL again. Rebuild that one snapshot on top of main: move the branch's `.sql` aside, delete its journal entry and snapshot, `npm run db:generate -w api` (`-- --custom --name <name>` for hand-written SQL), put the original SQL body back in the generated file, then `./scripts/fix-migration-order.sh --check`.
+1. Commit (`chore(migrations): renumber after origin/main`), then `git merge <sha>` — **the SHA the tool printed, not `origin/main`**. If another PR landed in between, a re-fetched `origin/main` carries entries the renumbered journal lacks: the merge then also conflicts on a snapshot, and "keep ours" silently drops main's newer entry. Merging the printed SHA, `_journal.json` **always** conflicts (both sides appended); keep ours, it already holds that commit's entries plus the branch's: `git checkout --ours api/src/drizzle/migrations/meta/_journal.json && git add` it. Every `.sql` and snapshot merges cleanly.
+2. After the merge commit, re-run `./scripts/renumber-branch-migrations.sh --no-fetch --base <sha>`. It **must** print `nothing to renumber`; anything else means the merge did not match the renumber. If main has moved since, just run the tool again (fetching) — it renumbers on top of the new tip, and the guard's missing-entry check names any entry a wrong "keep ours" dropped.
+3. Re-run `./scripts/validate-migrations.sh`. A renumbered migration now runs **after** main's new ones; if its SQL depends on schema main changed, the real-Postgres run shows it.
+4. **If both migrations changed `schema.ts`**, the branch's renumbered snapshot predates main's change, so the drift check (`validate-migrations.sh --drift-only`) wants main's DDL again. Rebuild that one snapshot on top of main: move the branch's `.sql` aside, delete its journal entry and snapshot, `npm run db:generate -w api` (`-- --custom --name <name>` for hand-written SQL), put the original SQL body back in the generated file, then `./scripts/fix-migration-order.sh --check`.
 
 ## Retention (ROK-1663)
 
