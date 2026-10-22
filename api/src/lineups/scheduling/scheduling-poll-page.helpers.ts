@@ -106,7 +106,12 @@ export async function assembleSchedulePollResponse(
   const [slotConflicts, { votes, terminal }, hubView] = await Promise.all([
     userId ? findSlotConflicts(db, userId, slots) : undefined,
     loadVotesAndTerminalState(db, pollMatch, lineup, slots, viewer),
-    loadPollHubView(db, lineup?.guildId ?? null, userId),
+    loadPollHubView(
+      db,
+      lineup?.guildId ?? null,
+      userId,
+      slots.map((s) => s.id),
+    ),
   ]);
   const base = buildPollResponse(
     pollMatch,

@@ -3,7 +3,7 @@
  * hub" button, and `isHubMember` on every voter chip. A hidden / archived hub
  * (or an untagged poll) yields `hub: null` and no flags.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -20,7 +20,7 @@ export interface PollPageHub {
   viewerIsMember: boolean;
 }
 
-/** The hub block plus the live member ids used to stamp voters. */
+/** The hub block plus the live member ids (voters + viewer only) used to stamp voters. */
 export interface PollHubView {
   hub: PollPageHub | null;
   memberIds: ReadonlySet<number> | null;
@@ -28,26 +28,55 @@ export interface PollHubView {
 
 const NO_HUB: PollHubView = { hub: null, memberIds: null };
 
+/**
+ * The live hub members among this poll's voters (on `slotIds`) and the
+ * viewer — never the hub's whole roster.
+ */
+async function loadVoterMemberIds(
+  db: Db,
+  guildId: number,
+  slotIds: readonly number[],
+  viewerId: number | null,
+): Promise<Set<number>> {
+  if (slotIds.length === 0 && viewerId === null) return new Set();
+  const m = schema.hubCommunityMembers;
+  const v = schema.communityLineupScheduleVotes;
+  const voters = db
+    .selectDistinct({ userId: v.userId })
+    .from(v)
+    .where(inArray(v.slotId, [...slotIds]));
+  const rows = await db
+    .select({ userId: m.userId })
+    .from(m)
+    .where(
+      and(
+        eq(m.guildId, guildId),
+        liveMemberPredicate(),
+        or(
+          slotIds.length > 0 ? inArray(m.userId, voters) : undefined,
+          viewerId === null ? undefined : eq(m.userId, viewerId),
+        ),
+      ),
+    );
+  return new Set(rows.map((r) => r.userId));
+}
+
 /** Load the hub view for a poll tagged to `guildId` (null = untagged). */
 export async function loadPollHubView(
   db: Db,
   guildId: number | null,
   viewerId: number | null,
+  slotIds: readonly number[],
 ): Promise<PollHubView> {
   if (guildId === null) return NO_HUB;
   const hub = await findVisiblePollHub(db, guildId);
   if (!hub) return NO_HUB;
-  const m = schema.hubCommunityMembers;
-  const rows = await db
-    .select({ userId: m.userId })
-    .from(m)
-    .where(and(eq(m.guildId, guildId), liveMemberPredicate()));
-  const memberIds = new Set(rows.map((r) => r.userId));
+  const memberIds = await loadVoterMemberIds(db, guildId, slotIds, viewerId);
   return {
     hub: {
       id: hub.id,
       name: hub.name,
-      memberCount: memberIds.size,
+      memberCount: hub.memberCount,
       viewerIsMember: viewerId !== null && memberIds.has(viewerId),
     },
     memberIds,
