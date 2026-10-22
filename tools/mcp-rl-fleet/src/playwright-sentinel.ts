@@ -31,7 +31,13 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { isTerminalStatus, type ExecuteStatusReturn } from './tools/task-schemas.js';
-import { playwrightRowStatus, splitGateClean, staticGateGreen } from './gate-summary.js';
+import {
+  isScopedSummary,
+  playwrightRowStatus,
+  scopedGateGreen,
+  splitGateClean,
+  staticGateGreen,
+} from './gate-summary.js';
 import { isSplitParent, parallelParentUnmerged } from './tools/task-parallel.js';
 
 /** The validate-ci.sh summary row (and orchestrator step name) we key on. */
@@ -129,8 +135,11 @@ export function playwrightPassed(
   );
 }
 
-/** Which tier earned the sentinel. `playwright` implies the static rows too. */
-export type GateTier = 'static' | 'playwright';
+/**
+ * Which tier earned the sentinel. `playwright` implies the static rows too;
+ * `scoped` (2026-10-22) is build + tsc + lint for the diff's own targets only.
+ */
+export type GateTier = 'static' | 'scoped' | 'playwright';
 
 export interface SentinelAnnotation {
   /** Legacy alias of `gate_verified` — kept so older callers keep reading. */
@@ -205,6 +214,13 @@ export function resolveGateTier(status: ExecuteStatusReturn): GateTier | null {
   // Review P1: its children ran concurrently, so a child-A FAIL voids B's PASS.
   if (isSplitParent(status) && !splitGateClean(status.log_tail)) return null;
   if (playwrightPassed(status)) return 'playwright';
+  // 2026-10-22: a `--scoped` run is judged ONLY as scoped — its narrowed rows
+  // must never be read as a whole-monorepo `static` pass.
+  if (isScopedSummary(status.log_tail)) {
+    return status.mcp_runtime_status === 'succeeded' && scopedGateGreen(status.log_tail)
+      ? 'scoped'
+      : null;
+  }
   const staticGreen =
     status.mcp_runtime_status === 'succeeded' && staticGateGreen(status.log_tail);
   return staticGreen ? 'static' : null;

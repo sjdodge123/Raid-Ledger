@@ -64,6 +64,9 @@ export function resolveValidateCiWeight(args: string[], explicit?: TaskWeight): 
   if (explicit) return explicit;
   const hasHeavyFlag = args.some((a) => VALIDATE_CI_HEAVY_FLAGS.includes(a));
   if (hasHeavyFlag) return 'heavy';
+  // 2026-10-22: --scoped builds/typechecks up to one app workspace — between a
+  // --static (light, all three but cheap) and a suite run.
+  if (args.includes('--scoped')) return 'medium';
   return args.includes('--static') ? 'light' : 'heavy';
 }
 
