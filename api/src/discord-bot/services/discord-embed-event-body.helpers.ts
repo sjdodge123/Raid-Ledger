@@ -97,7 +97,12 @@ export interface EventBodyOptions {
  * named `@everyone` can never resolve as a mention.
  */
 export function hubLine(name: string): string {
-  const escaped = escapeMarkdown(name, { maskedLink: true, heading: true, bulletedList: true, numberedList: true });
+  const escaped = escapeMarkdown(name, {
+    maskedLink: true,
+    heading: true,
+    bulletedList: true,
+    numberedList: true,
+  });
   const safe = escaped.replace(/@/g, '@\u200b');
   return `Hub: **${safe}**`;
 }
