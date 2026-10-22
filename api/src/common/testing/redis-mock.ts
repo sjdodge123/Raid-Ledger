@@ -5,7 +5,8 @@
  * 300-line ESLint cap and so a future redis-mock unit test can target this
  * module directly. The mock implements only the subset of ioredis methods
  * the codebase touches (set with NX, setex, del, incr, expire, ttl, exists,
- * keys with `*` glob, getdel, ping, quit, disconnect, duplicate). The `store` Map
+ * keys with `*` glob, getdel, ping, quit, disconnect, duplicate, and an
+ * `eval` that runs only the compare-and-delete lease release). The `store` Map
  * is exposed via the returned handle so `truncateAllTables` can purge
  * cross-suite keys (e.g. the `lineup-*` dedup claims) without round-tripping the client.
  *
@@ -16,6 +17,13 @@
  * surface. `ttl` returns -2 for a missing key and -1 for one with no
  * expiry, matching Redis.
  */
+import { COMPARE_AND_DELETE_LUA } from '../redis-lease';
+
+/** True when the trailing ioredis args carry the given bare flag (NX/XX). */
+function hasFlag(args: (string | number)[], flag: 'NX' | 'XX'): boolean {
+  return args.some((a) => typeof a === 'string' && a.toUpperCase() === flag);
+}
+
 /**
  * Parses ioredis-style trailing `EX <seconds>` / `PX <millis>` tokens into
  * an absolute expiry timestamp. Returns null when no expiry was requested.
@@ -33,16 +41,14 @@ function parseExpiryArgs(args: (string | number)[]): number | null {
   return null;
 }
 
-/** Redis mock set with NX + EX/PX support. */
+/** Redis mock set with NX / XX + EX/PX support. */
 function mockRedisSet(
   store: Map<string, string>,
   expiries: Map<string, number>,
 ) {
   return (key: string, value: string, ...args: (string | number)[]) => {
-    const hasNX = args.some(
-      (a) => typeof a === 'string' && a.toUpperCase() === 'NX',
-    );
-    if (hasNX && store.has(key)) return Promise.resolve(null);
+    if (hasFlag(args, 'NX') && store.has(key)) return Promise.resolve(null);
+    if (hasFlag(args, 'XX') && !store.has(key)) return Promise.resolve(null);
     store.set(key, value);
     const expiresAt = parseExpiryArgs(args);
     // A plain SET clears any prior TTL, same as Redis.
@@ -114,6 +120,27 @@ function mockRedisIncr(store: Map<string, string>) {
   };
 }
 
+/**
+ * Redis mock EVAL: implements ONLY the scripts the codebase sends (today the
+ * compare-and-delete lease release); anything else rejects loudly so a new
+ * script cannot silently no-op in integration tests.
+ */
+function mockRedisEval(
+  store: Map<string, string>,
+  expiries: Map<string, number>,
+) {
+  return (script: string, numKeys: number, ...rest: (string | number)[]) => {
+    if (script !== COMPARE_AND_DELETE_LUA || numKeys !== 1) {
+      return Promise.reject(new Error('redis-mock: unsupported EVAL script'));
+    }
+    const key = String(rest[0]);
+    if (store.get(key) !== String(rest[1])) return Promise.resolve(0);
+    store.delete(key);
+    expiries.delete(key);
+    return Promise.resolve(1);
+  };
+}
+
 export interface RedisMockHandle {
   client: ReturnType<typeof buildRedisMockClient>;
   store: Map<string, string>;
@@ -156,6 +183,7 @@ function buildRedisMockClient(
       return Promise.resolve(list.slice(start, end));
     },
     set: mockRedisSet(store, expiries),
+    eval: mockRedisEval(store, expiries),
     setex: (key: string, seconds: number, value: string) => {
       store.set(key, value);
       expiries.set(key, Date.now() + seconds * 1000);

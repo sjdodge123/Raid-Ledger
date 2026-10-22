@@ -46,7 +46,7 @@ import {
 } from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
-import { CooptimusSettingsBase } from './settings-cooptimus.base';
+import { ChannelLifecycleSettingsBase } from './settings-channel-lifecycle.base';
 import type {
   DiscordOAuthConfig,
   IgdbConfig,
@@ -61,7 +61,7 @@ const CACHE_TTL_MS = 30 * 60_000;
 
 @Injectable()
 export class SettingsService
-  extends CooptimusSettingsBase
+  extends ChannelLifecycleSettingsBase
   implements OnModuleInit
 {
   private readonly logger = new Logger(SettingsService.name);

@@ -1,0 +1,299 @@
+import { Logger } from '@nestjs/common';
+import type { Guild } from 'discord.js';
+import * as Sentry from '@sentry/nestjs';
+import type { ReconcileResultDto } from '@raid-ledger/contract';
+import { applyAction, linkHubs } from './channel-lifecycle.apply';
+import { staleLinkDetail } from './channel-lifecycle.decide';
+import { lockLifecycleBinding } from './channel-lifecycle.store.queries';
+import {
+  ChannelGoneError,
+  CreateCapacityError,
+  LifecyclePermissionError,
+  lifecycleCall,
+} from './channel-lifecycle.errors';
+import {
+  CAP_DETAIL,
+  emptyResult,
+  tally,
+  type ReconcilePlan,
+} from './channel-lifecycle.plan';
+import { insertSuppression } from './channel-lifecycle.store';
+import { unlinkAutoHubsForChannel } from './hub-channel-link.queries';
+import type {
+  ApplyContext,
+  ItemOutcome,
+  PlannedGame,
+} from './channel-lifecycle.types';
+
+type CreatedChannel = NonNullable<ItemOutcome['created']>;
+
+/**
+ * ROK-1431 — the live reconcile loop + the D14 error policy (spec §2.5 steps
+ * 6–7, §2.9): one game's failure never blocks the others; a permission error
+ * stops the tick; a hand-deleted channel is unbound + suppressed, no Sentry.
+ */
+
+const logger = new Logger('ChannelLifecycleRun');
+
+/** The `lastRunError` text for a permission stop (§2.5 step 7). */
+export const PERMISSION_ERROR_TEXT =
+  'Raid Ledger needs Manage Channels and Manage Roles';
+
+/** `lastRunError` when no archive category can be found or created. */
+export const NO_ARCHIVE_CATEGORY_TEXT =
+  'Choose or allow an Archived category before enabling';
+
+/** The `lastRunError` a finished tick records (null = clean, clears it). */
+export function runErrorText(result: ReconcileResultDto): string | null {
+  if (result.stoppedReason === 'permissions') return PERMISSION_ERROR_TEXT;
+  if (result.stoppedReason === 'no-archive-category') {
+    return NO_ARCHIVE_CATEGORY_TEXT;
+  }
+  return null;
+}
+
+/**
+ * D9: the channel is gone — suppress first (so it reads `deleted`), unbind,
+ * and clear hubs auto-linked to it (manual hub links are untouched).
+ */
+async function handleGone(
+  ctx: ApplyContext,
+  game: PlannedGame,
+): Promise<ItemOutcome> {
+  const { binding, gameId } = game.row;
+  await insertSuppression(ctx.db, {
+    guildId: ctx.guild.id,
+    gameId,
+    reason: 'deleted',
+  });
+  if (binding) {
+    // On the game's tx (int-fix 3): a pool unbind re-inserts the suppression on
+    // a second connection, which waits on the tx's uncommitted row → deadlock.
+    await ctx.bindings.unbindById(binding.id, { db: ctx.db });
+    await unlinkAutoHubsForChannel(ctx.db, binding.channelId);
+  }
+  return { outcome: 'failed', detail: 'channel deleted in Discord' };
+}
+
+/** Map one game's thrown error onto an outcome (D14). */
+async function handleFailure(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  err: unknown,
+): Promise<ItemOutcome> {
+  if (err instanceof LifecyclePermissionError) {
+    return { outcome: 'failed', detail: err.message, stop: true };
+  }
+  if (err instanceof CreateCapacityError) {
+    return { outcome: 'failed', detail: err.message, stopCreates: true };
+  }
+  if (err instanceof ChannelGoneError) return handleGone(ctx, game);
+  const phase = game.action === 'link_hub' ? 'link' : game.action;
+  Sentry.captureException(err, {
+    tags: { area: `channel-lifecycle-${phase}` },
+    extra: { gameId: game.row.gameId },
+  });
+  const message = err instanceof Error ? err.message : String(err);
+  logger.warn(
+    `Lifecycle ${game.action} failed for ${game.row.gameId}: ${message}`,
+  );
+  return { outcome: 'failed', detail: message };
+}
+
+/**
+ * Codex r18 P2: re-read + row-lock the new binding before linking, as
+ * `applyLinkHub` does — a binding unbound or re-routed since the create
+ * committed never gets the old game's hubs or topic. Null = skipped (stale).
+ */
+async function linkCreated(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  created: CreatedChannel,
+): Promise<number | null> {
+  const current = await lockLifecycleBinding(ctx.db, created.bindingId);
+  const planned = { channelId: created.channelId, gameId: game.row.gameId };
+  const stale = staleLinkDetail(planned, current);
+  if (stale !== null) {
+    logger.log(`Hub link after create for ${game.row.gameId} ${stale}`);
+    return null;
+  }
+  return linkHubs(ctx, game, {
+    id: created.channelId,
+    autoManaged: current?.autoManaged === true,
+  });
+}
+
+/**
+ * Link a just-created channel's hubs in a tx of its own, after the create
+ * committed (Codex r5 P1). A failure never undoes the create: the binding
+ * stays and the next reconcile retries the link (`link_hub`, spec §2.7).
+ */
+async function linkAfterCreate(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  created: CreatedChannel,
+  item: ItemOutcome,
+): Promise<ItemOutcome> {
+  try {
+    const linkedHubs = await ctx.db.transaction((tx) =>
+      linkCreated({ ...ctx, db: tx }, game, created),
+    );
+    return linkedHubs === null ? item : { ...item, linkedHubs };
+  } catch (err) {
+    if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
+    Sentry.captureException(err, {
+      tags: { area: 'channel-lifecycle-link' },
+      extra: { gameId: game.row.gameId },
+    });
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Hub link after create failed for ${game.row.gameId}: ${message}`,
+    );
+    return item;
+  }
+}
+
+/** Map a game's failure onto an outcome in a fresh tx; never throws. */
+async function cleanupInTx(
+  ctx: ApplyContext,
+  game: PlannedGame,
+  err: unknown,
+): Promise<ItemOutcome> {
+  try {
+    return await ctx.db.transaction((tx) =>
+      handleFailure({ ...ctx, db: tx }, game, err),
+    );
+  } catch (inner) {
+    Sentry.captureException(inner, {
+      tags: { area: 'channel-lifecycle-cleanup' },
+    });
+    return { outcome: 'failed', detail: 'cleanup failed' };
+  }
+}
+
+/**
+ * Cache-then-fetch existence check. Only Unknown Channel (10003, mapped to
+ * `ChannelGoneError`) counts as gone; any other failure is transient — keep
+ * the binding and look again next tick.
+ */
+async function channelIsGone(
+  guild: Guild,
+  channelId: string,
+): Promise<boolean> {
+  if (guild.channels.cache.has(channelId)) return false;
+  try {
+    await lifecycleCall('fetch', channelId, () =>
+      guild.channels.fetch(channelId),
+    );
+    return false;
+  } catch (err) {
+    if (err instanceof ChannelGoneError) return true;
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Lifecycle existence check failed for ${channelId}: ${message}`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Codex r6 P2: a `none` game runs no Discord op, so a hand-deleted managed
+ * channel would never trip the D9 cleanup. Check each one still exists and
+ * route a gone channel through the same `ChannelGoneError` cleanup.
+ */
+async function sweepGone(
+  ctx: ApplyContext,
+  games: readonly PlannedGame[],
+  result: ReconcileResultDto,
+): Promise<void> {
+  for (const game of games) {
+    const channelId = game.row.binding?.channelId;
+    if (!channelId || !(await channelIsGone(ctx.guild, channelId))) continue;
+    const gone = new ChannelGoneError(channelId);
+    tally(result, game, await cleanupInTx(ctx, game, gone));
+    result.skipped -= 1;
+  }
+}
+
+/**
+ * Run one game, never throwing (per-game isolation). `ctx.db` is the pool:
+ * the game's writes commit in their OWN transaction (Codex r4b P1), so a
+ * failed statement — which poisons a postgres.js tx, savepoints included —
+ * rolls back only this game. Its cleanup gets a fresh tx of its own.
+ */
+async function runOne(
+  ctx: ApplyContext,
+  game: PlannedGame,
+): Promise<ItemOutcome> {
+  let item: ItemOutcome;
+  try {
+    item = await ctx.db.transaction((tx) =>
+      applyAction({ ...ctx, db: tx }, game),
+    );
+  } catch (err) {
+    return cleanupInTx(ctx, game, err);
+  }
+  const { created, ...rest } = item;
+  if (created === undefined) return item;
+  return linkAfterCreate(ctx, game, created, rest);
+}
+
+/** Detail for creates deferred after the guild hit its channel cap. */
+export const CAPACITY_DETAIL = 'deferred: server channel limit reached';
+
+/** §2.13: the guild is full — ONE Sentry message per tick. */
+function reportCapacity(): void {
+  Sentry.captureMessage('Channel lifecycle: server channel limit reached', {
+    level: 'warning',
+    tags: { area: 'channel-lifecycle-create' },
+  });
+}
+
+/**
+ * Run the plan's items in order. A permission error stops the tick (returns
+ * the not-yet-run items); a full guild (30013) defers the remaining creates.
+ */
+async function runItems(
+  ctx: ApplyContext,
+  run: readonly PlannedGame[],
+  result: ReconcileResultDto,
+): Promise<PlannedGame[]> {
+  const waiting = [...run];
+  let capped = false;
+  for (let game = waiting.shift(); game; game = waiting.shift()) {
+    if (capped && game.action === 'create') {
+      tally(result, game, { outcome: 'deferred', detail: CAPACITY_DETAIL });
+      continue;
+    }
+    const item = await runOne(ctx, game);
+    tally(result, game, item);
+    if (item.stop) {
+      result.stoppedReason = 'permissions';
+      break;
+    }
+    if (item.stopCreates && !capped) reportCapacity();
+    capped ||= item.stopCreates === true;
+  }
+  return waiting;
+}
+
+/**
+ * Execute a plan live; returns the tally (stoppedReason set on a permission
+ * stop — the caller sends the D14 Sentry message, deduped across nudges).
+ */
+export async function executePlan(
+  ctx: ApplyContext,
+  plan: ReconcilePlan,
+): Promise<ReconcileResultDto> {
+  const result = emptyResult(false, null);
+  result.skipped = plan.skipped;
+  await sweepGone(ctx, plan.verify, result);
+  const waiting = await runItems(ctx, plan.run, result);
+  const stopped = 'stopped: missing permissions';
+  for (const g of waiting)
+    tally(result, g, { outcome: 'deferred', detail: stopped });
+  for (const g of plan.deferred) {
+    tally(result, g, { outcome: 'deferred', detail: CAP_DETAIL });
+  }
+  return result;
+}

@@ -302,6 +302,7 @@ export class AdHocEventService implements OnModuleInit {
       gracePeriodQueue: this.gracePeriodQueue,
       channelBindingsService: this.channelBindingsService,
       activeEvents: this.activeEvents,
+      eventEmitter: this.eventEmitter,
       autoSignupParticipant: (eventId, member) =>
         this.autoSignupParticipant(eventId, member),
     };

@@ -65,6 +65,8 @@ import { lfgInviteTests } from "./tests/lfg-invite.test.js";
 import { gameRoleTests } from "./tests/game-role.test.js";
 import { joinPostTests } from "./tests/join-post.test.js";
 import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
+import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
+import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
 import { hubNotificationsDmTests } from "./tests/hub-notifications-dm.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
@@ -222,6 +224,8 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...gameRoleTests,
     ...joinPostTests,
     ...guildDiscordMirrorTests,
+    ...channelLifecycleTests,
+    ...embedHubLinkTests,
     ...hubNotificationsDmTests,
     ...hubProposalNotificationsTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
