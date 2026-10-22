@@ -42,7 +42,7 @@ import { SchemaValidationError } from '../lib/api/fetch-api';
 import { RosterSlotSection } from './event-detail/EventDetailRosterSlot';
 import { EventCalendarLine } from '../components/features/calendar-sync/EventCalendarLine';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
-import { HubJoinPrompts } from '../components/hub/community/hub-join-prompt';
+import { HubJoinPromptsLazy } from '../components/hub/community/hub-join-prompt-lazy';
 import './event-detail-page.css';
 
 function buildVoiceChannelLink(data: VoiceChannelResponseDto | null | undefined): { name: string; url: string } | null {
@@ -204,7 +204,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
             <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
-            <HubJoinPrompts eventId={page.eventId} enabled={page.isAuthenticated} hubTagged={page.event.guildId != null} />
+            <HubJoinPromptsLazy eventId={page.eventId} enabled={page.isAuthenticated} hubTagged={page.event.guildId != null} />
             {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}
             {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />

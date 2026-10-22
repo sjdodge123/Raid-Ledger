@@ -5,7 +5,7 @@
  * once) and `PATCH /hubs/:id/auto-membership` (Leader or staff).
  */
 import {
-    useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationResult, type UseQueryResult,
+    useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult,
 } from '@tanstack/react-query';
 import {
     HubInviteJoinResponseSchema, HubJoinPromptListSchema,
@@ -15,22 +15,14 @@ import { fetchApi } from '../../../lib/api-client';
 import { toast } from '../../../lib/toast';
 import { guildPageKey } from '../api/use-guild';
 import { invalidateHubMembership } from './invalidate-hub-membership';
+import { HUB_JOIN_PROMPTS_KEY, promptWatchKey } from './hub-join-prompts-keys';
 
-/** Query key of the signed-in user's pending hub join prompts. */
-export const HUB_JOIN_PROMPTS_KEY = ['hub-join-prompts'] as const;
+export { HUB_JOIN_PROMPTS_KEY, PROMPT_WATCH_MS, watchHubJoinPrompts } from './hub-join-prompts-keys';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-/** Poll cadence + window after a signup: the API raises prompts in a post-commit listener. */
+/** Poll cadence after a signup: the API raises prompts in a post-commit listener. */
 export const PROMPT_POLL_MS = 1_000;
-export const PROMPT_WATCH_MS = 8_000;
-
-const promptWatchKey = (eventId: number) => ['hub-join-prompts-watch', eventId] as const;
-
-/** Open the bounded post-signup watch for `eventId`'s prompt (called on signup success). */
-export function watchHubJoinPrompts(qc: QueryClient, eventId: number): void {
-    qc.setQueryData<number>(promptWatchKey(eventId), Date.now() + PROMPT_WATCH_MS);
-}
 
 /** Poll while the watch is open and no signup prompt for `eventId` has arrived yet. */
 export function promptPollInterval(
