@@ -52,6 +52,17 @@ describe('SkillsSection trend chip', () => {
         expect(chip.className).not.toContain('text-success');
     });
 
+    it('colours each dot by its own day, not the chip tone: a gain day stays filled success inside a danger chip (spec §5/Q3)', () => {
+        render(<SkillsSection character={valheimSheetFixture({ skillTrend: valheimSkillTrend })} />);
+        const chip = within(row('-1287461328')).getByRole('button');
+        const dots = Array.from(within(chip).getByTestId('skill-trend-dots').children);
+        // Oldest → newest: Oct 15 no change, Oct 18 +0.3, Oct 20 −1.5.
+        expect(dots.map((d) => d.getAttribute('data-filled'))).toEqual(['false', 'true', 'false']);
+        expect(dots[1]?.className).toContain('bg-success');
+        expect(dots[2]?.className).toContain('border-edge-strong');
+        expect(dots[2]?.className).not.toContain('bg-danger');
+    });
+
     it('renders no chip with empty days, and none when skillTrend is absent', () => {
         const { unmount } = render(<SkillsSection character={valheimSheetFixture({ skillTrend: { days: [] } })} />);
         expect(screen.queryAllByRole('button')).toHaveLength(0);

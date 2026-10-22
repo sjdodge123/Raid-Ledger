@@ -24,6 +24,12 @@ const TONE_CLS = {
     danger: 'border-danger/30 bg-danger/10 text-danger',
 } as const;
 
+/**
+ * Dot colour is per DAY, never the chip's net tone (spec §5 + Q3): a gain day
+ * is a filled `bg-success` dot even inside a net-loss (danger) chip, and a
+ * loss or no-change day is hollow — so a chip reads "net down, but one good
+ * session" at a glance.
+ */
 function SessionDots({ trend }: { trend: SkillTrendSummary }): JSX.Element {
     return (
         <span aria-hidden="true" data-testid="skill-trend-dots" className="inline-flex items-center gap-0.5">
