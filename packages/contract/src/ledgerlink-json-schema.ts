@@ -12,7 +12,7 @@ import {
  * drift guard fails when the committed file differs.
  */
 export const LEDGERLINK_SCHEMA_ID =
-    `https://raid.gamernight.net/contracts/ledgerlink/v${ADDON_EXPORT_ENVELOPE_VERSION}/schema.json`;
+    `https://github.com/sjdodge123/Raid-Ledger/blob/main/packages/contract/ledgerlink/v${ADDON_EXPORT_ENVELOPE_VERSION}/schema.json`;
 
 /** The JSON Schema object for the decoded export payload. */
 export function buildLedgerLinkJsonSchema(): Record<string, unknown> {
