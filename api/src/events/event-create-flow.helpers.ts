@@ -18,6 +18,7 @@ import {
   insertRecurringEvents,
   insertSingleEvent,
   buildBaseValues,
+  inheritPollHub,
   resolveRecurrenceGroupId,
 } from './event-create.helpers';
 import { buildLifecyclePayload } from './event-response.helpers';
@@ -163,8 +164,9 @@ export async function runCreateEvent(
   deps: CreateFlowDeps,
   activityLog: Pick<ActivityLogService, 'log'>,
   creatorId: number,
-  dto: CreateEventDto,
+  rawDto: CreateEventDto,
 ): Promise<EventResponseDto & { allEventIds?: number[] }> {
+  const dto = await inheritPollHub(deps.db, rawDto);
   const startTime = new Date(dto.startTime);
   const endTime = new Date(dto.endTime);
   const durationMs = endTime.getTime() - startTime.getTime();

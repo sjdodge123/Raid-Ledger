@@ -70,6 +70,8 @@ export function findLineupPollMeta(db: Db, lineupId: number) {
       phaseDeadline: schema.communityLineups.phaseDeadline,
       includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
       phaseDurationOverride: schema.communityLineups.phaseDurationOverride,
+      // ROK-1893 P3: the hub the poll is tagged to (poll page `hub`).
+      guildId: schema.communityLineups.guildId,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
