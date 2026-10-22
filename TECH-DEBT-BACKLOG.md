@@ -3497,3 +3497,7 @@ same day (#1278, #1279, #1280).
 
 - **[low]** `api/src/lineups/standalone-poll/standalone-poll-voter.helpers.ts:181` + `api/src/lineups/scheduling/scheduling-auto-signup.helpers.ts:47` — a voter whose auto-signup throws is still DM'd "Auto-signed up": `autoSignupSlotVoters` swallows the failure, and `notifyPollVoters` iterates the intended `selectedIds`, not the signup results. Pre-existing (the swallow predates ROK-1874; ROK-1874 only added the bench branch). Not fixed in ROK-1874 by design (spec OQ5).
   Suggested: return `signedUpUserIds` alongside `benchedUserIds` from `autoSignupSlotVoters` and DM only those.
+
+### 2026-10-21 — rok-1894-valheim-upgrade-formula (surfaced during `npx tsc --noEmit -p api/tsconfig.json`)
+
+- **low** `api/src/plugins/pelican/pelican-sync.service.spec.ts:73` and `api/src/plugins/pelican/pelican-schedule-sync.service.spec.ts:96`: `error TS2345: Argument of type '(msg: unknown) => void' is not assignable to parameter of type '(...args: [message: any, ...optionalParams: any[]] | …) => void'`, with `Types of parameters 'msg' and 'args' are incompatible`. Why I think it's pre-existing: the branch touches only `api/src/plugins/valheim/armory/read/*` and the valheim-link contract docs, and the same tsc run shows the documented sentry and ad-hoc-reaper spec errors. Suggested: type the logger spy callback as `(...args: unknown[]) => void`, or spy with `jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)`.
