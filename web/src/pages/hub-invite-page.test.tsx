@@ -87,6 +87,16 @@ describe('HubInvitePage', () => {
         expect(screen.queryByRole('button', { name: 'Join Night Owls' })).toBeNull();
     });
 
+    it('signed in without a linked Discord account: asks to link it, not to join the server', async () => {
+        auth.user = { ...member, discordId: 'local:visitor' } as User;
+        server.use(hubInvitePreviewHandler(createMockHubInvitePreview({ inDiscordServer: false })));
+        renderPage();
+        expect(await screen.findByText('Link your Discord account first')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Link Discord' })).toBeInTheDocument();
+        expect(screen.queryByText('Join the Discord server first')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Join Night Owls' })).toBeNull();
+    });
+
     it('signed in, not in the server, no bot invite: text only', async () => {
         auth.user = member;
         server.use(hubInvitePreviewHandler(createMockHubInvitePreview({ inDiscordServer: false, discordServerInviteUrl: null })));
