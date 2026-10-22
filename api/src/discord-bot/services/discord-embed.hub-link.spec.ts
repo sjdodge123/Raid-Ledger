@@ -130,6 +130,16 @@ describe('scheduling poll hub link (H6)', () => {
  * byte-identical to the pre-1895 card.
  */
 describe('event card tagged-hub line (ROK-1895)', () => {
+  // The embed stamps `timestamp: now`; freeze the clock so two renders compare
+  // byte-identical instead of drifting by a millisecond on a busy runner.
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+    jest.setSystemTime(new Date('2026-10-22T12:00:00.000Z'));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   const TAGGED: HubLink = {
     ...HUB,
     url: `${CLIENT_URL}/guilds/9`,
