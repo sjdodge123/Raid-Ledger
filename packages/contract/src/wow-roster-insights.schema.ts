@@ -11,7 +11,8 @@ import {
  * OMITTED for visitors, never sent empty.
  */
 const MAX_ROSTER = 2000;
-const characterId = z.number().int().positive();
+/** `characters.id` is a uuid. */
+const characterId = z.string().uuid();
 const level = z.number().int().min(0).max(100);
 
 const RoleCountsSchema = z

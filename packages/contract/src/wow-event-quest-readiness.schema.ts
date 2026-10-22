@@ -32,7 +32,8 @@ export const EventQuestReadinessSchema = z
         z
           .object({
             userId: z.number().int().positive(),
-            characterId: z.number().int().positive().nullable(),
+            /** `characters.id` (uuid); null when the signup has no character. */
+            characterId: z.string().uuid().nullable(),
             name: z.string().max(64),
             perQuest: z
               .array(
