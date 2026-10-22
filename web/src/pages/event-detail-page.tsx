@@ -193,6 +193,8 @@ function EventConflictsNotice({ conflicts }: { conflicts: EventResponseDto['myCo
 function EventDetailBodySections({ page, voice, derived, handlers }: {
     page: PageState & { event: EventResponseDto }; voice: VoiceState; derived: EventDetailDerived; handlers: EventDetailHandlers;
 }) {
+    // ROK-1893 P1: the hub join prompt sits with the signup state (roster header, or the fallback Join button).
+    const hubPrompt = <HubJoinPromptsLazy eventId={page.eventId} enabled={page.isAuthenticated} hubTagged={page.event.guildId != null} />;
     return (
         <>
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
@@ -201,10 +203,10 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <EventConflictsNotice conflicts={page.event.myConflicts} />
             <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
                 isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
-                canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
+                canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} hubPrompt={hubPrompt} />
             <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
-            <HubJoinPromptsLazy eventId={page.eventId} enabled={page.isAuthenticated} hubTagged={page.event.guildId != null} />
+            {!derived.rosterAssignments && hubPrompt}
             {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}
             {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
