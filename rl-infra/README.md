@@ -250,7 +250,9 @@ makes it safe is admission control, which replaced the manual
   in <1s while a heavy task waits. While waiting, the task log gets
   `[admission] waiting for memory: available=…MB need=…MB (N heavy running)`
   every `RL_HEAVY_TASK_POLL_SECONDS` (10).
-- On expiry of `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (1800) the task ends
+- On expiry of `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (1800) — or
+  `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (5400) while the wait is on a ledger
+  cap, the budget or FIFO (see the ledger below) — the task ends
   `status: failed` with `failure_reason: "admission_timeout"` and a log line
   naming it — it is NOT a test failure, it means the host never freed up.
 - A freshly-admitted task reserves one floor's worth of the reading for
@@ -283,7 +285,8 @@ in the same flock window as the admit:
   wrapped command exits (success, failure, cancel, watchdog kill), and pruned
   on every read when its holder is gone: the task JSON is already terminal, or
   the recorded holder pid no longer exists on this host
-  (`admission::prune_dead`). The 4h max-hold prune stays as the last resort.
+  (`admission::prune_dead`, also run on every waiter's poll). The 4h max-hold
+  prune stays as the last resort.
 - **Reservations:** heavy `RL_HEAVY_TASK_RESERVE_MB` (5632), medium
   `RL_MEDIUM_TASK_RESERVE_MB` (3072), image build `RL_IMAGE_BUILD_RESERVE_MB`
   (3072), and every live env in `env-registry.json` `RL_ENV_RESERVE_MB` (1024).
@@ -295,9 +298,15 @@ in the same flock window as the admit:
   `RL_MAX_IMAGE_BUILDS` (1) image builds run at once (`0` = no cap). An image
   build (tool `rl_env_build_image_from_runner`) is its own category: it uses
   the build cap and reservation, not a heavy slot. Medium tasks are bound by
-  the budget only.
+  the budget only. Known gap: an `rl_env_deploy` or `rl_run_on_runner` that
+  runs a docker build is admitted as a plain heavy, not under the build cap.
+- **FIFO:** a newcomer is refused while admitting it would leave no cap slot or
+  budget room for an OLDER live waiter, so a stream of mediums cannot starve a
+  parked heavy (`blocked_by=fifo …`). A ledger wait gets
+  `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (5400), because the holders it waits on
+  keep their reservation for a whole gate.
 - A waiting task's log line ends `blocked_by=heavy_cap 2/2`,
-  `image_build_cap 1/1` or `budget …`, and `admission.waiting[].blocked_by`
+  `image_build_cap 1/1`, `budget …` or `fifo …`, and `admission.waiting[].blocked_by`
   carries the same reason.
 - `rl status` / `rl lease-status` keep `heavy_running` / `heavy_waiting` (all
   tasks holding / waiting for an admission slot, any weight) and add, under
@@ -312,8 +321,9 @@ in the same flock window as the admit:
 **MCP defaults** (`tools/mcp-rl-fleet/src/tools/task-weight.ts`): image builds
 are always heavy; `rl_validate_ci` is heavy for every suite-running mode
 (default / `--full` / `--only-unit` / `--only-integration` / `--only-e2e` /
-`--with-e2e`) and **medium** for a `--static`-only run (light before
-2026-10-22); `rl_run_on_runner` is heavy
+`--with-e2e`) and **light** for a `--static`-only run (it moves to `medium`
+in a follow-up MCP change that lands only after this ledger is deployed on the
+VM — a VM older than #1699 rejects `medium`); `rl_run_on_runner` is heavy
 when the command matches jest / vitest / playwright / validate-ci / docker
 build. Pass `weight` explicitly to override either way. The `<=120s`
 synchronous `rl_run_on_runner` path is never gated — it exists for short
@@ -338,6 +348,7 @@ drop-ins keep the control plane off the reclaim and kill lists.
    printf '[zram0]\nzram-size = 4096\ncompression-algorithm = zstd\nswap-priority = 100\n' \
      | sudo tee /etc/systemd/zram-generator.conf
    sudo systemctl daemon-reload && sudo systemctl start systemd-zram-setup@zram0.service
+   # ext4 assumed; on btrfs/XFS use: sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile
    sudo swapon --priority 10 /swapfile
    echo '/swapfile none swap sw,pri=10 0 0' | sudo tee -a /etc/fstab
@@ -355,11 +366,16 @@ drop-ins keep the control plane off the reclaim and kill lists.
    ```bash
    sudo apt-get install -y earlyoom
    sudo tee /etc/default/earlyoom >/dev/null <<'EOF'
-   EARLYOOM_ARGS="-m 6,3 -s 15,5 -r 60 --prefer '(^|/)(node|jest|vitest|eslint|tsc|playwright|chrome)$' --avoid '(^|/)(sshd|dockerd|containerd|containerd-shim.*|systemd.*|postgres|traefik|mutagen.*|task-start|bash)$'"
+   EARLYOOM_ARGS="-m 6,3 -s 15,5 -r 60 --prefer ^(node|jest|vitest|eslint|tsc|playwright|chrome)$ --avoid ^(sshd|dockerd|containerd|containerd-shim.*|systemd.*|postgres|traefik|mutagen.*|task-start|bash)$"
    EOF
    sudo systemctl enable --now earlyoom && sudo systemctl restart earlyoom
-   journalctl -u earlyoom -n 5   # prints the active thresholds
+   journalctl -u earlyoom -n 20 | grep -E 'prefer|avoid'   # regexes with NO quote characters
    ```
+
+   The regexes are unquoted on purpose: the unit expands `$EARLYOOM_ARGS` by
+   whitespace only, so inner `'…'` quotes would become part of the regex and
+   match nothing. They contain no spaces, and earlyoom matches them against
+   the bare process name (`/proc/PID/comm`), so `^…$` anchors are enough.
 
    The orchestrator is bash under sshd (`task-start` supervisors), hence
    `bash` in the avoid list.
@@ -370,12 +386,18 @@ drop-ins keep the control plane off the reclaim and kill lists.
    for u in ssh docker containerd; do
      sudo mkdir -p /etc/systemd/system/$u.service.d
      mm=256M; [ "$u" = ssh ] && mm=128M
-     printf '[Service]\nOOMScoreAdjust=-900\nMemoryMin=%s\n' "$mm" \
+     adj=-900; [ "$u" = containerd ] && adj=-999   # Debian already ships -999 for containerd
+     printf '[Service]\nOOMScoreAdjust=%s\nMemoryMin=%s\n' "$adj" "$mm" \
        | sudo tee /etc/systemd/system/$u.service.d/90-rl-oom.conf
    done
    sudo systemctl daemon-reload
    systemctl show ssh docker containerd -p OOMScoreAdjust -p MemoryMin
    ```
+
+   sshd's children inherit its score, so every SSH session, `task-start`
+   supervisor and the host-side Mutagen agent also run at -900. That is
+   intended (the orchestrator is control plane); the test workloads run in
+   containers, which are not children of sshd.
 
    The new values apply on each unit's next restart. Restart `ssh` from a
    console session, not over SSH, and restart `docker` only when `rl status`
@@ -385,13 +407,20 @@ drop-ins keep the control plane off the reclaim and kill lists.
    deployed. Do it only when `rl status` shows slot 4 unclaimed.
 
    ```bash
-   cd /srv/rl-infra && docker compose stop runner-4
-   sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=3/' .env && ./orchestrator/bin/init-state
+   cd /srv/rl-infra && ./orchestrator/bin/slots-resize 3   # flocked; refuses if slot 4 is claimed or queued
+   docker compose stop runner-4
+   sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=3/' .env
    ```
 
-   Check that `rl status` lists 3 slots. Revert (`RUNNER_SLOTS=4`,
-   `docker compose --profile extra-slots up -d runner-4`) once the ledger is
-   live.
+   `init-state` alone does not do this: `claim` hands out the rows of
+   `claims.json`, and `init-state` only creates that file when it is missing.
+   Check that `rl status` lists 3 slots. Revert once the ledger is live:
+
+   ```bash
+   cd /srv/rl-infra && sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=4/' .env
+   docker compose --profile extra-slots up -d runner-4   # profiled: a bare `up -d` never starts it
+   ./orchestrator/bin/slots-resize 4
+   ```
 
 ## Task tracking (ROK-1331 M1)
 
@@ -1325,6 +1354,7 @@ RL_TARGET=remote RL_PROXMOX_HOST=192.168.0.132 ./rl-infra/cli/rl test-plan wait 
 - `RL_REPO_ROOT_ALLOWLIST` (optional, MCP-side). Comma-separated list of absolute paths. When set, restricts the `worktree_path` parameter on every rl_* tool to subdirectories of these prefixes (after symlink resolution + git-worktree probe). When unset, defaults to `~/Documents/Projects/` — the operator's canonical Raid-Ledger projects directory. Use to lock down the allowlist further when running the MCP server on a shared host.
 - `RL_ENV_JWT_SECRET` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, env-spin passes it as `JWT_SECRET` to the allinone container so app_settings rows encrypted with the operator's local JWT_SECRET decrypt at runtime after `rl_env_sync_from_local`. Without it, the env generates its own secret and synced settings rows fail to decrypt.
 - `RL_HEAVY_TASK_MIN_FREE_MB` (optional, on the rl-infra VM; default 5120). Host `MemAvailable` floor a `--weight heavy` task must clear before it starts. Raise it if envs get squeezed, lower it if heavy tasks wait too often.
+- `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (default 5400) — admission wait budget while blocked on a ledger cap, the budget or FIFO.
 - `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (default 1800) / `RL_HEAVY_TASK_POLL_SECONDS` (default 10) / `RL_HEAVY_TASK_SETTLE_SECONDS` (default 90) / `RL_HEAVY_TASK_MAX_HOLD_SECONDS` (default 14400) — admission budget, poll interval, freshly-admitted reserve window, and the age at which a leaked `heavy_running` entry is pruned.
 - `RL_ADMISSION_BUDGET_MB` (default 12288; `0` = off) / `RL_HEAVY_TASK_RESERVE_MB` (5632) / `RL_MEDIUM_TASK_RESERVE_MB` (3072) / `RL_IMAGE_BUILD_RESERVE_MB` (3072) / `RL_ENV_RESERVE_MB` (1024 per live env) / `RL_MAX_HEAVY_CONCURRENT` (2; `0` = no cap) / `RL_MAX_IMAGE_BUILDS` (1; `0` = no cap) — the admission ledger (2026-10-22). Set in `/srv/rl-infra/.env` on the VM. See "Dynamic memory + heavy-task admission".
 - `RL_MEMINFO_PATH` (default `/proc/meminfo`) / `RL_ADMISSION_FILE` (default `$RL_STATE_DIR/admission.json`) — override points; the orchestrator shell tests use them to drive the gate off fixtures.
