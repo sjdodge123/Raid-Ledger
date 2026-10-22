@@ -79,7 +79,7 @@ export interface ValidateCiParams {
   /**
    * ROK-1470 admission weight. Omitted → derived from the resolved args: every
    * mode that runs a suite (default/full, --only-unit, --only-integration,
-   * --only-e2e, --with-e2e) is `heavy`; a --static-only run is `medium` (2026-10-22).
+   * --only-e2e, --with-e2e) is `heavy`; a --static-only run is `light`.
    */
   weight?: TaskWeight;
   /** ROK-1466: forwards --fleet — the whole gate in one dispatch. Needs a target. */

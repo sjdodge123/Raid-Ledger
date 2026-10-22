@@ -51,9 +51,9 @@ describe('resolveValidateCiWeight (rl_validate_ci)', () => {
     },
   );
 
-  it('classifies a --static-only run as medium (build + tsc + lint is admitted, not ungated)', () => {
-    expect(resolveValidateCiWeight(['--static'])).toBe('medium');
-    expect(resolveValidateCiWeight(['--static', '--no-e2e'])).toBe('medium');
+  it('classifies a --static-only run as light (build + tsc + lint)', () => {
+    expect(resolveValidateCiWeight(['--static'])).toBe('light');
+    expect(resolveValidateCiWeight(['--static', '--no-e2e'])).toBe('light');
   });
 
   it('keeps --static heavy when it is combined with a forced e2e run', () => {

@@ -11,9 +11,8 @@
 
 /**
  * Admission weight understood by orchestrator/bin/task-start. ROK-1793 S2:
- * `medium` (RL_MEDIUM_TASK_MIN_FREE_MB, 2560 floor; RL_MEDIUM_TASK_RESERVE_MB,
- * 3072 ledger reservation) is the borrowed-slot Playwright child of a parallel
- * gate, and since 2026-10-22 the default for a `--static` rl_validate_ci run.
+ * `medium` (RL_MEDIUM_TASK_MIN_FREE_MB, 2560) is the borrowed-slot Playwright
+ * child of a parallel gate; nothing in the MCP derives it by default.
  */
 export const TASK_WEIGHTS = ['heavy', 'medium', 'light'] as const;
 export type TaskWeight = (typeof TASK_WEIGHTS)[number];
@@ -54,11 +53,9 @@ export function resolveCommandWeight(command: string, explicit?: TaskWeight): Ta
 /**
  * Weight for a validate-ci.sh invocation (rl_validate_ci).
  *
- * Heavy by default — a bare run is the full pipeline. A `--static` run with no
- * forced e2e flag is `medium` (no-RAM memory plan 2026-10-22, item 3): build +
- * typecheck + lint peaks at ~3 GiB, and on 2026-10-22 03:20Z several ungated
- * statics next to an image build and jest runs stalled the VM. Medium holds a
- * ledger reservation for its whole run but is not bound by the heavy cap.
+ * Heavy by default — a bare run is the full pipeline. Only a `--static` run
+ * with no forced e2e flag is light: build + typecheck + lint fit comfortably
+ * alongside another heavy run.
  *
  * @param args - the fully-resolved validate-ci.sh argv (post resolveArgs).
  * @param explicit - caller-supplied override; returned as-is when present.
@@ -67,7 +64,7 @@ export function resolveValidateCiWeight(args: string[], explicit?: TaskWeight): 
   if (explicit) return explicit;
   const hasHeavyFlag = args.some((a) => VALIDATE_CI_HEAVY_FLAGS.includes(a));
   if (hasHeavyFlag) return 'heavy';
-  return args.includes('--static') ? 'medium' : 'heavy';
+  return args.includes('--static') ? 'light' : 'heavy';
 }
 
 /**

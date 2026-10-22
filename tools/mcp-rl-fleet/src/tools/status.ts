@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_status';
 export const TOOL_DESCRIPTION =
-  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load (ROK-1568 adds the numeric host.disk_free_gb plus host.disk_pressure, the last gc-sweeper prune-ladder run), live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung. Since 2026-10-22 admission is a ledger: each admitted task (heavy, medium incl. --static gates, image builds) holds its reservation until it ends, live envs count too, and admission.categories / committed_mb / budget_mb / max_heavy_concurrent (2) / max_image_builds (1) show why a task waits (admission.waiting[].blocked_by: heavy_cap, image_build_cap, budget or memory_floor). ROK-1568 adds the disk axis: an image build can also park on free DISK (task admission_state `waiting_disk`, then failure_reason `disk_pressure`) — compare host.disk_free_gb against RL_BUILD_MIN_FREE_GB (20 GB) and use rl_fleet_prune to reclaim. It also reports settings_bundle: bundle.enc age, key count and whether it decrypts, so a stale or undecryptable settings bundle is visible without SSH (never key names or values).';
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load (ROK-1568 adds the numeric host.disk_free_gb plus host.disk_pressure, the last gc-sweeper prune-ladder run), live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung. ROK-1568 adds the disk axis: an image build can also park on free DISK (task admission_state `waiting_disk`, then failure_reason `disk_pressure`) — compare host.disk_free_gb against RL_BUILD_MIN_FREE_GB (20 GB) and use rl_fleet_prune to reclaim. It also reports settings_bundle: bundle.enc age, key count and whether it decrypts, so a stale or undecryptable settings bundle is visible without SSH (never key names or values).';
 
 // ROK-1338 PR-1 — runner sync-state fields.
 //
@@ -146,7 +146,7 @@ export interface StatusResult {
   // the 15 GiB host on purpose (4 x `mem_limit: 6g`), and heavy tasks queue on
   // host MemAvailable instead of on a per-slot cap. Optional + nullable so an
   // orchestrator that predates ROK-1470 still parses.
-  /** Tasks (heavy, medium or image build) currently holding an admission slot. */
+  /** Heavy tasks currently holding an admission slot. */
   heavy_running?: number;
   /** Heavy tasks parked waiting for memory right now. */
   heavy_waiting?: number;
@@ -156,30 +156,8 @@ export interface StatusResult {
   heavy_task_min_free_mb?: number;
   /** Per-entry detail behind the two counts. */
   admission?: {
-    running: Array<{
-      key: string;
-      task_id: string;
-      admitted_at: string;
-      weight?: 'heavy' | 'medium';
-      kind?: 'task' | 'image_build';
-      reserve_mb?: number;
-    }>;
-    waiting: Array<{ key: string; task_id: string; since: string; blocked_by?: string }>;
-    // No-RAM memory plan 2026-10-22, item 3 — the ledger behind the counts.
-    /** Running admitted tasks per category (a build is not in `heavy`). */
-    categories?: { heavy: number; medium: number; image_build: number };
-    /** Σ reservations of running tasks, held for each task's whole life. */
-    reserved_mb?: number;
-    /** Live envs × RL_ENV_RESERVE_MB. */
-    env_reserved_mb?: number;
-    /** reserved_mb + env_reserved_mb; a task admits only while this + its reservation ≤ budget_mb. */
-    committed_mb?: number;
-    /** RL_ADMISSION_BUDGET_MB (0 = budget off). */
-    budget_mb?: number;
-    /** RL_MAX_HEAVY_CONCURRENT (0 = no cap). */
-    max_heavy_concurrent?: number;
-    /** RL_MAX_IMAGE_BUILDS (0 = no cap). */
-    max_image_builds?: number;
+    running: Array<{ key: string; task_id: string; admitted_at: string }>;
+    waiting: Array<{ key: string; task_id: string; since: string }>;
   };
   error?: string;
 }
