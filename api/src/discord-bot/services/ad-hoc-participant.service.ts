@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql, type SQL } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -19,6 +19,7 @@ import {
   type SteamUpsertOutcome,
 } from './ad-hoc-steam-participant.helpers';
 import { withParticipantLock } from './ad-hoc-participant-lock';
+import { UNLINKED_SERVER_ROW_SQL } from './ad-hoc-unlinked-row.sql';
 
 export type { ServerPresenceMemberInfo, SteamUpsertOutcome };
 
@@ -88,13 +89,16 @@ export class AdHocParticipantService {
     // ROK-1451 M5: announce a genuinely NEW participation only. A voice
     // re-join updates the existing row, and re-announcing it would make
     // LfgQuickPlayListener re-emit QUICK_PLAY_MATCH for a single session.
-    if (inserted) {
-      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
-        eventId,
-        userId: member.userId,
-        discordUserId: member.discordUserId,
-      });
-    }
+    // ROK-1888 (Codex r1 P2): a re-join gets its own post-commit signal, so
+    // the Steam-link nudge sees it without LFG re-matching the session.
+    const name = inserted
+      ? AD_HOC_EVENTS.PARTICIPANT_JOINED
+      : AD_HOC_EVENTS.PARTICIPANT_REJOINED;
+    this.eventEmitter.emit(name, {
+      eventId,
+      userId: member.userId,
+      discordUserId: member.discordUserId,
+    });
     this.logger.debug(
       `Participant ${member.discordUsername} added to event ${eventId}`,
     );
@@ -282,9 +286,23 @@ export class AdHocParticipantService {
   }
 
   /**
-   * Get count of currently active participants (joined but not left).
+   * Open participants the roster reports as "N playing" (web + gateway).
+   * ROK-1888 ruling 2: unlinked server rows are left out, matching the card.
+   * Lifecycle checks use {@link getOpenRowCount}, which still counts them.
    */
   async getActiveCount(eventId: number): Promise<number> {
+    return this.countOpen(eventId, sql`NOT ${UNLINKED_SERVER_ROW_SQL}`);
+  }
+
+  /**
+   * Every open row, unlinked server players included — "is anyone still
+   * here?" for grace decisions (ROK-1888 ruling 1: they still count).
+   */
+  async getOpenRowCount(eventId: number): Promise<number> {
+    return this.countOpen(eventId);
+  }
+
+  private async countOpen(eventId: number, extra?: SQL): Promise<number> {
     const [result] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.adHocParticipants)
@@ -292,9 +310,9 @@ export class AdHocParticipantService {
         and(
           eq(schema.adHocParticipants.eventId, eventId),
           isNull(schema.adHocParticipants.leftAt),
+          extra,
         ),
       );
-
     return result?.count ?? 0;
   }
 }
