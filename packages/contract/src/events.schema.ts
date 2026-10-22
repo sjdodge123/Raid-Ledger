@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SignupUserSchema, EventRosterSchema } from "./signups.schema.js";
 import { RosterWithAssignmentsSchema } from "./roster.schema.js";
 import { PugSlotResponseSchema } from "./pug.schema.js";
+import { GuildKindSchema } from "./guilds.schema.js";
 
 // ============================================================
 // Slot Configuration Schema
@@ -173,6 +174,17 @@ export const ConflictingEventSchema = z.object({
 export type ConflictingEventDto = z.infer<typeof ConflictingEventSchema>;
 
 /** Single event response */
+/**
+ * ROK-1893 P4: the hub an event is tagged to, for calendar provenance.
+ * Present only when `guildId` points at a hub that is active and not hidden.
+ */
+export const EventHubRefSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  kind: GuildKindSchema,
+});
+export type EventHubRef = z.infer<typeof EventHubRefSchema>;
+
 export const EventResponseSchema = z.object({
   id: z.number(),
   title: z.string(),
@@ -230,6 +242,8 @@ export const EventResponseSchema = z.object({
   privateVoice: z.boolean().nullable().optional(),
   /** ROK-1787: guild this event is tagged to (null = untagged). */
   guildId: z.number().int().nullable().optional(),
+  /** ROK-1893 P4: the tagged hub when visible (null = untagged or hidden hub). */
+  hub: EventHubRefSchema.nullable().optional(),
   /** ROK-1725: organiser-pasted log report URL (allow-listed on write). */
   reportUrl: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
