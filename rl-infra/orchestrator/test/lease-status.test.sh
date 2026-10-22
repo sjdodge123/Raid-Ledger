@@ -101,7 +101,7 @@ test_claim_wait_immediate_grant_on_free_slot() {
     CURRENT_TEST_NAME="AC9: claim-wait returns immediately when a slot is already free"
     # Fresh state — both slots free.
     export RL_AGENT_ID="immediate-grantee"
-    local out exit_code
+    local out exit_code fails_before=$TEST_FAIL_COUNT
     out=$(bash "$BIN_DIR/claim-wait" --timeout 30 --branch foo 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "claim-wait must exit 0 on grant"
@@ -110,6 +110,12 @@ test_claim_wait_immediate_grant_on_free_slot() {
     wait_timed_out=$(echo "$out" | jq -r '.wait_timed_out // empty' 2>/dev/null || echo "")
     assert_neq "$slot" "" "claim-wait must populate .slot on grant"
     assert_neq "$wait_timed_out" "true" "claim-wait must NOT timeout when grant happens immediately"
+    # This only fails on a fleet runner; dump claim-wait's captured
+    # stdout+stderr so the failure is diagnosable from the log alone.
+    if (( TEST_FAIL_COUNT > fails_before )); then
+        echo "  claim-wait exit=$exit_code combined stdout+stderr:"
+        printf '%s\n' "${out:-<empty>}" | sed 's/^/    | /'
+    fi
 }
 
 # AC9 — claim-wait emits queue_position when enqueued (single-shot then long-poll)

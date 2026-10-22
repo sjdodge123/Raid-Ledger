@@ -113,8 +113,15 @@ export class ItadPriceSyncService
     private readonly cronJobService: CronJobService,
   ) {}
 
-  /** Trigger initial pricing sync after startup delay. */
+  /**
+   * Trigger initial pricing sync after startup delay. Skipped when
+   * CRON_DISABLED=true, mirroring VersionCheckService (ROK-1777):
+   * integration-setup.ts sets the flag, and without this gate the timer fired
+   * 30s into the integration realm and ran a pricing sync mid-suite.
+   * Production never sets CRON_DISABLED.
+   */
   onApplicationBootstrap(): void {
+    if (process.env.CRON_DISABLED === 'true') return;
     this.bootstrapTimer = setTimeout(() => {
       this.bootstrapTimer = null;
       this.syncPricing().catch((err) =>

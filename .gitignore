@@ -39,6 +39,11 @@ scripts/*
 !scripts/check-migration-merge-order.spec.mjs
 !scripts/check-migration-snapshot-chain.mjs
 !scripts/check-migration-snapshot-chain.spec.mjs
+# Renumber a branch's migrations after origin/main + the index-collision guard.
+!scripts/renumber-branch-migrations.sh
+!scripts/renumber-branch-migrations.mjs
+!scripts/renumber-branch-migrations.spec.mjs
+!scripts/check-migration-index-collision.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs
