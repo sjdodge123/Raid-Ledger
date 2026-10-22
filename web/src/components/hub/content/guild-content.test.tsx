@@ -3,7 +3,7 @@
  * recommended addons) and when that tab shows.
  */
 import { useEffect } from 'react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -17,6 +17,18 @@ import { usePluginStore } from '../../../stores/plugin-store';
 import { at } from '../../../test/defined';
 import { guildPageKey } from '../api/use-guild';
 import { GuildPage } from '../hub-page';
+import type { MarkdownEditorProps } from '../../ui/markdown/lazy-markdown-editor';
+import { buildHubPost } from '../../../test/factories/hub-posts';
+
+/** The TipTap chunk is V10's; here the Textarea fallback stands in (ROK-1868). */
+vi.mock('../../ui/markdown/lazy-markdown-editor', async () => {
+    const { Textarea } = await import('../../ui/textarea');
+    return {
+        LazyMarkdownEditor: (p: MarkdownEditorProps) => (
+            <Textarea value={p.value} onChange={(e) => p.onChange(e.target.value)} data-testid={p.testId} />
+        ),
+    };
+});
 
 const BASE = 'http://localhost:3000/guilds/7';
 /** Addons stay on the WoW plugin's routes (ROK-1831 moved only the profile to core). */
@@ -76,14 +88,14 @@ beforeEach(() => { activateWowPlugin(); calls = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GM post (Overview)', () => {
-    const post: GuildProfile = { ...EMPTY_PROFILE, gmPost: { body: 'Raid Thursday 8pm.\nBring flasks.', updatedAt: '2026-10-03T12:00:00.000Z', updatedBy: 'Grimtusk' } };
+    const post: GuildProfile = { ...EMPTY_PROFILE, latestPost: buildHubPost({ body: 'Raid Thursday 8pm.\nBring flasks.' }) };
 
     it('shows the body and author to a viewer, with no Edit', async () => {
         serve(false, post);
         renderPage();
         expect(await screen.findByTestId('guild-gm-post-body')).toHaveTextContent('Raid Thursday 8pm.');
         expect(screen.getByTestId('guild-gm-post-byline')).toHaveTextContent('Grimtusk');
-        expect(screen.queryByRole('button', { name: 'Edit the guild post' }), 'a viewer must not get Edit').toBeNull();
+        expect(screen.queryByRole('button', { name: 'Edit the latest post' }), 'a viewer must not get Edit').toBeNull();
     });
 
     it('shows an empty state to a viewer when there is no post', async () => {
@@ -93,13 +105,20 @@ describe('GM post (Overview)', () => {
         expect(screen.queryByRole('button', { name: 'Add a post' })).toBeNull();
     });
 
-    it('lets an editor add a post and PATCHes the profile', async () => {
+    it('lets an editor add a post and POSTs it to the feed (ROK-1868)', async () => {
         serve(true);
+        const posted: unknown[] = [];
+        server.use(http.post(`${BASE}/posts`, async ({ request }) => {
+            posted.push(await request.json());
+            return HttpResponse.json({ post: buildHubPost({ body: 'Welcome raiders' }), relayOutcome: 'sent' }, { status: 201 });
+        }));
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Add a post' }));
-        await userEvent.type(screen.getByLabelText('Guild post'), 'Welcome raiders');
-        await userEvent.click(screen.getByTestId('guild-gm-post-save'));
-        await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', url: `${BASE}/profile`, body: { gmPost: 'Welcome raiders' } }]));
+        await userEvent.type(screen.getByLabelText('New post'), 'Welcome raiders');
+        await waitFor(() => expect(screen.getByTestId('hub-post-submit')).toBeEnabled());
+        await userEvent.click(screen.getByTestId('hub-post-submit'));
+        await waitFor(() => expect(posted).toEqual([{ body: 'Welcome raiders', relayToDiscord: true }]));
+        expect(calls.filter((c) => c.method === 'PATCH'), 'the profile PATCH no longer carries the post').toEqual([]);
     });
 
     it('shows the loading skeleton, not Add a post, to an editor while the profile loads', async () => {

@@ -1,7 +1,8 @@
 /**
  * ROK-1851 — a voice spawn reuses the game's live Quick Play when it is
- * server-born or was created by a binding on the SAME Discord channel; a
- * Quick Play born on another channel stays separate (ROK-1800 rule). Prod 2026-10-17: a channel with a general-lobby AND a
+ * server-born or was created by a binding on the SAME Discord channel; since
+ * ROK-1888 one born on another channel is reused too (one live Quick Play per
+ * game across all channels). Prod 2026-10-17: a channel with a general-lobby AND a
  * game-voice-monitor binding; the server path spawned Quick Play 279 on the
  * monitor binding, then the lobby's voice spawn skipped it (binding-scoped
  * dedup) and created 280. 279 sat orphaned until the reaper.
@@ -262,8 +263,8 @@ describe('ROK-1851 — lobby voice spawn reuses the same-channel Quick Play', ()
   });
 });
 
-describe('ROK-1851 — cross-channel separation and the shared end path', () => {
-  it('a Quick Play of the game born on ANOTHER channel is not reused', async () => {
+describe('ROK-1851/1888 — cross-channel reuse and the shared end path', () => {
+  it('ROK-1888: a Quick Play of the game born on ANOTHER channel is reused', async () => {
     const otherBinding = await seedBinding(
       'game-voice-monitor',
       valheim,
@@ -279,13 +280,11 @@ describe('ROK-1851 — cross-channel separation and the shared end path', () => 
     await lobbyVoiceSpawn();
 
     const live = (await liveValheimQuickPlays()).map((r) => r.id);
-    expect(live).toHaveLength(2);
-    expect(live).toContain(otherEvent);
+    expect(live).toEqual([otherEvent]);
     const state = testApp.app
       .get(AdHocEventService)
       .getActiveState(lobbyId, valheim);
-    expect(state?.eventId).not.toBe(otherEvent);
-    expect(live).toContain(state?.eventId);
+    expect(state?.eventId).toBe(otherEvent);
   });
 
   it('AC2: when voice and server both empty, the shared event ends and no key stays registered', async () => {
@@ -329,7 +328,9 @@ describe('ROK-1851 — the lobby card shows the shared same-channel Quick Play',
     expect(recap.map((e) => e.id)).toEqual([serverEvent]);
   });
 
-  it('does not link a same-game Quick Play born on ANOTHER channel', async () => {
+  // ROK-1888 (OQ1): one live Quick Play per game, so the lobby card links the
+  // same-game event born on another channel when the room shows that game.
+  it('links a same-game Quick Play born on ANOTHER channel by game', async () => {
     const otherBinding = await seedBinding(
       'game-voice-monitor',
       valheim,
@@ -343,8 +344,9 @@ describe('ROK-1851 — the lobby card shows the shared same-channel Quick Play',
       VALHEIM,
     );
 
-    const linked = await findLinkedEvents(testApp.db, lobbyId);
-    expect(linked.map((e) => e.id)).toEqual([]);
+    const linked = await findLinkedEvents(testApp.db, lobbyId, [valheim]);
+    expect(linked.map((e) => e.id)).toEqual([otherEvent]);
+    expect(await findLinkedEvents(testApp.db, lobbyId)).toEqual([]);
     const recap = await recapEvents(testApp.db, lobbyId, opened);
     expect(recap.map((e) => e.id)).toEqual([]);
     expect(otherEvent).toBeGreaterThan(0);
