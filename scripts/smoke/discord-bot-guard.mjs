@@ -68,7 +68,7 @@ export const BOT_GATED = [
     { kind: 'api', path: '/admin/test/game-roles', subpaths: true, controller: 'api/src/admin/demo-test-game-roles.controller.ts', prefix: 'admin/test/game-roles', without: 'no guild to act on' },
     { kind: 'page', path: '/admin/settings/discord/channels', source: 'web/src/pages/admin/discord-channels-page.tsx', without: 'channel selectors hidden, bindings list empty', fixtures: [BOT_STATUS, '/admin/discord/bindings', '/admin/settings/discord-bot/channels'] },
     { kind: 'page', path: '/admin/settings/discord/features', source: 'web/src/pages/admin/discord-features-page.tsx', without: 'bot-only sections hidden', fixtures: [BOT_STATUS] },
-    { kind: 'testid', id: 'guild-discord-picker', source: 'web/src/components/hub/discord/guild-discord-picker.tsx', without: 'renders guild-discord-picker-disconnected', fixtures: ['/guilds/:id/discord/channels'], seeds: ['/admin/test/wow/guild-discord-channel'] },
+    { kind: 'testid', id: 'guild-discord-picker', source: 'web/src/components/hub/discord/guild-discord-picker.tsx', without: 'renders guild-discord-picker-disconnected', exceptSuffixes: ['disconnected'], fixtures: ['/guilds/:id/discord/channels'], seeds: ['/admin/test/wow/guild-discord-channel'] },
     { kind: 'testid', id: 'lineup-channel-override-select', source: 'web/src/components/lineups/lineup-channel-override-select.tsx', without: 'not rendered', fixtures: [BOT_STATUS, '/admin/settings/discord-bot/channels'] },
 ];
 
@@ -81,7 +81,11 @@ function pathSource(path) {
 }
 
 function referenceRe(entry) {
-    if (entry.kind === 'testid') return new RegExp(`(?<=['"\`])${escapeRe(entry.id)}(?=['"\`-])`, 'g');
+    if (entry.kind === 'testid') {
+      // `exceptSuffixes`: ids under the prefix that render WITHOUT a bot (e.g. `-disconnected`).
+      const except = (entry.exceptSuffixes ?? []).map((x) => `(?!-${escapeRe(x)}['"\`])`).join('');
+      return new RegExp(`(?<=['"\`])${escapeRe(entry.id)}${except}(?=['"\`-])`, 'g');
+    }
     const tail = entry.subpaths ? '(?![\\w-])' : '(?![\\w/-])';
     // A path counts after a quote, `^` (a '^/…' regex string), `*` (a glob),
     // a `/` (a longer prefix), or an API base const — not after any `${…}`.

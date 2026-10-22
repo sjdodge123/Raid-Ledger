@@ -87,6 +87,11 @@ test('a bot-gated data-testid is flagged unless the bot data is seeded', () => {
     assert.deepEqual(labels(`async function seed() { await apiPost(t, '/admin/test/wow/guild-discord-channel', {}); }\n${src}`), []);
 });
 
+test('the no-bot picker state (guild-discord-picker-disconnected) is not flagged', () => {
+    const src = "test('picker', async ({ page }) => {\n    await expect(page.getByTestId('guild-discord-picker-disconnected')).toBeVisible();\n});";
+    assert.deepEqual(labels(src), []);
+});
+
 test('listed endpoints outside api/src/discord-bot are seen; sub-paths and other bases are not misread', () => {
     assert.deepEqual(labels("test('m', async () => { await apiGet(t, '/users/me/discord-membership'); });"), ['/users/me/discord-membership']);
     assert.deepEqual(labels("test('g', async () => { await apiGet(t, `/plugins/wow/guilds/${gid}/discord/channels`); });"), ['/guilds/:id/discord/channels']);
