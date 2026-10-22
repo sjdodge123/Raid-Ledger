@@ -1,0 +1,233 @@
+/**
+ * ROK-1913 (H5) — `GET /plugins/wow/guilds/:id/roster-insights` against a
+ * real DB: a Forever guild (roster rows + 3 linked characters + 1 LedgerLink
+ * snapshot). Asserts the contract parse, the visitor/member professions
+ * split, import invalidation of the 5-min cache, and a 2000-row timing guard.
+ */
+import * as bcrypt from 'bcrypt';
+import { WowRosterInsightsSchema } from '@raid-ledger/contract';
+import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
+import { nonEmpty } from '../../../../common/testing/narrow';
+import * as schema from '../../../../drizzle/schema';
+import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import { RosterInsightsCache } from './roster-insights.cache';
+import { RosterInsightsService } from './roster-insights.service';
+
+const SNAP = new Date('2026-11-04T20:00:00.000Z');
+const PROFESSIONS = {
+  primary: [
+    {
+      id: 171,
+      name: 'Alchemy',
+      slug: 'alchemy',
+      skillLevel: 300,
+      maxSkillLevel: 300,
+      tiers: [],
+    },
+  ],
+  secondary: [],
+  syncedAt: SNAP.toISOString(),
+};
+type Who = 'lead' | 'healer' | 'crafter' | 'outsider';
+
+let testApp: TestApp;
+let guildId: number;
+const tokens = {} as Record<Who, string>;
+const charIds = {} as Record<Who, string>;
+
+async function insertGuild(name: string): Promise<number> {
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId: testApp.seed.game.id,
+        region: 'us',
+        name,
+        nameKey: name.toLowerCase(),
+        source: 'addon_import',
+        lastSnapshotAt: SNAP,
+      })
+      .returning(),
+    'guild',
+  );
+  return g.id;
+}
+
+function memberRow(
+  gid: number,
+  guid: string,
+  name: string,
+  level: number,
+  cls: string,
+) {
+  return {
+    guildId: gid,
+    guid,
+    characterName: name,
+    level,
+    class: cls,
+    rankIndex: 2,
+    rankName: 'Raider',
+    source: 'addon_import',
+    lastSeenAt: SNAP,
+  };
+}
+
+/** A local-login user + Forever character; members also get a roster row. */
+async function seedUser(
+  who: Who,
+  level: number,
+  cls: string,
+  extra: Partial<typeof schema.characters.$inferInsert>,
+): Promise<void> {
+  const email = `${who}@insights.test`;
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: `local:${email}`, username: who, role: 'member' })
+      .returning(),
+    'user',
+  );
+  await testApp.db.insert(schema.localCredentials).values({
+    email,
+    passwordHash: await bcrypt.hash('TestPassword123!', 4),
+    userId: user.id,
+  });
+  const guid = `Player-7-${who}`;
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId: user.id,
+        gameId: testApp.seed.game.id,
+        name: who,
+        class: cls,
+        level,
+        addonGuid: guid,
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+        isMain: true,
+        ...extra,
+      })
+      .returning(),
+    'character',
+  );
+  charIds[who] = char.id;
+  if (who !== 'outsider')
+    await testApp.db
+      .insert(schema.guildMembers)
+      .values(memberRow(guildId, guid, who, level, cls));
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
+  tokens[who] = res.body.access_token as string;
+}
+
+const insights = (who: Who, gid = guildId) =>
+  testApp.request
+    .get(`/plugins/wow/guilds/${gid}/roster-insights`)
+    .set('Authorization', `Bearer ${tokens[who]}`);
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+  const registry = testApp.app.get(PluginRegistryService);
+  await registry.ensureInstalled('blizzard');
+  await registry.activate('blizzard');
+  guildId = await insertGuild('Forever Insights');
+  await seedUser('lead', 60, 'Warrior', { roleOverride: 'tank' });
+  await seedUser('healer', 45, 'Priest', { role: 'healer' });
+  await seedUser('crafter', 22, 'Mage', { professions: PROFESSIONS });
+  await seedUser('outsider', 60, 'Rogue', {});
+  await testApp.db
+    .insert(schema.guildMembers)
+    .values([
+      memberRow(guildId, 'Player-7-pug1', 'Pugone', 8, 'Mage'),
+      memberRow(guildId, 'Player-7-pug2', 'Pugtwo', 60, 'Hunter'),
+    ]);
+  await testApp.db.insert(schema.characterAddonSnapshots).values({
+    characterId: charIds.lead,
+    section: 'char',
+    schema: 2,
+    data: {
+      gear: [{ slot: 1, itemId: 16866, ilvl: 66, bonusIds: [] }],
+      talents: { nodes: [] },
+      lockouts: [],
+    },
+    capturedAt: SNAP,
+    payloadSha256: 'a'.repeat(64),
+  });
+});
+
+describe('GET roster-insights (real DB)', () => {
+  it('a member gets a contract-valid payload WITH professions', async () => {
+    const res = await insights('healer');
+    expect(res.status).toBe(200);
+    const dto = WowRosterInsightsSchema.parse(res.body);
+    expect(dto.classes.find((c) => c.class === 'Mage')?.count).toBe(2);
+    expect(dto.levels).toMatchObject({ max: 60, atCap: 2 });
+    expect(dto.roles.raid).toEqual({ tank: 1, healer: 0, dps: 0, unknown: 0 });
+    expect(dto.roles.dungeon).toMatchObject({ tank: 1, healer: 1 });
+    expect(dto.professions).toEqual([
+      {
+        name: 'Alchemy',
+        members: [
+          expect.objectContaining({ characterId: charIds.crafter, skill: 300 }),
+        ],
+      },
+    ]);
+    expect(dto.freshness.characters.addon).toBe(1);
+  });
+
+  it('a visitor sees class/level/role but NO professions key', async () => {
+    const res = await insights('outsider');
+    expect(res.status).toBe(200);
+    const dto = WowRosterInsightsSchema.parse(res.body);
+    expect(dto.classes.length).toBeGreaterThan(0);
+    expect('professions' in res.body).toBe(false);
+  });
+
+  it('serves the cached payload until an import of a guild character invalidates it', async () => {
+    await insights('lead');
+    await testApp.db
+      .insert(schema.guildMembers)
+      .values(memberRow(guildId, 'Player-7-new', 'Newbie', 12, 'Druid'));
+    const cached = WowRosterInsightsSchema.parse((await insights('lead')).body);
+    expect(cached.classes.some((c) => c.class === 'Druid')).toBe(false);
+    await testApp.app
+      .get(RosterInsightsCache)
+      .invalidateForCharacter(charIds.lead);
+    const fresh = WowRosterInsightsSchema.parse((await insights('lead')).body);
+    expect(fresh.classes.find((c) => c.class === 'Druid')?.count).toBe(1);
+  });
+});
+
+describe('roster-insights on a 2000-member roster', () => {
+  it('computes under the timing guard (p95 logged)', async () => {
+    const big = await insertGuild('Forever Two Thousand');
+    const rows = Array.from({ length: 2000 }, (_, i) =>
+      memberRow(
+        big,
+        `Player-7-big${i}`,
+        `Big${i}`,
+        (i % 60) + 1,
+        i % 2 ? 'Mage' : 'Rogue',
+      ),
+    );
+    for (let i = 0; i < rows.length; i += 500)
+      await testApp.db
+        .insert(schema.guildMembers)
+        .values(rows.slice(i, i + 500));
+    const svc = testApp.app.get(RosterInsightsService);
+    const times: number[] = [];
+    for (let run = 0; run < 10; run += 1) {
+      const t0 = performance.now();
+      const dto = await svc.compute(big, 'member', false);
+      times.push(performance.now() - t0);
+      expect(dto.classes.reduce((n, c) => n + c.count, 0)).toBe(2000);
+    }
+    const p95 =
+      [...times].sort((a, b) => a - b)[Math.ceil(times.length * 0.95) - 1] ?? 0;
+    console.log(`roster-insights 2000-row p95=${p95.toFixed(1)}ms`);
+    expect(p95).toBeLessThan(1500);
+  });
+});
