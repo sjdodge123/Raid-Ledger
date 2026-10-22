@@ -1,5 +1,5 @@
 {
-  "id": "9ef1f496-2d45-4ed3-aece-e78954d82de2",
+  "id": "938febdb-0a12-4318-97ff-5df5677d32f6",
   "prevId": "2cd301b8-8421-4ed8-ba1a-a2e29b769cdf",
   "version": "7",
   "dialect": "postgresql",
@@ -4108,6 +4108,39 @@
           "notNull": false,
           "default": "'{}'::jsonb"
         },
+        "lifecycle_state": {
+          "name": "lifecycle_state",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "auto_managed": {
+          "name": "auto_managed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pinned": {
+          "name": "pinned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restore_parent_id": {
+          "name": "restore_parent_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -4257,6 +4290,34 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_channel_bindings_lifecycle": {
+          "name": "idx_channel_bindings_lifecycle",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "game_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lifecycle_state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"channel_bindings\".\"auto_managed\" AND \"channel_bindings\".\"recurrence_group_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4277,7 +4338,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "channel_bindings_lifecycle_state_check": {
+          "name": "channel_bindings_lifecycle_state_check",
+          "value": "\"channel_bindings\".\"lifecycle_state\" IN ('active', 'archived')"
+        },
+        "channel_bindings_archived_auto_check": {
+          "name": "channel_bindings_archived_auto_check",
+          "value": "\"channel_bindings\".\"lifecycle_state\" = 'active' OR \"channel_bindings\".\"auto_managed\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.post_event_reminders_sent": {
@@ -12241,457 +12311,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.hub_community_members": {
-      "name": "hub_community_members",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "varchar(8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "joined_at": {
-          "name": "joined_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "left_at": {
-          "name": "left_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "removed_by": {
-          "name": "removed_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "banned_at": {
-          "name": "banned_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "banned_by": {
-          "name": "banned_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ban_reason": {
-          "name": "ban_reason",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "join_source": {
-          "name": "join_source",
-          "type": "varchar(10)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "invite_id": {
-          "name": "invite_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_hub_community_members_guild_user": {
-          "name": "idx_hub_community_members_guild_user",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_community_one_leader": {
-          "name": "idx_hub_community_one_leader",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"hub_community_members\".\"role\" = 'leader' AND \"hub_community_members\".\"left_at\" IS NULL AND \"hub_community_members\".\"banned_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_community_members_user_id": {
-          "name": "idx_hub_community_members_user_id",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_community_members_removed_by": {
-          "name": "idx_hub_community_members_removed_by",
-          "columns": [
-            {
-              "expression": "removed_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_community_members_banned_by": {
-          "name": "idx_hub_community_members_banned_by",
-          "columns": [
-            {
-              "expression": "banned_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_community_members_invite_id": {
-          "name": "idx_hub_community_members_invite_id",
-          "columns": [
-            {
-              "expression": "invite_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_community_members_live": {
-          "name": "idx_hub_community_members_live",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"hub_community_members\".\"left_at\" IS NULL AND \"hub_community_members\".\"banned_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_community_members_guild_id_guilds_id_fk": {
-          "name": "hub_community_members_guild_id_guilds_id_fk",
-          "tableFrom": "hub_community_members",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_community_members_user_id_users_id_fk": {
-          "name": "hub_community_members_user_id_users_id_fk",
-          "tableFrom": "hub_community_members",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_community_members_removed_by_users_id_fk": {
-          "name": "hub_community_members_removed_by_users_id_fk",
-          "tableFrom": "hub_community_members",
-          "tableTo": "users",
-          "columnsFrom": [
-            "removed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "hub_community_members_banned_by_users_id_fk": {
-          "name": "hub_community_members_banned_by_users_id_fk",
-          "tableFrom": "hub_community_members",
-          "tableTo": "users",
-          "columnsFrom": [
-            "banned_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "hub_community_members_invite_id_hub_invites_id_fk": {
-          "name": "hub_community_members_invite_id_hub_invites_id_fk",
-          "tableFrom": "hub_community_members",
-          "tableTo": "hub_invites",
-          "columnsFrom": [
-            "invite_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "hub_community_members_role_check": {
-          "name": "hub_community_members_role_check",
-          "value": "\"hub_community_members\".\"role\" IN ('leader', 'officer', 'member')"
-        },
-        "hub_community_members_join_source_check": {
-          "name": "hub_community_members_join_source_check",
-          "value": "\"hub_community_members\".\"join_source\" IS NULL OR \"hub_community_members\".\"join_source\" IN ('manual', 'invite', 'auto', 'prompt')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.hub_invites": {
-      "name": "hub_invites",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token": {
-          "name": "token",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "max_uses": {
-          "name": "max_uses",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "use_count": {
-          "name": "use_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "idx_hub_invites_guild_id": {
-          "name": "idx_hub_invites_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_invites_created_by": {
-          "name": "idx_hub_invites_created_by",
-          "columns": [
-            {
-              "expression": "created_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_invites_live_by_maker": {
-          "name": "idx_hub_invites_live_by_maker",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"hub_invites\".\"revoked_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_invites_guild_id_guilds_id_fk": {
-          "name": "hub_invites_guild_id_guilds_id_fk",
-          "tableFrom": "hub_invites",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_invites_created_by_users_id_fk": {
-          "name": "hub_invites_created_by_users_id_fk",
-          "tableFrom": "hub_invites",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "hub_invites_token_unique": {
-          "name": "hub_invites_token_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "hub_invites_max_uses_check": {
-          "name": "hub_invites_max_uses_check",
-          "value": "\"hub_invites\".\"max_uses\" IS NULL OR \"hub_invites\".\"max_uses\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.hub_onboarding_dismissals": {
       "name": "hub_onboarding_dismissals",
       "schema": "",
@@ -16091,6 +15710,251 @@
         "discord_game_roles_window_days_range": {
           "name": "discord_game_roles_window_days_range",
           "value": "\"discord_game_roles\".\"window_days\" BETWEEN 1 AND 365"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.hub_community_members": {
+      "name": "hub_community_members",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "left_at": {
+          "name": "left_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "removed_by": {
+          "name": "removed_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "banned_at": {
+          "name": "banned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "banned_by": {
+          "name": "banned_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ban_reason": {
+          "name": "ban_reason",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_hub_community_members_guild_user": {
+          "name": "idx_hub_community_members_guild_user",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_community_one_leader": {
+          "name": "idx_hub_community_one_leader",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"hub_community_members\".\"role\" = 'leader' AND \"hub_community_members\".\"left_at\" IS NULL AND \"hub_community_members\".\"banned_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_community_members_user_id": {
+          "name": "idx_hub_community_members_user_id",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_community_members_removed_by": {
+          "name": "idx_hub_community_members_removed_by",
+          "columns": [
+            {
+              "expression": "removed_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_community_members_banned_by": {
+          "name": "idx_hub_community_members_banned_by",
+          "columns": [
+            {
+              "expression": "banned_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_community_members_live": {
+          "name": "idx_hub_community_members_live",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"hub_community_members\".\"left_at\" IS NULL AND \"hub_community_members\".\"banned_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hub_community_members_guild_id_guilds_id_fk": {
+          "name": "hub_community_members_guild_id_guilds_id_fk",
+          "tableFrom": "hub_community_members",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hub_community_members_user_id_users_id_fk": {
+          "name": "hub_community_members_user_id_users_id_fk",
+          "tableFrom": "hub_community_members",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hub_community_members_removed_by_users_id_fk": {
+          "name": "hub_community_members_removed_by_users_id_fk",
+          "tableFrom": "hub_community_members",
+          "tableTo": "users",
+          "columnsFrom": [
+            "removed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "hub_community_members_banned_by_users_id_fk": {
+          "name": "hub_community_members_banned_by_users_id_fk",
+          "tableFrom": "hub_community_members",
+          "tableTo": "users",
+          "columnsFrom": [
+            "banned_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "hub_community_members_role_check": {
+          "name": "hub_community_members_role_check",
+          "value": "\"hub_community_members\".\"role\" IN ('leader', 'officer', 'member')"
         }
       },
       "isRLSEnabled": false
