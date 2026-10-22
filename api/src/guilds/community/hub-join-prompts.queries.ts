@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { HubJoinPrompt } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { DbOrTx } from './community-membership.queries';
@@ -116,6 +116,28 @@ export async function dismissPrompt(db: DbOrTx, id: number): Promise<void> {
     .where(eq(p.id, id));
 }
 
+/** The prompt's user's LIVE membership row of the prompt's hub. */
+function liveMemberOfPrompt(): SQL | undefined {
+  return and(
+    eq(m.guildId, p.guildId),
+    eq(m.userId, p.userId),
+    isNull(m.leftAt),
+    isNull(m.bannedAt),
+  );
+}
+
+/** Undismissed, on a visible active community hub, and not a stale suggest. */
+function openPromptOf(userId: number): SQL | undefined {
+  return and(
+    eq(p.userId, userId),
+    isNull(p.dismissedAt),
+    eq(g.kind, 'game_community'),
+    eq(g.status, 'active'),
+    isNull(g.hiddenAt),
+    sql`NOT (${p.kind} = 'suggest' AND ${m.id} IS NOT NULL)`,
+  );
+}
+
 /**
  * The user's open prompts on visible, active community hubs. A `suggest`
  * whose user has since become a live member is stale and left out.
@@ -136,25 +158,8 @@ export async function listOpenPrompts(
     })
     .from(p)
     .innerJoin(g, eq(g.id, p.guildId))
-    .leftJoin(
-      m,
-      and(
-        eq(m.guildId, p.guildId),
-        eq(m.userId, p.userId),
-        isNull(m.leftAt),
-        isNull(m.bannedAt),
-      ),
-    )
-    .where(
-      and(
-        eq(p.userId, userId),
-        isNull(p.dismissedAt),
-        eq(g.kind, 'game_community'),
-        eq(g.status, 'active'),
-        isNull(g.hiddenAt),
-        sql`NOT (${p.kind} = 'suggest' AND ${m.id} IS NOT NULL)`,
-      ),
-    )
+    .leftJoin(m, liveMemberOfPrompt())
+    .where(openPromptOf(userId))
     .orderBy(desc(p.createdAt), desc(p.id));
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
 }
