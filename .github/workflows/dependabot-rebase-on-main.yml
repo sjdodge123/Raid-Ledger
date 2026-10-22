@@ -178,6 +178,12 @@ jobs:
               *"HTTP 401"*|*"HTTP 403"*)
                 echo "::error::update-branch on PR #$n was refused — check REBASE_PAT: $out"
                 exit 1 ;;
+              # A merge fires this workflow twice; the second run sees the PR
+              # the first one just rebased. That PR is in flight — stop here
+              # rather than rebasing a second one.
+              *"no new commits"*|*"is up to date"*)
+                echo "PR #$n is already up to date (rebased by a sibling run): $out"
+                exit 0 ;;
             esac
             echo "::warning::Skip PR #$n — update-branch failed: $out"
           done
