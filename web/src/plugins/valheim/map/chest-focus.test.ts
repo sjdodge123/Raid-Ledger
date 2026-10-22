@@ -10,7 +10,13 @@ import {
 import { worldToScreen } from './valheim-grid';
 
 const GRID: ValheimMapGrid = { textureSize: 256, pixelSizeMetres: 12 };
-const IRON = { prefab: 'piece_chest_wood', x: -271, z: 75, item: 'Iron' };
+const IRON = {
+    prefab: 'piece_chest_wood',
+    x: -271,
+    z: 75,
+    y: null,
+    item: 'Iron',
+};
 
 describe('chest focus deep link (ROK-1889)', () => {
     it('round-trips a chest through the #map hash', () => {
@@ -49,10 +55,42 @@ describe('chest focus deep link (ROK-1889)', () => {
             prefab: 'piece_chest',
             x: 1.5,
             z: -2,
+            y: null,
             item: null,
         });
     });
+});
 
+describe('chest focus y — stacked chests (ROK-1889)', () => {
+    it('carries y so a stacked chest names the right one', () => {
+        const stacked = { ...IRON, y: 32.04 };
+        const hash = chestFocusHash(stacked);
+        expect(new URLSearchParams(hash.slice(5)).get('y')).toBe('32.0');
+        expect(parseChestFocus(hash)).toEqual({ ...IRON, y: 32 });
+        expect(chestFocusQuery(stacked)).toBe(
+            'prefab=piece_chest_wood&x=-271.0&z=75.0&y=32.0&item=Iron',
+        );
+    });
+
+    it('keeps an older link without y working (lowest chest)', () => {
+        const hash = '#map?focus=chest%3Apiece_chest%401.5%2C-2';
+        expect(parseChestFocus(hash)?.y).toBeNull();
+        expect(chestFocusQuery({ ...IRON, y: null })).not.toContain('y=');
+    });
+
+    it('ignores a malformed y but keeps the chest', () => {
+        const hash = '#map?focus=chest%3Apiece_chest%401.5%2C-2&y=1e3';
+        expect(parseChestFocus(hash)).toEqual({
+            prefab: 'piece_chest',
+            x: 1.5,
+            z: -2,
+            y: null,
+            item: null,
+        });
+    });
+});
+
+describe('chest focus marker projection (ROK-1889)', () => {
     it('projects with the ROK-1880 pin projection', () => {
         const { left, top } = worldToScreen(GRID, -271, 75);
         expect(chestMarkerPoint(GRID, -271, 75)).toEqual({ x: left, y: top });
