@@ -376,9 +376,10 @@ invoke remote "$ENV_URL" --fleet
 
 # W2 (reviewer): a fresh runner has no tools/test-bot/node_modules — the
 # Discord-smoke step says so and installs them. The render-rule self-test in the
-# tools step needed the same guard or it dies at import.
+# tools step needed the same guard or it dies at import, and so does the
+# `--scoped` gate's `tool:test-bot` target (the 4th match).
 CURRENT_TEST_NAME="W2: the test-bot dep guard is shared, not duplicated"
-assert_count '_ensure_test_bot_deps' "$VALIDATE_CI_PATH" 3 "one definition + both call sites"
+assert_count '_ensure_test_bot_deps' "$VALIDATE_CI_PATH" 4 "one definition + the Discord-smoke, tools-step and --scoped tool:test-bot call sites"
 
 # Reviewer suggestion: --fleet's whole point is running e2e against the env, but
 # e2e_mode stayed "auto" so it SKIPped unless the diff happened to touch web/**.
