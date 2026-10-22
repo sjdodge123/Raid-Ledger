@@ -7,6 +7,8 @@ import {
   SetGuildDiscordChannelSchema,
   type GuildDiscordChannelListDto,
   type GuildDiscordChannelOptionDto,
+  type GuildDiscordChannelSource,
+  type GuildDiscordManagedForDto,
   type GuildDiscordMirrorDto,
   type SetGuildDiscordChannelDto,
 } from '@raid-ledger/contract';
@@ -86,4 +88,19 @@ export function withServerName(
 ): GuildDiscordMirrorDto {
   if (read.state !== 'ok' || serverName === null) return read;
   return { ...read, channel: { ...read.channel, serverName } };
+}
+
+/** ROK-1871 — how the bound channel got there (mirror `ok` meta, §2.7). */
+export interface ChannelMeta {
+  source: GuildDiscordChannelSource | null;
+  managedFor: GuildDiscordManagedForDto | null;
+}
+
+/** Stamp `channelSource` + `managedFor` on an `ok` read; else unchanged. */
+export function withChannelMeta(
+  read: GuildDiscordMirrorDto,
+  meta: ChannelMeta,
+): GuildDiscordMirrorDto {
+  if (read.state !== 'ok') return read;
+  return { ...read, channelSource: meta.source, managedFor: meta.managedFor };
 }
