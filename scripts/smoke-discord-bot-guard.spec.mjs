@@ -1,139 +1,20 @@
 // node:test guard: Playwright smoke specs must not silently depend on a
-// connected Discord bot.
-//
-// Why this exists: GitHub CI runs the smoke suite with NO Discord bot, so every
-// endpoint that reads the bot's guild answers empty / null / 503 there. PR
-// #1721's admin-discord-lifecycle spec asserted rows from
-// `GET /admin/discord/bindings` (`{ data: [] }` without a guild —
-// channel-bindings.controller.ts), passed on a fleet env with a bot, and failed
-// in every CI project — a wasted CI cycle.
-//
-// The contract pinned here: a `scripts/smoke/*.smoke.spec.ts` that references
-// an endpoint in BOT_DEPENDENT_ENDPOINTS must either call
-// `requireDiscordBot(test, token, reason)` (scripts/smoke/discord-bot.ts) or
-// fixture THAT endpoint with a `page.route` / `context.route` whose matcher
-// names it. Comments are stripped first (a comment naming an endpoint is not a
-// call), and simple string consts are expanded (`${BOT}/roles`).
-//
-// Heuristic limits (documented, not bugs): a path assembled at runtime from
-// non-const parts, or a request made inside a shared helper file, is not seen.
+// connected Discord bot. The scanner, the BOT_GATED list (API endpoints, page
+// routes, data-testids — extend it there) and the full contract live in
+// scripts/smoke/discord-bot-guard.mjs; this file pins its behaviour and runs it
+// over every scripts/smoke/*.smoke.spec.ts. Background: TESTING.md →
+// "Smoke specs and the Discord bot".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BOT_GATED, scanSpec, violationMessage } from './smoke/discord-bot-guard.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const SMOKE_DIR = join(HERE, 'smoke');
-const BOT_DIR = 'api/src/discord-bot';
-
-// Built from the controllers whose handler returns empty / null / 503 (or
-// rejects) when `getGuild()` / `getGuildId()` is null or `isConnected()` is
-// false. `prefix` is the controller's @Controller() path, checked below so the
-// list cannot silently outlive a rename.
-export const BOT_DEPENDENT_ENDPOINTS = [
-    { path: '/admin/discord/bindings', controller: 'channel-bindings.controller.ts', prefix: 'admin/discord/bindings', without: 'list { data: [] }, health empty, create rejected' },
-    { path: '/admin/settings/discord-bot/channels', controller: 'discord-bot-settings.controller.ts', prefix: 'admin/settings/discord-bot', without: '[] (no guild text channels)' },
-    { path: '/admin/settings/discord-bot/voice-channels', controller: 'discord-bot-settings.controller.ts', prefix: 'admin/settings/discord-bot', without: '[] (no guild voice channels)' },
-    { path: '/admin/settings/discord-bot/sync-emojis', controller: 'discord-bot-settings.controller.ts', prefix: 'admin/settings/discord-bot', without: 'rejected (bot not connected)' },
-    { path: '/admin/settings/discord-bot/test-message', controller: 'discord-bot-settings.controller.ts', prefix: 'admin/settings/discord-bot', without: 'rejected (bot not connected)' },
-    { path: '/admin/settings/discord-bot/roles', controller: 'game-roles/game-roles-settings.controller.ts', prefix: 'admin/settings/discord-bot', without: 'no guild roles' },
-    { path: '/admin/settings/discord-bot/game-roles', controller: 'game-roles/game-roles-settings.controller.ts', prefix: 'admin/settings/discord-bot', without: 'no live role data; save/run 503' },
-    { path: '/admin/settings/discord-bot/ephemeral-voice/categories', controller: 'ephemeral-voice-settings.controller.ts', prefix: 'admin/settings/discord-bot/ephemeral-voice', without: 'no guild categories' },
-    { path: '/discord/channels', controller: 'discord-channels.controller.ts', prefix: 'discord/channels', without: '503 Service Unavailable' },
-    { path: '/discord/members', controller: 'discord-member.controller.ts', prefix: 'discord/members', without: 'list/search []' },
-    { path: '/discord/server-invite', controller: 'discord-user.controller.ts', prefix: 'discord', without: '{ url: null, guildName: null }' },
-    { path: '/discord/guild-membership', controller: 'discord-user.controller.ts', prefix: 'discord', without: '{ isMember: false }' },
-];
-
-// Literal-aware comment stripper — a copy of web/src/test/strip-comments.ts
-// (itself the twin of api/src/common/testing/strip-comments.ts); a .mjs cannot
-// import the .ts. Keep the four regex sources identical to those.
-const REGEX_LITERAL = String.raw`(?<=(?:^|=>|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete)|\b(?:if|while|for)\s*\((?:[^()\n]|\([^()\n]*\))*\))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
-const QUOTED_STRING = String.raw`\x27(?:\\.|[^\x27\\\n])*\x27|\x22(?:\\.|[^\x22\\\n])*\x22`;
-const TEMPLATE_LITERAL = String.raw`\x60(?:\\.|\$\{(?:[^{}\x60]|\x60(?:\\.|[^\x60\\])*\x60)*\}|[^\x60\\])*\x60`;
-const COMMENT = String.raw`(\/\*[\s\S]*?\*\/|(?!(?<=\b(?!default:)[a-zA-Z][a-zA-Z0-9+.-]*:)\/\/[^\s/])\/\/[^\n]*)`;
-const LITERAL_OR_COMMENT_RE = new RegExp([REGEX_LITERAL, QUOTED_STRING, TEMPLATE_LITERAL, COMMENT].join('|'), 'gm');
-
-export function stripComments(source) {
-    return source.replace(LITERAL_OR_COMMENT_RE, (match, comment) =>
-        comment === undefined ? match : comment.replace(/[^\n]/g, ' '),
-    );
-}
-
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** `const NAME = '…'` / `"…"` / `` `…` `` string consts (`${NAME}` expanded in later values) and regex-literal consts. */
-function collectStringConsts(code) {
-    const consts = new Map();
-    const re = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(['"`])((?:\\.|(?!\2)[^\\\n])*)\2/g;
-    for (const m of code.matchAll(re)) {
-        const value = m[3].replace(/\$\{([A-Za-z_$][\w$]*)\}/g, (all, name) => consts.get(name) ?? all);
-        consts.set(m[1], value);
-    }
-    // `const CHANNELS = /\/admin\/…$/;` — a route matcher often lives in one.
-    const regexConst = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*)/g;
-    for (const m of code.matchAll(regexConst)) consts.set(m[1], m[2]);
-    return consts;
-}
-
-/** Comment-stripped, const-expanded source with regex-escaped slashes unescaped. */
-function normalise(source) {
-    let code = stripComments(source);
-    const consts = collectStringConsts(code);
-    code = code.replace(/\$\{([A-Za-z_$][\w$]*)\}/g, (all, name) => consts.get(name) ?? all);
-    return { code: code.replace(/\\\//g, '/'), consts };
-}
-
-/** First-argument source of every `.route(` call (paren-depth scan). */
-function routeMatchers(code, consts) {
-    const out = [];
-    for (const m of code.matchAll(/\.route\(/g)) {
-        let depth = 0;
-        let i = m.index + m[0].length;
-        const start = i;
-        for (; i < code.length; i++) {
-            const ch = code[i];
-            if (ch === '(' || ch === '[' || ch === '{') depth++;
-            else if (ch === ')' || ch === ']' || ch === '}') {
-                if (depth === 0) break;
-                depth--;
-            } else if (ch === ',' && depth === 0) break;
-        }
-        let arg = code.slice(start, i);
-        for (const [name, value] of consts) arg = arg.replace(new RegExp(`\\b${escapeRe(name)}\\b`, 'g'), value);
-        out.push(arg.replace(/\\\//g, '/'));
-    }
-    return out;
-}
-
-/** Violations for one spec source: `[{ path, without }]`, empty when it is guarded. */
-export function scanSpec(source) {
-    const { code, consts } = normalise(source);
-    if (/\brequireDiscordBot\s*\(/.test(code)) return [];
-    const matchers = routeMatchers(code, consts);
-    return BOT_DEPENDENT_ENDPOINTS.filter(({ path }) => {
-        const used = new RegExp(`(?<=['"\`^*}/]|/api)${escapeRe(path)}(?![\\w-])`).test(code);
-        if (!used) return false;
-        const fixtured = matchers.some((arg) => new RegExp(`${escapeRe(path)}(?![\\w-])`).test(arg));
-        return !fixtured;
-    });
-}
-
-export function violationMessage(file, { path, without }) {
-    return (
-        `${file}: references ${path} (without a Discord bot: ${without}) but neither calls ` +
-        `requireDiscordBot(test, token, reason) from scripts/smoke/discord-bot.ts nor fixtures ` +
-        `that endpoint with page.route. GitHub CI has no bot — see TESTING.md "Smoke specs and the Discord bot".`
-    );
-}
-
-export function scanSmokeDir(dir = SMOKE_DIR) {
-    return readdirSync(dir)
-        .filter((f) => f.endsWith('.smoke.spec.ts'))
-        .flatMap((f) => scanSpec(readFileSync(join(dir, f), 'utf8')).map((v) => violationMessage(`scripts/smoke/${f}`, v)));
-}
+const labels = (src) => scanSpec(src).map((v) => v.label);
 
 const UNGUARDED = `
 import { test, expect } from './base';
@@ -143,46 +24,98 @@ test('lists bindings', async () => {
     expect(res.data.length).toBeGreaterThan(0);
 });
 `;
+const GUARD = "await requireDiscordBot(test, await getAdminToken(), 'rows');";
 
 test('an unguarded bot-dependent call is a violation that names the helper', () => {
     const hits = scanSpec(UNGUARDED);
-    assert.deepEqual(hits.map((h) => h.path), ['/admin/discord/bindings']);
+    assert.deepEqual(hits.map((h) => h.label), ['/admin/discord/bindings']);
     assert.match(violationMessage('x.smoke.spec.ts', hits[0]), /requireDiscordBot\(test, token, reason\)/);
 });
 
-test('requireDiscordBot clears it', () => {
-    const guarded = UNGUARDED.replace("const res", "await requireDiscordBot(test, await getAdminToken(), 'rows');\n    const res");
-    assert.deepEqual(scanSpec(guarded), []);
+test('requireDiscordBot in the same test clears it', () => {
+    assert.deepEqual(labels(UNGUARDED.replace('const res', `${GUARD}\n    const res`)), []);
+});
+
+test('requireDiscordBot in a SIBLING test does not clear it (exemption is per test)', () => {
+    const sibling = `test('needs the bot', async () => { ${GUARD} });\n${UNGUARDED}`;
+    assert.deepEqual(labels(sibling), ['/admin/discord/bindings']);
+});
+
+test('a beforeEach guard covers its describe only', () => {
+    const inDescribe = `test.describe('d', () => {\n  test.beforeEach(async () => { ${GUARD} });\n  ${UNGUARDED.replace(/^import.*$/gm, '')}\n});`;
+    assert.deepEqual(labels(inDescribe), []);
+    const outside = `${inDescribe}\ntest('later', async () => { await apiGet(t, '/discord/members'); });`;
+    assert.deepEqual(labels(outside), ['/discord/members']);
 });
 
 test('a page.route for that endpoint clears it (regex const, template const, glob)', () => {
     const viaRegexConst = `const B = /\\/admin\\/discord\\/bindings$/;\nawait page.route(B, (r) => r.fulfill({ json: { data: [] } }));\n${UNGUARDED}`;
     const viaTemplate = `const BOT = '/discord'; const M = \`\${BOT}/members\`;\nawait page.route((u) => u.pathname.startsWith(M), (r) => r.fulfill({ json: [] }));\nawait apiGet(t, '/discord/members/list');`;
     const viaGlob = `await context.route('**/api/discord/channels', (r) => r.fulfill({ json: [] }));\nawait fetch(\`\${API}/discord/channels\`);`;
-    assert.deepEqual(scanSpec(viaRegexConst), []);
-    assert.deepEqual(scanSpec(viaTemplate), []);
-    assert.deepEqual(scanSpec(viaGlob), []);
+    const viaWideGlob = `await page.route('**/admin/settings/discord-bot/**', (r) => r.fulfill({ json: [] }));\nawait apiGet(t, '/admin/settings/discord-bot/roles');`;
+    for (const src of [viaRegexConst, viaTemplate, viaGlob, viaWideGlob]) assert.deepEqual(labels(src), [], src);
 });
 
 test('a page.route for a DIFFERENT endpoint does not clear it', () => {
     const other = `await page.route(/\\/admin\\/settings\\/discord-bot$/, (r) => r.fulfill({ json: { connected: true } }));\n${UNGUARDED}`;
-    assert.deepEqual(scanSpec(other).map((h) => h.path), ['/admin/discord/bindings']);
+    assert.deepEqual(labels(other), ['/admin/discord/bindings']);
 });
 
-test('comments and UI page routes are not calls', () => {
-    const src = `// apiGet(token, '/admin/discord/bindings')\n/* '/discord/channels' */\nawait page.goto('/admin/settings/discord/channels');\nawait apiGet(t, '/admin/settings/discord-bot/channel');`;
-    assert.deepEqual(scanSpec(src), []);
+// The #1721 failure: the test opened the channels page and asserted binding
+// rows the web bundle fetched — the spec source never named the endpoint.
+const PAGE_ONLY = `test('binding rows', async ({ page }) => {
+    await page.goto('/admin/settings/discord/channels');
+    await expect(page.getByTestId('channel-binding-row')).toHaveCount(1);
+});`;
+
+test('opening a bot-gated page unguarded is a violation (#1721, no API path named)', () => {
+    assert.deepEqual(labels(PAGE_ONLY), ['/admin/settings/discord/channels']);
 });
 
-test('every listed endpoint still maps to its controller', () => {
-    for (const { path, controller, prefix } of BOT_DEPENDENT_ENDPOINTS) {
-        const file = join(ROOT, BOT_DIR, controller);
-        assert.ok(existsSync(file), `${path}: ${BOT_DIR}/${controller} is gone — update BOT_DEPENDENT_ENDPOINTS`);
-        assert.ok(readFileSync(file, 'utf8').includes(`@Controller('${prefix}')`), `${path}: @Controller('${prefix}') not in ${controller}`);
+test('a bot-gated page clears with a status/data route mock, requireDiscordBot, or a discord-bot-optional annotation', () => {
+    const mocked = PAGE_ONLY.replace('await page.goto', "await page.route('**/api/admin/discord/bindings', (r) => r.fulfill({ json: { data: [] } }));\n    await page.goto");
+    const guarded = PAGE_ONLY.replace('await page.goto', `${GUARD}\n    await page.goto`);
+    const optional = PAGE_ONLY.replace("'binding rows', async", "'binding rows', { annotation: DISCORD_BOT_OPTIONAL }, async");
+    for (const src of [mocked, guarded, optional]) assert.deepEqual(labels(src), [], src);
+    const optionalSibling = `test('other', { annotation: DISCORD_BOT_OPTIONAL }, async () => {});\n${PAGE_ONLY}`;
+    assert.deepEqual(labels(optionalSibling), ['/admin/settings/discord/channels']);
+});
+
+test('a bot-gated data-testid is flagged unless the bot data is seeded', () => {
+    const src = "test('picker', async ({ page }) => {\n    await expect(page.getByTestId('guild-discord-picker-body')).toBeVisible();\n});";
+    assert.deepEqual(labels(src), ['data-testid guild-discord-picker']);
+    assert.deepEqual(labels(`async function seed() { await apiPost(t, '/admin/test/wow/guild-discord-channel', {}); }\n${src}`), []);
+});
+
+test('listed endpoints outside api/src/discord-bot are seen; sub-paths and other bases are not misread', () => {
+    assert.deepEqual(labels("test('m', async () => { await apiGet(t, '/users/me/discord-membership'); });"), ['/users/me/discord-membership']);
+    assert.deepEqual(labels("test('g', async () => { await apiGet(t, `/plugins/wow/guilds/${gid}/discord/channels`); });"), ['/guilds/:id/discord/channels']);
+    assert.deepEqual(labels("test('p', async () => { await apiPatch(t, `/admin/discord/bindings/${id}`, {}); });"), []);
+});
+
+test('comments are not calls', () => {
+    const src = `// apiGet(token, '/admin/discord/bindings')\n/* '/discord/channels' page.goto('/admin/settings/discord/channels') */\nawait apiGet(t, '/admin/settings/discord-bot/channel');`;
+    assert.deepEqual(labels(src), []);
+});
+
+test('every BOT_GATED entry still maps to its controller or web source', () => {
+    for (const entry of BOT_GATED) {
+        const rel = entry.controller ?? entry.source;
+        const file = join(ROOT, rel);
+        assert.ok(existsSync(file), `${entry.path ?? entry.id}: ${rel} is gone — update BOT_GATED`);
+        const text = readFileSync(file, 'utf8');
+        if (entry.kind === 'api') assert.ok(new RegExp(`@Controller\\([^)]*'${entry.prefix}'`).test(text), `${entry.path}: '${entry.prefix}' not in ${rel}'s @Controller()`);
+        if (entry.kind === 'testid') assert.ok(text.includes(entry.id), `${entry.id} not rendered by ${rel}`);
+        if (entry.kind === 'page') {
+            const routes = readFileSync(join(ROOT, 'web/src/app-routes.tsx'), 'utf8');
+            assert.ok(routes.includes(`path="${entry.path.replace('/admin/settings/', '')}"`), `${entry.path} has no <Route> in web/src/app-routes.tsx`);
+        }
     }
 });
 
 test('no smoke spec in scripts/smoke silently depends on a connected Discord bot', () => {
-    const violations = scanSmokeDir();
+    const violations = readdirSync(SMOKE_DIR)
+        .filter((f) => f.endsWith('.smoke.spec.ts'))
+        .flatMap((f) => scanSpec(readFileSync(join(SMOKE_DIR, f), 'utf8')).map((v) => violationMessage(`scripts/smoke/${f}`, v)));
     assert.deepEqual(violations, [], `\n${violations.join('\n')}\n`);
 });
