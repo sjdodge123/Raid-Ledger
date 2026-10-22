@@ -73,6 +73,16 @@ export function parseFixtureSlot(body: unknown): number {
     : 1;
 }
 
+/**
+ * Body → `guildMember`: only a literal `true` stamps `guild_member_seen_at`
+ * (ROK-1892 — a hub proposer must be "in the Discord", ROK-1870 A2). Opt-in so
+ * every older smoke keeps an unstamped row (stamped users are 50278 / sweep
+ * deactivation candidates, ROK-1749).
+ */
+export function parseFixtureGuildMember(body: unknown): boolean {
+  return (body as { guildMember?: unknown } | null)?.guildMember === true;
+}
+
 export interface SeedFixtureUserResponse {
   userId: number;
   discordId: string;
@@ -98,7 +108,10 @@ export class DemoTestFixtureUserController {
   ): Promise<SeedFixtureUserResponse> {
     await this.assertDemoMode();
     const identity = fixtureIdentity(parseFixtureSlot(body));
-    const user = await this.upsertFixtureUser(identity);
+    const user = await this.upsertFixtureUser(
+      identity,
+      parseFixtureGuildMember(body),
+    );
     const { access_token } = await this.authService.login({
       id: user.id,
       username: user.username,
@@ -120,11 +133,13 @@ export class DemoTestFixtureUserController {
    * the lineup detail view) and ACTIVE — the daily guild-membership cron
    * deactivates this synthetic user (no real Discord membership), which then
    * 404s invitee validation in `addInvitees` (activeUsersFilter).
+   * `guildMember` also stamps `guild_member_seen_at` (both branches).
    */
-  private async upsertFixtureUser(identity: {
-    discordId: string;
-    username: string;
-  }) {
+  private async upsertFixtureUser(
+    identity: { discordId: string; username: string },
+    guildMember: boolean,
+  ) {
+    const seen = guildMember ? { guildMemberSeenAt: new Date() } : {};
     const [user] = await this.db
       .insert(schema.users)
       .values({
@@ -132,10 +147,15 @@ export class DemoTestFixtureUserController {
         username: identity.username,
         role: 'member',
         onboardingCompletedAt: new Date(),
+        ...seen,
       })
       .onConflictDoUpdate({
         target: schema.users.discordId,
-        set: { onboardingCompletedAt: new Date(), deactivatedAt: null },
+        set: {
+          onboardingCompletedAt: new Date(),
+          deactivatedAt: null,
+          ...seen,
+        },
       })
       .returning({
         id: schema.users.id,
