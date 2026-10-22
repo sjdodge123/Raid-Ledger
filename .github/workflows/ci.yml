@@ -137,13 +137,9 @@ jobs:
     if: >-
       github.event_name == 'push' ||
       needs.detect-changes.outputs.code == 'true'
-    # reconcile-migrations-trust-probe.test.sh pulls the pgvector image from the
-    # private GHCR mirror (Docker Hub's anonymous rate limit reddened CI).
-    permissions:
-      contents: read
-      packages: read
-    env:
-      RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+    # 2026-10-22 CI speed-up: the shell/node:test script suites (and the GHCR
+    # login + RL_PGVECTOR_IMAGE they need) moved to the parallel
+    # `scripts-tests` job below, which reports through `tools-tests`.
 
     steps:
       - name: Checkout code
@@ -203,14 +199,48 @@ jobs:
       - name: Typecheck (web specs)
         run: npx tsc --noEmit -p web/tsconfig.test.json
 
-      - name: Lint
-        run: npm run lint --workspaces
+      # api lints with typed rules (recommendedTypeChecked + projectService),
+      # and ESLint's cache keys a file's result on that file + the config only:
+      # a type change in an imported file would replay a stale "clean". So api
+      # stays UNCACHED; it runs exactly as `npm run lint --workspaces` ran it.
+      - name: Lint (api, type-aware, uncached)
+        run: npm run lint -w @raid-ledger/api
+
+      # 2026-10-22: the remaining workspaces + test-bot lint without type
+      # information, so a content-keyed cache cannot change a verdict (ESLint
+      # also drops the cache itself when the resolved config changes). Content
+      # strategy because a fresh checkout resets every mtime. The key carries
+      # the lockfile + every eslint config; github.sha makes each run save a
+      # fresh entry, restored by prefix on the next run.
+      - name: Cache ESLint results
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/eslintcache
+          key: ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'eslint.config.*', 'api/eslint.config.*', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'eslint.config.*', 'api/eslint.config.*', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-
+
+      # Every workspace except api (above), read from package.json so a new
+      # workspace is linted without editing this file. --if-present matches
+      # `npm run lint --workspaces`, which skips a workspace with no script.
+      - name: Lint (other workspaces, cached)
+        env:
+          ESLINT_CACHE_DIR: ${{ runner.temp }}/eslintcache/
+        run: |
+          set -euo pipefail
+          npm query .workspace | jq -r '.[].name' | grep -vx '@raid-ledger/api' | while read -r ws; do
+            echo "::group::lint $ws"
+            npm run lint -w "$ws" --if-present -- --cache --cache-strategy content --cache-location "$ESLINT_CACHE_DIR"
+            echo "::endgroup::"
+          done
 
       # ROK-1516: tools/test-bot is NOT an npm workspace, so --workspaces skips
       # it. Its eslint.config.js resolves eslint + plugins from the root
       # node_modules installed by `npm ci` above — no test-bot install needed.
       - name: Lint (tools/test-bot)
-        run: npm run lint --prefix tools/test-bot
+        env:
+          ESLINT_CACHE_DIR: ${{ runner.temp }}/eslintcache/
+        run: npm run lint --prefix tools/test-bot -- --cache --cache-strategy content --cache-location "$ESLINT_CACHE_DIR"
 
       # ROK-1154: gzip budget per web chunk class (entry / vendor / lazy) on
       # the dist built above; an overrun fails the job. It runs AFTER typecheck and
@@ -244,36 +274,6 @@ jobs:
             bash -n "$f" || exit 1
           done
 
-      # The trust-probe shell test pulls RL_PGVECTOR_IMAGE (the private GHCR mirror)
-      # through the runner's docker daemon, which needs a ghcr.io login —
-      # anonymous Docker Hub pulls hit `toomanyrequests` on shared runners.
-      - name: Log in to GHCR (pgvector mirror)
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Behavioral shell tests. `bash -n` only proves a script PARSES — it
-      # cannot catch a logic bug like validate-ci.sh's run_step reading exit
-      # code 2 as SKIPPED, which silently reported broken builds as passing
-      # and survived two backlog reports. The suite runs in ~5s.
-      - name: Shell behavior tests (scripts/test)
-        run: ./scripts/test/run-all.sh
-
-      # node:test specs for the CI/fleet scripts. validate-ci.sh runs them in
-      # both --static and --full, but until now no GitHub job did, so the real
-      # gate never exercised them. restore-drill-corruption.spec.mjs imports
-      # packages/contract/dist, built above.
-      - name: Script node:test specs (scripts/*.spec.mjs)
-        run: node --test scripts/*.spec.mjs
-
-      # 2026-10-04: the rl-infra dashboard suite ran in no CI job. Pass the
-      # glob, not the directory: Node >=21 reads `node --test <dir>` as a
-      # module path and fails with MODULE_NOT_FOUND.
-      - name: rl-infra dashboard node:test specs
-        run: node --test rl-infra/dashboard/test/*.test.js
-
       # ROK-1693: a migration whose journal `when` is <= the newest entry
       # already on main is silently SKIPPED by Drizzle on every DB that ran
       # that entry (0176_lfg_invites never reached prod). HEAD^1 is the base:
@@ -295,6 +295,84 @@ jobs:
       # shipped without `npm run db:generate -w api`. No DB, ~1s.
       - name: Migration snapshot drift check
         run: bash scripts/validate-migrations.sh --drift-only
+
+  # ─── Script + shell test suites ───────────────────────────────────
+  # 2026-10-22 CI speed-up: these ran at the tail of `lint` (~5.5 min, the
+  # shell suite alone 315 s) and so delayed every job that `needs: lint`.
+  # Nothing needs them, so they run in parallel here. Same `if:` as lint. They
+  # still block merge: the required `tools-tests` aggregator needs this job,
+  # so branch protection is unchanged.
+  scripts-tests:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.code == 'true'
+    # reconcile-migrations-trust-probe.test.sh pulls the pgvector image from the
+    # private GHCR mirror (Docker Hub's anonymous rate limit reddened CI).
+    permissions:
+      contents: read
+      packages: read
+    env:
+      RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # Same depth the lint job gave these suites when they ran there.
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      # The trust-probe shell test pulls RL_PGVECTOR_IMAGE (the private GHCR mirror)
+      # through the runner's docker daemon, which needs a ghcr.io login —
+      # anonymous Docker Hub pulls hit `toomanyrequests` on shared runners.
+      - name: Log in to GHCR (pgvector mirror)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Behavioral shell tests. `bash -n` only proves a script PARSES — it
+      # cannot catch a logic bug like validate-ci.sh's run_step reading exit
+      # code 2 as SKIPPED, which silently reported broken builds as passing
+      # and survived two backlog reports. The suite runs in ~5s.
+      - name: Shell behavior tests (scripts/test)
+        run: ./scripts/test/run-all.sh
+
+      # node:test specs for the CI/fleet scripts. validate-ci.sh runs them in
+      # both --static and --full, but until now no GitHub job did, so the real
+      # gate never exercised them. restore-drill-corruption.spec.mjs imports
+      # packages/contract/dist, built above.
+      # Order matters: run-all.sh first, then node:test, as in the old lint job.
+      - name: Script node:test specs (scripts/*.spec.mjs)
+        run: node --test scripts/*.spec.mjs
+
+      # 2026-10-04: the rl-infra dashboard suite ran in no CI job. Pass the
+      # glob, not the directory: Node >=21 reads `node --test <dir>` as a
+      # module path and fails with MODULE_NOT_FOUND.
+      - name: rl-infra dashboard node:test specs
+        run: node --test rl-infra/dashboard/test/*.test.js
+
 
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
@@ -331,12 +409,21 @@ jobs:
         run: npm run test:cov -w api -- --passWithNoTests
 
   # ─── Unit Tests (Web) ──────────────────────────────────────────────
+  # 2026-10-22 CI speed-up: 3 shards (~741 s single job before). Each shard
+  # writes a blob report that carries its coverage map; thresholds are zeroed
+  # PER SHARD only (a third of the specs cannot meet a whole-suite floor) and
+  # the merge job below enforces web/vitest.config.ts's real thresholds on the
+  # merged map. `unit-tests` needs both jobs.
   unit-tests-web:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
       needs.detect-changes.outputs.web == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
 
     steps:
       - name: Checkout code
@@ -361,8 +448,64 @@ jobs:
       - name: Build contract
         run: npm run build -w packages/contract
 
-      - name: Test web (with coverage)
-        run: npx vitest run --coverage
+      # --reporter=default keeps the per-test log; blob is what the merge reads.
+      # Explicit outputFile: the default (.vitest/blob) is a dot-dir, which
+      # upload-artifact skips.
+      - name: Test web shard ${{ matrix.shard }}/3 (with coverage)
+        run: >-
+          npx vitest run --shard=${{ matrix.shard }}/3
+          --reporter=default --reporter=blob
+          --outputFile.blob=vitest-blob/blob-${{ matrix.shard }}-3.json
+          --coverage
+          --coverage.thresholds.lines=0 --coverage.thresholds.functions=0
+          --coverage.thresholds.branches=0 --coverage.thresholds.statements=0
+        working-directory: web
+
+      - name: Upload blob report
+        uses: actions/upload-artifact@v7
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: web/vitest-blob/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merges the shard blobs and enforces the coverage thresholds from
+  # web/vitest.config.ts (unchanged) on the merged map; a miss exits non-zero.
+  # Runs only when every shard passed (default `if:`), so a shard failure
+  # leaves it skipped and `unit-tests` fails on unit-tests-web itself.
+  unit-tests-web-merge:
+    runs-on: ubuntu-latest
+    needs: [unit-tests-web]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v7
+        with:
+          pattern: vitest-blob-*
+          path: web/vitest-blob
+          merge-multiple: true
+
+      - name: Merge reports + enforce coverage thresholds
+        run: npx vitest run --merge-reports=vitest-blob --coverage
         working-directory: web
 
   # TDB:1246: the contract schema specs had no runner anywhere; this job runs them.
@@ -489,37 +632,46 @@ jobs:
   # the unit-tests / integration-tests / smoke-tests summary pattern.
   tools-tests:
     runs-on: ubuntu-latest
-    needs: [tools-test-shard, tools-typecheck-test-bot]
+    # scripts-tests rides here (2026-10-22) so the moved script suites still
+    # block merge without a new required context in branch protection.
+    needs: [tools-test-shard, tools-typecheck-test-bot, scripts-tests]
     if: always()
     steps:
       - name: Check results
         run: |
           R="${{ needs.tools-test-shard.result }}"
           T="${{ needs.tools-typecheck-test-bot.result }}"
-          for X in "$R" "$T"; do
+          S="${{ needs.scripts-tests.result }}"
+          for X in "$R" "$T" "$S"; do
             if [ "$X" = "failure" ] || [ "$X" = "cancelled" ]; then
-              echo "Tools tests failed (shard=$R, test-bot typecheck=$T)"
+              echo "Tools tests failed (shard=$R, test-bot typecheck=$T, scripts=$S)"
               exit 1
             fi
           done
-          echo "Tools tests passed (shard=$R, test-bot typecheck=$T)"
+          echo "Tools tests passed (shard=$R, test-bot typecheck=$T, scripts=$S)"
 
   # ─── Unit Tests (summary — required status check) ─────────────────
   unit-tests:
     runs-on: ubuntu-latest
-    needs: [unit-tests-api, unit-tests-web, unit-tests-contract]
+    needs: [unit-tests-api, unit-tests-web, unit-tests-web-merge, unit-tests-contract]
     if: always()
     steps:
       - name: Check results
         run: |
           API="${{ needs.unit-tests-api.result }}"
           WEB="${{ needs.unit-tests-web.result }}"
+          MERGE="${{ needs.unit-tests-web-merge.result }}"
           CONTRACT="${{ needs.unit-tests-contract.result }}"
-          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ] || [ "$CONTRACT" = "failure" ]; then
-            echo "Unit tests failed (api=$API, web=$WEB, contract=$CONTRACT)"
+          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ] || [ "$MERGE" = "failure" ] || [ "$CONTRACT" = "failure" ]; then
+            echo "Unit tests failed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT)"
             exit 1
           fi
-          echo "Unit tests passed (api=$API, web=$WEB, contract=$CONTRACT)"
+          # Shards green but the threshold merge never ran = coverage unchecked.
+          if [ "$WEB" = "success" ] && [ "$MERGE" != "success" ]; then
+            echo "Web coverage merge did not succeed (web=$WEB, web-merge=$MERGE)"
+            exit 1
+          fi
+          echo "Unit tests passed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT)"
 
   # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:
