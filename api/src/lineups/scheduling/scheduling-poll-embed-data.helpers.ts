@@ -4,6 +4,7 @@
  * Moved out of `SchedulingPollEmbedService` so the service stays under the
  * file cap once the sync path gained the deadline + cancel reason inputs.
  */
+import { Logger } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -16,8 +17,13 @@ import {
   findScheduleVotes,
 } from './scheduling-query.helpers';
 import { buildEmbedSlots, buildPollUrl } from './scheduling-poll-embed.helpers';
+import { resolveGameHubLinkSafe } from '../../discord-bot/channel-lifecycle/hub-link.resolver';
+import { hubLinkPart } from '../../discord-bot/channel-lifecycle/embed-hub-link.helpers';
+import type { HubLink } from '../../discord-bot/embeds/hub-link-button.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+const logger = new Logger('SchedulingPollEmbedData');
 
 /** The parent lineup's lifecycle inputs. */
 export interface LineupLifecycle {
@@ -91,6 +97,15 @@ export async function loadLockedInTime(
   return event?.startTime ? new Date(event.startTime).toISOString() : null;
 }
 
+/** ROK-1872: the poll game's hub link, best-effort (logs + null on failure). */
+function loadPollHubLink(
+  db: Db,
+  input: EmbedDataInput,
+): Promise<HubLink | null> {
+  const { gameId, clientUrl } = input;
+  return resolveGameHubLinkSafe(db, { gameId, clientUrl }, logger);
+}
+
 /**
  * Build the card's render data from current DB state.
  *
@@ -109,6 +124,7 @@ export async function loadEmbedData(
     .limit(1);
   if (!game) return null;
   const slots = await findScheduleSlots(db, input.matchId);
+  const hub = await loadPollHubLink(db, input);
   const votes = await findScheduleVotes(
     db,
     slots.map((s) => s.id),
@@ -126,5 +142,6 @@ export async function loadEmbedData(
     pollUrl: buildPollUrl(input.clientUrl, input.lineupId, input.matchId),
     slots: buildEmbedSlots(slots, votes),
     uniqueVoterCount: new Set(votes.map((v) => v.userId)).size,
+    ...hubLinkPart(hub),
   };
 }

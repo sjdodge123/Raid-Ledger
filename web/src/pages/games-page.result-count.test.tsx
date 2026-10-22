@@ -182,5 +182,7 @@ describe('GamesPage — ROK-1659: tablets (768–1023px) get the phone layout', 
         const searchBar = screen.getByLabelText('Search games').closest('.sticky');
         expect(searchBar).toHaveClass('lg:static', 'md:top-16');
         expect(searchBar).not.toHaveClass('md:static');
+        // Above the carousel cards' z-10 "N played" badge, which otherwise floats over the sticky bar on scroll.
+        expect(searchBar).toHaveClass('z-20');
     });
 });
