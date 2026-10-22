@@ -30,6 +30,11 @@ jest.mock('../../lfg/lfg-write.helpers', () => ({
 jest.mock('../services/ad-hoc-event.signup-helpers', () => ({
   autoSignupParticipant: jest.fn(),
 }));
+// ROK-1888 m4: an attach restores an in-grace Quick Play; the drizzle mock
+// has no `.update`, and grace is not what these specs are about.
+jest.mock('../services/ad-hoc-event.helpers', () => ({
+  restoreFromGracePeriod: jest.fn(() => Promise.resolve(false)),
+}));
 jest.mock('./lfg-now-manual-start.helpers', () => ({
   listLiveGroupHands: jest.fn(),
   convertStarterIntent: jest.fn(),

@@ -26,4 +26,9 @@ export interface LfgNowSpawnResult {
    * rosters everyone it converts.
    */
   invitedUserIds: number[];
+  /**
+   * ROK-1888: this pass attached to a Quick Play in grace and restored it to
+   * live — the caller re-arms grace post-COMMIT if nobody is in voice.
+   */
+  restoredFromGrace?: true;
 }

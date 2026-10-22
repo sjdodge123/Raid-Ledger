@@ -36,8 +36,28 @@ interface FakeOverwrite {
 }
 
 const isFlag = (f: string): f is FlagName => f in PermissionFlagsBits;
+/** A Discord edit that lands `ms` later — on the FAKE clock (see below). */
 const wait = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
+
+/*
+ * Fake timers: the 5ms cap, the 100ms settle bound and the mocked edit delays
+ * all race on one clock that only moves when the test advances it, and every
+ * promise chain drains between timers. On real timers a loaded CI runner could
+ * stall long enough for the 5ms cap to beat an "instant" (setTimeout 0) edit,
+ * timing out the lock instead of the move (main run 39727906755).
+ */
+beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+});
+afterEach(() => jest.useRealTimers());
+
+/** Expect `run` to reject with a timeout once the fake clock has moved `ms`. */
+async function rejectsWithin(run: Promise<unknown>, ms: number): Promise<void> {
+  const assertion = expect(run).rejects.toThrow(/timeout/);
+  await jest.advanceTimersByTimeAsync(ms);
+  await assertion;
+}
 
 function apply(
   cache: Map<string, FakeOverwrite>,
@@ -105,10 +125,11 @@ describe('archiveChannel — lock edits that outlive the timeout (Codex r8 P1)',
 
   it('waits for the late @everyone edit before rolling back, so the channel ends unlocked', async () => {
     const { guild, cache } = slowChannel(20);
-    await expect(
+    // Cap fires at 5ms, the edit lands at 20ms; 60ms lets any late edit land.
+    await rejectsWithin(
       archiveChannel(guild as never, 'ch-1', { categoryId: 'a', hide: true }),
-    ).rejects.toThrow(/timeout/);
-    await wait(40); // let any still-pending edit land
+      60,
+    );
     const left = [...cache.values()].map((o) => [o.id, o.deny.bitfield]);
     expect(left).toEqual([]);
     expect(guild.channels.edit).not.toHaveBeenCalled();
@@ -116,9 +137,11 @@ describe('archiveChannel — lock edits that outlive the timeout (Codex r8 P1)',
 
   it('a hung edit does not hang the run: the bounded wait gives up and reports it', async () => {
     const { guild } = slowChannel(null);
-    await expect(
+    // Past the 100ms settle bound (cap at 5ms + 2x50ms).
+    await rejectsWithin(
       archiveChannel(guild as never, 'ch-1', { categoryId: 'a', hide: false }),
-    ).rejects.toThrow(/timeout/);
+      150,
+    );
     expect(Sentry.captureMessage).toHaveBeenCalledWith(
       expect.stringContaining('ch-1'),
       expect.objectContaining({ level: 'warning' }),
@@ -147,13 +170,14 @@ describe('archiveChannel — a move that lands after its timeout (Codex r10 P2)'
 
   it('moves a late-landing channel back to its original parent', async () => {
     const { ch, guild } = slowMove(20);
-    await expect(
+    // Move cap at 5ms, the move lands at 20ms (inside the settle bound).
+    await rejectsWithin(
       archiveChannel(guild as never, 'ch-1', {
         categoryId: 'arch',
         hide: false,
       }),
-    ).rejects.toThrow(/timeout/);
-    await wait(40); // let any still-pending edit land
+      60,
+    );
     expect(ch.parentId).toBe('games-cat');
     expect(Sentry.captureMessage).toHaveBeenCalledWith(
       expect.stringContaining('ch-1'),
@@ -163,13 +187,14 @@ describe('archiveChannel — a move that lands after its timeout (Codex r10 P2)'
 
   it('a move that lands after the bounded wait is still moved back', async () => {
     const { ch, guild } = slowMove(150);
-    await expect(
+    // Settle bound gives up at ~105ms; the move lands at 150ms, then reverts.
+    await rejectsWithin(
       archiveChannel(guild as never, 'ch-1', {
         categoryId: 'arch',
         hide: false,
       }),
-    ).rejects.toThrow(/timeout/);
-    await wait(200);
+      300,
+    );
     expect(ch.parentId).toBe('games-cat');
   });
 });

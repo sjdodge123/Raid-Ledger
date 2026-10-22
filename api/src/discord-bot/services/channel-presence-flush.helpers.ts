@@ -6,9 +6,6 @@
  * payload hash, the recap hydration and the D8 close predicate.
  */
 import { createHash } from 'node:crypto';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
-import * as schema from '../../drizzle/schema';
 import type { ResolvedBinding } from '../listeners/voice-state.helpers';
 import type { ChannelEmbed } from '../embeds/embed-chrome.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
@@ -20,8 +17,8 @@ import type { ResolvedRoom } from './channel-presence-room.helpers';
 import { recapEvents } from './channel-presence-room.helpers';
 import {
   buildEmbedEventData,
+  readParticipants,
   type AdHocNotificationDeps,
-  type AdHocParticipant,
 } from './ad-hoc-notification.helpers';
 
 /** Default empty-room grace, in minutes, when the binding sets none (D8). */
@@ -82,51 +79,26 @@ export function renderRecapMessage(
 }
 
 /**
- * The stored roster of one finished session, leavers kept (ROK-1243).
- *
- * The recap reads `ad_hoc_participants` directly rather than unioning live
- * voice members the way an evented group does: by definition nobody is in the
- * room any more, so the DB is the only truth left.
- */
-async function recapParticipants(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-): Promise<AdHocParticipant[]> {
-  const rows = await db
-    .select({
-      discordUserId: schema.adHocParticipants.discordUserId,
-      discordUsername: schema.adHocParticipants.discordUsername,
-      leftAt: schema.adHocParticipants.leftAt,
-    })
-    .from(schema.adHocParticipants)
-    .where(eq(schema.adHocParticipants.eventId, eventId));
-  return rows.map((row) => ({
-    discordUserId: row.discordUserId,
-    discordUsername: row.discordUsername,
-    isActive: !row.leftAt,
-  }));
-}
-
-/**
  * Hydrate every ad-hoc session this message has covered since it opened (D8).
  *
  * @param deps - Database plus the binding/channel/settings services.
  * @param bindingId - `null` once the binding was deleted; there is then no way
  *   to find the sessions, and the recap degrades to "No session started."
- * @param openedAt - The row's `opened_at`; sessions older than it belong to a
- *   previous, already-closed message.
+ * @param row - The message row. `openedAt`: sessions older than it belong to
+ *   a previous, already-closed message. `id`: its occupancy ledger pulls in a
+ *   session born on another channel that its occupants joined (ROK-1888 OQ3).
  * @returns Embed data per session, in the order `recapEvents` returned them.
  */
 export async function hydrateRecap(
   deps: AdHocNotificationDeps,
   bindingId: string | null,
-  openedAt: Date,
+  row: { openedAt: Date; id: string },
 ): Promise<EmbedEventData[]> {
   if (!bindingId) return [];
-  const events = await recapEvents(deps.db, bindingId, openedAt);
+  const events = await recapEvents(deps.db, bindingId, row.openedAt, row.id);
   const hydrated = await Promise.all(
     events.map((event) =>
-      recapParticipants(deps.db, event.id).then((participants) =>
+      readParticipants(deps.db, event.id).then((participants) =>
         buildEmbedEventData(deps, event.id, participants),
       ),
     ),
