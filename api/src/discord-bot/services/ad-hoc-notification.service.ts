@@ -234,7 +234,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
    * No second "completed" message is posted — the original embed is edited.
    *
    * ROK-1243: event / participants are kept on the signature for backwards
-   * compatibility with `ad-hoc-event.handlers.ts::notifyCompleted` but the
+   * compatibility with `ad-hoc-event-end.helpers.ts::notifyCompleted` but the
    * implementation re-reads everything it needs from the DB.
    *
    * ROK-1446 D9: `bindingId` is used again — the presence service is told the

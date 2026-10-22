@@ -32,23 +32,24 @@ import {
   type SpawnClearance,
 } from './ad-hoc-spawn-clearance';
 import { traceGate } from '../listeners/voice-gate-trace';
-import { graceUnlessOnServer } from './ad-hoc-voice-leave-server.helpers';
+import { processVoiceLeave } from './ad-hoc-voice-leave.helpers';
 import {
   adoptEventState,
   buildEventKey,
   findEventKeyForMember,
 } from './ad-hoc-event-key.helpers';
-import { hasOpenVoiceParticipants } from './ad-hoc-server-presence.helpers';
 import { announceLfgSessionEnd } from '../lfg-now/lfg-now-session-end.helpers';
 import {
-  removeActiveSession,
   handleJoinExisting,
   spawnNewEvent,
-  notifyCompleted,
   type ActiveAdHocState,
   type AdHocHandlerDeps,
   type VoiceJoinBinding,
 } from './ad-hoc-event.handlers';
+import {
+  notifyCompleted,
+  removeActiveSession,
+} from './ad-hoc-event-end.helpers';
 import { rearmGraceIfVoiceEmpty } from '../lfg-now/lfg-now-grace.helpers';
 
 @Injectable()
@@ -205,7 +206,13 @@ export class AdHocEventService implements OnModuleInit {
       return;
     }
 
-    await this.processLeave(state, event, discordUserId);
+    await processVoiceLeave(
+      this.getDeps(),
+      this.eventEmitter,
+      state,
+      event,
+      discordUserId,
+    );
   }
 
   /** Finalize an ad-hoc event when grace period expires. */
@@ -333,35 +340,6 @@ export class AdHocEventService implements OnModuleInit {
   /** ROK-1888 B4: grace for a live event a recovery sweep left voice-empty. */
   async armGraceIfVoiceEmpty(eventId: number): Promise<void> {
     await rearmGraceIfVoiceEmpty(this.getDeps(), this.eventEmitter, eventId);
-  }
-
-  private async processLeave(
-    state: ActiveAdHocState,
-    event: typeof schema.events.$inferSelect,
-    discordUserId: string,
-  ): Promise<void> {
-    await this.participantService.markLeave(state.eventId, discordUserId);
-    if (event.channelBindingId) {
-      this.notificationService.queueUpdate(
-        state.eventId,
-        event.channelBindingId,
-      );
-    }
-    const roster = await this.getAdHocRoster(state.eventId);
-    this.gateway.emitRosterUpdate(
-      state.eventId,
-      roster.participants,
-      roster.activeCount,
-    );
-    // ROK-1800/1821: anyone on the game server (rows or tracker) keeps it alive.
-    if (state.memberSet.size > 0) return;
-    // ROK-1888: another channel's open voice row (in-memory drift) keeps it live.
-    if (await hasOpenVoiceParticipants(this.db, state.eventId)) return;
-    await graceUnlessOnServer(this.getDeps(), this.eventEmitter, {
-      eventId: state.eventId,
-      gameId: event.gameId,
-      bindingId: event.channelBindingId,
-    });
   }
 
   private async autoSignupParticipant(
