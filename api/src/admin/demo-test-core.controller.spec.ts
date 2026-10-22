@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { DemoTestCoreController } from './demo-test-core.controller';
 import { DemoTestService } from './demo-test.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
@@ -314,6 +314,41 @@ function clearGameTimeConfirmationTests(
     expect(result).toEqual({ success: true });
     expect(getMock().clearGameTimeConfirmationForTest).toHaveBeenCalledWith(1);
   });
+
+  it('clears the body userId instead of the caller when one is passed', async () => {
+    const result = await getController().clearGameTimeConfirmationForTest(
+      adminReq(),
+      { userId: 42 },
+    );
+    expect(result).toEqual({ success: true });
+    expect(getMock().clearGameTimeConfirmationForTest).toHaveBeenCalledWith(42);
+    expect(getMock().clearGameTimeConfirmationForTest).not.toHaveBeenCalledWith(
+      1,
+    );
+  });
+
+  it('rejects a non-positive userId with 400', async () => {
+    await expect(
+      getController().clearGameTimeConfirmationForTest(adminReq(), {
+        userId: 0,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(getMock().clearGameTimeConfirmationForTest).not.toHaveBeenCalled();
+  });
+}
+
+function adminReq() {
+  return {
+    user: {
+      id: 1,
+      username: 'test',
+      role: 'admin' as const,
+      discordId: null,
+      deactivatedAt: null,
+      impersonatedBy: null,
+      tokenVersion: 0,
+    },
+  };
 }
 
 /**

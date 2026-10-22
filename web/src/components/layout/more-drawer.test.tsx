@@ -337,23 +337,20 @@ describe('MoreDrawer (admin user)', () => {
     });
 });
 
-describe('MoreDrawer — the "Browse all hubs" row (ROK-1870, ROK-1875)', () => {
-    beforeEach(() => { vi.clearAllMocks(); });
+describe('MoreDrawer — no hubs block (ROK-1890)', () => {
+    beforeEach(() => { vi.clearAllMocks(); queryClient.clear(); });
 
-    it('links to /hubs above the profile block and closes the drawer on tap', () => {
-        const { onClose } = renderDrawer();
-        const row = screen.getByTestId('drawer-hubs-link');
-        expect(row).toHaveAttribute('href', '/hubs');
-        expect(row).toHaveTextContent('Browse all hubs');
-        const profile = screen.getByText(mockUser.username);
-        expect(row.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING, 'Hubs sits under "Your hubs", above the profile').toBeTruthy();
-        fireEvent.click(row);
-        // The drawer also closes on the route change the tap causes, so ≥1.
-        expect(onClose).toHaveBeenCalled();
-    });
-
-    it('marks the row current on /hubs', () => {
+    it('a hub member\'s drawer lists no hubs and no "Browse all hubs" row — the bottom Hubs button owns that', () => {
+        // Pre-seed the viewer's hubs so a drawer that still read them would render the block synchronously.
+        queryClient.setQueryData(['plugins', 'wow', 'guilds', 'mine', 'viewer-1'], { guilds: [{
+            id: 11, gameId: 7, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us', realmSlug: 'whitemane', realmName: null,
+            faction: 'horde', memberCount: 12, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false, gmPostHeadline: null,
+        }] });
         renderDrawer(true, '/hubs');
-        expect(screen.getByTestId('drawer-hubs-link')).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByText(mockUser.username), 'the drawer rendered').toBeInTheDocument();
+        expect(screen.queryByTestId('drawer-your-guild'), 'no "Your hubs" block').toBeNull();
+        expect(screen.queryByTestId('guild-entry-row'), 'no hub rows').toBeNull();
+        expect(screen.queryByTestId('drawer-hubs-link'), 'no "Browse all hubs" row').toBeNull();
+        expect(screen.queryByText(/Your hubs?$/), 'no "Your hub(s)" heading').toBeNull();
     });
 });
