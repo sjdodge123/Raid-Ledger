@@ -130,9 +130,9 @@ describe('evaluateSentinel — scoped tier', () => {
 });
 
 describe('--scoped dispatch wiring', () => {
-  it('runs at weight light (like --static, never medium) unless a suite flag makes it heavy', () => {
+  it('runs at weight light (--static is medium since #1744) unless a suite flag makes it heavy', () => {
     expect(resolveValidateCiWeight(['--scoped'])).toBe('light');
-    expect(resolveValidateCiWeight(['--static'])).toBe('light');
+    expect(resolveValidateCiWeight(['--static'])).toBe('medium');
     expect(resolveValidateCiWeight(['--scoped', '--with-e2e'])).toBe('heavy');
   });
 
