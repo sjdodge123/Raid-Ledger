@@ -6,7 +6,7 @@
 # `validate-ci.sh --static` fails with this command as the fix). This moves
 # THIS branch's new migrations after origin/main's newest: .sql filenames,
 # journal idx/tag/when, snapshot filenames and the prevId chain. SQL bodies are
-# never edited. Idempotent; refuses a dirty tree (commit first — never stash).
+# never edited. Idempotent; refuses uncommitted changes to tracked files (untracked notes are fine) (commit first — never stash).
 #
 # Usage:
 #   ./scripts/renumber-branch-migrations.sh                 # vs origin/main (fetched first)
@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
 done
 
 ROOT="$(git rev-parse --show-toplevel)"
-if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
+if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]; then
     echo "✗ refusing: the working tree is dirty. Commit (a WIP commit is fine) and re-run — never git stash." >&2
     git -C "$ROOT" status --short >&2
     exit 1
