@@ -54,7 +54,7 @@ env:
   # (GITHUB_TOKEN can never have it; REBASE_PAT only has contents + pull
   # requests). Until the PAT is granted Administration: read, this list is
   # what is used — keep it in sync with branch protection on main.
-  REQUIRED_CONTEXTS_FALLBACK: 'lint container-startup tools-tests discord-smoke'
+  REQUIRED_CONTEXTS_FALLBACK: 'integration-tests smoke-tests lint unit-tests discord-smoke container-startup tools-tests'
 
 jobs:
   rebase:
