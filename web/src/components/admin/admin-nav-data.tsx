@@ -97,9 +97,11 @@ export function buildDiscordNavItems(
     if (botConnected) {
         items.push(
             { to: '/admin/settings/discord/channels', label: 'Channels' },
-            { to: '/admin/settings/discord/features', label: 'Features' },
         );
     }
+    // ROK-1428: always reachable — automation must be switchable OFF while the bot is down.
+    items.push({ to: '/admin/settings/discord/lifecycle', label: 'Channel automation' });
+    if (botConnected) items.push({ to: '/admin/settings/discord/features', label: 'Features' });
 
     return items;
 }
@@ -120,6 +122,23 @@ const GENERAL_CHILDREN: NavItem[] = [
     { to: '/admin/settings/general/backups', label: 'Backups' },
     { to: '/admin/settings/general/logs', label: 'Logs' },
 ];
+
+/**
+ * Admin settings pages an OPERATOR may open (operator ruling 2026-10-21: the
+ * hub-proposal notice reaches operators and links to Hubs). Every other
+ * settings page stays admin-only — `AdminSettingsLayout` gates on this list.
+ */
+export const OPERATOR_SETTINGS_PATHS: readonly string[] = ['/admin/settings/general/hubs'];
+
+export function isOperatorSettingsPath(pathname: string): boolean {
+    return OPERATOR_SETTINGS_PATHS.includes(pathname.replace(/\/+$/, ''));
+}
+
+/** The operator's sidebar: General, holding only the items they may open. */
+export function buildOperatorNavSections(): NavSection[] {
+    const children = GENERAL_CHILDREN.filter((c) => OPERATOR_SETTINGS_PATHS.includes(c.to));
+    return [{ id: 'general', label: 'General', icon: GeneralIcon, children }];
+}
 
 export function buildNavSections(
     coreIntegrations: NavItem[],

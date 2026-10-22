@@ -14,17 +14,12 @@ import {
   type ValheimRecipe,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
-  type ValheimRecipeResource,
 } from '@raid-ledger/contract';
+import { amountAt, type ValheimCostRule } from './valheim-recipes.cost-rule';
 import type { RecipeGraph } from './valheim-recipes.graph';
 
 export type ShoppingLine = ValheimRecipePlanResponse['shoppingList'][number];
 export type FuelEstimate = ValheimRecipePlanResponse['fuelEstimates'][number];
-
-/** §1.2 `amount(r, q)`. */
-export function amountAt(r: ValheimRecipeResource, q: number): number {
-  return q <= 1 ? r.amount : (q - 1) * r.amountPerLevel;
-}
 
 /** §1.2 `stationLevel(R, q)`. */
 export function stationLevelAt(recipe: ValheimRecipe, q: number): number {
@@ -116,6 +111,7 @@ export function recipeSteps(
   startStep: number,
   quality: number,
   rest: number,
+  rule: ValheimCostRule = 'v0',
 ): RecipeSteps {
   const sums = new Map<string, number>(
     recipe.resources.map((r) => [r.prefab, 0]),
@@ -129,7 +125,7 @@ export function recipeSteps(
     for (const r of recipe.resources) {
       sums.set(
         r.prefab,
-        (sums.get(r.prefab) ?? 0) + amountAt(r, q) * stepCrafts,
+        (sums.get(r.prefab) ?? 0) + amountAt(r, q, rule) * stepCrafts,
       );
     }
   }

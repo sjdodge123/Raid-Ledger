@@ -32,21 +32,25 @@ import {
   type SpawnClearance,
 } from './ad-hoc-spawn-clearance';
 import { traceGate } from '../listeners/voice-gate-trace';
-import { graceUnlessOnServer } from './ad-hoc-voice-leave-server.helpers';
+import { processVoiceLeave } from './ad-hoc-voice-leave.helpers';
 import {
+  adoptEventState,
   buildEventKey,
   findEventKeyForMember,
 } from './ad-hoc-event-key.helpers';
 import { announceLfgSessionEnd } from '../lfg-now/lfg-now-session-end.helpers';
 import {
-  removeActiveSession,
   handleJoinExisting,
   spawnNewEvent,
-  notifyCompleted,
   type ActiveAdHocState,
   type AdHocHandlerDeps,
   type VoiceJoinBinding,
 } from './ad-hoc-event.handlers';
+import {
+  notifyCompleted,
+  removeActiveSession,
+} from './ad-hoc-event-end.helpers';
+import { rearmGraceIfVoiceEmpty } from '../lfg-now/lfg-now-grace.helpers';
 
 @Injectable()
 export class AdHocEventService implements OnModuleInit {
@@ -113,6 +117,7 @@ export class AdHocEventService implements OnModuleInit {
     resolvedGameName?: string,
     channelId?: string,
     clearance?: SpawnClearance,
+    joinOnly?: boolean,
   ): Promise<boolean> {
     if (!(await this.isEnabled())) {
       // ROK-1417: the kill-switch is the single most common "why didn't Quick
@@ -149,6 +154,7 @@ export class AdHocEventService implements OnModuleInit {
       effectiveGameId,
       member,
       resolvedGameName,
+      joinOnly,
     );
     return true;
   }
@@ -200,7 +206,13 @@ export class AdHocEventService implements OnModuleInit {
       return;
     }
 
-    await this.processLeave(state, event, discordUserId);
+    await processVoiceLeave(
+      this.getDeps(),
+      this.eventEmitter,
+      state,
+      event,
+      discordUserId,
+    );
   }
 
   /** Finalize an ad-hoc event when grace period expires. */
@@ -266,7 +278,8 @@ export class AdHocEventService implements OnModuleInit {
   adoptEvent(bindingId: string, gameId: number, eventId: number): void {
     const key = buildEventKey(bindingId, gameId);
     if (this.activeEvents.has(key)) return;
-    this.activeEvents.set(key, { eventId, memberSet: new Set(), gameId });
+    // ROK-1888: every key of one event shares ONE state (one memberSet).
+    adoptEventState(this.activeEvents, key, eventId, gameId);
   }
 
   /** Check if any active event exists for a binding. */
@@ -302,6 +315,7 @@ export class AdHocEventService implements OnModuleInit {
       gracePeriodQueue: this.gracePeriodQueue,
       channelBindingsService: this.channelBindingsService,
       activeEvents: this.activeEvents,
+      eventEmitter: this.eventEmitter,
       autoSignupParticipant: (eventId, member) =>
         this.autoSignupParticipant(eventId, member),
     };
@@ -323,31 +337,9 @@ export class AdHocEventService implements OnModuleInit {
     );
   }
 
-  private async processLeave(
-    state: ActiveAdHocState,
-    event: typeof schema.events.$inferSelect,
-    discordUserId: string,
-  ): Promise<void> {
-    await this.participantService.markLeave(state.eventId, discordUserId);
-    if (event.channelBindingId) {
-      this.notificationService.queueUpdate(
-        state.eventId,
-        event.channelBindingId,
-      );
-    }
-    const roster = await this.getAdHocRoster(state.eventId);
-    this.gateway.emitRosterUpdate(
-      state.eventId,
-      roster.participants,
-      roster.activeCount,
-    );
-    // ROK-1800/1821: anyone on the game server (rows or tracker) keeps it alive.
-    if (state.memberSet.size > 0) return;
-    await graceUnlessOnServer(this.getDeps(), this.eventEmitter, {
-      eventId: state.eventId,
-      gameId: event.gameId,
-      bindingId: event.channelBindingId,
-    });
+  /** ROK-1888 B4: grace for a live event a recovery sweep left voice-empty. */
+  async armGraceIfVoiceEmpty(eventId: number): Promise<void> {
+    await rearmGraceIfVoiceEmpty(this.getDeps(), this.eventEmitter, eventId);
   }
 
   private async autoSignupParticipant(

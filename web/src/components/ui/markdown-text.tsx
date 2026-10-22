@@ -1,107 +1,22 @@
 import type { JSX } from 'react';
+import { MarkdownInline } from './markdown-inline';
 
 interface Props {
     text: string;
     className?: string;
 }
 
-type Token =
-    | { kind: 'text'; value: string }
-    | { kind: 'bold'; value: string }
-    | { kind: 'italic'; value: string }
-    | { kind: 'code'; value: string }
-    | { kind: 'link'; text: string; href: string };
-
-const PATTERN =
-    /(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))/g;
-
 /**
- * True for space, the C0 controls (tab/LF/CR among them) and the DEL/C1 range.
- *
- * A browser removes tab, LF and CR from a URL *before* it resolves the origin,
- * so a href carrying one can present safe leading characters here and still
- * reach the network as something else. Written as a code-point scan rather than
- * a character class because a regex literal holding control characters trips
- * `no-control-regex` — the rule is right that they are almost always a typo.
- */
-function isUnsafeHrefChar(ch: string): boolean {
-    const code = ch.codePointAt(0) ?? 0;
-    return code <= 0x20 || (code >= 0x7f && code <= 0x9f);
-}
-
-/** Accept absolute http(s) and single-slash app-relative hrefs only. */
-function isSafeHref(href: string): boolean {
-    if ([...href].some(isUnsafeHrefChar)) return false;
-    if (/^https?:\/\//.test(href)) return true;
-    return href.startsWith('/') && !/^\/[/\\]/.test(href);
-}
-
-function parseInline(line: string): Token[] {
-    const tokens: Token[] = [];
-    let lastIdx = 0;
-    for (const match of line.matchAll(PATTERN)) {
-        const [raw] = match;
-        const idx = match.index ?? 0;
-        if (idx > lastIdx) tokens.push({ kind: 'text', value: line.slice(lastIdx, idx) });
-        if (raw.startsWith('**')) tokens.push({ kind: 'bold', value: raw.slice(2, -2) });
-        else if (raw.startsWith('`')) tokens.push({ kind: 'code', value: raw.slice(1, -1) });
-        else if (raw.startsWith('[')) {
-            const closeBracket = raw.indexOf('](');
-            const text = raw.slice(1, closeBracket);
-            const href = raw.slice(closeBracket + 2, -1);
-            // Protocol-relative //host URLs would pass a bare startsWith('/')
-            // and resolve to an external origin — require a single leading /.
-            // The second char must also not be a backslash: browsers normalize
-            // \ to / for http(s), so /\evil.com is //evil.com in disguise.
-            //
-            // Whitespace and control characters are rejected outright (ROK-1077):
-            // browsers strip tab/LF/CR from a URL before parsing it, so "/\t/evil.com"
-            // passes a leading-character check here and then resolves as "//evil.com".
-            if (isSafeHref(href)) {
-                tokens.push({ kind: 'link', text, href });
-            } else {
-                tokens.push({ kind: 'text', value: raw });
-            }
-        } else tokens.push({ kind: 'italic', value: raw.slice(1, -1) });
-        lastIdx = idx + raw.length;
-    }
-    if (lastIdx < line.length) tokens.push({ kind: 'text', value: line.slice(lastIdx) });
-    return tokens;
-}
-
-function renderToken(token: Token, i: number): JSX.Element | string {
-    switch (token.kind) {
-        case 'bold':
-            return <strong key={i}>{token.value}</strong>;
-        case 'italic':
-            return <em key={i}>{token.value}</em>;
-        case 'code':
-            return (
-                <code key={i} className="px-1 rounded bg-surface/60 text-xs">
-                    {token.value}
-                </code>
-            );
-        case 'link':
-            return (
-                <a
-                    key={i}
-                    href={token.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-400 hover:underline"
-                >
-                    {token.text}
-                </a>
-            );
-        default:
-            return token.value;
-    }
-}
-
-/**
- * Minimal markdown renderer (ROK-1063).
+ * Minimal markdown renderer (ROK-1063), one `<p>` per line.
  * Supports: **bold**, *italic*, `code`, [link](url), line breaks.
  * Raw HTML is NOT rendered — only the allow-listed inline tokens above.
+ *
+ * Runs on the shared inline tokenizer (`MarkdownInline`, ROK-1868) with
+ * strike and autolinks off, so this token set is unchanged. Link safety
+ * (ROK-1077: http(s) or single-slash app-relative only; protocol-relative,
+ * backslash, whitespace and control characters rejected) is the contract's
+ * `isSafeMarkdownHref` — an unsafe link renders as its raw text.
+ * For multi-paragraph text with lists, use `MarkdownBlock`.
  */
 export function MarkdownText({ text, className }: Props): JSX.Element {
     const lines = text.split(/\r?\n/);
@@ -109,7 +24,7 @@ export function MarkdownText({ text, className }: Props): JSX.Element {
         <div className={className}>
             {lines.map((line, li) => (
                 <p key={li} className="text-sm text-muted whitespace-pre-wrap">
-                    {parseInline(line).map((tok, ti) => renderToken(tok, ti))}
+                    <MarkdownInline text={line} strike={false} autolink={false} />
                 </p>
             ))}
         </div>

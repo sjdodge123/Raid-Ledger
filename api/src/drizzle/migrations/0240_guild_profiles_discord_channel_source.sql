@@ -1,0 +1,2 @@
+ALTER TABLE "guild_profiles" ADD COLUMN "discord_channel_source" varchar(6);--> statement-breakpoint
+ALTER TABLE "guild_profiles" ADD CONSTRAINT "guild_profiles_discord_channel_source_check" CHECK ("guild_profiles"."discord_channel_source" IN ('auto', 'manual'));

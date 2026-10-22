@@ -19,7 +19,12 @@ import { openLfgNowEventWhere } from '../../lfg/lfg-playing.helpers';
 import { lfgGroupLockKey } from '../../lfg/lfg.constants';
 import { convertGroup } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
+import { restoreFromGracePeriod } from '../services/ad-hoc-event.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
+import {
+  findVoiceSpawnTarget,
+  lockGameSpawn,
+} from '../services/ad-hoc-game-spawn-lock';
 import {
   convertStarterIntent,
   listLiveGroupHands,
@@ -115,6 +120,16 @@ export async function findOpenLfgNowEvent(
 }
 
 /**
+ * The session a now-group joins (ROK-1888): its open LFG-born event, else the
+ * game's live Quick Play from any channel or the game server.
+ */
+async function findOpenSession(tx: Db, gameId: number): Promise<number | null> {
+  const lfgBorn = await findOpenLfgNowEvent(tx, gameId);
+  if (lfgBorn !== null) return lfgBorn;
+  return (await findVoiceSpawnTarget(tx, gameId))?.id ?? null;
+}
+
+/**
  * Roster the given hands onto an event.
  *
  * A hand with no linked Discord account is skipped: the roster row is keyed by
@@ -164,7 +179,12 @@ export function spawnUnderGroupLock(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${lfgGroupLockKey(gameId)}))`,
     );
-    const open = await findOpenLfgNowEvent(tx, gameId);
+    // ROK-1888: also the per-game Quick Play lock (voice + server spawns take
+    // it), so "one live Quick Play per game" holds across every spawn path.
+    // Order is always group lock -> game lock; the Quick Play paths never take
+    // the group lock, so the two cannot deadlock.
+    await lockGameSpawn(tx, gameId);
+    const open = await findOpenSession(tx, gameId);
     // The manual branch shares the lock, the guard read and every insert shape
     // with the threshold path below; what it does NOT share is the now-hand
     // count (AC1) or the creator (spec finding 2).
@@ -210,6 +230,10 @@ async function manualStart(
 ): Promise<LfgNowSpawnResult> {
   const participants = await listLiveGroupHands(tx, gameId, now);
   const starter = participants.find((p) => p.userId === manual.starterUserId);
+  // ROK-1888 m4: joining a Quick Play in grace restores it to live, so hands
+  // are never signed up to a session about to end (the expiring grace job's
+  // `claimAndEndEvent` only ends a `grace_period` row, so it no-ops).
+  const restored = open !== null && (await restoreFromGracePeriod(tx, open));
   const eventId =
     open ?? (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
   if (starter) await signupNowHands(tx, eventId, [starter]);
@@ -226,6 +250,7 @@ async function manualStart(
     invitedUserIds: participants
       .filter((p) => p.userId !== manual.starterUserId)
       .map((p) => p.userId),
+    ...(restored ? { restoredFromGrace: true as const } : {}),
   };
 }
 
@@ -245,9 +270,16 @@ export async function attachToOpenEvent(
   eventId: number,
   hands: LfgNowHand[],
 ): Promise<LfgNowSpawnResult> {
-  if (hands.length > 0) {
-    await signupNowHands(tx, eventId, hands);
-    await convertGroup(tx, gameId, { eventId });
-  }
-  return { eventId, spawned: false, invitedUserIds: [] };
+  if (hands.length === 0)
+    return { eventId, spawned: false, invitedUserIds: [] };
+  // ROK-1888 m4, see manualStart
+  const restored = await restoreFromGracePeriod(tx, eventId);
+  await signupNowHands(tx, eventId, hands);
+  await convertGroup(tx, gameId, { eventId });
+  return {
+    eventId,
+    spawned: false,
+    invitedUserIds: [],
+    ...(restored ? { restoredFromGrace: true as const } : {}),
+  };
 }
