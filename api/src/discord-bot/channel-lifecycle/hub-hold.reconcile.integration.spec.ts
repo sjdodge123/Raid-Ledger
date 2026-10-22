@@ -62,6 +62,9 @@ beforeEach(async () => {
     .mockImplementation(() => Promise.resolve(`hub-ch-${++seq}`));
   jest.spyOn(ops, 'categorySeriesIds').mockImplementation(() => new Set());
   jest.spyOn(ops, 'categoryHasRoom').mockResolvedValue(true);
+  // The stub guild has no `channels.edit`: an unspied topic refresh after the
+  // hub link throws, rolling back the link tx (run.ts linkAfterCreate).
+  jest.spyOn(ops, 'setTopic').mockResolvedValue(undefined);
   jest.spyOn(ops, 'archiveChannel').mockResolvedValue({
     previousParentId: 'old-parent',
     restoreParentId: 'old-parent',
@@ -160,6 +163,11 @@ describe('X2: an approved community hub creates its channel (ROK-1873)', () => {
       discordChannelId: rows[0]?.channelId,
       discordChannelSource: 'auto',
     });
+    expect(ops.setTopic).toHaveBeenCalledWith(
+      guild,
+      rows[0]?.channelId,
+      expect.any(String),
+    );
   });
 
   it.each<[string, string | null]>([
