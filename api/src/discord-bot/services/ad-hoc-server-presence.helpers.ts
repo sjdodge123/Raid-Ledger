@@ -194,6 +194,19 @@ export async function hasOpenServerPlayers(
   return rows[0] !== undefined;
 }
 
+/** ROK-1888: any open VOICE row on the event, from any channel. */
+export async function hasOpenVoiceParticipants(
+  db: Db,
+  eventId: number,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: p.id })
+    .from(p)
+    .where(and(eq(p.eventId, eventId), eq(p.inVoice, true), isNull(p.leftAt)))
+    .limit(1);
+  return rows[0] !== undefined;
+}
+
 /**
  * Codex r2 P1: open rows held by a game server ALONE (not also in voice) —
  * the attendance the voice tracker cannot see, so auto-extend adds it.
