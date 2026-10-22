@@ -125,7 +125,9 @@ GitHub CI runs the full suite (build, tsc, lint, unit, integration sharded 3×3 
 
 So for **most stories**, run the **lite gate** — `--static`: build + typecheck + lint, plus the conditional migration/container checks (which auto-skip when no migration/infra files changed). It defers unit/integration/Playwright/Discord smoke to GitHub. ~3–4 min vs ~20+ for `--full`.
 
-Use `--static` by default. Escalate to `--full` only when:
+**`--scoped` first (operator ruling 2026-10-22).** For a single-workspace diff run `--scoped` (on the fleet: `rl_validate_ci({args:["--scoped"]})`, weight `medium`): build + tsc + lint for the diff's own targets only — `scripts/smoke/**` typechecks the smoke tsconfig, docs need nothing. Its PASS writes the pre-push sentinel (`gate_tier: 'scoped'`). It refuses with exit 2 and names `--static` or `--full` when the diff touches `packages/contract/**`, migrations, `package*.json`, Dockerfile/nginx/entrypoint, root config, or both api and web — then run the tier it names.
+
+Use `--static` for a cross-workspace diff. Escalate to `--full` only when:
 - The diff touches **`drizzle/migrations/**`** or **container/infra** (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — note `--static` already runs the migration + allinone validation for these; `--full` additionally adds local unit/integration/e2e, worth it for these high-blast-radius changes.
 - The diff touches **`package.json` / `package-lock.json`** (any workspace, or root). GitHub's path filter classifies dependency files as `code` (lint runs) but NOT `api`/`web`, so GitHub **skips both unit and integration suites** for a deps-only change — `--static` would defer behavioral coverage to a job that never runs, and auto-merge could land a dependency regression untested. `--full` runs unit + integration locally to close that gap.
 - It's a **large/cross-workspace refactor** where you'd rather not discover a behavioral break on GitHub after the fact.
@@ -204,7 +206,7 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
 
 **Lite gate (`--static`, the default):** Playwright + Discord smoke are NOT run locally — they're deferred to GitHub CI, which runs them sharded on every PR. For most stories you skip this step entirely and let GitHub cover behavioral/e2e. This is the intended behavior, not a gap.
 
-**A fleet `--static` PASS is the default pre-push gate, including for a web branch (ROK-1565).** `rl_validate_ci` writes the pre-push sentinel on any terminal+succeeded run whose Build/TypeScript/Lint rows are PASS with no `FAIL` row anywhere (`gate_tier: 'static'`), so a web branch does NOT have to buy a Playwright tier before pushing. Run Playwright on the fleet only when `bash scripts/smoke/scope-specs.sh` prints `ALL` (a shared surface) or the operator asks — and then let it scope itself (`e2e_scope: 'auto'`, the default).
+**A fleet `--scoped` PASS (single-workspace diff) or `--static` PASS (cross-workspace) is the default pre-push gate, including for a web branch (ROK-1565, 2026-10-22).** A green `--scoped` run writes `gate_tier: 'scoped'`. `rl_validate_ci` writes the pre-push sentinel on any terminal+succeeded run whose Build/TypeScript/Lint rows are PASS with no `FAIL` row anywhere (`gate_tier: 'static'`), so a web branch does NOT have to buy a Playwright tier before pushing. Run Playwright on the fleet only when `bash scripts/smoke/scope-specs.sh` prints `ALL` (a shared surface) or the operator asks — and then let it scope itself (`e2e_scope: 'auto'`, the default).
 
 **When you DID run `--full` (Step 7):** it auto-runs Playwright + Discord smoke when the diff touches their surface AND the dev env is up (`:3000/health` + `:5173`). What you do then depends on what Step 7 produced:
 
