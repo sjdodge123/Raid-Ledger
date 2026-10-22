@@ -1,4 +1,13 @@
-import { and, eq, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -197,6 +206,30 @@ export async function lockHubRow(
     .where(eq(g.id, guildId))
     .for('update');
   return row ?? null;
+}
+
+/**
+ * Lock several hub rows (`FOR UPDATE`) in ascending id order.
+ *
+ * GLOBAL LOCK ORDER for community hubs: hub rows (by id, ascending) FIRST,
+ * then invite rows / member rows. Redeem, ban, leave and remove each take
+ * one hub lock before touching invites; a path that touches several hubs
+ * (the user wipe) takes them all here, sorted, before any invite UPDATE —
+ * so no two paths can wait on each other in opposite orders.
+ */
+export async function lockHubRows(
+  tx: DbOrTx,
+  guildIds: readonly number[],
+): Promise<void> {
+  const ids = [...new Set(guildIds)];
+  if (ids.length === 0) return;
+  const g = schema.guilds;
+  await tx
+    .select({ id: g.id })
+    .from(g)
+    .where(inArray(g.id, ids))
+    .orderBy(asc(g.id))
+    .for('update');
 }
 
 /**
