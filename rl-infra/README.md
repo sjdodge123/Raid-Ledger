@@ -250,7 +250,9 @@ makes it safe is admission control, which replaced the manual
   in <1s while a heavy task waits. While waiting, the task log gets
   `[admission] waiting for memory: available=…MB need=…MB (N heavy running)`
   every `RL_HEAVY_TASK_POLL_SECONDS` (10).
-- On expiry of `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (1800) the task ends
+- On expiry of `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (1800) — or
+  `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (5400) while the wait is on a ledger
+  cap, the budget or FIFO (see the ledger below) — the task ends
   `status: failed` with `failure_reason: "admission_timeout"` and a log line
   naming it — it is NOT a test failure, it means the host never freed up.
 - A freshly-admitted task reserves one floor's worth of the reading for
@@ -272,10 +274,56 @@ makes it safe is admission control, which replaced the manual
   and `rl status` / `rl lease-status` surface `heavy_running`,
   `heavy_waiting`, `mem_available_mb`, `heavy_task_min_free_mb`.
 
+**The admission ledger (no-RAM memory plan, 2026-10-22).** On 2026-10-22
+03:20Z four claims, an image build, an env deploy, several `--static` gates and
+jest runs were all admitted at once and stalled the VM for 40 minutes: the
+floor above is read once at launch, and a reservation only counted for the
+90s settle window. On top of the floor, admission now keeps a ledger, checked
+in the same flock window as the admit:
+
+- **A reservation is held for the task's whole life.** It is released when the
+  wrapped command exits (success, failure, cancel, watchdog kill), and pruned
+  on every read when its holder is gone: the task JSON is already terminal, or
+  the recorded holder pid no longer exists on this host
+  (`admission::prune_dead`, also run on every waiter's poll). The 4h max-hold
+  prune stays as the last resort.
+- **Reservations:** heavy `RL_HEAVY_TASK_RESERVE_MB` (5632), medium
+  `RL_MEDIUM_TASK_RESERVE_MB` (3072), image build `RL_IMAGE_BUILD_RESERVE_MB`
+  (3072), and every live env in `env-registry.json` `RL_ENV_RESERVE_MB` (1024).
+  A task admits only while running reservations + env charge + its own
+  reservation fit in `RL_ADMISSION_BUDGET_MB` (12288; `0` = off). The first
+  task on an empty ledger always passes the budget (the floor still applies),
+  so a mis-set budget delays work but never wedges the fleet.
+- **Hard caps:** at most `RL_MAX_HEAVY_CONCURRENT` (2) heavy tasks and at most
+  `RL_MAX_IMAGE_BUILDS` (1) image builds run at once (`0` = no cap). An image
+  build (tool `rl_env_build_image_from_runner`) is its own category: it uses
+  the build cap and reservation, not a heavy slot. Medium tasks are bound by
+  the budget only. Known gap: an `rl_env_deploy` or `rl_run_on_runner` that
+  runs a docker build is admitted as a plain heavy, not under the build cap.
+- **FIFO:** a newcomer is refused while admitting it would leave no cap slot or
+  budget room for an OLDER live waiter, so a stream of mediums cannot starve a
+  parked heavy (`blocked_by=fifo …`). A ledger wait gets
+  `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (5400), because the holders it waits on
+  keep their reservation for a whole gate.
+- A waiting task's log line ends `blocked_by=heavy_cap 2/2`,
+  `image_build_cap 1/1`, `budget …` or `fifo …`, and `admission.waiting[].blocked_by`
+  carries the same reason.
+- `rl status` / `rl lease-status` keep `heavy_running` / `heavy_waiting` (all
+  tasks holding / waiting for an admission slot, any weight) and add, under
+  `admission`: `categories` (`heavy`, `medium`, `image_build`), `reserved_mb`,
+  `env_reserved_mb`, `committed_mb`, `budget_mb`, `max_heavy_concurrent`,
+  `max_image_builds`. Running entries carry `weight`, `kind`, `reserve_mb`,
+  `pid`, `host`.
+- Env spins are not themselves parked (the spin is synchronous inside a claim);
+  each live env is charged against the budget instead, so heavy and medium work
+  queues behind envs. Pinned by `orchestrator/test/task-admission-ledger.test.sh`.
+
 **MCP defaults** (`tools/mcp-rl-fleet/src/tools/task-weight.ts`): image builds
 are always heavy; `rl_validate_ci` is heavy for every suite-running mode
 (default / `--full` / `--only-unit` / `--only-integration` / `--only-e2e` /
-`--with-e2e`) and light for a `--static`-only run; `rl_run_on_runner` is heavy
+`--with-e2e`) and **light** for a `--static`-only run (it moves to `medium`
+in a follow-up MCP change that lands only after this ledger is deployed on the
+VM — a VM older than #1699 rejects `medium`); `rl_run_on_runner` is heavy
 when the command matches jest / vitest / playwright / validate-ci / docker
 build. Pass `weight` explicitly to override either way. The `<=120s`
 synchronous `rl_run_on_runner` path is never gated — it exists for short
@@ -284,6 +332,105 @@ probes.
 **Reading a stalled task:** if a heavy task sits in `running` with no output,
 check `rl_status` — `heavy_waiting > 0` with a low `mem_available_mb` means it
 is parked on the gate, not hung.
+
+### Memory hardening (operator, on the VM)
+
+From the 2026-10-22 no-RAM memory plan. The operator runs these by hand on the
+rl-infra VM; agents never SSH to it. They stop a runaway from starving sshd
+(the 03:20Z stall was thrash, not an OOM kill): zram gives cold anonymous
+pages somewhere to go, earlyoom kills the right process early, and the
+drop-ins keep the control plane off the reclaim and kill lists.
+
+1. **zram 4 GiB + 2 GiB swapfile + swappiness.**
+
+   ```bash
+   sudo apt-get install -y systemd-zram-generator
+   printf '[zram0]\nzram-size = 4096\ncompression-algorithm = zstd\nswap-priority = 100\n' \
+     | sudo tee /etc/systemd/zram-generator.conf
+   sudo systemctl daemon-reload && sudo systemctl start systemd-zram-setup@zram0.service
+   # ext4 assumed; on btrfs/XFS use: sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile
+   sudo swapon --priority 10 /swapfile
+   echo '/swapfile none swap sw,pri=10 0 0' | sudo tee -a /etc/fstab
+   printf 'vm.swappiness=100\nvm.min_free_kbytes=131072\n' | sudo tee /etc/sysctl.d/90-rl-memory.conf
+   sudo sysctl --system
+   swapon --show   # zram0 at priority 100, /swapfile at 10
+   ```
+
+   `vm.swappiness=100` is right only once zram exists; the old value of 10
+   assumed no swap.
+
+2. **earlyoom.** Kill node / jest / eslint / vitest / tsc first, never sshd,
+   dockerd, containerd or the orchestrator.
+
+   ```bash
+   sudo apt-get install -y earlyoom
+   sudo tee /etc/default/earlyoom >/dev/null <<'EOF'
+   EARLYOOM_ARGS="-m 6,3 -s 15,5 -r 60 --prefer ^(node|jest|vitest|eslint|tsc|playwright|chrome)$ --avoid ^(sshd|dockerd|containerd|containerd-shim.*|systemd.*|postgres|traefik|mutagen.*|task-start|bash)$"
+   EOF
+   sudo systemctl enable --now earlyoom && sudo systemctl restart earlyoom
+   journalctl -u earlyoom -n 20 | grep -E 'prefer|avoid'   # regexes with NO quote characters
+   ```
+
+   The regexes are unquoted on purpose: the unit expands `$EARLYOOM_ARGS` by
+   whitespace only, so inner `'…'` quotes would become part of the regex and
+   match nothing. They contain no spaces, and earlyoom matches them against
+   the bare process name (`/proc/PID/comm`), so `^…$` anchors are enough.
+
+   The orchestrator is bash under sshd (`task-start` supervisors), hence
+   `bash` in the avoid list.
+
+3. **Protect sshd / dockerd / containerd from the OOM killer and from reclaim.**
+
+   ```bash
+   for u in ssh docker containerd; do
+     sudo mkdir -p /etc/systemd/system/$u.service.d
+     mm=256M; [ "$u" = ssh ] && mm=128M
+     adj=-900; [ "$u" = containerd ] && adj=-999   # Debian already ships -999 for containerd
+     printf '[Service]\nOOMScoreAdjust=%s\nMemoryMin=%s\n' "$adj" "$mm" \
+       | sudo tee /etc/systemd/system/$u.service.d/90-rl-oom.conf
+   done
+   sudo systemctl daemon-reload
+   systemctl show ssh docker containerd -p OOMScoreAdjust -p MemoryMin
+   ```
+
+   sshd's children inherit its score, so every SSH session, `task-start`
+   supervisor and the host-side Mutagen agent also run at -900. That is
+   intended (the orchestrator is control plane); the test workloads run in
+   containers, which are not children of sshd.
+
+   The new values apply on each unit's next restart. Restart `ssh` from a
+   console session, not over SSH, and restart `docker` only when `rl status`
+   shows no claims.
+
+4. **Stop-gap: drop to 3 runner slots** until the admission ledger above is
+   deployed. Do it only when `rl status` shows slot 4 unclaimed.
+
+   ```bash
+   cd /srv/rl-infra && sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=3/' .env   # first: stops new claims/queues on slot 4
+   ./orchestrator/bin/slots-resize 3   # flocked; refuses if slot 4 is claimed or queued
+   docker compose stop runner-4
+   ```
+
+   Order matters: keep `RUNNER_SLOTS` at or below the number of `claims.json`
+   rows at every moment. `claim --slot 4` and the unpinned enqueue path
+   (`lease::pick_enqueue_slot`) range over `1..RUNNER_SLOTS`, so if the rows
+   shrink first a claim can still land in `lease-queue/4.json` for a slot that
+   no longer exists, and nothing ever advances that queue. `.env` is sourced on
+   every orchestrator invocation, so the `sed` takes effect at once and there
+   is nothing to restart. If `slots-resize 3` refuses, set `RUNNER_SLOTS=4`
+   back, wait for slot 4 to drain, and start again.
+
+   `init-state` alone does not do this: `claim` hands out the rows of
+   `claims.json`, and `init-state` only creates that file when it is missing.
+   Check that `rl status` lists 3 slots. Revert once the ledger is live, in the
+   reverse order (rows first, `RUNNER_SLOTS` last):
+
+   ```bash
+   cd /srv/rl-infra && docker compose --profile extra-slots up -d runner-4   # profiled: a bare `up -d` never starts it
+   ./orchestrator/bin/slots-resize 4
+   sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=4/' .env   # last: slot 4 now exists to claim and queue on
+   ```
 
 ## Task tracking (ROK-1331 M1)
 
@@ -1217,7 +1364,9 @@ RL_TARGET=remote RL_PROXMOX_HOST=192.168.0.132 ./rl-infra/cli/rl test-plan wait 
 - `RL_REPO_ROOT_ALLOWLIST` (optional, MCP-side). Comma-separated list of absolute paths. When set, restricts the `worktree_path` parameter on every rl_* tool to subdirectories of these prefixes (after symlink resolution + git-worktree probe). When unset, defaults to `~/Documents/Projects/` — the operator's canonical Raid-Ledger projects directory. Use to lock down the allowlist further when running the MCP server on a shared host.
 - `RL_ENV_JWT_SECRET` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, env-spin passes it as `JWT_SECRET` to the allinone container so app_settings rows encrypted with the operator's local JWT_SECRET decrypt at runtime after `rl_env_sync_from_local`. Without it, the env generates its own secret and synced settings rows fail to decrypt.
 - `RL_HEAVY_TASK_MIN_FREE_MB` (optional, on the rl-infra VM; default 5120). Host `MemAvailable` floor a `--weight heavy` task must clear before it starts. Raise it if envs get squeezed, lower it if heavy tasks wait too often.
+- `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (default 5400) — admission wait budget while blocked on a ledger cap, the budget or FIFO.
 - `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (default 1800) / `RL_HEAVY_TASK_POLL_SECONDS` (default 10) / `RL_HEAVY_TASK_SETTLE_SECONDS` (default 90) / `RL_HEAVY_TASK_MAX_HOLD_SECONDS` (default 14400) — admission budget, poll interval, freshly-admitted reserve window, and the age at which a leaked `heavy_running` entry is pruned.
+- `RL_ADMISSION_BUDGET_MB` (default 12288; `0` = off) / `RL_HEAVY_TASK_RESERVE_MB` (5632) / `RL_MEDIUM_TASK_RESERVE_MB` (3072) / `RL_IMAGE_BUILD_RESERVE_MB` (3072) / `RL_ENV_RESERVE_MB` (1024 per live env) / `RL_MAX_HEAVY_CONCURRENT` (2; `0` = no cap) / `RL_MAX_IMAGE_BUILDS` (1; `0` = no cap) — the admission ledger (2026-10-22). Set in `/srv/rl-infra/.env` on the VM. See "Dynamic memory + heavy-task admission".
 - `RL_MEMINFO_PATH` (default `/proc/meminfo`) / `RL_ADMISSION_FILE` (default `$RL_STATE_DIR/admission.json`) — override points; the orchestrator shell tests use them to drive the gate off fixtures.
 - `RL_ADMIN_PASSWORD` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, every env's admin@local user is seeded with this stable password, deterministically across calls and slugs. Without it, env-spin generates a random `rl-<hex>` password per call. **A3-B P4: no MCP tool hands you that value by default** — the terminal `rl_task_status` / `rl_task_wait` of an `rl_env_spin` or `rl_env_deploy` `local-…` task (and `rl_task_inspect`) return `admin_password_available` instead (the `rl_env_spin` dispatch reply carries neither; an `include_credentials: true` spin call gets a `credentials_hint` naming the route below), and the value comes back only from an explicit `rl_task_status({task_id, include_credentials: true})` on the spin's or the deploy chain's `local-…` task id (both task JSONs are stored 0600 on the laptop; the async `rl_env_spin` dispatch reply never carries the password, so re-calling it with `include_credentials` no longer returns it). The operator's own `rl env spin` stdout still prints it — that is a human terminal, not an agent context. **ROK-1534: the credential also rides in the task `cmd`** — `rl_validate_ci({against_env_slug})` threads it to the runner as an `ADMIN_PASSWORD='…'` env prefix, which the task record stores verbatim. Every task-shaped return boundary (`rl_task_status`, `rl_task_wait`, `rl_task_inspect`, `rl_task_list`) now masks `*PASSWORD`/`*TOKEN`/`*SECRET` assignment values in `cmd`/`args_summary` and secret-named `env` keys to `***`, UNCONDITIONALLY — `include_credentials: true` opts into the `admin_password` FIELD, never into a command line. Still uncovered: `log_tail` (unredacted by design) and the VM-side `ps` / stored task JSON, which would need the password routed via stdin instead of an env prefix. `rl_validate_ci({ args: ["--only-e2e"], against_env_slug })` re-asserts admin@local to a known password (RL_ADMIN_PASSWORD when set, else a fresh `rl-ci-<hex>`) via the rl-docker-proxy and threads it as `ADMIN_PASSWORD` into the runner so Playwright's global-setup authenticates against the env regardless of whether RL_ADMIN_PASSWORD is set (ROK-1368).
 - `RL_OPERATOR_DISCORD_ID` (optional, on the rl-infra VM). Your own Discord user id (snowflake — digits only; enable Developer Mode → right-click yourself → Copy User ID). When set in `/srv/rl-infra/.env`, env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` on both the fresh and the idempotent path, and bootstrap-admin upserts that one id as an `admin` row. You then sign in to any fleet env with Discord OAuth and land as an admin instead of an ordinary member — no mid-test switch to admin@local just to reach an admin surface. Discord login preserves `role` (it updates only username/avatar), so the promotion survives every subsequent login. **This is fleet-only and cannot fire in production:** bootstrap-admin refuses unless `FLEET_ADMIN_DISCORD_ID` is set *and* `DEMO_MODE === 'true'`, and the production allinone entrypoint sets neither. **ROK-1537:** with it set, that Discord id is admin from its first login (env-spin also passes it to the app container as `FLEET_ADMIN_DISCORD_ID`, which switches the first-login promotion below off). A value that is not a Discord snowflake (digits only) is ignored with one stderr warning and treated as unset, so first-login promotion stays on and `operator_admin` reports `first-login`. Unset it and the **first real Discord login** on each fresh env is promoted instead (see `FLEET_FIRST_DISCORD_LOGIN_ADMIN`). `rl_env_spin` / `rl_env_deploy` report which case applies as `operator_admin: 'configured' | 'first-login' | 'none'`, and `rl_fleet_health` lists `operator_discord_id_unset` under `config_warnings` while it is unset. Pinned by `rl-infra/orchestrator/test/env-spin-fleet-operator.test.sh` and `api/src/scripts/bootstrap-admin-fleet-operator.spec.ts`.
