@@ -176,4 +176,11 @@ describe('event card tagged-hub line (ROK-1895)', () => {
     const { description } = render({ ...context, hubLink: named });
     expect(description).toContain('Hub: **@\u200beveryone \\*x\\***');
   });
+
+  it('escapes a masked link in the hub name so it cannot render as a link', () => {
+    const named: HubLink = { ...TAGGED, hubName: '[Free](https://x.y)' };
+    const { description } = render({ ...context, hubLink: named });
+    expect(description).not.toContain('Hub: **[Free](https://x.y)**');
+    expect(description).toContain('Hub: **\\[Free](https://x.y)**');
+  });
 });

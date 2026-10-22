@@ -91,11 +91,14 @@ export interface EventBodyOptions {
 }
 
 /**
- * `Hub: **<name>**` — markdown-escaped, and `@` broken with a zero-width
- * space so a hub named `@everyone` can never resolve as a mention.
+ * `Hub: **<name>**` — markdown-escaped (masked links, headings and lists too:
+ * hub names are user-proposed, so `[Free](https://…)` must not render as a
+ * link in the bot's card), and `@` broken with a zero-width space so a hub
+ * named `@everyone` can never resolve as a mention.
  */
 export function hubLine(name: string): string {
-  const safe = escapeMarkdown(name).replace(/@/g, '@\u200b');
+  const escaped = escapeMarkdown(name, { maskedLink: true, heading: true, bulletedList: true, numberedList: true });
+  const safe = escaped.replace(/@/g, '@\u200b');
   return `Hub: **${safe}**`;
 }
 
