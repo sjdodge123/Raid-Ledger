@@ -20,6 +20,7 @@ import { StandalonePollNotificationService } from './standalone-poll-notificatio
 import { StandalonePollReminderService } from './standalone-poll-reminder.service';
 import { StandalonePollShareController } from './standalone-poll-share.controller';
 import { StandalonePollShareService } from './standalone-poll-share.service';
+import { HubPollsController } from './hub-polls.controller';
 
 @Module({
   imports: [
@@ -35,7 +36,12 @@ import { StandalonePollShareService } from './standalone-poll-share.service';
     // DiscordBotModule imports EventsModule, so the cycle must resolve lazily.
     forwardRef(() => DiscordBotModule),
   ],
-  controllers: [StandalonePollController, StandalonePollShareController],
+  controllers: [
+    StandalonePollController,
+    StandalonePollShareController,
+    // ROK-1893 P3: GET /hubs/:id/polls (the hub Events tab's open polls).
+    HubPollsController,
+  ],
   providers: [
     StandalonePollService,
     StandalonePollNotificationService,
