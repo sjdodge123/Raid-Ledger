@@ -172,10 +172,7 @@ describe('hub polls — reads', () => {
     const hub = await mkHub(leader);
     const res = await createPoll(leader.token, { hubId: hub.id });
     expect(res.status).toBe(201);
-    const { matchId, lineupId } = res.body as {
-      matchId: number;
-      lineupId: number;
-    };
+    const { matchId, lineupId } = pollIds(res.body);
     await addYesVote(matchId, leader.id);
     await addYesVote(matchId, outsider.id);
     const page = await get(
@@ -213,10 +210,8 @@ describe('hub polls — reads', () => {
     const leader = await mkUser();
     const hub = await mkHub(leader);
     const res = await createPoll(leader.token, { hubId: hub.id });
-    const { matchId, lineupId } = res.body as {
-      matchId: number;
-      lineupId: number;
-    };
+    expect(res.status).toBe(201);
+    const { matchId, lineupId } = pollIds(res.body);
     await addYesVote(matchId, leader.id);
     await testApp.db
       .update(schema.guilds)
