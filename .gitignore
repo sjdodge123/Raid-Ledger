@@ -39,6 +39,8 @@ scripts/*
 !scripts/check-migration-merge-order.spec.mjs
 !scripts/check-migration-snapshot-chain.mjs
 !scripts/check-migration-snapshot-chain.spec.mjs
+!scripts/scoped-gate-plan.mjs
+!scripts/scoped-gate-plan.spec.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs
