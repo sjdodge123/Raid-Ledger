@@ -227,6 +227,7 @@ The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared reso
 ### Migration Generation Rules
 
 - **Always run `./scripts/fix-migration-order.sh --check`** after generating a migration — concurrent branches produce out-of-order journal timestamps that Drizzle silently skips.
+- **Two PRs claimed the same migration number?** `git fetch origin && ./scripts/renumber-branch-migrations.sh` renumbers the branch's new migrations after `origin/main` (files, journal, snapshot `prevId` chain; never the SQL). The index-collision guard in CI and `validate-ci.sh` names it. Runbook: `docs/runbooks/migrations-and-backups.md`.
 - **Validate against a real Postgres before pushing:** `./scripts/validate-migrations.sh` (also run automatically by `validate-ci.sh` when migration files appear in the diff).
 - **Never hand-edit migration SQL** unless fixing a known Drizzle codegen bug. If you must, document the edit in the commit message.
 - **One migration per schema change.** Do not combine unrelated schema changes into one file.
