@@ -7,18 +7,24 @@ import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
 type Db = PostgresJsDatabase<typeof schema>;
 const m = schema.hubServerMembers;
 
-/** A visible `game_server` hub's Pelican server id (null = server deleted); 404 otherwise. */
-export async function findVisibleServerHub(
+/**
+ * A `game_server` hub's Pelican server id (null = server deleted); 404 when the
+ * guild is missing or not a server hub. Visibility is NOT checked here: every
+ * caller sits behind `HubVisibleGuard`, which 404s non-staff on a hidden hub and
+ * lets staff through (ROK-1831 L-5) — so staff get the same answer as on a
+ * visible hub (prod 2026-10-21: Quick Play 404'd staff on a hidden hub).
+ */
+export async function findServerHub(
   db: Db,
   guildId: number,
 ): Promise<{ pelicanServerId: number | null }> {
   const g = schema.guilds;
   const [row] = await db
-    .select({ kind: g.kind, hiddenAt: g.hiddenAt, serverId: g.pelicanServerId })
+    .select({ kind: g.kind, serverId: g.pelicanServerId })
     .from(g)
     .where(eq(g.id, guildId))
     .limit(1);
-  if (!row || row.kind !== 'game_server' || row.hiddenAt !== null) {
+  if (!row || row.kind !== 'game_server') {
     throw new NotFoundException(HUB_NOT_FOUND);
   }
   return { pelicanServerId: row.serverId };
