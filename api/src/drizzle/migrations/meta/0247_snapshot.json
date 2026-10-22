@@ -4108,6 +4108,45 @@
           "notNull": false,
           "default": "'{}'::jsonb"
         },
+        "lifecycle_state": {
+          "name": "lifecycle_state",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "auto_managed": {
+          "name": "auto_managed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pinned": {
+          "name": "pinned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restore_parent_id": {
+          "name": "restore_parent_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_overwrites": {
+          "name": "archived_overwrites",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -4257,6 +4296,34 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_channel_bindings_lifecycle": {
+          "name": "idx_channel_bindings_lifecycle",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "game_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lifecycle_state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"channel_bindings\".\"auto_managed\" AND \"channel_bindings\".\"recurrence_group_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4277,7 +4344,116 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "channel_bindings_lifecycle_state_check": {
+          "name": "channel_bindings_lifecycle_state_check",
+          "value": "\"channel_bindings\".\"lifecycle_state\" IN ('active', 'archived')"
+        },
+        "channel_bindings_archived_auto_check": {
+          "name": "channel_bindings_archived_auto_check",
+          "value": "\"channel_bindings\".\"lifecycle_state\" = 'active' OR \"channel_bindings\".\"auto_managed\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.channel_lifecycle_suppressions": {
+      "name": "channel_lifecycle_suppressions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_id": {
+          "name": "game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "channel_lifecycle_suppressions_guild_game_unique": {
+          "name": "channel_lifecycle_suppressions_guild_game_unique",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "game_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_channel_lifecycle_suppressions_game": {
+          "name": "idx_channel_lifecycle_suppressions_game",
+          "columns": [
+            {
+              "expression": "game_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "channel_lifecycle_suppressions_game_id_games_id_fk": {
+          "name": "channel_lifecycle_suppressions_game_id_games_id_fk",
+          "tableFrom": "channel_lifecycle_suppressions",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "channel_lifecycle_suppressions_reason_check": {
+          "name": "channel_lifecycle_suppressions_reason_check",
+          "value": "\"channel_lifecycle_suppressions\".\"reason\" IN ('deleted', 'unbound')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.post_event_reminders_sent": {
@@ -7798,6 +7974,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -11748,6 +11930,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "discord_channel_source": {
+          "name": "discord_channel_source",
+          "type": "varchar(6)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_relay_default": {
+          "name": "post_relay_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11843,6 +12038,192 @@
         "guild_profiles_gm_post_length": {
           "name": "guild_profiles_gm_post_length",
           "value": "char_length(\"guild_profiles\".\"gm_post\") <= 4000"
+        },
+        "guild_profiles_discord_channel_source_check": {
+          "name": "guild_profiles_discord_channel_source_check",
+          "value": "\"guild_profiles\".\"discord_channel_source\" IN ('auto', 'manual')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.hub_posts": {
+      "name": "hub_posts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relay_channel_id": {
+          "name": "relay_channel_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relay_message_id": {
+          "name": "relay_message_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relayed_at": {
+          "name": "relayed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_hub_posts_guild_created": {
+          "name": "idx_hub_posts_guild_created",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_posts_author_id": {
+          "name": "idx_hub_posts_author_id",
+          "columns": [
+            {
+              "expression": "author_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_posts_updated_by": {
+          "name": "idx_hub_posts_updated_by",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hub_posts_guild_id_guilds_id_fk": {
+          "name": "hub_posts_guild_id_guilds_id_fk",
+          "tableFrom": "hub_posts",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hub_posts_author_id_users_id_fk": {
+          "name": "hub_posts_author_id_users_id_fk",
+          "tableFrom": "hub_posts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "hub_posts_updated_by_users_id_fk": {
+          "name": "hub_posts_updated_by_users_id_fk",
+          "tableFrom": "hub_posts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "hub_posts_body_length": {
+          "name": "hub_posts_body_length",
+          "value": "char_length(\"hub_posts\".\"body\") BETWEEN 1 AND 4000"
+        },
+        "hub_posts_relay_pair": {
+          "name": "hub_posts_relay_pair",
+          "value": "(\"hub_posts\".\"relay_channel_id\" IS NULL) = (\"hub_posts\".\"relay_message_id\" IS NULL)"
         }
       },
       "isRLSEnabled": false
