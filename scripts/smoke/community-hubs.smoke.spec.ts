@@ -245,7 +245,10 @@ test.describe('community hubs — member', () => {
     test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the bottom Hubs sheet (phone)', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         await signInOnboardedMember(page, actorId(seed, testInfo));
-        await page.goto('/calendar');
+        // Not /calendar: on phones it smooth-scrolls to today after mount, so useScrollDirection slides the
+        // bottom bar off-screen and the trigger click times out "outside of the viewport". /players never
+        // scrolls itself (same fix as hubs-nav.smoke.spec.ts NAV_START).
+        await page.goto('/players');
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) {
             // ROK-1875: the actor is in Seed Crew, so the header Hubs item is a menu (not a plain link).
