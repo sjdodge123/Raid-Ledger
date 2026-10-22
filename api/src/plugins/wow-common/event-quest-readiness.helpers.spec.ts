@@ -1,4 +1,5 @@
 import { EventQuestReadinessSchema } from '@raid-ledger/contract';
+import * as chainHelpers from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import { selectEventQuests } from './event-forever-progress.helpers';
 import {
@@ -171,5 +172,21 @@ describe('buildQuestReadiness caps (ROK-1911)', () => {
     expect(big.quests).toHaveLength(200);
     expect(big.signups).toHaveLength(100);
     expect(big.signups[0]?.perQuest).toHaveLength(200);
+  });
+});
+
+describe('buildQuestReadiness prereqsMet without a chain position (ROK-1911)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is null (unknown), not true, when the quest is missing from its own chain', () => {
+    jest.spyOn(chainHelpers, 'walkChainInMemory').mockReturnValue([]);
+    const body = buildQuestReadiness({
+      quests: SET,
+      signups: [signup(1, C1)],
+      snapshots: new Map([[C1, snap([100], [200])]]),
+      manual: [],
+    });
+    expect(stateOf(body, 1, 300)?.prereqsMet).toBeNull();
+    expect(stateOf(body, 1, 200)?.prereqsMet).toBeNull();
   });
 });

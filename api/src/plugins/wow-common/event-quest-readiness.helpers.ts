@@ -89,7 +89,7 @@ function stateOf(
   return !row && unknown ? 'unknown' : 'missing';
 }
 
-/** Every pre-req step done → true; any unknowable step → null. */
+/** Every pre-req step done → true; any unknowable step (or no chain position) → null. */
 function prereqsMet(
   quest: DungeonQuestDto,
   lookup: Map<number, DungeonQuestDto>,
@@ -97,7 +97,9 @@ function prereqsMet(
 ): boolean | null {
   const chain = walkChainInMemory(quest, lookup);
   const idx = chain.findIndex((q) => q.questId === quest.questId);
-  const states = chain.slice(0, Math.max(idx, 0)).map((q) => doneFn(q.questId));
+  // A quest missing from its own chain has an unknowable pre-req set.
+  if (idx < 0) return null;
+  const states = chain.slice(0, idx).map((q) => doneFn(q.questId));
   if (states.some((st) => !st.done && st.unknown)) return null;
   return states.every((st) => st.done);
 }
@@ -152,6 +154,7 @@ export function buildQuestReadiness(
 ): EventQuestReadinessDto {
   const quests = input.quests.eventQuests
     .filter((q) => q.dungeonInstanceId !== null)
+    // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
     .slice(0, MAX_READINESS_QUESTS);
   const manual = groupManual(input.manual);
   return {

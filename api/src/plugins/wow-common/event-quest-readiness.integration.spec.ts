@@ -22,7 +22,17 @@ const FOREVER_SLUG = 'world-of-warcraft-forever';
 const CLASSIC_SLUG = 'world-of-warcraft-classic';
 const CAPTURED_AT = new Date('2026-10-01T12:00:00.000Z');
 const HOUR = 3600_000;
-type Who = 'ready' | 'ticker' | 'member' | 'outsider';
+type Who =
+  | 'ready'
+  | 'ticker'
+  | 'member'
+  | 'outsider'
+  | 'otherGuild'
+  | 'declined'
+  | 'roachedOut';
+type SignupStatus = NonNullable<
+  (typeof schema.eventSignups.$inferInsert)['status']
+>;
 
 let testApp: TestApp;
 let adminToken: string;
@@ -68,15 +78,15 @@ async function seedQuests(): Promise<void> {
   ]);
 }
 
-async function insertGuild(): Promise<number> {
+async function insertGuild(name = 'Quest Keepers'): Promise<number> {
   const [g] = nonEmpty(
     await testApp.db
       .insert(schema.guilds)
       .values({
         gameId: testApp.seed.game.id,
         region: 'us',
-        name: 'Quest Keepers',
-        nameKey: 'quest keepers',
+        name,
+        nameKey: name.toLowerCase(),
         source: 'addon_import',
         lastSnapshotAt: CAPTURED_AT,
       })
@@ -104,7 +114,11 @@ async function seedUser(who: Who): Promise<number> {
 }
 
 /** A guild member by roster guid (the WoW hub's membership rule). */
-async function makeGuildMember(userId: number, who: Who): Promise<void> {
+async function makeGuildMember(
+  userId: number,
+  who: Who,
+  inGuild: number = guildId,
+): Promise<void> {
   const guid = `Player-7-qr-${who}`;
   await testApp.db.insert(schema.characters).values({
     userId,
@@ -114,7 +128,7 @@ async function makeGuildMember(userId: number, who: Who): Promise<void> {
     isMain: true,
   });
   await testApp.db.insert(schema.guildMembers).values({
-    guildId,
+    guildId: inGuild,
     guid,
     characterName: `${who}main`,
     rankIndex: 3,
@@ -171,10 +185,15 @@ async function createEvent(slug: string): Promise<number> {
   return defined(event, slug).id;
 }
 
-async function signUp(eventId: number, userId: number, characterId: string) {
+async function signUp(
+  eventId: number,
+  userId: number,
+  characterId: string,
+  status: SignupStatus = 'signed_up',
+) {
   await testApp.db
     .insert(schema.eventSignups)
-    .values({ eventId, userId, characterId, status: 'signed_up' });
+    .values({ eventId, userId, characterId, status });
 }
 
 let charIds: { ready: string; ticker: string };
@@ -205,6 +224,21 @@ async function seedRoster(): Promise<void> {
   });
 }
 
+/** otherGuild: member of a different guild. declined/roachedOut: inactive Forever signups. */
+async function seedNonReaders(): Promise<void> {
+  const other = await insertGuild('Other Keepers');
+  await makeGuildMember(await seedUser('otherGuild'), 'otherGuild', other);
+  const inactive = [
+    ['declined', 'declined'],
+    ['roachedOut', 'roached_out'],
+  ] as const;
+  for (const [who, status] of inactive) {
+    const id = await seedUser(who);
+    const charId = await seedForeverChar(id, `${who}char`);
+    await signUp(foreverEvent, id, charId, status);
+  }
+}
+
 const readiness = (eventId: number, token: string) =>
   testApp.request
     .get(`/plugins/wow-classic/events/${eventId}/quest-readiness`)
@@ -221,6 +255,7 @@ beforeAll(async () => {
   await seedQuests();
   guildId = await insertGuild();
   await seedRoster();
+  await seedNonReaders();
 });
 
 afterAll(async () => {
@@ -321,6 +356,37 @@ describe('GET quest-readiness — access + D7 (ROK-1911)', () => {
     expect((await readiness(foreverEvent, users.outsider.token)).status).toBe(
       403,
     );
+  });
+
+  it('is 403 for a member of a different guild', async () => {
+    const res = await readiness(foreverEvent, users.otherGuild.token);
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty('signups');
+  });
+
+  it('is 403, not 404, for an outsider on a Classic event (access before D7)', async () => {
+    const res = await readiness(classicEvent, users.outsider.token);
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty('signups');
+  });
+
+  it('is 403 for a declined or roached-out (cancelled) signup', async () => {
+    for (const who of ['declined', 'roachedOut'] as const) {
+      const res = await readiness(foreverEvent, users[who].token);
+      expect(res.status).toBe(403);
+      expect(res.body).not.toHaveProperty('signups');
+    }
+  });
+
+  it('leaves declined and roached-out signups off the roster a member sees', async () => {
+    const res = await readiness(foreverEvent, users.member.token);
+    expect(res.status).toBe(200);
+    const ids = (res.body as Body).signups.map((s) => s.userId);
+    expect(ids).toEqual(
+      expect.arrayContaining([users.ready.id, users.ticker.id]),
+    );
+    expect(ids).not.toContain(users.declined.id);
+    expect(ids).not.toContain(users.roachedOut.id);
   });
 
   it('is 404 for a missing event', async () => {

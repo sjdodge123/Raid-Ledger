@@ -87,6 +87,7 @@ export async function loadReadinessRoster(
     .leftJoin(c, eq(c.id, s.characterId))
     .where(activeSignups(eventId))
     .orderBy(asc(s.id))
+    // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
     .limit(MAX_READINESS_SIGNUPS);
   return rows;
 }

@@ -226,35 +226,38 @@ describe('GET /plugins/wow/guilds/:id/raids — access', () => {
   });
 });
 
-describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
-  let body: Record<string, unknown> & {
-    upcoming: {
-      id: number;
-      signupCount: number;
-      viewerStatus: unknown;
-      contentInstances?: unknown;
-    }[];
-    recent: { id: number; signedUp: number; attended: number | null }[];
-    schedule: {
-      eventId: number;
-      recurrenceGroupId: string;
-      isNext: boolean;
-      frequency: unknown;
-    }[];
-    composition: {
-      event: { id: number };
-      roles: unknown[];
-      benched: unknown[];
-    } | null;
-    attendance: { rows: { userId: number; attended: number; of: number }[] };
-    nextRaid: { id: number } | null;
-  };
+type RaidsBody = Record<string, unknown> & {
+  upcoming: {
+    id: number;
+    signupCount: number;
+    viewerStatus: unknown;
+    contentInstances?: unknown;
+  }[];
+  recent: { id: number; signedUp: number; attended: number | null }[];
+  schedule: {
+    eventId: number;
+    recurrenceGroupId: string;
+    isNext: boolean;
+    frequency: unknown;
+  }[];
+  composition: {
+    event: { id: number };
+    roles: unknown[];
+    benched: unknown[];
+  } | null;
+  attendance: { rows: { userId: number; attended: number; of: number }[] };
+  nextRaid: { id: number } | null;
+};
+let body: RaidsBody;
 
-  beforeAll(async () => {
-    const res = await getRaids(guildId, users.member.token);
-    expect(res.status).toBe(200);
-    body = res.body as typeof body;
-  });
+async function loadBody(): Promise<void> {
+  const res = await getRaids(guildId, users.member.token);
+  expect(res.status).toBe(200);
+  body = res.body as RaidsBody;
+}
+
+describe('GET /plugins/wow/guilds/:id/raids — payload: upcoming + recent', () => {
+  beforeAll(loadBody);
 
   it('lists only live tagged upcoming events, soonest first; nextRaid = the first', () => {
     expect(body.upcoming.map((e) => e.id)).toEqual(
@@ -290,6 +293,10 @@ describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
       expect.objectContaining({ id: ids.done, signedUp: 3, attended: 2 }),
     ]);
   });
+});
+
+describe('GET /plugins/wow/guilds/:id/raids — payload: schedule, composition, attendance', () => {
+  beforeAll(loadBody);
 
   it('has one schedule row per series (its next night), isNext on the earliest', () => {
     expect(body.schedule).toEqual([
