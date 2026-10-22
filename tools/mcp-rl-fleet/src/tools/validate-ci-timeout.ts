@@ -27,7 +27,7 @@ const LONG_GATE_FLAGS = new Set(['--fleet', '--only-e2e', '--with-e2e']);
  * NOT narrowing: `--full` (a no-op alias of the default), `--no-e2e` (unit +
  * integration still run), `--no-coverage`, `--ci`, `--scope=*`.
  */
-const NARROWING_FLAGS = new Set(['--static', '--only-unit', '--only-integration']);
+const NARROWING_FLAGS = new Set(['--static', '--scoped', '--only-unit', '--only-integration']);
 
 /** Watchdog bounds task-start accepts from this tool. */
 const MIN_TIMEOUT_S = 60;
