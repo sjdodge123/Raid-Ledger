@@ -69,7 +69,9 @@ describe('auto-link skips disabled hub kinds (Codex r17 P2)', () => {
   afterEach(() => setActiveHubKindsSource(null));
 
   it('linkHubsForGame: a disabled link kind is never linked', async () => {
-    setActiveHubKindsSource(() => ['wow_guild', 'game_community']);
+    // Only a never-linked kind is live: game_community + game_server (the
+    // link kinds) are both off.
+    setActiveHubKindsSource(() => ['wow_guild']);
     await expect(linkHubsForGame(asDb(mock), 7, 'chan-1')).resolves.toBe(0);
     expect(mock.where).not.toHaveBeenCalled();
     expect(mock.insert).not.toHaveBeenCalled();
