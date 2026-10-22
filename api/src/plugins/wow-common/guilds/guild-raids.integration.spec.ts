@@ -93,6 +93,7 @@ interface Ev {
   rule?: string;
   slot?: unknown;
   cancelled?: boolean;
+  content?: unknown;
 }
 
 async function ev(e: Ev): Promise<number> {
@@ -110,6 +111,7 @@ async function ev(e: Ev): Promise<number> {
         recurrenceRule: e.rule ? { frequency: e.rule } : null,
         slotConfig: e.slot ?? null,
         cancelledAt: e.cancelled ? new Date() : null,
+        ...(e.content === undefined ? {} : { contentInstances: e.content }),
       })
       .returning(),
     e.key,
@@ -157,7 +159,12 @@ async function rosterOn(
 }
 
 async function seedEvents(): Promise<void> {
-  const soon = await ev({ key: 'soon', startH: 24, slot: { type: 'generic' } });
+  const soon = await ev({
+    key: 'soon',
+    startH: 24,
+    slot: { type: 'generic' },
+    content: [{ id: 63, name: 'Wailing Caverns', levels: '17-24' }],
+  });
   await signup(soon, 'member', { status: 'tentative' });
   // Departed mid-raid: no longer counted as signed up on a live card.
   await signup(soon, 'alt', { status: 'departed' });
@@ -221,7 +228,12 @@ describe('GET /plugins/wow/guilds/:id/raids — access', () => {
 
 describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
   let body: Record<string, unknown> & {
-    upcoming: { id: number; signupCount: number; viewerStatus: unknown }[];
+    upcoming: {
+      id: number;
+      signupCount: number;
+      viewerStatus: unknown;
+      contentInstances?: unknown;
+    }[];
     recent: { id: number; signedUp: number; attended: number | null }[];
     schedule: {
       eventId: number;
@@ -256,6 +268,15 @@ describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
     expect(soon).toMatchObject({ viewerStatus: 'tentative', signupCount: 1 });
     const a1 = body.upcoming.find((e) => e.id === ids.a1);
     expect(a1?.viewerStatus).toBeNull();
+  });
+
+  it('cards carry the event content instances as {id, name} (ROK-1911)', () => {
+    const soon = body.upcoming.find((e) => e.id === ids.soon);
+    expect(soon?.contentInstances).toEqual([
+      { id: 63, name: 'Wailing Caverns' },
+    ]);
+    const a1 = body.upcoming.find((e) => e.id === ids.a1);
+    expect(a1?.contentInstances).toEqual([]);
   });
 
   it('lists ended events in the 8-week window, newest first, attended null when unrecorded', () => {
