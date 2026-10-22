@@ -75,6 +75,15 @@ describe('buildServerHours (ROK-1876)', () => {
         ]);
     });
 
+    it('shows a same-day 24h window on a 25h fall-back day as one "from – until" span (review fix-delta NIT)', () => {
+        // 2026-11-01 is the US fall-back day: 12:30 AM EDT (04:30Z) → 11:30 PM EST (Nov 2 04:30Z) is 24h on one local day.
+        const fallBack: GameServerCalendarItemDto[] = [
+            { kind: 'window', ...mine, start: '2026-11-01T04:30:00Z', end: '2026-11-02T04:30:00Z', label: 'Long day', source: 'schedule' },
+        ];
+        const days = build({ items: fallBack, now: Date.parse('2026-10-31T12:00:00Z'), tz: 'America/New_York' }).days;
+        expect(days).toEqual([{ key: '2026-11-01', day: 'Sun', spans: '12:30 AM – 11:30 PM' }]);
+    });
+
     it('asks for seven days from now', () => {
         expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-14T12:00:00.000Z', to: '2026-10-21T12:00:00.000Z' });
     });

@@ -170,6 +170,16 @@ describe('TabRow — More menu keyboard model (§4.14)', () => {
         expect(screen.queryByRole('menu'), 'a hash change elsewhere closes the menu').toBeNull();
     });
 
+    it('stays closed when Forward returns to the tab it was opened on (review fix-delta MINOR)', () => {
+        mockWidths(330);
+        const { rerender } = render(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        fireEvent.click(screen.getByTestId('tab-row-more-trigger'));
+        rerender(<TabRow tabs={TABS} activeId="members" label="Hub sections" />);
+        rerender(<TabRow tabs={TABS} activeId="overview" label="Hub sections" />);
+        expect(screen.queryByRole('menu'), 'Back then Forward must not reopen the menu with no click').toBeNull();
+        expect(screen.getByTestId('tab-row-more-trigger')).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('an outside press closes it', () => {
         openMenu('overview');
         act(() => { fireEvent.pointerDown(document.body); });

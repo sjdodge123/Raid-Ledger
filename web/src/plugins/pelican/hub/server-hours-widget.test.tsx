@@ -11,6 +11,7 @@ import { createTestQueryClient } from '../../../test/render-helpers';
 import { useTimezoneStore } from '../../../stores/timezone-store';
 import { ServerHoursWidget } from './server-hours-widget';
 import { pelicanHubModule } from './register-hub';
+import { LazyServerHoursWidget } from './server-hours-widget-lazy';
 
 const SUMMARY = { id: 9, gameId: 3, kind: 'game_server' as const, name: 'Valheim — Main', region: 'server', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null };
 const H = 3_600_000;
@@ -83,6 +84,14 @@ describe('ServerHoursWidget (ROK-1876)', () => {
         await waitFor(() => expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · opens /));
         await act(async () => { await vi.advanceTimersByTimeAsync(3 * 60_000); });
         expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · closes /);
+    });
+
+    it('reserves the card while the hours chunk loads, so the Overview does not shift (review fix-delta MINOR)', async () => {
+        server.use(http.get(GAME_SERVERS_CALENDAR_URL, () => HttpResponse.json({ data: [] })));
+        render(<QueryClientProvider client={createTestQueryClient()}><LazyServerHoursWidget {...ctx(page())} /></QueryClientProvider>);
+        expect(screen.getByTestId('server-hub-hours-fallback'), 'the Suspense fallback is a placeholder card, not null').toHaveTextContent('Loading hours…');
+        expect(screen.getByRole('heading', { name: 'Server hours' })).toBeInTheDocument();
+        expect(await screen.findByText('No set hours')).toBeInTheDocument();
     });
 
     it('is an Overview widget before Recent arrivals, visible to every viewer of a server hub only', () => {
