@@ -37,6 +37,7 @@ import { AdHocNotificationService } from './services/ad-hoc-notification.service
 import { ChannelPresenceEmbedService } from './services/channel-presence-embed.service';
 import { ServerPresenceRosterService } from './services/server-presence-roster.service';
 import { DiscordEventListener } from './listeners/event.listener';
+import { AdHocSteamLinkListener } from './listeners/ad-hoc-steam-link.listener';
 import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
@@ -177,6 +178,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     ChannelPresenceEmbedService,
     ServerPresenceRosterService,
     DiscordEventListener,
+    AdHocSteamLinkListener,
     DiscordSyncListener,
     EmbedSyncQueueService,
     EmbedSyncProcessor,
