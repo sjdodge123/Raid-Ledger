@@ -38,7 +38,11 @@ const insights = {
       class: "Warrior",
       count: 2,
       members: [
-        { name: "Wren", characterId: 5, level: 23 },
+        {
+          name: "Wren",
+          characterId: "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c",
+          level: 23,
+        },
         { name: "Pariah", characterId: null, level: null },
       ],
     },
@@ -110,7 +114,7 @@ describe("WowRosterInsights", () => {
           name: "Alchemy",
           members: [
             {
-              characterId: 5,
+              characterId: "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c",
               name: "Wren",
               skill: 75,
               maxSkill: 150,
@@ -152,7 +156,7 @@ describe("EventQuestReadiness", () => {
       signups: [
         {
           userId: 1,
-          characterId: 5,
+          characterId: "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c",
           name: "Wren",
           perQuest: [
             { questId: 166, state: "done", prereqsMet: true, source: "addon" },
@@ -174,6 +178,22 @@ describe("EventQuestReadiness", () => {
           perQuest: [
             { questId: 1, state: "started", prereqsMet: null, source: null },
           ],
+        },
+      ],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("characterId is the characters table uuid (ROK-1911 review)", () => {
+  it("rejects an integer characterId", () => {
+    const r = WowRosterInsightsSchema.safeParse({
+      ...insights,
+      classes: [
+        {
+          class: "Mage",
+          count: 1,
+          members: [{ name: "x", characterId: 5, level: 1 }],
         },
       ],
     });
