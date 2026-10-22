@@ -74,8 +74,10 @@ interface MoreProps {
 }
 
 export function TabRowMore({ tabs, activeId, activeHidden }: MoreProps): JSX.Element {
-    // Open FOR an active tab: a hash change from outside (Back, an in-page link) closes it.
+    // Open FOR an active tab: a hash change from outside (Back, an in-page link) closes it, and the
+    // reset (set-state-during-render) stops Forward back to that tab from reopening it unclicked.
     const [openFor, setOpenFor] = useState<string | null>(null);
+    if (openFor !== null && openFor !== activeId) setOpenFor(null);
     const isOpen = openFor === activeId;
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);

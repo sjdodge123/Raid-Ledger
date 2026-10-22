@@ -90,11 +90,16 @@ function multiDaySpans(start: number, end: number, from: number, tz: string): Da
         const midnight = nextMidnight(cursor, tz);
         const key = dayKey(cursor, tz);
         const endsHere = end < midnight;
-        const span = key === startKey ? `from ${clock(start, tz)}` : endsHere ? `until ${clock(end, tz)}` : 'All day';
+        const span = key === startKey ? startDaySpan(start, end, endsHere, tz) : endsHere ? `until ${clock(end, tz)}` : 'All day';
         spans.push({ key, anchor: cursor, span });
         cursor = midnight;
     }
     return spans;
+}
+
+/** The start day's span; a 24h window inside one 25h DST day ends there too, so it gets both ends. */
+function startDaySpan(start: number, end: number, endsHere: boolean, tz: string): string {
+    return endsHere ? `${clock(start, tz)} – ${clock(end, tz)}` : `from ${clock(start, tz)}`;
 }
 
 function clock(ms: number, tz: string): string {
