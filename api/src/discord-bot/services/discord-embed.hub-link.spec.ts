@@ -123,3 +123,57 @@ describe('scheduling poll hub link (H6)', () => {
     expect(pollDescription({})).not.toContain('Hub');
   });
 });
+
+/**
+ * ROK-1895: an explicitly tagged visible hub is named in the body and the one
+ * Hub button targets it; a game-derived hub stays unnamed; no hub at all is
+ * byte-identical to the pre-1895 card.
+ */
+describe('event card tagged-hub line (ROK-1895)', () => {
+  const TAGGED: HubLink = {
+    ...HUB,
+    url: `${CLIENT_URL}/guilds/9`,
+    hubName: 'Iron Vale',
+  };
+
+  function render(ctx: EmbedContext) {
+    const { embed, row } = createFactory().buildEventEmbed(event, ctx);
+    const comps = (row?.toJSON().components ?? []) as {
+      label?: string;
+      url?: string;
+    }[];
+    return {
+      description: embed.data.description ?? '',
+      hubs: comps.filter((c) => c.label === 'Hub'),
+    };
+  }
+
+  it('a tagged hub: a "Hub: <name>" line and exactly one Hub button to it', () => {
+    const { description, hubs } = render({ ...context, hubLink: TAGGED });
+    expect(description).toContain('Hub: **Iron Vale**');
+    expect(hubs).toEqual([expect.objectContaining({ url: TAGGED.url })]);
+  });
+
+  it('a game-derived hub: the Hub button, but no name line', () => {
+    const { description, hubs } = render({ ...context, hubLink: HUB });
+    expect(description).not.toContain('Hub:');
+    expect(hubs).toHaveLength(1);
+  });
+
+  it('no hub (absent / null / hidden ⇒ unresolved) is byte-identical', () => {
+    const base = createFactory().buildEventEmbed(event, context);
+    const nulled = createFactory().buildEventEmbed(event, {
+      ...context,
+      hubLink: null,
+    });
+    expect(nulled.embed.toJSON()).toStrictEqual(base.embed.toJSON());
+    expect(nulled.row?.toJSON()).toStrictEqual(base.row?.toJSON());
+    expect(base.embed.data.description ?? '').not.toContain('Hub:');
+  });
+
+  it('escapes markdown and defuses mentions in the hub name', () => {
+    const named: HubLink = { ...TAGGED, hubName: '@everyone *x*' };
+    const { description } = render({ ...context, hubLink: named });
+    expect(description).toContain('Hub: **@\u200beveryone \\*x\\***');
+  });
+});

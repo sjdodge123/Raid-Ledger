@@ -44,6 +44,39 @@ describe('resolveGameHubLink (D15)', () => {
     expect(whereSql(mock)).toContain('"guilds"."id" = $');
   });
 
+  it('ROK-1895: a visible tagged hub carries its name; the game hub never does', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 3, name: 'Game Hub' },
+      { id: 9, name: 'Tagged Hub' },
+    ]);
+    const tagged = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(tagged).toStrictEqual({
+      url: `${BASE}/guilds/9`,
+      label: 'Hub',
+      hubName: 'Tagged Hub',
+    });
+    mock.where.mockResolvedValueOnce([{ id: 3, name: 'Game Hub' }]);
+    const derived = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      clientUrl: BASE,
+    });
+    expect(derived).toStrictEqual({ url: `${BASE}/guilds/3`, label: 'Hub' });
+  });
+
+  it('ROK-1895: a hidden tagged hub (filtered in SQL) falls back unnamed', async () => {
+    mock.where.mockResolvedValueOnce([{ id: 5, name: 'Game Hub' }]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toStrictEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+  });
+
   it("H2: untagged, the game's single visible hub resolves to it", async () => {
     mock.where.mockResolvedValueOnce([{ id: 5 }]);
     const link = await resolveGameHubLink(asDb(mock), {

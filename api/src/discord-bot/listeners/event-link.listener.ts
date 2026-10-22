@@ -233,12 +233,10 @@ export class EventLinkListener {
       this.settingsService.getBranding(),
       this.settingsService.getDefaultTimezone(),
     ]);
+    const rawUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
     return {
       communityName: branding.communityName,
-      clientUrl:
-        (process.env.CLIENT_URL || process.env.CORS_ORIGIN || null) === 'auto'
-          ? null
-          : process.env.CLIENT_URL || process.env.CORS_ORIGIN || null,
+      clientUrl: rawUrl === 'auto' ? null : rawUrl,
       timezone,
     };
   }
