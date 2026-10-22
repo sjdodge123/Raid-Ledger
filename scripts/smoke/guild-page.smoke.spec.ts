@@ -185,10 +185,13 @@ test('entry points: header Hubs menu row / drawer "Your hubs" reach the page; Pl
             await expect(row.getByTestId('hub-kind-chip'), 'a WoW guild row reads "Guild"').toContainText('Guild');
             await row.click();
         } else {
-            await page.getByRole('button', { name: 'Open menu' }).click();
-            const block = page.getByTestId('more-drawer-panel').getByTestId('drawer-your-guild');
-            await expect(block).toBeVisible();
-            await block.getByTestId('guild-entry-row').click();
+            // ROK-1890: the phone entry is the bottom bar's Hubs sheet (the More drawer lists no hubs).
+            const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+            await expect(trigger, 'a guild member gets the bottom Hubs sheet trigger').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const row = page.getByRole('dialog', { name: 'Your hubs' }).locator(`a[href="/guilds/${guild.guildId}"]`);
+            await expect(row, 'the Hubs sheet lists the guild').toBeVisible({ timeout: 15_000 });
+            await row.click();
         }
         await expect(page).toHaveURL(new RegExp(`/guilds/${guild.guildId}(?:[?#]|$)`));
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });

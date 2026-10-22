@@ -16,9 +16,6 @@ import { PhoneWeekCheckStep } from '../features/game-time/phone/PhoneWeekCheckSt
 import { PROFILE_HOURS } from '../features/game-time/phone/phone-week-check.helpers';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { PluginSlot } from '../../plugins';
-import { DrawerYourGuild } from './hub-nav/drawer-your-guild';
-import { DrawerHubsLink } from './hub-nav/hubs-nav-links';
-import { isHubsNavActive } from './hub-nav/use-hub-nav-active';
 
 interface MoreDrawerProps {
     isOpen: boolean;
@@ -245,11 +242,8 @@ function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
     s: Omit<ReturnType<typeof useMoreDrawerState>, 'trapRef'>; onClose: () => void;
     onFeedbackClick?: (() => void) | undefined; onOpenGameTime: () => void;
 }) {
-    const hubsActive = isHubsNavActive(s.location.pathname);
     return (
         <div className="flex-1 overflow-y-auto">
-            {s.isAuthenticated && <DrawerYourGuild onClose={onClose} />}
-            {s.isAuthenticated && <DrawerHubsLink onClose={onClose} active={hubsActive} />}
             {s.isAuthenticated && <PluginSlot name="nav:drawer-top" context={{ onClose }} />}
             {s.isAuthenticated && s.user && (
                 <UserProfileAccordion user={s.user} avatarUrl={s.avatarUrl} avatarError={s.accordion.avatarError}

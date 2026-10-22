@@ -42,6 +42,11 @@ scripts/*
 !scripts/scoped-gate-plan.mjs
 !scripts/scoped-gate-plan.spec.mjs
 !scripts/scoped-gate-changed-files.spec.mjs
+# Renumber a branch's migrations after origin/main + the index-collision guard.
+!scripts/renumber-branch-migrations.sh
+!scripts/renumber-branch-migrations.mjs
+!scripts/renumber-branch-migrations.spec.mjs
+!scripts/check-migration-index-collision.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs
