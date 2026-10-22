@@ -1667,6 +1667,13 @@
       "when": 1792517407172,
       "tag": "0238_hub_proposal_notification_types",
       "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1792644701916,
+      "tag": "0239_hub_invites",
+      "breakpoints": true
     }
   ]
 }

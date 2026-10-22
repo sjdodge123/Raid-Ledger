@@ -42,6 +42,8 @@ const row = (
   bannedAt: null,
   bannedBy: null,
   banReason: null,
+  joinSource: null,
+  inviteId: null,
   createdAt: AT,
   updatedAt: AT,
   ...over,
