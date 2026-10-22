@@ -7,7 +7,7 @@
 import type { CoreWidgetId, HubCtx, HubModule } from '../../hub-module';
 import { JoinLeavePill, ServerStatusPill } from './server-hero';
 import { SERVER_MEMBER_COLUMNS } from './server-member-columns';
-import { QuickPlayTab } from './quick-play-tab';
+import { LazyQuickPlayTab } from './quick-play-tab-lazy';
 import { serverHubGameTabs } from './server-hub-game-tabs';
 import { RecentArrivalsWidget } from './recent-arrivals-widget';
 import { LazyServerHoursWidget } from './server-hours-widget-lazy';
@@ -27,7 +27,7 @@ export function serverCoreWidgetVisible(id: CoreWidgetId, { page }: HubCtx): boo
 export const pelicanHubModule: HubModule = {
     kind: 'game_server',
     get tabs() {
-        return [{ id: 'quick-play', label: 'Quick Play', order: 10, component: QuickPlayTab }, ...serverHubGameTabs()];
+        return [{ id: 'quick-play', label: 'Quick Play', order: 10, component: LazyQuickPlayTab }, ...serverHubGameTabs()];
     },
     overviewWidgets: [
         // ROK-1876: every viewer (operator ruling 2026-10-21) — hours are not sensitive.
