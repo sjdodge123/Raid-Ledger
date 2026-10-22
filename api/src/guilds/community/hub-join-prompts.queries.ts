@@ -11,6 +11,7 @@ import type { DbOrTx } from './community-membership.queries';
 const p = schema.hubJoinPrompts;
 const g = schema.guilds;
 const m = schema.hubCommunityMembers;
+const e = schema.events;
 
 /** The hub an event is tagged to, with the fields the auto-membership rule reads. */
 export interface TaggedHub {
@@ -135,6 +136,8 @@ function openPromptOf(userId: number): SQL | undefined {
     eq(g.status, 'active'),
     isNull(g.hiddenAt),
     sql`NOT (${p.kind} = 'suggest' AND ${m.id} IS NOT NULL)`,
+    // `source_ref` has no FK: a signup prompt whose event was deleted is dropped.
+    sql`NOT (${p.source} = 'signup' AND ${e.id} IS NULL)`,
   );
 }
 
@@ -159,6 +162,7 @@ export async function listOpenPrompts(
     .from(p)
     .innerJoin(g, eq(g.id, p.guildId))
     .leftJoin(m, liveMemberOfPrompt())
+    .leftJoin(e, and(eq(p.source, 'signup'), eq(e.id, p.sourceRef)))
     .where(openPromptOf(userId))
     .orderBy(desc(p.createdAt), desc(p.id));
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));

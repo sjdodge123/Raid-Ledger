@@ -229,6 +229,21 @@ describe('signup → auto-membership (A1–A4)', () => {
   });
 });
 
+describe('prompts of deleted events (A5b)', () => {
+  it('A5b: a signup prompt whose event was deleted is left out of the list', async () => {
+    const [leader, u] = [await mkUser(), await mkUser()];
+    const hub = await mkHub(leader, 'suggest');
+    const event = await mkEvent(hub);
+    await call('post', `/events/${event}/signup`, u.token, {});
+    await waitFor(async () => {
+      expect((await promptRow(hub, u.id))?.kind).toBe('suggest');
+    });
+    await testApp.db.delete(schema.events).where(eq(schema.events.id, event));
+    const list = await call('get', '/users/me/hub-join-prompts', u.token);
+    expect(list.body).toEqual({ items: [] });
+  });
+});
+
 describe('prompts (A5–A6)', () => {
   it('A5: "Not now" sticks across a second signup, even after a switch to auto', async () => {
     const [leader, u] = [await mkUser(), await mkUser()];
