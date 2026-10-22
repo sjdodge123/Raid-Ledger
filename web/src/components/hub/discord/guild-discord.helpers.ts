@@ -67,3 +67,17 @@ export function mirrorBlurb(mirror: GuildDiscordMirrorDto | undefined): string {
 export function pickerHint(serverName: string | undefined): string {
     return `Channels in ${serverPhrase(serverName)} that Raid Ledger can read.`;
 }
+
+/**
+ * ROK-1428 — the game a lifecycle-linked channel was created for, when the
+ * mirror says the channel came from the automation (`channelSource: 'auto'`).
+ */
+export function managedGameName(mirror: GuildDiscordMirrorDto | undefined): string | null {
+    if (mirror?.state !== 'ok' || mirror.channelSource !== 'auto') return null;
+    return mirror.managedFor?.gameName ?? null;
+}
+
+/** Hint under the picker's select for an auto-linked channel. */
+export function managedChannelHint(gameName: string): string {
+    return `Created by Raid Ledger for ${gameName}. Pick another channel to override.`;
+}
