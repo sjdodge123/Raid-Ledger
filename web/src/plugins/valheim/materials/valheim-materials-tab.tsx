@@ -2,7 +2,7 @@
  * ROK-1853 — the hub Materials tab: scan age, toolbar, shared totals, the
  * viewer's personal chests, the warning banner, and the chest list with a
  * drill-down. Selecting a totals row narrows the chest list to the chests
- * holding that item; a new search clears the selection. Empty state while the server has sent no scan (`worldUid` null).
+ * holding that item (kept in the hash — ROK-1889); a new search clears the selection. Empty state while the server has sent no scan (`worldUid` null).
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { ValheimMaterialsResponse } from '@raid-ledger/contract';
@@ -13,6 +13,7 @@ import {
     useValheimMaterials,
 } from '../hooks/use-valheim-materials';
 import { ChestsSection } from './chests-section';
+import { useMaterialsItem } from './materials-hash';
 import {
     categoriesOf,
     DEFAULT_MATERIALS_FILTERS,
@@ -85,7 +86,8 @@ function MaterialsBody({
     setFilters,
 }: BodyProps): JSX.Element {
     const [sort, setSort] = useState<MaterialSort>(DEFAULT_SORT);
-    const [selected, setSelected] = useState<string | null>(null);
+    // ROK-1889: the open item is in the hash, so Back from a Map link restores it.
+    const [selected, setSelected] = useMaterialsItem();
     const chests = useValheimContainers(
         serverId,
         filters.includeVehicles,
@@ -96,7 +98,7 @@ function MaterialsBody({
         setFilters(next);
     };
     const onSelect = (prefab: string): void =>
-        setSelected((cur) => (cur === prefab ? null : prefab));
+        setSelected(selected === prefab ? null : prefab);
     const items = useMemo(
         () => ({ ...chests.data?.items, ...data.items }),
         [chests.data?.items, data.items],

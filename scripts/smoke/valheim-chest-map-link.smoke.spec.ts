@@ -115,6 +115,8 @@ test.describe("Valheim hub — chest → Map link (ROK-1889)", () => {
     await expect(focus).toContainText(/\d+\/\d+ slots · Wood ×\d+/);
 
     await page.goBack();
+    // The open item rides in the hash, so Back restores the drilled-in view.
+    await expect(page).toHaveURL(/#materials\?item=Wood$/);
     await expect(page.getByTestId("valheim-chests-holding")).toBeVisible();
   });
 
