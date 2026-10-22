@@ -7,7 +7,8 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { ArchiveBoxIcon } from '@heroicons/react/24/outline';
 import { formatCoords } from '../materials/materials.helpers';
 import type { ChestFocusTarget } from './chest-focus';
-import { chestFocusLabel, type ValheimChestFocus } from './use-chest-focus';
+import type { ValheimChestFocus } from '@raid-ledger/contract';
+import { chestFocusLabel } from './use-chest-focus';
 
 const CARD =
     'flex items-center gap-2 rounded-lg border border-edge bg-panel p-3 text-sm';

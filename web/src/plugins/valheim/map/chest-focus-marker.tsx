@@ -7,7 +7,8 @@ import type { JSX } from 'react';
 import type { ValheimMapGrid } from '@raid-ledger/contract';
 import { ArchiveBoxIcon } from '@heroicons/react/24/solid';
 import { chestMarkerPoint } from './chest-focus';
-import { chestFocusLabel, type ValheimChestFocus } from './use-chest-focus';
+import type { ValheimChestFocus } from '@raid-ledger/contract';
+import { chestFocusLabel } from './use-chest-focus';
 
 interface MarkerProps {
     grid: ValheimMapGrid;

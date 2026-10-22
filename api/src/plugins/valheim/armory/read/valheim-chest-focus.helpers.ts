@@ -30,17 +30,8 @@ export interface ChestFocusQuery {
   item: string | null;
 }
 
-export interface ValheimChestFocus {
-  prefab: string;
-  x: number;
-  y: number;
-  z: number;
-  privacy: 'shared' | 'personal';
-  vehicle: boolean;
-  slots: number;
-  usedSlots: number;
-  held: { prefab: string; count: number } | null;
-}
+export type { ValheimChestFocus } from '@raid-ledger/contract';
+import type { ValheimChestFocus } from '@raid-ledger/contract';
 
 /** The repository row (`held` is a bigint sum, or null without `item`). */
 export interface ChestFocusRow {

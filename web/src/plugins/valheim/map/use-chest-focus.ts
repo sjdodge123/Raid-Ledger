@@ -1,8 +1,7 @@
 /** ROK-1889 — read the Map tab's chest focus from the hash and resolve it server-side. */
 import { createContext, useEffect, useMemo, useSyncExternalStore } from 'react';
-import type { ValheimMapGrid } from '@raid-ledger/contract';
+import { ValheimChestFocusSchema, type ValheimChestFocus, type ValheimMapGrid } from '@raid-ledger/contract';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { z } from 'zod';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
 import { valheimMaterialsKeys } from '../hooks/use-valheim-materials';
@@ -18,19 +17,6 @@ import {
     type ChestFocusTarget,
 } from './chest-focus';
 
-/** `GET …/servers/:id/chest-focus` — display fields only, never an id. */
-export const ValheimChestFocusSchema = z.object({
-    prefab: z.string(),
-    x: z.number(),
-    y: z.number(),
-    z: z.number(),
-    privacy: z.enum(['shared', 'personal']),
-    vehicle: z.boolean(),
-    slots: z.number().int(),
-    usedSlots: z.number().int(),
-    held: z.object({ prefab: z.string(), count: z.number().int() }).nullable(),
-});
-export type ValheimChestFocus = z.infer<typeof ValheimChestFocusSchema>;
 
 /** The resolved focus for the map frame (null: none, loading, or not found). */
 export const ChestFocusContext = createContext<ValheimChestFocus | null>(null);
