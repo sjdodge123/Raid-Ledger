@@ -4,7 +4,7 @@
  * invite is stubbed by spying on the app's real `HubDiscordInviteService`
  * (a `jest.mock` never reaches the shared singleton app).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import {
   HubInviteJoinResponseSchema,
   HubInviteListSchema,
@@ -16,7 +16,10 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import * as schema from '../../../drizzle/schema';
 import { insertCommunityHub } from '../community-proposals.queries';
-import { refreshMemberCount } from '../community-membership.queries';
+import {
+  refreshMemberCount,
+  type DbOrTx,
+} from '../community-membership.queries';
 import { HubDiscordInviteService } from './hub-discord-invite.service';
 
 interface Who {
@@ -100,6 +103,47 @@ async function setInvite(id: number, patch: Partial<schema.HubInviteInsert>) {
     .update(schema.hubInvites)
     .set(patch)
     .where(eq(schema.hubInvites.id, id));
+}
+
+async function lockWaiters(): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(
+    sql`SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+  );
+  return rows[0]?.n ?? 0;
+}
+
+/** Poll until `n` sessions wait on a lock (bounded; fails loudly after). */
+async function untilLockWaiters(n: number): Promise<void> {
+  for (let k = 0; k < 200; k++) {
+    if ((await lockWaiters()) >= n) return;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  throw new Error(`never saw ${n} lock waiters`);
+}
+
+/**
+ * Hold the hub row's `FOR UPDATE` lock in a separate transaction until
+ * `release(during)` — `during` runs inside that transaction just before it
+ * commits. Makes a lock-ordering race deterministic: start the contenders,
+ * wait until they queue on the hub lock, then let go.
+ */
+async function holdHub(hubId: number) {
+  let release: (during?: (tx: DbOrTx) => Promise<unknown>) => void = () =>
+    undefined;
+  const gate = new Promise<((tx: DbOrTx) => Promise<unknown>) | undefined>(
+    (r) => (release = r),
+  );
+  let held: () => void = () => undefined;
+  const isHeld = new Promise<void>((r) => (held = r));
+  const done = testApp.db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM guilds WHERE id = ${hubId} FOR UPDATE`);
+    held();
+    const during = await gate;
+    if (during) await during(tx);
+  });
+  await isHeld;
+  return { release, done };
 }
 
 async function memberRow(hubId: number, userId: number) {
@@ -367,10 +411,15 @@ describe('I6, I7, I9 refused redeems', () => {
     const [leader, a, b] = [await mkUser(), await mkUser(), await mkUser()];
     const hub = await mkHub(leader);
     const inv = await mkInvite(hub, leader, { maxUses: 1 });
-    const res = await Promise.all([
-      call('post', `/hubs/invites/${inv.token}/join`, a),
-      call('post', `/hubs/invites/${inv.token}/join`, b),
+    const hold = await holdHub(hub);
+    const racing = Promise.all([
+      call('post', `/hubs/invites/${inv.token}/join`, a).then((r) => r),
+      call('post', `/hubs/invites/${inv.token}/join`, b).then((r) => r),
     ]);
+    await untilLockWaiters(2); // both past the pre-checks, queued on the hub
+    hold.release();
+    await hold.done;
+    const res = await racing;
     expect(res.map((r) => r.status).sort()).toEqual([200, 410]);
     expect((await inviteRow(inv.id)).useCount).toBe(1);
   });
@@ -379,10 +428,16 @@ describe('I6, I7, I9 refused redeems', () => {
     const [leader, maker, u] = [await mkUser(), await mkUser(), await mkUser()];
     const hub = await mkHub(leader, [maker]);
     const inv = await mkInvite(hub, maker);
-    const [redeem, ban] = await Promise.all([
-      call('post', `/hubs/invites/${inv.token}/join`, u),
-      call('put', `/hubs/${hub}/bans/${maker.id}`, leader, {}),
+    const hold = await holdHub(hub);
+    const racing = Promise.all([
+      call('post', `/hubs/invites/${inv.token}/join`, u).then((r) => r),
+      call('put', `/hubs/${hub}/bans/${maker.id}`, leader, {}).then((r) => r),
     ]);
+    // Both queue on the hub lock; neither may hold an invite lock yet.
+    await untilLockWaiters(2);
+    hold.release();
+    await hold.done;
+    const [redeem, ban] = await racing;
     // A deadlock aborts one side with a 500; either serial order is fine.
     expect([200, 410]).toContain(redeem.status);
     expect([200, 204]).toContain(ban.status);
@@ -431,4 +486,26 @@ describe('I8 unavailable hubs', () => {
       ).toBe(404);
     },
   );
+
+  it('a hub hidden while the redeem waits on its lock → 404 (re-check under the lock)', async () => {
+    const [leader, u] = [await mkUser(), await mkUser()];
+    const hub = await mkHub(leader);
+    const inv = await mkInvite(hub, leader);
+    const hold = await holdHub(hub);
+    // The pre-check sees an available hub; the redeem then blocks on the lock.
+    const redeem = call('post', `/hubs/invites/${inv.token}/join`, u).then(
+      (r) => r,
+    );
+    await untilLockWaiters(1);
+    hold.release((tx) =>
+      tx
+        .update(schema.guilds)
+        .set({ hiddenAt: new Date() })
+        .where(eq(schema.guilds.id, hub)),
+    );
+    await hold.done;
+    expect((await redeem).status).toBe(404);
+    expect(await memberRow(hub, u.id)).toBeNull();
+    expect((await inviteRow(inv.id)).useCount).toBe(0);
+  });
 });
