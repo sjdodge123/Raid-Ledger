@@ -3514,3 +3514,12 @@ same day (#1278, #1279, #1280).
 ### 2026-10-21 — rok-1894-valheim-upgrade-formula (surfaced during `npx tsc --noEmit -p api/tsconfig.json`)
 
 - **low** `api/src/plugins/pelican/pelican-sync.service.spec.ts:73` and `api/src/plugins/pelican/pelican-schedule-sync.service.spec.ts:96`: `error TS2345: Argument of type '(msg: unknown) => void' is not assignable to parameter of type '(...args: [message: any, ...optionalParams: any[]] | …) => void'`, with `Types of parameters 'msg' and 'args' are incompatible`. Why I think it's pre-existing: the branch touches only `api/src/plugins/valheim/armory/read/*` and the valheim-link contract docs, and the same tsc run shows the documented sentry and ad-hoc-reaper spec errors. Suggested: type the logger spy callback as `(...args: unknown[]) => void`, or spy with `jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)`.
+
+### 2026-10-22 — Lead session ag (review MINORs from ROK-1895, ROK-1897, ROK-1890, #1722 renumber)
+
+- **[low]** ROK-1895 — hiding/archiving a hub after an event card was posted doesn't re-sync the card; it keeps the hub name/button until its next edit (the button had this gap since #1721). Suggested: on hub hide/archive, enqueue an embed re-sync for upcoming events tagged to it.
+- **[low]** `api/src/discord-bot/listeners/event-link.listener.ts:183` — the PUG invite unfurl gets no hub context (other unfurls do since ROK-1895).
+- **[nit]** `api/src/discord-bot/listeners/signup-reply-embed.helpers.ts:30` — a signup interaction looks up the hub twice (reply card + the listener's own card refresh). Suggested: reuse the listener's context.
+- **[nit]** `packages/contract/valheim-link/v1/schema.json` `$id` still points at raid.gamernight.net (ROK-1897 moved only LedgerLink's).
+- **[nit]** `nav:drawer-top` slot has no registrations after ROK-1890 — remove the slot or keep it documented.
+- **[low]** `scripts/renumber-branch-migrations.mjs` (once merged) — renaming a branch migration leaves specs that read it by filename stale (#1722: `hub-posts.backfill.integration.spec.ts` hardcoded `0240_…`, failed after renumber to 0246). Suggested: the tool greps `api/src` for the old filenames and prints them; specs should locate migrations by suffix (as #1722 now does). Existing number-pinned readers: `games-dedup-merge`, `steam-app-id-source`, `game-time-absence-span` integration specs.
