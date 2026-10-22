@@ -664,3 +664,21 @@ describe('DesignSystemPage — ROK-1868 markdown (Forms, V13)', () => {
         expect(within(forms).getByTestId('ds-md-editor')).toHaveAttribute('data-md-editor');
     });
 });
+
+describe('DesignSystemPage — hub row bits demo (ROK-1883)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('mounts the real HubViewerAction in View / Join / Joined / Leader / Banned, plus the Hidden chip', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-hub-row-bits');
+        expect(within(demo).getByRole('link', { name: 'View Valheim Dedicated' })).toHaveAttribute('href', '/guilds/310');
+        expect(within(demo).getByRole('button', { name: 'Join Tavern Regulars' })).toBeEnabled();
+        expect(within(demo).getByText('Joined')).toHaveAttribute('data-tone', 'success');
+        expect(within(demo).getByText('Leader')).toHaveAttribute('data-tone', 'success');
+        expect(within(demo).getByText('Banned')).toHaveAttribute('data-tone', 'danger');
+        expect(within(demo).getByText('Hidden')).toHaveAttribute('data-tone', 'warning');
+    });
+});
