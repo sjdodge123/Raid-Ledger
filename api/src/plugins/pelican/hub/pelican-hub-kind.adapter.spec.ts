@@ -57,7 +57,7 @@ describe('PelicanHubKindAdapter.raids — events tagged to a server hub', () => 
     nextRaid: null,
   };
 
-  it('returns the hub\'s tagged events from the shared loader, not a hard-coded empty list', async () => {
+  it("returns the hub's tagged events from the shared loader, not a hard-coded empty list", async () => {
     db.limit.mockResolvedValueOnce([{ id: 1 }]);
     jest.mocked(loadCommunityHubEvents).mockResolvedValueOnce(events);
     await expect(adapter.raids(actor, 1)).resolves.toBe(events);
