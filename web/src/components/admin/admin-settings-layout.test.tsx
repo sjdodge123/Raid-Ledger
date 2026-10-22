@@ -16,9 +16,13 @@ vi.mock('../../hooks/use-auth', () => ({
     isAdmin: (user: { role?: string } | null) => user?.role === 'admin',
     isOperatorOrAdmin: (user: { role?: string } | null) => user?.role === 'admin' || user?.role === 'operator',
 }));
-vi.mock('./admin-sidebar', () => ({
+// The full sidebar fires admin-only status queries; the operator sidebar is real.
+vi.mock('./admin-sidebar', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./admin-sidebar')>()),
     AdminSidebar: () => <div data-testid="full-admin-sidebar" />,
-    SidebarNavItem: ({ item }: { item: { to: string; label: string } }) => <a href={item.to}>{item.label}</a>,
+}));
+vi.mock('../../hooks/use-seen-admin-sections', () => ({
+    useSeenAdminSections: () => ({ isNew: () => false, markSeen: () => undefined }),
 }));
 vi.mock('./UpdateBanner', () => ({ UpdateBanner: () => null }));
 vi.mock('./BuildFixesNotice', () => ({ BuildFixesNotice: () => null }));
