@@ -1,6 +1,7 @@
 /**
  * Types for scheduling poll Discord embeds (ROK-1014).
  */
+import type { HubLink } from '../embeds/hub-link-button.helpers';
 
 /** Slot data for a scheduling poll embed. */
 export interface SchedulingPollSlot {
@@ -52,4 +53,6 @@ export interface SchedulingPollEmbedData {
   cancelReason?: string | null;
   slots: SchedulingPollSlot[];
   uniqueVoterCount: number;
+  /** ROK-1872 (D16): the game's hub link; absent ⇒ no `Hub` link. */
+  hubLink?: HubLink | null;
 }

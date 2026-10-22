@@ -3,14 +3,100 @@ import {
   uuid,
   varchar,
   integer,
+  boolean,
   jsonb,
   timestamp,
   uniqueIndex,
   index,
+  check,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { ChannelBindingConfig } from '@raid-ledger/contract';
+import type {
+  BindingLifecycleState,
+  ChannelBindingConfig,
+} from '@raid-ledger/contract';
 import { games } from './games';
+
+/** An overwrite bit's tri-state before archive changed it. */
+export type OverwritePriorState = 'allow' | 'deny' | 'inherit';
+
+/** The bits an archive locks (thread bits: Codex r4b — read-only means threads too). */
+type ArchivedOverwriteFlag =
+  | 'SendMessages'
+  | 'SendMessagesInThreads'
+  | 'CreatePublicThreads'
+  | 'CreatePrivateThreads'
+  | 'ViewChannel';
+
+/**
+ * One overwrite bit an archive changed, with the state to restore.
+ * `everyone` = the `@everyone` role overwrite; `bot` = the bot's member
+ * overwrite; `role` / `member` (Codex r3) = any other overwrite whose explicit
+ * Allow the archive turned into a Deny, keyed by its snowflake `id`.
+ */
+export type ArchivedOverwriteChange =
+  | {
+      target: 'everyone' | 'bot';
+      flag: ArchivedOverwriteFlag;
+      prior: OverwritePriorState;
+    }
+  | {
+      target: 'role' | 'member';
+      id: string;
+      flag: ArchivedOverwriteFlag;
+      prior: OverwritePriorState;
+    };
+
+/**
+ * ROK-1428 D6, v1 (pre Codex r2): booleans for the bits an archive ADDED;
+ * unarchive resets each to inherit. Still read for rows written before v2.
+ */
+export interface ArchivedOverwritesV1 {
+  /** `@everyone` SendMessages deny. */
+  everyoneSend: boolean;
+  /** `@everyone` ViewChannel deny (hideOnArchive). */
+  everyoneView: boolean;
+  /** The bot's member ViewChannel allow (granted with the hide). */
+  botView: boolean;
+}
+
+/** v2: every bit the archive changed with its prior state — unarchive restores exactly these. */
+export interface ArchivedOverwritesV2 {
+  changes: ArchivedOverwriteChange[];
+}
+
+/** The `archived_overwrites` record (v2 written; v1 still read). */
+export type ArchivedOverwrites = ArchivedOverwritesV1 | ArchivedOverwritesV2;
+
+/** Columns the ROK-1429 lifecycle constraints reference. */
+interface LifecycleColumns {
+  guildId: AnyPgColumn;
+  gameId: AnyPgColumn;
+  recurrenceGroupId: AnyPgColumn;
+  lifecycleState: AnyPgColumn;
+  autoManaged: AnyPgColumn;
+}
+
+/**
+ * ROK-1429: lifecycle state CHECK, the rule that only an auto-managed row can
+ * be archived, and the reconciler's partial lookup index.
+ */
+function lifecycleConstraints(table: LifecycleColumns) {
+  return [
+    check(
+      'channel_bindings_lifecycle_state_check',
+      sql`${table.lifecycleState} IN ('active', 'archived')`,
+    ),
+    check(
+      'channel_bindings_archived_auto_check',
+      sql`${table.lifecycleState} = 'active' OR ${table.autoManaged}`,
+    ),
+    index('idx_channel_bindings_lifecycle')
+      .on(table.guildId, table.gameId, table.lifecycleState)
+      .where(sql`${table.autoManaged} AND ${table.recurrenceGroupId} IS NULL`),
+  ];
+}
 
 /**
  * Channel Bindings - Maps Discord channels to games/behaviors.
@@ -35,6 +121,22 @@ export const channelBindings = pgTable(
     /** ROK-435: Optional recurrence group ID to bind a specific event series to this channel. */
     recurrenceGroupId: uuid('recurrence_group_id'),
     config: jsonb('config').default({}).$type<ChannelBindingConfig>(),
+    /** ROK-1429: 'active' | 'archived' — only an auto-managed binding archives. */
+    lifecycleState: varchar('lifecycle_state', { length: 10 })
+      .$type<BindingLifecycleState>()
+      .default('active')
+      .notNull(),
+    /** ROK-1429: created by the lifecycle reconciler (manual bindings are never touched). */
+    autoManaged: boolean('auto_managed').default(false).notNull(),
+    /** ROK-1429: an admin pin keeps the channel active regardless of activity. */
+    pinned: boolean('pinned').default(false).notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /** ROK-1429 (D6): the category the channel sat in before archive, for unarchive. */
+    restoreParentId: varchar('restore_parent_id', { length: 32 }),
+    /** ROK-1428 D6: the bits archive added; null when not archived. */
+    archivedOverwrites: jsonb(
+      'archived_overwrites',
+    ).$type<ArchivedOverwrites>(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -72,5 +174,6 @@ export const channelBindings = pgTable(
       .where(
         sql`${table.recurrenceGroupId} IS NULL AND ${table.gameId} IS NULL`,
       ),
+    ...lifecycleConstraints(table),
   ],
 );
