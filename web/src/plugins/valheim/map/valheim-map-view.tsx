@@ -217,33 +217,46 @@ interface MapFrameProps {
     status: MapStatusProps;
 }
 
+/** The pannable texture: map layers, plus the ROK-1889 chest marker. */
+interface FrameViewportProps {
+    layers: LayerProps;
+    onCommands: (c: MapViewportCommands) => void;
+}
+
+function FrameViewport({ layers, onCommands }: FrameViewportProps) {
+    const chest = useContext(ChestFocusContext);
+    const grid = layers.meta.grid;
+    return (
+        <MapViewport
+            contentSize={grid.textureSize}
+            label="Valheim map"
+            onCommands={onCommands}
+            className="absolute inset-0"
+        >
+            {(vp) => (
+                <>
+                    <MapLayers layers={layers} scale={vp.scale} />
+                    {chest && (
+                        <ChestFocusMarker
+                            grid={grid}
+                            scale={vp.scale}
+                            chest={chest}
+                        />
+                    )}
+                </>
+            )}
+        </MapViewport>
+    );
+}
+
 /** Viewport + status chip + overlay controls in the sized frame (D10). */
 function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
     const chest = useContext(ChestFocusContext);
-    const grid = layers.meta.grid;
-    useCentreOnChest(commands, grid, chest);
+    useCentreOnChest(commands, layers.meta.grid, chest);
     return (
         <div className={className ? `${FRAME} ${className}` : FRAME}>
-            <MapViewport
-                contentSize={layers.meta.grid.textureSize}
-                label="Valheim map"
-                onCommands={setCommands}
-                className="absolute inset-0"
-            >
-                {(vp) => (
-                    <>
-                        <MapLayers layers={layers} scale={vp.scale} />
-                        {chest && (
-                            <ChestFocusMarker
-                                grid={grid}
-                                scale={vp.scale}
-                                chest={chest}
-                            />
-                        )}
-                    </>
-                )}
-            </MapViewport>
+            <FrameViewport layers={layers} onCommands={setCommands} />
             <MapStatus {...status} />
             <MapLegend />
             <div className="absolute right-2 top-2 z-10">
