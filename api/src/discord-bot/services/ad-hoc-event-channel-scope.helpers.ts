@@ -6,10 +6,11 @@
  * creating its own), so the event keeps the monitor's `channel_binding_id`.
  * Every lookup that asks "which events belong to binding X" must therefore
  * accept any binding on X's Discord channel, or the lobby's card loses its
- * live link and its recap. A Quick Play born on ANOTHER channel never
- * matches (ROK-1800 rule).
+ * live link and its recap. The voice SPAWN target is not channel-scoped
+ * (ROK-1888: one live Quick Play per game across all channels — see
+ * `findVoiceSpawnTarget`); this helper scopes the per-binding card lookups.
  */
-import { isNull, or, sql, type SQL } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 
 /**
@@ -22,15 +23,4 @@ export function onBindingChannel(bindingId: string): SQL {
       SELECT cb.id FROM channel_bindings cb
       JOIN channel_bindings me ON me.channel_id = cb.channel_id
       WHERE me.id = ${bindingId})`;
-}
-
-/**
- * Events a voice spawn from `bindingId` may reuse: server-born (no creating
- * binding) or born on the spawning binding's Discord channel.
- */
-export function bornOnSpawningChannel(bindingId: string): SQL | undefined {
-  return or(
-    isNull(schema.events.channelBindingId),
-    onBindingChannel(bindingId),
-  );
 }
