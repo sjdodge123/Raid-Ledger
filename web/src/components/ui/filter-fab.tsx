@@ -45,6 +45,7 @@ export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = fal
             aria-expanded={isOpen}
             aria-describedby={activeCount > 0 ? countId : undefined}
             data-testid="filter-fab"
+            data-filter-fab=""
             className={FAB_CLASS}
             style={{ zIndex: Z_INDEX.FAB, bottom }}
         >

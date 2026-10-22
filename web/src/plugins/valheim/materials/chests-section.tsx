@@ -21,6 +21,8 @@ interface ChestsSectionProps {
     chests: UseQueryResult<ValheimContainerListResponse>;
     /** The selected item's display name, or null for every chest. */
     holdingLabel: string | null;
+    /** ROK-1889: the selected item's prefab, for the chest map links. */
+    holding?: string | null;
     onClear: () => void;
     ctx: ItemIconContext;
 }
@@ -53,10 +55,12 @@ function ChestsBody({
     chests,
     ctx,
     onOpen,
+    holding,
 }: {
     chests: ChestsSectionProps['chests'];
     ctx: ItemIconContext;
     onOpen: (chest: ValheimContainerSummary) => void;
+    holding: string | null;
 }): JSX.Element {
     // Placeholder rows belong to the previous filter (another item, or the
     // vehicles toggle): never present them as the answer to this one.
@@ -76,6 +80,7 @@ function ChestsBody({
             containers={chests.data.containers}
             ctx={ctx}
             onOpen={onOpen}
+            holding={holding}
         />
     );
 }
@@ -85,6 +90,7 @@ export function ChestsSection({
     includeVehicles,
     chests,
     holdingLabel,
+    holding = null,
     onClear,
     ctx,
 }: ChestsSectionProps): JSX.Element {
@@ -100,7 +106,12 @@ export function ChestsSection({
             {holdingLabel !== null && (
                 <HoldingLine label={holdingLabel} onClear={onClear} />
             )}
-            <ChestsBody chests={chests} ctx={ctx} onOpen={setOpen} />
+            <ChestsBody
+                chests={chests}
+                ctx={ctx}
+                onOpen={setOpen}
+                holding={holding}
+            />
             <ChestDetail
                 serverId={serverId}
                 includeVehicles={includeVehicles}

@@ -223,3 +223,24 @@ export const ValheimClaimEventListResponseSchema = z
 export type ValheimClaimEventListResponse = z.infer<
   typeof ValheimClaimEventListResponseSchema
 >;
+
+/**
+ * ROK-1889 — `GET …/servers/:id/chest-focus`: one visible chest found by
+ * prefab + position (the Map tab's `focus=chest:<prefab>@x,z` deep link).
+ * Display fields only — never a row id or creatorPlayerId; a hidden personal
+ * chest is a 404 exactly like a missing one.
+ */
+export const ValheimChestFocusSchema = z
+  .object({
+    prefab: z.string(),
+    x: z.number(),
+    y: z.number(),
+    z: z.number(),
+    privacy: z.enum(['shared', 'personal']),
+    vehicle: z.boolean(),
+    slots: z.number().int(),
+    usedSlots: z.number().int(),
+    held: z.object({ prefab: z.string(), count: z.number().int() }).strict().nullable(),
+  })
+  .strict();
+export type ValheimChestFocus = z.infer<typeof ValheimChestFocusSchema>;
