@@ -62,6 +62,12 @@ function minimalHubTitle(event: CalendarEvent, tier: Tier): string | undefined {
     return tier === 'minimal' && suffix ? `${event.title}${suffix}` : undefined;
 }
 
+/** The minimal tier shows no hub line; screen readers still get it (a `title` alone is unreliable). */
+function MinimalHubSrText({ event }: { event: CalendarEvent }) {
+    const suffix = hubSuffixText(event.resource?.hub);
+    return suffix ? <span className="sr-only" data-testid="week-minimal-hub">{suffix}</span> : null;
+}
+
 function SignupBadge({ count }: { count: number }) {
     return (
         <span className="week-event-signup-badge" data-testid="signup-badge">
@@ -92,6 +98,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
             backgroundSize: 'cover', backgroundPosition: 'center', borderLeft: `3px solid ${colors.border}`,
         }}>
             <WeekEventHeader title={event.title} tier={tier} overlaps={overlaps} isSeries={!!event.resource?.recurrenceGroupId} />
+            {tier === 'minimal' && <MinimalHubSrText event={event} />}
             <div className="week-event-details">
                 <WeekEventGameLine event={event} tier={tier} />
                 <span className="week-event-time">{format(event.start, 'h:mm a')}{event.end ? ` - ${format(event.end, 'h:mm a')}` : ''}</span>

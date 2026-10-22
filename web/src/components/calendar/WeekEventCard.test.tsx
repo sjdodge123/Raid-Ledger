@@ -206,11 +206,13 @@ describe('WeekEventCard — hub suffix (ROK-1893 V3)', () => {
         const { container } = renderCard(eventWithDuration(120, { hub }));
         expect(screen.queryByTestId('event-hub-label')).not.toBeInTheDocument();
         expect(container.querySelector('.week-event-block')?.getAttribute('title')).toBe('Test Raid · BG3 Friends');
+        expect(screen.getByTestId('week-minimal-hub')).toHaveTextContent('· BG3 Friends');
     });
 
     it('an untagged event (hub null) shows no suffix and no title', () => {
         const { container } = renderCard(eventWithDuration(180, { hub: null }));
         expect(container.querySelector('.week-event-game')?.textContent).toBe('World of Warcraft');
         expect(container.querySelector('.week-event-block')?.hasAttribute('title')).toBe(false);
+        expect(screen.queryByTestId('week-minimal-hub')).not.toBeInTheDocument();
     });
 });
