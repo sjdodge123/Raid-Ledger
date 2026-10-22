@@ -148,6 +148,16 @@ export const HubJoinPromptSchema = z
 export type HubJoinPrompt = z.infer<typeof HubJoinPromptSchema>;
 
 export const HubJoinPromptListSchema = z
-  .object({ items: z.array(HubJoinPromptSchema) })
+  .object({
+    items: z.array(HubJoinPromptSchema),
+    /**
+     * Whether the viewer passes the Join rule's Discord check (linked account,
+     * seen in the community server, not deactivated). False ⇒ a Suggest card
+     * shows "Join the Discord server first" instead of a Join that would fail.
+     */
+    inDiscordServer: z.boolean(),
+    /** Bot-made server invite for a viewer outside the server; null when not needed or unavailable. */
+    discordServerInviteUrl: z.string().nullable(),
+  })
   .strict();
 export type HubJoinPromptList = z.infer<typeof HubJoinPromptListSchema>;
