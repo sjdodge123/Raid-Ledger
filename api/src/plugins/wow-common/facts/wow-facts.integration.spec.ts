@@ -6,7 +6,6 @@
  */
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import * as schema from '../../../drizzle/schema';
 import { WowFactsService } from './wow-facts.service';
 
@@ -134,10 +133,6 @@ beforeAll(async () => {
     'Mage',
   );
   await seedLinkedCharacter();
-});
-
-afterAll(async () => {
-  testApp.seed = await truncateAllTables(testApp.db);
 });
 
 describe('WowFactsService.resolveForGuild (real DB)', () => {
