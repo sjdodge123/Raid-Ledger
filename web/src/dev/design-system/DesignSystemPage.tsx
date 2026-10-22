@@ -19,6 +19,7 @@ import { WeekStripSection } from './week-strip-section';
 import { GroupMarksSection } from './group-marks-section';
 import { CalendarBusySection } from './calendar-busy-section';
 import { CalendarLayerSection } from './calendar-layer-section';
+import { CalendarHubSection } from './calendar-hub-section';
 import { MapViewportSection } from './map-viewport-section';
 import { FormsSection } from './forms-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
@@ -37,6 +38,7 @@ const NAV = [
     { id: 'week-strip', label: 'Week strip' },
     { id: 'group-marks', label: 'Group marks' },
     { id: 'calendar-busy', label: 'Own busy band' },
+    { id: 'calendar-hub', label: 'Hub suffix' },
     { id: 'map-viewport', label: 'Map viewport' },
 ];
 
@@ -83,6 +85,7 @@ function Sections(): JSX.Element {
             <GroupMarksSection />
             <CalendarBusySection />
             <CalendarLayerSection />
+            <CalendarHubSection />
             <MapViewportSection />
         </>
     );
