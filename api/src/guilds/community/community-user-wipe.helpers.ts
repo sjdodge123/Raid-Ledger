@@ -4,10 +4,12 @@ import {
   refreshMemberCount,
   type DbOrTx,
 } from './community-membership.queries';
+import { revokeUserInvites } from './invites/hub-invites.queries';
 
 /**
  * ROK-1870 review — the community-hub part of a user wipe (ban+wipe and hard
- * delete). Deletes the user's still-`proposed` hubs (else `proposed_by` goes
+ * delete). Revokes every invite link they made (ROK-1893 — a SET NULL maker
+ * would otherwise leave the link open), deletes the user's still-`proposed` hubs (else `proposed_by` goes
  * NULL and the row reserves its name, invisible in the queue), deletes their
  * membership rows and recounts `member_count` on every hub they were in.
  */
@@ -26,6 +28,7 @@ export async function wipeCommunityHubData(
         eq(g.proposedBy, userId),
       ),
     );
+  await revokeUserInvites(tx, userId);
   const left = await tx
     .delete(m)
     .where(eq(m.userId, userId))

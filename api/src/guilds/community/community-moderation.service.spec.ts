@@ -26,6 +26,7 @@ jest.mock('./community-hub.reads', () => ({
   liveCommunityRole: jest.fn(),
 }));
 jest.mock('./community-proposals.users');
+jest.mock('./invites/hub-invites.queries');
 
 const AT = new Date('2026-10-01T00:00:00Z');
 const leader: GuildActor = { id: 1, role: 'member' };
