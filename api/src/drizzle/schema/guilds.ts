@@ -91,8 +91,8 @@ export const guilds = pgTable(
      * `off` nothing, `suggest` asks them to join, `auto` joins them and tells
      * them. Community hubs only (`guilds_auto_membership_kind_check`). The DB
      * default keeps existing hubs `off`.
-     * TODO(ROK-1893 P1 API lane): new community hubs are inserted with
-     * `suggest` explicitly by the create/propose service, not via this default.
+     * New community hubs are inserted with `suggest` explicitly by
+     * `insertCommunityHub` (community-proposals.queries.ts), not via this default.
      */
     autoMembership: varchar('auto_membership', {
       length: 8,

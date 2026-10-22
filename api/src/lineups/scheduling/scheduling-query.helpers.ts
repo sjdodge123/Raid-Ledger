@@ -149,6 +149,7 @@ export function insertScheduleVote(
   stance: ScheduleVoteStance = 'yes',
   source: ScheduleVoteSource = 'web',
 ) {
+  // TODO(ROK-1893 P3): once hub polls carry guild_id, raise a 'vote' hub join prompt via HubAutoMembershipService.
   return db
     .insert(schema.communityLineupScheduleVotes)
     .values({ slotId, userId, stance, source })
