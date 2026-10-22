@@ -53,9 +53,9 @@ export function resolveCommandWeight(command: string, explicit?: TaskWeight): Ta
 /**
  * Weight for a validate-ci.sh invocation (rl_validate_ci).
  *
- * Heavy by default — a bare run is the full pipeline. Only a `--static` run
- * with no forced e2e flag is light: build + typecheck + lint fit comfortably
- * alongside another heavy run.
+ * Heavy by default — a bare run is the full pipeline. Only a `--static` or
+ * `--scoped` run with no forced e2e flag is light: build + typecheck + lint fit
+ * comfortably alongside another heavy run.
  *
  * @param args - the fully-resolved validate-ci.sh argv (post resolveArgs).
  * @param explicit - caller-supplied override; returned as-is when present.
@@ -64,10 +64,10 @@ export function resolveValidateCiWeight(args: string[], explicit?: TaskWeight): 
   if (explicit) return explicit;
   const hasHeavyFlag = args.some((a) => VALIDATE_CI_HEAVY_FLAGS.includes(a));
   if (hasHeavyFlag) return 'heavy';
-  // 2026-10-22: --scoped builds/typechecks up to one app workspace — between a
-  // --static (light, all three but cheap) and a suite run.
-  if (args.includes('--scoped')) return 'medium';
-  return args.includes('--static') ? 'light' : 'heavy';
+  // 2026-10-22: --scoped does strictly less than --static (one workspace, not
+  // three), so it is light too. Not `medium`: the deployed VM task-start
+  // rejects that weight with `invalid_weight` until rl-infra ships it.
+  return args.includes('--static') || args.includes('--scoped') ? 'light' : 'heavy';
 }
 
 /**
