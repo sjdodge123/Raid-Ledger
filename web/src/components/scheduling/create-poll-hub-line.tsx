@@ -6,13 +6,7 @@
  */
 import type { JSX } from 'react';
 import { useGameRegistry } from '../../hooks/use-game-registry';
-
-/** The game + hub a hub-started poll is locked to. */
-export interface PollHubLock {
-    gameId: number;
-    hubId: number;
-    hubName: string;
-}
+import type { PollHubLock } from './create-poll-hub-lock';
 
 export function CreatePollHubLine({ lock }: { lock: PollHubLock }): JSX.Element {
     const { games } = useGameRegistry();
@@ -23,12 +17,4 @@ export function CreatePollHubLine({ lock }: { lock: PollHubLock }): JSX.Element 
             <span className="text-foreground">{lock.hubName}</span>
         </p>
     );
-}
-
-/** A lock only when both the hub and its game are known. */
-export function resolvePollHubLock(
-    hubId: number | undefined, gameId: number | undefined, hubName: string | undefined,
-): PollHubLock | null {
-    if (hubId === undefined || gameId === undefined) return null;
-    return { gameId, hubId, hubName: hubName ?? 'this hub' };
 }

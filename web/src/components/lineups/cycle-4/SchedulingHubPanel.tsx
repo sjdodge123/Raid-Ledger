@@ -15,16 +15,9 @@ import { StatusChip } from '../../ui/status-chip';
 import { useAuth } from '../../../hooks/use-auth';
 import { schedulePollKey } from '../../../hooks/use-scheduling';
 import { useCommunityJoin } from '../../hub/community/community-hub-api';
+import { uniqueVoters, type Voter } from './scheduling-hub.helpers';
 
 type PollHub = NonNullable<SchedulePollPageResponseDto['hub']>;
-type Voter = SchedulePollPageResponseDto['slots'][number]['votes'][number];
-
-/** Every distinct yes-voter across the poll's times, first-seen order. */
-export function uniqueVoters(slots: SchedulePollPageResponseDto['slots']): Voter[] {
-    const seen = new Map<number, Voter>();
-    for (const slot of slots) for (const v of slot.votes) if (!seen.has(v.userId)) seen.set(v.userId, v);
-    return [...seen.values()];
-}
 
 function VoterChips({ voters }: { voters: Voter[] }): JSX.Element | null {
     if (voters.length === 0) return null;

@@ -18,7 +18,7 @@
  */
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { IgdbGameDto, SchedulingPollResponseDto, StandalonePollVisibility } from '@raid-ledger/contract';
+import type { CreateSchedulingPollDto, IgdbGameDto, SchedulingPollResponseDto, StandalonePollVisibility } from '@raid-ledger/contract';
 import { useQuery } from '@tanstack/react-query';
 import { Modal } from '../ui/modal';
 import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
@@ -32,7 +32,8 @@ import { MinVoteThresholdSlider } from './min-vote-threshold-slider';
 import { getPlayers } from '../../lib/api-client';
 import { CreatePollVisibility } from './create-poll-visibility';
 import { CreatePollSuccess, CreatePollSuccessFooter } from './create-poll-success';
-import { CreatePollHubLine, resolvePollHubLock, type PollHubLock } from './create-poll-hub-line';
+import { CreatePollHubLine } from './create-poll-hub-line';
+import { resolvePollHubLock, type PollHubLock } from './create-poll-hub-lock';
 
 interface CreatePollModalProps {
   isOpen: boolean;
@@ -87,22 +88,29 @@ function useCreatePollForm() {
   };
 }
 
+/** The create request; null until a game is known (picked, or locked by the hub). */
+function buildPollDto(form: ReturnType<typeof useCreatePollForm>, lock: PollHubLock | null): CreateSchedulingPollDto | null {
+  const gameId = lock?.gameId ?? form.selectedGame?.id;
+  if (gameId === undefined) return null;
+  return {
+    gameId,
+    ...(lock ? { hubId: lock.hubId } : {}),
+    memberUserIds: form.memberIds.length > 0 ? form.memberIds : undefined,
+    minVoteThreshold: form.minVoteThreshold > 0 ? form.minVoteThreshold : undefined,
+    durationHours: form.durationHours,
+    ...(form.visibility === 'private' ? { visibility: 'private' as const } : {}),
+  };
+}
+
 /** Create the poll. Public: close (unguarded: nothing is lost) and open it. Private: show the link. */
 function useSubmitPoll(form: ReturnType<typeof useCreatePollForm>, close: () => void, lock: PollHubLock | null) {
   const navigate = useNavigate();
   const mutation = useCreateSchedulingPoll();
   const [created, setCreated] = useState<CreatedPrivatePoll | null>(null);
   const handleSubmit = async () => {
-    const gameId = lock?.gameId ?? form.selectedGame?.id;
-    if (gameId === undefined) return;
-    const result = await mutation.mutateAsync({
-      gameId,
-      ...(lock ? { hubId: lock.hubId } : {}),
-      memberUserIds: form.memberIds.length > 0 ? form.memberIds : undefined,
-      minVoteThreshold: form.minVoteThreshold > 0 ? form.minVoteThreshold : undefined,
-      durationHours: form.durationHours,
-      ...(form.visibility === 'private' ? { visibility: 'private' as const } : {}),
-    });
+    const dto = buildPollDto(form, lock);
+    if (!dto) return;
+    const result = await mutation.mutateAsync(dto);
     if (result.visibility === 'private' && result.shareToken) {
       form.reset();
       setCreated({ id: result.id, lineupId: result.lineupId, shareToken: result.shareToken });
