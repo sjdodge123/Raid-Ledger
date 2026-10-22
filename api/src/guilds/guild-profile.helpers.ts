@@ -4,6 +4,7 @@ import {
   type GuildLink,
   type GuildLinkGroup,
   type GuildProfile,
+  type HubPost,
   type GuildRuleSection,
   type UpdateGuildProfileInput,
 } from '@raid-ledger/contract';
@@ -135,4 +136,22 @@ export function toGuildProfile(
     rules: parseStoredRules(row?.rules),
     links: parseStoredLinks(row?.links),
   };
+}
+
+/**
+ * ROK-1868 A3: `gmPost` follows the newest hub post (same shape; `updatedBy`
+ * is the last editor, else the author) and `latestPost` carries the post.
+ */
+export function withLatestPost(
+  profile: GuildProfile,
+  latest: HubPost | null,
+): GuildProfile {
+  const gmPost = latest
+    ? {
+        body: latest.body,
+        updatedAt: latest.updatedAt,
+        updatedBy: (latest.editedBy ?? latest.author).displayName,
+      }
+    : null;
+  return { ...profile, gmPost, latestPost: latest };
 }

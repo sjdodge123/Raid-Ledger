@@ -218,7 +218,7 @@ function AdminTabToggle({ canManage, activeTab, onTabChange }: { canManage: bool
 // Sticky below 1024px (phone + tablet, the FAB layout). Phones sit under the header (64) and the
 // Discover/Manage toolbar (~76) — 75 once the header scrolls away. At 768–1023 that toolbar is
 // hidden and the header never hides, so the bar sits right under the header (`md:top-16`).
-const SEARCH_BAR_CLASS = 'sticky z-10 bg-surface/95 backdrop-blur-sm pt-2 pb-4 -mx-1 px-1 mb-6 transition-[top] duration-300 ease-in-out md:top-16 '
+const SEARCH_BAR_CLASS = 'sticky z-20 bg-surface/95 backdrop-blur-sm pt-2 pb-4 -mx-1 px-1 mb-6 transition-[top] duration-300 ease-in-out md:top-16 '
   + 'lg:static lg:z-auto lg:bg-transparent lg:backdrop-blur-none lg:pt-0 lg:pb-0 lg:mx-0 lg:px-0';
 
 function SearchBar({ searchQuery, onSearchChange, isHeaderHidden, resultCount, children }: { searchQuery: string; onSearchChange: (q: string) => void; isHeaderHidden: boolean; resultCount: number | null; children?: ReactNode }): JSX.Element {
