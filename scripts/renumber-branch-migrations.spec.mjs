@@ -23,6 +23,11 @@ const T0 = 1790000000000;
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const run = (cwd, cmd, args) => spawnSync(cmd, args, { cwd, encoding: 'utf8' });
+// Conflicted paths via `ls-files --unmerged`, not `diff --name-only`: validate-ci's
+// shell suites (validate-ci-fleet-scope-skip.test.sh) put a `git` stub on PATH that
+// answers every `diff --name-only` from a fixture file, which empties this list.
+const unmerged = (cwd) =>
+  [...new Set(git(cwd, 'ls-files', '--unmerged').split('\n').filter(Boolean).map((l) => l.split('\t')[1]))].join('\n');
 const read = (dir, rel) => readFileSync(path.join(dir, MIG, rel), 'utf8');
 const journal = (dir) => JSON.parse(read(dir, 'meta/_journal.json')).entries;
 
@@ -138,7 +143,7 @@ test('renumber is idempotent; merging main afterwards conflicts only on the jour
   // Both sides appended to _journal.json, so git always flags it; every .sql and
   // snapshot merges cleanly, and ours already holds main's entries + the branch's.
   run(dir, 'git', ['merge', '--no-edit', '-q', 'main']);
-  assert.equal(git(dir, 'diff', '--name-only', '--diff-filter=U'), `${MIG}/meta/_journal.json`);
+  assert.equal(unmerged(dir), `${MIG}/meta/_journal.json`);
   git(dir, 'checkout', '--ours', `${MIG}/meta/_journal.json`);
   git(dir, 'add', `${MIG}/meta/_journal.json`);
   git(dir, 'commit', '-q', '--no-edit');
@@ -180,7 +185,7 @@ test('main moves between renumber and merge: keeping ours drops main\'s entry, t
   git(dir, 'checkout', '-q', 'feature');
   // The wrong merge: the moved main, then "keep ours" on everything that conflicts.
   run(dir, 'git', ['merge', '--no-edit', '-q', 'main']);
-  for (const rel of git(dir, 'diff', '--name-only', '--diff-filter=U').split('\n')) {
+  for (const rel of unmerged(dir).split('\n')) {
     git(dir, 'checkout', '--ours', rel);
     git(dir, 'add', rel);
   }
