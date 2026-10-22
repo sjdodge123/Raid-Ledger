@@ -37,6 +37,8 @@ interface Ctx {
     inLink: boolean;
     /** When set (top level only), every link the scan forms records its label's `[from, to)` here. */
     labels?: Array<[number, number]>;
+    /** When set (top level only), the index of every `[` the scan prints as literal text. */
+    literalBrackets?: number[];
 }
 
 interface Hit {
@@ -165,6 +167,7 @@ function parseWith(ctx: Ctx): InlineNode[] {
         const hit = matchAt(ctx, i);
         if (hit) items.push(...hit.nodes);
         else items.push({ kind: 'text', value: ctx.s[i] ?? '' });
+        if (!hit && ctx.s[i] === '[') ctx.literalBrackets?.push(i);
         i = hit ? hit.end : i + 1;
     }
     return resolveEmphasis(items);
@@ -194,4 +197,23 @@ export function insideLinkLabel(s: string, from: number, to: number): boolean {
     const labels: Array<[number, number]> = [];
     parseWith({ s: s.slice(start, stop === -1 ? s.length : stop), opts: READER_OPTS, depth: 0, inLink: false, labels });
     return labels.some(([a, b]: [number, number]): boolean => from - start >= a && to - start <= b);
+}
+
+/**
+ * `s` with a `\\` before every `[` the reader prints as literal text (r14b review). marked's link grammar
+ * is more lenient than the reader's (`[a](/p(x)` links `/p(x` there), so the load path escapes the
+ * brackets the reader never opens a link with, and marked cannot form a link `MarkdownBlock` does not show.
+ * @param s - one line, as the load path parses it
+ * @returns the line with those brackets escaped
+ */
+export function escapeLiteralBrackets(s: string): string {
+    const at: number[] = [];
+    parseWith({ s, opts: READER_OPTS, depth: 0, inLink: false, literalBrackets: at });
+    let out = '';
+    let from = 0;
+    for (const i of at) {
+        out += `${s.slice(from, i)}\\`;
+        from = i;
+    }
+    return out + s.slice(from);
 }

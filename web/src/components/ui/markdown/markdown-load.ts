@@ -18,6 +18,7 @@ import { parseBlocks, type MarkdownBlockNode } from './markdown-block-parse';
 import { buildMarkdownExtensions } from './markdown-extensions';
 import { prepareEditorMarkdown } from './markdown-serialize';
 import { autolinkAt } from './markdown-autolink';
+import { escapeLiteralBrackets } from './markdown-inline-parse';
 
 /**
  * A line start the GFM parser reads as a block the reader does not have: ATX heading, quote, code
@@ -76,7 +77,7 @@ function manager(): MarkdownManager {
 /** One line's inline content, parsed alone; literal text if it somehow parses to anything but one paragraph. */
 function lineContent(line: string): JSONContent[] {
     if (line === '') return [];
-    const doc = manager().parse(prepareEditorMarkdown(escapeBlockStart(line)));
+    const doc = manager().parse(prepareEditorMarkdown(escapeLiteralBrackets(escapeBlockStart(line))));
     const nodes = doc.content ?? [];
     const first = nodes[0];
     if (nodes.length === 1 && first?.type === 'paragraph') return first.content ?? [];
