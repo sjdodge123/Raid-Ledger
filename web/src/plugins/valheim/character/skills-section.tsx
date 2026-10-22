@@ -67,16 +67,24 @@ function SkillRow({ skill, trend }: {
     );
 }
 
+/** The sorted rows — also the `/dev/design-system` sample, so the demo is the real row. */
+export function SkillList({ skills, trend }: {
+    skills: ValheimSkill[];
+    trend: ValheimSkillTrend | undefined;
+}): JSX.Element {
+    return (
+        <ul className="m-0 grid list-none gap-2.5 p-0">
+            {sortSkillsByLevel(skills).map((skill) => (
+                <SkillRow key={skill.id} skill={skill} trend={trend} />
+            ))}
+        </ul>
+    );
+}
+
 export function SkillsSection({
     character,
 }: ValheimCharacterSectionProps): JSX.Element {
     if (character.skills.length === 0)
         return <p className="text-sm text-muted">No skills recorded yet.</p>;
-    return (
-        <ul className="m-0 grid list-none gap-2.5 p-0">
-            {sortSkillsByLevel(character.skills).map((skill) => (
-                <SkillRow key={skill.id} skill={skill} trend={character.skillTrend} />
-            ))}
-        </ul>
-    );
+    return <SkillList skills={character.skills} trend={character.skillTrend} />;
 }
