@@ -14,6 +14,10 @@
 #   L4  a holder that died (dead pid / terminal task JSON) is pruned on read
 #   L5  status counters: categories, env charge, committed vs budget; live envs
 #       count against the budget
+#   L6  FIFO: a medium that fits is refused while an OLDER heavy waiter would
+#       no longer fit beside it (no starvation of heavies by a stream of statics)
+#   L7  a holder SIGKILLed while others wait is pruned on the waiter's next poll
+#   L8  a ledger wait uses RL_LEDGER_ADMISSION_TIMEOUT_SECONDS, not the floor's
 #
 # Pure bash + jq, no docker: /proc/meminfo is faked via RL_MEMINFO_PATH.
 
@@ -37,6 +41,7 @@ MEM
     ADMISSION_JSON="$RL_STATE_DIR/admission.json"
     export RL_HEAVY_TASK_POLL_SECONDS=1
     export RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS=2
+    export RL_LEDGER_ADMISSION_TIMEOUT_SECONDS=2
     export RL_HEAVY_TASK_MIN_FREE_MB=5120
     export RL_MEDIUM_TASK_MIN_FREE_MB=2560
     export RL_HEAVY_TASK_SETTLE_SECONDS=0
@@ -171,10 +176,75 @@ test_status_counters_and_env_charge() {
     assert_eq "$(jq -r '.heavy_waiting | length' "$ADMISSION_JSON")" "0" "the timed-out waiter is released"
 }
 
+# Wait until <key> shows up in heavy_waiting (max ~6s).
+wait_waiting() {
+    local key="$1" i
+    for (( i = 0; i < 60; i++ )); do
+        jq -e --arg k "$key" 'any((.heavy_waiting // [])[]; .key == $k)' "$ADMISSION_JSON" >/dev/null 2>&1 && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+# L6 — FIFO across weights.
+test_fifo_older_heavy_waiter_blocks_medium() {
+    CURRENT_TEST_NAME="L6: an older heavy waiter blocks a medium that fits now but leaves it no room"
+    ledger_env 30000 12288
+    jq -n '[{slug:"e1"},{slug:"e2"},{slug:"e3"},{slug:"e4"}]' > "$RL_STATE_DIR/env-registry.json"
+    seed_running '[{key:"m1",weight:"medium",kind:"task",reserve_mb:3072}]'
+    # 3072 running + 4096 envs + 5632 heavy = 12800 > 12288: the heavy is parked.
+    jq --argjson since "$(( $(date +%s) - 30 ))" --argjson pid "$$" --arg host "$HOST_NAME" \
+        '.heavy_waiting = [{key:"hw1", task_id:"hw1", since_epoch:$since, weight:"heavy", kind:"task",
+                            reserve_mb:5632, blocked_by:"budget", pid:$pid, host:$host}]' \
+        "$ADMISSION_JSON" > "$ADMISSION_JSON.tmp" && mv "$ADMISSION_JSON.tmp" "$ADMISSION_JSON"
+    # 3072 + 4096 + 3072 = 10240 fits alone, but 10240 + 5632 does not.
+    start_task "llllf111" medium rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllf111 15)" "failed" "medium must NOT leapfrog the older parked heavy"
+    assert_contains "$(cat "$RL_TASKS_DIR/llllf111.log")" "blocked_by=fifo 1 older waiter(s) need 5632MB first" \
+        "wait line names the FIFO block"
+    jq '.heavy_waiting = []' "$ADMISSION_JSON" > "$ADMISSION_JSON.tmp" && mv "$ADMISSION_JSON.tmp" "$ADMISSION_JSON"
+    start_task "llllf222" medium rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllf222 15)" "succeeded" "with no older waiter the same medium admits"
+}
+
+# L7 — a SIGKILLed holder is reclaimed while another task waits on it.
+test_dead_holder_reclaimed_during_wait() {
+    CURRENT_TEST_NAME="L7: a SIGKILLed holder's reservation is pruned on the waiter's next poll"
+    ledger_env 30000 8000
+    export RL_LEDGER_ADMISSION_TIMEOUT_SECONDS=8
+    /bin/sleep 60 &
+    local holder=$!
+    jq -n --argjson now "$(date +%s)" --argjson pid "$holder" --arg host "$HOST_NAME" '{
+        heavy_running: [{key:"victim1", task_id:"victim1", admitted_at:"x", admitted_epoch:$now, mb:5120,
+                         weight:"heavy", kind:"task", reserve_mb:5632, pid:$pid, host:$host}],
+        heavy_waiting: [] }' > "$ADMISSION_JSON"
+    start_task "llllg111" heavy manual /bin/sh -c "exit 0"
+    wait_waiting "llllg111" || true
+    assert_eq "$(jq -r '.heavy_waiting[0].key // "none"' "$ADMISSION_JSON")" "llllg111" "waiter parked on the live holder"
+    kill -9 "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+    assert_eq "$(wait_terminal llllg111 15)" "succeeded" "dead holder pruned mid-wait, so the waiter admits"
+    assert_eq "$(jq -r '[.heavy_running[].key] | index("victim1") // "gone"' "$ADMISSION_JSON")" "gone" "victim entry removed"
+}
+
+# L8 — the ledger wait budget is the long one.
+test_ledger_wait_uses_ledger_timeout() {
+    CURRENT_TEST_NAME="L8: a budget wait times out on RL_LEDGER_ADMISSION_TIMEOUT_SECONDS, not the floor timeout"
+    ledger_env 30000 8000
+    export RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS=1
+    export RL_LEDGER_ADMISSION_TIMEOUT_SECONDS=3
+    seed_running '[{key:"h1",weight:"heavy",kind:"task",reserve_mb:5632}]'
+    start_task "llllh111" heavy manual /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllh111 15)" "failed" "budget-blocked heavy eventually times out"
+    assert_contains "$(cat "$RL_TASKS_DIR/llllh111.log")" "admission_timeout after 3s" "ledger wait got the 3s ledger budget"
+}
+
 run_test "l1-lifetime-reservation" test_reservation_held_for_task_lifetime
 run_test "l2-heavy-cap" test_heavy_cap_queues_third_heavy
 run_test "l3-image-build-cap" test_image_build_cap_and_kind
 run_test "l4-dead-holders" test_dead_holders_pruned
 run_test "l5-status-env-charge" test_status_counters_and_env_charge
+run_test "l6-fifo" test_fifo_older_heavy_waiter_blocks_medium
+run_test "l7-dead-holder-mid-wait" test_dead_holder_reclaimed_during_wait
+run_test "l8-ledger-timeout" test_ledger_wait_uses_ledger_timeout
 
 print_test_summary

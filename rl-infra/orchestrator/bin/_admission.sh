@@ -19,7 +19,8 @@
 #   RL_MEMINFO_PATH                          /proc/meminfo
 #   RL_ADMISSION_FILE                        $RL_STATE_DIR/admission.json
 #   RL_HEAVY_TASK_MIN_FREE_MB                5120
-#   RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS  1800
+#   RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS  1800  (waiting on the MemAvailable floor)
+#   RL_LEDGER_ADMISSION_TIMEOUT_SECONDS      5400  (waiting on a cap / the budget / FIFO)
 #   RL_HEAVY_TASK_POLL_SECONDS               10
 #   RL_HEAVY_TASK_SETTLE_SECONDS             90    (see admission::_try_admit)
 #   RL_HEAVY_TASK_MAX_HOLD_SECONDS           14400 (stale-entry pruning)
@@ -32,6 +33,9 @@ RL_HEAVY_TASK_MIN_FREE_MB="${RL_HEAVY_TASK_MIN_FREE_MB:-5120}"
 # counts as the heavy floor.
 RL_MEDIUM_TASK_MIN_FREE_MB="${RL_MEDIUM_TASK_MIN_FREE_MB:-2560}"
 RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS="${RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS:-1800}"
+# Ledger holds last a task's whole life (a full gate is 60-90 min), so a waiter
+# parked behind a cap or the budget gets the long-gate budget, not 1800s.
+RL_LEDGER_ADMISSION_TIMEOUT_SECONDS="${RL_LEDGER_ADMISSION_TIMEOUT_SECONDS:-5400}"
 RL_HEAVY_TASK_POLL_SECONDS="${RL_HEAVY_TASK_POLL_SECONDS:-10}"
 RL_HEAVY_TASK_SETTLE_SECONDS="${RL_HEAVY_TASK_SETTLE_SECONDS:-90}"
 RL_HEAVY_TASK_MAX_HOLD_SECONDS="${RL_HEAVY_TASK_MAX_HOLD_SECONDS:-14400}"
@@ -75,15 +79,21 @@ admission::ensure_file() {
     admission::prune_dead
 }
 
+# The longest any waiter may legitimately wait (either timeout).
+admission::max_wait_seconds() {
+    local a="$RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS" b="$RL_LEDGER_ADMISSION_TIMEOUT_SECONDS"
+    if (( b > a )); then echo "$b"; else echo "$a"; fi
+}
+
 # Drop heavy_running entries older than RL_HEAVY_TASK_MAX_HOLD_SECONDS and
-# heavy_waiting entries older than the admission timeout budget.
+# heavy_waiting entries older than the longest admission timeout.
 admission::prune_stale() {
     local now
     now=$(date +%s)
     state::mutate "$RL_ADMISSION_FILE" \
         --argjson now "$now" \
         --argjson hold "$RL_HEAVY_TASK_MAX_HOLD_SECONDS" \
-        --argjson waitmax "$RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS" \
+        --argjson waitmax "$(admission::max_wait_seconds)" \
         '{
             heavy_running: [ (.heavy_running // [])[]
                 | select(($now - (.admitted_epoch // $now)) < $hold) ],
@@ -159,25 +169,46 @@ def heavy_n: [ents[] | select(wt == "heavy" and kd != "image_build")] | length;
 def medium_n: [ents[] | select(wt == "medium" and kd != "image_build")] | length;
 def build_n: [ents[] | select(kd == "image_build")] | length;
 def reserved: [ents[] | (.reserve_mb // .mb // $floor)] | add // 0;
+def waits: (.heavy_waiting // []);
+def since_of($k; $now): (first(waits[] | select(.key == $k) | .since_epoch) // $now);
+def ahead($k; $now): since_of($k; $now) as $s
+    | [waits[] | select(.key != $k and (.since_epoch // $now) < $s)];
+def ledger_reason($w; $kind; $reserve; $envmb; $k; $now):
+    ahead($k; $now) as $a
+    | ([$a[] | select(wt == "heavy" and kd != "image_build")] | length) as $ah
+    | ([$a[] | select(kd == "image_build")] | length) as $ab
+    | ([$a[] | (.reserve_mb // $floor)] | add // 0) as $ar
+    | (ents | length) as $n
+    | if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
+      then "heavy_cap \(heavy_n)/\($maxheavy)"
+      elif ($kind == "image_build" and $maxbuilds > 0 and build_n >= $maxbuilds)
+      then "image_build_cap \(build_n)/\($maxbuilds)"
+      elif ($budget > 0 and $n > 0 and (reserved + $envmb + $reserve) > $budget)
+      then "budget \(reserved)MB tasks + \($envmb)MB envs + \($reserve)MB > \($budget)MB"
+      elif ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and $ah > 0
+            and (heavy_n + $ah + 1) > $maxheavy)
+      then "fifo \($ah) older heavy waiter(s) need the heavy slot"
+      elif ($kind == "image_build" and $maxbuilds > 0 and $ab > 0 and (build_n + $ab + 1) > $maxbuilds)
+      then "fifo \($ab) older image build(s) waiting"
+      elif ($budget > 0 and $n > 0 and ($a | length) > 0
+            and (reserved + $envmb + $ar + $reserve) > $budget)
+      then "fifo \($a | length) older waiter(s) need \($ar)MB first"
+      else "" end;
 '
 
 # Why the ledger refuses <weight>/<kind>/<reserve> right now ("" = it would
 # admit on the ledger; the MemAvailable floor is checked separately).
+# admission::ledger_block_reason <weight> <kind> <reserve> [key]
+# With a key, waiters older than that key's own wait come first (FIFO).
 admission::ledger_block_reason() {
-    local weight="$1" kind="$2" reserve="$3" envmb
+    local weight="$1" kind="$2" reserve="$3" key="${4:-}" envmb
     envmb="$(admission::env_reserved_mb)"
-    jq -r --arg w "$weight" --arg kind "$kind" --argjson reserve "$reserve" \
+    jq -r --arg w "$weight" --arg kind "$kind" --argjson reserve "$reserve" --arg k "$key" \
         --argjson envmb "$envmb" --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
-        --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson now "$(date +%s)" --argjson budget "$RL_ADMISSION_BUDGET_MB" \
         --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
-        "$_ADMISSION_JQ_DEFS"'
-        if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
-        then "heavy_cap \(heavy_n)/\($maxheavy)"
-        elif ($kind == "image_build" and $maxbuilds > 0 and build_n >= $maxbuilds)
-        then "image_build_cap \(build_n)/\($maxbuilds)"
-        elif ($budget > 0 and (ents | length) > 0 and (reserved + $envmb + $reserve) > $budget)
-        then "budget \(reserved)MB tasks + \($envmb)MB envs + \($reserve)MB > \($budget)MB"
-        else "" end' "$RL_ADMISSION_FILE" 2>/dev/null || true
+        "$_ADMISSION_JQ_DEFS"'ledger_reason($w; $kind; $reserve; $envmb; $k; $now)' \
+        "$RL_ADMISSION_FILE" 2>/dev/null || true
 }
 
 # Echo the host's MemAvailable in MB, or nothing when the file is missing or
@@ -238,6 +269,11 @@ admission::snapshot() {
         }' 2>/dev/null || echo '{"heavy_running":0,"heavy_waiting":0,"mem_available_mb":null}'
 }
 
+# admission::need_mb_for <weight> — the free-memory floor for a gated weight.
+admission::need_mb_for() {
+    if [[ "$1" == "medium" ]]; then echo "$RL_MEDIUM_TASK_MIN_FREE_MB"; else echo "$RL_HEAVY_TASK_MIN_FREE_MB"; fi
+}
+
 # Try to claim a heavy slot atomically. Returns 0 when admitted, 1 when the
 # host is too tight right now.
 #
@@ -246,14 +282,17 @@ admission::snapshot() {
 # about to consume. Each admit inside RL_HEAVY_TASK_SETTLE_SECONDS therefore
 # reserves one floor's worth of the reading — without it, two waiters wake on
 # the same poll tick and both admit into the same 6 GiB (thundering herd).
-# admission::need_mb_for <weight> — the free-memory floor for a gated weight.
-admission::need_mb_for() {
-    if [[ "$1" == "medium" ]]; then echo "$RL_MEDIUM_TASK_MIN_FREE_MB"; else echo "$RL_HEAVY_TASK_MIN_FREE_MB"; fi
-}
-
+#
 # On top of that floor, the ledger (caps + budget, see the knobs at the top)
 # is evaluated in the SAME flock window, so two waiters can never both take
-# the last heavy slot or the last of the budget.
+# the last heavy slot or the last of the budget. (The env charge, envmb, is
+# read just before that window: a concurrent env-spin can overshoot the budget
+# by one RL_ENV_RESERVE_MB, which is accepted.)
+#
+# FIFO: a newcomer whose admission would leave no room for an OLDER live
+# waiter (its cap slot or its reservation) is refused, so a stream of mediums
+# can never starve a parked heavy. The first task on an empty ledger is still
+# always admitted (memory floor aside).
 #
 # admission::_try_admit <key> <task_id> <avail> [need] [weight] [kind] [pid]
 admission::_try_admit() {
@@ -278,13 +317,7 @@ admission::_try_admit() {
          def recent: [ ents[]
              | select(($now - (.admitted_epoch // 0)) < $settle)
              | (.mb // $floor) ] | add // 0;
-         def ledger_ok:
-             (if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0)
-              then heavy_n < $maxheavy else true end)
-             and (if ($kind == "image_build" and $maxbuilds > 0)
-                  then build_n < $maxbuilds else true end)
-             and ($budget <= 0 or (ents | length) == 0
-                  or (reserved + $envmb + $reserve) <= $budget);
+         def ledger_ok: ledger_reason($w; $kind; $reserve; $envmb; $k; $now) == "";
          if ledger_ok and ($avail - recent) >= $need
          then {
              heavy_running: (ents
@@ -299,17 +332,19 @@ admission::_try_admit() {
 # Register (idempotently) as a waiter so status/lease-status can show pressure.
 admission::_mark_waiting() {
     local key="$1" task_id="$2" weight="${3:-heavy}" kind="${4:-task}" reason="${5:-}" pid="${6:-$$}"
-    local now ts host
+    local now ts host reserve
     now=$(date +%s)
     ts=$(date -u +%FT%TZ)
     host="$(hostname 2>/dev/null || echo unknown)"
+    reserve="$(admission::reserve_mb_for "$weight" "$kind")"
     state::mutate "$RL_ADMISSION_FILE" \
         --arg k "$key" --arg t "$task_id" --arg ts "$ts" --argjson now "$now" \
+        --argjson reserve "$reserve" \
         --arg w "$weight" --arg kind "$kind" --arg r "$reason" --arg host "$host" --arg pid "$pid" \
         '.heavy_waiting = (if any((.heavy_waiting // [])[]; .key == $k)
              then [ (.heavy_waiting // [])[] | if .key == $k then .blocked_by = $r else . end ]
              else ((.heavy_waiting // []) + [{key: $k, task_id: $t, since: $ts, since_epoch: $now,
-                   weight: $w, kind: $kind, blocked_by: $r,
+                   weight: $w, kind: $kind, reserve_mb: $reserve, blocked_by: $r,
                    pid: ($pid | tonumber? // null), host: $host}])
              end)' 2>/dev/null || true
 }
@@ -396,11 +431,14 @@ admission::acquire() {
     if [[ -z "$weight" ]]; then
         if [[ "$floor" == "$RL_MEDIUM_TASK_MIN_FREE_MB" ]]; then weight=medium; else weight=heavy; fi
     fi
-    local poll="$RL_HEAVY_TASK_POLL_SECONDS"
-    local deadline=$(( $(date +%s) + RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS ))
+    local poll="$RL_HEAVY_TASK_POLL_SECONDS" started limit
+    started=$(date +%s)
     admission::ensure_file
     local avail
     while :; do
+        # Every poll, not once: a holder SIGKILLed while only waiters are
+        # active must not pin its reservation until they all time out.
+        admission::prune_dead
         if [[ -n "$abort_cmd" ]] && eval "$abort_cmd"; then
             admission::release "$key"
             admission::_log "$log_path" \
@@ -419,14 +457,18 @@ admission::acquire() {
                 "[admission] admitted: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)"
             return 0
         fi
-        reason="$(admission::ledger_block_reason "$weight" "$kind" "$(admission::reserve_mb_for "$weight" "$kind")")"
+        reason="$(admission::ledger_block_reason "$weight" "$kind" "$(admission::reserve_mb_for "$weight" "$kind")" "$key")"
         admission::_mark_waiting "$key" "$task_id" "$weight" "$kind" "${reason:-memory_floor}" "$$"
         admission::_log "$log_path" \
             "[admission] waiting for memory: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)${reason:+ blocked_by=$reason}"
-        if (( $(date +%s) + poll > deadline )); then
+        # A ledger wait (cap / budget / fifo) waits out lifetime holds; a pure
+        # memory-floor wait keeps the shorter budget.
+        if [[ -n "$reason" ]]; then limit="$RL_LEDGER_ADMISSION_TIMEOUT_SECONDS"
+        else limit="$RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS"; fi
+        if (( $(date +%s) + poll > started + limit )); then
             admission::release "$key"
             admission::_log "$log_path" \
-                "[admission] admission_timeout after ${RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS}s: available=${avail}MB need=${floor}MB"
+                "[admission] admission_timeout after ${limit}s: available=${avail}MB need=${floor}MB${reason:+ blocked_by=$reason}"
             return 1
         fi
         sleep "$poll"
