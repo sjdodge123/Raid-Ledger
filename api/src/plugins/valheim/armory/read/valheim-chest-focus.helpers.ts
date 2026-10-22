@@ -6,12 +6,15 @@
  * `creatorPlayerId` ever leaves.
  */
 import { BadRequestException } from '@nestjs/common';
+import type { ValheimChestFocus } from '@raid-ledger/contract';
 import type { ValheimContainerPrivacyRow } from '../../../../drizzle/schema';
 import {
   parsePrefabFilter,
   toCount,
   toVisibility,
 } from './valheim-materials.mappers';
+
+export type { ValheimChestFocus } from '@raid-ledger/contract';
 
 /** Valheim worlds are ~10 km across; anything past this is malformed. */
 export const COORD_LIMIT = 100_000;
@@ -29,9 +32,6 @@ export interface ChestFocusQuery {
   /** The filtered item ("Iron ×12"), or null. */
   item: string | null;
 }
-
-export type { ValheimChestFocus } from '@raid-ledger/contract';
-import type { ValheimChestFocus } from '@raid-ledger/contract';
 
 /** The repository row (`held` is a bigint sum, or null without `item`). */
 export interface ChestFocusRow {

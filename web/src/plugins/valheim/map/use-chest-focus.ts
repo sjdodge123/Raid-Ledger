@@ -1,6 +1,10 @@
 /** ROK-1889 — read the Map tab's chest focus from the hash and resolve it server-side. */
 import { createContext, useEffect, useMemo, useSyncExternalStore } from 'react';
-import { ValheimChestFocusSchema, type ValheimChestFocus, type ValheimMapGrid } from '@raid-ledger/contract';
+import {
+    ValheimChestFocusSchema,
+    type ValheimChestFocus,
+    type ValheimMapGrid,
+} from '@raid-ledger/contract';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
@@ -16,7 +20,6 @@ import {
     parseChestFocus,
     type ChestFocusTarget,
 } from './chest-focus';
-
 
 /** The resolved focus for the map frame (null: none, loading, or not found). */
 export const ChestFocusContext = createContext<ValheimChestFocus | null>(null);
