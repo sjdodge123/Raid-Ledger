@@ -16,7 +16,7 @@ import type { AdHocEventService } from './ad-hoc-event.service';
 import type { AdHocNotificationService } from './ad-hoc-notification.service';
 import type { AdHocParticipantService } from './ad-hoc-participant.service';
 import type { ChannelBindingsService } from './channel-bindings.service';
-import { startGracePeriod } from './ad-hoc-event.handlers';
+import { startGracePeriod } from './ad-hoc-event-end.helpers';
 import {
   getEventById,
   resolveGameName,
@@ -78,7 +78,7 @@ export async function afterServerLeave(
 ): Promise<void> {
   await refreshLive(deps, live);
   if (live.adHocStatus !== 'live') return;
-  if ((await deps.participantService.getActiveCount(live.id)) > 0) return;
+  if ((await deps.participantService.getOpenRowCount(live.id)) > 0) return;
   await startGracePeriod(
     {
       db: deps.db,
