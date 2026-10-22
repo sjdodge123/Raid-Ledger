@@ -32,6 +32,7 @@ import {
   serverGameOf,
 } from './voice-lobby-server-merge.helpers';
 import { gateCtx, traceGate } from './voice-gate-trace';
+import { liveGameIdsOf } from './voice-live-game.helpers';
 
 /** A detected game group inside a general-lobby channel. */
 export interface LobbyGameGroup {
@@ -45,6 +46,11 @@ export interface LobbyGameGroup {
    * toward the threshold (`groupSize`); `name: null` = anonymous `+N`.
    */
   serverOnly?: ServerRosterEntry[];
+  /**
+   * ROK-1888 m2: qualified only because the game is live elsewhere, so the
+   * spawn may join that event but never mint a new one below `minPlayers`.
+   */
+  joinOnly?: boolean;
 }
 
 /** Groups split by whether they clear the binding's `minPlayers`. */
@@ -106,11 +112,18 @@ export function partitionLobbyGroups(
   detected: LobbyGameGroup[],
   allowJustChatting: boolean,
   minPlayers: number,
+  liveGameIds: ReadonlySet<number> = new Set(),
 ): LobbyGroupSplit {
   const groups = applyNullPolicy(detected, allowJustChatting);
+  // ROK-1888: a game already live anywhere qualifies whatever its size.
+  const clears = (g: LobbyGameGroup) =>
+    groupSize(g) >= minPlayers ||
+    (g.gameId !== null && liveGameIds.has(g.gameId));
   return {
-    qualifying: groups.filter((g) => groupSize(g) >= minPlayers),
-    dropped: groups.filter((g) => groupSize(g) < minPlayers),
+    qualifying: groups
+      .filter(clears)
+      .map((g) => (groupSize(g) >= minPlayers ? g : { ...g, joinOnly: true })),
+    dropped: groups.filter((g) => !clears(g)),
     minPlayers,
   };
 }
@@ -183,6 +196,7 @@ export async function resolveLobbyGroups(
       detected,
       binding.config?.allowJustChatting ?? false,
       minPlayers,
+      await liveGameIdsOf(deps, detected),
     ),
     channelMemberCount: members.length,
   };
