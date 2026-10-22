@@ -16,6 +16,7 @@ import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
 import { hubPostsHandlers } from './hub-posts-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
+import { channelLifecycleHandlers } from './channel-lifecycle-handlers';
 import { hubNotificationMuteHandlers } from './hub-notification-mute-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 
@@ -35,6 +36,7 @@ export const handlers = [
     ...guildContentHandlers,
     ...hubPostsHandlers,
     ...guildDiscordHandlers,
+    ...channelLifecycleHandlers,
     // Per-group notification mute (ROK-1832) — echo writes, no muted groups.
     ...hubNotificationMuteHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes

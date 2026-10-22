@@ -57,7 +57,13 @@ type Resolver = { resolveAllBindings(ch: string): Promise<ResolvedBinding[]> };
 
 async function setup() {
   const deleted = jest.fn();
-  const db = { delete: () => ({ where: () => ({ returning: deleted }) }) };
+  const tx = { delete: () => ({ where: () => ({ returning: deleted }) }) };
+  // ROK-1428 Codex r16: unbindById deletes + suppresses in one transaction.
+  const db = {
+    ...tx,
+    transaction: <T>(work: (t: typeof tx) => Promise<T>): Promise<T> =>
+      work(tx),
+  };
   const module: TestingModule = await Test.createTestingModule({
     imports: [EventEmitterModule.forRoot()],
     providers: [

@@ -28,6 +28,7 @@ import {
   AD_HOC_EVENTS,
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot.constants';
+import { emitServerSpawn } from './ad-hoc-spawn-events.helpers';
 import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
   enrolGame,
@@ -375,11 +376,8 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   ): Promise<void> {
     if (input.bindingId)
       this.adHocEventService.adoptEvent(input.bindingId, input.gameId, eventId);
-    for (const userId of joined)
-      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
-        eventId,
-        userId,
-      });
+    // Post-commit (Codex r9 P2): the Quick Play itself, then its joiners.
+    emitServerSpawn(this.eventEmitter, eventId, input.gameId, joined);
     await announceServerSpawn(this.fx, eventId, plan, input.ids);
     const live = {
       id: eventId,

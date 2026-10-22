@@ -191,6 +191,12 @@ export const communityLineupScheduleVotes = pgTable(
       .default('web')
       .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+    /**
+     * ROK-1428 (Codex r2): when the stance last flipped. Null until the first
+     * flip — deliberately no default, so existing rows are not all stamped
+     * "now" (which would read as fresh poll activity on every game).
+     */
+    updatedAt: timestamp('updated_at'),
   },
   (table) => [
     unique('uq_schedule_vote_user').on(table.slotId, table.userId),

@@ -24,6 +24,7 @@ function row(over: Partial<GuildProfileSelect>): GuildProfileSelect {
     postRelayDefault: false,
     discordChannelSetBy: null,
     discordChannelSetAt: null,
+    discordChannelSource: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...over,
