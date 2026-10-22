@@ -173,7 +173,6 @@ export const ConflictingEventSchema = z.object({
 
 export type ConflictingEventDto = z.infer<typeof ConflictingEventSchema>;
 
-/** Single event response */
 /**
  * ROK-1893 P4: the hub an event is tagged to, for calendar provenance.
  * Present only when `guildId` points at a hub that is active and not hidden.
@@ -185,6 +184,7 @@ export const EventHubRefSchema = z.object({
 });
 export type EventHubRef = z.infer<typeof EventHubRefSchema>;
 
+/** Single event response */
 export const EventResponseSchema = z.object({
   id: z.number(),
   title: z.string(),
