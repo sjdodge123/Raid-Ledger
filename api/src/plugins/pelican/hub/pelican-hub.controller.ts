@@ -26,7 +26,7 @@ import {
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
 import { PELICAN_PLUGIN_ID } from '../pelican.constants';
-import { findVisibleServerHub } from './server-hub-join.queries';
+import { findServerHub } from './server-hub-join.queries';
 import { ServerHubMembershipService } from './server-hub-membership.service';
 import {
   clampQuickPlayLimit,
@@ -35,7 +35,8 @@ import {
 
 /**
  * ROK-1831 server-hub endpoints. A hidden hub is 404 for non-staff
- * (`HubVisibleGuard`); Join/Leave are also 404 on a hidden or non-server hub.
+ * (`HubVisibleGuard`) and behaves exactly like a visible one for staff; every
+ * route is also 404 on a non-server hub.
  */
 @Controller('plugins/pelican/hubs/:id')
 @UseGuards(AuthGuard('jwt'), PluginActiveGuard, HubVisibleGuard)
@@ -75,7 +76,7 @@ export class PelicanHubController {
     @Param('id', ParseIntPipe) id: number,
     @Query('limit') limit?: string,
   ): Promise<HubQuickPlayList> {
-    const { pelicanServerId } = await findVisibleServerHub(this.db, id);
+    const { pelicanServerId } = await findServerHub(this.db, id);
     const data =
       pelicanServerId === null
         ? []

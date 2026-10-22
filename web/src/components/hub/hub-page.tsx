@@ -10,7 +10,7 @@
  * A 403 (not a member) is a friendly empty state.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
@@ -21,6 +21,7 @@ import { HubHero } from './hub-hero';
 import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
+import { postIdFromSearch } from './posts/post-link';
 import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';
@@ -37,6 +38,8 @@ import { hubBellVisible } from './hub-notify-bell.helpers';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
+/** ROK-1868 — the Posts tab (feed, composer, deep link) loads only when opened. */
+const HubPostsTab = lazy(() => import('./posts/posts-tab').then((m) => ({ default: m.HubPostsTab })));
 const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
 /** Phone: the fixed bottom bar + raised Hubs circle overlay the last card unless the page pads past them (ROK-1876). */
@@ -87,6 +90,13 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
     const { page } = ctx;
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
     if (active === 'events') return <HubEventsTab query={ctx.raids} kind={ctx.page.guild.kind} />;
+    if (active === 'posts') {
+        return (
+            <Suspense fallback={<div className="h-28 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" />}>
+                <HubPostsTab guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} />
+            </Suspense>
+        );
+    }
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
@@ -153,12 +163,14 @@ interface FrameProps {
     ctx: HubCtx;
     module: HubModule | undefined;
     showResources: boolean;
+    /** ROK-1868 A5 — the Posts tab shows once the hub has a post, or for a `?post=` deep link. */
+    hasPosts: boolean;
     mods: ModsState;
 }
 
 /** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
-function HubFrame({ ctx, module: mod, showResources, mods }: FrameProps): JSX.Element {
-    const tabs = hubTabs(mod, ctx, showResources);
+function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProps): JSX.Element {
+    const tabs = hubTabs(mod, ctx, showResources, hasPosts);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
     const canManage = canOpenHubSettings(ctx.page);
     const s = useHubSettingsState(canManage, canUseHubChannelPicker(ctx.page));
@@ -184,6 +196,8 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     const raids = useGuildRaids(page.guild.id);
     const mod = useHubModule(page.guild.kind);
     const profile = useGuildProfile(page.guild.id);
+    // A `?post=` link resolves even when no post is left, so a deleted last post says so (AC3).
+    const linkedPost = postIdFromSearch(useLocation().search);
     const coreResources = resourcesVisible(page.viewer.canEdit, profile.data);
     const sources = mod?.modSources ?? NO_SECTIONS;
     const ctx: HubCtx = { page, raids };
@@ -195,6 +209,7 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
                 "Recommend mods" step — `anyVisible` is false forever there, so
                 the checklist could otherwise never finish. */}
             {(anyVisible) => <HubFrame ctx={ctx} module={mod} showResources={coreResources || anyVisible}
+                hasPosts={!!profile.data?.latestPost || linkedPost !== null}
                 mods={{ hasSources: sources.length > 0, configured: anyVisible }} />}
         </HubResourceVisibility>
     );
