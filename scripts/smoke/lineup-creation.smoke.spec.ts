@@ -302,8 +302,17 @@ test.describe('Phase countdown display', () => {
     });
 
     test('banner shows compact countdown with time remaining', async ({ page }) => {
-        // Re-ensure active lineup in case another worker archived it
+        // OUR lineup's banner, not whichever spec created a lineup last — the
+        // unscoped /games banner can be a sibling's (or a deadline-less demo
+        // row that renders no countdown). Same scoping as the test below.
         lineupId = await ensureActiveLineup(adminToken);
+        await expect
+            .poll(async () => (await getScopedBanner(adminToken, lineupId))?.id ?? null, {
+                timeout: 15_000,
+                message: `lineup ${lineupId} never became banner-eligible`,
+            })
+            .toBe(lineupId);
+        await scopeBannerTo(page, lineupId);
 
         await page.goto('/games');
         await expect(page.locator('body')).not.toHaveText(
@@ -311,7 +320,11 @@ test.describe('Phase countdown display', () => {
             { timeout: 10_000 },
         );
 
-        // Banner should show compact countdown like "Building - 23h remaining"
+        // The banner on screen is ours, and shows a compact countdown like
+        // "Building - 23h remaining".
+        await expect(page.locator(`a[href="/community-lineup/${lineupId}"]`).first()).toBeVisible({
+            timeout: 15_000,
+        });
         const countdown = page.getByText(/remaining/i);
         await expect(countdown).toBeVisible({ timeout: 15_000 });
     });
