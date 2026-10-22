@@ -325,11 +325,13 @@ test.describe('Phase countdown display', () => {
         await expect(page.locator(`a[href="/community-lineup/${lineupId}"]`).first()).toBeVisible({
             timeout: 15_000,
         });
-        const countdown = page.getByText(/remaining/i);
-        await expect(countdown).toBeVisible({ timeout: 15_000 });
+        // The banner root is the subtitle's parent (no testid of its own); the
+        // countdown is matched inside it, never page-wide.
+        const banner = page.getByTestId('lineup-banner-subtitle').locator('xpath=..');
+        await expect(banner).toContainText(/remaining/i, { timeout: 15_000 });
     });
 
-    test('detail page shows full countdown timer', async ({ page }) => {
+    test('banner countdown links through to our lineup\'s detail page', async ({ page }) => {
         // OUR lineup, end to end. The unscoped /games banner (and its first
         // "View Lineup" link) belongs to whichever spec created a lineup last,
         // so this test used to open a sibling's lineup (TDB:2558, TDB:2683).
@@ -353,9 +355,10 @@ test.describe('Phase countdown display', () => {
         // after the click only ever matched the page being left behind.
         const subtitle = page.getByTestId('lineup-banner-subtitle');
         await expect(subtitle).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByText(/remaining|countdown|time left/i).first()).toBeVisible({
-            timeout: 10_000,
-        });
+        await expect(subtitle.locator('xpath=..')).toContainText(
+            /remaining|countdown|time left/i,
+            { timeout: 10_000 },
+        );
 
         const bannerLink = page.locator(`a[href="/community-lineup/${lineupId}"]`).first();
         await expect(bannerLink).toBeVisible({ timeout: 15_000 });
