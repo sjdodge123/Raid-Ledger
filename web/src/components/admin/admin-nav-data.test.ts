@@ -220,22 +220,22 @@ describe('buildPluginIntegrationItems — part 2', () => {
 });
 
 describe('buildDiscordNavItems — part 1', () => {
-    it('returns 3 items when bot is offline: Overview, Authentication, Bot', () => {
+    it('returns 4 items when bot is offline: Overview, Authentication, Bot, Channel automation', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
             { configured: false, loading: false },
         );
-        expect(items).toHaveLength(3);
-        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot']);
+        expect(items).toHaveLength(4);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channel automation']);
     });
 
-    it('returns 5 items when bot is connected: Overview, Authentication, Bot, Channels, Features', () => {
+    it('returns 6 items when bot is connected: Overview, Authentication, Bot, Channels, Channel automation, Features', () => {
         const items = buildDiscordNavItems(
             { connected: true, connecting: false },
             { configured: true, loading: false },
         );
-        expect(items).toHaveLength(5);
-        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Features']);
+        expect(items).toHaveLength(6);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Channel automation', 'Features']);
     });
 
     it('Authentication item shows online status when OAuth configured', () => {
@@ -293,6 +293,11 @@ describe('buildDiscordNavItems — part 2', () => {
         );
         expect(items.find((i) => i.label === 'Channels')).toBeUndefined();
         expect(items.find((i) => i.label === 'Features')).toBeUndefined();
+    });
+
+    it('Channel automation stays reachable when the bot is offline (so it can be switched off)', () => {
+        const items = buildDiscordNavItems({ connected: false, connecting: false }, { configured: true, loading: false });
+        expect(items.find((i) => i.label === 'Channel automation')).toBeDefined();
     });
 
 });

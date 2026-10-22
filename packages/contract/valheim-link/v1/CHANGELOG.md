@@ -3,6 +3,19 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-21 (no schema change) — `recipes` per-quality formula for Valheim 1.0.x
+
+- **No schema, field or enum change** (documentation and semantics only;
+  `schema.json`, the Zod source and the fixtures are untouched). CONTRACT §5b's
+  per-quality `amount(r, q)` now depends on the message's `gameVersion`
+  (ROK-1894). 0.221.x keeps `q <= 1 ? amount : (q − 1) · amountPerLevel`.
+  1.0.x (major ≥ 1, measured on a 1.0.20 server) charges an upgrade item
+  (`upgraderResource`) its `amount` at every quality step, and any other
+  resource `amountPerLevel · 2^(q − 2)` from q2. Station and station level are
+  unchanged. Mod 0.4.1 checks `formula` against the same rule, so `custom`
+  again means a mod changed the recipe; 0.4.0 flagged 272 of 479 vanilla 1.0.20
+  recipes.
+
 ## v1 — 2026-10-20 (additive) — `recipes`
 
 - **Additive.** New message `kind: "recipes"` (ROK-1854): crafting recipes,

@@ -5,7 +5,7 @@
  * Every test seeds its OWN guild through the DEMO_MODE fixture
  * `POST /admin/test/wow/seed-guild` with `withContent: true` (a per-project,
  * per-worker, per-run name), which adds a GM post, two multi-line rule
- * sections, one link group and two recommended addons (CurseForge "Details!
+ * sections, one link group, two recommended addons and (ROK-1868) three hub posts (CurseForge "Details!
  * Damage Meter" required, GitHub "WeakAuras" optional). Viewers are the
  * fixture's fresh users, each signed in with its own session; the edits land
  * on that run's guild only, and the seeded users are deleted in `finally`.
@@ -14,6 +14,7 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
+import { editorTextbox, typeBoldLine } from './hub-post-editor';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -84,10 +85,12 @@ test('member: the GM post shows on Overview, read-only', async ({ page }, testIn
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member');
         const post = page.getByTestId('guild-gm-post');
+        // ROK-1868: the Overview card is the newest seeded hub post (bold headline + a bullet list).
         await expect(post.getByTestId('guild-gm-post-body')).toContainText(SEEDED_HEADLINE, { timeout: 15_000 });
-        await expect(post.getByTestId('guild-gm-post-body')).toContainText('Bring flasks, food and repair gold.');
+        await expect(post.getByTestId('guild-gm-post-body').locator('li')).toHaveText(['Flasks', 'Food', 'Repair gold']);
         await expect(post.getByTestId('guild-gm-post-byline')).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Edit the guild post' }), 'a plain member cannot edit the post').toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Edit the latest post' }), 'a plain member cannot edit the post').toHaveCount(0);
+        await expect(page.getByTestId('hub-post-new'), 'a plain member cannot post').toHaveCount(0);
     });
 });
 
@@ -117,21 +120,27 @@ test('member: Resources shows rules split by line, links, and addons with Ledger
     });
 });
 
-test('editor (rank-1 officer): edits the GM post and the Players card headline follows', async ({ page }, testInfo) => {
+test('editor (rank-1 officer): a new post becomes the Players card headline, markdown-stripped', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         const headline = `Smoke headline ${Date.now()}`;
-        await page.getByRole('button', { name: 'Edit the guild post' }).click({ timeout: 15_000 });
-        const editor = page.getByTestId('guild-gm-post-editor');
-        await editor.getByRole('textbox').fill(`${headline}\nSecond line stays in the post.`);
-        await editor.getByTestId('guild-gm-post-save').click();
-        await expect(editor).toHaveCount(0);
+        // ROK-1868: the GM post editor became the hub-post composer (TipTap); the headline is typed bold,
+        // so the stored first line is `**headline**` and the Players card must show it stripped.
+        await page.getByTestId('hub-post-new').click({ timeout: 15_000 });
+        const composer = page.getByTestId('hub-post-composer');
+        const frame = composer.getByTestId('hub-post-body');
+        await (await editorTextbox(page, frame)).click();
+        await typeBoldLine(page, frame, headline);
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('Second line stays in the post.');
+        await composer.getByTestId('hub-post-submit').click();
+        await expect(composer).toHaveCount(0);
         const body = page.getByTestId('guild-gm-post-body');
-        await expect(body).toContainText(headline);
+        await expect(body.locator('strong')).toHaveText(headline);
         await expect(body).toContainText('Second line stays in the post.');
         await page.goto('/players');
         const card = page.getByTestId('players-guild-card');
-        await expect(card.getByTestId('players-guild-headline'), 'the headline is the first line only').toHaveText(headline, { timeout: 15_000 });
+        await expect(card.getByTestId('players-guild-headline'), 'the headline is the first line, without the ** markers').toHaveText(headline, { timeout: 15_000 });
     });
 });
 
