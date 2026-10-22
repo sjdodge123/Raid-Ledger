@@ -141,6 +141,11 @@ export const HubDirectoryEntrySchema = z
     viewer: HubViewerStateSchema,
     /** ROK-1875: the hub's kind — the directory lists community, game-server and WoW guild hubs. */
     kind: GuildKindSchema,
+    /**
+     * ROK-1883: staff only — true when an admin hid the hub. Staff see hidden
+     * hubs (marked "Hidden"); everyone else never receives them, nor this key.
+     */
+    hidden: z.boolean().optional(),
   })
   .strict();
 export type HubDirectoryEntry = z.infer<typeof HubDirectoryEntrySchema>;

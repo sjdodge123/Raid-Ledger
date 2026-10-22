@@ -68,3 +68,17 @@ describe('GameHubsSchema', () => {
     expect(GameHubsSchema.safeParse(hubs).success).toBe(true);
   });
 });
+
+describe('HubDirectoryEntrySchema.hidden (ROK-1883)', () => {
+  it('accepts an entry without hidden (non-staff viewers never get it)', () => {
+    expect(HubDirectoryEntrySchema.safeParse(entry).success).toBe(true);
+  });
+
+  it.each([true, false])('accepts hidden: %s for staff', (hidden) => {
+    expect(HubDirectoryEntrySchema.safeParse({ ...entry, hidden }).success).toBe(true);
+  });
+
+  it('rejects a non-boolean hidden', () => {
+    expect(HubDirectoryEntrySchema.safeParse({ ...entry, hidden: 'yes' }).success).toBe(false);
+  });
+});
