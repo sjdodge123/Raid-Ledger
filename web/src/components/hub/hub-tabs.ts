@@ -9,7 +9,8 @@
  * for every hub kind (`#posts`, deep link `?post=<id>#posts`); it follows
  * Resources so Resources keeps its slot right after Events (ROK-1876).
  */
-import type { HubCtx, HubModule } from '../../plugins/hub-module';
+import type { HubCtx, HubModule, HubTab } from '../../plugins/hub-module';
+import { hubGameTabs } from '../../plugins/hub-game-tabs';
 import { hubCopy } from './hub-copy';
 
 export interface HubTabEntry {
@@ -27,9 +28,17 @@ export function canOpenHubPosts(ctx: HubCtx): boolean {
     return ctx.page.viewer.role !== 'visitor';
 }
 
+/**
+ * The module band: the kind module's own tabs plus every plugin's game tabs
+ * (ROK-1912 `registerHubGameTab`), each game tab gated on `page.guild.gameSlug`.
+ */
+export function hubModuleTabs(mod: HubModule | undefined): HubTab[] {
+    return [...(mod?.tabs ?? []), ...hubGameTabs()];
+}
+
 /** Resources joins once it has content, or straight away for an editor; Posts once there is a post and the viewer may open it. */
 export function hubTabs(mod: HubModule | undefined, ctx: HubCtx, showResources: boolean, hasPosts = false): HubTabEntry[] {
-    const moduleTabs = [...(mod?.tabs ?? [])]
+    const moduleTabs = hubModuleTabs(mod)
         .sort((a, b) => a.order - b.order)
         .map((t) => ({ id: t.id, label: t.label, hidden: t.visible ? !t.visible(ctx) : false }));
     return [
