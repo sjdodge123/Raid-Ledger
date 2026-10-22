@@ -88,13 +88,20 @@ jobs:
               - 'rl-infra/runner/Dockerfile'
               # The lint job runs the rl-infra dashboard node:test suite.
               - 'rl-infra/dashboard/**'
+              # A change to this workflow must exercise the jobs it defines.
+              # Without it a ci.yml-only PR skips every job and the required
+              # aggregators go green on skips, so the first real run is on
+              # main after merge. Keep it in code, api and web permanently.
+              - '.github/workflows/ci.yml'
             api:
+              - '.github/workflows/ci.yml'
               - 'api/package.json'
               - 'package-lock.json'
               - 'api/src/**'
               - 'api/jest*.config.*'
               - 'packages/contract/**'
             web:
+              - '.github/workflows/ci.yml'
               - 'web/package.json'
               - 'package-lock.json'
               - 'web/src/**'
@@ -216,9 +223,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/eslintcache
-          key: ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'eslint.config.*', 'api/eslint.config.*', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-${{ github.sha }}
+          key: ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'eslint.config.*', 'api/eslint.config.*', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-
+            ${{ runner.os }}-eslint-${{ hashFiles('package-lock.json', 'tools/test-bot/package-lock.json', 'web/eslint.config.*', 'packages/*/eslint.config.*', 'tools/*/eslint.config.*') }}-
 
       # Every workspace except api (above), read from package.json so a new
       # workspace is linted without editing this file. --if-present matches
@@ -230,7 +237,9 @@ jobs:
           set -euo pipefail
           npm query .workspace | jq -r '.[].name' | grep -vx '@raid-ledger/api' | while read -r ws; do
             echo "::group::lint $ws"
-            npm run lint -w "$ws" --if-present -- --cache --cache-strategy content --cache-location "$ESLINT_CACHE_DIR"
+            # </dev/null: the loop reads names from the pipe; a child that
+            # reads stdin would swallow the rest and skip their lint silently.
+            npm run lint -w "$ws" --if-present -- --cache --cache-strategy content --cache-location "$ESLINT_CACHE_DIR" </dev/null
             echo "::endgroup::"
           done
 
@@ -355,7 +364,7 @@ jobs:
       # Behavioral shell tests. `bash -n` only proves a script PARSES — it
       # cannot catch a logic bug like validate-ci.sh's run_step reading exit
       # code 2 as SKIPPED, which silently reported broken builds as passing
-      # and survived two backlog reports. The suite runs in ~5s.
+      # and survived two backlog reports.
       - name: Shell behavior tests (scripts/test)
         run: ./scripts/test/run-all.sh
 
@@ -363,7 +372,6 @@ jobs:
       # both --static and --full, but until now no GitHub job did, so the real
       # gate never exercised them. restore-drill-corruption.spec.mjs imports
       # packages/contract/dist, built above.
-      # Order matters: run-all.sh first, then node:test, as in the old lint job.
       - name: Script node:test specs (scripts/*.spec.mjs)
         run: node --test scripts/*.spec.mjs
 
@@ -448,13 +456,15 @@ jobs:
       - name: Build contract
         run: npm run build -w packages/contract
 
-      # --reporter=default keeps the per-test log; blob is what the merge reads.
+      # --reporter=default keeps the per-test log; blob is what the merge reads;
+      # github-actions restores the inline PR annotations an explicit
+      # --reporter list otherwise drops.
       # Explicit outputFile: the default (.vitest/blob) is a dot-dir, which
       # upload-artifact skips.
       - name: Test web shard ${{ matrix.shard }}/3 (with coverage)
         run: >-
           npx vitest run --shard=${{ matrix.shard }}/3
-          --reporter=default --reporter=blob
+          --reporter=default --reporter=github-actions --reporter=blob
           --outputFile.blob=vitest-blob/blob-${{ matrix.shard }}-3.json
           --coverage
           --coverage.thresholds.lines=0 --coverage.thresholds.functions=0
@@ -475,6 +485,7 @@ jobs:
   # leaves it skipped and `unit-tests` fails on unit-tests-web itself.
   unit-tests-web-merge:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [unit-tests-web]
 
     steps:
@@ -662,10 +673,14 @@ jobs:
           WEB="${{ needs.unit-tests-web.result }}"
           MERGE="${{ needs.unit-tests-web-merge.result }}"
           CONTRACT="${{ needs.unit-tests-contract.result }}"
-          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ] || [ "$MERGE" = "failure" ] || [ "$CONTRACT" = "failure" ]; then
-            echo "Unit tests failed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT)"
-            exit 1
-          fi
+          # cancelled counts as failed, as in tools-tests: a cancelled shard
+          # skips the merge, so coverage would otherwise go unchecked.
+          for X in "$API" "$WEB" "$MERGE" "$CONTRACT"; do
+            if [ "$X" = "failure" ] || [ "$X" = "cancelled" ]; then
+              echo "Unit tests failed (api=$API, web=$WEB, web-merge=$MERGE, contract=$CONTRACT)"
+              exit 1
+            fi
+          done
           # Shards green but the threshold merge never ran = coverage unchecked.
           if [ "$WEB" = "success" ] && [ "$MERGE" != "success" ]; then
             echo "Web coverage merge did not succeed (web=$WEB, web-merge=$MERGE)"
