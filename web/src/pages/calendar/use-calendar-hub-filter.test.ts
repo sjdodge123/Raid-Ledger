@@ -57,3 +57,15 @@ describe('useHubFilteredEvents + useCalendarHubFilter (ROK-1893 P4)', () => {
         expect(result.current.hubs.hiddenCount).toBe(1);
     });
 });
+
+describe('useCalendarHubFilterStore.clearViewer (ROK-1893 P4)', () => {
+    it('forgets the departing viewer\'s hubs and hidden set', () => {
+        const store = useCalendarHubFilterStore.getState();
+        store.addKnown([{ id: 7, name: 'BG3 Friends', kind: 'game_community' }]);
+        store.toggle(7);
+        store.toggle(NO_HUB);
+        useCalendarHubFilterStore.getState().clearViewer();
+        const after = useCalendarHubFilterStore.getState();
+        expect({ known: after.known, hidden: [...after.hidden] }).toEqual({ known: [], hidden: [] });
+    });
+});

@@ -18,14 +18,18 @@ interface HubFilterState {
     addKnown: (hubs: EventHubRef[]) => void;
     toggle: (key: HubKey) => void;
     showAll: () => void;
+    /** The viewer changed (logout, login, impersonation): forget the hubs and hidden set. */
+    clearViewer: () => void;
 }
 
 export const useCalendarHubFilterStore = create<HubFilterState>((set) => ({
     known: [],
     hidden: new Set<HubKey>(),
     addKnown: (hubs) => set((s) => {
-        const fresh = hubs.filter((h) => !s.known.some((k) => k.id === h.id));
-        return fresh.length === 0 ? s : { known: [...s.known, ...fresh].sort((a, b) => a.name.localeCompare(b.name)) };
+        // Dedupe within the batch too: several loaded events share a hub.
+        const byId = new Map(s.known.map((k) => [k.id, k]));
+        for (const h of hubs) if (!byId.has(h.id)) byId.set(h.id, h);
+        return byId.size === s.known.length ? s : { known: [...byId.values()].sort((a, b) => a.name.localeCompare(b.name)) };
     }),
     toggle: (key) => set((s) => {
         const hidden = new Set(s.hidden);
@@ -33,6 +37,7 @@ export const useCalendarHubFilterStore = create<HubFilterState>((set) => ({
         return { hidden };
     }),
     showAll: () => set({ hidden: new Set<HubKey>() }),
+    clearViewer: () => set({ known: [], hidden: new Set<HubKey>() }),
 }));
 
 export const hubKeyOf = (e: Pick<EventResponseDto, 'hub'>): HubKey => e.hub?.id ?? NO_HUB;
@@ -47,7 +52,7 @@ export function useHubFilteredEvents<T extends { resource: EventResponseDto }>(e
     return useMemo(() => (hidden.size === 0 ? events : events.filter((e) => !hidden.has(hubKeyOf(e.resource)))), [events, hidden]);
 }
 
-export interface CalendarHubFilter extends Omit<HubFilterState, 'addKnown'> {
+export interface CalendarHubFilter extends Omit<HubFilterState, 'addKnown' | 'clearViewer'> {
     /** Hidden options (known hubs + "No hub") — the Filters badge. */
     hiddenCount: number;
 }
