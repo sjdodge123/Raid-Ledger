@@ -8,9 +8,14 @@
 import { WOW_COMMON_MANIFEST } from '../../plugins/wow-common/manifest';
 import {
   app,
+  authOf,
+  banCommunity,
+  getHubs,
+  must,
   registry,
   seedHub,
   seedMatrix,
+  seedUser,
   setupMatrixSuite,
   type Auth,
   type Entry,
@@ -40,6 +45,21 @@ function namesInOrder(m: Matrix, body: GameHubsBody): string[] {
   return body.hubs.map((h) => byId.get(h.id) ?? `?${h.id}`);
 }
 
+/** Staff see every live hub (never proposed/archived), hidden ones flagged. */
+function expectStaffView(m: Matrix, body: GameHubsBody): void {
+  expect([...namesInOrder(m, body)].sort()).toEqual([
+    'C1',
+    'C4',
+    'S1',
+    'S2',
+    'W1',
+    'W2',
+    'W3',
+  ]);
+  const hidden = new Set([m.ids.C4, m.ids.S2, m.ids.W3]);
+  for (const h of body.hubs) expect(h.hidden).toBe(hidden.has(h.id));
+}
+
 describe('GET /hubs/by-game/:gameId — every live kind (ROK-1883)', () => {
   it('u1 sees C1, S1, W1 once each as a member', async () => {
     const m = await seedMatrix();
@@ -64,7 +84,9 @@ describe('GET /hubs/by-game/:gameId — every live kind (ROK-1883)', () => {
     const body = await byGame(m.u1);
     expect(namesInOrder(m, body)).toEqual(['W1', 'S1', 'C1', 'C5']);
   });
+});
 
+describe('GET /hubs/by-game/:gameId — by viewer role (ROK-1883)', () => {
   it('u2 sees C1 and S1, no WoW rows, no hidden key', async () => {
     const m = await seedMatrix();
     const body = await byGame(m.u2);
@@ -77,20 +99,30 @@ describe('GET /hubs/by-game/:gameId — every live kind (ROK-1883)', () => {
 
   it('admin sees every live hub incl. hidden ones, never proposed/archived', async () => {
     const m = await seedMatrix();
-    const body = await byGame(m.admin);
-    expect([...namesInOrder(m, body)].sort()).toEqual([
-      'C1',
-      'C4',
-      'S1',
-      'S2',
-      'W1',
-      'W2',
-      'W3',
-    ]);
-    const hidden = new Set([m.ids.C4, m.ids.S2, m.ids.W3]);
-    for (const h of body.hubs) expect(h.hidden).toBe(hidden.has(h.id));
+    expectStaffView(m, await byGame(m.admin));
   });
 
+  it('an operator sees hidden hubs flagged hidden, like admin', async () => {
+    const m = await seedMatrix();
+    const op = await authOf(await seedUser('dir-op', 'operator'));
+    expectStaffView(m, await byGame(op));
+  });
+});
+
+describe('GET /hubs/by-game/:gameId — a banned viewer (ROK-1883)', () => {
+  it('a viewer banned from C1 still sees it as banned, same as /hubs', async () => {
+    const m = await seedMatrix();
+    const user = await seedUser('dir-banned');
+    await banCommunity(must(m.ids.C1), user.id);
+    const auth = await authOf(user);
+    const card = (await byGame(auth)).hubs.find((h) => h.id === m.ids.C1);
+    const dir = (await getHubs(auth)).items.find((h) => h.id === m.ids.C1);
+    expect(card?.viewer).toBe('banned');
+    expect(dir?.viewer).toBe('banned');
+  });
+});
+
+describe('GET /hubs/by-game/:gameId — plugins and proposals (ROK-1883)', () => {
   it('the WoW plugin deactivated drops wow_guild rows', async () => {
     const m = await seedMatrix();
     await registry().deactivate(WOW_COMMON_MANIFEST.id);

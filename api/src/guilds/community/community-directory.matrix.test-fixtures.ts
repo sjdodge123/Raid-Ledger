@@ -64,33 +64,41 @@ export async function authOf(
   return { Authorization: `Bearer ${token}` };
 }
 
-/** One hub on the seed game. */
-export async function seedHub(name: string, o: HubOpts): Promise<number> {
+/** The `guilds` insert row for one hub on the seed game. */
+function hubValues(
+  name: string,
+  o: HubOpts,
+): typeof schema.guilds.$inferInsert {
   const status = o.status ?? 'active';
   const community = o.kind === 'game_community';
   const archived = status === 'archived';
+  return {
+    gameId: testApp.seed.game.id,
+    kind: o.kind,
+    region: community ? 'community' : 'us',
+    source: community
+      ? 'community'
+      : o.kind === 'wow_guild'
+        ? 'addon_import'
+        : 'pelican',
+    name,
+    nameKey: name.toLowerCase(),
+    status,
+    memberCount: o.members ?? 0,
+    hiddenAt: o.hidden ? new Date() : null,
+    lastSnapshotAt: o.kind === 'wow_guild' ? SNAP : null,
+    archivedAt: archived ? new Date() : null,
+    archivedReason: archived ? 'admin' : null,
+    proposedBy: status === 'proposed' ? testApp.seed.adminUser.id : null,
+  };
+}
+
+/** One hub on the seed game. */
+export async function seedHub(name: string, o: HubOpts): Promise<number> {
   const [hub] = nonEmpty(
     await testApp.db
       .insert(schema.guilds)
-      .values({
-        gameId: testApp.seed.game.id,
-        kind: o.kind,
-        region: community ? 'community' : 'us',
-        source: community
-          ? 'community'
-          : o.kind === 'wow_guild'
-            ? 'addon_import'
-            : 'pelican',
-        name,
-        nameKey: name.toLowerCase(),
-        status,
-        memberCount: o.members ?? 0,
-        hiddenAt: o.hidden ? new Date() : null,
-        lastSnapshotAt: o.kind === 'wow_guild' ? SNAP : null,
-        archivedAt: archived ? new Date() : null,
-        archivedReason: archived ? 'admin' : null,
-        proposedBy: status === 'proposed' ? testApp.seed.adminUser.id : null,
-      })
+      .values(hubValues(name, o))
       .returning(),
     `hub ${name}`,
   );
@@ -105,6 +113,17 @@ export async function joinCommunity(
   await testApp.db
     .insert(schema.hubCommunityMembers)
     .values({ guildId, userId, role: 'member' });
+}
+
+/** A community membership ended by a ban (D7): left and banned. */
+export async function banCommunity(
+  guildId: number,
+  userId: number,
+): Promise<void> {
+  const now = new Date();
+  await testApp.db
+    .insert(schema.hubCommunityMembers)
+    .values({ guildId, userId, role: 'member', leftAt: now, bannedAt: now });
 }
 
 /** A server-hub row: a live manual Join, or a presence sighting `daysAgo`. */
