@@ -74,14 +74,23 @@ export function useWithdrawProposal(): UseMutationResult<void, Error, number> {
 }
 
 /** Submit a proposal; on success the card's "Your proposals" gains the row. */
-export function useProposeHub(gameId: number): UseMutationResult<HubProposal, Error, CreateHubProposalDto> {
+/**
+ * Submit a proposal. `live` (ROK-1892: an admin/operator proposer) means the
+ * server approved it on submit — it is a live hub, not a pending proposal.
+ */
+export function useProposeHub(gameId: number, live = false): UseMutationResult<HubProposal, Error, CreateHubProposalDto> {
     const qc = useQueryClient();
     const key = gameHubsKey(gameId);
     return useMutation<HubProposal, Error, CreateHubProposalDto>({
         mutationFn: (body) => fetchApi('/hubs/proposals', { method: 'POST', body: JSON.stringify(body) }, HubProposalSchema),
         onSuccess: (proposal) => {
-            qc.setQueryData<GameHubs>(key, (d) => (d ? { ...d, myProposals: [...d.myProposals, proposal] } : d));
-            toast.success('Sent for review');
+            if (live) {
+                toast.success('Your hub is live');
+                void invalidateHubMembership(qc, proposal.id);
+            } else {
+                qc.setQueryData<GameHubs>(key, (d) => (d ? { ...d, myProposals: [...d.myProposals, proposal] } : d));
+                toast.success('Sent for review');
+            }
             void qc.invalidateQueries({ queryKey: ALL_GAME_HUBS });
         },
     });
