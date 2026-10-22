@@ -9,7 +9,12 @@
  *     below the base's newest idx (it collides with, or sits under, main's);
  *   - two journal entries share an idx, or two tags share an NNNN prefix;
  *   - an entry's tag prefix disagrees with its idx;
- *   - two .sql files in the migrations folder share an NNNN prefix.
+ *   - two .sql files in the migrations folder share an NNNN prefix;
+ *   - a journal entry the branch has already merged (present at the merge base
+ *     of HEAD and the base) is missing from the branch journal — a bad "keep
+ *     ours" on _journal.json that dropped main's entry, which Drizzle would then
+ *     never run. Measured at the merge base, not the base tip, so a branch that
+ *     simply has not merged main's newest entries yet is not flagged.
  * Every report names the one command that fixes it.
  *
  * Usage:
@@ -59,6 +64,14 @@ function journalViolations(baseEntries, headEntries) {
   return out;
 }
 
+/** Entries the branch already merged (merge-base journal) that its journal no longer has. */
+function missingMergedEntries(mergedEntries, headEntries) {
+  const headTags = new Set(headEntries.map((e) => e.tag));
+  return mergedEntries
+    .filter((e) => !headTags.has(e.tag))
+    .map((e) => ({ kind: 'missing-base-entry', tag: e.tag, idx: e.idx }));
+}
+
 function fileViolations(sqlFiles) {
   const seen = new Map();
   const out = [];
@@ -73,10 +86,16 @@ function fileViolations(sqlFiles) {
 
 /**
  * Collisions for a branch journal (headEntries) against the base journal, plus
- * the migrations folder's .sql file names. Empty array means no collision.
+ * the migrations folder's .sql file names. `mergedEntries` is the journal at the
+ * merge base of HEAD and the base: every one of those must still be in head.
+ * Empty array means no collision.
  */
-export function findIndexCollisions(baseEntries, headEntries, sqlFiles) {
-  return [...journalViolations(baseEntries, headEntries), ...fileViolations(sqlFiles)];
+export function findIndexCollisions(baseEntries, headEntries, sqlFiles, mergedEntries = []) {
+  return [
+    ...journalViolations(baseEntries, headEntries),
+    ...missingMergedEntries(mergedEntries, headEntries),
+    ...fileViolations(sqlFiles),
+  ];
 }
 
 function describe(v, baseRef) {
@@ -89,6 +108,8 @@ function describe(v, baseRef) {
       return `  ${v.tag}: idx ${v.idx} is already used by ${v.other} in the journal.`;
     case 'duplicate-prefix':
       return `  ${v.tag}: prefix ${v.prefix} is already used by ${v.other} in the journal.`;
+    case 'missing-base-entry':
+      return `  ${v.tag}: merged from ${baseRef} but missing from this branch's journal (a bad "keep ours" on _journal.json?) — Drizzle would never run it.`;
     case 'tag-idx-mismatch':
       return `  ${v.tag}: tag prefix does not match its idx ${v.idx}.`;
     default:
@@ -119,6 +140,22 @@ function parseArgs(argv) {
   return opts;
 }
 
+/** Journal at merge-base(HEAD, ref); [] when there is none (unrelated history, shallow clone). */
+function readMergedEntries(root, ref) {
+  let mergeBase;
+  try {
+    mergeBase = execFileSync('git', ['merge-base', 'HEAD', ref], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    console.error(`⚠ index-collision guard: no merge base of HEAD and ${ref} — skipping the missing-entry check`);
+    return [];
+  }
+  return readBaseEntries(root, mergeBase) ?? [];
+}
+
 function readBaseEntries(root, ref) {
   let raw;
   try {
@@ -142,7 +179,8 @@ function main() {
   }
   const headEntries = JSON.parse(readFileSync(path.join(root, JOURNAL_REL), 'utf8')).entries;
   const sqlFiles = readdirSync(path.join(root, MIGRATIONS_REL)).filter((f) => f.endsWith('.sql'));
-  const violations = findIndexCollisions(baseEntries, headEntries, sqlFiles);
+  const merged = readMergedEntries(root, base);
+  const violations = findIndexCollisions(baseEntries, headEntries, sqlFiles, merged);
   if (violations.length > 0) {
     console.error(formatCollisionReport(violations, base));
     return 1;
