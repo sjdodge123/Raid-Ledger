@@ -102,6 +102,12 @@ export const PelicanServerRowSchema = z
       .strict()
       .nullable()
       .optional(),
+    /**
+     * ROK-1882 — the game server's IANA timezone (e.g. `Europe/Berlin`): the
+     * day boundary for Valheim skill-trend play days. Null = use the community
+     * default. (Pelican schedules themselves stay UTC — ROK-1795.)
+     */
+    timezone: z.string().max(64).nullable().optional(),
   })
   .strict();
 export type PelicanServerRowDto = z.infer<typeof PelicanServerRowSchema>;
@@ -115,7 +121,8 @@ export type PelicanServerListResponse = z.infer<
 
 /**
  * `PATCH /admin/plugins/pelican/servers/:id` — omitted = unchanged. Pelican
- * schedules are always UTC (ROK-1795), so there is no timezone field.
+ * schedules are always UTC (ROK-1795); `timezone` is only the game server's
+ * local day boundary (ROK-1882), validated as an IANA zone server-side.
  */
 export const PelicanServerUpdateSchema = z
   .object({
@@ -124,6 +131,8 @@ export const PelicanServerUpdateSchema = z
     presenceTracking: z.boolean(),
     /** ROK-1831 — on creates or un-hides the hub; off hides it. */
     communityHub: z.boolean(),
+    /** ROK-1882 — IANA zone for the server's play-day boundary; null clears it (community default). */
+    timezone: z.string().min(1).max(64).nullable(),
   })
   .partial()
   .strict()
