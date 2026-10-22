@@ -214,10 +214,25 @@ async function deleteOldHubEvents(
     );
 }
 
+const HUB_EVENT_HOURS = 3;
+
 /**
- * ROK-1893 P4: one event tagged to `hubId`, starting on a whole hour 1–2h
- * from now (so it sits in the current calendar week except late on a Saturday —
- * smoke specs deep-link `?date=` from `startTime`). The title carries the hub
+ * A whole hour 1–2h from now, or 18:00 UTC tomorrow when that would run past
+ * UTC midnight (a day-crossing event leaves the Week grid's timed column).
+ */
+export function hubEventStart(nowMs: number): Date {
+  const start = new Date((Math.floor(nowMs / HOUR_MS) + 2) * HOUR_MS);
+  if (start.getUTCHours() + HUB_EVENT_HOURS <= 24) return start;
+  start.setUTCDate(start.getUTCDate() + 1);
+  start.setUTCHours(18);
+  return start;
+}
+
+/**
+ * ROK-1893 P4: one 3h event (the Week card's `compact` tier, which shows the
+ * hub) tagged to `hubId`, at `hubEventStart` — the current calendar week
+ * except late on a Saturday, so smoke specs deep-link `?date=` from
+ * `startTime`. The title carries the hub
  * id, so it is unique per seed. Earlier fixture events by `creatorId` on the
  * game are deleted first: the reset deletes their hub, which only nulls
  * `guild_id`, so they would linger as untagged duplicates.
@@ -230,8 +245,8 @@ export async function seedHubEvent(
 ): Promise<SeedHubEvent> {
   await deleteOldHubEvents(db, gameId, creatorId);
   const ev = schema.events;
-  const start = new Date((Math.floor(Date.now() / HOUR_MS) + 2) * HOUR_MS);
-  const end = new Date(start.getTime() + 2 * HOUR_MS);
+  const start = hubEventStart(Date.now());
+  const end = new Date(start.getTime() + HUB_EVENT_HOURS * HOUR_MS);
   const title = `${HUB_EVENT_PREFIX}${hubId}`;
   const [row] = await db
     .insert(ev)
