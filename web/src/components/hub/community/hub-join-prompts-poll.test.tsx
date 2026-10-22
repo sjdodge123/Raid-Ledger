@@ -21,7 +21,7 @@ vi.mock('../../../lib/api-client', async (importOriginal) => ({
 const fetchMock = vi.mocked(fetchApi);
 const EVENT_ID = 7;
 const NOW = Date.UTC(2026, 9, 22, 12, 0, 0);
-const EMPTY: HubJoinPromptList = { items: [] };
+const EMPTY: HubJoinPromptList = { items: [], inDiscordServer: true, discordServerInviteUrl: null };
 const PROMPT: HubJoinPrompt = {
     id: 1, kind: 'suggest', hubId: 3, hubName: 'Hub', source: 'signup', sourceRef: EVENT_ID,
     createdAt: new Date(NOW).toISOString(),

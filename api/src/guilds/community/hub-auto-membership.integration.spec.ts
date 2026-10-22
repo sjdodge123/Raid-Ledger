@@ -15,6 +15,7 @@ import * as schema from '../../drizzle/schema';
 import { insertCommunityHub } from './community-proposals.queries';
 import { refreshMemberCount } from './community-membership.queries';
 import { HubAutoMembershipService } from './hub-auto-membership.service';
+import { HubDiscordInviteService } from './invites/hub-discord-invite.service';
 
 interface Who {
   id: number;
@@ -147,6 +148,8 @@ describe('signup → auto-membership (A1–A4)', () => {
       items: [
         { kind: 'suggest', hubId: hub, source: 'signup', sourceRef: event },
       ],
+      inDiscordServer: true,
+      discordServerInviteUrl: null,
     });
   });
 
@@ -170,6 +173,23 @@ describe('signup → auto-membership (A1–A4)', () => {
     expect(await auto.onSignup(await mkEvent(hub), u.id)).toBe('suggest');
     expect(await memberRow(hub, u.id)).toBeNull();
     expect((await promptRow(hub, u.id))?.kind).toBe('suggest');
+  });
+
+  it('A2c: the list tells a signer outside the Discord server to join it, with the server invite', async () => {
+    const [leader, u] = [await mkUser(), await mkUser(false)];
+    const hub = await mkHub(leader, 'auto');
+    const mint = jest
+      .spyOn(testApp.app.get(HubDiscordInviteService), 'serverInviteUrl')
+      .mockResolvedValue('https://discord.gg/rl-test');
+    expect(await auto.onSignup(await mkEvent(hub), u.id)).toBe('suggest');
+    const list = await call('get', '/users/me/hub-join-prompts', u.token);
+    expect(list.status).toBe(200);
+    expect(list.body).toMatchObject({
+      items: [{ kind: 'suggest', hubId: hub }],
+      inDiscordServer: false,
+      discordServerInviteUrl: 'https://discord.gg/rl-test',
+    });
+    expect(mint).toHaveBeenCalledWith(hub);
   });
 
   it('A3: off — nothing happens', async () => {
@@ -240,7 +260,11 @@ describe('prompts of deleted events (A5b)', () => {
     });
     await testApp.db.delete(schema.events).where(eq(schema.events.id, event));
     const list = await call('get', '/users/me/hub-join-prompts', u.token);
-    expect(list.body).toEqual({ items: [] });
+    expect(list.body).toEqual({
+      items: [],
+      inDiscordServer: true,
+      discordServerInviteUrl: null,
+    });
   });
 });
 
@@ -262,7 +286,11 @@ describe('prompts (A5–A6)', () => {
     expect(await memberRow(hub, u.id)).toBeNull();
     expect((await promptRow(hub, u.id))?.dismissedAt).not.toBeNull();
     const list = await call('get', '/users/me/hub-join-prompts', u.token);
-    expect(list.body).toEqual({ items: [] });
+    expect(list.body).toEqual({
+      items: [],
+      inDiscordServer: true,
+      discordServerInviteUrl: null,
+    });
   });
 
   it('A6: Join on a suggest prompt joins with source prompt and closes it', async () => {

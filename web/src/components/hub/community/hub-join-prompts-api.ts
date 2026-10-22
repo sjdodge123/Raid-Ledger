@@ -26,7 +26,7 @@ export const PROMPT_POLL_MS = 1_000;
 
 /** Poll while the watch is open and no signup prompt for `eventId` has arrived yet. */
 export function promptPollInterval(
-    deadline: number | undefined, data: HubJoinPromptList | undefined, eventId: number, now: number,
+    deadline: number | undefined, data: Pick<HubJoinPromptList, 'items'> | undefined, eventId: number, now: number,
 ): number | false {
     if (deadline === undefined || now >= deadline) return false;
     const arrived = (data?.items ?? []).some((p) => p.source === 'signup' && p.sourceRef === eventId);
@@ -50,7 +50,7 @@ export function useHubJoinPrompts(enabled: boolean, watchEventId?: number): UseQ
 }
 
 function dropPrompt(list: HubJoinPromptList | undefined, id: number): HubJoinPromptList | undefined {
-    return list === undefined ? undefined : { items: list.items.filter((p) => p.id !== id) };
+    return list === undefined ? undefined : { ...list, items: list.items.filter((p) => p.id !== id) };
 }
 
 /** "Join hub" on a `suggest` prompt; the hub's membership surfaces refetch after. */

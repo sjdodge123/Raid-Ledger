@@ -79,16 +79,20 @@ export function HubInviteCard({ hub, children }: { hub: PreviewHub; children: Re
     );
 }
 
-/** Signed in but not in the hub's Discord server (R2): join there first, then retry. */
-export function DiscordFirstBlock({ inviteUrl, onRetry, retrying }: {
-    inviteUrl: string | null; onRetry: () => void; retrying: boolean;
+const DISCORD_FIRST_NOTE = "Hub members have to be in the community's Discord server. Join it, then come back to this link.";
+const LINK_DISCORD_NOTE = "Hub members have to be in the community's Discord server, so your account needs Discord linked. Link it, then come back to this link.";
+
+/**
+ * Signed in but not in the hub's Discord server (R2): join there first, then
+ * retry. `note` overrides the landing-page copy (the event page's join prompt).
+ */
+export function DiscordFirstBlock({ inviteUrl, onRetry, retrying, note = DISCORD_FIRST_NOTE }: {
+    inviteUrl: string | null; onRetry: () => void; retrying: boolean; note?: string;
 }): JSX.Element {
     return (
         <div className="space-y-2 rounded-lg border border-warning/30 bg-warning/10 p-3" data-testid="hub-invite-discord-first">
             <p className="text-sm font-semibold text-foreground">Join the Discord server first</p>
-            <p className="text-xs text-secondary">
-                Hub members have to be in the community&apos;s Discord server. Join it, then come back to this link.
-            </p>
+            <p className="text-xs text-secondary">{note}</p>
             <div className="flex flex-wrap gap-2">
                 {inviteUrl && (
                     <a href={inviteUrl} target="_blank" rel="noopener noreferrer" data-testid="hub-invite-discord-link"
@@ -101,14 +105,12 @@ export function DiscordFirstBlock({ inviteUrl, onRetry, retrying }: {
 }
 
 /** Signed in without a linked Discord account: hub membership is checked by Discord id. */
-export function LinkDiscordFirstBlock(): JSX.Element {
+export function LinkDiscordFirstBlock({ note = LINK_DISCORD_NOTE }: { note?: string } = {}): JSX.Element {
     const { linkDiscord, isPending } = useDiscordLinkAction();
     return (
         <div className="space-y-2 rounded-lg border border-warning/30 bg-warning/10 p-3" data-testid="hub-invite-link-discord">
             <p className="text-sm font-semibold text-foreground">Link your Discord account first</p>
-            <p className="text-xs text-secondary">
-                Hub members have to be in the community&apos;s Discord server, so your account needs Discord linked. Link it, then come back to this link.
-            </p>
+            <p className="text-xs text-secondary">{note}</p>
             <Button variant="primary" size="sm" disabled={isPending} onClick={linkDiscord}>Link Discord</Button>
         </div>
     );

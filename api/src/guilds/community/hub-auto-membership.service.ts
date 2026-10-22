@@ -26,6 +26,7 @@ import {
   isRecruitingHub,
   type AutoMembershipAction,
 } from './hub-auto-membership.decision';
+import { HubDiscordInviteService } from './invites/hub-discord-invite.service';
 import * as q from './hub-join-prompts.queries';
 
 /**
@@ -43,6 +44,7 @@ export class HubAutoMembershipService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly membership: CommunityMembershipService,
+    private readonly discordInvite: HubDiscordInviteService,
   ) {}
 
   @OnEvent(SIGNUP_EVENTS.CREATED)
@@ -111,9 +113,22 @@ export class HubAutoMembershipService {
     return { mode };
   }
 
-  /** GET /users/me/hub-join-prompts */
+  /**
+   * GET /users/me/hub-join-prompts — plus the viewer's Discord state: a
+   * `suggest` Join needs the community Discord server (no staff bypass), so
+   * the card swaps Join for "Join the Discord server first" + a bot-made
+   * server invite (minted only when one would be shown).
+   */
   async listMine(userId: number): Promise<HubJoinPromptList> {
-    return { items: await q.listOpenPrompts(this.db, userId) };
+    const items = await q.listOpenPrompts(this.db, userId);
+    const fields = await loadDiscordFields(this.db, userId);
+    const inDiscordServer = fields !== null && isInDiscordGuild(fields);
+    const suggest = items.find((p) => p.kind === 'suggest');
+    const discordServerInviteUrl =
+      !inDiscordServer && suggest
+        ? await this.discordInvite.serverInviteUrl(suggest.hubId)
+        : null;
+    return { items, inDiscordServer, discordServerInviteUrl };
   }
 
   /** POST …/:id/accept — `suggest` joins (source `prompt`); both dismiss. */
