@@ -36,7 +36,7 @@ function rect(left: number, right: number): DOMRect {
 /** The row is 0–100px wide; the active tab sits at `activeLeft`, every other tab at 0–50. */
 function mockGeometry(activeLeft: number): void {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-        if (this.tagName === 'NAV') return rect(0, 100);
+        if (this.tagName === 'UL') return rect(0, 100);
         return this.getAttribute('aria-current') === 'page' ? rect(activeLeft, activeLeft + 60) : rect(0, 50);
     });
 }
@@ -73,7 +73,8 @@ describe('TabRow — markup', () => {
 
     it('scrolls inside its own row with a thin scrollbar', () => {
         render(<TabRow tabs={TABS} activeId="overview" label="Sections" />);
-        const nav = screen.getByRole('navigation');
+        // ROK-1876: the scroller is the tab list, so the nav (and the More menu it holds) is never clipped.
+        const nav = screen.getByTestId('tab-row-scroller');
         expect(nav.className).toContain('overflow-x-auto');
         // The tabs' -mb-px underline is 1px of vertical overflow: without this a vertical scrollbar shows on phones.
         expect(nav.className, 'the row must never scroll (or draw a scrollbar) vertically').toContain('overflow-y-hidden');

@@ -3,7 +3,7 @@
  *
  * A throwaway plugin registers a `game_server` hub module with one tab and one
  * Overview widget. The core `/guilds/:id` shell must offer the tab in the
- * frame's module band (after Overview/Members, before Resources), render its
+ * frame's module band (after the Overview/Members/Events/Resources core band), render its
  * panel when selected, and draw the widget in the Overview bento — none of
  * which this file teaches core about.
  */
