@@ -27,6 +27,7 @@ import { LayerDayColumnWrapper } from './layers/LayerDayColumnWrapper';
 import { LayerBackgroundEventWrapper } from './layers/LayerBackgroundEventWrapper';
 import { LayerMonthDateHeader } from './layers/LayerMonthDateHeader';
 import { useZonedLayerRange } from './layers/use-zoned-layer-range';
+import { useHubFilteredEvents } from '../../pages/calendar/use-calendar-hub-filter';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
 import './layers/calendar-layers.css';
@@ -165,7 +166,7 @@ function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
     const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
-    const calendarEvents = useCalendarEvents(eventsData, selectedGames, resolved);
+    const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved));
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
