@@ -111,7 +111,7 @@ function useTemplateActions(form: FormState) {
 function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
     mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean,
-    followupForEventId?: number | null, originalGuildId: number | null = null) {
+    followupForEventId?: number | null, originalGuildId: number | null = null, pollHubId: number | null = null) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
     const [firstErrorKey] = Object.keys(validationErrors);
@@ -120,7 +120,7 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
-    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId));
+    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId, pollHubId));
 }
 
 function useCreateEventFormState(
@@ -166,9 +166,11 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
     const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null);
+    // ROK-1893 P3: the hub of the poll being locked in (its guildId deep-link param).
+    const pollHubId = schedulingMatchId != null ? initialGuildId ?? null : null;
 
     return (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null); }} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
                 registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />

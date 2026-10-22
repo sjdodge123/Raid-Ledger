@@ -116,6 +116,15 @@ describe('guildId (ROK-1787)', () => {
         expect(guildIdForSubmit(9, false, null)).toEqual({ guildId: 9 });
     });
 
+    it('ROK-1893 P3: a hub poll lock-in omits its own hub so the server inherits it', () => {
+        expect(guildIdForSubmit(9, false, null, 9), 'the poll hub kept → omitted (no Leader/Officer check)').toEqual({});
+        expect(guildIdForSubmit(4, false, null, 9), 'another hub picked → sent, normal tag check').toEqual({ guildId: 4 });
+        expect(guildIdForSubmit(null, false, null, 9), 'cleared → nothing to send (create guildId is not nullable)').toEqual({});
+        const form = { ...getInitialState(undefined, TZ), title: 'MC', startDate: '2030-01-08', startTime: '20:00', guildId: 9 };
+        expect(buildSubmitDto(form, TZ, 42, false, null, null, 9)).not.toHaveProperty('guildId');
+        expect(buildSubmitDto({ ...form, guildId: 4 }, TZ, 42, false, null, null, 9)).toMatchObject({ guildId: 4 });
+    });
+
     it('edit sends guildId only when it changed — null clears the tag', () => {
         expect(guildIdForSubmit(9, true, 9), 'an unchanged tag is omitted so a non-editor can still save').toEqual({});
         expect(guildIdForSubmit(null, true, 9)).toEqual({ guildId: null });

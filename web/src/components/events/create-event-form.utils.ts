@@ -185,6 +185,9 @@ function gameIdForSubmit(
 
 /** ROK-1787: the guild tag to submit, as a spreadable fragment.
  *  - Create: only when a guild is picked (CreateEventDto.guildId is optional, not nullable).
+ *    ROK-1893 P3: when that guild is the hub of the poll being locked in
+ *    (`pollHubId`) it is omitted — the server inherits it (D16) without the
+ *    Leader/Officer tag check, so a plain member who made the poll can lock it.
  *  - Edit: only when it changed — `null` clears the tag. An unchanged tag is
  *    omitted so an organizer who is no longer a guild editor can still save
  *    the event (the server re-checks edit rights on every guildId it receives). */
@@ -192,8 +195,9 @@ export function guildIdForSubmit(
     guildId: number | null,
     isEditMode: boolean,
     originalGuildId: number | null,
+    pollHubId: number | null = null,
 ): { guildId?: number | null } {
-    if (!isEditMode) return guildId === null ? {} : { guildId };
+    if (!isEditMode) return guildId === null || guildId === pollHubId ? {} : { guildId };
     return guildId === originalGuildId ? {} : { guildId };
 }
 
@@ -204,6 +208,7 @@ export function buildSubmitDto(
     isEditMode: boolean,
     followupForEventId?: number | null,
     originalGuildId: number | null = null,
+    pollHubId: number | null = null,
 ): CreateEventDto | UpdateEventDto {
     const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
     const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
@@ -221,7 +226,7 @@ export function buildSubmitDto(
         reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
         ephemeralVoiceEnabled: form.ephemeralVoiceEnabled,
         privateVoice: form.privateVoice,
-        ...guildIdForSubmit(form.guildId, isEditMode, originalGuildId),
+        ...guildIdForSubmit(form.guildId, isEditMode, originalGuildId, pollHubId),
         // ROK-1371: create-only — links the new event to the ended event so the
         // server post-create hook fans out sign-up DMs. Omitted in edit mode.
         ...(!isEditMode && followupForEventId ? { followupForEventId } : {}),
