@@ -1,5 +1,5 @@
 {
-  "id": "49993c44-28aa-469a-b9cc-6bb2943b6059",
+  "id": "9b68b2a2-22bb-4306-80f6-149b48fc9140",
   "prevId": "35f4c22d-2d17-4f57-908e-e264d0abac9e",
   "version": "7",
   "dialect": "postgresql",
@@ -7076,12 +7076,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7098,21 +7092,6 @@
         }
       },
       "indexes": {
-        "idx_community_lineups_guild_id": {
-          "name": "idx_community_lineups_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "uq_community_lineups_share_token": {
           "name": "uq_community_lineups_share_token",
           "columns": [
@@ -7205,19 +7184,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "tie_pick_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "community_lineups_guild_id_guilds_id_fk": {
-          "name": "community_lineups_guild_id_guilds_id_fk",
-          "tableFrom": "community_lineups",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
           ],
           "columnsTo": [
             "id"
@@ -11970,6 +11936,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "post_relay_default": {
+          "name": "post_relay_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12069,6 +12042,188 @@
         "guild_profiles_discord_channel_source_check": {
           "name": "guild_profiles_discord_channel_source_check",
           "value": "\"guild_profiles\".\"discord_channel_source\" IN ('auto', 'manual')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.hub_posts": {
+      "name": "hub_posts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relay_channel_id": {
+          "name": "relay_channel_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relay_message_id": {
+          "name": "relay_message_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "relayed_at": {
+          "name": "relayed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_hub_posts_guild_created": {
+          "name": "idx_hub_posts_guild_created",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_posts_author_id": {
+          "name": "idx_hub_posts_author_id",
+          "columns": [
+            {
+              "expression": "author_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_posts_updated_by": {
+          "name": "idx_hub_posts_updated_by",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hub_posts_guild_id_guilds_id_fk": {
+          "name": "hub_posts_guild_id_guilds_id_fk",
+          "tableFrom": "hub_posts",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hub_posts_author_id_users_id_fk": {
+          "name": "hub_posts_author_id_users_id_fk",
+          "tableFrom": "hub_posts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "hub_posts_updated_by_users_id_fk": {
+          "name": "hub_posts_updated_by_users_id_fk",
+          "tableFrom": "hub_posts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "hub_posts_body_length": {
+          "name": "hub_posts_body_length",
+          "value": "char_length(\"hub_posts\".\"body\") BETWEEN 1 AND 4000"
+        },
+        "hub_posts_relay_pair": {
+          "name": "hub_posts_relay_pair",
+          "value": "(\"hub_posts\".\"relay_channel_id\" IS NULL) = (\"hub_posts\".\"relay_message_id\" IS NULL)"
         }
       },
       "isRLSEnabled": false
