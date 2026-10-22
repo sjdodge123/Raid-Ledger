@@ -123,6 +123,11 @@ jobs:
               # and the demo-test controllers are what the fixtures call.
               - 'api/src/auth/**'
               - 'api/src/admin/demo-test*'
+              # ROK-1904: like the api/web filters, an edit to this workflow
+              # must exercise the smoke job it may have changed (a ci.yml-only
+              # PR used to skip every smoke shard, so a broken setup step
+              # would surface first on main).
+              - '.github/workflows/ci.yml'
             container:
               - 'Dockerfile*'
               - 'api/Dockerfile'
