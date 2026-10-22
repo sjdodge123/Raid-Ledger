@@ -4,10 +4,18 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import {
+  FAILURE_CACHE_MS,
+  inviteCacheTtlMs,
+} from './hub-discord-invite.helpers';
 
-/** A minted invite lives 24h on Discord; reuse it a little less than that. */
+/** A minted invite lives 24h on Discord. */
 const INVITE_MAX_AGE_S = 86_400;
-const CACHE_TTL_MS = 23 * 3_600_000;
+
+interface MintedInvite {
+  url: string;
+  expiresAt: Date | null;
+}
 
 interface CachedInvite {
   url: string | null;
@@ -19,7 +27,8 @@ interface CachedInvite {
  * preview, so a visitor outside the server can get in first. Prefers the
  * hub's own channel (`guild_profiles.discord_channel_id`), else the server's
  * system channel. Needs the bot's Create Invite permission; null whenever the
- * bot cannot make one. Cached per hub (a failure is cached too, briefly).
+ * bot cannot make one. Cached per hub until shortly before the invite
+ * expires (a failure is cached too, briefly).
  */
 @Injectable()
 export class HubDiscordInviteService {
@@ -36,13 +45,23 @@ export class HubDiscordInviteService {
   async serverInviteUrl(hubId: number): Promise<string | null> {
     const hit = this.cache.get(hubId);
     if (hit && hit.until > Date.now()) return hit.url;
-    const url = await this.mint(hubId);
-    const ttl = url === null ? 5 * 60_000 : CACHE_TTL_MS;
+    let minted = await this.mint(hubId, false);
+    // `unique: false` may reuse the bot's invite on its last legs — mint anew.
+    if (minted && inviteCacheTtlMs(minted.expiresAt, Date.now()) === 0) {
+      minted = await this.mint(hubId, true);
+    }
+    const ttl = minted
+      ? inviteCacheTtlMs(minted.expiresAt, Date.now())
+      : FAILURE_CACHE_MS;
+    const url = minted?.url ?? null;
     this.cache.set(hubId, { url, until: Date.now() + ttl });
     return url;
   }
 
-  private async mint(hubId: number): Promise<string | null> {
+  private async mint(
+    hubId: number,
+    unique: boolean,
+  ): Promise<MintedInvite | null> {
     const guild = this.client.getGuild();
     if (!guild) return null;
     try {
@@ -53,10 +72,10 @@ export class HubDiscordInviteService {
       if (!channel || !('createInvite' in channel)) return null;
       const invite = await channel.createInvite({
         maxAge: INVITE_MAX_AGE_S,
-        unique: false,
+        unique,
         reason: `Hub invite preview for hub ${hubId}`,
       });
-      return invite.url;
+      return { url: invite.url, expiresAt: invite.expiresAt };
     } catch (err) {
       // Missing Create Invite permission / unknown channel: text-only fallback.
       this.logger.warn(
