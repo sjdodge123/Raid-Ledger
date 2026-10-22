@@ -12,7 +12,7 @@ import { NewBadge } from '../ui/new-badge';
 import { PluginBadge } from '../ui/plugin-badge';
 import { getPluginBadge } from '../../plugins/plugin-registry';
 import type { IntegrationStatus, NavItem, NavSection } from './admin-nav-data';
-import { buildCoreIntegrationItems, buildPluginIntegrationItems, buildDiscordNavItems, buildNavSections } from './admin-nav-data';
+import { buildCoreIntegrationItems, buildPluginIntegrationItems, buildDiscordNavItems, buildNavSections, buildOperatorNavSections } from './admin-nav-data';
 
 interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 
@@ -57,6 +57,24 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
             <div className="space-y-4">
                 {sections.map((section) => (
                     <SidebarSection key={section.id} section={section} currentPath={location.pathname} onNavigate={onNavigate} />
+                ))}
+            </div>
+        </nav>
+    );
+}
+
+/**
+ * Operator view of the sidebar: only the pages an operator may open (Hubs).
+ * Fires none of the admin status queries the full sidebar needs (they are
+ * admin-only and would 403).
+ */
+export function OperatorSidebar() {
+    const location = useLocation();
+    return (
+        <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Admin settings navigation">
+            <div className="space-y-4">
+                {buildOperatorNavSections().map((section) => (
+                    <SidebarSection key={section.id} section={section} currentPath={location.pathname} />
                 ))}
             </div>
         </nav>

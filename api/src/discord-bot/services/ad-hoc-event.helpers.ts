@@ -257,7 +257,7 @@ export async function claimAndEndEvent(
   return claimed ?? null;
 }
 
-/** Set event status to grace_period. */
+/** Set event status to grace_period — only from `live` (never revive an ended event). */
 export async function setGracePeriodStatus(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -265,7 +265,9 @@ export async function setGracePeriodStatus(
   await db
     .update(tables.events)
     .set({ adHocStatus: 'grace_period', updatedAt: new Date() })
-    .where(eq(tables.events.id, eventId));
+    .where(
+      and(eq(tables.events.id, eventId), eq(tables.events.adHocStatus, 'live')),
+    );
 }
 
 /** Stale threshold: events whose effective end is > 30 minutes ago. */
