@@ -1,9 +1,9 @@
 name: Rebase open PRs after main update
 
 # When main moves, branch protection's "up to date" requirement causes any open
-# PR to become BEHIND and stop auto-merging. This workflow rebases the oldest
-# merge-ready BEHIND PR via the REST update-branch endpoint, one per trigger fire (sequential
-# queue — see the rebase job below for rationale).
+# PR to become BEHIND and stop auto-merging. This workflow rebases the
+# lowest-numbered merge-ready BEHIND PR via the REST update-branch endpoint,
+# at most one per run (sequential queue — see the rebase job for rationale).
 #
 # Scope: ALL open PRs, regardless of author. Originally this was Dependabot-only
 # but the operator runs parallel agents that also produce PRs needing the same
@@ -11,47 +11,61 @@ name: Rebase open PRs after main update
 # `gh workflow run` invocations continue to work.
 #
 # Triggers:
-#   - push to main: covers normal merges from human/PR contributors.
-#   - pull_request_target closed (merged): covers automation-driven auto-merges
-#     (Dependabot, our own workflows). Pushes resulting from GITHUB_TOKEN-driven
-#     merges do NOT fire `on: push` workflows (GitHub anti-recursion default),
-#     so without this second trigger the first auto-merge in a batch silently
-#     leaves the rest BEHIND.
+#   - push to main and pull_request_target closed (merged): a merge moved main.
+#     In practice BOTH fire for the same merge (run history shows pairs in the
+#     same second); the `concurrency` group serialises them and the second run
+#     sees the first run's PR in flight and exits.
+#   - pull_request_target auto_merge_enabled / ready_for_review: a BEHIND PR
+#     just became merge-ready, so it should not wait for the next merge.
+#   - schedule (every 15 min): safety net. Catches a rebased PR that went red
+#     (no event fires, so the next PR in line would otherwise wait for an
+#     unrelated merge) and any event GitHub dropped.
 #   - workflow_dispatch: manual kickstart from the Actions UI or CLI.
+#
+# Security: pull_request_target runs with this repo's secrets, so this job must
+# NEVER check out or execute PR code. It only calls the GitHub API; PR event
+# fields are read in the job `if:` and nowhere else.
 
 on:
   push:
     branches: [main]
   pull_request_target:
-    types: [closed]
-  # Manual kickstart: useful when a batch of PRs is already rebased and
-  # waiting on CI, but main has moved (so they're BEHIND again) and no further
-  # merge events are pending to fire the auto-rebase. Run via
-  # `gh workflow run dependabot-rebase-on-main.yml` or the Actions UI.
+    types: [closed, auto_merge_enabled, ready_for_review]
+  schedule:
+    - cron: '*/15 * * * *'
+  # Run via `gh workflow run dependabot-rebase-on-main.yml` or the Actions UI.
   workflow_dispatch:
 
-permissions:
-  contents: write
-  # pull-requests: write is required by `PUT /repos/{owner}/{repo}/pulls/{n}/update-branch`.
-  # `read` 403's with "Resource not accessible by integration". The previous
-  # version of this file had `read` and silently 403'd inside `|| true`, so
-  # every workflow run reported success while doing nothing.
-  pull-requests: write
+# One run at a time, and never cancel a run mid-PUT: a merge fires push AND
+# pull_request_target together, and two parallel runs would rebase two PRs.
+concurrency:
+  group: rebase-bot
+  cancel-in-progress: false
+
+# GITHUB_TOKEN is never used — every API call goes through REBASE_PAT below —
+# so the job token gets no permissions at all.
+permissions: {}
+
+env:
+  # Fallback list of branch-protection required status check contexts.
+  # The job first reads them at runtime from
+  # GET /repos/{owner}/{repo}/branches/main/protection/required_status_checks,
+  # but that endpoint needs the "Administration: read" repository permission
+  # (GITHUB_TOKEN can never have it; REBASE_PAT only has contents + pull
+  # requests). Until the PAT is granted Administration: read, this list is
+  # what is used — keep it in sync with branch protection on main.
+  REQUIRED_CONTEXTS_FALLBACK: 'lint container-startup tools-tests discord-smoke'
 
 jobs:
   rebase:
-    # Run on push-to-main, on a merged PR targeting main, or when manually
-    # dispatched. Skip non-merged closes (PRs closed without merging don't
-    # change main).
+    # Skip non-merged closes (they don't change main) and PRs not targeting main.
     if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request_target' &&
-       github.event.pull_request.merged == true &&
-       github.event.pull_request.base.ref == 'main')
+      github.event_name != 'pull_request_target' ||
+      (github.event.pull_request.base.ref == 'main' &&
+       (github.event.action != 'closed' || github.event.pull_request.merged == true))
     runs-on: ubuntu-latest
     steps:
-      - name: Update branch on the oldest merge-ready BEHIND open PR
+      - name: Update branch on the lowest-numbered merge-ready BEHIND open PR
         env:
           # Use REBASE_PAT (fine-grained personal access token, contents+PRs
           # read/write on this repo) instead of GITHUB_TOKEN. The merge commit
@@ -65,51 +79,106 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Sequential queue: pick ONE PR per trigger fire, not all of them.
+          # Sequential queue: rebase at most ONE PR per run.
           #
           # Why: rebasing every BEHIND PR in parallel means each subsequent
           # merge invalidates the others' in-flight CI, forcing them to
-          # re-run. With N PRs that's worst-case N×N CI invocations. Picking
-          # one at a time costs exactly N CI runs total (one per merge),
-          # at the cost of slower wall-clock (N × CI duration sequentially
-          # instead of overlapping).
+          # re-run. With N PRs that's worst-case N×N CI invocations. One at a
+          # time costs exactly N CI runs total (one per merge), at the cost of
+          # slower wall-clock.
           #
-          # Selection: smallest PR number among ALL open PRs (not just
-          # Dependabot's) that is BEHIND *and merge-ready*: auto-merge enabled,
-          # not a draft, and no failing checks (pending is fine). Rebasing a
-          # PR that is still mid-review just burns a full extra CI run, so
-          # those wait until their author enables auto-merge. We deliberately skip:
-          #   - MERGEABLE: already current with main, no rebase needed
-          #   - BLOCKED: failing CI or missing review — needs a human
-          #   - DIRTY: merge conflict — needs a human
-          #   - drafts / no auto-merge / failing checks: not ready to land
-          #
-          # If nothing's BEHIND, exit clean. The next merge event refires
-          # this workflow and the cascade continues.
-          target=$(gh pr list \
-            --state open \
-            --json number,mergeStateStatus,autoMergeRequest,isDraft,statusCheckRollup \
-            --jq '[.[]
-              | select(.mergeStateStatus == "BEHIND"
-                  and .autoMergeRequest != null
-                  and (.isDraft | not)
-                  and ([.statusCheckRollup[]?
-                        | (.conclusion // .state)
-                        | select(. == "FAILURE" or . == "ERROR" or . == "CANCELLED"
-                                 or . == "TIMED_OUT" or . == "ACTION_REQUIRED")]
-                       | length == 0))
-              | .number] | sort | .[0] // empty')
-          if [ -z "$target" ]; then
+          # Rules, judged on branch-protection REQUIRED contexts only (a red
+          # non-required check doesn't block the merge, so it doesn't block
+          # the rebase either), using the LATEST attempt per context (the
+          # rollup keeps superseded attempts; an old FAILURE of a re-run job
+          # or a CANCELLED superseded run must not count):
+          #   1. If a merge-ready PR is already up to date with main and its
+          #      required checks are pending (or not reported yet just after a
+          #      rebase), the slot is taken — exit without rebasing anything.
+          #   2. Otherwise try BEHIND PRs that have auto-merge enabled, are not
+          #      drafts, and have no failing required check, lowest number
+          #      first, until one update-branch call succeeds.
+          # Not BEHIND (CLEAN/BLOCKED/DIRTY/...) means no rebase is needed or a
+          # human is needed; those are never rebased.
+
+          if req=$(gh api "repos/$GH_REPO/branches/main/protection/required_status_checks" \
+                     --jq '[(.contexts // [])[], ((.checks // [])[] | .context)] | unique' 2>/dev/null) \
+             && [ "$(jq 'length' <<<"$req")" -gt 0 ]; then
+            echo "Required contexts (from branch protection): $req"
+          else
+            req=$(jq -cn --arg s "$REQUIRED_CONTEXTS_FALLBACK" '$s | split(" ") | map(select(length > 0))')
+            echo "::notice::Could not read branch protection (REBASE_PAT lacks Administration: read) — using REQUIRED_CONTEXTS_FALLBACK: $req"
+          fi
+
+          # mergeStateStatus is computed lazily: right after main moves, PRs
+          # can read UNKNOWN. Re-query a bounded number of times.
+          for attempt in 1 2 3 4; do
+            prs=$(gh pr list --state open --limit 200 \
+              --json number,mergeStateStatus,autoMergeRequest,isDraft,updatedAt,statusCheckRollup)
+            unknown=$(jq '[.[] | select(.mergeStateStatus == "UNKNOWN")] | length' <<<"$prs")
+            if [ "$unknown" -eq 0 ]; then break; fi
+            echo "$unknown open PR(s) have mergeStateStatus UNKNOWN — re-querying in 15s (attempt $attempt/4)"
+            sleep 15
+          done
+
+          plan=$(jq -c --argjson req "$req" '
+            def terminal: IN("SUCCESS","FAILURE","ERROR","TIMED_OUT","ACTION_REQUIRED",
+                             "STARTUP_FAILURE","CANCELLED","SKIPPED","NEUTRAL","STALE");
+            def failing: IN("FAILURE","ERROR","TIMED_OUT","ACTION_REQUIRED","STARTUP_FAILURE");
+            map(
+              ([.statusCheckRollup[]?
+                | {k: (.name // .context),
+                   t: ((.startedAt // "") + (.completedAt // "")),
+                   v: (if (.conclusion // "") != "" then .conclusion else (.state // .status // "") end)}
+                | select(.k | IN($req[]))]
+               | group_by(.k) | map(max_by(.t))) as $latest
+              | {number,
+                 mss: .mergeStateStatus,
+                 ready: (.autoMergeRequest != null and (.isDraft | not)),
+                 red: [$latest[] | select(.v | failing) | "\(.k)=\(.v)"],
+                 pending: [$latest[] | select(.v | terminal | not) | .k],
+                 reported: ($latest | length),
+                 fresh: ((.updatedAt | fromdateiso8601) > (now - 600))})
+            | sort_by(.number) as $all
+            | {inflight: [$all[]
+                 | select(.ready and (.mss | IN("BEHIND","DIRTY") | not) and (.red | length == 0)
+                          and ((.pending | length > 0) or (.reported == 0 and .fresh)))
+                 | "#\(.number) (\(.mss), pending: \(if .reported == 0 then "no required checks reported yet" else (.pending | join(",")) end))"],
+               candidates: [$all[] | select(.mss == "BEHIND" and .ready and (.red | length == 0)) | .number],
+               skipped: [$all[] | select(.mss == "BEHIND" and ((.ready | not) or (.red | length > 0)))
+                 | "#\(.number): \(if .ready | not then "no auto-merge or draft" else "required check failing: \(.red | join(","))" end)"]}
+          ' <<<"$prs")
+
+          jq -r '.skipped[] | "Skip BEHIND PR \(.)"' <<<"$plan"
+
+          if [ "$(jq '.inflight | length' <<<"$plan")" -gt 0 ]; then
+            jq -r '.inflight[] | "In flight (up to date, CI running): PR \(.)"' <<<"$plan"
+            echo "Slot taken — not rebasing another PR this run."
+            exit 0
+          fi
+
+          mapfile -t candidates < <(jq -r '.candidates[]' <<<"$plan")
+          if [ "${#candidates[@]}" -eq 0 ]; then
             echo "No merge-ready BEHIND open PRs — nothing to rebase."
             exit 0
           fi
-          echo "Updating branch on PR #$target (sequential queue)"
-          # Omit expected_head_sha — the API defaults to the PR's current
-          # HEAD. The previous `-f expected_head_sha=` (empty string) form
-          # always 422'd, and `|| true` silently swallowed it, so the
-          # workflow looked successful while doing nothing.
-          #
-          # `|| true` tolerates rare races (e.g. the PR closed between the
-          # list call and the update call) so a transient 4xx doesn't fail
-          # the whole workflow.
-          gh api "repos/$GH_REPO/pulls/$target/update-branch" -X PUT || true
+
+          # Omit expected_head_sha — the API defaults to the PR's current HEAD.
+          # Fall through to the next candidate on a 4xx such as 422 (stale
+          # BEHIND that really conflicts, or the PR closed meanwhile), but fail
+          # loudly on 401/403: an expired/revoked REBASE_PAT must not report
+          # success (this file has had two silent-success bugs already).
+          for n in "${candidates[@]}"; do
+            echo "Updating branch on PR #$n"
+            if out=$(gh api -X PUT "repos/$GH_REPO/pulls/$n/update-branch" 2>&1); then
+              echo "Updated PR #$n: $out"
+              exit 0
+            fi
+            case "$out" in
+              *"HTTP 401"*|*"HTTP 403"*)
+                echo "::error::update-branch on PR #$n was refused — check REBASE_PAT: $out"
+                exit 1 ;;
+            esac
+            echo "::warning::Skip PR #$n — update-branch failed: $out"
+          done
+          echo "::warning::Every merge-ready BEHIND PR failed update-branch; nothing was rebased."
