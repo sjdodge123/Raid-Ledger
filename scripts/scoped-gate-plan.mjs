@@ -42,9 +42,13 @@ const IGNORED = [
 /** The target one path maps to, or null when it is not a known surface. */
 function targetFor(path) {
   if (/^api\//.test(path)) return 'api';
-  if (/^web\//.test(path)) return 'web';
-  if (/^playwright\.config\.[^/]+$/.test(path) || /^scripts\/.*\.ts$/.test(path)) return 'smoke';
-  if (/^scripts\//.test(path)) return 'scripts';
+  // The bundle budget only runs for a web target, so its own config maps there.
+  if (/^web\//.test(path) || /^scripts\/(bundle-budget\.config|check-bundle-size)\.mjs$/.test(path)) return 'web';
+  if (/^scripts\/smoke\/.*\.sh$/.test(path)) return 'scripts';
+  // Everything else under scripts/smoke/ (tsconfig, fixtures, helper .mjs) feeds the smoke tsconfig.
+  if (/^playwright\.config\.[^/]+$/.test(path) || /^scripts\/smoke\//.test(path) || /^scripts\/.*\.ts$/.test(path)) return 'smoke';
+  // ci.yml is read by scripts/validate-ci-smoke-ci-parity.spec.mjs.
+  if (/^scripts\//.test(path) || /^\.github\/workflows\//.test(path)) return 'scripts';
   const tool = /^tools\/([\w-]+)\//.exec(path);
   return tool ? `tool:${tool[1]}` : null;
 }

@@ -48,9 +48,22 @@ test('docs / planning-artifacts / operator config need nothing', () => {
   );
 });
 
-test('gate scripts run the shell parse + node:test specs; smoke .sh files count as scripts', () => {
+test('gate scripts map to the scripts target (shell parse + node:test specs); so do smoke .sh files', () => {
   assert.deepEqual(targets(['scripts/validate-ci.sh', 'scripts/smoke/push-gate.sh']), ['scripts']);
   assert.deepEqual(targets(['scripts/smoke/push-gate.sh', 'scripts/smoke/a.smoke.spec.ts']), ['scripts', 'smoke']);
+});
+
+test('smoke non-.ts files feed the smoke tsconfig; ci.yml runs the script specs; the bundle budget runs with web', () => {
+  assert.deepEqual(targets(['scripts/smoke/tsconfig.typecheck.json', 'scripts/smoke/fixtures/a.json']), ['smoke']);
+  assert.deepEqual(targets(['scripts/smoke/helper.mjs']), ['smoke']);
+  assert.deepEqual(targets(['.github/workflows/ci.yml']), ['scripts']);
+  assert.deepEqual(targets(['.github/pull_request_template.md']), []);
+  assert.deepEqual(targets(['scripts/bundle-budget.config.mjs']), ['web']);
+  assert.deepEqual(targets(['scripts/check-bundle-size.mjs']), ['web']);
+});
+
+test('a rename out of packages/contract (both sides listed, --no-renames) refuses', () => {
+  assert.equal(refusedWith(['packages/contract/src/x.ts', 'api/src/x.ts']), '--static');
 });
 
 test('one app workspace plus a tool, smoke or docs stays scoped', () => {
