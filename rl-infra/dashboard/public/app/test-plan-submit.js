@@ -121,6 +121,22 @@
     return headers;
   };
 
+  // Persist the link's key for this plan up front (bootTesterPage calls it),
+  // so a later navigation that drops `?k=` still finds it in localStorage.
+  const rememberTesterKey = (slug, planId) => { testerHeaders(slug, planId); };
+
+  // The server answers 401 tester_token_required when a write carries no
+  // valid key — tell the tester which link to use instead of the raw code.
+  const TOKEN_MISSING_MESSAGE =
+    'This page was opened without its tester link — open the link you were sent (it ends in &k=…)';
+  const writeFailure = async (r) => {
+    const j = await r.json().catch(() => ({}));
+    const error = j.error === 'tester_token_required'
+      ? TOKEN_MISSING_MESSAGE
+      : (j.error || `HTTP ${r.status}`);
+    return { ok: false, status: r.status, error };
+  };
+
   // ----- POST helpers -----
   const submitDraft = async (slug, plan) => {
     const tester = await ensureTesterName();
@@ -135,10 +151,7 @@
       headers: testerHeaders(slug, plan.plan_id),
       body: JSON.stringify({ tester, verdicts }),
     });
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      return { ok: false, status: r.status, error: j.error || `HTTP ${r.status}` };
-    }
+    if (!r.ok) return writeFailure(r);
     clearDraft(slug, plan.plan_id);
     return { ok: true };
   };
@@ -154,10 +167,7 @@
         body: JSON.stringify({ tester, body, attachment_url: attachmentUrl || null }),
       },
     );
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      return { ok: false, status: r.status, error: j.error || `HTTP ${r.status}` };
-    }
+    if (!r.ok) return writeFailure(r);
     return { ok: true };
   };
 
@@ -172,10 +182,7 @@
         body: JSON.stringify({ tester }),
       },
     );
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      return { ok: false, status: r.status, error: j.error || `HTTP ${r.status}` };
-    }
+    if (!r.ok) return writeFailure(r);
     return { ok: true };
   };
 
@@ -207,5 +214,6 @@
     sanitizeTester, getStoredTesterName, askTesterNameModal, ensureTesterName,
     loadDraft, saveDraft, clearDraft, bufferVerdict,
     submitDraft, postComment, requestReset, uploadAttachment, testerHeaders,
+    rememberTesterKey, TOKEN_MISSING_MESSAGE,
   });
 })();
