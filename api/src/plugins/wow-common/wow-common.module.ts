@@ -50,6 +50,10 @@ import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
+import { RosterFactSource } from './facts/roster.fact-source';
+import { AddonSnapshotFactSource } from './facts/addon-snapshot.fact-source';
+import { CharacterRowFactSource } from './facts/character-row.fact-source';
+import { WowFactsService } from './facts/wow-facts.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule, GuildsCoreModule],
@@ -99,6 +103,11 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     GuildRaidsService,
     GuildAddonsService,
     WowHubKindAdapter,
+    // ROK-1910: roster fact sources + resolver (H5 roster-insights injects it).
+    RosterFactSource,
+    AddonSnapshotFactSource,
+    CharacterRowFactSource,
+    WowFactsService,
   ],
   exports: [
     BlizzardService,
@@ -107,6 +116,7 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     DungeonQuestsService,
     BossEncountersService,
     WowItemMetaService,
+    WowFactsService,
     GuildsCoreModule,
   ],
 })
