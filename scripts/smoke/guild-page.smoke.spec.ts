@@ -19,6 +19,7 @@ import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
+import { expectActiveHubTab } from './hub-tabs';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -223,8 +224,7 @@ test('#events: the core tab carries the schedule, attendance and every tagged ev
 test('#raids: the WoW module tab keeps role composition and nothing core already shows', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member', '#raids');
-        const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
-        await expect(tabs.locator('a[href="#raids"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        await expectActiveHubTab(page, testInfo, 'Raids', 'raids');
         const tab = page.getByTestId('guild-raids-tab');
         await expect(tab).toBeVisible({ timeout: 15_000 });
         await expect(tab.getByTestId('guild-composition-tank')).toBeVisible();

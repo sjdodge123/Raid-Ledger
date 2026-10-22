@@ -14,6 +14,7 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
+import { expectActiveHubTab } from './hub-tabs';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -74,9 +75,8 @@ function addonItems(page: Page): Locator {
     return page.getByRole('list', { name: 'Recommended addons' }).locator(':scope > li');
 }
 
-async function expectResourcesTab(page: Page): Promise<void> {
-    const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
-    await expect(tabs.locator('a[href="#resources"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+async function expectResourcesTab(page: Page, testInfo: TestInfo): Promise<void> {
+    await expectActiveHubTab(page, testInfo, 'Resources', 'resources');
     await expect(page.getByTestId('guild-resources')).toBeVisible();
 }
 
@@ -94,7 +94,7 @@ test('member: the GM post shows on Overview, read-only', async ({ page }, testIn
 test('member: Resources shows rules split by line, links, and addons with LedgerLink pinned first; no edit controls', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member', '#resources');
-        await expectResourcesTab(page);
+        await expectResourcesTab(page, testInfo);
         // The cards are `<section aria-labelledby>` regions (WidgetCard) with no test id.
         const rules = page.getByRole('region', { name: 'Guild rules & loot rules' });
         await expect(rules.getByTestId('guild-rule-items')).toHaveCount(2);
@@ -138,7 +138,7 @@ test('editor (rank-1 officer): edits the GM post and the Players card headline f
 test('editor (rank-1 officer): adds an addon from a GitHub URL, reorders it, then removes it', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer', '#resources');
-        await expectResourcesTab(page);
+        await expectResourcesTab(page, testInfo);
         const form = page.getByTestId('guild-addon-form');
         await form.getByLabel('Addon link').fill(PASTED_URL);
         await expect(form.getByTestId('guild-addon-preview')).toContainText(PASTED_NAME);

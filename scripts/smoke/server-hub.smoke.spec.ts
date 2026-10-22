@@ -16,6 +16,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
+import { tabOrder } from './hub-tabs';
 
 type Role = 'online' | 'recent' | 'joined' | 'lapsed' | 'outsider';
 
@@ -142,21 +143,6 @@ const PHONE = { width: 375, height: 812 };
 function must<T>(value: T | undefined | null, label: string): T {
     if (value === undefined || value === null) throw new Error(`missing: ${label}`);
     return value;
-}
-
-/** Tab ids in row order: the visible links, then (when the row overflows) the More menu's items. */
-async function tabOrder(page: Page): Promise<string[]> {
-    const hrefs = await page.getByTestId('tab-row-scroller').locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? ''));
-    const trigger = page.getByTestId('tab-row-more-trigger');
-    if (await trigger.isVisible()) {
-        await trigger.click();
-        const menu = page.getByTestId('tab-row-more-menu');
-        await expect(menu).toBeVisible();
-        hrefs.push(...await menu.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? '')));
-        await page.keyboard.press('Escape');
-        await expect(menu).toHaveCount(0);
-    }
-    return hrefs.map((h) => h.replace(/^#/, ''));
 }
 
 /** The top of the bottom bar including the raised Hubs circle: the smallest top of the bar and everything in it. */
