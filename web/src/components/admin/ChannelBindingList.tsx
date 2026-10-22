@@ -4,6 +4,7 @@ import { classifyBindingTriple } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { BindingConfigForm } from './BindingConfigForm';
 import { useMultiMonitorChannels } from './use-multi-monitor-channels';
+import { ChannelBindingLifecycleCell, type LifecyclePinState } from './channel-binding-lifecycle-cell';
 
 const BEHAVIOR_LABELS: Record<string, string> = {
   'game-announcements': 'Event Announcements',
@@ -74,7 +75,9 @@ function MultiMonitorNote() {
     );
 }
 
-function BindingInfo({ binding, hasMultiMonitor, isInert }: { binding: ChannelBindingDto; hasMultiMonitor: boolean; isInert: boolean }) {
+function BindingInfo({ binding, hasMultiMonitor, isInert, pin }: {
+    binding: ChannelBindingDto; hasMultiMonitor: boolean; isInert: boolean; pin: LifecyclePinState;
+}) {
     return (
         <div className="flex items-center gap-3 min-w-0">
             <div className="flex-shrink-0"><ChannelTypeIcon type={binding.channelType} /></div>
@@ -88,6 +91,7 @@ function BindingInfo({ binding, hasMultiMonitor, isInert }: { binding: ChannelBi
                     {binding.gameName ? binding.gameName : 'All games'}{' · '}{BEHAVIOR_LABELS[binding.bindingPurpose] ?? binding.bindingPurpose}
                 </p>
                 {hasMultiMonitor && <MultiMonitorNote />}
+                <ChannelBindingLifecycleCell binding={binding} pin={pin} />
             </div>
         </div>
     );
@@ -112,11 +116,12 @@ function BindingActions({ binding, isEditing, isInert, onToggleEdit, onFix, onDe
     );
 }
 
-function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSaving, saveLocked, isDeleting, deletingId, hasMultiMonitor, updateError }: {
+function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSaving, saveLocked, isDeleting, deletingId, hasMultiMonitor, updateError, pin }: {
     binding: ChannelBindingDto; editingId: string | null; setEditingId: (id: string | null) => void;
     onSave: (id: string, dto: UpdateChannelBindingDto) => void; onDelete: (id: string) => void;
     isSaving: boolean; saveLocked: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean;
     updateError?: string | null | undefined;
+    pin: LifecyclePinState;
 }) {
     const isEditing = editingId === binding.id;
     const isInert = isBindingInert(binding);
@@ -125,7 +130,7 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSavi
             {/* Below sm the 44px action cluster stacks under the info block so it can't squeeze it; a row from sm. */}
             <div data-testid="channel-binding-row"
                 className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 rounded-lg border ${isInert ? 'bg-danger/5 border-danger/30' : 'bg-panel/50 border-edge'}`}>
-                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} isInert={isInert} />
+                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} isInert={isInert} pin={pin} />
                 <BindingActions binding={binding} isEditing={isEditing} isInert={isInert}
                     onToggleEdit={() => setEditingId(isEditing ? null : binding.id)}
                     onFix={() => setEditingId(binding.id)}
@@ -158,23 +163,34 @@ function useBindingEditor(
 ) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [savedId, setSavedId] = useState<string | null>(null);
+    // ROK-1428: the row whose pin was the last PATCH — owns the pin spinner + error.
+    const [pinId, setPinId] = useState<string | null>(null);
     // Read when the PATCH settles: the promise callback's closure holds the render-time editingId.
     const editingRef = useRef<string | null>(null);
     const changeEditing = (id: string | null) => { editingRef.current = id; setEditingId(id); onEditingChange?.(id); };
+    // The page toasts + rethrows a rejected PATCH; the row's inline error comes from
+    // the mutation state, so the rejection is consumed here (Codex r5), like handleSave.
+    const handlePin = (id: string, pinned: boolean) => {
+        setSavedId(id);
+        setPinId(id);
+        const result: unknown = onUpdate(id, { pinned });
+        if (isThenable(result)) result.catch(() => {});
+    };
     const handleSave = (id: string, dto: UpdateChannelBindingDto) => {
         setSavedId(id);
+        setPinId(null);
         const result: unknown = onUpdate(id, dto);
         if (!isThenable(result)) { changeEditing(null); return; }
         result.then(() => { if (editingRef.current === id) changeEditing(null); }).catch(() => {});
     };
-    return { editingId, savedId, changeEditing, handleSave };
+    return { editingId, savedId, pinId, changeEditing, handleSave, handlePin };
 }
 
 /**
  * Table of all channel bindings with inline editing, inert-binding repair, and delete.
  */
 export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, isDeleting, updateError, onEditingChange }: ChannelBindingListProps) {
-    const { editingId, savedId, changeEditing, handleSave } = useBindingEditor(onUpdate, onEditingChange);
+    const { editingId, savedId, pinId, changeEditing, handleSave, handlePin } = useBindingEditor(onUpdate, onEditingChange);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const multiMonitorChannels = useMultiMonitorChannels(bindings);
@@ -197,7 +213,10 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
                     onSave={handleSave} onDelete={handleDelete} isDeleting={isDeleting} deletingId={deletingId}
                     // One PATCH at a time: the row that saved shows loading; every other open row is locked.
                     isSaving={isUpdating && savedId === binding.id} saveLocked={isUpdating && savedId !== binding.id}
-                    updateError={savedId === binding.id ? updateError : null}
+                    updateError={savedId === binding.id && pinId !== binding.id ? updateError : null}
+                    // ROK-1428: a pin is a direct PATCH (no editor); its spinner + error stay on the pinned row.
+                    pin={{ onPin: handlePin, loading: isUpdating && pinId === binding.id, locked: isUpdating && pinId !== binding.id,
+                        error: pinId === binding.id ? updateError : null }}
                     hasMultiMonitor={binding.bindingPurpose === 'game-voice-monitor' && multiMonitorChannels.has(binding.channelId)} />
             ))}
         </div>
