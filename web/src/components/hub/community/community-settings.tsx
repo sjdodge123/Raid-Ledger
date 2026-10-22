@@ -12,6 +12,7 @@ import { Field } from '../../ui/field';
 import { Textarea } from '../../ui/textarea';
 import { SettingsSection } from '../settings/settings-rows';
 import { useHubBans, useHubBlurb, useHubStatus, useHubUnban } from './community-settings-api';
+import { CommunityAutoMembershipSection } from './community-auto-membership-section';
 
 function BlurbSection({ hubId, blurb }: { hubId: number; blurb: string | null }): JSX.Element {
     const save = useHubBlurb(hubId);
@@ -99,6 +100,7 @@ export function CommunitySettingsSections(ctx: HubCtx): JSX.Element | null {
         <>
             {canEdit && <BlurbSection hubId={ctx.page.guild.id} blurb={ctx.page.community.blurb} />}
             {canEdit && <BannedSection hubId={ctx.page.guild.id} />}
+            <CommunityAutoMembershipSection ctx={ctx} />
             <LifecycleSection ctx={ctx} />
         </>
     );
