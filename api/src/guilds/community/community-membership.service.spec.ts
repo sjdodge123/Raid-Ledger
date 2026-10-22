@@ -13,6 +13,7 @@ import * as lookup from './community-hub.lookup';
 import * as reads from './community-hub.reads';
 import * as mq from './community-membership.queries';
 import { CommunityMembershipService } from './community-membership.service';
+import * as invites from './invites/hub-invites.queries';
 
 jest.mock('./community-hub.lookup', () => ({
   ...jest.requireActual('./community-hub.lookup'),
@@ -22,6 +23,7 @@ jest.mock('./community-hub.lookup', () => ({
   assertInDiscord: jest.fn(),
 }));
 jest.mock('./community-membership.queries');
+jest.mock('./invites/hub-invites.queries');
 jest.mock('./community-hub.reads', () => ({
   ...jest.requireActual('./community-hub.reads'),
   liveCommunityRole: jest.fn(),
@@ -77,7 +79,17 @@ beforeEach(async () => {
     order.push('lock');
     return Promise.resolve({ status: 'active' });
   });
+  jest.mocked(invites.revokeUserInvites).mockImplementation(() => {
+    order.push('revoke');
+    return Promise.resolve();
+  });
 });
+
+/** ROK-1893: the member's links into the hub are revoked inside the same tx. */
+function expectInvitesRevokedOnTx(userId: number): void {
+  expect(invites.revokeUserInvites).toHaveBeenCalledWith(TX, userId, 7);
+  expect(order.slice(-2)).toEqual(['revoke', 'commit']);
+}
 
 describe('leave as leader (D13)', () => {
   it('counts under the hub lock and refuses with company — nothing written', async () => {
@@ -96,6 +108,14 @@ describe('leave as leader (D13)', () => {
     jest.mocked(lookup.countLiveMembers).mockResolvedValue(1);
     await svc.leave(actor, 7);
     expect(lookup.archiveHub).toHaveBeenCalledWith(TX, 7, 'empty');
+    expectInvitesRevokedOnTx(actor.id);
+  });
+
+  it("a plain member leaving revokes their links on the leave's tx", async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({}));
+    await svc.leave(actor, 7);
+    expect(mq.markLeft).toHaveBeenCalledWith(TX, 7, actor.id, null);
+    expectInvitesRevokedOnTx(actor.id);
   });
 });
 
@@ -171,6 +191,7 @@ describe('role-sensitive writes serialise with transfers (M22)', () => {
     expect(order).toEqual(['begin', 'lock', 'read']);
     expect(mq.findMembership).toHaveBeenCalledWith(TX, 7, 3);
     expect(mq.markLeft).not.toHaveBeenCalled();
+    expect(invites.revokeUserInvites).not.toHaveBeenCalled();
   });
 
   it('setRole reads the target under the hub lock — never demotes the new leader', async () => {
@@ -223,6 +244,7 @@ describe('caller role is read on the lock tx, never the pool (Codex r4)', () => 
     await expect(svc.remove(actor, 7, 3)).resolves.toBeUndefined();
     expectRoleReadOnTx();
     expect(mq.markLeft).toHaveBeenCalledWith(TX, 7, 3, actor.id);
+    expectInvitesRevokedOnTx(3);
   });
 
   it('staff need no hub membership (no role read)', async () => {
