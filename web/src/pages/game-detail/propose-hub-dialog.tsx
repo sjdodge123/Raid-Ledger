@@ -67,8 +67,9 @@ function Footer({ form, live, onCancel, full }: FormProps & { onCancel: () => vo
 /** The proposal form, split Modal / BottomSheet by viewport. */
 export function ProposeHubDialog({ isOpen, onClose, gameId, gameName }: ProposeHubDialogProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
+    /** Pre-submit copy only; the outcome (toast + navigate) follows the response's `status`. */
     const live = isOperatorOrAdmin(useAuth().user);
-    const form = useProposalForm(gameId, onClose, live);
+    const form = useProposalForm(gameId, onClose);
     const cancel = (): void => { form.reset(); onClose(); };
     const body = <ProposalFields form={form} live={live} gameName={gameName} />;
     if (isDesktop) {

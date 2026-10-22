@@ -352,6 +352,7 @@ describe('ROK-1892 staff proposals skip review', () => {
       expect(res.body).toEqual(
         expect.objectContaining({
           name: 'P16 Crew',
+          status: 'active',
           proposedBy: expect.objectContaining({ userId: staff.user.id }),
         }),
       );
@@ -384,7 +385,10 @@ describe('ROK-1892 staff proposals skip review', () => {
 
   it('P17 a member proposal is still proposed with no reviewer', async () => {
     const proposer = await seedUser('p17-proposer');
-    const id = await proposeOk(proposer, { gameId: gameG(), name: 'P17 Crew' });
+    const res = await propose(proposer, { gameId: gameG(), name: 'P17 Crew' });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('proposed');
+    const id = res.body.id as number;
     const row = await hubRow(id);
     expect(row?.status).toBe('proposed');
     expect(row?.reviewedBy).toBeNull();

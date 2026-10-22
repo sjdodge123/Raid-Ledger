@@ -152,7 +152,20 @@ export async function listProposals(
     .innerJoin(u, eq(u.id, g.proposedBy))
     .where(proposalWhere(and(...extra), filter?.status))
     .orderBy(asc(g.createdAt), asc(g.id));
-  return rows.map(({ hub, game, user }) => ({
+  return rows.map(toHubProposal);
+}
+
+/** A proposal row (+ game, proposer) → contract `HubProposal`; `status` is the row's (ROK-1892). */
+function toHubProposal({
+  hub,
+  game,
+  user,
+}: {
+  hub: schema.GuildSelect;
+  game: typeof games.$inferSelect;
+  user: typeof u.$inferSelect;
+}): HubProposal {
+  return {
     id: hub.id,
     gameId: hub.gameId,
     gameName: game.name,
@@ -165,7 +178,8 @@ export async function listProposals(
       avatarUrl: user.customAvatarUrl ?? null,
     },
     createdAt: hub.createdAt.toISOString(),
-  }));
+    status: hub.status,
+  };
 }
 
 /** Approve: active + reviewed; optional tidy of name/blurb. */
