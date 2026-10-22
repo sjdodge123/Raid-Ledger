@@ -43,20 +43,12 @@ jobs:
     # Run on push-to-main, on a merged PR targeting main, or when manually
     # dispatched. Skip non-merged closes (PRs closed without merging don't
     # change main).
-    #
-    # Redundant under GitHub merge queue (docs/runbooks/merge-queue.md): the
-    # queue tests each PR on top of main itself, so nothing needs rebasing.
-    # Set the repo variable MERGE_QUEUE_ENABLED=true when the queue is turned
-    # on; delete it (or set it to anything else) to bring this bot back on a
-    # rollback. workflow_dispatch is gated too — a manual kick under the queue
-    # would only restart CI the queue does not read.
     if: |
-      vars.MERGE_QUEUE_ENABLED != 'true' && (
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_target' &&
        github.event.pull_request.merged == true &&
-       github.event.pull_request.base.ref == 'main'))
+       github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Update branch on the oldest BEHIND open PR

@@ -7,16 +7,7 @@ on:
   pull_request:
     branches:
       - main
-  # GitHub merge queue (docs/runbooks/merge-queue.md). Every required check
-  # lives in this workflow or discord-smoke.yml, so both must report on the
-  # queue's temporary gh-readonly-queue/main/* branch or the entry never merges.
-  merge_group:
-    types: [checks_requested]
 
-# On merge_group, github.ref is the entry's own gh-readonly-queue/main/pr-N-<sha>
-# branch, so each queue entry gets its own group and entries never cancel one
-# another. cancel-in-progress stays PR-only: the queue itself removes and
-# rebuilds entries, and a push-to-main run must always finish.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,10 +35,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      # merge_group: paths-filter v4 handles it natively — it diffs
-      # merge_group.head_sha against merge_group.base_sha (the main the queue
-      # entry was built on, so this PR plus any entries ahead of it), fetching
-      # the base commit itself. No base/ref inputs or fetch-depth needed.
       - name: Detect changed paths
         uses: dorny/paths-filter@v4
         id: filter
@@ -163,7 +150,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           # HEAD^1 (the PR base) for the migration merge-order guard below.
-          # On merge_group HEAD^1 is the queue entry ahead of this one (or main).
           fetch-depth: 2
 
       - name: Setup Node.js
@@ -574,8 +560,7 @@ jobs:
         # ordering, and an order-flake regression is caught same-day on the main
         # run, so coverage is preserved while a backend PR drops from 9
         # NestApp-booting integration jobs to 3.
-        # merge_group runs once too: the 3x sweep stays on push-to-main.
-        run: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && fromJSON('[1]') || fromJSON('[1, 2, 3]') }}
+        run: ${{ github.event_name == 'pull_request' && fromJSON('[1]') || fromJSON('[1, 2, 3]') }}
 
     services:
       postgres:
@@ -928,7 +913,7 @@ jobs:
   container-startup:
     needs: detect-changes
     if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      github.event_name == 'pull_request' &&
       needs.detect-changes.outputs.container == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -1047,7 +1032,7 @@ jobs:
   container-upgrade-path:
     needs: detect-changes
     if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      github.event_name == 'pull_request' &&
       needs.detect-changes.outputs.container == 'true'
     runs-on: ubuntu-latest
     steps:

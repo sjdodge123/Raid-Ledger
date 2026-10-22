@@ -7,12 +7,6 @@ on:
   pull_request:
     branches:
       - main
-  # GitHub merge queue (docs/runbooks/merge-queue.md): `discord-smoke` is a
-  # required check, so it must report on the queue's temporary branch. No
-  # workflow-level concurrency here on purpose — the shared-guild lease pool
-  # below serialises runs, and a concurrency group would cancel queued ones.
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
 
 # ROK-1838: error reporting is on by default; nothing CI boots may spend the
@@ -30,10 +24,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      # merge_group: paths-filter v4 handles it natively — it diffs
-      # merge_group.head_sha against merge_group.base_sha (the main the queue
-      # entry was built on, so this PR plus any entries ahead of it), fetching
-      # the base commit itself. No base/ref inputs or fetch-depth needed.
       - name: Detect changed paths
         uses: dorny/paths-filter@v4
         id: filter
