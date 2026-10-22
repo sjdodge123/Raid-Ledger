@@ -99,6 +99,32 @@ export function staticGateGreen(logTail?: string): boolean {
   );
 }
 
+/** validate-ci.sh's `--scoped` tier prints this row first (2026-10-22). */
+const SCOPED_PLAN_ROW = /^Scoped plan\b/;
+
+/** Is this summary from a `--scoped` run (it carries the `Scoped plan` row)? */
+export function isScopedSummary(logTail?: string): boolean {
+  return summaryRows(logTail).some((r) => SCOPED_PLAN_ROW.test(r.name));
+}
+
+/**
+ * Did a `--scoped` run pass? The plan row PASSed, nothing FAILed, each of
+ * Build / TypeScript / Lint reported (PASS, or SKIPPED when the diff had
+ * nothing of that kind), and at least one of them actually PASSed — an
+ * all-SKIPPED run checked nothing and is not evidence (a docs-only diff has
+ * no web surface, so the hook allows it without a sentinel anyway).
+ *
+ * @param logTail - Raw tail of the validate-ci log.
+ */
+export function scopedGateGreen(logTail?: string): boolean {
+  const rows = summaryRows(logTail);
+  if (!rows.some((r) => SCOPED_PLAN_ROW.test(r.name) && r.status === 'PASS')) return false;
+  if (rows.some((r) => r.status === 'FAIL')) return false;
+  const tier = REQUIRED_STATIC.map((re) => rows.filter((r) => re.test(r.name)));
+  if (!tier.every((m) => m.some((r) => r.status === 'PASS' || r.status === 'SKIPPED'))) return false;
+  return tier.some((m) => m.some((r) => r.status === 'PASS'));
+}
+
 /**
  * ROK-1793 S2 review P1 — is a split parent's merged table clean enough to
  * grant any tier? Build + TypeScript + Lint must PASS and no non-Discord row may

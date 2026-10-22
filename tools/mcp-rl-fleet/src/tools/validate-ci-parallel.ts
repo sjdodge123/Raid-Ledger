@@ -15,7 +15,7 @@ import { execFileP } from './runner-git.js';
 export const GATE_FANOUT = '/srv/rl-infra/orchestrator/bin/gate-fanout';
 
 /** Flags that narrow the gate so there is nothing to split across two runners. */
-const UNSPLITTABLE_FLAGS = ['--static', '--no-e2e', '--only-e2e', '--only-unit', '--only-integration'];
+const UNSPLITTABLE_FLAGS = ['--static', '--scoped', '--no-e2e', '--only-e2e', '--only-unit', '--only-integration'];
 
 /** The subset of rl_validate_ci params the parallel path reads. */
 export interface ParallelParams {
