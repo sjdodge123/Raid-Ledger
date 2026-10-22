@@ -152,6 +152,7 @@ The gotchas that bite:
 
 - **Always enable auto-merge (squash)** after creating or pushing to a PR: `gh pr merge <branch> --auto --squash`
 - This is safe to run whether the PR was just created or already existed — it's a no-op if already enabled.
+- **Never merge `main` into a PR while it is under review (operator ruling 2026-10-22).** Bring a branch up to date only once it is merge-ready (reviewed, gated, operator steps ruled) — the rebase bot (`dependabot-rebase-on-main.yml`) does that. A main merge mid-review moves the code under the reviewer and forces extra review/gate rounds. Exception: a conflict that blocks the review itself is fixed by hand.
 
 ## Operator Config Files (STRICT — applies to ALL agents)
 
