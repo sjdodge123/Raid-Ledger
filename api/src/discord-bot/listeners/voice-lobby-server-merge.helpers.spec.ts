@@ -229,3 +229,30 @@ describe('serverGameOf', () => {
     ).toBeNull();
   });
 });
+
+// ROK-1888 AC7 (ruling 1): the lobby threshold is unchanged — an unlinked
+// server player still counts toward `minPlayers`, and a linked player whose
+// Discord id is in voice is counted once.
+describe('ROK-1888 AC7 — lobby threshold keeps unlinked server players', () => {
+  it('one voice member + one unlinked server entry → groupSize 2', () => {
+    const merged = mergeServerPresence(
+      [group(VALHEIM, ['v1'])],
+      ['v1'],
+      roster({ [VALHEIM]: [unlinked('s-loanati', 'Loanati')] }),
+    );
+    const valheim = find(merged, VALHEIM);
+    expect(valheim && groupSize(valheim)).toBe(2);
+    expect(valheim?.serverOnly?.map((e) => e.name)).toEqual(['Loanati']);
+  });
+
+  it('a linked entry whose Discord id is in voice is counted once', () => {
+    const merged = mergeServerPresence(
+      [group(VALHEIM, ['v1'])],
+      ['v1'],
+      roster({ [VALHEIM]: [linked('v1', 'Rok')] }),
+    );
+    const valheim = find(merged, VALHEIM);
+    expect(valheim && groupSize(valheim)).toBe(1);
+    expect(valheim?.serverOnly ?? []).toEqual([]);
+  });
+});

@@ -13,6 +13,7 @@ import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
 import { DemoTestQuickPlayVoiceController } from './demo-test-quick-play-voice.controller';
+import { DemoTestQuickPlayServerController } from './demo-test-quick-play-server.controller';
 import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
@@ -35,6 +36,7 @@ import { DemoTestBrowserSessionController } from './demo-test-browser-session.co
 import { DemoTestGuildController } from './demo-test-guild.controller';
 import { DemoTestGuildDiscordController } from './demo-test-guild-discord.controller';
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
+import { DemoTestChannelLifecycleController } from './demo-test-channel-lifecycle.controller';
 import { DemoTestCommunityHubsController } from './demo-test-community-hubs.controller';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
 import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
@@ -122,6 +124,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestLfgController,
     DemoTestLfgNowVoiceController,
     DemoTestQuickPlayVoiceController,
+    DemoTestQuickPlayServerController,
     DemoTestThreadMirrorController,
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
@@ -144,6 +147,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestGuildController,
     DemoTestGuildDiscordController,
     DemoTestHubMemberController,
+    DemoTestChannelLifecycleController,
     DemoTestCommunityHubsController,
     DemoTestGameRolesController,
     DemoTestJoinPostController,

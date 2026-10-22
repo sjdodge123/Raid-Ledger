@@ -165,6 +165,18 @@ function questLogControl(tag: 'input' | 'select' | 'textarea'): Element {
     return el;
 }
 
+/** The MarkdownEditor frame (ROK-1868): a `div[data-md-editor]` carrying the control frame classes. */
+function questLogMdEditor(): Element {
+    const root = document.createElement('div');
+    root.setAttribute('data-variant', 'quest-log');
+    const el = document.createElement('div');
+    el.setAttribute('data-md-editor', '');
+    el.className = `${FIELD_FRAME_BASE} overflow-hidden`;
+    el.setAttribute('aria-invalid', 'true');
+    root.append(el);
+    return el;
+}
+
 function questLogCard(cls: string): Element {
     const root = document.createElement('div');
     root.setAttribute('data-variant', 'quest-log');
@@ -200,6 +212,14 @@ describe('quest-log invalid form controls (TDB:1888)', () => {
         expect(
             QL_IMPORTANT_BORDERS.filter(({ sel }) => el.matches(sel)).map(({ sel }) => sel),
             `these !important border rules override the invalid <${tag}>'s danger border (form controls carry bg-panel)`,
+        ).toEqual([]);
+    });
+
+    it('no quest-log !important border rule reaches the markdown editor frame (ROK-1868)', () => {
+        const el = questLogMdEditor();
+        expect(
+            QL_IMPORTANT_BORDERS.filter(({ sel }) => el.matches(sel)).map(({ sel }) => sel),
+            'these !important rules paint the bg-panel editor frame as a parchment card and hide its danger border',
         ).toEqual([]);
     });
 

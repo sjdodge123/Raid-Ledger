@@ -16,6 +16,8 @@ import {
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
+import { resolveGameHubLinkSafe } from '../channel-lifecycle/hub-link.resolver';
+import { hubLinkPart } from '../channel-lifecycle/embed-hub-link.helpers';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import {
   EMBED_SYNC_QUEUE,
@@ -108,7 +110,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       this.channelResolver,
     );
     const newState = computeEmbedState(event, eventData);
-    const context = await this.buildContext();
+    const context = await this.buildContext(event);
 
     await this.syncAllMessages(active, eventData, newState, context, eventId);
     this.logAndTriggerSideEffects(
@@ -355,13 +357,25 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     }
   }
 
-  /** Build shared embed context from settings. */
-  private async buildContext(): Promise<EmbedContext> {
+  /** Shared embed context from settings + the event's hub link (ROK-1872). */
+  private async buildContext(
+    event: Pick<typeof schema.events.$inferSelect, 'gameId' | 'guildId'>,
+  ): Promise<EmbedContext> {
     const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
-    return { communityName: branding.communityName, clientUrl, timezone };
+    const hub = await resolveGameHubLinkSafe(
+      this.db,
+      { gameId: event.gameId, taggedGuildId: event.guildId, clientUrl },
+      this.logger,
+    );
+    return {
+      communityName: branding.communityName,
+      clientUrl,
+      timezone,
+      ...hubLinkPart(hub),
+    };
   }
 }

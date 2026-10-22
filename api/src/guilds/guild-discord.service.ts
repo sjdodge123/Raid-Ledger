@@ -27,6 +27,7 @@ import {
   parseSetChannel,
   pickReadableChannel,
   requirePrivateAck,
+  withChannelMeta,
   withServerName,
 } from './guild-discord.helpers';
 import {
@@ -37,6 +38,7 @@ import {
   saveBinding,
 } from './guild-discord.queries';
 import { findGuild } from './guild-core.queries';
+import { findManagedForChannel } from '../discord-bot/channel-lifecycle/hub-channel-link.queries';
 
 /**
  * ROK-1788 (S4) — the guild page's read-only Discord channel mirror. Reads
@@ -127,10 +129,13 @@ export class GuildDiscordService {
     const binding = await findBinding(this.db, guildId);
     if (binding === null) return { state: 'unset' };
     const read = await this.mirror.readLatest(binding.channelId);
-    return withServerName(
+    const named = withServerName(
       requirePrivateAck(read, binding.privateAck),
       this.serverName(),
     );
+    if (named.state !== 'ok') return named;
+    const managedFor = await findManagedForChannel(this.db, binding.channelId);
+    return withChannelMeta(named, { source: binding.source, managedFor });
   }
 
   /** The bot's Discord server name (card copy), or null when the bot is down. */
