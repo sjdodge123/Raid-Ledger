@@ -10,6 +10,7 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
+import { upsertJoin } from '../../guilds/community/community-membership.queries';
 import { insertCommunityHub } from '../../guilds/community/community-proposals.queries';
 import { decideGame } from './channel-lifecycle.decide';
 import { selectGameLifecycleActivity } from './game-activity.queries';
@@ -155,12 +156,17 @@ describe('community-hub hold release + revival (ROK-1873 D8)', () => {
   it('a recent member join revives a dormant hub', async () => {
     const gameId = await makeGame();
     const hubId = await makeHub(gameId, 'active', 40);
-    await testApp.db
+    const memberId = testApp.seed.adminUser.id;
+    await upsertJoin(testApp.db, hubId, memberId, 'leader');
+    const touched = await testApp.db
       .update(schema.hubCommunityMembers)
       .set({ joinedAt: ago(1) })
-      .where(eq(schema.hubCommunityMembers.guildId, hubId));
-    const { holds } = await rowFor(gameId);
+      .where(eq(schema.hubCommunityMembers.guildId, hubId))
+      .returning({ id: schema.hubCommunityMembers.id });
+    expect(touched).toHaveLength(1);
+    const { holds, row } = await rowFor(gameId);
     expect(holds.has(gameId)).toBe(true);
+    expect(row?.signals.find((s) => s.kind === 'hub')?.itemCount).toBe(1);
   });
 
   it('two hubs on one game are two hub items', async () => {
@@ -170,4 +176,29 @@ describe('community-hub hold release + revival (ROK-1873 D8)', () => {
     const { row } = await rowFor(gameId);
     expect(row?.signals.find((s) => s.kind === 'hub')?.itemCount).toBe(2);
   });
+});
+
+describe('a hold is a lifecycle candidate on its own (ROK-1873 X2)', () => {
+  it.each<[string, 'none' | 'other']>([
+    ['no game', 'none'],
+    ['a different game', 'other'],
+  ])(
+    'a hold from a tagged event of %s still surfaces the hub game → create (X2)',
+    async (_label, eventGame) => {
+      const gameId = await makeGame();
+      const otherId = await makeGame();
+      const hubId = await makeHub(gameId, 'active', 40);
+      await testApp.db.insert(schema.events).values({
+        title: 'Hub night',
+        gameId: eventGame === 'other' ? otherId : null,
+        guildId: hubId,
+        creatorId: testApp.seed.adminUser.id,
+        duration: [ago(2), new Date(ago(2).getTime() + 3_600_000)],
+      });
+      const { holds, row } = await rowFor(gameId);
+      expect(holds.has(gameId)).toBe(true);
+      expect(row?.hubHold).toBe(true);
+      expect(row && decideGame(row, SETTINGS).action).toBe('create');
+    },
+  );
 });
