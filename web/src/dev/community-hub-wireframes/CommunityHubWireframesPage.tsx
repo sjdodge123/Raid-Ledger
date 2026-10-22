@@ -44,7 +44,7 @@ function Header(): JSX.Element {
 function Frames(): JSX.Element {
   return (
     <div className="space-y-10">
-      <Frame title="1 · Game page — Community hubs card + proposal form" note="Card sits under the game's plugin sections. Start opens a Modal on desktop, a BottomSheet on phone (§4.4). Phone shows the empty state.">
+      <Frame title="1 · Game page — Hubs card (every kind, ROK-1883) + proposal form" note="Card sits under the game's plugin sections. Start opens a Modal on desktop, a BottomSheet on phone (§4.4). Phone shows the empty state.">
         <GameCardFrames />
       </Frame>
       <Frame title="2 · Admin → Hubs approval queue" note="Pending / Active / Archived. Approve lets the admin tidy the name; Reject needs a reason the proposer sees.">
