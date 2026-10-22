@@ -1525,5 +1525,5 @@ owning `HubModule.overviewWidgets`.
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
 (declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
-(`web/src/dev/design-system/hub-widgets-section.tsx`) — sample widgets through the real `gameWidgetCells`
+(`web/src/dev/design-system/hub-widgets-section.tsx`, demo lazy-loaded from `hub-widgets-demo.tsx`) — sample widgets through the real `gameWidgetCells`
 in the ready, skeleton and contained-error states; live on the hub Overview (`/guilds/:id`).

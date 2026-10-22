@@ -7,10 +7,7 @@
 import { eq } from 'drizzle-orm';
 import type { GuildKind } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
-import {
-  loginAsAdmin,
-  truncateAllTables,
-} from '../common/testing/integration-helpers';
+import { loginAsAdmin } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
@@ -45,13 +42,14 @@ async function insertHub(kind: GuildKind): Promise<number> {
   return g.id;
 }
 
+const PLUGINS = ['blizzard', PELICAN_PLUGIN_ID] as const;
+
+function registry(): PluginRegistryService {
+  return testApp.app.get(PluginRegistryService);
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
-  const registry = testApp.app.get(PluginRegistryService);
-  for (const slug of ['blizzard', PELICAN_PLUGIN_ID]) {
-    await registry.ensureInstalled(slug);
-    await registry.activate(slug);
-  }
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   const [game] = nonEmpty(
     await testApp.db
@@ -63,11 +61,18 @@ beforeAll(async () => {
   gameSlug = game.slug;
 });
 
-afterAll(async () => {
-  const registry = testApp.app.get(PluginRegistryService);
-  if (registry.isActive(PELICAN_PLUGIN_ID))
-    await registry.deactivate(PELICAN_PLUGIN_ID);
-  testApp.seed = await truncateAllTables(testApp.db);
+beforeEach(async () => {
+  for (const slug of PLUGINS) {
+    await registry().ensureInstalled(slug);
+    await registry().activate(slug);
+  }
+});
+
+// No afterAll DB work: the shared integration-setup afterAll closes the pool
+// first, and the next spec's setup truncates.
+afterEach(async () => {
+  if (registry().isActive(PELICAN_PLUGIN_ID))
+    await registry().deactivate(PELICAN_PLUGIN_ID);
 });
 
 describe('GET guilds/:id — guild.gameSlug (ROK-1909)', () => {
