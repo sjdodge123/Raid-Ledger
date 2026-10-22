@@ -47,6 +47,14 @@ describe('PelicanServersRepository.upsertListed', () => {
     ]);
   });
 
+  it('never hides a hub — the listed servers are live (prod Valheim hub, 2026-10-21)', async () => {
+    const { db, repo } = build();
+    db.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
+    await repo.upsertListed(db as never, [listed(1), listed(2)], NOW);
+    expect(db.update).not.toHaveBeenCalled();
+    expect(db.set).not.toHaveBeenCalledWith({ hiddenAt: NOW });
+  });
+
   it('issues no statement for an empty listing', async () => {
     const { db, repo } = build();
     expect(await repo.upsertListed(db as never, [], NOW)).toBe(0);
@@ -67,6 +75,26 @@ describe('PelicanServersRepository.markMissing', () => {
       '("pelican_servers"."missing_since" is null and "pelican_servers"."panel_uuid" not in ($1, $2))',
     );
     expect(q.params).toEqual(['uuid-1', 'uuid-2']);
+  });
+
+  it('hides the hubs of exactly the servers it just marked missing, skipping already-hidden ones', async () => {
+    const { db, repo } = build();
+    db.returning.mockResolvedValueOnce([{ id: 7 }, { id: 8 }]);
+    await repo.markMissing(db as never, ['uuid-1'], NOW);
+    expect(db.update).toHaveBeenCalledTimes(2);
+    expect(db.set).toHaveBeenNthCalledWith(2, { hiddenAt: NOW });
+    const q = render(db.where.mock.calls[1]?.[0]);
+    expect(q.sql).toBe(
+      '("guilds"."pelican_server_id" in ($1, $2) and "guilds"."hidden_at" is null)',
+    );
+    expect(q.params).toEqual([7, 8]);
+  });
+
+  it('hides no hub when no server went missing', async () => {
+    const { db, repo } = build();
+    await repo.markMissing(db as never, ['uuid-1'], NOW);
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(db.set).not.toHaveBeenCalledWith({ hiddenAt: NOW });
   });
 
   it('marks every present row when the complete listing is empty', async () => {

@@ -49,6 +49,7 @@ export interface SignupInteractionMocks {
   mockEmbedFactory: { buildEventEmbed: jest.Mock };
   mockSettingsService: {
     getBranding: jest.Mock;
+    getClientUrl: jest.Mock;
     getDefaultTimezone: jest.Mock;
   };
   mockDb: Record<'select', jest.Mock>;
@@ -182,6 +183,10 @@ function createSecondaryCoreServiceMocks(
         communityName: 'Test Guild',
         communityLogoPath: null,
       }),
+      // Mirrors the real settings fallback to the env var when unset.
+      getClientUrl: jest.fn(() =>
+        Promise.resolve(process.env.CLIENT_URL ?? null),
+      ),
       getDefaultTimezone: jest.fn().mockResolvedValue(null),
     },
     mockDb,

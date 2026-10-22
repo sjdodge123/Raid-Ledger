@@ -20,6 +20,7 @@ import {
 } from './ad-hoc-event.helpers';
 
 import { createVoiceQuickPlay } from './ad-hoc-game-spawn-lock';
+import { emitVoiceSpawn } from './ad-hoc-spawn-events.helpers';
 /** In-memory state for an active ad-hoc event. */
 export interface ActiveAdHocState {
   eventId: number;
@@ -47,6 +48,8 @@ export interface AdHocHandlerDeps {
   gracePeriodQueue: AdHocGracePeriodQueueService;
   channelBindingsService: ChannelBindingsService;
   activeEvents: Map<string, ActiveAdHocState>;
+  /** Codex r9 P2: announces a committed Quick Play to the lifecycle nudge. */
+  eventEmitter?: Parameters<typeof emitVoiceSpawn>[0];
   autoSignupParticipant: (
     eventId: number,
     member: VoiceMemberInfo,
@@ -116,6 +119,7 @@ export async function spawnNewEvent(
     joinOnly,
   );
   if (!created) return null;
+  emitVoiceSpawn(deps.eventEmitter, created, effectiveBinding.gameId);
   await completeSpawn(deps, created, {
     eventKey,
     bindingId,

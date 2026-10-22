@@ -5,7 +5,9 @@ import {
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
+import { GameActivityNudge } from '../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
@@ -68,6 +70,7 @@ export class EventPlansService {
     private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** Creates a new event plan and posts a Discord poll. */
@@ -90,6 +93,7 @@ export class EventPlansService {
       dto,
     );
     await this.schedulePollClose(plan.id, dto.pollDurationHours * 3600 * 1000);
+    GameActivityNudge.safeTouch(this.nudge, dto.gameId);
     return toResponseDto(plan);
   }
 
@@ -102,13 +106,14 @@ export class EventPlansService {
   ): Promise<EventPlanResponseDto> {
     const event = await this.eventsService.findOne(eventId);
     assertEventOwnerOrPrivileged(event, userId, userRole);
-    const { dto } = await executeConversion(
+    const { plan, dto } = await executeConversion(
       this.opsDeps(),
       event,
       userId,
       this.settingsService,
       options,
     );
+    GameActivityNudge.safeTouch(this.nudge, plan.gameId);
     await tryCancelOriginal(
       this.eventsService,
       eventId,
@@ -197,7 +202,9 @@ export class EventPlansService {
         `Can only restart cancelled/expired/draft plans, got "${plan.status}"`,
       );
     }
-    return restartPlan(this.opsDeps(), plan);
+    const restarted = await restartPlan(this.opsDeps(), plan);
+    GameActivityNudge.safeTouch(this.nudge, plan.gameId);
+    return restarted;
   }
 
   /** Job handler: processes poll close. */
