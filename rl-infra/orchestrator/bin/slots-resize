@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# slots-resize <N> — OPERATOR-ONLY: make claims.json list exactly slots 1..N.
+#
+# Why: `claim` picks free slots from the ROWS of claims.json, not from
+# RUNNER_SLOTS, and state::init only builds the file when it is absent — so
+# editing RUNNER_SLOTS + init-state never shrinks a live fleet. Dropping to 3
+# slots (README "Memory hardening" step 4) needs slot 4's row gone, or the next
+# agent handed slot 4 fails every rl_* call against a stopped rl-runner-4.
+#
+# Shrinking refuses (exit 1, file untouched) while any slot above N is claimed
+# or has a lease-queue waiter. Growing adds unclaimed rows for the missing
+# slots. The edit runs under the claims.json flock (state::mutate_with_
+# precondition), the same lock claim/release use.
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+N="${1:-}"
+if ! [[ "$N" =~ ^[1-9]$ ]]; then
+    echo '{"ok":false,"error":"usage","message":"slots-resize <1-9>"}' >&2
+    exit 2
+fi
+state::init
+
+# Lease-queue waiters for a slot being removed would wait forever. Read-only
+# check outside the claims lock (lock order is queue-then-claims); an operator
+# runs this by hand after `rl status` shows the slot idle.
+for qf in "$RL_LEASE_QUEUE_DIR"/*.json; do
+    [[ -f "$qf" ]] || continue
+    s="$(basename "$qf" .json)"
+    if [[ "$s" =~ ^[0-9]+$ ]] && (( s > N )) \
+        && [[ "$(jq -r 'if type == "array" then length else 0 end' "$qf" 2>/dev/null || echo 0)" != "0" ]]; then
+        echo "{\"ok\":false,\"error\":\"slot_queued\",\"slot\":$s}" >&2
+        exit 1
+    fi
+done
+
+# shellcheck disable=SC2016  # jq program, not shell expansion
+FILTER='
+    if any(.[]; .slot > $n and .claimed == true) then .
+    else ([ .[] | select(.slot <= $n) ]) as $keep
+        | ($keep + [ ([range(1; $n + 1)] - ($keep | map(.slot)))[]
+              | {slot: ., claimed: false, agent_id: null, branch: null,
+                 started_at: null, last_heartbeat: null} ])
+        | sort_by(.slot)
+    end'
+if ! state::mutate_with_precondition "$RL_CLAIMS_FILE" --argjson n "$N" "$FILTER"; then
+    # Unchanged: either already N slots (fine) or a claimed slot blocked it.
+    if jq -e --argjson n "$N" 'any(.[]; .slot > $n and .claimed == true)' "$RL_CLAIMS_FILE" >/dev/null; then
+        jq -c --argjson n "$N" '{ok:false, error:"slot_claimed",
+            slots: [.[] | select(.slot > $n and .claimed == true) | {slot, agent_id}]}' \
+            "$RL_CLAIMS_FILE" >&2
+        exit 1
+    fi
+fi
+audit::log slots-resize ok "$(jq -nc --argjson n "$N" '{slots:$n}')" 2>/dev/null || true
+jq -c '{ok: true, slots: [.[].slot]}' "$RL_CLAIMS_FILE"

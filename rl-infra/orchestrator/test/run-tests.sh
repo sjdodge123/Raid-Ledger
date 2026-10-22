@@ -64,6 +64,8 @@ else
         # ROK-1470 — heavy-task admission control (dynamic fleet memory).
         "$TEST_DIR/task-admission.test.sh"
         "$TEST_DIR/task-admission-ledger.test.sh"
+        # README memory-hardening step 4 — flocked slot shrink/grow.
+        "$TEST_DIR/slots-resize.test.sh"
         # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
         "$TEST_DIR/env-settings-overlay.test.sh"
         # The stat-probe portability guard: `owner_of` tried BSD `stat -f`
