@@ -7,8 +7,22 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { DiscordMarkup } from './DiscordMarkup';
 import { formatDiscordTimestamp } from './discord-markup-time';
+import type * as TimeModule from './discord-markup-time';
+
+// Pin locale + zone so every timestamp assertion below is a FIXED string.
+vi.mock('./discord-markup-time', async (importOriginal) => {
+    const real = await importOriginal<typeof TimeModule>();
+    const pinned: TimeModule.DiscordTimestampFormat = { locale: 'en-US', timeZone: 'UTC' };
+    return {
+        ...real,
+        formatDiscordTimestamp: (unix: number, style: TimeModule.DiscordTimestampStyle, format = pinned) =>
+            real.formatDiscordTimestamp(unix, style, format),
+    };
+});
 
 const UNIX = 1792890900;
+/** ICU may use a narrow no-break space before AM/PM; compare on plain spaces. */
+const norm = (s: string | null | undefined): string | undefined => s?.replace(/\s/g, ' ');
 const PROD_SAMPLE = [
     '**Wrennarök** · **pariah\\_\\_\\_**',
     '[Open event ↗](https://raid.gamernight.net/events/281)',
@@ -39,7 +53,7 @@ describe('DiscordMarkup — the prod Valheim embed (ROK-1878)', () => {
     it('renders <t:…:f> as the viewer-local date+time and <t:…:R> as relative', () => {
         vi.useFakeTimers({ now: new Date((UNIX - 2 * 86400) * 1000), toFake: ['Date'] });
         const times = [...renderMarkup(PROD_SAMPLE).querySelectorAll('time')];
-        expect(times.map((t) => t.textContent)).toEqual([formatDiscordTimestamp(UNIX, 'f'), 'in 2 days']);
+        expect(times.map((t) => norm(t.textContent))).toEqual(['October 25, 2026 at 1:15 AM', 'in 2 days']);
         expect(times[0]?.getAttribute('dateTime')).toBe(new Date(UNIX * 1000).toISOString());
         expect(times[0]?.textContent).toContain(String(new Date(UNIX * 1000).getFullYear()));
     });
@@ -93,7 +107,12 @@ describe('DiscordMarkup — the inline subset', () => {
     });
 
     it('renders <t:UNIX> with no style as the f style', () => {
-        expect(renderMarkup(`<t:${UNIX}>`).querySelector('time')?.textContent).toBe(formatDiscordTimestamp(UNIX, 'f'));
+        expect(norm(renderMarkup(`<t:${UNIX}>`).querySelector('time')?.textContent)).toBe('October 25, 2026 at 1:15 AM');
+    });
+
+    it('renders a past <t:…:R> as "… ago"', () => {
+        vi.useFakeTimers({ now: new Date((UNIX + 3 * 3600) * 1000), toFake: ['Date'] });
+        expect(renderMarkup(`<t:${UNIX}:R>`).querySelector('time')?.textContent).toBe('about 3 hours ago');
     });
 
     it('resolves user/role mentions with neutral fallbacks and emoji as :name:', () => {
@@ -106,7 +125,52 @@ describe('DiscordMarkup — the inline subset', () => {
     });
 });
 
+describe('DiscordMarkup — delimiter edge cases', () => {
+    it('renders ***x*** as bold italic and ___x___ as underlined italic, with no stray delimiter', () => {
+        const el = renderMarkup('***x*** ___y___');
+        expect(el.querySelector('strong > em')?.textContent).toBe('x');
+        expect(el.querySelector('u > em')?.textContent).toBe('y');
+        expect(el.textContent).toBe('x y');
+    });
+
+    it('nests bold inside asterisk italic', () => {
+        const el = renderMarkup('*a **b** c*');
+        expect(el.querySelectorAll('em')).toHaveLength(1);
+        expect(el.querySelector('em')?.textContent).toBe('a b c');
+        expect(el.querySelector('em > strong')?.textContent).toBe('b');
+    });
+
+    it('never nests an anchor: a URL label stays text inside the one link', () => {
+        const anchors = renderMarkup('[https://good.com](https://evil.com)').querySelectorAll('a');
+        expect(anchors).toHaveLength(1);
+        expect(anchors[0]?.getAttribute('href')).toBe('https://evil.com');
+        expect(anchors[0]?.textContent).toBe('https://good.com');
+    });
+
+    it('an escaped delimiter does not close bold', () => {
+        const el = renderMarkup('**a\\**b**');
+        expect(el.querySelector('strong')?.textContent).toBe('a**b');
+        expect(el.textContent).toBe('a**b');
+    });
+
+    it('a delimiter inside a code span does not close bold', () => {
+        const strong = renderMarkup('**a `b**` c**').querySelector('strong');
+        expect(strong?.querySelector('code')?.textContent).toBe('b**');
+        expect(strong?.textContent).toBe('a b** c');
+        expect(strong?.lastChild?.textContent).toBe(' c');
+    });
+});
+
 describe('formatDiscordTimestamp', () => {
+    it('formats fixed strings in a pinned locale and zone', () => {
+        const pinned = { locale: 'en-US', timeZone: 'UTC' };
+        expect(norm(formatDiscordTimestamp(UNIX, 't', pinned))).toBe('1:15 AM');
+        expect(formatDiscordTimestamp(UNIX, 'd', pinned)).toBe('10/25/2026');
+        expect(norm(formatDiscordTimestamp(UNIX, 'f', pinned))).toBe('October 25, 2026 at 1:15 AM');
+        expect(norm(formatDiscordTimestamp(UNIX, 'F', pinned))).toBe('Sunday, October 25, 2026 at 1:15 AM');
+        expect(norm(formatDiscordTimestamp(UNIX, 'f', { locale: 'en-US', timeZone: 'America/New_York' }))).toBe('October 24, 2026 at 9:15 PM');
+    });
+
     it('covers every Discord style with a non-empty, distinct-enough string', () => {
         for (const style of ['t', 'T', 'd', 'D', 'f', 'F', 'R'] as const) {
             expect(formatDiscordTimestamp(UNIX, style)).not.toBe('');

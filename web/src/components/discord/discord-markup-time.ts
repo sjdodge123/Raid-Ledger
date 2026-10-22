@@ -16,6 +16,12 @@ const STYLE_OPTIONS: Record<Exclude<DiscordTimestampStyle, 'R'>, Intl.DateTimeFo
     F: { dateStyle: 'full', timeStyle: 'short' },
 };
 
+/** Locale/zone override; omitted fields mean the viewer's own (tests pin them). */
+export interface DiscordTimestampFormat {
+    locale?: string;
+    timeZone?: string;
+}
+
 const STYLES: readonly DiscordTimestampStyle[] = ['t', 'T', 'd', 'D', 'f', 'F', 'R'];
 
 function isTimestampStyle(raw: string): raw is DiscordTimestampStyle {
@@ -40,11 +46,18 @@ export function discordTimestampDate(unix: number): Date | null {
  *
  * @param unix seconds since the epoch, as written in the token
  * @param style the token's style letter (`R` is relative, e.g. "in 2 days")
+ * @param format locale/zone override — callers omit it so the viewer's own apply
  * @returns the display string, or null for an invalid instant (caller keeps the literal)
  */
-export function formatDiscordTimestamp(unix: number, style: DiscordTimestampStyle): string | null {
+export function formatDiscordTimestamp(
+    unix: number,
+    style: DiscordTimestampStyle,
+    format: DiscordTimestampFormat = {},
+): string | null {
     const date = discordTimestampDate(unix);
     if (date === null) return null;
     if (style === 'R') return formatDistanceToNow(date, { addSuffix: true });
-    return new Intl.DateTimeFormat(undefined, STYLE_OPTIONS[style]).format(date);
+    const options: Intl.DateTimeFormatOptions = { ...STYLE_OPTIONS[style] };
+    if (format.timeZone !== undefined) options.timeZone = format.timeZone;
+    return new Intl.DateTimeFormat(format.locale, options).format(date);
 }
