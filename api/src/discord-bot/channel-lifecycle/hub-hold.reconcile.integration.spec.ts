@@ -162,6 +162,28 @@ describe('X2: an approved community hub creates its channel (ROK-1873)', () => {
     });
   });
 
+  it.each<[string, string | null]>([
+    ['set', 'leader-picked-ch'],
+    ['cleared', null],
+  ])(
+    'a hub whose Leader %s its channel (source=manual) is never auto-linked (§8c)',
+    async (_label, channelId) => {
+      const id = await game();
+      const hubId = await hub(id, 'active');
+      await t.db.insert(schema.guildProfiles).values({
+        guildId: hubId,
+        discordChannelId: channelId,
+        discordChannelSource: 'manual',
+      });
+      await svc.reconcile(live);
+      expect(ops.createTextChannel).toHaveBeenCalledTimes(1);
+      expect(await profileOf(hubId)).toMatchObject({
+        discordChannelId: channelId,
+        discordChannelSource: 'manual',
+      });
+    },
+  );
+
   it('a dormant (40 d quiet) hub alone never creates a channel', async () => {
     const id = await game();
     await hub(id, 'active', 40);
