@@ -35,8 +35,32 @@ interface FakeOverwrite {
   deny: { bitfield: bigint };
 }
 
+/** A Discord edit that lands `ms` later — on the FAKE clock (see below). */
 const wait = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
+
+/*
+ * Fake timers: the 5ms cap, the 100ms settle bound and the mocked delays race
+ * on one clock that only moves when the test advances it, and every promise
+ * chain drains between timers. On real timers a loaded CI runner could stall
+ * past the 5ms cap between two chained "instant" (setTimeout 0) deletes, so a
+ * clean unarchive timed out (`lifecycle.unarchive.unlock exceeded 5ms`).
+ */
+beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+});
+afterEach(() => jest.useRealTimers());
+
+/** Start `p`, attach `check` at once, then move the fake clock `ms`. */
+async function within<T>(
+  p: Promise<T>,
+  ms: number,
+  check: (p: Promise<T>) => Promise<void>,
+): Promise<void> {
+  const assertion = check(p);
+  await jest.advanceTimersByTimeAsync(ms);
+  await assertion;
+}
 
 /** The v2 record an archive of a plain channel writes (send lock). */
 const ADDED: ArchivedOverwrites = {
@@ -127,7 +151,9 @@ const run = (guild: unknown) =>
 describe('unarchiveChannel — a Discord-phase failure is compensated (Codex r18 P2)', () => {
   it('re-locks and moves back to Archived when an overwrite restore throws after the @everyone unlock', async () => {
     const { guild, cache } = archivedChannel({ botDeleteFails: true });
-    await expect(run(guild)).rejects.toThrow('bot overwrite delete failed');
+    await within(run(guild), 50, (p) =>
+      expect(p).rejects.toThrow('bot overwrite delete failed'),
+    );
     expect(everyoneLocked(cache)).toBe(true);
     expect(guild.channels.edit).toHaveBeenLastCalledWith('ch-1', {
       parent: 'arch-cat',
@@ -137,8 +163,9 @@ describe('unarchiveChannel — a Discord-phase failure is compensated (Codex r18
 
   it('waits for a timed-out @everyone unlock to land before re-locking', async () => {
     const { guild, cache } = archivedChannel({ everyoneDeleteMs: 20 });
-    await expect(run(guild)).rejects.toThrow();
-    await wait(40); // let any still-pending edit land
+    // Cap at 5ms, the unlock lands at 20ms; 200ms covers the settle bound
+    // and lets any still-pending edit land.
+    await within(run(guild), 200, (p) => expect(p).rejects.toThrow());
     expect(everyoneLocked(cache)).toBe(true);
     expect(guild.channels.edit).toHaveBeenLastCalledWith('ch-1', {
       parent: 'arch-cat',
@@ -148,7 +175,9 @@ describe('unarchiveChannel — a Discord-phase failure is compensated (Codex r18
 
   it('a clean unarchive is not reverted', async () => {
     const { guild, cache } = archivedChannel({});
-    await expect(run(guild)).resolves.toEqual({ previousParentId: 'arch-cat' });
+    await within(run(guild), 50, (p) =>
+      expect(p).resolves.toEqual({ previousParentId: 'arch-cat' }),
+    );
     expect(everyoneLocked(cache)).toBe(false);
     expect(guild.channels.edit).toHaveBeenCalledTimes(1);
   });
