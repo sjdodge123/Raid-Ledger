@@ -36,6 +36,30 @@ RL_HEAVY_TASK_POLL_SECONDS="${RL_HEAVY_TASK_POLL_SECONDS:-10}"
 RL_HEAVY_TASK_SETTLE_SECONDS="${RL_HEAVY_TASK_SETTLE_SECONDS:-90}"
 RL_HEAVY_TASK_MAX_HOLD_SECONDS="${RL_HEAVY_TASK_MAX_HOLD_SECONDS:-14400}"
 
+# 2026-10-22 no-RAM plan item 3 — a LEDGER on top of the MemAvailable floor.
+# The floor alone is read once at launch and a reservation only counted for
+# RL_HEAVY_TASK_SETTLE_SECONDS, so on 2026-10-22 03:20Z an image build, an env
+# deploy, several --static gates and jest runs all admitted and stalled the VM.
+# Now every admitted task's reservation counts against RL_ADMISSION_BUDGET_MB
+# for its WHOLE life (released at terminal / cancel / holder death), each live
+# env counts RL_ENV_RESERVE_MB, and two hard caps bound the heaviest work.
+#   RL_ADMISSION_BUDGET_MB      12288  Σ reservations + envs may not exceed it (0 = off)
+#   RL_HEAVY_TASK_RESERVE_MB     5632  ledger reservation of a heavy task
+#   RL_MEDIUM_TASK_RESERVE_MB    3072  ledger reservation of a medium task (--static)
+#   RL_IMAGE_BUILD_RESERVE_MB    3072  ledger reservation of an image build
+#   RL_ENV_RESERVE_MB            1024  ledger charge per live env in env-registry.json
+#   RL_MAX_HEAVY_CONCURRENT         2  heavy tasks running at once (0 = no cap)
+#   RL_MAX_IMAGE_BUILDS             1  image builds running at once (0 = no cap)
+# The first task is always admitted on an empty ledger (memory floor still
+# applies), so a mis-set budget can delay work but never wedge the fleet.
+RL_ADMISSION_BUDGET_MB="${RL_ADMISSION_BUDGET_MB:-12288}"
+RL_HEAVY_TASK_RESERVE_MB="${RL_HEAVY_TASK_RESERVE_MB:-5632}"
+RL_MEDIUM_TASK_RESERVE_MB="${RL_MEDIUM_TASK_RESERVE_MB:-3072}"
+RL_IMAGE_BUILD_RESERVE_MB="${RL_IMAGE_BUILD_RESERVE_MB:-3072}"
+RL_ENV_RESERVE_MB="${RL_ENV_RESERVE_MB:-1024}"
+RL_MAX_HEAVY_CONCURRENT="${RL_MAX_HEAVY_CONCURRENT:-2}"
+RL_MAX_IMAGE_BUILDS="${RL_MAX_IMAGE_BUILDS:-1}"
+
 # Create the state file if absent, then drop entries whose holder plainly
 # died (host reboot, SIGKILLed supervisor) so one leak can't wedge the gate
 # forever. Written via jq so byte-for-byte identity holds for the
@@ -48,6 +72,7 @@ admission::ensure_file() {
         chmod 664 "$RL_ADMISSION_FILE" 2>/dev/null || true
     fi
     admission::prune_stale
+    admission::prune_dead
 }
 
 # Drop heavy_running entries older than RL_HEAVY_TASK_MAX_HOLD_SECONDS and
@@ -65,6 +90,94 @@ admission::prune_stale() {
             heavy_waiting: [ (.heavy_waiting // [])[]
                 | select(($now - (.since_epoch // $now)) < ($waitmax + 60)) ]
         }' 2>/dev/null || true
+}
+
+# Drop entries whose holder is gone even though it never called release: its
+# task JSON is already terminal (cancelled, swept as an orphan, finished) or the
+# recorded holder pid no longer exists on THIS host. Without this a SIGKILLed
+# supervisor would pin its reservation until the 4h max-hold prune.
+admission::prune_dead() {
+    [[ -s "$RL_ADMISSION_FILE" ]] || return 0
+    local host key tid pid h json have_ps=0
+    host="$(hostname 2>/dev/null || echo unknown)"
+    # Without ps every pid would look dead; then only the terminal-JSON check runs.
+    command -v ps >/dev/null 2>&1 && have_ps=1
+    local -a dead=()
+    while IFS=$'\t' read -r key tid pid h; do
+        [[ -n "$key" ]] || continue
+        json="${RL_TASKS_DIR:-/nonexistent}/${tid}.json"
+        if [[ -n "$tid" && -f "$json" ]] && admission::json_status_terminal "$json"; then
+            dead+=("$key"); continue
+        fi
+        if (( have_ps )) && [[ "$pid" =~ ^[0-9]+$ && "$h" == "$host" ]] && ! ps -p "$pid" >/dev/null 2>&1; then
+            dead+=("$key")
+        fi
+    done < <(jq -r '((.heavy_running // []) + (.heavy_waiting // []))[]
+        | [.key, (.task_id // ""), ((.pid // "") | tostring), (.host // "")] | @tsv' \
+        "$RL_ADMISSION_FILE" 2>/dev/null)
+    (( ${#dead[@]} > 0 )) || return 0
+    local dead_json
+    dead_json="$(printf '%s\n' "${dead[@]}" | jq -R . | jq -sc .)"
+    state::mutate "$RL_ADMISSION_FILE" --argjson dead "$dead_json" \
+        '{
+            heavy_running: [ (.heavy_running // [])[] | select(.key as $k | ($dead | index($k)) == null) ],
+            heavy_waiting: [ (.heavy_waiting // [])[] | select(.key as $k | ($dead | index($k)) == null) ]
+        }' 2>/dev/null || true
+}
+
+# Which admission category a task tool falls in: `image_build` has its own cap
+# and reservation; everything else is a plain `task` sized by its weight.
+admission::kind_for_tool() {
+    case "${1:-}" in
+        rl_env_build_image_from_runner|*build_image*|*build-image*) echo image_build ;;
+        *) echo task ;;
+    esac
+}
+
+# admission::reserve_mb_for <weight> [kind] — the ledger reservation.
+admission::reserve_mb_for() {
+    if [[ "${2:-task}" == "image_build" ]]; then echo "$RL_IMAGE_BUILD_RESERVE_MB"
+    elif [[ "$1" == "medium" ]]; then echo "$RL_MEDIUM_TASK_RESERVE_MB"
+    else echo "$RL_HEAVY_TASK_RESERVE_MB"; fi
+}
+
+# MB charged for live envs (each one's allinone + PG run outside admission).
+admission::env_reserved_mb() {
+    local n
+    n=$(jq -r 'if type == "array" then length else 0 end' "${RL_ENVS_FILE:-/nonexistent}" 2>/dev/null || echo 0)
+    [[ "$n" =~ ^[0-9]+$ ]] || n=0
+    echo $(( n * RL_ENV_RESERVE_MB ))
+}
+
+# Shared jq defs for the ledger: legacy entries (no weight/kind/reserve_mb)
+# count as a heavy task holding the heavy floor.
+_ADMISSION_JQ_DEFS='
+def ents: (.heavy_running // []);
+def wt: (.weight // "heavy");
+def kd: (.kind // "task");
+def heavy_n: [ents[] | select(wt == "heavy" and kd != "image_build")] | length;
+def medium_n: [ents[] | select(wt == "medium" and kd != "image_build")] | length;
+def build_n: [ents[] | select(kd == "image_build")] | length;
+def reserved: [ents[] | (.reserve_mb // .mb // $floor)] | add // 0;
+'
+
+# Why the ledger refuses <weight>/<kind>/<reserve> right now ("" = it would
+# admit on the ledger; the MemAvailable floor is checked separately).
+admission::ledger_block_reason() {
+    local weight="$1" kind="$2" reserve="$3" envmb
+    envmb="$(admission::env_reserved_mb)"
+    jq -r --arg w "$weight" --arg kind "$kind" --argjson reserve "$reserve" \
+        --argjson envmb "$envmb" --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
+        --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
+        "$_ADMISSION_JQ_DEFS"'
+        if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
+        then "heavy_cap \(heavy_n)/\($maxheavy)"
+        elif ($kind == "image_build" and $maxbuilds > 0 and build_n >= $maxbuilds)
+        then "image_build_cap \(build_n)/\($maxbuilds)"
+        elif ($budget > 0 and (ents | length) > 0 and (reserved + $envmb + $reserve) > $budget)
+        then "budget \(reserved)MB tasks + \($envmb)MB envs + \($reserve)MB > \($budget)MB"
+        else "" end' "$RL_ADMISSION_FILE" 2>/dev/null || true
 }
 
 # Echo the host's MemAvailable in MB, or nothing when the file is missing or
@@ -91,20 +204,36 @@ admission::snapshot() {
     local avail
     avail="$(admission::mem_available_mb)"
     [[ -n "$avail" ]] || avail="null"
+    # heavy_running / heavy_waiting keep their ROK-1470 meaning: every task
+    # holding (or waiting for) an admission slot, whatever its weight. The
+    # per-category split and the ledger totals live under `admission`.
     jq -nc \
-        --argjson running "$(admission::running_count)" \
-        --argjson waiting "$(admission::waiting_count)" \
         --argjson avail "$avail" \
         --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
+        --argjson envmb "$(admission::env_reserved_mb)" \
+        --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" \
+        --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
         --slurpfile state "$RL_ADMISSION_FILE" \
-        '{
-            heavy_running: $running,
-            heavy_waiting: $waiting,
+        "$_ADMISSION_JQ_DEFS"'
+        $state[0] as $st
+        | ($st | heavy_n) as $h | ($st | medium_n) as $m | ($st | build_n) as $b
+        | ($st | reserved) as $r
+        | {
+            heavy_running: ($st | ents | length),
+            heavy_waiting: (($st.heavy_waiting // []) | length),
             mem_available_mb: $avail,
             heavy_task_min_free_mb: $floor,
             admission: {
-                running: ($state[0].heavy_running // []),
-                waiting: ($state[0].heavy_waiting // [])
+                running: ($st.heavy_running // []),
+                waiting: ($st.heavy_waiting // []),
+                categories: {heavy: $h, medium: $m, image_build: $b},
+                reserved_mb: $r,
+                env_reserved_mb: $envmb,
+                committed_mb: ($r + $envmb),
+                budget_mb: $budget,
+                max_heavy_concurrent: $maxheavy,
+                max_image_builds: $maxbuilds
             }
         }' 2>/dev/null || echo '{"heavy_running":0,"heavy_waiting":0,"mem_available_mb":null}'
 }
@@ -122,24 +251,46 @@ admission::need_mb_for() {
     if [[ "$1" == "medium" ]]; then echo "$RL_MEDIUM_TASK_MIN_FREE_MB"; else echo "$RL_HEAVY_TASK_MIN_FREE_MB"; fi
 }
 
+# On top of that floor, the ledger (caps + budget, see the knobs at the top)
+# is evaluated in the SAME flock window, so two waiters can never both take
+# the last heavy slot or the last of the budget.
+#
+# admission::_try_admit <key> <task_id> <avail> [need] [weight] [kind] [pid]
 admission::_try_admit() {
     local key="$1" task_id="$2" avail="$3" need="${4:-$RL_HEAVY_TASK_MIN_FREE_MB}"
-    local now ts
+    local weight="${5:-heavy}" kind="${6:-task}" pid="${7:-$$}"
+    local now ts reserve envmb host
     now=$(date +%s)
     ts=$(date -u +%FT%TZ)
+    reserve="$(admission::reserve_mb_for "$weight" "$kind")"
+    envmb="$(admission::env_reserved_mb)"
+    host="$(hostname 2>/dev/null || echo unknown)"
     state::mutate_with_precondition "$RL_ADMISSION_FILE" \
         --arg k "$key" --arg t "$task_id" --arg ts "$ts" \
+        --arg w "$weight" --arg kind "$kind" --arg host "$host" --arg pid "$pid" \
         --argjson now "$now" --argjson avail "$avail" \
         --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
         --argjson settle "$RL_HEAVY_TASK_SETTLE_SECONDS" \
-        --argjson need "$need" \
-        'def recent: [ (.heavy_running // [])[]
+        --argjson need "$need" --argjson reserve "$reserve" --argjson envmb "$envmb" \
+        --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
+        "$_ADMISSION_JQ_DEFS"'
+         def recent: [ ents[]
              | select(($now - (.admitted_epoch // 0)) < $settle)
              | (.mb // $floor) ] | add // 0;
-         if ($avail - recent) >= $need
+         def ledger_ok:
+             (if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0)
+              then heavy_n < $maxheavy else true end)
+             and (if ($kind == "image_build" and $maxbuilds > 0)
+                  then build_n < $maxbuilds else true end)
+             and ($budget <= 0 or (ents | length) == 0
+                  or (reserved + $envmb + $reserve) <= $budget);
+         if ledger_ok and ($avail - recent) >= $need
          then {
-             heavy_running: ((.heavy_running // [])
-                 + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now, mb: $need}]),
+             heavy_running: (ents
+                 + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now, mb: $need,
+                     weight: $w, kind: $kind, reserve_mb: $reserve,
+                     pid: ($pid | tonumber? // null), host: $host}]),
              heavy_waiting: [ (.heavy_waiting // [])[] | select(.key != $k) ]
          }
          else . end'
@@ -147,15 +298,19 @@ admission::_try_admit() {
 
 # Register (idempotently) as a waiter so status/lease-status can show pressure.
 admission::_mark_waiting() {
-    local key="$1" task_id="$2"
-    local now ts
+    local key="$1" task_id="$2" weight="${3:-heavy}" kind="${4:-task}" reason="${5:-}" pid="${6:-$$}"
+    local now ts host
     now=$(date +%s)
     ts=$(date -u +%FT%TZ)
+    host="$(hostname 2>/dev/null || echo unknown)"
     state::mutate "$RL_ADMISSION_FILE" \
         --arg k "$key" --arg t "$task_id" --arg ts "$ts" --argjson now "$now" \
+        --arg w "$weight" --arg kind "$kind" --arg r "$reason" --arg host "$host" --arg pid "$pid" \
         '.heavy_waiting = (if any((.heavy_waiting // [])[]; .key == $k)
-             then (.heavy_waiting // [])
-             else ((.heavy_waiting // []) + [{key: $k, task_id: $t, since: $ts, since_epoch: $now}])
+             then [ (.heavy_waiting // [])[] | if .key == $k then .blocked_by = $r else . end ]
+             else ((.heavy_waiting // []) + [{key: $k, task_id: $t, since: $ts, since_epoch: $now,
+                   weight: $w, kind: $kind, blocked_by: $r,
+                   pid: ($pid | tonumber? // null), host: $host}])
              end)' 2>/dev/null || true
 }
 
@@ -163,15 +318,21 @@ admission::_mark_waiting() {
 # the counters still reflect what is running.
 admission::_register_running() {
     local key="$1" task_id="$2" need="${3:-$RL_HEAVY_TASK_MIN_FREE_MB}"
-    local now ts
+    local weight="${4:-heavy}" kind="${5:-task}" pid="${6:-$$}"
+    local now ts reserve host
     now=$(date +%s)
     ts=$(date -u +%FT%TZ)
+    reserve="$(admission::reserve_mb_for "$weight" "$kind")"
+    host="$(hostname 2>/dev/null || echo unknown)"
     state::mutate "$RL_ADMISSION_FILE" \
         --arg k "$key" --arg t "$task_id" --arg ts "$ts" --argjson now "$now" \
-        --argjson need "$need" \
+        --argjson need "$need" --argjson reserve "$reserve" \
+        --arg w "$weight" --arg kind "$kind" --arg host "$host" --arg pid "$pid" \
         '{
             heavy_running: ((.heavy_running // [])
-                + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now, mb: $need}]),
+                + [{key: $k, task_id: $t, admitted_at: $ts, admitted_epoch: $now, mb: $need,
+                    weight: $w, kind: $kind, reserve_mb: $reserve,
+                    pid: ($pid | tonumber? // null), host: $host}]),
             heavy_waiting: [ (.heavy_waiting // [])[] | select(.key != $k) ]
         }' 2>/dev/null || true
 }
@@ -223,10 +384,18 @@ admission::json_status_terminal() {
 # one poll interval instead of being noticed only after admission — otherwise
 # freed memory would start a command nobody is waiting for any more.
 #
-# admission::acquire <key> <task_id> [log_path] [abort_cmd] [need_mb]
+# The reservation taken here is held until admission::release (the
+# supervisor's exit path) or admission::prune_dead (holder gone), NOT for a
+# fixed settle window. The holder pid recorded is this shell's ($$).
+#
+# admission::acquire <key> <task_id> [log_path] [abort_cmd] [need_mb] [weight] [kind]
 admission::acquire() {
     local key="$1" task_id="$2" log_path="${3:-}" abort_cmd="${4:-}"
     local floor="${5:-$RL_HEAVY_TASK_MIN_FREE_MB}"
+    local weight="${6:-}" kind="${7:-task}" reason
+    if [[ -z "$weight" ]]; then
+        if [[ "$floor" == "$RL_MEDIUM_TASK_MIN_FREE_MB" ]]; then weight=medium; else weight=heavy; fi
+    fi
     local poll="$RL_HEAVY_TASK_POLL_SECONDS"
     local deadline=$(( $(date +%s) + RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS ))
     admission::ensure_file
@@ -242,17 +411,18 @@ admission::acquire() {
         if [[ -z "$avail" ]]; then
             admission::_log "$log_path" \
                 "[admission] MemAvailable unreadable at $RL_MEMINFO_PATH — admitted ungated"
-            admission::_register_running "$key" "$task_id" "$floor"
+            admission::_register_running "$key" "$task_id" "$floor" "$weight" "$kind" "$$"
             return 0
         fi
-        if admission::_try_admit "$key" "$task_id" "$avail" "$floor"; then
+        if admission::_try_admit "$key" "$task_id" "$avail" "$floor" "$weight" "$kind" "$$"; then
             admission::_log "$log_path" \
                 "[admission] admitted: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)"
             return 0
         fi
-        admission::_mark_waiting "$key" "$task_id"
+        reason="$(admission::ledger_block_reason "$weight" "$kind" "$(admission::reserve_mb_for "$weight" "$kind")")"
+        admission::_mark_waiting "$key" "$task_id" "$weight" "$kind" "${reason:-memory_floor}" "$$"
         admission::_log "$log_path" \
-            "[admission] waiting for memory: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)"
+            "[admission] waiting for memory: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)${reason:+ blocked_by=$reason}"
         if (( $(date +%s) + poll > deadline )); then
             admission::release "$key"
             admission::_log "$log_path" \

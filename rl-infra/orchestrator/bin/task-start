@@ -199,7 +199,10 @@ export RL_TASKS_DIR RL_STATE_DIR RL_LOCK_DIR RL_CLAIMS_FILE RL_ENVS_FILE RL_QUEU
 # detach boundary.
 export RL_ADMISSION_FILE RL_MEMINFO_PATH RL_HEAVY_TASK_MIN_FREE_MB \
     RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS RL_HEAVY_TASK_POLL_SECONDS \
-    RL_HEAVY_TASK_SETTLE_SECONDS RL_HEAVY_TASK_MAX_HOLD_SECONDS
+    RL_HEAVY_TASK_SETTLE_SECONDS RL_HEAVY_TASK_MAX_HOLD_SECONDS \
+    RL_MEDIUM_TASK_MIN_FREE_MB RL_ADMISSION_BUDGET_MB RL_HEAVY_TASK_RESERVE_MB \
+    RL_MEDIUM_TASK_RESERVE_MB RL_IMAGE_BUILD_RESERVE_MB RL_ENV_RESERVE_MB \
+    RL_MAX_HEAVY_CONCURRENT RL_MAX_IMAGE_BUILDS
 # ROK-1568 — same for the disk gate's knobs (it runs in the supervisor too).
 export RL_BUILD_MIN_FREE_GB RL_BUILD_DISK_WAIT_S RL_DISK_POLL_SECONDS RL_DISK_GATE \
     RL_DISK_PRUNE_PCT RL_DISK_TARGET_PCT RL_IMAGE_PRUNE_AGE RL_DISK_ROOT \
@@ -244,10 +247,16 @@ rm -f "$PARSE_DONE"
 # RL_ADMISSION_HELD is exported for the wrapped command: nested wrappers
 # (run-on-runner-with-heartbeat --weight heavy) see that an ancestor already
 # holds a heavy slot and do NOT gate again — no double counting, no deadlock.
+# No-RAM plan item 3 — the tool decides the admission CATEGORY: an image build
+# has its own cap (RL_MAX_IMAGE_BUILDS) and reservation; the reservation is held
+# until the release below the wait, not for a settle window.
+TASK_TOOL=$(jq -r ".tool // \"\"" "$JSON_PATH" 2>/dev/null || echo "")
+ADM_KIND=$(admission::kind_for_tool "$TASK_TOOL")
 if [[ "$WEIGHT" == "heavy" || "$WEIGHT" == "medium" ]]; then
     state::mutate "$JSON_PATH" ".admission_state = \"waiting\"" 2>/dev/null || true
     admission::acquire "$TASK_ID" "$TASK_ID" "$LOG_PATH" \
-        "admission::json_status_terminal \"$JSON_PATH\"" "$(admission::need_mb_for "$WEIGHT")"
+        "admission::json_status_terminal \"$JSON_PATH\"" "$(admission::need_mb_for "$WEIGHT")" \
+        "$WEIGHT" "$ADM_KIND"
     ADM_RC=$?
     if (( ADM_RC == 2 )); then
         # Cancelled (or otherwise finished) while parked on the gate. Do NOT
@@ -290,7 +299,6 @@ fi
 # prune-ladder pass) turns that into either a delayed-but-clean build or a
 # named `disk_pressure` failure carrying the numbers. The tool name comes from
 # the task JSON — the supervisor is only handed id/bin/timeout/weight.
-TASK_TOOL=$(jq -r ".tool // \"\"" "$JSON_PATH" 2>/dev/null || echo "")
 if admission::disk_gate_applies "$TASK_TOOL"; then
     admission::acquire_disk "$TASK_ID" "$JSON_PATH" "$LOG_PATH" \
         "admission::json_status_terminal \"$JSON_PATH\""
