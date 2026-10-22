@@ -282,6 +282,13 @@ jobs:
       - name: Migration merge-order guard
         run: node scripts/check-migration-merge-order.mjs --base HEAD^1
 
+      # Two open PRs both claimed the next migration number (0239): a branch-only
+      # journal entry whose idx collides with, or sits under, the base's newest,
+      # or a duplicate idx/NNNN prefix in the journal or the .sql files. The
+      # message names the fix: ./scripts/renumber-branch-migrations.sh.
+      - name: Migration index-collision guard
+        run: node scripts/check-migration-index-collision.mjs --base HEAD^1
+
       # TDB:1150: every meta/NNNN_snapshot.json's prevId must be the id of the
       # snapshot before it (numeric order; gaps are normal). drizzle-kit only
       # aborts on a prevId collision, so a broken link (0102 pointed at a tag
