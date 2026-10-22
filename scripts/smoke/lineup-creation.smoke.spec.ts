@@ -9,7 +9,14 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiGet, createLineupOrRetry } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiGet,
+    createLineupOrRetry,
+    getScopedBanner,
+    scopeBannerTo,
+} from './api-helpers';
 import { defined } from './defined';
 import { isMobile } from './helpers';
 
@@ -310,9 +317,17 @@ test.describe('Phase countdown display', () => {
     });
 
     test('detail page shows full countdown timer', async ({ page }) => {
-        // Navigate to Games page then click through to lineup detail
-        // (avoids stale lineupId from cross-project race)
+        // OUR lineup, end to end. The unscoped /games banner (and its first
+        // "View Lineup" link) belongs to whichever spec created a lineup last,
+        // so this test used to open a sibling's lineup (TDB:2558, TDB:2683).
         lineupId = await ensureActiveLineup(adminToken);
+        await expect
+            .poll(async () => (await getScopedBanner(adminToken, lineupId))?.id ?? null, {
+                timeout: 15_000,
+                message: `lineup ${lineupId} never became banner-eligible`,
+            })
+            .toBe(lineupId);
+        await scopeBannerTo(page, lineupId);
 
         await page.goto('/games');
         await expect(page.locator('body')).not.toHaveText(
@@ -320,21 +335,23 @@ test.describe('Phase countdown display', () => {
             { timeout: 10_000 },
         );
 
-        // Click through to lineup detail via banner link.
-        // ROK-1167: scope to .first() — under parallel CI load, OtherActiveLineups
-        // (rendered below the banner) shows sibling workers' lineups as additional
-        // matching links, breaking strict mode. The primary banner link is first
-        // in DOM order.
-        const bannerLink = page
-            .getByRole('link', { name: /View Lineup|Lineup/i })
-            .first();
+        // The countdown renders on the banner (PhaseCountdown, LineupBanner);
+        // the detail page has none since ROK-1323 (TDB:2417). Asserting it
+        // after the click only ever matched the page being left behind.
+        const subtitle = page.getByTestId('lineup-banner-subtitle');
+        await expect(subtitle).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(/remaining|countdown|time left/i).first()).toBeVisible({
+            timeout: 10_000,
+        });
+
+        const bannerLink = page.locator(`a[href="/community-lineup/${lineupId}"]`).first();
         await expect(bannerLink).toBeVisible({ timeout: 15_000 });
         await bannerLink.click();
-        await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });
-
-        // Full countdown should be visible on the detail page
-        const countdown = page.getByText(/remaining|countdown|time left/i);
-        await expect(countdown).toBeVisible({ timeout: 10_000 });
+        await page.waitForURL(new RegExp(`/community-lineup/${lineupId}(?:[?#]|$)`), {
+            timeout: 10_000,
+        });
+        // The detail page replaced /games (no banner left behind).
+        await expect(subtitle).toHaveCount(0, { timeout: 10_000 });
     });
 });
 
