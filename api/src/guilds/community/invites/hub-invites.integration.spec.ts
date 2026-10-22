@@ -162,6 +162,25 @@ describe('I1 create / list / revoke (ruling a: any live member)', () => {
   });
 });
 
+describe('I1 cap under concurrency', () => {
+  it('two concurrent creates at 4 live links → one 201, one 409, 5 live', async () => {
+    const [leader, member] = [await mkUser(), await mkUser()];
+    const hub = await mkHub(leader, [member]);
+    for (let n = 0; n < 4; n++) await mkInvite(hub, member);
+    const res = await Promise.all([
+      call('post', `/hubs/${hub}/invites`, member, {}),
+      call('post', `/hubs/${hub}/invites`, member, {}),
+    ]);
+    expect(res.map((r) => r.status).sort()).toEqual([201, 409]);
+    const i = schema.hubInvites;
+    const rows = await testApp.db
+      .select()
+      .from(i)
+      .where(and(eq(i.guildId, hub), eq(i.createdBy, member.id)));
+    expect(rows.filter((r) => r.revokedAt === null)).toHaveLength(5);
+  });
+});
+
 describe('I1 list / revoke', () => {
   it('a member lists only their own links; the Leader lists all, with tokens', async () => {
     const [leader, a, b] = [await mkUser(), await mkUser(), await mkUser()];
@@ -328,6 +347,20 @@ describe('I6, I7, I9 refused redeems', () => {
     ]);
     expect(res.map((r) => r.status).sort()).toEqual([200, 410]);
     expect((await inviteRow(inv.id)).useCount).toBe(1);
+  });
+
+  it('a redeem racing a ban of the link maker → no deadlock (hub lock first)', async () => {
+    const [leader, maker, u] = [await mkUser(), await mkUser(), await mkUser()];
+    const hub = await mkHub(leader, [maker]);
+    const inv = await mkInvite(hub, maker);
+    const [redeem, ban] = await Promise.all([
+      call('post', `/hubs/invites/${inv.token}/join`, u),
+      call('put', `/hubs/${hub}/bans/${maker.id}`, leader, {}),
+    ]);
+    // A deadlock aborts one side with a 500; either serial order is fine.
+    expect([200, 410]).toContain(redeem.status);
+    expect([200, 204]).toContain(ban.status);
+    expect((await inviteRow(inv.id)).revokedAt).not.toBeNull();
   });
 
   it('I9: not in the Discord server → 403, no membership', async () => {

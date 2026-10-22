@@ -15,7 +15,11 @@ import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../hub-hidden.helpers';
 import { liveCommunityRole, loadDiscordFields } from '../community-hub.reads';
 import { assertMayJoin, joinLocked } from '../community-join.helpers';
-import { refreshMemberCount } from '../community-membership.queries';
+import {
+  lockHubRow,
+  refreshMemberCount,
+  type DbOrTx,
+} from '../community-membership.queries';
 import { isInDiscordGuild } from '../discord-guild-member.helpers';
 import { HubDiscordInviteService } from './hub-discord-invite.service';
 import {
@@ -49,9 +53,39 @@ function isAvailable(hub: PreviewHubRow | null): hub is PreviewHubRow {
 }
 
 /**
+ * The redeem's locked section. Lock order is hub row → invite row, the same
+ * order a ban takes (hub lock, then it revokes the banned user's links), so
+ * a redeem racing a ban cannot deadlock. The hub is re-read under the lock:
+ * hidden or archived since the pre-check → 404 (R4).
+ */
+async function redeemLocked(
+  tx: DbOrTx,
+  token: string,
+  hubId: number,
+  userId: number,
+): Promise<boolean> {
+  await lockHubRow(tx, hubId);
+  if (!isAvailable(await loadPreviewHub(tx, hubId))) {
+    throw new NotFoundException(HUB_NOT_FOUND);
+  }
+  const locked = await findInviteByToken(tx, token, true);
+  if (!locked || locked.guildId !== hubId) {
+    throw new NotFoundException(INVITE_NOT_FOUND);
+  }
+  const state = inviteState(locked, new Date());
+  if (state !== 'ok') {
+    throw new GoneException({ message: GONE_COPY[state], state });
+  }
+  const fresh = await joinLocked(tx, hubId, userId, 'invite', locked.id);
+  if (fresh) await bumpUseCount(tx, locked.id);
+  return fresh;
+}
+
+/**
  * ROK-1893 P1 — the `/h/:token` landing: a public preview (signed-in viewer
  * fields when a JWT is present) and the redeem. Redeeming is one transaction:
- * lock the invite row, re-check its state, join, count a NEW member only.
+ * lock the hub row, then the invite row, re-check both, join, count a NEW
+ * member only.
  */
 @Injectable()
 export class HubInviteLandingService {
@@ -97,17 +131,9 @@ export class HubInviteLandingService {
       return { hubId: hub.id, joined: false, memberCount: hub.memberCount };
     }
     await assertMayJoin(this.db, userId, hub.id, true);
-    const joined = await this.db.transaction(async (tx) => {
-      const locked = await findInviteByToken(tx, token, true);
-      if (!locked) throw new NotFoundException(INVITE_NOT_FOUND);
-      const state = inviteState(locked, new Date());
-      if (state !== 'ok') {
-        throw new GoneException({ message: GONE_COPY[state], state });
-      }
-      const fresh = await joinLocked(tx, hub.id, userId, 'invite', locked.id);
-      if (fresh) await bumpUseCount(tx, locked.id);
-      return fresh;
-    });
+    const joined = await this.db.transaction((tx) =>
+      redeemLocked(tx, token, hub.id, userId),
+    );
     const memberCount = await refreshMemberCount(this.db, hub.id);
     return { hubId: hub.id, joined, memberCount };
   }
