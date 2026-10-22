@@ -158,7 +158,7 @@ describe('hub link (ROK-1893 V5)', () => {
             renderWithRouter(<EventBanner {...mockProps} hub={{ id: 7, name: 'BG3 Friends', kind: 'game_community' }} />);
             const link = screen.getByTestId('event-banner-hub');
             expect(link.getAttribute('href')).toBe('/guilds/7');
-            expect(link.textContent).toContain('BG3 Friends · Community');
+            expect(link.textContent).toContain('BG3 Friends hub');
             expect(link.className).toContain('event-banner__game--link');
         });
 

@@ -7,7 +7,6 @@ import { formatDuration } from '../../utils/game-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { SeriesBadge } from './SeriesBadge';
-import { HUB_KIND_LABEL } from '../layout/hub-nav/hub-kind-label';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -89,11 +88,11 @@ function GameBadge({ game }: { game: NonNullable<EventBannerProps['game']> }) {
     );
 }
 
-/** ROK-1893 §10.4: the hub link beside `GameBadge` — same pill + link class, kind noun from `HUB_KIND_LABEL`. */
+/** ROK-1893 §10.4: the hub link beside `GameBadge` — same pill + link class; "<name> hub" per the approved wireframe. */
 function HubBadge({ hub }: { hub: EventHubRef }) {
     return (
         <Link to={`/guilds/${hub.id}`} className="event-banner__game event-banner__game--link" data-testid="event-banner-hub">
-            <span role="img" aria-hidden="true">⌂</span> {hub.name} · {HUB_KIND_LABEL[hub.kind]}
+            <span role="img" aria-hidden="true">⌂</span> {hub.name} hub
         </Link>
     );
 }
