@@ -258,9 +258,10 @@ beforeAll(async () => {
   await seedNonReaders();
 });
 
-afterAll(async () => {
+// No truncate here: the shared integration setup closes the pool in its own
+// afterAll (integration-setup.ts:85), and the next spec truncates in beforeAll.
+afterAll(() => {
   clearKnownQuestMemo();
-  testApp.seed = await truncateAllTables(testApp.db);
 });
 
 type Body = {
