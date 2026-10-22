@@ -242,7 +242,7 @@ test.describe('community hubs — member', () => {
         await expect(page.getByTestId('community-hub-join')).toBeVisible({ timeout: 15_000 });
     });
 
-    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the More drawer (phone)', async ({ page }, testInfo) => {
+    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the bottom Hubs sheet (phone)', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         await signInOnboardedMember(page, actorId(seed, testInfo));
         await page.goto('/calendar');
@@ -256,10 +256,13 @@ test.describe('community hubs — member', () => {
             await expect(browse, '"Browse all hubs" closes the Hubs menu').toBeVisible({ timeout: 15_000 });
             await browse.click();
         } else {
-            await page.getByRole('button', { name: 'Open menu' }).click();
-            const row = page.getByTestId('more-drawer-panel').getByTestId('drawer-hubs-link');
-            await expect(row, 'phone: the Hubs row in the More drawer').toBeVisible({ timeout: 15_000 });
-            await row.click();
+            // ROK-1890: the More drawer no longer lists hubs; the bottom bar's Hubs sheet is the phone entry.
+            const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+            await expect(trigger, 'phone: a hub member gets the bottom Hubs sheet trigger').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const browse = page.getByRole('dialog', { name: 'Your hubs' }).getByTestId('bottom-hubs-browse-all');
+            await expect(browse, 'phone: "Browse all hubs" in the bottom Hubs sheet').toBeVisible({ timeout: 15_000 });
+            await browse.click();
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
@@ -273,7 +276,8 @@ test.describe('community hubs — signed out', () => {
         await page.goto('/');
         await expect(page.locator('body')).toBeVisible();
         await expect(page.getByRole('link', { name: 'Hubs', exact: true }), 'no Hubs link without a session').toHaveCount(0);
-        await expect(page.getByTestId('drawer-hubs-link')).toHaveCount(0);
+        await expect(page.getByTestId('bottom-hubs-link'), 'no bottom Hubs link without a session').toHaveCount(0);
+        await expect(page.getByTestId('bottom-hubs-trigger'), 'no bottom Hubs sheet without a session').toHaveCount(0);
     });
 });
 
