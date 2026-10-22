@@ -205,7 +205,47 @@ describe('hub polls — reads', () => {
       matchId,
     ]);
   });
+});
 
+describe('hub polls — hub list', () => {
+  it('hub list excludes untagged polls and polls of another visible hub', async () => {
+    const leader = await mkUser();
+    const otherLeader = await mkUser();
+    const hub = await mkHub(leader);
+    const otherHub = await mkHub(otherLeader);
+    const mine = await createPoll(leader.token, { hubId: hub.id });
+    const other = await createPoll(otherLeader.token, { hubId: otherHub.id });
+    const untagged = await createPoll((await mkUser()).token, {});
+    expect([mine.status, other.status, untagged.status]).toEqual([
+      201, 201, 201,
+    ]);
+    const hubList = await get(`/hubs/${hub.id}/polls`, adminToken);
+    expect((hubList.body as ListItem[]).map((p) => p.matchId)).toEqual([
+      pollIds(mine.body).matchId,
+    ]);
+  });
+
+  it('a private hub poll is not listed for a non-invitee', async () => {
+    const leader = await mkUser();
+    const outsider = await mkUser();
+    const hub = await mkHub(leader);
+    const res = await createPoll(leader.token, {
+      hubId: hub.id,
+      visibility: 'private',
+    });
+    expect(res.status).toBe(201);
+    const { matchId } = pollIds(res.body);
+    const forCreator = await get(`/hubs/${hub.id}/polls`, leader.token);
+    expect((forCreator.body as ListItem[]).map((p) => p.matchId)).toEqual([
+      matchId,
+    ]);
+    const forOutsider = await get(`/hubs/${hub.id}/polls`, outsider.token);
+    expect(forOutsider.status).toBe(200);
+    expect(forOutsider.body).toEqual([]);
+  });
+});
+
+describe('hub polls — hidden hub', () => {
   it('hidden hub: page hub null, no voter flags, empty hub list', async () => {
     const leader = await mkUser();
     const hub = await mkHub(leader);
@@ -223,6 +263,10 @@ describe('hub polls — reads', () => {
     );
     expect(page.body.hub).toBeNull();
     expect(page.body.slots[0]?.votes[0]).not.toHaveProperty('isHubMember');
+    const active = await get('/scheduling-polls/active', adminToken);
+    const item = (active.body as ListItem[]).find((p) => p.matchId === matchId);
+    expect(item).toBeDefined();
+    expect(item?.hub).toBeNull();
     const hubList = await get(`/hubs/${hub.id}/polls`, adminToken);
     expect(hubList.body).toEqual([]);
   });
@@ -248,6 +292,63 @@ describe('hub polls — inheritance', () => {
     const res = await createPoll(adminToken, { linkedEventId: event.id });
     expect(res.status).toBe(201);
     expect(await lineupGuildId(pollIds(res.body).matchId)).toBe(hub.id);
+  });
+
+  it('a reschedule poll does not inherit a hub of another game', async () => {
+    const [other] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: next('Other'), slug: next('other') })
+        .returning(),
+      'game',
+    );
+    const hub = await mkHub(await mkUser(), [], other.id);
+    const start = new Date(Date.now() + 2 * 864e5);
+    const [event] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Mismatched hub night',
+          gameId: testApp.seed.game.id,
+          creatorId: testApp.seed.adminUser.id,
+          duration: [start, new Date(start.getTime() + 72e5)],
+          guildId: hub.id,
+        })
+        .returning(),
+      'event',
+    );
+    const res = await createPoll(adminToken, { linkedEventId: event.id });
+    expect(res.status).toBe(201);
+    expect(await lineupGuildId(pollIds(res.body).matchId)).toBeNull();
+  });
+});
+
+describe('hub polls — lock-in', () => {
+  it('a plain member who made a hub poll locks it in: the event inherits the hub (no 403)', async () => {
+    const member = await mkUser();
+    const hub = await mkHub(await mkUser(), [member]);
+    const poll = await createPoll(member.token, { hubId: hub.id });
+    expect(poll.status).toBe(201);
+    const start = new Date(Date.now() + 3 * 864e5);
+    const res = await testApp.request
+      .post('/events')
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({
+        title: 'Member lock-in',
+        gameId: testApp.seed.game.id,
+        startTime: start.toISOString(),
+        endTime: new Date(start.getTime() + 72e5).toISOString(),
+        schedulingMatchId: pollIds(poll.body).matchId,
+      });
+    expect(res.status).toBe(201);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ guildId: schema.events.guildId })
+        .from(schema.events)
+        .where(eq(schema.events.id, (res.body as { id: number }).id)),
+      'event',
+    );
+    expect(row.guildId).toBe(hub.id);
   });
 
   it('an event created from a hub poll match inherits the hub', async () => {
