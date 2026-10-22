@@ -4,6 +4,8 @@ import { AttendeeAvatars } from './AttendeeAvatars';
 import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
 import { toAttendeePreviews } from './attendee-previews';
+import { EventHubLabel } from './event-hub-label';
+import { hubSuffixText } from './event-hub-label.helpers';
 
 interface WeekEventCardProps {
     event: CalendarEvent;
@@ -45,6 +47,21 @@ function WeekEventHeader({ title, tier, overlaps, isSeries }: { title: string; t
     );
 }
 
+/** ROK-1893 R23: `<game> · <hub>` on compact/standard; the minimal tier keeps the game alone (hub in the block's title). */
+function WeekEventGameLine({ event, tier }: { event: CalendarEvent; tier: Tier }) {
+    const hub = tier === 'minimal' ? null : event.resource?.hub;
+    return (
+        <span className={hub ? 'week-event-game truncate' : 'week-event-game'}>
+            {event.resource?.game?.name || 'Event'}<EventHubLabel hub={hub} className="opacity-80" />
+        </span>
+    );
+}
+
+function minimalHubTitle(event: CalendarEvent, tier: Tier): string | undefined {
+    const suffix = hubSuffixText(event.resource?.hub);
+    return tier === 'minimal' && suffix ? `${event.title}${suffix}` : undefined;
+}
+
 function SignupBadge({ count }: { count: number }) {
     return (
         <span className="week-event-signup-badge" data-testid="signup-badge">
@@ -68,7 +85,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
     const signupsPreview = toAttendeePreviews(event.resource?.signupsPreview);
 
     return (
-        <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} style={{
+        <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} title={minimalHubTitle(event, tier)} style={{
             backgroundImage: coverUrl
                 ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
                 : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
@@ -76,7 +93,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
         }}>
             <WeekEventHeader title={event.title} tier={tier} overlaps={overlaps} isSeries={!!event.resource?.recurrenceGroupId} />
             <div className="week-event-details">
-                <span className="week-event-game">{event.resource?.game?.name || 'Event'}</span>
+                <WeekEventGameLine event={event} tier={tier} />
                 <span className="week-event-time">{format(event.start, 'h:mm a')}{event.end ? ` - ${format(event.end, 'h:mm a')}` : ''}</span>
                 {avatarConfig && signupsPreview && signupsPreview.length > 0 ? (
                     <div className="week-event-attendees">

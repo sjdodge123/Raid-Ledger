@@ -1,11 +1,13 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
+import type { EventHubRef } from '@raid-ledger/contract';
 import { UserLink } from '../common/UserLink';
 import { toAvatarUser } from '../../lib/avatar';
 import { formatDuration } from '../../utils/game-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { SeriesBadge } from './SeriesBadge';
+import { HUB_KIND_LABEL } from '../layout/hub-nav/hub-kind-label';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -29,6 +31,8 @@ interface EventBannerProps {
     voiceChannelUrl?: string | null;
     isCollapsed?: boolean;
     recurrenceGroupId?: string | null | undefined;
+    /** ROK-1893: the visible hub the event belongs to (`null` when untagged or the hub is hidden, R28). */
+    hub?: EventHubRef | null | undefined;
 }
 
 function useFormattedTimes(startTime: string, endTime: string) {
@@ -85,6 +89,25 @@ function GameBadge({ game }: { game: NonNullable<EventBannerProps['game']> }) {
     );
 }
 
+/** ROK-1893 §10.4: the hub link beside `GameBadge` — same pill + link class, kind noun from `HUB_KIND_LABEL`. */
+function HubBadge({ hub }: { hub: EventHubRef }) {
+    return (
+        <Link to={`/guilds/${hub.id}`} className="event-banner__game event-banner__game--link" data-testid="event-banner-hub">
+            <span role="img" aria-hidden="true">⌂</span> {hub.name} · {HUB_KIND_LABEL[hub.kind]}
+        </Link>
+    );
+}
+
+function BannerBadges({ game, hub }: { game: EventBannerProps['game']; hub: EventHubRef | null | undefined }) {
+    if (!hub) return game ? <GameBadge game={game} /> : null;
+    return (
+        <div className="flex flex-wrap gap-2">
+            {game && <GameBadge game={game} />}
+            <HubBadge hub={hub} />
+        </div>
+    );
+}
+
 function VoiceChannel({ name, url }: { name: string; url?: string | null | undefined }) {
     return (
         <>
@@ -97,8 +120,8 @@ function VoiceChannel({ name, url }: { name: string; url?: string | null | undef
     );
 }
 
-function FullBanner({ title, game, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl, recurrenceGroupId }: {
-    title: string; game: EventBannerProps['game']; dateStr: string; timeStr: string; duration: string;
+function FullBanner({ title, game, hub, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl, recurrenceGroupId }: {
+    title: string; game: EventBannerProps['game']; hub: EventHubRef | null | undefined; dateStr: string; timeStr: string; duration: string;
     creator: EventBannerProps['creator']; description?: string | null | undefined;
     voiceChannelName?: string | null | undefined; voiceChannelUrl?: string | null | undefined; recurrenceGroupId?: string | null | undefined;
 }) {
@@ -106,7 +129,7 @@ function FullBanner({ title, game, dateStr, timeStr, duration, creator, descript
         <div className="event-banner">
             {game?.coverUrl && <div className="event-banner__bg" style={{ backgroundImage: `url(${game.coverUrl})` }} />}
             <div className="event-banner__content">
-                {game && <GameBadge game={game} />}
+                <BannerBadges game={game} hub={hub} />
                 <h1 className="event-banner__title">{title}</h1>
                 <div className="event-banner__meta">
                     <span className="event-banner__date"><span role="img" aria-hidden="true">📅</span> {dateStr} @ {timeStr}</span>
@@ -136,7 +159,7 @@ function FullBanner({ title, game, dateStr, timeStr, duration, creator, descript
  */
 export const EventBanner = memo(function EventBanner({
     title, game, startTime, endTime, creator, description,
-    voiceChannelName, voiceChannelUrl, isCollapsed = false, recurrenceGroupId,
+    voiceChannelName, voiceChannelUrl, isCollapsed = false, recurrenceGroupId, hub,
 }: EventBannerProps) {
     const { dateStr, timeStr, duration } = useFormattedTimes(startTime, endTime);
     const scrollDirection = useScrollDirection();
@@ -147,7 +170,7 @@ export const EventBanner = memo(function EventBanner({
             duration={duration} creator={creator} isHeaderHidden={isHeaderHidden} />;
     }
 
-    return <FullBanner title={title} game={game} dateStr={dateStr} timeStr={timeStr}
+    return <FullBanner title={title} game={game} hub={hub} dateStr={dateStr} timeStr={timeStr}
         duration={duration} creator={creator} description={description}
         voiceChannelName={voiceChannelName} voiceChannelUrl={voiceChannelUrl} recurrenceGroupId={recurrenceGroupId} />;
 });

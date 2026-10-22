@@ -14,6 +14,7 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
+import { EventHubLabel } from './event-hub-label';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
 import type { LayerDayEntry, LayerDayMap } from './layers/calendar-layer-days';
@@ -75,7 +76,7 @@ function ScheduleEventInfo({ event, resolved }: { event: CalendarEvent; resolved
     return (
         <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-foreground truncate">{event.title}</div>
-            {event.resource.game && <div className="text-xs text-muted truncate">{event.resource.game.name}</div>}
+            {(event.resource.game || event.resource.hub) && <div className="text-xs text-muted truncate">{event.resource.game?.name ?? 'Event'}<EventHubLabel hub={event.resource.hub} /></div>}
             <div className="text-xs text-emerald-400 mt-0.5">{formatTime(event.resource.startTime)} – {formatTime(event.resource.endTime)}</div>
         </div>
     );
