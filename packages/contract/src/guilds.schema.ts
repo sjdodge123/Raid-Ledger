@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CharacterRoleSchema } from './characters.schema.js';
 import { GameServerStateSchema } from './game-servers.schema.js';
+import { HubAutoMembershipModeSchema, HubJoinSourceSchema } from './hub-invite.schema.js';
 
 /**
  * ROK-1785 (S1 of ROK-1781): guild page `/guilds/:id` — read shapes and the
@@ -67,6 +68,8 @@ export const GuildSummarySchema = z
     status: HubStatusSchema.optional(),
     /** ROK-1870 — the short blurb a community hub was proposed with. */
     blurb: z.string().max(280).nullable().optional(),
+    /** ROK-1893 — community hubs only, sent to the hub Leader and staff. */
+    autoMembership: HubAutoMembershipModeSchema.optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
@@ -78,6 +81,8 @@ export const GuildMemberCommunitySchema = z
     userId: id,
     role: z.enum(['leader', 'officer', 'member']),
     joinedAt: isoDate,
+    /** ROK-1893 — how they joined; null on rows that predate it. */
+    joinSource: HubJoinSourceSchema.nullable().optional(),
   })
   .strict();
 export type GuildMemberCommunity = z.infer<typeof GuildMemberCommunitySchema>;
