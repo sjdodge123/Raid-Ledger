@@ -6,7 +6,7 @@
  */
 import type { JSX } from 'react';
 import { SkillList } from '../../plugins/valheim/character/skills-section';
-import { StateFrame } from './design-system-bits';
+import { Section, StateFrame } from './design-system-bits';
 
 const SKILLS = [
     { id: 'Spears', level: 52.4, accumulator: 20 },
@@ -27,5 +27,14 @@ export function SkillTrendDemo(): JSX.Element {
         <StateFrame label="Skill trend chip — 3 days / 1 day / net loss / no change" note="Same dates on every row; hollow dot = no change that day. Tap a chip for the per-day line.">
             <div className="w-full max-w-md"><SkillList skills={SKILLS} trend={TREND} /></div>
         </StateFrame>
+    );
+}
+
+/** Its own section (moved out of Map viewport — the chip is a separate pattern). */
+export function SkillTrendSection(): JSX.Element {
+    return (
+        <Section id="skill-trend" title="Pattern — skill trend chip" blurb="§3.2 Character section slots — a delta chip + one dot per play day; dot colour is per day, the chip tone is the net.">
+            <SkillTrendDemo />
+        </Section>
     );
 }

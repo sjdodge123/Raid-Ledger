@@ -14,7 +14,6 @@ import { FogCanvas } from '../../plugins/valheim/map/fog-canvas';
 import { PinLayer } from '../../plugins/valheim/map/pin-layer';
 import { MapControls } from '../../plugins/valheim/map/map-controls';
 import { Section, StateFrame } from './design-system-bits';
-import { SkillTrendDemo } from './skill-trend-demo';
 import {
     DEMO_BASE_MAP_URL,
     DEMO_GRID,
@@ -97,7 +96,6 @@ export function MapViewportSection(): JSX.Element {
             >
                 <MapDemo />
             </StateFrame>
-            <div className="mt-3"><SkillTrendDemo /></div>
         </Section>
     );
 }

@@ -20,6 +20,7 @@ import { GroupMarksSection } from './group-marks-section';
 import { CalendarBusySection } from './calendar-busy-section';
 import { CalendarLayerSection } from './calendar-layer-section';
 import { MapViewportSection } from './map-viewport-section';
+import { SkillTrendSection } from './skill-trend-demo';
 import { FormsSection } from './forms-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
@@ -84,6 +85,7 @@ function Sections(): JSX.Element {
             <CalendarBusySection />
             <CalendarLayerSection />
             <MapViewportSection />
+            <SkillTrendSection />
         </>
     );
 }
