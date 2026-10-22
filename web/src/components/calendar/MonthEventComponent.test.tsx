@@ -31,15 +31,20 @@ function renderChip(event: CalendarEvent) {
 }
 
 describe('MonthEventComponent — hub in tooltip only (ROK-1893 V2)', () => {
-    it('appends the hub to the title and aria-label, with no visible marker', () => {
+    it('appends the hub to the title and sr-only text, with no visible marker', () => {
         const chip = renderChip(makeEvent({ hub: { id: 7, name: 'BG3 Friends', kind: 'game_community' } }));
         expect(chip.getAttribute('title')).toBe('Raid night (BG3) · BG3 Friends');
-        expect(chip.getAttribute('aria-label')).toBe('Raid night (BG3) · BG3 Friends');
-        expect(chip.textContent).not.toContain('BG3 Friends');
+        // A div with no role ignores aria-label, so screen readers get the hub from sr-only text.
+        const srHub = chip.querySelector('[data-testid="month-chip-hub"]');
+        expect(srHub?.textContent).toBe(' · BG3 Friends');
+        expect(srHub?.classList.contains('sr-only')).toBe(true);
+        const visible = Array.from(chip.children).filter((el) => !el.classList.contains('sr-only'));
+        expect(visible.map((el) => el.textContent).join('')).not.toContain('BG3 Friends');
     });
 
     it('leaves the title unchanged for an untagged event', () => {
         const chip = renderChip(makeEvent({ hub: null }));
         expect(chip.getAttribute('title')).toBe('Raid night (BG3)');
+        expect(chip.querySelector('[data-testid="month-chip-hub"]')).toBeNull();
     });
 });

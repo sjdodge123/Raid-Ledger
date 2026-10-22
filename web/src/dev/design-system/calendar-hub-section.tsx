@@ -23,7 +23,7 @@ export function CalendarHubSection(): JSX.Element {
         <Section
             id="calendar-hub"
             title="Pattern — hub suffix on event game lines"
-            blurb="An event tagged to a visible hub reads '<game> · <hub>' on its game line (Week/Day compact+standard cards, the phone agenda): plain text in the line's own size, text-muted on page surfaces, opacity-80 over game art. The Week minimal tier and the Month chip carry it in the tooltip/aria-label only. Untagged or hidden-hub events show nothing."
+            blurb="An event tagged to a visible hub reads '<game> · <hub>' on its game line (Week/Day compact+standard cards, the phone agenda): plain text in the line's own size, text-muted on page surfaces, opacity-80 over game art. The Week minimal tier carries it in the tooltip, the Month chip in the tooltip plus sr-only text. Untagged or hidden-hub events show nothing."
         >
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <StateFrame label="Tagged · EventHubLabel" note="Truncates with the line; no chip, no new token.">
