@@ -27,8 +27,18 @@ const editor = new Editor({ extensions: buildMarkdownExtensions({ onLinkShortcut
 
 afterAll(() => { editor.destroy(); });
 
+/**
+ * r14b review: an autolink is label text only inside a link the READER forms. No `)`, an unbalanced
+ * `(`, a `~` in the URL, nested brackets — each must load and save like MarkdownBlock shows it.
+ */
+const R14C: string[] = [
+    '$ [a <https://example.com/?x&amp;y> b](/p', '$ [a <https://example.com/~bob> b](/p',
+    '$ [a <https://example.com/?x&amp;y> b](/p(x)', '$ [[a] <https://example.com/&amp;> b](/p)',
+];
+
 /** Block constructs; `$` is replaced by the inline text. */
 const CONSTRUCTS: string[] = [
+    ...R14C,
     '# $', '## $', '### $', '#### $', '##### $', '###### $', '####### $', '#$', '#', '# $ #',
     '> $', '>$', '> > $', '> $\n> $', '> $\n$', '>\n$', '> - $', '> # $',
     '- $', '* $', '+ $', '1. $', '1) $', '3. $', '-', '- ', '1.',
@@ -127,6 +137,10 @@ describe('every stored block construct loads, shows and saves like MarkdownBlock
         const cases = inputs();
         const bad = cases.map(blockFailure).filter((m): m is string => m !== null);
         expect(bad.slice(0, 10), `${bad.length} of ${cases.length} cases failed`).toEqual([]);
+    });
+
+    it.each(R14C)('r14c review repro %s', (construct: string) => {
+        expect(blockFailure(construct.split('$').join(T))).toBeNull();
     });
 
     it('the two Codex r13 bodies: a two-paragraph item stays schema-valid, a quoted link survives an edit', () => {
