@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -18,6 +19,7 @@ import type {
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import type { CreateNotificationInput } from '../../notifications/notification.types';
 import { isStaff, type GuildActor } from '../guild-access.service';
 import { toGuildSummary } from '../guild-core.queries';
@@ -65,6 +67,7 @@ export class CommunityProposalsService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly notifications: NotificationService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** A2 → game → D12 limits → D11 name → insert `proposed` → notify staff. */
@@ -133,6 +136,8 @@ export class CommunityProposalsService {
     dto: ApproveHubProposalDto,
   ): Promise<GuildSummary> {
     const { row, proposerId } = await this.approveTx(adminId, id, dto);
+    // ROK-1873 (D8): an approved hub creates + holds its game's channel.
+    GameActivityNudge.safeTouch(this.nudge, row.gameId);
     const gameName = (await q.findGameName(this.db, row.gameId)) ?? 'your game';
     await this.send([
       approvedNotice(proposerId, {
@@ -211,9 +216,9 @@ export class CommunityProposalsService {
         await upsertJoin(tx, hub.id, leader.id, 'leader');
         return { ...hub, memberCount: await refreshMemberCount(tx, hub.id) };
       });
-    return toCommunitySummary(
-      await conflictOnUnique(run, PROPOSAL_ERRORS.nameTaken),
-    );
+    const hub = await conflictOnUnique(run, PROPOSAL_ERRORS.nameTaken);
+    GameActivityNudge.safeTouch(this.nudge, hub.gameId);
+    return toCommunitySummary(hub);
   }
 
   private async requireGame(gameId: number): Promise<string> {
