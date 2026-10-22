@@ -5,14 +5,16 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { startGracePeriod } from './ad-hoc-event.handlers';
+import { startGracePeriod } from './ad-hoc-event-end.helpers';
 import { hasOpenServerPlayers } from './ad-hoc-server-presence.helpers';
 import {
   graceUnlessOnServer,
   SERVER_TRACKER_ENROL,
 } from './ad-hoc-voice-leave-server.helpers';
 
-jest.mock('./ad-hoc-event.handlers', () => ({ startGracePeriod: jest.fn() }));
+jest.mock('./ad-hoc-event-end.helpers', () => ({
+  startGracePeriod: jest.fn(),
+}));
 jest.mock('./ad-hoc-server-presence.helpers', () => ({
   hasOpenServerPlayers: jest.fn(),
 }));

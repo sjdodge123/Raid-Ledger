@@ -446,9 +446,10 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
             return;
         }
 
-        // The attendance container is the parent of the "Attendance" heading.
-        // Verify its computed background color is light (not the old hardcoded dark zinc-800).
-        const container = page.locator('h3:has-text("Attendance")').locator('..');
+        // Measure the bg-panel/50 panel itself (not the transparent AttendanceHeader
+        // row the heading sits in). Verify its computed background color is light
+        // (not the old hardcoded dark zinc-800).
+        const container = page.getByTestId('attendance-tracker');
         const bgColor = await container.evaluate((el) => getComputedStyle(el).backgroundColor);
 
         // In light mode, bg-panel resolves to #f1f5f9 (slate-100) with /50 alpha.

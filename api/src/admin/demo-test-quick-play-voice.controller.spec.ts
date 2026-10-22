@@ -76,6 +76,35 @@ afterAll(() => {
 });
 
 describe('DemoTestQuickPlayVoiceController.voiceJoin', () => {
+  it('ROK-1888: records a Discord-only member with no Raid Ledger user', async () => {
+    const discordOnly = {
+      discordUserId: '223456789012345678',
+      displayName: 'Wren',
+    };
+    const { userId: _omit, ...rest } = body;
+    void _omit;
+    await controller().voiceJoin({ ...rest, discordOnly });
+    expect(users.findById).not.toHaveBeenCalled();
+    const member: unknown = adHoc.handleVoiceJoin.mock.calls[0]?.[1];
+    expect(member).toEqual({
+      discordUserId: '223456789012345678',
+      discordUsername: 'Wren',
+      discordAvatarHash: null,
+      userId: null,
+    });
+  });
+
+  it('ROK-1888: refuses a body with both userId and discordOnly', async () => {
+    const discordOnly = {
+      discordUserId: '223456789012345678',
+      displayName: 'Wren',
+    };
+    await expect(
+      controller().voiceJoin({ ...body, discordOnly }),
+    ).rejects.toThrow(BadRequestException);
+    expect(adHoc.handleVoiceJoin).not.toHaveBeenCalled();
+  });
+
   it('runs the suppression guard, then joins with its clearance', async () => {
     const result = await controller().voiceJoin(body);
 
