@@ -17,7 +17,11 @@
  * later `git merge origin/main` merges the migrations folder cleanly.
  * Idempotent: a branch already numbered after the base is left untouched.
  *
- * Usage: node scripts/renumber-branch-migrations.mjs --root <repo> [--base <ref>]
+ * The .sh pins --base to a commit SHA; the "Next" text tells you to merge THAT
+ * SHA, never a moving origin/main (merging a newer main and keeping ours would
+ * drop its newer journal entries).
+ *
+ * Usage: node scripts/renumber-branch-migrations.mjs --root <repo> [--base <ref>] [--label <name>]
  * Exit: 0 ok · 1 refused/failed · 3 bad args or base unreadable.
  */
 import { execFileSync } from 'node:child_process';
@@ -118,20 +122,23 @@ function missingBaseFiles(root, base) {
   return [...base.blobs.keys()].filter((rel) => rel !== JOURNAL_REL && !existsSync(path.join(root, rel)));
 }
 
-function report(plan, snaps, ref) {
+function report(plan, snaps, ref, label) {
   for (const { moved } of plan) {
     if (moved.from !== moved.to) console.log(`  ${moved.from} → ${moved.to}`);
   }
   for (const s of snaps) if (s.from !== s.to) console.log(`  ${s.from.split('/').pop()} → ${s.to.split('/').pop()} (prevId repointed)`);
-  console.log(`✓ Renumbered ${plan.length} branch migration(s) after ${ref}. SQL bodies untouched.`);
-  console.log('  Next: commit, then `git merge origin/main`. _journal.json will conflict (both sides');
-  console.log(`  appended) — keep ours, it already holds main's entries: git checkout --ours ${JOURNAL_REL}`);
-  console.log('  && git add it. Then re-run ./scripts/validate-migrations.sh');
+  const named = label && label !== ref ? `${label} @ ${ref}` : ref;
+  console.log(`✓ Renumbered ${plan.length} branch migration(s) after ${named}. SQL bodies untouched.`);
+  console.log(`  Next: commit, then \`git merge ${ref}\` — this exact commit, not a re-fetched main.`);
+  console.log('  _journal.json will conflict (both sides appended) — keep ours, it already holds');
+  console.log(`  that commit's entries: git checkout --ours ${JOURNAL_REL} && git add it.`);
+  console.log(`  After the merge commit: ./scripts/renumber-branch-migrations.sh --no-fetch --base ${ref}`);
+  console.log('  must print "nothing to renumber". Then re-run ./scripts/validate-migrations.sh');
   console.log('  (a renumbered migration now runs AFTER main\'s new ones — if its SQL depends on, or');
   console.log('  its snapshot predates, schema main changed, the drift check / real-Postgres run shows it).');
 }
 
-export function renumber(root, ref) {
+export function renumber(root, ref, label = ref) {
   const git = gitIn(root);
   const base = readBase(git, ref);
   const journal = JSON.parse(readFileSync(path.join(root, JOURNAL_REL), 'utf8'));
@@ -144,9 +151,11 @@ export function renumber(root, ref) {
   const plan = planRenumber(base.entries, fresh);
   const snaps = planSnapshots(git, root, base, plan);
   const entries = [...base.entries, ...plan.map((p) => p.entry)];
-  const journalText = JSON.stringify({ ...journal, entries }, null, 2) + '\n';
-  const sql = sqlMoves(plan);
   const current = readFileSync(path.join(root, JOURNAL_REL), 'utf8');
+  // drizzle-kit writes the journal with no trailing newline; keep whatever is there.
+  const eol = current.endsWith('\n') ? '\n' : '';
+  const journalText = JSON.stringify({ ...journal, entries }, null, 2) + eol;
+  const sql = sqlMoves(plan);
   const idle = journalText === current && sql.length === 0 && missingBaseFiles(root, base).length === 0 &&
     snaps.every((s) => s.from === s.to && !s.changed);
   if (idle) {
@@ -154,16 +163,17 @@ export function renumber(root, ref) {
     return 0;
   }
   apply(root, ref, base, { journalText, sql, snaps });
-  report(plan, snaps, ref);
+  report(plan, snaps, ref, label);
   return 0;
 }
 
 function parseArgs(argv) {
-  const opts = { root: null, base: 'origin/main' };
+  const opts = { root: null, base: 'origin/main', label: null };
   for (let i = 0; i < argv.length; i++) {
     const next = argv[i + 1];
     if (argv[i] === '--root' && next) opts.root = path.resolve(argv[++i]);
     else if (argv[i] === '--base' && next) opts.base = argv[++i];
+    else if (argv[i] === '--label' && next) opts.label = argv[++i];
     else throw new Error(`unknown or incomplete argument: ${argv[i]}`);
   }
   if (!opts.root) throw new Error('--root <repo> is required');
@@ -179,7 +189,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(3);
   }
   try {
-    process.exit(renumber(opts.root, opts.base));
+    process.exit(renumber(opts.root, opts.base, opts.label ?? opts.base));
   } catch (err) {
     console.error(`✗ renumber: ${err.message.split('\n')[0]}`);
     process.exit(1);

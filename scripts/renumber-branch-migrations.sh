@@ -13,7 +13,10 @@
 #   ./scripts/renumber-branch-migrations.sh --base <ref>    # vs another ref
 #   ./scripts/renumber-branch-migrations.sh --no-fetch      # skip `git fetch`
 #
-# Then: commit, `git merge origin/main`, re-run ./scripts/validate-migrations.sh.
+# The base is pinned to a commit SHA after the fetch. Then: commit, `git merge
+# <that sha>` (the tool prints it — never a bare origin/main, which may have moved
+# since), keep ours on _journal.json, and re-run this with `--no-fetch --base
+# <sha>`: it must print `nothing to renumber`. Then ./scripts/validate-migrations.sh.
 # Detail: docs/runbooks/migrations-and-backups.md → "Two PRs claimed the same migration number".
 
 set -euo pipefail
@@ -25,7 +28,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --base) BASE="${2:?--base needs a git ref}"; shift ;;
         --no-fetch) FETCH=false ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) echo "ERROR: unknown argument: $1" >&2; exit 3 ;;
     esac
     shift
@@ -43,4 +46,9 @@ if $FETCH && [[ "$BASE" == origin/* ]]; then
         || echo "⚠ git fetch origin ${BASE#origin/} failed — using the local $BASE ref" >&2
 fi
 
-exec node "$SCRIPT_DIR/renumber-branch-migrations.mjs" --root "$ROOT" --base "$BASE"
+# Pin the base: everything after this (the renumber AND the merge the user runs
+# next) must use this exact commit, or a main that moved in between gets dropped.
+BASE_SHA="$(git -C "$ROOT" rev-parse --verify --quiet "$BASE^{commit}")" \
+    || { echo "ERROR: cannot resolve $BASE to a commit (git fetch origin?)" >&2; exit 3; }
+
+exec node "$SCRIPT_DIR/renumber-branch-migrations.mjs" --root "$ROOT" --base "$BASE_SHA" --label "$BASE"
