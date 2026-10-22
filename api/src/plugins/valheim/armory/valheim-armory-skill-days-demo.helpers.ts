@@ -1,7 +1,8 @@
 /**
  * ROK-1882 — DEMO_MODE skill history for the armory character fixture
  * (`skillDays: 3`): three play days dated today−1, today−3 and today−6 in
- * the game server's timezone (UTC when it has none), built BACKWARDS from
+ * the game server's timezone (else the community default, else UTC — the
+ * same chain the importer uses), built BACKWARDS from
  * the character's current skills so the newest day ends where the sheet is.
  * Swords gains +2.0 / +1.6 / +0.5 (chip "+4.1 over 3 sessions"); Run is
  * unchanged on the newest day and +1.0 / +0.5 on the older two.
@@ -71,7 +72,7 @@ export async function seedArmorySkillDays(
   db: Db,
   profileId: number,
   count: DemoSkillDayCount,
-  now: Date = new Date(),
+  opts: { defaultTz: string | null; now?: Date },
 ): Promise<void> {
   if (count === 0) return;
   const P = schema.valheimProfiles;
@@ -85,6 +86,7 @@ export async function seedArmorySkillDays(
   if (!hit) throw new Error(`Armory fixture profile ${profileId} not found`);
   const D = schema.valheimProfileSkillDays;
   await db.delete(D).where(eq(D.profileId, profileId));
-  const tz = resolvePlayTimezone(hit.tz, null);
+  const tz = resolvePlayTimezone(hit.tz, opts.defaultTz);
+  const now = opts.now ?? new Date();
   await db.insert(D).values(demoSkillDayRows(profileId, hit.skills, tz, now));
 }

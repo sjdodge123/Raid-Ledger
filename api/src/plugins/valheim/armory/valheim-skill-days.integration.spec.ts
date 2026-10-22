@@ -6,11 +6,16 @@
 import { asc, eq } from 'drizzle-orm';
 import type { ValheimSkill } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
+import {
+  loginAsAdmin,
+  truncateAllTables,
+} from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { fakeServer } from '../../pelican/testing/pelican-fixtures';
+import { PELICAN_PLUGIN_ID } from '../../pelican/pelican.constants';
+import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { VALHEIM_GAME_SLUG } from '../valheim.constants';
 import { loadValheimFixture } from '../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../link/ingest/valheim-link-snapshot.helpers';
@@ -192,5 +197,55 @@ describe('Valheim skill play days (ROK-1882)', () => {
     expect(await dayRows()).toHaveLength(2);
     await testApp.db.delete(schema.valheimProfiles);
     expect(await dayRows()).toEqual([]);
+  });
+});
+
+describe('Valheim skill play days — re-import, midnight, admin zone (ROK-1882)', () => {
+  it('re-importing the same snapshot changes nothing (idempotent)', async () => {
+    await importAt('2026-10-17T20:15:00Z', skills(10));
+    await importAt('2026-10-18T20:00:00Z', skills(12));
+    const before = await dayRows();
+    await importAt('2026-10-18T20:00:00Z', skills(12));
+    expect(await dayRows()).toEqual(before);
+  });
+
+  it('a session across local midnight splits into two play days, DST-aware (US fall-back 2026-11-01)', async () => {
+    await setServerTz('America/New_York');
+    // EST (UTC-5) after the fall-back: 22:30, 23:30 on Nov 1, then 00:30 Nov 2.
+    // Under EDT (UTC-4) 04:30Z would read as Nov 2 — so this pins the DST offset.
+    await importAt('2026-11-02T03:30:00Z', skills(10));
+    await importAt('2026-11-02T04:30:00Z', skills(11));
+    await importAt('2026-11-02T05:30:00Z', skills(12));
+    const [nov1, nov2, extra] = await dayRows();
+    expect(extra).toBeUndefined();
+    expect(nov1).toMatchObject({
+      playDate: '2026-11-01',
+      endSkills: skills(11),
+    });
+    expect(nov1?.lastSeenAt.toISOString()).toBe('2026-11-02T04:30:00.000Z');
+    expect(nov2).toMatchObject({
+      playDate: '2026-11-02',
+      startSkills: skills(11),
+      endSkills: skills(12),
+    });
+  });
+
+  it('the zone an admin sets via PATCH buckets the next import', async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.ensureInstalled(PELICAN_PLUGIN_ID);
+    await registry.activate(PELICAN_PLUGIN_ID);
+    try {
+      await settings().setDefaultTimezone('Asia/Tokyo');
+      const token = await loginAsAdmin(testApp.request, testApp.seed);
+      const res = await testApp.request
+        .patch(`/admin/plugins/pelican/servers/${server}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ timezone: 'America/New_York' });
+      expect(res.status).toBe(200);
+      await importAt('2026-10-21T03:00:00Z', skills(10));
+      expect(await playDates()).toEqual(['2026-10-20']);
+    } finally {
+      await registry.deactivate(PELICAN_PLUGIN_ID);
+    }
   });
 });

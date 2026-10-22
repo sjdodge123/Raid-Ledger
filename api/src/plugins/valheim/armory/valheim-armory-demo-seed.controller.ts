@@ -20,6 +20,7 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { PelicanConfigService } from '../../pelican/pelican-config.service';
+import { SettingsService } from '../../../settings/settings.service';
 import { ensureValheimDemoPlugins } from '../link/valheim-link-demo-seed.controller';
 import {
   VALHEIM_LINK_FIXTURE_SLOTS,
@@ -127,6 +128,7 @@ export class ValheimArmoryDemoSeedController {
   constructor(
     private readonly registry: PluginRegistryService,
     private readonly pelicanConfig: PelicanConfigService,
+    private readonly settings: SettingsService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -150,7 +152,9 @@ export class ValheimArmoryDemoSeedController {
       new Date(),
     );
     const characterId = await seedArmoryCharacter(this.db, serverId, req);
-    await seedArmorySkillDays(this.db, characterId, req.skillDays);
+    await seedArmorySkillDays(this.db, characterId, req.skillDays, {
+      defaultTz: await this.settings.getDefaultTimezone(),
+    });
     return {
       characterId,
       serverId,
