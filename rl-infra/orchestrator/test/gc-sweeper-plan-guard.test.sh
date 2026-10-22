@@ -171,6 +171,7 @@ case "$1" in
             [[ "$a" == "{{json .Config.Labels}}" ]] && { echo "$LABELS"; exit 0; }
             [[ "$a" == "{{.State.Health.Status}}" ]] && { echo "healthy"; exit 0; }
             if [[ "$a" == "{{.Name}}" ]]; then
+                [[ -n "${SHIM_NAME:-}" ]] && { echo "$SHIM_NAME"; exit 0; }
                 case "$2" in
                     envcid2) echo "/rl-env-${SLUG}-pg" ;;
                     *)       echo "/rl-env-${SLUG}-allinone" ;;
@@ -374,6 +375,53 @@ test_spared_env_audits_once_per_cycle() {
         "the spare decision itself must still hold for both containers"
 }
 
+# ROK-1846 AC5 — rl.* labels are caller-supplied: anything that can reach a
+# Docker API can stamp rl.role=env / rl.env_slug=<victim> / rl.ttl=0h on its
+# own container. The TTL reap must trust the env-registry, not the label.
+test_forged_unregistered_slug_survives_reap() {
+    CURRENT_TEST_NAME="ROK-1846: a forged-label container with an unregistered slug is not reaped"
+    local plans_dir="$TMP_STATE/test-plans" shim_dir="$TMP_STATE/shim"
+    local rm_log="$TMP_STATE/rm.log" labels
+    : > "$rm_log"
+    echo '[]' > "$RL_STATE_DIR/claims.json"
+    echo '[]' > "$RL_STATE_DIR/queue.json"
+    echo '[]' > "$RL_STATE_DIR/env-registry.json"
+    labels=$(jq -nc --arg lt "$(iso_hours_ago 30)" \
+        '{"rl.role":"env","rl.env_slug":"forged1846","rl.ttl":"0h","rl.slot":"1","rl.last_touched":$lt}')
+    _make_docker_shim "$shim_dir" "$labels" "$rm_log"
+
+    _run_sweeper_with "$shim_dir" "$plans_dir" 24
+
+    _assert_cycle_completed
+    assert_eq "$(grep -c 'forged1846' "$rm_log" 2>/dev/null || true)" "0" \
+        "an rl.env_slug the registry does not know must never drive a TTL reap"
+    assert_contains "$SWEEPER_OUT" "not in env-registry" "the skip is logged"
+}
+
+test_forged_container_name_cannot_reap_registered_env() {
+    CURRENT_TEST_NAME="ROK-1846: a forged container carrying a REGISTERED slug is not reaped"
+    local plans_dir="$TMP_STATE/test-plans" shim_dir="$TMP_STATE/shim"
+    local rm_log="$TMP_STATE/rm.log" labels
+    : > "$rm_log"
+    echo '[]' > "$RL_STATE_DIR/claims.json"
+    echo '[]' > "$RL_STATE_DIR/queue.json"
+    # The victim's registry row is fresh (its own containers are young).
+    jq -nc --arg lt "$(iso_hours_ago 1)" \
+        '[{slug:"victim1846", slot:2, image:"img", ttl:"24h", created_at:"2026-10-18T00:00:00Z", last_touched:$lt}]' \
+        > "$RL_STATE_DIR/env-registry.json"
+    labels=$(jq -nc --arg lt "$(iso_hours_ago 30)" \
+        '{"rl.role":"env","rl.env_slug":"victim1846","rl.ttl":"0h","rl.slot":"2","rl.last_touched":$lt}')
+    _make_docker_shim "$shim_dir" "$labels" "$rm_log"
+
+    SHIM_NAME="/attacker-box" _run_sweeper_with "$shim_dir" "$plans_dir" 0
+
+    _assert_cycle_completed
+    assert_eq "$(grep -c 'victim1846' "$rm_log" 2>/dev/null || true)" "0" \
+        "a container not named rl-env-<slug>-{allinone,pg} must not reap that env"
+    assert_eq "$(jq -r '.[0].slug // "gone"' "$RL_STATE_DIR/env-registry.json")" "victim1846" \
+        "the victim stays registered"
+}
+
 run_test "ac1-pending-spares-answered-reaps" test_pending_plan_spares_answered_plan_reaped
 run_test "ac2-grace-is-absolute-ceiling" test_grace_is_an_absolute_ceiling
 run_test "ac3-inside-ttl-and-missing-plans" test_inside_ttl_and_missing_plans
@@ -384,5 +432,7 @@ run_test "ac7-bad-grace-does-not-abort-cycle" test_non_numeric_grace_does_not_ab
 run_test "ac8-timestamp-is-data-not-code" test_timestamp_is_never_executed_as_code
 run_test "ac9-corrupt-timestamp-keeps-env" test_corrupt_timestamp_keeps_the_env
 run_test "ac10-spared-env-audits-once" test_spared_env_audits_once_per_cycle
+run_test "rok1846-forged-unregistered-slug-survives" test_forged_unregistered_slug_survives_reap
+run_test "rok1846-forged-name-cannot-reap-registered" test_forged_container_name_cannot_reap_registered_env
 
 print_test_summary
