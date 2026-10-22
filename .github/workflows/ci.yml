@@ -291,6 +291,16 @@ jobs:
       - name: Migration merge-order guard
         run: node scripts/check-migration-merge-order.mjs --base HEAD^1
 
+      # Backstop only. When two open PRs both claim the next migration number
+      # (0239), the second PR's _journal.json conflicts with main, GitHub builds
+      # no merge ref and this job never runs: the PR's merge conflict is the
+      # signal to run ./scripts/renumber-branch-migrations.sh. This step catches
+      # a bad hand-merge: a branch-only entry whose idx collides with, or sits
+      # under, the base's newest, a duplicate idx/NNNN prefix, or a merged main
+      # entry dropped by a wrong "keep ours". The message names the fix.
+      - name: Migration index-collision guard
+        run: node scripts/check-migration-index-collision.mjs --base HEAD^1
+
       # TDB:1150: every meta/NNNN_snapshot.json's prevId must be the id of the
       # snapshot before it (numeric order; gaps are normal). drizzle-kit only
       # aborts on a prevId collision, so a broken link (0102 pointed at a tag

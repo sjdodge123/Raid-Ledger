@@ -311,6 +311,39 @@ describe('ItadPriceSyncService — adversarial', () => {
   });
 
   describe('onApplicationBootstrap', () => {
+    let savedCronDisabled: string | undefined;
+
+    beforeEach(() => {
+      savedCronDisabled = process.env.CRON_DISABLED;
+      delete process.env.CRON_DISABLED;
+    });
+
+    afterEach(() => {
+      if (savedCronDisabled === undefined) delete process.env.CRON_DISABLED;
+      else process.env.CRON_DISABLED = savedCronDisabled;
+    });
+
+    it('arms the bootstrap timer when CRON_DISABLED is unset', () => {
+      jest.useFakeTimers();
+      service.onApplicationBootstrap();
+      expect(jest.getTimerCount()).toBe(1);
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    });
+
+    it('does not arm the bootstrap timer when CRON_DISABLED=true', () => {
+      process.env.CRON_DISABLED = 'true';
+      jest.useFakeTimers();
+      const sync = jest
+        .spyOn(service, 'syncPricing')
+        .mockResolvedValue(undefined);
+      service.onApplicationBootstrap();
+      expect(jest.getTimerCount()).toBe(0);
+      jest.advanceTimersByTime(60_000);
+      expect(sync).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
     it('schedules the sync via setTimeout (does not call syncPricing immediately)', () => {
       jest.useFakeTimers();
 
