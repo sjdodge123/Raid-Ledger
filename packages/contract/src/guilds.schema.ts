@@ -67,6 +67,12 @@ export const GuildSummarySchema = z
     status: HubStatusSchema.optional(),
     /** ROK-1870 — the short blurb a community hub was proposed with. */
     blurb: z.string().max(280).nullable().optional(),
+    /**
+     * ROK-1906 — the hub's game slug, so plugin widgets and tabs can gate by
+     * game on every hub kind (a `wow_guild` hub cannot otherwise tell Forever
+     * from Classic). Optional so older fixtures parse.
+     */
+    gameSlug: z.string().max(100).optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
