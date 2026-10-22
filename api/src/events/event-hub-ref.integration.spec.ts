@@ -95,6 +95,22 @@ async function byIds(ids: number[]): Promise<Map<number, EventResponseDto>> {
   return new Map(rows.map((e) => [e.id, e]));
 }
 
+/** `GET /users/:id/events/signups` (queryUpcomingByUser) after signing the admin up. */
+async function upcomingById(
+  eventIds: number[],
+): Promise<Map<number, EventResponseDto>> {
+  const userId = testApp.seed.adminUser.id;
+  await testApp.db
+    .insert(schema.eventSignups)
+    .values(eventIds.map((eventId) => ({ eventId, userId })));
+  const res = await testApp.request
+    .get(`/users/${userId}/events/signups`)
+    .set(auth());
+  expect(res.status).toBe(200);
+  const rows = (res.body as { data: EventResponseDto[] }).data;
+  return new Map(rows.map((e) => [e.id, e]));
+}
+
 /** Every path's row keeps `guildId` but carries no hub ref (R28). */
 function expectNullHubEverywhere(
   rows: (EventResponseDto | undefined)[],
@@ -109,16 +125,16 @@ function expectNullHubEverywhere(
   }
 }
 
-describe('Event hub ref (ROK-1893 P4)', () => {
-  beforeAll(async () => {
-    testApp = await getTestApp();
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-  });
-  afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db);
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-  });
+beforeAll(async () => {
+  testApp = await getTestApp();
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+});
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+});
 
+describe('Event hub ref (ROK-1893 P4)', () => {
   it('H1/H4: a visible tagged hub maps to {id,name,kind} on list, detail and by-ids', async () => {
     const hubId = await seedHub('BG3 Friends');
     const eventId = await seedEvent('Tagged raid', hubId);
@@ -175,5 +191,22 @@ describe('Event hub ref (ROK-1893 P4)', () => {
     });
     const listed = defined((await listById()).get(eventId), 'listed event');
     expect(listed.hub).toBeNull();
+  });
+});
+
+describe('Event hub ref — upcoming by user (ROK-1893 P4)', () => {
+  it('H6: the upcoming-by-user path carries the hub ref (null for a hidden hub)', async () => {
+    const hubId = await seedHub('BG3 Friends');
+    const hiddenId = await seedHub('Hidden Hub', 'active', true);
+    const tagged = await seedEvent('Signed-up tagged raid', hubId);
+    const hiddenEvent = await seedEvent('Signed-up hidden raid', hiddenId);
+
+    const upcoming = await upcomingById([tagged, hiddenEvent]);
+    const row = defined(upcoming.get(tagged), 'upcoming tagged event');
+    expect({ hub: row.hub, guildId: row.guildId }).toEqual({
+      hub: { id: hubId, name: 'BG3 Friends', kind: 'game_community' },
+      guildId: hubId,
+    });
+    expectNullHubEverywhere([upcoming.get(hiddenEvent)], hiddenId);
   });
 });
