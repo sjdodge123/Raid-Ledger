@@ -54,8 +54,10 @@ RL_HEAVY_TASK_MAX_HOLD_SECONDS="${RL_HEAVY_TASK_MAX_HOLD_SECONDS:-14400}"
 #   RL_ENV_RESERVE_MB            1024  ledger charge per live env in env-registry.json
 #   RL_MAX_HEAVY_CONCURRENT         2  heavy tasks running at once (0 = no cap)
 #   RL_MAX_IMAGE_BUILDS             1  image builds running at once (0 = no cap)
-# The first task is always admitted on an empty ledger (memory floor still
-# applies), so a mis-set budget can delay work but never wedge the fleet.
+# The OLDEST waiter is always admitted on an empty ledger (memory floor still
+# applies), so a mis-set budget can delay work but never wedge the fleet. The
+# FIFO budget clause applies even on an empty ledger: otherwise every waiter
+# (and any newcomer) races for it and a parked heavy can starve behind mediums.
 RL_ADMISSION_BUDGET_MB="${RL_ADMISSION_BUDGET_MB:-12288}"
 RL_HEAVY_TASK_RESERVE_MB="${RL_HEAVY_TASK_RESERVE_MB:-5632}"
 RL_MEDIUM_TASK_RESERVE_MB="${RL_MEDIUM_TASK_RESERVE_MB:-3072}"
@@ -190,7 +192,7 @@ def ledger_reason($w; $kind; $reserve; $envmb; $k; $now):
       then "fifo \($ah) older heavy waiter(s) need the heavy slot"
       elif ($kind == "image_build" and $maxbuilds > 0 and $ab > 0 and (build_n + $ab + 1) > $maxbuilds)
       then "fifo \($ab) older image build(s) waiting"
-      elif ($budget > 0 and $n > 0 and ($a | length) > 0
+      elif ($budget > 0 and ($a | length) > 0
             and (reserved + $envmb + $ar + $reserve) > $budget)
       then "fifo \($a | length) older waiter(s) need \($ar)MB first"
       else "" end;

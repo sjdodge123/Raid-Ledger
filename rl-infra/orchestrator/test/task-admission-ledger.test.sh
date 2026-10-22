@@ -16,6 +16,7 @@
 #       count against the budget
 #   L6  FIFO: a medium that fits is refused while an OLDER heavy waiter would
 #       no longer fit beside it (no starvation of heavies by a stream of statics)
+#   L6b the same FIFO holds on an EMPTY ledger; the oldest waiter still admits
 #   L7  a holder SIGKILLed while others wait is pruned on the waiter's next poll
 #   L8  a ledger wait uses RL_LEDGER_ADMISSION_TIMEOUT_SECONDS, not the floor's
 #
@@ -207,6 +208,25 @@ test_fifo_older_heavy_waiter_blocks_medium() {
     assert_eq "$(wait_terminal llllf222 15)" "succeeded" "with no older waiter the same medium admits"
 }
 
+# L6b — FIFO holds on an EMPTY ledger too (the old `$n > 0` guard let every
+# waiter race the moment the last holder left).
+test_fifo_holds_on_empty_ledger() {
+    CURRENT_TEST_NAME="L6b: on an empty ledger a newcomer medium is refused behind an older heavy waiter, which admits"
+    ledger_env 30000 12288
+    jq -n '[{slug:"e1"},{slug:"e2"},{slug:"e3"},{slug:"e4"}]' > "$RL_STATE_DIR/env-registry.json"
+    jq -n --argjson since "$(( $(date +%s) - 30 ))" --argjson pid "$$" --arg host "$HOST_NAME" \
+        '{heavy_running: [], heavy_waiting: [{key:"llllf333", task_id:"llllf333", since_epoch:$since,
+            weight:"heavy", kind:"task", reserve_mb:5632, blocked_by:"budget", pid:$pid, host:$host}]}' \
+        > "$ADMISSION_JSON"
+    # 0 running + 4096 envs + 3072 medium fits alone; + the heavy's 5632 = 12800 > 12288.
+    start_task "llllf444" medium rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllf444 15)" "failed" "newcomer medium must not take the empty ledger from the older heavy"
+    assert_contains "$(cat "$RL_TASKS_DIR/llllf444.log")" "blocked_by=fifo 1 older waiter(s) need 5632MB first" \
+        "wait line names the FIFO block on an empty ledger"
+    start_task "llllf333" heavy manual /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllf333 15)" "succeeded" "the oldest waiter has nobody ahead, so it admits (no deadlock)"
+}
+
 # L7 — a SIGKILLed holder is reclaimed while another task waits on it.
 test_dead_holder_reclaimed_during_wait() {
     CURRENT_TEST_NAME="L7: a SIGKILLed holder's reservation is pruned on the waiter's next poll"
@@ -244,6 +264,7 @@ run_test "l3-image-build-cap" test_image_build_cap_and_kind
 run_test "l4-dead-holders" test_dead_holders_pruned
 run_test "l5-status-env-charge" test_status_counters_and_env_charge
 run_test "l6-fifo" test_fifo_older_heavy_waiter_blocks_medium
+run_test "l6b-fifo-empty-ledger" test_fifo_holds_on_empty_ledger
 run_test "l7-dead-holder-mid-wait" test_dead_holder_reclaimed_during_wait
 run_test "l8-ledger-timeout" test_ledger_wait_uses_ledger_timeout
 
