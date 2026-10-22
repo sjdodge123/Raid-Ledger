@@ -1,5 +1,5 @@
 /** ROK-1870 W1/W2 + ROK-1883 — the game page's one "Hubs" card. */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -10,7 +10,9 @@ import {
     communityHubHandlers, createMockGameHubs, createMockGameHubsAllKinds, createMockGuildHubEntry,
     createMockHubEntry, createMockHubProposal, createMockServerHubEntry,
 } from '../../test/handlers/community-hubs';
+import { toast } from '../../lib/toast';
 import { GameHubsSection } from './game-hubs-section';
+import { LazyGameHubsSection } from './game-hubs-section-lazy';
 
 const API = 'http://localhost:3000';
 const FOUR_HUBS = [1, 2, 3, 4].map((id) => createMockHubEntry({ id, name: `Hub ${id}`, memberCount: 10 }));
@@ -33,7 +35,7 @@ async function rowFor(name: string): Promise<HTMLElement> {
 
 const rowIds = (): Array<string | null> => screen.getAllByTestId('game-hub-row').map((r) => r.getAttribute('data-hub-id'));
 
-afterEach(() => server.resetHandlers());
+afterEach(() => { server.resetHandlers(); vi.restoreAllMocks(); });
 
 describe('GameHubsSection — ROK-1870 behaviour kept', () => {
     it('W1: lists three hubs, links to all four and shows the pending proposal', async () => {
@@ -209,5 +211,35 @@ describe('GameHubsSection — staff Hidden chip (ROK-1883)', () => {
         renderCard();
         await rowFor('Lantern Watch');
         expect(screen.queryByText('Hidden')).toBeNull();
+    });
+});
+
+describe('GameHubsSection — Join failure, loading (ROK-1883 review)', () => {
+    it('AC6: a failed Join shows Joined optimistically, then rolls back and toasts the error', async () => {
+        const toastError = vi.spyOn(toast, 'error').mockImplementation(() => 0);
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        serveHubs([createMockHubEntry({ memberCount: 14 })]);
+        server.use(http.post(`${API}/hubs/:id/join`, async () => {
+            await gate;
+            return HttpResponse.json({ message: 'Hub is full' }, { status: 500 });
+        }));
+        renderCard();
+        await userEvent.click(await screen.findByRole('button', { name: 'Join Tavern Regulars' }));
+        expect(await screen.findByText('Joined')).toBeInTheDocument();
+        expect(screen.getByText(/^15 members/)).toBeInTheDocument();
+        release();
+        expect(await screen.findByRole('button', { name: 'Join Tavern Regulars' })).toBeEnabled();
+        expect(screen.queryByText('Joined')).toBeNull();
+        expect(screen.getByText(/^14 members/)).toBeInTheDocument();
+        await waitFor(() => expect(toastError).toHaveBeenCalledWith('Hub is full'));
+    });
+
+    it('AC12: the lazy card shows its skeleton first, then the card replaces it', async () => {
+        serveHubs([createMockHubEntry()]);
+        renderWithProviders(<LazyGameHubsSection gameId={5} gameName="Baldur's Gate 3" />);
+        expect(screen.getByTestId('game-hubs-loading')).toHaveAttribute('aria-busy', 'true');
+        expect(await screen.findByRole('heading', { name: 'Hubs' })).toBeInTheDocument();
+        expect(screen.queryByTestId('game-hubs-loading')).toBeNull();
     });
 });
