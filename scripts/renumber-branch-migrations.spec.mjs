@@ -203,12 +203,20 @@ test('main moves between renumber and merge: keeping ours drops main\'s entry, t
 test('renumber refuses a dirty tree and changes nothing', (t) => {
   const dir = buildFixture();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  writeFileSync(path.join(dir, 'scratch.txt'), 'wip\n');
+  writeFileSync(path.join(dir, MIG, '0002_branch_feat.sql'), '-- wip edit\n', { flag: 'a' });
   const res = run(dir, 'bash', [TOOL, '--no-fetch']);
   assert.notEqual(res.status, 0);
   assert.match(res.stdout + res.stderr, /dirty/i);
   assert.equal(existsSync(path.join(dir, MIG, '0002_branch_feat.sql')), true);
   assert.equal(journal(dir).length, 4);
+});
+
+test('renumber ignores untracked notes (lane HANDOVER files) in its dirty check', (t) => {
+  const dir = buildFixture();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(path.join(dir, 'HANDOVER.md'), 'notes\n');
+  const res = run(dir, 'bash', [TOOL, '--no-fetch']);
+  assert.doesNotMatch(res.stdout + res.stderr, /dirty/i);
 });
 
 test('findIndexCollisions: duplicate idx and duplicate tag prefix inside one journal (a bad merge) are caught', () => {
