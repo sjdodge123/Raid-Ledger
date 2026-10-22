@@ -19,6 +19,7 @@
 #   L6b the same FIFO holds on an EMPTY ledger; the oldest waiter still admits
 #   L7  a holder SIGKILLed while others wait is pruned on the waiter's next poll
 #   L8  a ledger wait uses RL_LEDGER_ADMISSION_TIMEOUT_SECONDS, not the floor's
+#   L9  that longer limit is sticky through a later floor-only poll
 #
 # Pure bash + jq, no docker: /proc/meminfo is faked via RL_MEMINFO_PATH.
 
@@ -258,6 +259,39 @@ test_ledger_wait_uses_ledger_timeout() {
     assert_contains "$(cat "$RL_TASKS_DIR/llllh111.log")" "admission_timeout after 3s" "ledger wait got the 3s ledger budget"
 }
 
+# L9 — the ledger limit is sticky: a heavy that waited on the ledger longer
+# than the floor timeout must not time out on the poll where its holder leaves
+# but memory has not been reclaimed yet.
+test_ledger_limit_sticky_through_floor_poll() {
+    CURRENT_TEST_NAME="L9: after a ledger wait longer than the floor timeout, one floor-failing poll does not time out"
+    ledger_env 30000 8000
+    export RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS=1
+    export RL_LEDGER_ADMISSION_TIMEOUT_SECONDS=12
+    /bin/sleep 60 &
+    local holder=$!
+    jq -n --argjson now "$(date +%s)" --argjson pid "$holder" --arg host "$HOST_NAME" '{
+        heavy_running: [{key:"hold9", task_id:"hold9", admitted_at:"x", admitted_epoch:$now, mb:5120,
+                         weight:"heavy", kind:"task", reserve_mb:5632, pid:$pid, host:$host}],
+        heavy_waiting: [] }' > "$ADMISSION_JSON"
+    start_task "lllli111" heavy manual /bin/sh -c "exit 0"
+    wait_waiting "lllli111" || true
+    sleep 3   # wait on the ledger past the 1s floor timeout
+    # Holder leaves while memory is still low: the next poll fails the floor only.
+    printf 'MemTotal:       16777216 kB\nMemAvailable:   %d kB\n' $(( 1000 * 1024 )) > "$RL_MEMINFO_PATH.tmp"
+    mv "$RL_MEMINFO_PATH.tmp" "$RL_MEMINFO_PATH"
+    kill -9 "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+    local i
+    for (( i = 0; i < 60; i++ )); do
+        grep -q 'available=1000MB' "$RL_TASKS_DIR/lllli111.log" 2>/dev/null && break
+        sleep 0.1
+    done
+    printf 'MemTotal:       16777216 kB\nMemAvailable:   %d kB\n' $(( 30000 * 1024 )) > "$RL_MEMINFO_PATH.tmp"
+    mv "$RL_MEMINFO_PATH.tmp" "$RL_MEMINFO_PATH"
+    assert_eq "$(wait_terminal lllli111 15)" "succeeded" "kept the ledger limit through the floor-failing poll"
+    assert_eq "$(grep -c 'admission_timeout' "$RL_TASKS_DIR/lllli111.log")" "0" "no timeout on the poll its turn arrived"
+    assert_contains "$(cat "$RL_TASKS_DIR/lllli111.log")" "available=1000MB" "a floor-failing poll was actually observed"
+}
+
 run_test "l1-lifetime-reservation" test_reservation_held_for_task_lifetime
 run_test "l2-heavy-cap" test_heavy_cap_queues_third_heavy
 run_test "l3-image-build-cap" test_image_build_cap_and_kind
@@ -267,5 +301,6 @@ run_test "l6-fifo" test_fifo_older_heavy_waiter_blocks_medium
 run_test "l6b-fifo-empty-ledger" test_fifo_holds_on_empty_ledger
 run_test "l7-dead-holder-mid-wait" test_dead_holder_reclaimed_during_wait
 run_test "l8-ledger-timeout" test_ledger_wait_uses_ledger_timeout
+run_test "l9-sticky-ledger-limit" test_ledger_limit_sticky_through_floor_poll
 
 print_test_summary

@@ -433,7 +433,7 @@ admission::acquire() {
     if [[ -z "$weight" ]]; then
         if [[ "$floor" == "$RL_MEDIUM_TASK_MIN_FREE_MB" ]]; then weight=medium; else weight=heavy; fi
     fi
-    local poll="$RL_HEAVY_TASK_POLL_SECONDS" started limit
+    local poll="$RL_HEAVY_TASK_POLL_SECONDS" started limit="$RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS"
     started=$(date +%s)
     admission::ensure_file
     local avail
@@ -464,9 +464,11 @@ admission::acquire() {
         admission::_log "$log_path" \
             "[admission] waiting for memory: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)${reason:+ blocked_by=$reason}"
         # A ledger wait (cap / budget / fifo) waits out lifetime holds; a pure
-        # memory-floor wait keeps the shorter budget.
-        if [[ -n "$reason" ]]; then limit="$RL_LEDGER_ADMISSION_TIMEOUT_SECONDS"
-        else limit="$RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS"; fi
+        # memory-floor wait keeps the shorter budget. Sticky: once the task has
+        # waited on the ledger it keeps the long limit, because `started` is
+        # fixed — dropping back to the floor limit on the poll where its turn
+        # arrives (memory not yet reclaimed) would time it out instantly.
+        if [[ -n "$reason" ]]; then limit="$RL_LEDGER_ADMISSION_TIMEOUT_SECONDS"; fi
         if (( $(date +%s) + poll > started + limit )); then
             admission::release "$key"
             admission::_log "$log_path" \
