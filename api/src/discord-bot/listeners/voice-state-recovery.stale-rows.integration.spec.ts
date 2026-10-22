@@ -206,4 +206,20 @@ describe('ROK-1888 m3 — recovery closes stale in-voice rows', () => {
 
     expect(await statusOf(eventId)).toBe('grace_period');
   });
+
+  // ROK-1888 B5: the live path never graces an LFG-born (unbound) session, and
+  // its temp-channel rejoin never cancels grace — so arming it here would end
+  // the session with members back in voice.
+  it('does not start grace on an LFG-born (unbound) event the sweep emptied', async () => {
+    const eventId = await liveEventWith(['lfg-gone-m3']);
+    await testApp.db
+      .update(schema.events)
+      .set({ channelBindingId: null })
+      .where(eq(schema.events.id, eventId));
+
+    await recover(depsFor([], true, { [CHANNEL]: [], [LFG_CHANNEL]: [] }));
+
+    expect((await rowOf(eventId, 'lfg-gone-m3')).leftAt).not.toBeNull();
+    expect(await statusOf(eventId)).toBe('live');
+  });
 });
