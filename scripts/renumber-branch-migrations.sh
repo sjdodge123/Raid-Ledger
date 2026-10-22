@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# renumber-branch-migrations.sh
+#
+# Two open PRs both generated migration 0239 on top of the same main; the one
+# that lands second collides (the index-collision guard in CI and in
+# `validate-ci.sh --static` fails with this command as the fix). This moves
+# THIS branch's new migrations after origin/main's newest: .sql filenames,
+# journal idx/tag/when, snapshot filenames and the prevId chain. SQL bodies are
+# never edited. Idempotent; refuses a dirty tree (commit first — never stash).
+#
+# Usage:
+#   ./scripts/renumber-branch-migrations.sh                 # vs origin/main (fetched first)
+#   ./scripts/renumber-branch-migrations.sh --base <ref>    # vs another ref
+#   ./scripts/renumber-branch-migrations.sh --no-fetch      # skip `git fetch`
+#
+# Then: commit, `git merge origin/main`, re-run ./scripts/validate-migrations.sh.
+# Detail: docs/runbooks/migrations-and-backups.md → "Two PRs claimed the same migration number".
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="origin/main"
+FETCH=true
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --base) BASE="${2:?--base needs a git ref}"; shift ;;
+        --no-fetch) FETCH=false ;;
+        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        *) echo "ERROR: unknown argument: $1" >&2; exit 3 ;;
+    esac
+    shift
+done
+
+ROOT="$(git rev-parse --show-toplevel)"
+if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
+    echo "✗ refusing: the working tree is dirty. Commit (a WIP commit is fine) and re-run — never git stash." >&2
+    git -C "$ROOT" status --short >&2
+    exit 1
+fi
+
+if $FETCH && [[ "$BASE" == origin/* ]]; then
+    git -C "$ROOT" fetch --quiet origin "${BASE#origin/}" \
+        || echo "⚠ git fetch origin ${BASE#origin/} failed — using the local $BASE ref" >&2
+fi
+
+exec node "$SCRIPT_DIR/renumber-branch-migrations.mjs" --root "$ROOT" --base "$BASE"

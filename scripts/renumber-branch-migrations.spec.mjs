@@ -120,7 +120,7 @@ test('renumber: moves branch migrations after main, rewrites journal + snapshot 
   assert.equal(guard.status, 0, guard.stdout + guard.stderr);
 });
 
-test('renumber is idempotent and the result merges main without a migrations conflict', (t) => {
+test('renumber is idempotent; merging main afterwards conflicts only on the journal, and ours is right', (t) => {
   const dir = buildFixture();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   assert.equal(run(dir, 'bash', [TOOL, '--no-fetch']).status, 0);
@@ -129,8 +129,14 @@ test('renumber is idempotent and the result merges main without a migrations con
   assert.equal(again.status, 0, again.stdout + again.stderr);
   assert.match(again.stdout, /nothing to renumber/);
   assert.equal(git(dir, 'status', '--porcelain'), '');
-  const merge = run(dir, 'git', ['merge', '--no-edit', '-q', 'main']);
-  assert.equal(merge.status, 0, merge.stdout + merge.stderr);
+  // Both sides appended to _journal.json, so git always flags it; every .sql and
+  // snapshot merges cleanly, and ours already holds main's entries + the branch's.
+  run(dir, 'git', ['merge', '--no-edit', '-q', 'main']);
+  assert.equal(git(dir, 'diff', '--name-only', '--diff-filter=U'), `${MIG}/meta/_journal.json`);
+  git(dir, 'checkout', '--ours', `${MIG}/meta/_journal.json`);
+  git(dir, 'add', `${MIG}/meta/_journal.json`);
+  git(dir, 'commit', '-q', '--no-edit');
+  assert.equal(JSON.parse(read(dir, 'meta/0002_snapshot.json')).id, 'id-main');
   assert.deepEqual(journal(dir).map((e) => e.tag).slice(2), ['0002_main_x', '0003_branch_feat', '0004_branch_custom']);
 });
 
