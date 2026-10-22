@@ -5,7 +5,7 @@
  */
 import type { JSX, ReactNode } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useQuery } from '@tanstack/react-query';
@@ -64,6 +64,21 @@ describe('community auto-membership section', () => {
         render(pageWith('leader', 'suggest'));
         await userEvent.click(screen.getByRole('radio', { name: /Auto/ }));
         await waitFor(() => expect(bodies).toEqual([{ hubId: '41', body: { mode: 'auto' } }]));
+    });
+
+    it('checks the picked radio in the same tick as the click (no snap-back)', () => {
+        render(pageWith('leader', 'suggest'));
+        fireEvent.click(screen.getByRole('radio', { name: /Auto/ }));
+        expect(screen.getByRole('radio', { name: /Auto/ }), 'the pick must show before the save is notified').toBeChecked();
+        expect(screen.getByRole('radio', { name: /Suggest/ })).not.toBeChecked();
+    });
+
+    it('returns to the saved mode when the save fails', async () => {
+        server.use(http.patch(`${API}/hubs/:id/auto-membership`, () => HttpResponse.json({ message: 'nope' }, { status: 500 })));
+        render(pageWith('leader', 'suggest'));
+        fireEvent.click(screen.getByRole('radio', { name: /Off/ }));
+        expect(screen.getByRole('radio', { name: /Off/ })).toBeChecked();
+        await waitFor(() => expect(screen.getByRole('radio', { name: /Suggest/ }), 'a failed save reverts the pick').toBeChecked());
     });
 
     it('is hidden from an officer even when the field is present', () => {

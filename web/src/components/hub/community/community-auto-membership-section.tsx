@@ -5,7 +5,7 @@
  * sends `guild.autoMembership` to the Leader and staff only; the section
  * renders only when it is present and the viewer is the Leader or staff.
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { HubAutoMembershipMode } from '@raid-ledger/contract';
 import type { HubCtx } from '../../../plugins/hub-module';
 import { isOperatorOrAdmin, useAuth } from '../../../hooks/use-auth';
@@ -19,12 +19,24 @@ const MODE_OPTIONS = [
     { value: 'auto', label: 'Auto', description: 'Add them as a member when they sign up.' },
 ] as const;
 
+/**
+ * The pick shows at once: a controlled radio whose `checked` only changes when
+ * the mutation's (asynchronously notified) pending state lands is reset by
+ * React after the click, so the choice visibly snaps back. Local state set in
+ * the change handler holds it until the save settles and the page refetches.
+ */
 function ModePicker({ hubId, mode }: { hubId: number; mode: HubAutoMembershipMode }): JSX.Element {
     const save = useHubAutoMembership(hubId);
-    const shown = save.isPending && save.variables !== undefined ? save.variables : mode;
+    const [picked, setPicked] = useState<HubAutoMembershipMode | null>(null);
+    const shown = picked ?? mode;
+    const choose = (next: HubAutoMembershipMode): void => {
+        if (next === shown) return;
+        setPicked(next);
+        save.mutate(next, { onSettled: () => setPicked(null) });
+    };
     return (
         <RadioGroup label="When someone signs up for a hub event" options={MODE_OPTIONS} value={shown}
-            disabled={save.isPending} onChange={(next) => { if (next !== mode) save.mutate(next); }} />
+            disabled={save.isPending} onChange={choose} />
     );
 }
 
