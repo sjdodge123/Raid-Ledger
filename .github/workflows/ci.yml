@@ -819,9 +819,13 @@ jobs:
       # are kept; `Dir::Etc::sourceparts=-` would drop those too on 24.04.
       - name: Drop unused third-party apt sources
         run: |
+          # Keep Ubuntu's own sources: on 24.04 the runner rewrites ubuntu.sources
+          # to `mirror+file:/etc/apt/apt-mirrors.txt` (no *.ubuntu.com URL), so
+          # match that too and never drop ubuntu.sources by name (review r1).
           for f in /etc/apt/sources.list.d/*; do
-            [ -e "$f" ] || continue
-            if ! grep -qE 'https?://([a-z0-9.-]+\.)?(archive|security|ports)\.ubuntu\.com' "$f"; then
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in ubuntu.sources) continue ;; esac
+            if ! grep -qE 'https?://([a-z0-9.-]+\.)?(archive|security|ports)\.ubuntu\.com|mirror\+file:' "$f"; then
               echo "dropping $f"; sudo rm -f "$f"
             fi
           done
@@ -837,7 +841,7 @@ jobs:
       - name: Install postgresql-client (retry)
         if: steps.pgclient.outcome == 'failure'
         timeout-minutes: 6
-        run: sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
+        run: sudo dpkg --configure -a; sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1015,9 +1019,13 @@ jobs:
       # apt, so a broken third-party source fails it too (exit code 100).
       - name: Drop unused third-party apt sources
         run: |
+          # Keep Ubuntu's own sources: on 24.04 the runner rewrites ubuntu.sources
+          # to `mirror+file:/etc/apt/apt-mirrors.txt` (no *.ubuntu.com URL), so
+          # match that too and never drop ubuntu.sources by name (review r1).
           for f in /etc/apt/sources.list.d/*; do
-            [ -e "$f" ] || continue
-            if ! grep -qE 'https?://([a-z0-9.-]+\.)?(archive|security|ports)\.ubuntu\.com' "$f"; then
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in ubuntu.sources) continue ;; esac
+            if ! grep -qE 'https?://([a-z0-9.-]+\.)?(archive|security|ports)\.ubuntu\.com|mirror\+file:' "$f"; then
               echo "dropping $f"; sudo rm -f "$f"
             fi
           done
@@ -1061,7 +1069,7 @@ jobs:
       - name: Install Playwright OS dependencies (retry)
         if: steps.pw-deps.outcome == 'failure'
         timeout-minutes: 6
-        run: npx playwright install-deps chromium
+        run: sudo dpkg --configure -a; npx playwright install-deps chromium
 
       - name: Build contract
         run: npm run build -w packages/contract
