@@ -58,6 +58,8 @@ export const guildProfiles = pgTable(
     discordChannelSource: varchar('discord_channel_source', {
       length: 6,
     }).$type<'auto' | 'manual'>(),
+    /** ROK-1868 A4: the composer's "Also post to Discord" default (last choice). */
+    postRelayDefault: boolean('post_relay_default').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -70,6 +70,20 @@ describe('partitionLobbyGroups (ROK-1446 extraction)', () => {
   });
 });
 
+describe('partitionLobbyGroups — live-game bypass (ROK-1888)', () => {
+  it('qualifies a group below minPlayers when its game already has a live Quick Play', () => {
+    const result = partitionLobbyGroups(
+      [group(1, 'Valheim', ['a']), group(2, 'CoD4', ['c'])],
+      false,
+      2,
+      new Set([1]),
+    );
+
+    expect(result.qualifying.map((g) => g.gameName)).toEqual(['Valheim']);
+    expect(result.dropped.map((g) => g.gameName)).toEqual(['CoD4']);
+  });
+});
+
 describe('undetectedMemberIds (ROK-1446)', () => {
   it('returns the member ids of the presence-null group', () => {
     expect(
