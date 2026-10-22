@@ -11,6 +11,7 @@ import * as schema from '../../drizzle/schema';
 import * as q from './community-proposals.queries';
 import * as users from './community-proposals.users';
 import * as members from './community-membership.queries';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 
 jest.mock('./community-proposals.queries', () => ({
   ...jest.requireActual('./community-proposals.queries'),
@@ -78,6 +79,8 @@ const proposal = {
 
 const mocked = <T extends (...a: never[]) => unknown>(fn: T) => jest.mocked(fn);
 const create = jest.fn();
+/** ROK-1873 (D8): the channel-lifecycle nudge approve / createDirect fire. */
+const touch = jest.fn();
 const tx = {};
 let svc: CommunityProposalsService;
 
@@ -92,6 +95,7 @@ beforeEach(async () => {
         useValue: { transaction: (fn: (t: object) => unknown) => fn(tx) },
       },
       { provide: NotificationService, useValue: { create } },
+      { provide: GameActivityNudge, useValue: { touch } },
     ],
   }).compile();
   svc = mod.get(CommunityProposalsService);
@@ -264,5 +268,47 @@ describe('approve / reject / withdraw / createDirect', () => {
     await expect(
       svc.createDirect(1, { ...dto, leaderUserId: 5 }),
     ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('channel-lifecycle nudges (ROK-1873 D8)', () => {
+  it('approve nudges the hub game so its channel is created + held', async () => {
+    mocked(q.lockProposal).mockResolvedValue(proposedRow);
+    mocked(q.activateProposal).mockResolvedValue(hubRow);
+    mocked(members.refreshMemberCount).mockResolvedValue(1);
+    await svc.approve(1, 40, {});
+    expect(touch).toHaveBeenCalledTimes(1);
+    expect(touch).toHaveBeenCalledWith(9);
+  });
+
+  it('a refused approve (404) never nudges', async () => {
+    mocked(q.lockProposal).mockResolvedValue(null);
+    await expect(svc.approve(1, 40, {})).rejects.toThrow(NotFoundException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('createDirect nudges the new active hub game', async () => {
+    mocked(q.insertCommunityHub).mockResolvedValue(hubRow);
+    mocked(members.refreshMemberCount).mockResolvedValue(1);
+    await svc.createDirect(1, { ...dto, leaderUserId: 5 });
+    expect(touch).toHaveBeenCalledWith(9);
+  });
+
+  it('a name-clash createDirect (409) never nudges', async () => {
+    mocked(q.hasNameClash).mockResolvedValue(true);
+    await expect(
+      svc.createDirect(1, { ...dto, leaderUserId: 5 }),
+    ).rejects.toThrow(ConflictException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('a throwing nudge never fails the approve', async () => {
+    mocked(q.lockProposal).mockResolvedValue(proposedRow);
+    mocked(q.activateProposal).mockResolvedValue(hubRow);
+    mocked(members.refreshMemberCount).mockResolvedValue(1);
+    touch.mockImplementationOnce(() => {
+      throw new Error('queue down');
+    });
+    await expect(svc.approve(1, 40, {})).resolves.toMatchObject({ id: 40 });
   });
 });
