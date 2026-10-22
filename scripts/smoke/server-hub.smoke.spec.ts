@@ -16,6 +16,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
+import { tabOrder } from './hub-tabs';
 
 type Role = 'online' | 'recent' | 'joined' | 'lapsed' | 'outsider';
 
@@ -37,9 +38,9 @@ function userName(slot: number, role: Role): string {
     return `Hub ${slot} ${role[0]?.toUpperCase() ?? ''}${role.slice(1)}`;
 }
 
-async function seedHub(token: string): Promise<Hub> {
+async function seedHub(token: string, withSchedules = false): Promise<Hub> {
     const slot = 1 + (test.info().parallelIndex % 15);
-    const body = (await apiPost(token, '/admin/test/pelican/server-hub', { slot })) as Partial<Hub> | null;
+    const body = (await apiPost(token, '/admin/test/pelican/server-hub', { slot, withSchedules })) as Partial<Hub> | null;
     if (typeof body?.guildId !== 'number' || typeof body.serverId !== 'number' || !body.userIds) {
         throw new Error(`server-hub seed failed: ${JSON.stringify(body)}`);
     }
@@ -133,6 +134,90 @@ test.describe('Server community hub (ROK-1831)', () => {
         } finally {
             await apiPatch(token, servers, { communityHub: true }).catch(() => undefined);
         }
+    });
+});
+
+/** A phone viewport, set per test so both projects run the phone cases (the bottom bar is CSS `md:hidden`). */
+const PHONE = { width: 375, height: 812 };
+
+function must<T>(value: T | undefined | null, label: string): T {
+    if (value === undefined || value === null) throw new Error(`missing: ${label}`);
+    return value;
+}
+
+/** The top of the bottom bar including the raised Hubs circle: the smallest top of the bar and everything in it. */
+async function barTop(page: Page): Promise<number> {
+    return page.getByTestId('bottom-tab-bar').evaluate((bar) =>
+        Math.min(...[bar, ...Array.from(bar.querySelectorAll('*'))].map((el) => el.getBoundingClientRect().top)));
+}
+
+test.describe('Server hub phone UX (ROK-1876)', () => {
+    test('phone: hidden tabs sit in More; choosing one navigates and the trigger shows its name as active', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken());
+        await page.setViewportSize(PHONE);
+        await page.goto(`/guilds/${hub.guildId}`);
+        const trigger = page.getByTestId('tab-row-more-trigger');
+        await expect(trigger, 'a phone row overflows into More').toBeVisible({ timeout: 15_000 });
+        await expect(trigger).toContainText('More');
+        await expect(trigger).not.toHaveAttribute('data-active', 'true');
+
+        await trigger.click();
+        const menu = page.getByTestId('tab-row-more-menu');
+        await expect(menu).toBeVisible();
+        const item = menu.locator('a').first();
+        const id = must(await item.getAttribute('href'), 'first More item href').replace(/^#/, '');
+        const label = (await item.innerText()).trim();
+        await expect(page.getByTestId('tab-row-scroller').locator(`a[href="#${id}"]`), 'a More item is not also in the row').toHaveCount(0);
+
+        await page.getByTestId(`tab-row-more-item-${id}`).click();
+        await expect(page).toHaveURL(new RegExp(`#${id}$`));
+        await expect(menu, 'picking an item closes the menu').toHaveCount(0);
+        await expect(trigger).toHaveAttribute('data-active', 'true');
+        await expect(trigger).toContainText(label);
+    });
+
+    test('Resources comes right after Events in the tab order', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken());
+        await page.goto(`/guilds/${hub.guildId}`);
+        await expect(page.getByTestId('tab-row-scroller')).toBeVisible({ timeout: 15_000 });
+        const order = await tabOrder(page);
+        expect(order.slice(0, 4), `tab order: ${order.join(', ')}`).toEqual(['overview', 'members', 'events', 'resources']);
+    });
+
+    test('Server hours: seeded schedules show day rows and the restart; no schedules shows "No set hours"', async ({ page }) => {
+        const token = await getAdminToken();
+        const hub = await seedHub(token, true);
+        await page.goto(`/guilds/${hub.guildId}`);
+        const card = page.locator('#server-hub-hours');
+        await expect(card.getByTestId('server-hub-hours-row').first(), 'withSchedules gives the card a window').toBeVisible({ timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-restart')).toBeVisible();
+        await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
+
+        await seedHub(token);
+        await page.goto(`/guilds/${hub.guildId}`);
+        await expect(card.getByTestId('server-hub-hours-empty')).toHaveText('No set hours', { timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
+    });
+
+    test('phone: the last Members card ends 16px above the bottom bar and its raised Hubs circle', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken());
+        await page.setViewportSize(PHONE);
+        await page.goto(`/guilds/${hub.guildId}#members`);
+        const last = page.getByTestId('guild-members').getByTestId('guild-member-row').filter({ visible: true }).last();
+        await expect(last).toBeVisible({ timeout: 15_000 });
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        // Let the rAF-throttled scroll listener see the downward scroll before the 1px up-scroll.
+        await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+        // Scroll up 1px so the hide-on-scroll bar is shown, then wait for it to settle on screen.
+        await page.evaluate(() => window.scrollBy(0, -1));
+        const bar = page.getByTestId('bottom-tab-bar');
+        await expect(bar).toBeVisible();
+        await expect.poll(async () => { const b = must(await bar.boundingBox(), 'bar box'); return b.y + b.height; },
+            { message: 'the bottom bar is shown (not translated off screen)' }).toBeLessThanOrEqual(PHONE.height + 1);
+        const card = must(await last.boundingBox(), 'last member card box');
+        const top = await barTop(page);
+        expect(card.y + card.height, `last card bottom (${card.y + card.height}) vs bar + circle top (${top}) — ROK-1876 AC1`)
+            .toBeLessThanOrEqual(top - 16);
     });
 });
 
