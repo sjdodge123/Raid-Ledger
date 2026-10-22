@@ -12,66 +12,27 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer as createNetServer } from 'node:net';
+import { spawnDashboard } from './spawn-server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SERVER_PATH = resolve(__dirname, '..', 'server.js');
 const PUBLIC_DIR = resolve(__dirname, '..', 'public');
 
-const pickFreePort = () => new Promise((res, rej) => {
-  const s = createNetServer();
-  s.unref();
-  s.on('error', rej);
-  s.listen(0, '127.0.0.1', () => {
-    const { port } = s.address();
-    s.close(() => res(port));
-  });
-});
-
-const waitForListening = async (port, deadline = Date.now() + 5000) => {
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(500) });
-      if (r.ok) return;
-    } catch { /* not yet */ }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(`server did not become reachable on :${port} within 5s`);
-};
-
-const startServer = async (stateDir, extraEnv = {}) => {
-  const port = await pickFreePort();
-  const child = spawn(process.execPath, [SERVER_PATH], {
-    env: {
-      ...process.env,
-      PORT: String(port),
-      STATE_DIR: stateDir,
-      PUBLIC_DIR,
-      RL_AGENT_TOKEN: 'test-token-not-used',
-      NODE_ENV: 'test',
-      // ROK-1537: pin the operator id per test — never inherit the laptop's.
-      RL_OPERATOR_DISCORD_ID: '',
-      ...extraEnv,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  child.stderr.on('data', () => {});
-  await waitForListening(port);
-  return {
-    base: `http://127.0.0.1:${port}`,
-    kill: () => new Promise((r) => {
-      child.once('exit', () => r());
-      child.kill('SIGTERM');
-      setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 1000).unref();
-    }),
-  };
-};
+const startServer = (stateDir, extraEnv = {}) => spawnDashboard(SERVER_PATH, {
+  ...process.env,
+  STATE_DIR: stateDir,
+  PUBLIC_DIR,
+  RL_AGENT_TOKEN: 'test-token-not-used',
+  NODE_ENV: 'test',
+  // ROK-1537: pin the operator id per test — never inherit the laptop's.
+  RL_OPERATOR_DISCORD_ID: '',
+  ...extraEnv,
+}, stateDir);
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
 const secondsAgo = (s) => new Date(Date.now() - s * 1000).toISOString();

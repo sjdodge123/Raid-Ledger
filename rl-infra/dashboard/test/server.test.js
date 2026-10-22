@@ -8,75 +8,25 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnDashboard } from './spawn-server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SERVER_PATH = resolve(__dirname, '..', 'server.js');
 const PUBLIC_DIR = resolve(__dirname, '..', 'public');
 
-// Pick a free high port at the OS level. The dashboard server's current
-// announce log echoes the env-var PORT verbatim (not server.address().port),
-// so we cannot rely on PORT=0 self-discovery — we pre-pick a port from a
-// listener-then-close trick instead. Tests serialize via test.before/after
-// so port reuse across files is fine, but each individual test gets a
-// fresh port to avoid lingering-TIME_WAIT collisions.
-import { createServer as createNetServer } from 'node:net';
-const pickFreePort = () => new Promise((res, rej) => {
-  const s = createNetServer();
-  s.unref();
-  s.on('error', rej);
-  s.listen(0, '127.0.0.1', () => {
-    const { port } = s.address();
-    s.close(() => res(port));
-  });
-});
-
-// Wait for the server to actually accept TCP connections — the announce log
-// is fired from server.listen's callback so it's a reliable signal, but the
-// callback runs inside the listening event so we wait for either the log
-// OR a successful probe.
-const waitForListening = async (port, deadline = Date.now() + 5000) => {
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(500) });
-      if (r.ok) return;
-    } catch { /* not yet */ }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(`server did not become reachable on :${port} within 5s`);
-};
-
 // Spawn the dashboard server against a fresh STATE_DIR, return { base, kill }.
-const startServer = async (stateDir) => {
-  const port = await pickFreePort();
-  const child = spawn(process.execPath, [SERVER_PATH], {
-    env: {
-      ...process.env,
-      PORT: String(port),
-      STATE_DIR: stateDir,
-      PUBLIC_DIR,
-      RL_AGENT_TOKEN: 'test-token-not-used',
-      NODE_ENV: 'test',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  // Surface fatal errors but otherwise swallow.
-  child.stderr.on('data', () => {});
-  await waitForListening(port);
-  return {
-    base: `http://127.0.0.1:${port}`,
-    kill: () => new Promise((r) => {
-      child.once('exit', () => r());
-      child.kill('SIGTERM');
-      setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 1000).unref();
-    }),
-  };
-};
+const startServer = (stateDir) => spawnDashboard(SERVER_PATH, {
+  ...process.env,
+  STATE_DIR: stateDir,
+  PUBLIC_DIR,
+  RL_AGENT_TOKEN: 'test-token-not-used',
+  NODE_ENV: 'test',
+}, stateDir);
 
 const writeClaimsAndEnvs = async (stateDir, claims, envs) => {
   await writeFile(join(stateDir, 'claims.json'), JSON.stringify(claims));
