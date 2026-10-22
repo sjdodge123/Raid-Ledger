@@ -43,8 +43,13 @@ const MAX_DEPTH = 6;
 const ESCAPE_UNIT = '\\\\[^A-Za-z0-9\\s]|\\\\(?![^A-Za-z0-9\\s])';
 const CODE_UNIT = '```[\\s\\S]+?```|`[^`]+`|`(?![^`]*`)';
 const BODY = `(?:${ESCAPE_UNIT}|${CODE_UNIT}|[^\\\\\`])+?`;
-/** Asterisk italic: one line, no bare `*`, but a whole `**bold**` may nest. */
-const ITALIC_BODY = `(?:\\*\\*${BODY}\\*\\*|${ESCAPE_UNIT}|${CODE_UNIT}|[^*\\n\\\\\`])+?`;
+/*
+ * Asterisk italic: one line, no bare `*`, but a whole `**bold**` may nest. The
+ * nested bold's body excludes `*` too: with `BODY` (which allows `*`) a run of
+ * `**b**` pairs could be split exponentially many ways (ReDoS, review r2).
+ */
+const NESTED_BOLD_BODY = `(?:${ESCAPE_UNIT}|${CODE_UNIT}|[^*\\n\\\\\`])+?`;
+const ITALIC_BODY = `(?:\\*\\*${NESTED_BOLD_BODY}\\*\\*|${ESCAPE_UNIT}|${CODE_UNIT}|[^*\\n\\\\\`])+?`;
 
 const INLINE_SOURCE = [
     '\\\\([^A-Za-z0-9\\s])', // 1 escaped character

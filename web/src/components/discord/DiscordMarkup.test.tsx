@@ -8,6 +8,7 @@ import { render } from '@testing-library/react';
 import { DiscordMarkup } from './DiscordMarkup';
 import { formatDiscordTimestamp } from './discord-markup-time';
 import type * as TimeModule from './discord-markup-time';
+import { parseDiscordMarkup } from './discord-markup.parse';
 
 // Pin locale + zone so every timestamp assertion below is a FIXED string.
 vi.mock('./discord-markup-time', async (importOriginal) => {
@@ -180,5 +181,24 @@ describe('formatDiscordTimestamp', () => {
 
     it('returns null for an out-of-range timestamp', () => {
         expect(formatDiscordTimestamp(1e17, 'f')).toBeNull();
+    });
+});
+
+describe('parseDiscordMarkup — pathological input stays fast (ReDoS guard)', () => {
+    const ctx = { mentions: [], channels: [] };
+    // Exponential backtracking took 212ms at 145 chars and never finished at
+    // ~4k (review r2). The limit is generous so CI noise cannot trip it; a
+    // regression is orders of magnitude slower, not a few ms.
+    it.each([
+        ['italic around many **bold** pairs', '*' + 'a **b** '.repeat(400)],
+        ['unclosed italic with ** runs', '*' + 'a**'.repeat(1365)],
+        ['4096 asterisks', '*'.repeat(4096)],
+        ['4096 underscores', '_'.repeat(4096)],
+        ['4096 open brackets', '['.repeat(4096)],
+        ['4096 backticks', '`'.repeat(4096)],
+    ])('%s parses in well under a second', (_name, input) => {
+        const start = performance.now();
+        parseDiscordMarkup(input, ctx);
+        expect(performance.now() - start).toBeLessThan(500);
     });
 });
