@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -15,6 +16,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { isStaff, type GuildActor } from '../guild-access.service';
 import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
 import {
   archiveHub,
@@ -70,6 +72,7 @@ export class CommunityMembershipService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly adapter: CommunityHubKindAdapter,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** POST /hubs/:id/join — idempotent; 403 banned / not in Discord. */
@@ -77,7 +80,7 @@ export class CommunityMembershipService {
     actor: GuildActor,
     hubId: number,
   ): Promise<CommunityHubJoinResponse> {
-    await requireCommunityHub(this.db, hubId, true);
+    const hub = await requireCommunityHub(this.db, hubId, true);
     const existing = await findMembership(this.db, hubId, actor.id);
     if (existing?.bannedAt)
       throw new ForbiddenException("You can't join this hub");
@@ -89,6 +92,7 @@ export class CommunityMembershipService {
       return upsertJoin(tx, hubId, actor.id, 'member');
     });
     if (row.bannedAt) throw new ForbiddenException("You can't join this hub");
+    GameActivityNudge.safeTouch(this.nudge, hub.gameId); // ROK-1873 D12
     return {
       joined: true,
       memberCount: await refreshMemberCount(this.db, hubId),

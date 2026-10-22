@@ -37,8 +37,9 @@ export type {
  * ROK-1430 (spec D1, §2.2) — per-game lifecycle activity: the signal registry
  * `UNION ALL`-ed and grouped by `(game_id, kind)` (`count(DISTINCT item_id)`,
  * `max(last_at)`), merged with `games` (name, slug), the candidate binding and
- * the suppression row. The candidate set is every game with a signal OR a
- * candidate binding (a quiet auto channel must surface to be archived).
+ * the suppression row. The candidate set is every game with a signal, a
+ * candidate binding (a quiet auto channel must surface to be archived) OR a
+ * community-hub hold (ROK-1873: the hold alone creates the channel, X2).
  */
 
 type Db = PgDatabase<PostgresJsQueryResultHKT, typeof schema>;
@@ -233,9 +234,11 @@ export async function selectGameLifecycleActivity(
     selectSuppressedGameIds(db, opts.guildId),
   ]);
   const only = opts.gameIds ? new Set(opts.gameIds) : null;
-  const ids = [...new Set([...aggregates.keys(), ...bindings.keys()])].filter(
-    (id) => !only || only.has(id),
-  );
+  // A hub hold (D8) is a candidate on its own: a hold that comes only from a
+  // tagged event of another (or no) game puts no signal on the hub's game.
+  const held = opts.hubHoldGameIds ?? [];
+  const candidates = [...aggregates.keys(), ...bindings.keys(), ...held];
+  const ids = [...new Set(candidates)].filter((id) => !only || only.has(id));
   const games = await selectGames(db, opts.allGames && !only ? null : ids);
   return games.map((game) =>
     toRow(game, aggregates.get(game.id) ?? [], opts, {
