@@ -19,9 +19,18 @@ export interface PollHub {
   id: number;
   name: string;
   gameId: number;
+  /** `guilds.member_count` (live members, kept current by the hub writes). */
+  memberCount: number;
 }
 
 const g = schema.guilds;
+
+const pollHubColumns = {
+  id: g.id,
+  name: g.name,
+  gameId: g.gameId,
+  memberCount: g.memberCount,
+};
 
 /** The "visible community hub" predicate on `guilds`. */
 export function visibleCommunityHubWhere(): SQL | undefined {
@@ -38,7 +47,7 @@ export async function findVisiblePollHub(
   guildId: number,
 ): Promise<PollHub | null> {
   const [row] = await db
-    .select({ id: g.id, name: g.name, gameId: g.gameId })
+    .select(pollHubColumns)
     .from(g)
     .where(and(eq(g.id, guildId), visibleCommunityHubWhere()))
     .limit(1);
@@ -84,19 +93,26 @@ export async function assertCanTagPollToHub(
 export async function findEventVisibleHubId(
   db: Db,
   eventId: number,
+  gameId: number,
 ): Promise<number | null> {
   const [row] = await db
     .select({ id: g.id })
     .from(schema.events)
     .innerJoin(g, eq(g.id, schema.events.guildId))
-    .where(and(eq(schema.events.id, eventId), visibleCommunityHubWhere()))
+    .where(
+      and(
+        eq(schema.events.id, eventId),
+        eq(g.gameId, gameId),
+        visibleCommunityHubWhere(),
+      ),
+    )
     .limit(1);
   return row?.id ?? null;
 }
 
 /**
  * The hub a new poll is stored with: a reschedule poll copies its event's
- * visible hub; otherwise the validated `hubId`, or null when untagged.
+ * visible hub when that hub is for the poll's game (else none); otherwise the validated `hubId`, or null when untagged.
  */
 export async function resolvePollHubId(
   db: Db,
@@ -105,7 +121,7 @@ export async function resolvePollHubId(
   isStaff: boolean,
 ): Promise<number | null> {
   if (input.linkedEventId !== undefined) {
-    return findEventVisibleHubId(db, input.linkedEventId);
+    return findEventVisibleHubId(db, input.linkedEventId, input.gameId);
   }
   if (input.hubId === undefined) return null;
   await assertCanTagPollToHub(db, input.hubId, input.gameId, userId, isStaff);
@@ -121,7 +137,7 @@ export async function findMatchPollHub(
   matchId: number,
 ): Promise<PollHub | null> {
   const [row] = await db
-    .select({ id: g.id, name: g.name, gameId: g.gameId })
+    .select(pollHubColumns)
     .from(schema.communityLineupMatches)
     .innerJoin(
       schema.communityLineups,
