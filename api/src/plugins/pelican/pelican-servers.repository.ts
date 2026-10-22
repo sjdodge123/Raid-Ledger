@@ -87,12 +87,6 @@ export class PelicanServersRepository {
         },
       })
       .returning({ id: pelicanServers.id });
-    // ROK-1831: a server gone from the panel hides its hub (data kept).
-    await hideServerHubs(
-      tx,
-      rows.map((r) => r.id),
-      now,
-    );
     return rows.length;
   }
 
@@ -115,6 +109,14 @@ export class PelicanServersRepository {
       .set({ missingSince: now })
       .where(and(isNull(pelicanServers.missingSince), notSeen))
       .returning({ id: pelicanServers.id });
+    // ROK-1831: a server gone from the panel hides its hub (data kept). This
+    // ran in upsertListed on the servers STILL listed, so every 15-min sync
+    // hid every live server hub (prod Valheim hub missing from /hubs, 2026-10-21).
+    await hideServerHubs(
+      tx,
+      rows.map((r) => r.id),
+      now,
+    );
     return rows.length;
   }
 
