@@ -6,6 +6,11 @@
  * button, now pointing at the tagged hub — and the body names it. Untagging
  * reverts to the game-derived hub with no name line.
  *
+ * The game-derived hub is a single active `game_community` hub, which wins
+ * the untagged card over the server hub (ROK-1873 D15); two server hubs alone
+ * would link the `/hubs?game=` directory instead (H4). The tag must be a
+ * same-game hub (`GAME_MISMATCH`), so the tagged hub is the server hub.
+ *
  * Discord is mocked like the sibling `embed-hub-link.integration.spec.ts`:
  * `jest.spyOn` on the singleton client (connected, guild id, `sendEmbed` /
  * `editEmbed` capture) and on the channel resolver; the embed factory, the
@@ -26,6 +31,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { insertCommunityHub } from '../../guilds/community/community-proposals.queries';
 
 const GUILD = 'guild-1895';
 const BASE = 'https://raid.example.com';
@@ -103,6 +109,19 @@ async function seedHub(gameId: number, name: string): Promise<number> {
   return hub.id;
 }
 
+/** The game-derived hub: an active `game_community` hub (D15 winner). */
+async function seedCommunityHub(gameId: number, name: string): Promise<number> {
+  const hub = await insertCommunityHub(testApp.db, {
+    gameId,
+    name,
+    blurb: '',
+    status: 'active',
+    proposedBy: testApp.seed.adminUser.id,
+    reviewedBy: testApp.seed.adminUser.id,
+  });
+  return hub.id;
+}
+
 async function postCard(eventId: number, gameId: number): Promise<void> {
   const poster = testApp.app.get(EmbedPosterService);
   const startTime = new Date(Date.now() + 86_400_000).toISOString();
@@ -156,7 +175,7 @@ afterEach(async () => {
 describe('hub-tagged event card re-sync (ROK-1895, integration)', () => {
   it('tagging re-renders the card: the tagged hub wins and is named; untagging reverts', async () => {
     const { eventId, gameId } = await seedEvent();
-    const gameHubId = await seedHub(gameId, 'Server Alpha 1895');
+    const gameHubId = await seedCommunityHub(gameId, 'Crew Alpha 1895');
     const taggedHubId = await seedHub(gameId, 'Server Beta 1895');
     await postCard(eventId, gameId);
     const posted: unknown[] = sendEmbed.mock.calls[0] ?? [];
