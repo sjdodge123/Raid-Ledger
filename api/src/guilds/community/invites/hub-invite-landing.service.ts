@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -11,6 +12,7 @@ import type {
   HubInviteState,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import { GameActivityNudge } from '../../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../hub-hidden.helpers';
 import { liveCommunityRole, loadDiscordFields } from '../community-hub.reads';
@@ -93,6 +95,7 @@ export class HubInviteLandingService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly discordInvite: HubDiscordInviteService,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** GET /hubs/invites/:token — malformed → 404 without a DB hit. */
@@ -130,10 +133,11 @@ export class HubInviteLandingService {
     if ((await liveCommunityRole(this.db, hub.id, userId)) !== null) {
       return { hubId: hub.id, joined: false, memberCount: hub.memberCount };
     }
-    await assertMayJoin(this.db, userId, hub.id, true);
+    const { gameId } = await assertMayJoin(this.db, userId, hub.id, true);
     const joined = await this.db.transaction((tx) =>
       redeemLocked(tx, token, hub.id, userId),
     );
+    GameActivityNudge.safeTouch(this.nudge, gameId); // ROK-1873 D12, post-commit
     const memberCount = await refreshMemberCount(this.db, hub.id);
     return { hubId: hub.id, joined, memberCount };
   }

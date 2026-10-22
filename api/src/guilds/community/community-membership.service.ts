@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -15,6 +16,7 @@ import type {
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { isStaff, type GuildActor } from '../guild-access.service';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import { CommunityHubKindAdapter } from './community-hub-kind.adapter';
 import { revokeUserInvites } from './invites/hub-invites.queries';
 import {
@@ -75,6 +77,7 @@ export class CommunityMembershipService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly adapter: CommunityHubKindAdapter,
+    @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
   /** POST /hubs/:id/join — idempotent; 403 banned / not in Discord. */
@@ -92,7 +95,8 @@ export class CommunityMembershipService {
    * ROK-1893 D3 — every join path (manual, invite, auto, prompt): ban → 403,
    * hub must be active, Discord check unless `requireDiscord: false`, then
    * upsert with `join_source` / `invite_id` and recount. `joined` is false
-   * when the user was already a live member.
+   * when the user was already a live member. ROK-1873 D12: a join nudges the
+   * hub game's channel lifecycle once, after the transaction commits.
    */
   async joinVia(
     actorId: number,
@@ -100,10 +104,16 @@ export class CommunityMembershipService {
     source: HubJoinSource,
     opts: JoinViaOptions = {},
   ): Promise<JoinViaResult> {
-    await assertMayJoin(this.db, actorId, hubId, opts.requireDiscord ?? true);
+    const hub = await assertMayJoin(
+      this.db,
+      actorId,
+      hubId,
+      opts.requireDiscord ?? true,
+    );
     const joined = await this.db.transaction((tx) =>
       joinLocked(tx, hubId, actorId, source, opts.inviteId ?? null),
     );
+    GameActivityNudge.safeTouch(this.nudge, hub.gameId);
     return { joined, memberCount: await refreshMemberCount(this.db, hubId) };
   }
 

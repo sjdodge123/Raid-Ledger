@@ -132,6 +132,12 @@ export class ChannelLifecycleAdminService {
       // Same hub-link input as `reconcile`, so the preview shows `link_hub`.
       hubNeedsLinkGameIds:
         (await this.hubLinker?.hubNeedsLinkGameIds?.()) ?? new Set<number>(),
+      // L11 (D8): the same hub hold `reconcile` applies.
+      hubHoldGameIds:
+        (await this.hubLinker?.hubHoldGameIds?.(
+          now,
+          settings.recentActivityDays,
+        )) ?? new Set<number>(),
       ...(guildId ? { guildId } : {}),
     });
     const items = rows

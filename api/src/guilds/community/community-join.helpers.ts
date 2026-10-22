@@ -42,19 +42,21 @@ export interface JoinViaResult {
  * Pre-transaction checks, read through the pool (never while a hub lock is
  * held): 404 unless an active community hub, 403 when banned, 403 when the
  * Discord check applies and fails. An already-live member skips Discord.
+ * Returns the hub (its game feeds the ROK-1873 join nudge).
  */
 export async function assertMayJoin(
   db: PostgresJsDatabase<typeof schema>,
   userId: number,
   hubId: number,
   requireDiscord: boolean,
-): Promise<void> {
-  await requireCommunityHub(db, hubId, true);
+): Promise<schema.GuildSelect> {
+  const hub = await requireCommunityHub(db, hubId, true);
   const existing = await findMembership(db, hubId, userId);
   if (existing?.bannedAt) throw new ForbiddenException(BANNED_FROM_HUB);
   if (requireDiscord && !isLive(existing)) {
     await assertInDiscord(db, userId, false);
   }
+  return hub;
 }
 
 /**

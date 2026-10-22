@@ -108,9 +108,9 @@ export function formatReport(violations, baseRef) {
   }
   lines.push(
     '  Fix: re-stamping cannot repair a mid-journal entry (its snapshot prevId points at the',
-    '  wrong parent). Renumber it: move its .sql aside, delete its journal entry + snapshot,',
-    '  re-run `npm run db:generate -w api` (add `-- --custom --name <name>` for hand-written',
-    '  SQL) on top of the base, restore the SQL, then run ./scripts/fix-migration-order.sh.',
+    '  wrong parent). Renumber it after the base: git fetch origin &&',
+    '  ./scripts/renumber-branch-migrations.sh (renames files, rewrites journal idx/tag/when',
+    '  and the snapshot prevId chain), then re-run ./scripts/validate-migrations.sh.',
   );
   return lines.join('\n');
 }

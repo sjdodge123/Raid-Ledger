@@ -6,6 +6,7 @@ import {
   GameActivityNudge,
 } from './channel-lifecycle.nudge';
 import { ChannelLifecycleNudgeListener } from './channel-lifecycle.nudge.listener';
+import { HubActivityNudgeListener } from './hub-activity.nudge.listener';
 
 /**
  * ROK-1431 D12 — the nudge producer, global so the events / lineups / poll
@@ -18,7 +19,11 @@ import { ChannelLifecycleNudgeListener } from './channel-lifecycle.nudge.listene
     BullModule.registerQueue({ name: CHANNEL_LIFECYCLE_NUDGE_QUEUE }),
     SettingsModule,
   ],
-  providers: [GameActivityNudge, ChannelLifecycleNudgeListener],
+  providers: [
+    GameActivityNudge,
+    ChannelLifecycleNudgeListener,
+    HubActivityNudgeListener,
+  ],
   exports: [GameActivityNudge, BullModule],
 })
 export class ChannelLifecycleNudgeModule {}

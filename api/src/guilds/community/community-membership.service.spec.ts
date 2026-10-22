@@ -14,6 +14,7 @@ import * as reads from './community-hub.reads';
 import * as mq from './community-membership.queries';
 import { CommunityMembershipService } from './community-membership.service';
 import * as invites from './invites/hub-invites.queries';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 
 jest.mock('./community-hub.lookup', () => ({
   ...jest.requireActual('./community-hub.lookup'),
@@ -50,8 +51,39 @@ const row = (
   updatedAt: AT,
   ...over,
 });
+/** The hub `requireCommunityHub` hands `join` (its game feeds the nudge). */
+const HUB: schema.GuildSelect = {
+  id: 7,
+  gameId: 9,
+  kind: 'game_community',
+  region: 'community',
+  name: 'Crew',
+  nameKey: 'crew',
+  realmSlug: null,
+  guildSlug: null,
+  faction: null,
+  memberCount: 2,
+  source: 'community',
+  lastSnapshotAt: null,
+  rawRealm: null,
+  pelicanServerId: null,
+  hiddenAt: null,
+  status: 'active',
+  blurb: '',
+  proposedBy: 1,
+  blizzardGuildId: null,
+  reviewedBy: 1,
+  reviewedAt: AT,
+  archivedAt: null,
+  archivedReason: null,
+  autoMembership: 'off',
+  createdAt: AT,
+  updatedAt: AT,
+};
 const order: string[] = [];
 const adapter = { resolveLadder: jest.fn() };
+/** ROK-1873 (D8/D12): the channel-lifecycle nudge a join fires. */
+const touch = jest.fn();
 /** The handle the mocked transaction hands its callback. */
 const TX = { tx: true };
 const db = {
@@ -72,9 +104,11 @@ beforeEach(async () => {
       CommunityMembershipService,
       { provide: DrizzleAsyncProvider, useValue: db },
       { provide: CommunityHubKindAdapter, useValue: adapter },
+      { provide: GameActivityNudge, useValue: { touch } },
     ],
   }).compile();
   svc = mod.get(CommunityMembershipService);
+  jest.mocked(lookup.requireCommunityHub).mockResolvedValue(HUB);
   jest.mocked(mq.lockHubRow).mockImplementation(() => {
     order.push('lock');
     return Promise.resolve({ status: 'active' });
@@ -140,6 +174,31 @@ describe('join', () => {
     });
     expect(order).toEqual(['begin', 'lock', 'upsert', 'commit']);
   });
+
+  it("ROK-1873: a join nudges the hub game's channel lifecycle", async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(3);
+    await svc.join(actor, 7);
+    expect(touch).toHaveBeenCalledWith(9);
+  });
+
+  it('ROK-1873: a banned join (403) never nudges', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({ bannedAt: AT }));
+    await expect(svc.join(actor, 7)).rejects.toThrow(ForbiddenException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('ROK-1873: a throwing nudge never fails the join', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(3);
+    touch.mockImplementationOnce(() => {
+      throw new Error('queue down');
+    });
+    await expect(svc.join(actor, 7)).resolves.toMatchObject({ joined: true });
+  });
 });
 
 describe('joinVia (ROK-1893 D3)', () => {
@@ -165,6 +224,31 @@ describe('joinVia (ROK-1893 D3)', () => {
     jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
     const out = await svc.joinVia(1, 7, 'invite', { inviteId: 9 });
     expect(out.joined).toBe(false);
+  });
+
+  it.each(['invite', 'auto', 'prompt'] as const)(
+    'ROK-1873: a %s join nudges the game once, after the commit',
+    async (source) => {
+      jest.mocked(mq.findMembership).mockResolvedValue(null);
+      jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+      jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
+      touch.mockImplementationOnce(() => {
+        order.push('nudge');
+      });
+      await svc.joinVia(1, 7, source, { requireDiscord: false });
+      expect(touch).toHaveBeenCalledTimes(1);
+      expect(touch).toHaveBeenCalledWith(9);
+      expect(order).toEqual(['begin', 'lock', 'commit', 'nudge']);
+    },
+  );
+
+  it('ROK-1873: a join refused under the lock (hub archived) never nudges', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'archived' });
+    await expect(
+      svc.joinVia(1, 7, 'auto', { requireDiscord: false }),
+    ).rejects.toThrow(NotFoundException);
+    expect(touch).not.toHaveBeenCalled();
   });
 
   it('checks Discord by default for a non-member', async () => {
