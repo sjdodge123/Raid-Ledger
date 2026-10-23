@@ -30,15 +30,21 @@ describe('deathOccurredAt (ROK-1930 review fix 1)', () => {
 
   it('clamps a future-dated zoned read to the receive time', () => {
     expect(
-      deathOccurredAt('2026-10-15T10:00:05', 'America/New_York', received)
-        .toISOString(),
+      deathOccurredAt(
+        '2026-10-15T10:00:05',
+        'America/New_York',
+        received,
+      ).toISOString(),
     ).toBe('2026-10-15T10:00:06.000Z');
   });
 
   it('keeps a zoned read that is in the past (a cold replay of an old line)', () => {
     expect(
-      deathOccurredAt('2026-10-14T10:00:05', 'America/New_York', received)
-        .toISOString(),
+      deathOccurredAt(
+        '2026-10-14T10:00:05',
+        'America/New_York',
+        received,
+      ).toISOString(),
     ).toBe('2026-10-14T14:00:05.000Z');
   });
 
