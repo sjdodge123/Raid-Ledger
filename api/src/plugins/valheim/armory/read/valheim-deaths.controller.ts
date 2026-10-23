@@ -1,6 +1,19 @@
-import { Controller, Get, Header, Param, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import type { ValheimDeathsResponse } from '@raid-ledger/contract';
+import {
+  ValheimInt64StringSchema,
+  type ValheimDeathPinsResponse,
+  type ValheimDeathsResponse,
+} from '@raid-ledger/contract';
 import type { AuthenticatedExpressRequest } from '../../../../auth/types';
 import {
   PluginActiveGuard,
@@ -28,5 +41,18 @@ export class ValheimDeathsController {
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimDeathsResponse> {
     return this.deaths.deaths(serverId, req.user);
+  }
+
+  /** GET — every character's own Death pins on one world (Show all, L4a). */
+  @Get('plugins/valheim/armory/servers/:serverId/deaths/pins')
+  @Header('Cache-Control', 'private, no-store')
+  pins(
+    @Param('serverId', armoryIdPipe) serverId: number,
+    @Query('worldUid') worldUid: unknown,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimDeathPinsResponse> {
+    const parsed = ValheimInt64StringSchema.safeParse(worldUid);
+    if (!parsed.success) throw new BadRequestException('Invalid worldUid');
+    return this.deaths.deathPins(serverId, parsed.data, req.user);
   }
 }

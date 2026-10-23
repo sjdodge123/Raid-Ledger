@@ -44,6 +44,7 @@ import { ValheimMaterialsRepository } from './armory/read/valheim-materials.repo
 import { ValheimMaterialsService } from './armory/read/valheim-materials.service';
 import { ValheimDeathsController } from './armory/read/valheim-deaths.controller';
 import { ValheimDeathsService } from './armory/read/valheim-deaths.service';
+import { ValheimDeathPinsRepository } from './armory/read/valheim-deaths-pins.repository';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
@@ -122,6 +123,7 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimMaterialsRepository,
     ValheimMaterialsService,
     ValheimDeathsService,
+    ValheimDeathPinsRepository,
     ValheimRecipesReadRepository,
     ValheimRecipesService,
     ValheimArmoryMapBytesService,

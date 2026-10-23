@@ -2,9 +2,13 @@
  * ROK-1930 L2 — the hub Deaths widget read. D6: no hub → 404, a hub hidden
  * from the viewer → 404, then hub member or staff; a signed-in visitor gets
  * the same 404 body (a hidden widget and a missing hub answer alike).
+ * L4a adds the Map tab's server-wide death-pin layer under the same check.
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ValheimDeathsResponse } from '@raid-ledger/contract';
+import type {
+  ValheimDeathPinsResponse,
+  ValheimDeathsResponse,
+} from '@raid-ledger/contract';
 import type { AuthenticatedUser } from '../../../../auth/types';
 import {
   GuildAccessService,
@@ -15,6 +19,8 @@ import { ValheimDeathsRepository } from '../valheim-deaths.repository';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 import { refuseHiddenHub } from './valheim-armory-hub-visibility.helpers';
 import { toDeathsResponse } from './valheim-deaths.mappers';
+import { ValheimDeathPinsRepository } from './valheim-deaths-pins.repository';
+import { toDeathPinsResponse } from './valheim-deaths-pins.mappers';
 
 @Injectable()
 export class ValheimDeathsService {
@@ -22,6 +28,7 @@ export class ValheimDeathsService {
     private readonly hubs: ValheimArmoryReadRepository,
     private readonly access: GuildAccessService,
     private readonly repo: ValheimDeathsRepository,
+    private readonly pins: ValheimDeathPinsRepository,
   ) {}
 
   /** `GET …/servers/:serverId/deaths`. */
@@ -31,6 +38,17 @@ export class ValheimDeathsService {
   ): Promise<ValheimDeathsResponse> {
     await this.assertMemberOrStaff(serverId, user);
     return toDeathsResponse(await this.repo.countByPlayer(serverId));
+  }
+
+  /** `GET …/servers/:serverId/deaths/pins?worldUid=` (L4a, same D6 check). */
+  async deathPins(
+    serverId: number,
+    worldUid: string,
+    user: AuthenticatedUser,
+  ): Promise<ValheimDeathPinsResponse> {
+    await this.assertMemberOrStaff(serverId, user);
+    const rows = await this.pins.mapsOnWorld(serverId, worldUid);
+    return toDeathPinsResponse(worldUid, rows);
   }
 
   /** `assertServerHubVisible` (A4 + ROK-1856), then D6 membership. */
