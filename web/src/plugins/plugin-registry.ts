@@ -3,6 +3,7 @@ import type { CharacterIdentityProvider } from './character-identity';
 import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer';
 import type { HubModule, HubModuleRegistration, HubTab } from './hub-module';
 import { addGameServerProvider, clearGameServerProviders } from './game-server-status';
+import { addEventReportLinkPredicate, clearEventReportLinkPredicates, type EventReportLinkPredicate } from './event-report-links';
 import { addHubGameWidget, clearHubGameWidgets, type HubGameWidget } from './hub-game-widgets';
 import { addHubGameTab, clearHubGameTabs } from './hub-game-tabs';
 
@@ -72,6 +73,8 @@ export interface PluginHandle {
     registerCalendarLayer(layer: CalendarLayer): void;
     /** Declare that this plugin feeds `GET /game-servers/status` — core asks for statuses only while it is active (ROK-1776). */
     registerGameServerProvider(): void;
+    /** Declare which of this plugin's games take a report link on the event page — core shows the Logs card only for those, while this plugin is active. */
+    registerEventReportLinks(supports: EventReportLinkPredicate): void;
     /** Register this plugin's hub module — the tabs, widgets, member columns and hero pills for one `kind` (ROK-1830). */
     registerHubModule(module: HubModule): void;
     /** Add a game-scoped Overview widget to every hub of `widget.games` (ROK-1909). Re-registering an id replaces it. */
@@ -148,6 +151,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerGameServerProvider() {
             addGameServerProvider(slug);
         },
+        registerEventReportLinks: (supports) => addEventReportLinkPredicate(slug, supports),
         registerHubModule(module) {
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
         },
@@ -212,6 +216,7 @@ export function clearRegistry(): void {
     clearHubGameTabs();
     layersFrozen = false;
     clearGameServerProviders();
+    clearEventReportLinkPredicates();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */

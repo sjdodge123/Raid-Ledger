@@ -44,6 +44,7 @@ import { conflictOnUnique } from './community-db-errors';
 import { findProposalUser } from './community-proposals.users';
 import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
 import { toCommunitySummary } from './community-proposals.service';
+import { revokeUserInvites } from './invites/hub-invites.queries';
 
 const NOT_BANNED = 'That user is not banned';
 const NOT_MEMBER = 'Not a member of this hub';
@@ -126,6 +127,8 @@ export class CommunityModerationService {
         bannedBy: actor.id,
         reason: body.reason ?? null,
       });
+      // ROK-1893: a banned member's invite links into this hub stop working.
+      await revokeUserInvites(tx, userId, hubId);
     });
     await refreshMemberCount(this.db, hubId);
   }

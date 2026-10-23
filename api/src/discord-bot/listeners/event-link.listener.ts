@@ -34,6 +34,7 @@ import {
   markRecentlyProcessed,
 } from './event-link.dedup';
 import { defined } from '../../common/defined.helpers';
+import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 
 const MAX_UNFURLS_PER_MESSAGE = 3;
 
@@ -156,7 +157,9 @@ export class EventLinkListener {
       // ROK-1622: an unfurl creates a tracked message, so it is a first post
       // and must derive its state — the POSTED default painted an imminent
       // event cyan and `trackUnfurlMessages` then persisted that lie.
-      return this.embedFactory.buildEventEmbed(data, ctx, {
+      // ROK-1895: an unfurl is an event card too — keep its Hub button/line.
+      const hubCtx = await withEventHubLink(this.db, ctx, eventId, this.logger);
+      return this.embedFactory.buildEventEmbed(data, hubCtx, {
         buttons: 'signup',
         state: computeEmbedStateForData(data),
       });
@@ -230,12 +233,10 @@ export class EventLinkListener {
       this.settingsService.getBranding(),
       this.settingsService.getDefaultTimezone(),
     ]);
+    const rawUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
     return {
       communityName: branding.communityName,
-      clientUrl:
-        (process.env.CLIENT_URL || process.env.CORS_ORIGIN || null) === 'auto'
-          ? null
-          : process.env.CLIENT_URL || process.env.CORS_ORIGIN || null,
+      clientUrl: rawUrl === 'auto' ? null : rawUrl,
       timezone,
     };
   }

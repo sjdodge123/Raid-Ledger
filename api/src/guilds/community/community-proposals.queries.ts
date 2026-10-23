@@ -107,14 +107,22 @@ export async function insertCommunityHub(
       proposedBy: hub.proposedBy,
       reviewedBy: hub.reviewedBy,
       reviewedAt: hub.reviewedBy === null ? null : new Date(),
+      // ROK-1893 §8b: new community hubs ask signers to join; old rows stay `off`.
+      autoMembership: 'suggest',
     })
     .returning();
   if (!row) throw new Error('community hub insert returned no row');
   return row;
 }
 
-function proposalWhere(extra?: SQL): SQL | undefined {
-  return and(eq(g.kind, COMMUNITY), eq(g.status, 'proposed'), extra);
+/** ROK-1892: a staff proposal is read back `active` (auto-approved). */
+export type ProposalStatus = 'proposed' | 'active';
+
+function proposalWhere(
+  extra?: SQL,
+  status: ProposalStatus = 'proposed',
+): SQL | undefined {
+  return and(eq(g.kind, COMMUNITY), eq(g.status, status), extra);
 }
 
 /** A proposed row, locked `FOR UPDATE` when called inside a transaction. */
@@ -133,7 +141,7 @@ export async function lockProposal(
 /** Proposals as the contract `HubProposal`, oldest first. */
 export async function listProposals(
   db: DbOrTx,
-  filter?: { proposedBy?: number; ids?: number[] },
+  filter?: { proposedBy?: number; ids?: number[]; status?: ProposalStatus },
 ): Promise<HubProposal[]> {
   const extra: SQL[] = [];
   if (filter?.proposedBy !== undefined)
@@ -144,9 +152,22 @@ export async function listProposals(
     .from(g)
     .innerJoin(games, eq(games.id, g.gameId))
     .innerJoin(u, eq(u.id, g.proposedBy))
-    .where(proposalWhere(and(...extra)))
+    .where(proposalWhere(and(...extra), filter?.status))
     .orderBy(asc(g.createdAt), asc(g.id));
-  return rows.map(({ hub, game, user }) => ({
+  return rows.map(toHubProposal);
+}
+
+/** A proposal row (+ game, proposer) → contract `HubProposal`; `status` is the row's (ROK-1892). */
+function toHubProposal({
+  hub,
+  game,
+  user,
+}: {
+  hub: schema.GuildSelect;
+  game: typeof games.$inferSelect;
+  user: typeof u.$inferSelect;
+}): HubProposal {
+  return {
     id: hub.id,
     gameId: hub.gameId,
     gameName: game.name,
@@ -159,7 +180,8 @@ export async function listProposals(
       avatarUrl: user.customAvatarUrl ?? null,
     },
     createdAt: hub.createdAt.toISOString(),
-  }));
+    status: hub.status,
+  };
 }
 
 /** Approve: active + reviewed; optional tidy of name/blurb. */
