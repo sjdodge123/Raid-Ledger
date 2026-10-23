@@ -11,7 +11,6 @@ import {
 import { chartAxisProps, chartBarTooltipProps, chartGridProps } from '../ui/chart-chrome';
 import { useGameAttendance } from '../../hooks/use-analytics';
 
-
 function formatGameData(games: { gameName: string; avgAttendanceRate: number; avgNoShowRate: number; totalEvents: number }[]) {
     return games.map((g) => ({
         name: g.gameName.length > 18 ? g.gameName.slice(0, 16) + '...' : g.gameName,

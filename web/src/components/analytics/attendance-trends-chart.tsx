@@ -13,7 +13,6 @@ import { chartAxisProps, chartLineTooltipProps, chartGridProps } from '../ui/cha
 import { useAttendanceTrends } from '../../hooks/use-analytics';
 import type { AttendanceTrendsPeriod } from '@raid-ledger/contract';
 
-
 function formatDateTick(val: string) {
     const d = new Date(val + 'T00:00:00');
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
