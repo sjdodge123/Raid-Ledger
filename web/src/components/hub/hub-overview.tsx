@@ -8,15 +8,13 @@
  * ROK-1918: cells come from `layout/hub-widget-catalog`, ordered and filtered
  * by the hub's saved `widgetPrefs` through `layout/resolve-hub-layout`.
  */
-import { Fragment, lazy, Suspense, useState, type JSX } from 'react';
-import { Squares2X2Icon } from '@heroicons/react/24/outline';
+import { Fragment, lazy, Suspense, type JSX } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { useHubSettings } from './settings/hub-settings-context';
 import { usePluginStore } from '../../stores/plugin-store';
 import { canInvite } from './community/community-invite-access';
 import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-catalog';
 import { resolveHubLayout } from './layout/resolve-hub-layout';
-import { Button } from '../ui/button';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -24,10 +22,11 @@ import { Button } from '../ui/button';
  * they pushed the `hub-page` route chunk over its gzip budget (13.2 KB vs the
  * 12.6 KB cap the route carried before this story).
  */
-const HubSetupChecklist = lazy(() => import('./onboarding/setup-checklist').then((m) => ({ default: m.HubSetupChecklist })));
+const loadOverviewEditorTools = () => import('./overview-editor-tools');
+const HubSetupChecklist = lazy(() => loadOverviewEditorTools().then((m) => ({ default: m.HubSetupChecklist })));
 
-/** ROK-1918 L5: arrange mode is editor-only and lazy — none of it may land in the `hub-page` chunk. */
-const HubArrangeMode = lazy(() => import('./arrange/hub-arrange-mode'));
+/** ROK-1918 L5: Arrange button + arrange mode, editor-only — same loader, so no second preload list (see `overview-editor-tools`). */
+const HubArrangeGate = lazy(() => loadOverviewEditorTools().then((m) => ({ default: m.HubArrangeGate })));
 
 const SPAN_2 = 'md:col-span-2';
 
@@ -56,21 +55,6 @@ function WidgetCell({ cell }: { cell: HubWidgetCell }): JSX.Element {
     return cell.wrap ? <div className={SPAN_2}>{cell.node}</div> : <Fragment>{cell.node}</Fragment>;
 }
 
-/**
- * ROK-1918 §2.3: leaders, officers and staff (`viewer.canEdit`, Q8). Waits for
- * `raids` to settle: the core schedule/events/attendance widgets join the
- * catalog only then, and a draft built before it would drop them on Save.
- */
-function ArrangeButton({ loading, onClick }: { loading: boolean; onClick: () => void }): JSX.Element {
-    return (
-        <div className="mb-3 flex justify-end">
-            <Button variant="secondary" size="sm" onClick={onClick} disabled={loading} data-testid="hub-arrange">
-                <Squares2X2Icon className="h-4 w-4" aria-hidden="true" />Arrange
-            </Button>
-        </div>
-    );
-}
-
 /** Whether the hub kind has mod sources at all, and whether any reports content. */
 export interface ModsState {
     hasSources: boolean;
@@ -90,22 +74,16 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // ROK-1918: the hub's saved layout; `null`/absent = registry default (the pre-1918 Overview).
     const prefs = ctx.page.widgetPrefs ?? null;
     const layout = resolveHubLayout(catalog, prefs, ctx.page.viewer);
-    const [arranging, setArranging] = useState(false);
-    if (arranging) {
-        return (
-            <Suspense fallback={null}>
-                <HubArrangeMode guildId={ctx.page.guild.id} arranged={layout.arranged} available={layout.available}
-                    prefs={prefs} onExit={() => setArranging(false)} />
-            </Suspense>
-        );
-    }
+    const grid = (
+        <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
+            <SetupChecklistCell ctx={ctx} mods={mods} />
+            {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
+        </div>
+    );
+    if (!ctx.page.viewer.canEdit) return grid;
     return (
-        <>
-            {ctx.page.viewer.canEdit && <ArrangeButton loading={ctx.raids.isPending} onClick={() => setArranging(true)} />}
-            <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
-                <SetupChecklistCell ctx={ctx} mods={mods} />
-                {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
-            </div>
-        </>
+        <Suspense fallback={grid}>
+            <HubArrangeGate grid={grid} guildId={ctx.page.guild.id} layout={layout} prefs={prefs} raidsPending={ctx.raids.isPending} />
+        </Suspense>
     );
 }
