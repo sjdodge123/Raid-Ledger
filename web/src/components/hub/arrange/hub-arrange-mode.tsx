@@ -61,7 +61,7 @@ function ArrangePreview({ entries }: { entries: readonly HubLayoutEntry[] }): JS
 }
 
 export default function HubArrangeMode({ guildId, kind, arranged, available, prefs, onExit }: HubArrangeModeProps): JSX.Element {
-    const s = useArrangeState({ guildId, arranged, prefs, onExit });
+    const { bindList, ...s } = useArrangeState({ guildId, arranged, prefs, onExit });
     const guard = useDirtyCloseGuard(s.dirty, onExit);
     const [picking, setPicking] = useState(false);
     const [confirmReset, setConfirmReset] = useState(false);
@@ -72,7 +72,7 @@ export default function HubArrangeMode({ guildId, kind, arranged, available, pre
         <section data-testid="hub-arrange-mode" aria-label="Arrange the Overview">
             <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} />
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-                <ol ref={s.bindList} className="flex flex-col gap-2" aria-label="Overview widgets, in order">
+                <ol ref={bindList} className="flex flex-col gap-2" aria-label="Overview widgets, in order">
                     {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} owner={widgetOwner(row.entry.id, kind)} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
                 </ol>
                 <ArrangePreview entries={s.rows.filter((r) => r.on).map((r) => r.entry)} />
