@@ -68,3 +68,8 @@ export function useCalendarHubFilter(): CalendarHubFilter {
     const hiddenCount = options.filter((k) => hidden.has(k)).length;
     return { known, hidden, toggle, showAll, hiddenCount };
 }
+
+/** True while the Hubs filter hides at least one hub — drives the filter-aware empty states (ROK-1893). */
+export function useHubFilterActive(): boolean {
+    return useCalendarHubFilterStore((st) => st.hidden.size > 0);
+}

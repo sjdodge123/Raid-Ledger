@@ -4,11 +4,7 @@
  */
 import type { ReactElement } from 'react';
 import { useCalendarHubFilterStore } from '../../pages/calendar/use-calendar-hub-filter';
-
-/** True while the Hubs filter hides at least one hub. */
-export function useHubFilterActive(): boolean {
-    return useCalendarHubFilterStore((st) => st.hidden.size > 0);
-}
+import { Button } from '../ui/button';
 
 interface HubFilterEmptyProps {
     /** Classes for the message line — each view keeps its own empty-state type treatment. */
@@ -21,7 +17,8 @@ export function HubFilterEmpty({ messageClassName }: HubFilterEmptyProps): React
     return (
         <>
             <p className={messageClassName}>No events match your filters</p>
-            <button type="button" onClick={showAllHubs} className="empty-cta">Show all hubs</button>
+            {/* `bare` keeps the shared `.empty-cta` look of the sibling "Create Event" CTA. */}
+            <Button variant="bare" onClick={showAllHubs} className="empty-cta">Show all hubs</Button>
         </>
     );
 }

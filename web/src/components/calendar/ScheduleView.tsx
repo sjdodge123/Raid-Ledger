@@ -20,7 +20,8 @@ import { coverSrcSetProps } from '../../lib/igdb-image';
 import type { LayerDayEntry, LayerDayMap } from './layers/calendar-layer-days';
 import { mergeScheduleRows } from './layers/schedule-layer-rows';
 import { ScheduleLayerRow } from './layers/ScheduleLayerRow';
-import { HubFilterEmpty, useHubFilterActive } from './hub-filter-empty';
+import { HubFilterEmpty } from './hub-filter-empty';
+import { useHubFilterActive } from '../../pages/calendar/use-calendar-hub-filter';
 
 interface ScheduleViewProps {
     events: CalendarEvent[];
