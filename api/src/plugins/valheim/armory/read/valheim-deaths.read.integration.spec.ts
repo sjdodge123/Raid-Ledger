@@ -234,6 +234,18 @@ describe('GET …/servers/:serverId/deaths — counts (D7/D9)', () => {
     expect(r.players[0]?.characterId).not.toBe(older);
   });
 
+  it('links the newest character when every death is NULL-steam (D9)', async () => {
+    const older = await profile(A, 'Ragnar', 1);
+    const newer = await profile(A, 'Ragnar2', 9);
+    await death('Ragnar', null, 2);
+    await death('Ragnar', null, 3);
+    const r = await deathsOf(tokens.member);
+    expect(bars(r)).toEqual([`Ragnar|c${newer}|2|${newer}`]);
+    expect(r.players[0]?.characterId).not.toBe(older);
+  });
+});
+
+describe('GET …/servers/:serverId/deaths — NULL-steam resolution (D7/D9)', () => {
   it('keeps a NULL-steam death name-only when two profiles share the name', async () => {
     await profile(A, 'Twin', 1);
     await profile(B, 'Twin', 1);

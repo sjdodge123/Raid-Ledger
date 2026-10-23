@@ -156,9 +156,10 @@ export class ValheimDeathsRepository {
         groups.filter((g) => g.steamId === null).map((g) => g.characterName),
       ),
     ];
+    const onServer = eq(profiles.pelicanServerId, pelicanServerId);
     const match: SQL[] = [];
     if (steamIds.length > 0) match.push(inArray(profiles.steamId, steamIds));
-    if (names.length > 0) match.push(inArray(profiles.name, names));
+    if (names.length > 0) match.push(this.sameSteamAsNamed(onServer, names));
     if (match.length === 0) return [];
     return this.db
       .select({
@@ -168,6 +169,20 @@ export class ValheimDeathsRepository {
         capturedAt: profiles.capturedAt,
       })
       .from(profiles)
-      .where(and(eq(profiles.pelicanServerId, pelicanServerId), or(...match)));
+      .where(and(onServer, or(...match)));
+  }
+
+  /**
+   * Every profile sharing a SteamID with a name-matched one — so D9's newest
+   * character wins for an all-NULL-steam player as it does for an attributed one.
+   */
+  private sameSteamAsNamed(onServer: SQL, names: string[]): SQL {
+    return inArray(
+      profiles.steamId,
+      this.db
+        .select({ steamId: profiles.steamId })
+        .from(profiles)
+        .where(and(onServer, inArray(profiles.name, names))),
+    );
   }
 }
