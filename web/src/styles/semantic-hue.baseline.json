@@ -1,5 +1,5 @@
 {
-  "__total": 661,
+  "__total": 660,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -59,7 +59,6 @@
   "components/games/unified-game-card-parts.tsx": 1,
   "components/games/unified-game-card.tsx": 5,
   "components/insights/community/SocialGraphCanvas.tsx": 2,
-  "components/insights/community/TemporalHeatmap.tsx": 1,
   "components/layout/Header.tsx": 3,
   "components/layout/bottom-tab-bar.tsx": 2,
   "components/layout/more-drawer-submenus.tsx": 2,
