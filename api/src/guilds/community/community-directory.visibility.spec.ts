@@ -56,12 +56,37 @@ describe('visibleKinds', () => {
     expect(text).toContain('false');
   });
 
-  it('staff see every non-hidden WoW guild (no member-id gate)', () => {
+  it('staff see every WoW guild (no member-id gate)', () => {
     const { text } = render(
       visibleKinds(scope({ kinds: ['wow_guild'], staff: true })),
     );
     expect(text).not.toContain('"guilds"."id" in');
     expect(text).not.toContain('false');
+  });
+});
+
+describe('visibleKinds — hidden hubs (ROK-1883)', () => {
+  const ALL: GuildKind[] = ['wow_guild', 'game_server', 'game_community'];
+
+  it('non-staff keep the hidden_at IS NULL predicate on every kind', () => {
+    const { text } = render(
+      visibleKinds(scope({ kinds: ALL, memberIds: [1] })),
+    );
+    expect(text.match(/"hidden_at" is null/g)).toHaveLength(3);
+  });
+
+  it.each(ALL)('staff waive the hidden predicate for %s', (kind) => {
+    const { text } = render(
+      visibleKinds(scope({ kinds: [kind], staff: true })),
+    );
+    expect(text).not.toContain('hidden_at');
+  });
+
+  it('staff still see only active community hubs', () => {
+    const { params } = render(
+      visibleKinds(scope({ kinds: ['game_community'], staff: true })),
+    );
+    expect(params).toEqual(['game_community', 'active']);
   });
 });
 

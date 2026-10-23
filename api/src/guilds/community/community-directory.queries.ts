@@ -88,6 +88,7 @@ function selectRows(db: Db, viewerId: number, where: SQL[], order: SQL[]) {
       name: g.name,
       blurb: g.blurb,
       memberCount: g.memberCount,
+      hiddenAt: g.hiddenAt,
       nameKey: g.nameKey,
       createdKey: CREATED_KEY,
       leaderName: LEADER_NAME,
@@ -120,7 +121,8 @@ function viewerOf(r: DirectoryRow, memberIds: number[]): HubViewerState {
   return viewerStateOf(own);
 }
 
-function toEntry(r: DirectoryRow, memberIds: number[]): HubDirectoryEntry {
+/** ROK-1883: `hidden` only for staff viewers — non-staff never get the key. */
+function toEntry(r: DirectoryRow, scope: DirectoryScope): HubDirectoryEntry {
   const community = r.kind === 'game_community';
   return {
     id: r.id,
@@ -132,7 +134,8 @@ function toEntry(r: DirectoryRow, memberIds: number[]): HubDirectoryEntry {
     blurb: r.blurb,
     memberCount: r.memberCount,
     leaderName: community ? r.leaderName : null,
-    viewer: viewerOf(r, memberIds),
+    viewer: viewerOf(r, scope.memberIds),
+    ...(scope.staff ? { hidden: r.hiddenAt !== null } : {}),
   };
 }
 
@@ -159,21 +162,41 @@ async function countRows(db: Db, viewerId: number, where: SQL[]) {
 /** A directory page before the service adds the live `kinds`. */
 export type DirectoryResult = Omit<HubDirectoryPage, 'kinds'>;
 
+/** Options for callers that never page (the game card). */
+export interface DirectoryOptions {
+  /** ROK-1883: the viewer's hubs before the rest (no cursor on this path). */
+  joinedFirst?: boolean;
+}
+
+/** The sort's order, optionally led by "joined first". */
+function orderOf(
+  query: HubDirectoryQuery,
+  scope: DirectoryScope,
+  opts: DirectoryOptions,
+): SQL[] {
+  const base = ORDER[query.sort];
+  if (opts.joinedFirst !== true) return base;
+  const joined = joinedPredicate(scope);
+  return [sql`CASE WHEN ${joined} THEN 0 ELSE 1 END`, ...base];
+}
+
 /** One directory page for `viewerId` within `scope` (cursor 400s per M12). */
 export async function listDirectory(
   db: Db,
   viewerId: number,
   query: HubDirectoryQuery,
   scope: DirectoryScope,
+  opts: DirectoryOptions = {},
 ): Promise<DirectoryResult> {
   const cursor = decodeCursor(query.cursor, query.sort);
   const where = filtersOf(query, scope);
   const paged = cursor === null ? where : [...where, afterCursor(cursor)];
+  const order = orderOf(query, scope, opts);
   const [rows, total] = await Promise.all([
-    selectRows(db, viewerId, paged, ORDER[query.sort]).limit(query.limit + 1),
+    selectRows(db, viewerId, paged, order).limit(query.limit + 1),
     countRows(db, viewerId, where),
   ]);
   const page = pageOf(rows, query.limit, (r) => keyOf(query.sort, r));
-  const items = page.items.map((r) => toEntry(r, scope.memberIds));
+  const items = page.items.map((r) => toEntry(r, scope));
   return { items, nextCursor: page.nextCursor, total };
 }
