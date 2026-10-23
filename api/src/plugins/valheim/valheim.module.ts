@@ -27,6 +27,7 @@ import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-
 import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
 import { ValheimClaimSuggestService } from './armory/identity/valheim-claim-suggest.service';
 import { ValheimClaimSuggestCron } from './armory/identity/valheim-claim-suggest.cron';
+import { ValheimClaimSuggestDemoController } from './armory/identity/valheim-claim-suggest-demo.controller';
 import { NotificationModule } from '../../notifications/notification.module';
 import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
 import { ValheimClaimSuggestListener } from '../../discord-bot/listeners/valheim-claim-suggest.listener';
@@ -74,6 +75,8 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
     ValheimRecipesController,
     ValheimArmoryBlobController,
     ValheimArmoryMapBytesController,
+    // ROK-1933 L6a DEMO_MODE scan trigger (admin + DemoModeGuard).
+    ValheimClaimSuggestDemoController,
   ],
   providers: [
     ValheimAdapterRegistration,
