@@ -1,10 +1,11 @@
 /** ROK-1933 Part 1 — the claim banner on the Characters tab and the Overview card. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { JSX } from 'react';
-import type { ValheimCharacterSummary } from '@raid-ledger/contract';
+import type { GuildPage, GuildRaidsDto, ValheimCharacterSummary } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import {
@@ -18,6 +19,8 @@ import { valheimArmoryKeys } from '../lib/valheim-armory-api';
 import { invalidateOwnership } from '../hooks/use-valheim-claims';
 import { ValheimCharactersTab } from './valheim-characters-tab';
 import { ValheimClaimBanner } from './valheim-claim-banner';
+import ValheimCharactersHubTab from './valheim-characters-hub-tab';
+import { useClaimBannerWidgetVisible } from '../hooks/use-valheim-claim-banner';
 
 const auth = vi.hoisted(() => ({ user: { id: 9, steamId: null as string | null } }));
 const linkSteam = vi.hoisted(() => vi.fn());
@@ -168,10 +171,26 @@ describe('claim banner — Overview', () => {
         expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument();
     });
 
-    it('leaves the region to the Overview card, so the name is not duplicated', () => {
+    it('is the one region and the one heading on the Overview (chromeless card, mockup callout)', () => {
         overview();
-        expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
-        expect(screen.queryByRole('region', { name: 'Claim your character' })).not.toBeInTheDocument();
+        const region = screen.getByRole('region', { name: 'Claim your character' });
+        expect(within(region).getAllByRole('heading')).toHaveLength(1);
+        expect(region).toHaveClass('bg-overlay/30', 'border-edge', 'rounded-lg', 'p-4');
+        expect(within(region).getByRole('heading', { name: heading })).toHaveClass('text-base');
+    });
+
+    it('pins the × to the top-right corner through a positioned wrapper, not the Button', () => {
+        overview();
+        const button = screen.getByRole('button', { name: 'Dismiss' });
+        const corner = screen.getByTestId('claim-banner-dismiss');
+        expect(corner).toHaveClass('absolute', 'right-1', 'top-1');
+        expect(corner).toContainElement(button);
+        expect(button).not.toHaveClass('absolute');
+        expect(button).toHaveClass('min-w-[44px]', 'min-h-[44px]');
+        const region = screen.getByRole('region', { name: 'Claim your character' });
+        expect(region).toHaveClass('lg:pr-12');
+        expect(region).not.toHaveClass('pr-10');
+        expect(screen.getByRole('heading', { name: heading }).parentElement).toHaveClass('pr-10', 'lg:pr-0');
     });
 
     it('Pick my character switches tabs with a hash write and keeps other params', async () => {
@@ -185,3 +204,49 @@ describe('claim banner — Overview', () => {
         await waitFor(() => expect(changes).toEqual(['#characters']));
     });
 });
+
+type Viewer = GuildPage['viewer'];
+const MEMBER: Viewer = { role: 'member', canEdit: false, canManageEditors: false, notificationsMuted: false };
+const VISITOR: Viewer = { role: 'visitor', canEdit: false, canManageEditors: false };
+/** An admin is laddered `leader` on every hub; the API omits the mute for a non-member. */
+const STAFF_NON_MEMBER: Viewer = { role: 'leader', canEdit: true, canManageEditors: true };
+
+function hubPage(viewer: Viewer): GuildPage {
+    return {
+        guild: { id: 4, gameId: 3, kind: 'game_server', name: 'Valheim', region: 'server', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null, gameSlug: 'valheim' },
+        importedBy: null,
+        viewer,
+        ranks: [],
+        roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
+        server: { pelicanServerId: 7, gameSlug: 'valheim', gameIconUrl: null, state: 'running', viewerJoined: true },
+    };
+}
+
+/** Both hub surfaces for one viewer: the Overview probe's verdict and the Characters tab. */
+function HubSurfaces({ page }: { page: GuildPage }): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['idle-raids'], queryFn: () => new Promise(() => undefined), enabled: false });
+    const overviewVisible = useClaimBannerWidgetVisible({ page, raids, gameSlug: 'valheim' });
+    return <><output data-testid="overview-visible">{String(overviewVisible)}</output><ValheimCharactersHubTab page={page} raids={raids} /></>;
+}
+
+function renderSurfaces(viewer: Viewer): void {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(valheimArmoryKeys.claimStatus(7), { viewerHasClaim: false, unclaimedCount: 1 });
+    renderWithProviders(<HubSurfaces page={hubPage(viewer)} />, { queryClient });
+}
+
+describe('claim banner — hub members only (spec Part 1 "Who sees it")', () => {
+    it('shows on the Overview and the Characters tab for a hub member', async () => {
+        renderSurfaces(MEMBER);
+        expect(await screen.findByRole('region', { name: 'Claim your character' })).toBeInTheDocument();
+        expect(screen.getByTestId('overview-visible')).toHaveTextContent('true');
+    });
+
+    it.each([['a visitor', VISITOR], ['a non-member admin', STAFF_NON_MEMBER]])('never shows to %s, on either surface', async (_who, viewer) => {
+        renderSurfaces(viewer);
+        expect(await screen.findByRole('list')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Claim your character' })).not.toBeInTheDocument();
+        expect(screen.getByTestId('overview-visible')).toHaveTextContent('false');
+    });
+});
+

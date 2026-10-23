@@ -44,34 +44,49 @@ function BannerActions(props: ValheimClaimBannerViewProps): JSX.Element {
     );
 }
 
+/** §4.7 neutral instruction callout (spec Part 1 "Look"). */
+const CALLOUT_CLS = 'relative flex flex-col gap-3 rounded-lg border border-edge bg-overlay/30 p-4 lg:flex-row lg:items-center';
+
+/**
+ * The Overview ×, pinned to the callout's top-right corner. The wrapper is what
+ * is positioned: `Button` carries its own `relative`, which would beat an
+ * `absolute` passed in `className` and drop the × into the flow.
+ */
+function DismissCorner({ onDismiss }: { onDismiss: () => void }): JSX.Element {
+    return (
+        <div className="absolute right-1 top-1" data-testid="claim-banner-dismiss">
+            <Button iconOnly aria-label={COPY.dismiss} variant="ghost" size="sm" onClick={onDismiss}>
+                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+        </div>
+    );
+}
+
 /** The callout itself — copy and buttons only, no data. */
 export function ValheimClaimBannerView(
     props: ValheimClaimBannerViewProps,
 ): JSX.Element {
     const { variant, serverName, onDismiss } = props;
     const link = variant === 'link-steam';
-    // The Overview's WidgetCard is already the "Claim your character" region and
-    // card, so the dismissible variant draws neither (one landmark, no box in a box).
-    const Root = onDismiss ? 'div' : 'section';
-    const frame = onDismiss ? 'pr-10' : 'mb-4 rounded-lg border border-edge bg-overlay/30 p-4';
+    // The Overview card is chromeless (`chrome: 'none'`), so this callout is the
+    // one "Claim your character" landmark on both surfaces. With the × in the
+    // corner, phone reserves room beside the copy only (the stacked buttons keep
+    // the full width); ≥1024px reserves it beside the button row.
+    const reserve = onDismiss ? { root: 'lg:pr-12', copy: 'pr-10 lg:pr-0' } : { root: 'mb-4', copy: '' };
     return (
-        <Root
-            aria-label={onDismiss ? undefined : 'Claim your character'}
-            className={`relative flex flex-col gap-3 lg:flex-row lg:items-center ${frame}`}
+        <section
+            aria-label="Claim your character"
+            className={`${CALLOUT_CLS} ${reserve.root}`}
         >
-            <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-foreground">
+            <div className={`min-w-0 flex-1 ${reserve.copy}`}>
+                <h3 className="text-base font-semibold text-foreground">
                     {link ? COPY.linkHeading(serverName) : COPY.pickHeading(serverName)}
                 </h3>
                 <p className="mt-1 text-sm text-secondary">{link ? COPY.linkBody : COPY.pickBody}</p>
             </div>
             <BannerActions {...props} />
-            {onDismiss && (
-                <Button iconOnly aria-label={COPY.dismiss} variant="ghost" size="sm" onClick={onDismiss} className="absolute right-0 top-0">
-                    <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-                </Button>
-            )}
-        </Root>
+            {onDismiss && <DismissCorner onDismiss={onDismiss} />}
+        </section>
     );
 }
 
