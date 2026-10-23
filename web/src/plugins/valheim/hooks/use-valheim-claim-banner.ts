@@ -6,6 +6,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { useAuth } from '../../../hooks/use-auth';
+import type { HubWidgetCtx } from '../../hub-game-widgets';
+import { useValheimCharacterPages } from './use-valheim-characters';
 import {
     claimBannerVariant,
     readClaimBannerDismissed,
@@ -40,3 +42,12 @@ export function useClaimBannerVariant(rows: readonly ValheimCharacterSummary[], 
     });
 }
 
+
+/** The Overview card's `useVisible` probe: a banner to show and not dismissed here. */
+export function useClaimBannerWidgetVisible(ctx: HubWidgetCtx): boolean {
+    const serverId = ctx.page.server?.pelicanServerId ?? 0;
+    const pages = useValheimCharacterPages(serverId);
+    const variant = useClaimBannerVariant(pages.rows, pages.isSuccess && !pages.hasMore);
+    const [dismissed] = useClaimBannerDismissed(serverId);
+    return serverId > 0 && variant !== null && !dismissed;
+}

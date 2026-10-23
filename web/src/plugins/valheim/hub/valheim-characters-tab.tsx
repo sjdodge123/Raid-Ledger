@@ -88,6 +88,19 @@ function LoadMore({
     );
 }
 
+function TabStates({ pages }: { pages: ReturnType<typeof useValheimCharacterPages> }) {
+    if (pages.isError) {
+        return <Quiet role="alert">Couldn't load characters. Try again in a moment.</Quiet>;
+    }
+    if (!pages.isSuccess || pages.rows.length > 0) return null;
+    return (
+        <Quiet>
+            No characters yet. They appear after a player joins with the
+            Valheim Link mod.
+        </Quiet>
+    );
+}
+
 function countLabel(pages: ReturnType<typeof useValheimCharacterPages>): string {
     if (pages.total !== null) return String(pages.total);
     return `${pages.rows.length}${pages.hasMore ? '+' : ''}`;
@@ -116,7 +129,14 @@ function UnclaimedToggle({ on, onToggle }: { on: boolean; onToggle: () => void }
     );
 }
 
-export function ValheimCharactersTab({ serverId }: { serverId: number }) {
+export function ValheimCharactersTab({
+    serverId,
+    showClaimBanner = true,
+}: {
+    serverId: number;
+    /** ROK-1933: false for hub visitors — they never see the claim banner. */
+    showClaimBanner?: boolean;
+}) {
     const { pathname, search } = useLocation();
     const query = useValheimCharacterPages(serverId);
     const [unclaimedOnly, toggleUnclaimed] = useUnclaimedFilter();
@@ -130,19 +150,9 @@ export function ValheimCharactersTab({ serverId }: { serverId: number }) {
             aria-busy={query.isPending}
         >
             <TabHeading count={query.isSuccess ? count : null} />
-            <ValheimClaimBanner serverId={serverId} rows={query.rows} complete={query.isSuccess && !query.hasMore} />
+            {showClaimBanner && <ValheimClaimBanner serverId={serverId} rows={query.rows} complete={query.isSuccess && !query.hasMore} />}
             {query.isSuccess && query.rows.length > 0 && <UnclaimedToggle on={unclaimedOnly} onToggle={toggleUnclaimed} />}
-            {query.isError && (
-                <Quiet role="alert">
-                    Couldn't load characters. Try again in a moment.
-                </Quiet>
-            )}
-            {query.isSuccess && query.rows.length === 0 && (
-                <Quiet>
-                    No characters yet. They appear after a player joins with the
-                    Valheim Link mod.
-                </Quiet>
-            )}
+            <TabStates pages={query} />
             <RowList rows={rows} hubPath={`${pathname}${search}#characters`} />
             <LoadMore pages={query} />
         </section>

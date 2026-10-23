@@ -12,5 +12,10 @@ export default function ValheimCharactersHubTab({
 }: HubCtx): JSX.Element | null {
     const serverId = page.server?.pelicanServerId;
     if (serverId === undefined) return null;
-    return <ValheimCharactersTab serverId={serverId} />;
+    return (
+        <ValheimCharactersTab
+            serverId={serverId}
+            showClaimBanner={page.viewer.role !== 'visitor'}
+        />
+    );
 }
