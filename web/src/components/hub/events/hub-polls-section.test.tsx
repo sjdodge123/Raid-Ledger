@@ -9,6 +9,9 @@ import userEvent from '@testing-library/user-event';
 import { server } from '../../../test/mocks/server';
 import { createMockActivePoll, hubPollsHandlers, type HubPollsCalls } from '../../../test/mocks/hub-polls-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { buildCommunityPage } from '../../../test/factories/community-hub';
+import type { HubCtx } from '../../../plugins/hub-module';
+import { communityHubModule } from '../community/community-hub-module';
 import { HubPollsSection } from './hub-polls-section';
 
 const PROPS = { hubId: 7, hubName: 'Tavern Regulars', gameId: 5 };
@@ -53,5 +56,22 @@ describe('HubPollsSection (ROK-1893 P3)', () => {
         const line = await screen.findByTestId('create-poll-hub-line');
         expect(line).toHaveTextContent('Tagged to Tavern Regulars');
         expect(screen.queryByTestId('game-search-input'), 'the game is locked to the hub’s game').toBeNull();
+    });
+});
+
+describe('communityHubModule.eventsLead (ROK-1893 P3)', () => {
+    const raids = {} as HubCtx['raids'];
+
+    it('puts Open polls on a community hub Events tab, with New poll only for a joined viewer', async () => {
+        server.use(...hubPollsHandlers([createMockActivePoll()]));
+        const Lead = communityHubModule.eventsLead;
+        if (!Lead) throw new Error('community module has no eventsLead slot');
+        const { unmount } = renderWithProviders(<Lead page={buildCommunityPage({ community: { viewerJoined: true } })} raids={raids} />);
+        expect(await screen.findAllByTestId('hub-poll-row'), 'the hub polls render in the slot').toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'New poll' }), 'a joined viewer may start a poll').toBeInTheDocument();
+        unmount();
+        renderWithProviders(<Lead page={buildCommunityPage({ community: { viewerJoined: false } })} raids={raids} />);
+        await screen.findAllByTestId('hub-poll-row');
+        expect(screen.queryByRole('button', { name: 'New poll' }), 'a visitor gets no New poll').toBeNull();
     });
 });

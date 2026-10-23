@@ -2,14 +2,16 @@
  * ROK-1893 P3 — "Open polls" on a community hub's Events tab (approved
  * wireframe `HubPollsFrames` → `EventsTab`): the hub's open scheduling polls,
  * each with its visibility chip, and "New poll" for live members, which opens
- * CreatePollModal locked to the hub's game and tagged to the hub. The modal
- * loads on demand so it never rides in the hub page chunk.
+ * CreatePollModal locked to the hub's game and tagged to the hub. Mounted via
+ * the community hub module's `eventsLead` slot (that module's chunk, never the
+ * hub page's); the modal loads on demand.
  */
 import { lazy, Suspense, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ActiveStandalonePollDto } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { StatusChip } from '../../ui/status-chip';
+import type { HubCtx } from '../../../plugins/hub-module';
 import { useHubPolls } from './hub-polls-api';
 
 const CreatePollModal = lazy(() => import('../../scheduling/create-poll-modal').then((m) => ({ default: m.CreatePollModal })));
@@ -65,4 +67,10 @@ export function HubPollsSection({ hubId, hubName, gameId, canCreate }: HubPollsS
             )}
         </section>
     );
+}
+
+/** The community module's `eventsLead` slot: this hub's polls; live members get "New poll". */
+export function CommunityHubPolls({ page }: HubCtx): JSX.Element {
+    const { guild } = page;
+    return <HubPollsSection hubId={guild.id} hubName={guild.name} gameId={guild.gameId} canCreate={page.community?.viewerJoined === true} />;
 }
