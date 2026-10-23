@@ -8,6 +8,7 @@ import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import {
     VALHEIM_CHARACTERS_URL,
+    VALHEIM_CLAIM_STATUS_URL,
     valheimCharacterClaimed,
     valheimCharacterUnclaimed,
 } from '../../../test/mocks/valheim-armory-handlers';
@@ -28,6 +29,8 @@ vi.mock('../../../hooks/use-steam-link', () => ({
 }));
 
 let rows: ValheimCharacterSummary[] = [];
+/** Search strings of every list request, to prove the filter went to the server. */
+let listQueries: string[] = [];
 const mine = (): ValheimCharacterSummary => ({
     ...valheimCharacterUnclaimed,
     claimedBy: { id: 9, username: 'me', avatar: null, discordId: '9' },
@@ -38,14 +41,29 @@ const heading = /playing on/i;
 beforeEach(() => {
     auth.user = { id: 9, steamId: null };
     rows = [valheimCharacterClaimed, valheimCharacterUnclaimed];
-    server.use(http.get(VALHEIM_CHARACTERS_URL, () => HttpResponse.json({ data: rows })));
+    listQueries = [];
+    server.use(
+        http.get(VALHEIM_CHARACTERS_URL, ({ request }) => {
+            const q = new URL(request.url).searchParams;
+            listQueries.push(q.toString());
+            const unclaimed = q.get('unclaimed') === '1';
+            return HttpResponse.json({ data: unclaimed ? rows.filter((r) => r.claimedBy === null) : rows });
+        }),
+        // The server's facts, derived from the same rows the list serves.
+        http.get(VALHEIM_CLAIM_STATUS_URL, () => HttpResponse.json({
+            viewerHasClaim: rows.some((r) => r.claimedBy?.id === auth.user.id),
+            unclaimedCount: rows.filter((r) => r.claimedBy === null).length,
+        })),
+    );
 });
 afterEach(() => localStorage.clear());
 
-function overview(): void {
+/** Claim status pre-seeded, so a missing banner means "dismissed", never "still loading". */
+function overview(queryClient = createTestQueryClient()): void {
+    queryClient.setQueryData(valheimArmoryKeys.claimStatus(7), { viewerHasClaim: false, unclaimedCount: 1 });
     renderWithProviders(
-        <ValheimClaimBanner serverId={7} rows={rows} complete dismissible />,
-        { initialEntries: ['/hubs/4'] },
+        <ValheimClaimBanner serverId={7} dismissible />,
+        { initialEntries: ['/hubs/4'], queryClient },
     );
 }
 
@@ -89,11 +107,23 @@ describe('claim banner — Characters tab', () => {
         expect(screen.getByRole('button', { name: 'Unclaimed only' })).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByText('member1')).not.toBeInTheDocument();
         expect(screen.getByText(valheimCharacterUnclaimed.name)).toBeInTheDocument();
+        expect(listQueries.at(-1)).toContain('unclaimed=1');
+    });
+
+    it('shows on a server bigger than one list page when only the server knows a row is unclaimed (D1)', async () => {
+        const full = Array.from({ length: 50 }, (_, i) => ({ ...valheimCharacterClaimed, id: 100 + i, name: `Viking ${i}` }));
+        server.use(
+            http.get(VALHEIM_CHARACTERS_URL, () => HttpResponse.json({ data: full })),
+            http.get(VALHEIM_CLAIM_STATUS_URL, () => HttpResponse.json({ viewerHasClaim: false, unclaimedCount: 4 })),
+        );
+        renderWithProviders(<ValheimCharactersTab serverId={7} />);
+        expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Load more characters' })).toBeInTheDocument();
     });
 
     it('ignores an Overview dismiss and stays shown', async () => {
         overview();
-        await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
         renderWithProviders(<ValheimCharactersTab serverId={7} />);
         expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     });
@@ -102,6 +132,7 @@ describe('claim banner — Characters tab', () => {
 describe('claim banner — Overview', () => {
     it('a dismiss hides it and is remembered across renders', async () => {
         overview();
+        expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
         expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument();
         overview();
