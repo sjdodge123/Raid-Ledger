@@ -1579,6 +1579,13 @@ says. The list shows every widget, in saved order, including hidden and empty on
 - **Footer** (sticky): `Reset to default` (`ghost`, confirms) · `Cancel` (`secondary`, dirty guard →
   `DiscardChangesConfirm`) · `Save layout` (`primary`, disabled until dirty). Save writes the full order,
   hidden rows included.
+- **Leaving with an unsaved draft** (`use-arrange-leave-guard.ts`). Cancel and an **in-hub tab switch** (any
+  same-page `<a href="#…">` — `TabRow`, its More menu, jump links) ask through the one
+  `DiscardChangesConfirm`; Discard exits and then applies the held hash. Reload / close / external links get
+  `beforeunload`. **Not guarded:** a route change to another page, and Back/Forward between tabs — the app
+  runs under `BrowserRouter`, which has no navigation blocker, and `popstate`/`hashchange` cannot be
+  cancelled. Arrange mode belongs to one hub (keyed by hub id; a switch to another hub leaves it) and ends
+  the moment the viewer loses edit rights.
 - **Chunks.** Arrange mode is editor-only and lazy. `hub-page` must **not** gain another `import()`: every call
   site carries its own ~95-path `__vite__mapDeps` preload list (~0.5 KB gz) and the route has a gzip cap. Load
   editor-only Overview code through the single `overview-editor-tools.ts` loader, and import arrange pieces

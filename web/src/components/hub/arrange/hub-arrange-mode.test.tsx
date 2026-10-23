@@ -1,13 +1,14 @@
 /**
  * ROK-1918 L5 — arrange mode end-to-end through the hub page: who sees
  * Arrange, reorder + announcement, hide/show, add-at-top, the saved PATCH
- * body, Reset, Cancel restoring the grid, and the dirty guard.
+ * body, Reset, Cancel restoring the grid, and the dirty guard; Codex fix round:
+ * hub switch, lost edit rights and the in-hub tab-switch guard.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes, useNavigate } from 'react-router-dom';
 import type { JSX } from 'react';
 import type { GuildPage as GuildPageDto, HubWidgetPrefs } from '@raid-ledger/contract';
 import type { HubModule } from '../../../plugins/hub-module';
@@ -227,5 +228,78 @@ describe('arrange mode — save, reset, cancel, leave (ROK-1918 L5)', () => {
         const dirty = new Event('beforeunload', { cancelable: true });
         window.dispatchEvent(dirty);
         expect(dirty.defaultPrevented).toBe(true);
+    });
+});
+
+describe('arrange mode — Codex fix round (ROK-1918)', () => {
+    function GoTo({ to }: { to: string }): JSX.Element {
+        const navigate = useNavigate();
+        return <button type="button" data-testid={`go-${to}`} onClick={() => navigate(to)}>{to}</button>;
+    }
+
+    it('a switch to another cached hub of the same kind leaves arrange mode; the next save goes to that hub', async () => {
+        const user = userEvent.setup();
+        const saves: string[] = [];
+        server.use(
+            http.get('http://localhost:3000/guilds/:id', ({ params }) => HttpResponse.json({ ...PAGE, guild: { ...PAGE.guild, id: Number(params.id) }, widgetPrefs: null })),
+            http.patch('http://localhost:3000/guilds/:id/widget-prefs', async ({ params, request }) => {
+                saves.push(String(params.id));
+                return HttpResponse.json({ widgetPrefs: await request.json() });
+            }),
+        );
+        renderWithProviders(<><GoTo to="/hubs/7" /><GoTo to="/hubs/8" /><Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes></>, { initialEntries: ['/hubs/8'] });
+        await screen.findByTestId('w-uptime');
+        await user.click(screen.getByTestId('go-/hubs/7'));
+        const button = await screen.findByTestId('hub-arrange');
+        await waitFor(() => expect(button).toBeEnabled());
+        await user.click(button);
+        await user.click(await screen.findByRole('button', { name: 'Hide Uptime' }));
+        await user.click(screen.getByTestId('go-/hubs/8'));
+        expect(screen.queryByTestId('hub-arrange-mode'), "hub 7's draft must not follow the viewer to hub 8").not.toBeInTheDocument();
+        expect(screen.getByTestId('guild-overview')).toBeVisible();
+        await user.click(screen.getByTestId('hub-arrange'));
+        expect(screen.getByTestId('arrange-row-module:uptime'), 'hub 8 opens on a fresh draft').not.toHaveAttribute('data-hidden');
+        await user.click(screen.getByRole('button', { name: 'Hide Arrivals' }));
+        await user.click(screen.getByTestId('arrange-save'));
+        await waitFor(() => expect(saves).toEqual(['8']));
+    });
+
+    it('losing edit rights on a refetch while arranging shows the grid again', async () => {
+        const user = userEvent.setup();
+        serve(PAGE);
+        const { queryClient } = renderPage();
+        const button = await screen.findByTestId('hub-arrange');
+        await waitFor(() => expect(button).toBeEnabled());
+        await user.click(button);
+        await screen.findByTestId('hub-arrange-mode');
+        serve({ ...PAGE, viewer: { role: 'member', canEdit: false, canManageEditors: false } });
+        await queryClient.invalidateQueries();
+        await waitFor(() => expect(screen.queryByTestId('hub-arrange')).not.toBeInTheDocument());
+        expect(screen.getByTestId('guild-overview'), 'a demoted viewer must not be left on a hidden grid').toBeVisible();
+    });
+});
+
+describe('arrange mode — in-hub tab-switch guard (ROK-1918 Codex fix round)', () => {
+    afterEach(() => { window.history.replaceState(null, '', '/'); });
+
+    it('a tab switch with an unsaved draft asks first; Keep stays, Discard switches', async () => {
+        const user = userEvent.setup();
+        serve(PAGE);
+        await openArrange(user);
+        await user.click(screen.getByRole('link', { name: 'Members' }));
+        expect(window.location.hash, 'a clean draft does not block the switch').toBe('#members');
+        await user.click(screen.getByRole('link', { name: 'Overview' }));
+        await user.click(await screen.findByTestId('hub-arrange'));
+        await user.click(await screen.findByRole('button', { name: 'Hide Uptime' }));
+        await user.click(screen.getByRole('link', { name: 'Members' }));
+        expect(window.location.hash, 'a dirty draft must not be dropped by a silent tab switch').toBe('#overview');
+        expect(screen.getByTestId('discard-changes-keep'), 'a dirty draft asks before the switch').toBeVisible();
+        await user.click(screen.getByTestId('discard-changes-keep'));
+        expect(screen.getByTestId('hub-arrange-mode')).toBeInTheDocument();
+        expect(window.location.hash).toBe('#overview');
+        await user.click(screen.getByRole('link', { name: 'Members' }));
+        await user.click(await screen.findByTestId('discard-changes-discard'));
+        await waitFor(() => expect(window.location.hash).toBe('#members'));
+        expect(screen.queryByTestId('hub-arrange-mode')).not.toBeInTheDocument();
     });
 });

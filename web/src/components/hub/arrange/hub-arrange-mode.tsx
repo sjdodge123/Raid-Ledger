@@ -3,20 +3,21 @@
  * leader/officer/staff arranges, the bento grid becomes an order-truthful
  * list of every widget the viewer may see; hidden rows stay dimmed in place.
  * Lazy-loaded by `HubOverview` (default export) so none of this lands in the
- * `hub-page` route chunk. Cancel with unsaved changes asks first
- * (`useDirtyCloseGuard` → `DiscardChangesConfirm`); so does Reset to default.
+ * `hub-page` route chunk. Cancel or an in-hub tab switch with unsaved changes
+ * asks first (`useArrangeLeaveGuard` → `DiscardChangesConfirm`); so does Reset
+ * to default. Route changes to other pages are not guarded (see that hook).
  */
 import { useState, type JSX } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import type { HubWidgetPrefs } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
-import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import type { ArrangedEntry, HubLayoutEntry } from '../layout/resolve-hub-layout';
 import { AddWidgetPicker } from './add-widget-picker';
 import { ArrangeFooter } from './arrange-footer';
 import { ArrangeRow } from './arrange-row';
+import { useArrangeLeaveGuard } from './use-arrange-leave-guard';
 import { useArrangeState } from './use-arrange-state';
 import { DRAG_MQ, useRowDrag } from './use-row-drag';
 import { widgetOwner } from './widget-owner';
@@ -62,7 +63,7 @@ function ArrangePreview({ entries }: { entries: readonly HubLayoutEntry[] }): JS
 
 export default function HubArrangeMode({ guildId, kind, arranged, available, prefs, onExit }: HubArrangeModeProps): JSX.Element {
     const { bindList, ...s } = useArrangeState({ guildId, arranged, prefs, onExit });
-    const guard = useDirtyCloseGuard(s.dirty, onExit);
+    const guard = useArrangeLeaveGuard(s.dirty, onExit);
     const [picking, setPicking] = useState(false);
     const [confirmReset, setConfirmReset] = useState(false);
     const canDrag = useMediaQuery(DRAG_MQ);
