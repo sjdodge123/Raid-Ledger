@@ -41,8 +41,10 @@ function RowIcon({ row, names, short }: { row: CraftRow; names: PlannerNames; sh
 }
 
 function rowClass(selected: boolean, short: boolean): string {
+    // Button wraps children in a `data-button-label` span: stretch it so icon + name sit left, suffixes right.
     const base =
-        'flex min-h-11 w-full items-center gap-2.5 border-l-4 px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-success/80';
+        'flex min-h-11 w-full items-center gap-2.5 border-l-4 px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-success/80 ' +
+        '[&>[data-button-label]]:min-w-0 [&>[data-button-label]]:flex-1 [&>[data-button-label]]:gap-2.5';
     if (selected) return `${base} border-success bg-success/15 font-semibold text-foreground`;
     return `${base} border-transparent hover:bg-overlay ${short ? 'text-dim' : 'text-foreground'}`;
 }
