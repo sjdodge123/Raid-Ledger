@@ -10,7 +10,7 @@
  *
  * B has no Steam link, so the banner is the "link-steam" variant (heading
  * "Playing on <server>?"); the assertions use the region name, which both
- * variants share. Overview = `/guilds/:id`, Characters = `#characters`.
+ * variants share. Overview = `/hubs/:id`, Characters = `#characters`.
  */
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
@@ -89,7 +89,7 @@ function claimStatusAnswered(page: Page): Promise<void> {
 
 async function openOverview(page: Page, f: Fixture): Promise<void> {
   const status = claimStatusAnswered(page);
-  await page.goto(`/guilds/${f.guildId}`);
+  await page.goto(`/hubs/${f.guildId}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
     timeout: 15_000,
   });
@@ -103,7 +103,7 @@ async function openCharacters(
   settled = false,
 ): Promise<void> {
   const status = settled ? claimStatusAnswered(page) : null;
-  await page.goto(`/guilds/${f.guildId}#characters`);
+  await page.goto(`/hubs/${f.guildId}#characters`);
   await expect(
     page.getByRole("link", { name: `Open ${f.characters.claimed.name}` }),
   ).toBeVisible({ timeout: 15_000 });
