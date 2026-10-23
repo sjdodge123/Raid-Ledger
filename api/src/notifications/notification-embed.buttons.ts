@@ -11,6 +11,10 @@ import { toStr } from './notification-embed.helpers';
 import { buildLfgPlayerInviteRow } from './notification-embed.lfg-player-invite';
 import { VOICE_ACCESS_LOST_SUBTYPE } from './voice-access-lost.helpers';
 import { postDeepLink } from '../guilds/posts/hub-posts.helpers';
+import {
+  buildValheimClaimRow,
+  buildValheimOpenHubButton,
+} from './notification-embed.valheim-claim';
 
 /** Build extra action rows for specific notification types (ROK-378, ROK-536). */
 export function buildExtraRows(
@@ -22,6 +26,10 @@ export function buildExtraRows(
   // branch MUST sit above the eventId guard — below it, it is dead code.
   if (type === 'lfg_player_invite') {
     const row = buildLfgPlayerInviteRow(payload);
+    return row ? [row] : undefined;
+  }
+  if (type === 'valheim_claim_suggestion') {
+    const row = buildValheimClaimRow(payload);
     return row ? [row] : undefined;
   }
   const eventId = payload?.eventId;
@@ -153,6 +161,8 @@ export function buildPrimaryButton(
   }
   // ROK-1832: a leader post carries a guildId, not an eventId.
   if (type === 'hub_leader_post') return buildGroupButton(payload, clientUrl);
+  if (type === 'valheim_claim_suggestion')
+    return buildValheimOpenHubButton(payload);
   if (type === 'hub_proposal_submitted' || type === 'hub_proposal_reviewed')
     return buildHubProposalButton(payload, clientUrl);
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;

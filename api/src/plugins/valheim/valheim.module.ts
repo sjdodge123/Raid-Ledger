@@ -25,6 +25,9 @@ import { ValheimArmoryRepository } from './armory/valheim-armory.repository';
 import { VALHEIM_PROFILE_UPSERTED_HOOK } from './armory/valheim-armory-profile.hook';
 import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-claims.controller';
 import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
+import { ValheimClaimSuggestService } from './armory/identity/valheim-claim-suggest.service';
+import { ValheimClaimSuggestCron } from './armory/identity/valheim-claim-suggest.cron';
+import { NotificationModule } from '../../notifications/notification.module';
 import { ValheimIdentityRepository } from './armory/identity/valheim-identity.repository';
 import { ValheimIdentityService } from './armory/identity/valheim-identity.service';
 import { ValheimSteamLinkListener } from './armory/identity/valheim-steam-link.listener';
@@ -46,7 +49,8 @@ import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
  */
 @Module({
   // ROK-1833 DEMO_MODE fixture route (admin + DemoModeGuard).
-  imports: [ValheimLinkDemoSeedModule],
+  // ROK-1933 L2: NotificationModule for the claim-suggestion DM.
+  imports: [ValheimLinkDemoSeedModule, NotificationModule],
   controllers: [
     ValheimLinkTokensAdminController,
     ValheimLinkIngestController,
@@ -79,6 +83,9 @@ import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
     ValheimIdentityService,
     ValheimSteamLinkListener,
     ValheimArmoryClaimsService,
+    // ROK-1933 L2 suggested-claim DM scan.
+    ValheimClaimSuggestService,
+    ValheimClaimSuggestCron,
     // ROK-1835 L4 member/admin reads.
     ValheimArmoryReadRepository,
     ValheimArmoryReadService,

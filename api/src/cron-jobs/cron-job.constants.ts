@@ -313,6 +313,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes",
     category: 'Notifications',
   },
+  ValheimClaimSuggestCron_scan: {
+    description:
+      'DMs the single likely owner of an unclaimed Valheim character played 10+ minutes in a live Quick Play, asking them to claim it, every 5 minutes',
+    category: 'Notifications',
+  },
   QuickPlayHealthService_checkQuickPlayHealth: {
     description:
       'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',
