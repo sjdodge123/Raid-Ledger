@@ -1,8 +1,10 @@
 /**
  * ROK-1899 — the detail pane's footer (the in-game "Craft" button, spec
  * §3.1.3): in UPGRADE an "Upgrade to quality" `Select` over the entry's
- * upgrade steps, then the Amount `Input` and a full-width primary "Add to
- * list" — full-width in the phone sheet's footer too (spec §3.3). Amount is
+ * upgrade steps on its own line, then ONE row: a fixed Amount box (72px
+ * phone / 84px desktop — `w-18` / `lg:w-21`) and the primary "Add to list"
+ * filling the rest, so it stays full-width of what remains (spec §3.3,
+ * approved mockup). The Input frame is `w-full`, so the box sets the width. Amount is
  * controlled by the detail, whose breakdown plans the same amount. CRAFT adds from scratch (`fromQuality` 0); UPGRADE adds the
  * `quality − 1 → quality` step.
  */
@@ -53,14 +55,16 @@ export function CraftDetailFooter({ mode, entry, quality, onQuality, onAdd, atCa
     const valid = n !== null;
     return (
         <div className="w-full space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-                {mode === 'upgrade' && <UpgradeSelect entry={entry} quality={quality} onQuality={onQuality} />}
-                <Input aria-label="Amount" type="number" min={1} max={PLANNER_AMOUNT_MAX} value={amount} invalid={!valid}
-                    onChange={(e) => onAmount(e.target.value)} className="w-24" />
+            {mode === 'upgrade' && <UpgradeSelect entry={entry} quality={quality} onQuality={onQuality} />}
+            <div className="flex items-center gap-2">
+                <div className="w-18 shrink-0 lg:w-21">
+                    <Input aria-label="Amount" type="number" min={1} max={PLANNER_AMOUNT_MAX} value={amount} invalid={!valid}
+                        onChange={(e) => onAmount(e.target.value)} />
+                </div>
+                <Button variant="primary" className="min-w-0 flex-1" disabled={!valid || atCap} onClick={() => n !== null && onAdd(footerTarget(mode, entry, quality, n))}>
+                    Add to list
+                </Button>
             </div>
-            <Button variant="primary" className="w-full" disabled={!valid || atCap} onClick={() => n !== null && onAdd(footerTarget(mode, entry, quality, n))}>
-                Add to list
-            </Button>
             {atCap && (
                 <p role="status" className="text-xs text-muted">
                     Your list holds up to {PLANNER_TARGETS_MAX} targets — remove one to add another.
