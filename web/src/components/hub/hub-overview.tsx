@@ -4,6 +4,7 @@
  * Core contributes the leader post, the Discord mirror, the schedule, the
  * event list and attendance; the hub module's `overviewWidgets` are merged in
  * by `order`, which is what keeps a game's widgets in their prototype slots.
+ * ROK-1909: plugin game widgets (`registerHubWidget`) join the same sort.
  */
 import { Fragment, lazy, Suspense, type JSX, type ReactNode } from 'react';
 import type { CoreWidgetId, HubCtx, HubModule } from '../../plugins/hub-module';
@@ -11,6 +12,8 @@ import { GuildAttendance } from './events/guild-attendance';
 import { GuildEvents } from './events/guild-events';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { useHubSettings } from './settings/hub-settings-context';
+import { gameWidgetCells, type GameWidgetCell } from './hub-widget-cells';
+import { usePluginStore } from '../../stores/plugin-store';
 
 /**
  * ROK-1868 §3.4 — lazy so the post card, composer and post hooks (shared with
@@ -45,7 +48,7 @@ const OVERVIEW_ATTENDANCE_TOP = 5;
 const EVENTS_TAB = 'events';
 
 interface Cell {
-    key: CoreWidgetId | 'setup-checklist' | `module:${string}`;
+    key: CoreWidgetId | 'setup-checklist' | `module:${string}` | GameWidgetCell['key'];
     order: number;
     span: 1 | 2;
     node: ReactNode;
@@ -86,7 +89,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
 
 /** ROK-1831: drop the core widgets the hub module hides for this viewer. */
 function isCoreWidget(key: Cell['key']): key is CoreWidgetId {
-    return key !== 'setup-checklist' && !key.startsWith('module:');
+    return key !== 'setup-checklist' && !key.startsWith('module:') && !key.startsWith('plugin:');
 }
 
 function visibleCoreCells(cells: Cell[], ctx: HubCtx, mod: HubModule | undefined): Cell[] {
@@ -115,7 +118,11 @@ interface HubOverviewProps {
 
 export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
-    const cells = [...visibleCoreCells(coreCells(ctx, openChannelPicker, mods), ctx, mod), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const activeSlugs = usePluginStore((s) => s.activeSlugs);
+    // ROK-1909: plugin game widgets carry their own span class, so they enter as span-1 cells.
+    const pluginCells: Cell[] = gameWidgetCells(ctx, activeSlugs).map((c) => ({ ...c, span: 1 }));
+    const cells = [...visibleCoreCells(coreCells(ctx, openChannelPicker, mods), ctx, mod), ...moduleCells(ctx, mod), ...pluginCells]
+        .sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

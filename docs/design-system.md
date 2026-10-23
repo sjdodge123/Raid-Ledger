@@ -1493,3 +1493,37 @@ with `MarkdownBlock`; both use `MD_CLASSES`, so the composer looks like the post
 **DON'T** — import `@tiptap/*` or `markdown-editor` outside `ui/markdown/**`, hand-roll a toolbar, or use
 `MarkdownText` (one line, inline only) for multi-paragraph bodies. Rendered: `/dev/design-system` → Forms
 (lazy `MarkdownBlock` + editor demos, both families).
+
+### 4.27 Plugin hub widgets (game-scoped Overview cards, ROK-1909)
+
+A plugin that does **not** own a hub kind adds a card to the hub Overview of every hub of its game through
+`PluginHandle.registerHubWidget` (`web/src/plugins/hub-game-widgets.ts`): `{ id, title, games, kinds?,
+order, span?, audience, component, action?, useVisible? }`. Core draws the chrome
+(`web/src/components/hub/hub-widget-cells.tsx` + `hub-game-widget-card.tsx`), so a widget body never
+renders its own card or heading.
+
+- **Chrome.** The §4.2 `WidgetCard` (id `hub-widget-<pluginSlug>-<id>`, heading = `title`, `action` in the
+  header slot) around a `Suspense` whose fallback is a `h-24 animate-pulse rounded-md bg-panel` skeleton.
+  The body is `lazy` (keeps plugin `register.ts` files and the app entry light).
+- **Containment.** An error boundary inside the card swaps a throwing body for a `role="alert"` `text-sm
+  text-muted` "Couldn't load this widget."; a second one around the cell drops the card if `useVisible`
+  or the header action throws. The rest of the Overview always renders. Each cell is keyed by the hub's guild id,
+  so moving to another hub resets both boundaries and the Suspense.
+- **Gating.** Plugin active **and** `games` contains `page.guild.gameSlug` **and** `kinds` (default: every
+  kind) contains the hub's kind **and** `audience` allows the viewer (`everyone`; `members` = not a visitor;
+  `editors` = `viewer.canEdit`) **and** `useVisible` (a hook; use it to self-hide with no data) is true.
+  The gate runs before mount: a widget the viewer may not see never loads its lazy body or calls `useVisible`.
+  **Audience is a client-side display filter; members-only data endpoints MUST also enforce access
+  server-side.**
+- **Layout.** Merged into the bento by `order` with the core cells (10/20/30/40/70) and the module's
+  `overviewWidgets`; v1 order is fixed (no leader hide/reorder yet). `span` 1/2/3 at ≥1024px; 3 clamps to 2
+  at ≥768px; phone is one column. A hidden widget renders nothing, so it leaves no empty grid item.
+
+**DO** — use `registerHubWidget` for a game-specific glanceable card (≤ ~8 rows or one chart) with an
+`action` that links to the full view. Keep kind-structural cards (role composition, recent arrivals) in the
+owning `HubModule.overviewWidgets`.
+
+**DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
+(declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
+(`web/src/dev/design-system/hub-widgets-section.tsx`, demo lazy-loaded from `hub-widgets-demo.tsx`) — sample widgets through the real `gameWidgetCells`
+in the ready, skeleton and contained-error states; live on the hub Overview (`/guilds/:id`).

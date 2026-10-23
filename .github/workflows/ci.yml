@@ -123,6 +123,11 @@ jobs:
               # and the demo-test controllers are what the fixtures call.
               - 'api/src/auth/**'
               - 'api/src/admin/demo-test*'
+              # ROK-1904: like the api/web filters, an edit to this workflow
+              # must exercise the smoke job it may have changed (a ci.yml-only
+              # PR used to skip every smoke shard, so a broken setup step
+              # would surface first on main).
+              - '.github/workflows/ci.yml'
             container:
               - 'Dockerfile*'
               - 'api/Dockerfile'
@@ -808,11 +813,44 @@ jobs:
       # 34381433560) — every one in setup, before a test ran, across three
       # retries. Nothing here needs Chrome; drop the third-party lists so an
       # unrelated CDN cannot gate the distro package we actually want.
+      # ROK-1904: drop EVERY non-Ubuntu source, not a hard-coded pair — the
+      # runner image adds new ones (azure-cli, PPAs) without notice. Files that
+      # point at an *.ubuntu.com archive (incl. 24.04's deb822 ubuntu.sources)
+      # are kept; `Dir::Etc::sourceparts=-` would drop those too on 24.04.
       - name: Drop unused third-party apt sources
-        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/microsoft-prod.list
+        run: |
+          # Keep Ubuntu's own sources: on 24.04 the runner rewrites ubuntu.sources
+          # to `mirror+file:/etc/apt/apt-mirrors.txt` (no *.ubuntu.com URL), so
+          # match that too and never drop ubuntu.sources by name (review r1).
+          for f in /etc/apt/sources.list.d/*; do
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in ubuntu.sources) continue ;; esac
+            if ! grep -qE 'https?://([a-z0-9.-]+\.)?(archive|security|ports)\.ubuntu\.com|mirror\+file:' "$f"; then
+              echo "dropping $f"; sudo rm -f "$f"
+            fi
+          done
+
+      # ROK-1904: this step hung 25 min once (#1741). Each attempt gets its
+      # own cap; the second runs only if the first failed or timed out.
+      # ROK-1904: a second apt/dpkg run must WAIT for a lock (120s) instead
+      # of failing instantly; this file also covers apt run by install-deps.
+      - name: Make apt wait for the dpkg lock
+        run: echo 'DPkg::Lock::Timeout "120";' | sudo tee /etc/apt/apt.conf.d/99-rl-lock-timeout
 
       - name: Install postgresql-client (pg_dump/pg_restore for backup tests)
-        run: sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y postgresql-client
+        id: pgclient
+        continue-on-error: true
+        timeout-minutes: 6
+        run: sudo apt-get -o DPkg::Lock::Timeout=120 update -o Acquire::Retries=3 && sudo apt-get -o DPkg::Lock::Timeout=120 install -y postgresql-client
+
+      # The timed-out attempt may still hold the dpkg lock: kill it (exact
+      # names, disposable runner), finish any half-configured packages, retry.
+      - name: Install postgresql-client (retry)
+        if: steps.pgclient.outcome == 'failure'
+        timeout-minutes: 6
+        run: |
+          sudo pkill -x apt-get || true; sudo pkill -x apt || true; sudo pkill -x dpkg || true; sudo dpkg --configure -a || true
+          sudo apt-get -o DPkg::Lock::Timeout=120 update -o Acquire::Retries=3 && sudo apt-get -o DPkg::Lock::Timeout=120 install -y postgresql-client
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -882,7 +920,10 @@ jobs:
     permissions:
       contents: read
       packages: read
-    timeout-minutes: 20
+    # ROK-1904: worst case on a cold browser cache is 3x4 min download +
+    # 2x6 min OS deps (24 min) on top of a ~10 min run, so the job budget
+    # must exceed the per-attempt caps combined or the retries are decorative.
+    timeout-minutes: 40
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
@@ -959,29 +1000,115 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
+      # ROK-1904: the browser download used to run on every shard inside ONE
+      # 12-min step whose inner `for i in 1 2 3` retry was decorative — a slow
+      # CDN fetch ate the whole budget (6 PR runs on 2026-10-22, no spec ran).
+      # Now the browser cache is keyed on the EXACT Playwright version (not the
+      # whole lockfile, which churned it on every dependency bump), the
+      # download runs only on a miss, and each attempt has its own cap.
+      # Why not the mcr.microsoft.com/playwright job container: the
+      # "Bump Postgres max_connections" step below needs the host docker CLI to
+      # ALTER SYSTEM + `docker restart` the postgres service container, and the
+      # Playwright image ships no docker CLI.
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "imageos=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+
+      # restore/save are split so a red test run still saves a fresh download.
+      - name: Restore Playwright browser cache
+        id: pw-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('package-lock.json') }}
+          key: playwright-chromium-${{ runner.os }}-${{ steps.pw.outputs.imageos }}-${{ steps.pw.outputs.version }}
 
-      # Same exposure as the apt step above: `--with-deps` shells out to apt,
-      # so a broken third-party source fails the browser install too
-      # ("Failed to install browsers / exited with code: 100").
+      # Same exposure as the integration apt step: `install-deps` shells out to
+      # apt, so a broken third-party source fails it too (exit code 100).
       - name: Drop unused third-party apt sources
-        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/microsoft-prod.list
-
-      # timeout-minutes must exceed the retry budget below, or attempts 2 and 3
-      # never get room — the 5-minute cap used to consume all three.
-      - name: Install Playwright browsers
-        timeout-minutes: 12
         run: |
-          for i in 1 2 3; do
-            npx playwright install --with-deps chromium && exit 0
-            echo "Attempt $i failed; retrying..."
-            sleep 5
+          # Keep Ubuntu's own sources: on 24.04 the runner rewrites ubuntu.sources
+          # to `mirror+file:/etc/apt/apt-mirrors.txt` (no *.ubuntu.com URL), so
+          # match that too and never drop ubuntu.sources by name (review r1).
+          for f in /etc/apt/sources.list.d/*; do
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in ubuntu.sources) continue ;; esac
+            if ! grep -qE 'https?://([a-z0-9.-]+\.)?(archive|security|ports)\.ubuntu\.com|mirror\+file:' "$f"; then
+              echo "dropping $f"; sudo rm -f "$f"
+            fi
           done
-          exit 1
+
+      # Browser download: cache miss only, three attempts, each with its own
+      # timeout (a hung fetch can no longer starve the retries).
+      - name: Download Playwright chromium (attempt 1)
+        id: pw-dl1
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 4
+        run: npx playwright install chromium
+
+      - name: Download Playwright chromium (attempt 2)
+        id: pw-dl2
+        if: steps.pw-cache.outputs.cache-hit != 'true' && steps.pw-dl1.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 4
+        run: npx playwright install chromium
+
+      - name: Download Playwright chromium (attempt 3)
+        if: steps.pw-cache.outputs.cache-hit != 'true' && steps.pw-dl1.outcome == 'failure' && steps.pw-dl2.outcome == 'failure'
+        timeout-minutes: 4
+        run: npx playwright install chromium
+
+      - name: Save Playwright browser cache
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.pw-cache.outputs.cache-primary-key }}
+
+      # ROK-1904: ubuntu-24.04 ships Chrome, so chromium's shared libs are
+      # usually present and the apt install (which hung 6 min on run
+      # 39859382178) is pure risk. ldd every binary/.so of the cached chromium
+      # + headless shell; install-deps runs only if a lib is "not found" (or
+      # no browser is found to check).
+      - name: Check Playwright OS dependencies
+        id: pw-ldd
+        run: |
+          dirs=$(find ~/.cache/ms-playwright -maxdepth 1 -type d \( -name 'chromium-*' -o -name 'chromium_headless_shell-*' \))
+          if [ -z "$dirs" ]; then
+            echo "no cached chromium found; will run install-deps"
+            echo "missing=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          missing=$(for d in $dirs; do
+            find "$d" -type f \( -name '*.so*' -o -perm -u+x \) -exec ldd {} \; 2>/dev/null
+          done | grep 'not found' | sort -u || true)
+          if [ -n "$missing" ]; then
+            echo "missing libs:"; echo "$missing"
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "all deps present, skipping install-deps"
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ROK-1904: a second apt/dpkg run must WAIT for a lock (120s) instead
+      # of failing instantly; this file also covers apt run by install-deps.
+      - name: Make apt wait for the dpkg lock
+        run: echo 'DPkg::Lock::Timeout "120";' | sudo tee /etc/apt/apt.conf.d/99-rl-lock-timeout
+
+      - name: Install Playwright OS dependencies
+        id: pw-deps
+        if: steps.pw-ldd.outputs.missing == 'true'
+        continue-on-error: true
+        timeout-minutes: 6
+        run: npx playwright install-deps chromium
+
+      - name: Install Playwright OS dependencies (retry)
+        if: steps.pw-ldd.outputs.missing == 'true' && steps.pw-deps.outcome == 'failure'
+        timeout-minutes: 6
+        run: |
+          sudo pkill -x apt-get || true; sudo pkill -x apt || true; sudo pkill -x dpkg || true; sudo dpkg --configure -a || true
+          npx playwright install-deps chromium
 
       - name: Build contract
         run: npm run build -w packages/contract
