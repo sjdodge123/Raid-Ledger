@@ -323,7 +323,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `pull-to-refresh.tsx` → `PullToRefresh` | Mobile pull-to-refresh wrapper | Mobile list pages | `onRefresh`, `children` |
 | `scroll-collapsible.tsx` → `ScrollCollapsible` | Titled collapsible section | Long secondary content | `title`, `defaultOpen`, `children`, `className` |
 | `markdown-text.tsx` → `MarkdownText` | Safe inline markdown, one `<p>` per line (bold/italic/code/link/breaks; `text-sm text-muted`); raw HTML NOT rendered. Runs on the shared `MarkdownInline` tokenizer with strike + autolinks off; link safety = the contract's `isSafeMarkdownHref` (ROK-1868) | Short user-authored inline text (a banner reason) | `text`, `className` |
-| `markdown-block.tsx` → `MarkdownBlock` (ROK-1868) | Block markdown for the hub-post subset: paragraphs (blank line), `<br>` (single newline), flat bullet / numbered lists (`<ol start>`; indented markers flatten), and the inline set — bold, italic, ~~strike~~, `code`, `[label](href)` + `<https://…>` autolinks (nestable). Headings, quotes, images, tables and raw HTML render as literal text; unsafe hrefs stay text. React elements only, never `dangerouslySetInnerHTML`. Classes from `markdown/markdown-classes.ts` → `MD_CLASSES` (shared with the editor, D22); the root sets no text size | Multi-paragraph user-authored formatted text (hub posts) — not `MarkdownText` | `text`, `className?` (size, height clamp), `testId?` |
+| `markdown-block.tsx` → `MarkdownBlock` (ROK-1868) | Block markdown for the hub-post subset: paragraphs (blank line), `<br>` (single newline), flat bullet / numbered lists (`<ol start>`; indented markers flatten), `#`/`##`/`###` headings (ROK-1898 — rendered `h3`/`h4`/`h5` via `MD_HEADING_TAG`, never a page-level `h1`; sizes `MD_CLASSES.h1–h3`), and the inline set — bold, italic, ~~strike~~, `code`, `[label](href)` + `<https://…>` autolinks (nestable). `####`+, quotes, images, tables and raw HTML render as literal text; unsafe hrefs stay text. React elements only, never `dangerouslySetInnerHTML`. Classes from `markdown/markdown-classes.ts` → `MD_CLASSES` (shared with the editor, D22); the root sets no text size | Multi-paragraph user-authored formatted text (hub posts) — not `MarkdownText` | `text`, `className?` (size, height clamp), `testId?` |
 | `markdown-inline.tsx` → `MarkdownInline` (ROK-1868) | One line of inline markdown as a fragment — the tokenizer under `MarkdownText` and `MarkdownBlock` (`markdown/markdown-inline-parse.ts`, a regex-free forward scanner, `\` escapes) | Only when building another markdown surface — wrap it in your own `<p>`/`<li>` | `text`, `strike?` (default `true`), `autolink?` (default `true`) |
 | `markdown/lazy-markdown-editor.tsx` → `LazyMarkdownEditor` (ROK-1868) | **The only import path** for the WYSIWYG Markdown editor: `lazy(() => import('./markdown-editor'))` + a frame-shaped `aria-busy` loading `div` ("Loading editor", sr-only) + an error boundary that falls back to `Textarea showCount` with the same `value`/`onChange` (a failed chunk never blocks posting). `lazy-markdown-editor.guard.test.ts` fails any file outside `ui/markdown/**` importing `@tiptap/*` or `markdown-editor` statically | Composing multi-paragraph formatted text that `MarkdownBlock` renders (hub posts) — §4.26 | same props as `MarkdownEditor` |
 | `markdown/markdown-editor.tsx` → `MarkdownEditor` (ROK-1868, default export = the lazy chunk `markdown-editor-<hash>.js`, ~139 KB gz) | TipTap 3 editor restricted to the hub-post subset (paragraph, hard break, bold, italic, strike, code, link, flat bullet/numbered lists); emits markdown via `getMarkdown()` + `normalizeEditorMarkdown`. Frame `div[data-md-editor]` = `FIELD_FRAME_BASE` + `FOCUS_WITHIN_RING`; the `contenteditable` is `role="textbox" aria-multiline`, `outline-none`, `text-base lg:text-sm`; classes from `MD_CLASSES`. Counter = `CharCounter` on the markdown SOURCE length | Never import directly — use `LazyMarkdownEditor` | `value` (markdown), `onChange(md)`, `maxLength`, `id?` / `aria-labelledby?` / `aria-describedby?` (wired by `Field`), `invalid?`, `disabled?`, `placeholder?`, `autoFocus?`, `testId?` |
@@ -1483,16 +1483,26 @@ a command, and count pins by role (T9).
 with `MarkdownBlock`; both use `MD_CLASSES`, so the composer looks like the post.
 
 - **Subset only:** paragraphs, line breaks, bold, italic, ~~strike~~, `code`, safe links, flat bullet and
-  numbered lists. No headings, quotes, code blocks, images, tables, underline or colour — the editor has no
-  extension for them and `MarkdownBlock` shows such syntax as literal text.
+  numbered lists, and `#`/`##`/`###` headings (ROK-1898). No `####`+, quotes, code blocks, images, tables,
+  underline or colour — the editor has no extension for them and `MarkdownBlock` shows such syntax as literal text.
+- **Headings are card-sized** (ROK-1898): a post body lives inside a card on a page that owns its `h1`/`h2`,
+  so `#`/`##`/`###` render as `h3`/`h4`/`h5` (`MD_HEADING_TAG`) in BOTH the editor and `MarkdownBlock`, sized
+  `text-lg` / `text-base` semibold `text-foreground` and `text-sm` semibold uppercase `text-muted`
+  (`MD_CLASSES.h1–h3`). A heading is one line (no line break inside it); `- # x` in a list stays literal.
+  Typing `# ` / `## ` / `### ` at a paragraph start converts it; a paragraph line that merely *reads* `# x`
+  is saved escaped (`\# x`) so it never turns into a heading on the card.
+- **Legacy bodies** (migration 0246 backfill, raw HTML possible): the editor emits its saved form once on
+  load (`<b>` → `\<b>`), so what the author sees is exactly what saves and an untouched save passes the
+  contract's HTML check.
 - **Toolbar** (§3.1): one Tab stop, arrow keys between buttons, `aria-pressed` follows the selection, TipTap
-  default shortcuts (Mod-B/I/E, Mod-Shift-S/8/7) plus Mod-K for the link row. Tab leaves the editor.
+  default shortcuts (Mod-B/I/E, Mod-Shift-S/8/7, Mod-Alt-1/2/3 for Heading 1–3 — the `H1`/`H2`/`H3` buttons
+  after the lists toggle a heading back to a paragraph) plus Mod-K for the link row. Tab leaves the editor.
 - **Link row, not a popover:** opens under the toolbar; a bare host gains `https://`; anything failing
   `isSafeMarkdownHref` shows the contract's "Links must start with https://…" field error.
 - **Lazy rule:** the TipTap chunk (~139 KB gz) is never in the initial load or a route chunk. Import only
   `LazyMarkdownEditor` (the guard test enforces it); a failed chunk falls back to `Textarea showCount`.
 - **Length = markdown source length** (`CharCounter`), the same number the API validates.
-- **Paste** keeps the subset: HTML headings/quotes become paragraphs, images/tables/underline drop, nested
+- **Paste** keeps the subset: HTML `h1`–`h3` become headings of that level, `h4`–`h6`/quotes become paragraphs, images/tables/underline drop, nested
   lists flatten, unsafe hrefs drop.
 - **Phone (< 1024px, §4.18):** the toolbar is one horizontally-scrolling row (never wraps under the iOS
   keyboard); content stays `text-base` (no zoom); the composer stays inline, not in a sheet.
