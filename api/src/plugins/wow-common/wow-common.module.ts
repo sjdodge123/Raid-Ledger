@@ -56,6 +56,8 @@ import { RosterFactSource } from './facts/roster.fact-source';
 import { AddonSnapshotFactSource } from './facts/addon-snapshot.fact-source';
 import { CharacterRowFactSource } from './facts/character-row.fact-source';
 import { WowFactsService } from './facts/wow-facts.service';
+import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
+import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule, GuildsCoreModule],
@@ -112,6 +114,9 @@ import { WowFactsService } from './facts/wow-facts.service';
     AddonSnapshotFactSource,
     CharacterRowFactSource,
     WowFactsService,
+    // ROK-1913: roster-insights endpoint + its import-invalidated cache.
+    RosterInsightsCache,
+    RosterInsightsService,
   ],
   exports: [
     BlizzardService,

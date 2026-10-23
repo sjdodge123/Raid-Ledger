@@ -13,6 +13,7 @@ import { PelicanStateChip } from './pelican-state-chip';
 import { PluginSlot } from '../../plugin-slot';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { CommunityHubSwitch } from './pelican-server-hub-switch';
+import { ServerTimezoneSelect } from './pelican-server-timezone';
 import { PLUGINS_HREF, quickPlayHint, quickPlayPluginToActivate } from './pelican-servers.helpers';
 
 export type ServerUpdateHandler = (id: number, patch: PelicanServerUpdate, gameName?: string | null) => void;
@@ -144,7 +145,8 @@ function RowExtras({ row, inline = false }: { row: PelicanServerRowDto; inline?:
 /**
  * Desktop: one `<tr>` in the §4.21-idiom table. Sized to fit the admin content
  * box without inner scroll: the game picker holds 10rem, every other column
- * shrinks to its longest word. No timezone column (ROK-1795). The plugin
+ * shrinks to its longest word. Timezone is the server's play-day boundary
+ * (ROK-1882) — Pelican schedules themselves stay UTC (ROK-1795). The plugin
  * "Mod link" cell renders only with `showExtras` (the table's slot check).
  */
 export function PelicanServerRow(p: ServerRowProps & { showExtras?: boolean }) {
@@ -153,6 +155,7 @@ export function PelicanServerRow(p: ServerRowProps & { showExtras?: boolean }) {
             <td className="px-2 py-3"><ServerName row={p.row} /></td>
             <td className="px-2 py-3"><PelicanStateChip row={p.row} /></td>
             <td className="px-2 py-3 min-w-[10rem]"><GamePicker row={p.row} suggestions={p.suggestions} onUpdate={p.onUpdate} inline /></td>
+            <td className="px-2 py-3 min-w-[9rem]"><ServerTimezoneSelect row={p.row} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
             <td className="px-2 py-3"><QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><CommunityHubSwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
@@ -171,6 +174,10 @@ export function PelicanServerCard(p: ServerRowProps) {
                 <PelicanStateChip row={p.row} />
             </div>
             <GamePicker row={p.row} suggestions={p.suggestions} onUpdate={p.onUpdate} />
+            <div className="space-y-1">
+                <span className="text-sm text-secondary">Timezone</span>
+                <ServerTimezoneSelect row={p.row} onUpdate={p.onUpdate} />
+            </div>
             <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-secondary">Show on calendar</span>
                 <CalendarSwitch row={p.row} onUpdate={p.onUpdate} />

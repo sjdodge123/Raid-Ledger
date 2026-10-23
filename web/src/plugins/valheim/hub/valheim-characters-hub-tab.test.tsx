@@ -62,6 +62,7 @@ function ctx(gameSlug: string): HubCtx {
             faction: null,
             memberCount: 1,
             lastSnapshotAt: null,
+            gameSlug, // ROK-1909: every hub page carries its game; ROK-1912 tabs gate on it
         },
         importedBy: null,
         viewer: { role: 'member', canEdit: false, canManageEditors: false },

@@ -22,7 +22,7 @@ import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
 import { postIdFromSearch } from './posts/post-link';
-import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HUB_TAB_HASH_ALIASES, hubModuleTabs, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
@@ -102,7 +102,7 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
         );
     }
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
-    const tab = mod?.tabs.find((t) => t.id === active);
+    const tab = hubModuleTabs(mod).find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
     return <HubOverview ctx={ctx} module={mod} mods={mods} />;
 }

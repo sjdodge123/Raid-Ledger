@@ -549,6 +549,20 @@ await expect(page.getByText(/seeded row/)).toBeVisible({ timeout: 15_000 });
 
 Background: `feedback_smoke_polling_for_async_writes.md` (ROK-1156, the original incident). Default to API polling for any smoke assertion that depends on a `useQuery`-backed value.
 
+### Smoke specs and the Discord bot
+
+GitHub CI runs the Playwright suite with **no connected Discord bot**, so the endpoints that read the bot's guild answer empty, `null` or 503 there — `GET /admin/discord/bindings` returns `{ data: [] }`, `GET /discord/channels` is a 503, `GET /discord/members/list` is `[]` — and the pages that render that data hide it (`/admin/settings/discord/channels` drops its channel selectors and lists no bindings). A fleet env or laptop with a bot returns real rows, so a spec asserting them passes locally and fails in every CI project (PR #1721, `admin-discord-lifecycle`, which opened the Channels page and asserted binding rows).
+
+Pick one, in this order, **per test**:
+
+1. **Fixture the endpoint with `page.route`** (preferred — the spec asserts everywhere). Route the exact endpoint (or, for a page, the bot status `GET /admin/settings/discord-bot` plus the data it renders) before `page.goto`; examples: `admin-discord-join-post.smoke.spec.ts`, `admin-game-roles.smoke.spec.ts`.
+2. **`requireDiscordBot(test, token, reason)`** from `scripts/smoke/discord-bot.ts` when the test needs the real guild — call it in that test's body or in a `beforeAll`/`beforeEach` of its `describe`. It skips with the reason when the bot is offline, **throws** when the status call itself fails (a 401/500 is not "no bot"), and polls up to 20s while the bot reports `connecting: true` after an env boot. `discordBotConnected(token)` is the boolean behind it.
+3. **`{ annotation: DISCORD_BOT_OPTIONAL }`** on a `test`/`describe` that opens a bot-gated page but asserts only what renders without a bot (`admin-discord.smoke.spec.ts`). It covers pages and test ids only, never API calls.
+
+**`SMOKE_REQUIRE_DISCORD_BOT=1`** turns "no bot" into a failure: `requireDiscordBot` throws instead of skipping. Set it where a bot is expected (a fleet slot env with the bot configured), so a dead bot fails the gate instead of skipping every guarded test. GitHub CI and laptops leave it unset and keep the skip.
+
+`scripts/smoke-discord-bot-guard.spec.mjs` (node:test, run by CI's `scripts/*.spec.mjs` step) fails when a test in a `*.smoke.spec.ts` references a bot-gated thing with none of the three. The list is `BOT_GATED` in `scripts/smoke/discord-bot-guard.mjs`: API endpoints (from any controller that returns empty/503 without a guild), web page routes and `data-testid`s that render only with a bot. It is hand-maintained — **when you add a bot-gated endpoint, page or test id, add a row** (the comment above the const says how). The scan is a heuristic: a path built at runtime or a request made in a shared helper file is not seen, and a route fixture counts by its matcher even if its handler passes the request through.
+
 ## Smoke Test Authoring Standards (Discord Companion Bot)
 
 Discord smoke tests live in `tools/test-bot/src/smoke/tests/`. These rules ensure reliability and eliminate flaky timing issues.

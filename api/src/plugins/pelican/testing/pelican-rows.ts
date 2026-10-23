@@ -15,7 +15,7 @@ export function pelicanRow(
     gameId: 7,
     showOnCalendar: true,
     presenceTracking: false,
-    timezone: null, // ROK-1795: column unread; dropped in a follow-up
+    timezone: null, // ROK-1882: the play-day boundary; null = community default
     currentState: 'running',
     isSuspended: false,
     statusCheckedAt: null,

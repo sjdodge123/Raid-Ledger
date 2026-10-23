@@ -56,6 +56,11 @@ describe('applyServerPatch', () => {
         expect(applyServerPatch(pelicanServerFixture, { gameId: 9 }, 'Rust')).toMatchObject({ gameId: 9, gameName: 'Rust' });
         expect(applyServerPatch(pelicanServerFixture, { gameId: null })).toMatchObject({ gameId: null, gameName: null });
     });
+
+    it('sets and clears the server timezone (ROK-1882)', () => {
+        expect(applyServerPatch(pelicanServerFixture, { timezone: 'Europe/Berlin' })).toMatchObject({ timezone: 'Europe/Berlin' });
+        expect(applyServerPatch(pelicanServerFixture, { timezone: null })).toMatchObject({ timezone: null });
+    });
 });
 
 describe('quickPlayHint (ROK-1800, ROK-1819)', () => {

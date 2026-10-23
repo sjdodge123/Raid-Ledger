@@ -10,7 +10,9 @@
  *
  * "N online" reads the in-memory presence roster, which no fixture can fill
  * (the demo panel is unreachable), so the pill is checked against the API's
- * own `onlineNow` count rather than a hardcoded 1.
+ * own `server.onlineCount` / `unlinkedOnlineCount` rather than hardcoded
+ * numbers (ROK-1932). With no presence the seed yields "0 online" and no
+ * nudge; the nudge's link branch is covered by `server-hero.test.tsx`.
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
@@ -29,7 +31,10 @@ interface Hub {
 }
 
 interface PageMember { name: string; server?: { onlineNow: boolean } }
-interface HubPage { ranks: { members: PageMember[] }[] }
+interface HubPage {
+    ranks: { members: PageMember[] }[];
+    server?: { onlineCount?: number; unlinkedOnlineCount?: number };
+}
 
 const ADMIN_PELICAN = '/admin/settings/integrations/plugin/pelican/pelican-panel';
 
@@ -52,6 +57,14 @@ async function members(token: string, guildId: number): Promise<PageMember[]> {
     return (body?.ranks ?? []).flatMap((g) => g.members);
 }
 
+/** The hero's numbers as the API sends them (ROK-1932); a missing `onlineCount` fails the spec. */
+async function heroCounts(token: string, guildId: number): Promise<{ online: number; unlinked: number }> {
+    const body = (await apiGet(token, `/guilds/${guildId}`)) as HubPage | null;
+    const online = body?.server?.onlineCount;
+    if (typeof online !== 'number') throw new Error(`hub ${guildId}: server.onlineCount missing from the API`);
+    return { online, unlinked: body?.server?.unlinkedOnlineCount ?? 0 };
+}
+
 /** Poll the API roster until `name` is (or is no longer) a member. */
 async function waitForMember(token: string, hub: Hub, name: string, present: boolean): Promise<void> {
     await pollForCondition(async () => {
@@ -68,10 +81,17 @@ test.describe('Server community hub (ROK-1831)', () => {
     test('hub page: status pill, online count, Members columns; the 100-day player is absent', async ({ page }) => {
         const token = await getAdminToken();
         const hub = await seedHub(token);
-        const online = (await members(token, hub.guildId)).filter((m) => m.server?.onlineNow === true).length;
+        const counts = await heroCounts(token, hub.guildId);
         await page.goto(`/hubs/${hub.guildId}`);
         await expect(page.getByTestId('server-hub-status')).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('server-hub-online')).toHaveText(`${online} online`);
+        await expect(page.getByTestId('server-hub-online')).toHaveText(`${counts.online} online`);
+        const nudge = page.getByTestId('server-hub-unlinked');
+        if (counts.unlinked > 0) {
+            await expect(nudge).toHaveText(`${counts.unlinked} not linked yet`);
+            await expect(nudge).toHaveAttribute('href', '#characters');
+        } else {
+            await expect(nudge, 'no nudge when every online player is linked').toHaveCount(0);
+        }
 
         await page.goto(`/hubs/${hub.guildId}#members`);
         await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });

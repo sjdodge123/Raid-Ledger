@@ -66,6 +66,7 @@ describe('DesignSystemPage', () => {
         'Pattern — own-calendar busy band and radio cards',
         'Pattern — server-schedule layer (plugin calendar layers)',
         'Forms — the form primitives',
+        'Pattern — skill trend chip',
         'Pattern — plugin hub widgets',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);

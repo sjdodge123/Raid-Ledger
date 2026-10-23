@@ -17,7 +17,7 @@
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
@@ -350,6 +350,34 @@ test.describe('community hubs — leader', () => {
 });
 
 test.describe('community hubs — admin', () => {
+    test('ROK-1892: an admin proposal skips review and lands on the live hub', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        const admin = await getAdminToken();
+        // Unique per project AND per run (D11); archived below so the game's card stays clean.
+        const name = `Staff Hub ${testInfo.project.name} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const card = await openGamePage(page, seed.gameId);
+
+        await card.getByRole('button', { name: 'Start a community hub' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Start a community hub' });
+        await expect(dialog.getByText(/skips review and goes live right away/)).toBeVisible();
+        await dialog.getByLabel('Hub name').fill(name);
+        await dialog.getByLabel('Short description').fill('A staff smoke-test hub.');
+        await page.getByRole('button', { name: 'Create hub' }).click();
+
+        await expect(page, 'a staff proposer lands on the new hub').toHaveURL(/\/guilds\/\d+$/, { timeout: 20_000 });
+        const hubId = Number(must(/\/guilds\/(\d+)$/.exec(page.url())?.[1], 'hub id in the URL'));
+        try {
+            await expect.poll(async () => (await hubEntry(admin, seed.gameId, hubId))?.name, {
+                message: 'the hub is listed as active on its game',
+            }).toBe(name);
+            const queue = (await apiGet(admin, '/admin/hubs/proposals')) as { items?: Array<{ id: number }> } | null;
+            expect((queue?.items ?? []).map((p) => p.id), 'no review-queue entry').not.toContain(hubId);
+            await expect(page.getByRole('heading', { name, level: 1 }), 'the hub page renders').toBeVisible({ timeout: 15_000 });
+        } finally {
+            await apiPatch(admin, `/hubs/${hubId}/status`, { status: 'archived' }).catch(() => undefined);
+        }
+    });
+
     test('Admin → Hubs approves the seeded proposal; the proposer gets the notification', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
