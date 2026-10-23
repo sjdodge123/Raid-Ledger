@@ -2,7 +2,7 @@
  * ROK-1933 Part 1 — the claim banner's copy, visibility rule and the Overview
  * dismiss memory. Pure helpers so the rule is unit-tested apart from the UI.
  */
-import type { ValheimCharacterSummary } from '@raid-ledger/contract';
+import type { ValheimClaimStatusResponse } from '@raid-ledger/contract';
 
 /**
  * Every banner string in one place. PENDING operator approval (ITEM.md Q1,
@@ -30,27 +30,24 @@ export type ClaimBannerVariant = 'link-steam' | 'pick-only';
 export const CLAIM_FILTER_PARAM = 'unclaimed';
 
 export interface ClaimBannerInput {
-    rows: readonly ValheimCharacterSummary[];
-    /** Every character on the server is loaded (no further page). */
-    complete: boolean;
+    /** The server's claim facts (`…/claim-status`); null while unknown. */
+    status: ValheimClaimStatusResponse | null;
     viewerId: number | null;
     steamLinked: boolean;
 }
 
 /**
  * Which banner the viewer sees, or null for none. Shown only to a signed-in
- * viewer with no claim on this server while ≥1 character is unclaimed. A
- * partial list (D1: the list is paginated) can prove a claim but never its
- * absence, so it hides — the banner never nags someone who already claimed.
+ * viewer with no claim on this server while ≥1 character is unclaimed. The
+ * facts come from the server (D1: the list is paginated, so loaded rows can
+ * never prove a claim's absence); unknown hides — never a wrong nag.
  */
 export function claimBannerVariant(
     input: ClaimBannerInput,
 ): ClaimBannerVariant | null {
-    const { rows, complete, viewerId, steamLinked } = input;
-    if (viewerId === null) return null;
-    if (rows.some((r) => r.claimedBy?.id === viewerId)) return null;
-    if (!complete) return null;
-    if (!rows.some((r) => r.claimedBy === null)) return null;
+    const { status, viewerId, steamLinked } = input;
+    if (viewerId === null || status === null) return null;
+    if (status.viewerHasClaim || status.unclaimedCount === 0) return null;
     return steamLinked ? 'pick-only' : 'link-steam';
 }
 

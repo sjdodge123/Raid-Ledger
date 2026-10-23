@@ -5,19 +5,10 @@
  */
 import type { JSX } from 'react';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
-import { useValheimCharacterPages } from '../hooks/use-valheim-characters';
 import { ValheimClaimBanner } from './valheim-claim-banner';
 
 export default function ValheimClaimBannerWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const serverId = page.server?.pelicanServerId ?? 0;
-    const pages = useValheimCharacterPages(serverId);
     if (serverId <= 0) return null;
-    return (
-        <ValheimClaimBanner
-            serverId={serverId}
-            rows={pages.rows}
-            complete={pages.isSuccess && !pages.hasMore}
-            dismissible
-        />
-    );
+    return <ValheimClaimBanner serverId={serverId} dismissible />;
 }

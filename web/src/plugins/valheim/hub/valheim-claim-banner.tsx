@@ -7,9 +7,9 @@
 import type { JSX } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { useSteamLink } from '../../../hooks/use-steam-link';
+import { useValheimCharacters } from '../hooks/use-valheim-characters';
 import {
     useClaimBannerDismissed,
     useClaimBannerVariant,
@@ -73,15 +73,15 @@ export function ValheimClaimBannerView(
 
 export interface ValheimClaimBannerProps {
     serverId: number;
-    rows: readonly ValheimCharacterSummary[];
-    complete: boolean;
     /** Overview: draw the × and honour a remembered dismiss. */
     dismissible?: boolean | undefined;
 }
 
 /** The wired banner: derives its variant, links Steam, jumps to the unclaimed list. */
-export function ValheimClaimBanner({ serverId, rows, complete, dismissible = false }: ValheimClaimBannerProps): JSX.Element | null {
-    const variant = useClaimBannerVariant(rows, complete);
+export function ValheimClaimBanner({ serverId, dismissible = false }: ValheimClaimBannerProps): JSX.Element | null {
+    const variant = useClaimBannerVariant(serverId);
+    // Page 1 is cached with the Characters tab's own first page; only its server name is read.
+    const serverName = useValheimCharacters(serverId).data?.[0]?.serverName;
     const [dismissed, dismiss] = useClaimBannerDismissed(serverId);
     const { linkSteam, isLinkPending } = useSteamLink();
     const navigate = useNavigate();
@@ -90,7 +90,7 @@ export function ValheimClaimBanner({ serverId, rows, complete, dismissible = fal
     return (
         <ValheimClaimBannerView
             variant={variant}
-            serverName={rows[0]?.serverName ?? COPY.fallbackServer}
+            serverName={serverName ?? COPY.fallbackServer}
             onLinkSteam={() => linkSteam(`${pathname}#characters`)}
             linkPending={isLinkPending}
             onPick={() => navigate({ pathname, search: `?${CLAIM_FILTER_PARAM}=1`, hash: '#characters' })}

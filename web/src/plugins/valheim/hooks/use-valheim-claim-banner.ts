@@ -1,13 +1,12 @@
 /**
- * ROK-1933 Part 1 — the claim banner's hooks: the viewer's variant (derived
- * from the loaded character rows, D1) and the Overview dismiss flag, shared
+ * ROK-1933 Part 1 — the claim banner's hooks: the viewer's variant (from the
+ * server's `claim-status`, D1) and the Overview dismiss flag, shared
  * between the widget's `useVisible` probe and its body.
  */
 import { useCallback, useSyncExternalStore } from 'react';
-import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { useAuth } from '../../../hooks/use-auth';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
-import { useValheimCharacterPages } from './use-valheim-characters';
+import { useValheimClaimStatus } from './use-valheim-characters';
 import {
     claimBannerVariant,
     readClaimBannerDismissed,
@@ -31,23 +30,21 @@ export function useClaimBannerDismissed(serverId: number): [boolean, () => void]
     return [dismissed, dismiss];
 }
 
-/** The viewer's banner variant for these rows (null = no banner). */
-export function useClaimBannerVariant(rows: readonly ValheimCharacterSummary[], complete: boolean): ClaimBannerVariant | null {
+/** The viewer's banner variant on this server (null = no banner, or not known yet). */
+export function useClaimBannerVariant(serverId: number): ClaimBannerVariant | null {
     const { user } = useAuth();
+    const status = useValheimClaimStatus(serverId);
     return claimBannerVariant({
-        rows,
-        complete,
+        status: status.data ?? null,
         viewerId: user?.id ?? null,
         steamLinked: Boolean(user?.steamId),
     });
 }
 
-
 /** The Overview card's `useVisible` probe: a banner to show and not dismissed here. */
 export function useClaimBannerWidgetVisible(ctx: HubWidgetCtx): boolean {
     const serverId = ctx.page.server?.pelicanServerId ?? 0;
-    const pages = useValheimCharacterPages(serverId);
-    const variant = useClaimBannerVariant(pages.rows, pages.isSuccess && !pages.hasMore);
+    const variant = useClaimBannerVariant(serverId);
     const [dismissed] = useClaimBannerDismissed(serverId);
     return serverId > 0 && variant !== null && !dismissed;
 }

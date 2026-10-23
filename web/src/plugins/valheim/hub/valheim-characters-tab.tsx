@@ -88,11 +88,12 @@ function LoadMore({
     );
 }
 
-function TabStates({ pages }: { pages: ReturnType<typeof useValheimCharacterPages> }) {
+function TabStates({ pages, unclaimedOnly }: { pages: ReturnType<typeof useValheimCharacterPages>; unclaimedOnly: boolean }) {
     if (pages.isError) {
         return <Quiet role="alert">Couldn't load characters. Try again in a moment.</Quiet>;
     }
     if (!pages.isSuccess || pages.rows.length > 0) return null;
+    if (unclaimedOnly) return <Quiet>Every character here is claimed.</Quiet>;
     return (
         <Quiet>
             No characters yet. They appear after a player joins with the
@@ -138,11 +139,9 @@ export function ValheimCharactersTab({
     showClaimBanner?: boolean;
 }) {
     const { pathname, search } = useLocation();
-    const query = useValheimCharacterPages(serverId);
     const [unclaimedOnly, toggleUnclaimed] = useUnclaimedFilter();
-    const rows = unclaimedOnly
-        ? query.rows.filter((c) => c.claimedBy === null)
-        : query.rows;
+    // ROK-1933: filtered server-side, so "Load more" pages stay full and correct.
+    const query = useValheimCharacterPages(serverId, unclaimedOnly);
     const count = countLabel(query);
     return (
         <section
@@ -150,10 +149,10 @@ export function ValheimCharactersTab({
             aria-busy={query.isPending}
         >
             <TabHeading count={query.isSuccess ? count : null} />
-            {showClaimBanner && <ValheimClaimBanner serverId={serverId} rows={query.rows} complete={query.isSuccess && !query.hasMore} />}
-            {query.isSuccess && query.rows.length > 0 && <UnclaimedToggle on={unclaimedOnly} onToggle={toggleUnclaimed} />}
-            <TabStates pages={query} />
-            <RowList rows={rows} hubPath={`${pathname}${search}#characters`} />
+            {showClaimBanner && <ValheimClaimBanner serverId={serverId} />}
+            {query.isSuccess && (unclaimedOnly || query.rows.length > 0) && <UnclaimedToggle on={unclaimedOnly} onToggle={toggleUnclaimed} />}
+            <TabStates pages={query} unclaimedOnly={unclaimedOnly} />
+            <RowList rows={query.rows} hubPath={`${pathname}${search}#characters`} />
             <LoadMore pages={query} />
         </section>
     );

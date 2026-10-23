@@ -1,10 +1,5 @@
 /** ROK-1933 Part 1 — who sees the claim banner, which variant, and the Overview dismiss memory. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ValheimCharacterSummary } from '@raid-ledger/contract';
-import {
-    valheimCharacterClaimed,
-    valheimCharacterUnclaimed,
-} from '../../../test/mocks/valheim-armory-handlers';
 import {
     claimBannerVariant,
     readClaimBannerDismissed,
@@ -12,41 +7,39 @@ import {
 } from './valheim-claim-banner.helpers';
 
 const VIEWER = 9;
-const mine: ValheimCharacterSummary = {
-    ...valheimCharacterClaimed,
-    id: 50,
-    claimedBy: { id: VIEWER, username: 'me', avatar: null, discordId: '9' },
-};
-const base = { complete: true, viewerId: VIEWER, steamLinked: false };
+const open = { viewerHasClaim: false, unclaimedCount: 1 };
+const base = { status: open, viewerId: VIEWER, steamLinked: false };
 
 describe('claimBannerVariant', () => {
     it('shows Link Steam when the viewer has no claim and one character is unclaimed', () => {
-        const rows = [valheimCharacterClaimed, valheimCharacterUnclaimed];
-        expect(claimBannerVariant({ ...base, rows })).toBe('link-steam');
+        expect(claimBannerVariant(base)).toBe('link-steam');
     });
 
     it('drops Link Steam when the viewer already linked Steam (variant b)', () => {
-        const rows = [valheimCharacterUnclaimed];
-        expect(claimBannerVariant({ ...base, rows, steamLinked: true })).toBe('pick-only');
+        expect(claimBannerVariant({ ...base, steamLinked: true })).toBe('pick-only');
     });
 
     it('hides once the viewer has claimed a character on this server', () => {
-        const rows = [mine, valheimCharacterUnclaimed];
-        expect(claimBannerVariant({ ...base, rows })).toBeNull();
+        const status = { viewerHasClaim: true, unclaimedCount: 1 };
+        expect(claimBannerVariant({ ...base, status })).toBeNull();
     });
 
     it('hides when every character is claimed', () => {
-        expect(claimBannerVariant({ ...base, rows: [valheimCharacterClaimed] })).toBeNull();
+        const status = { viewerHasClaim: false, unclaimedCount: 0 };
+        expect(claimBannerVariant({ ...base, status })).toBeNull();
     });
 
     it('hides for a signed-out viewer', () => {
-        const rows = [valheimCharacterUnclaimed];
-        expect(claimBannerVariant({ ...base, rows, viewerId: null })).toBeNull();
+        expect(claimBannerVariant({ ...base, viewerId: null })).toBeNull();
     });
 
-    it('hides while the list is partial and the viewer claim is not in the loaded rows (D1)', () => {
-        const rows = [valheimCharacterUnclaimed];
-        expect(claimBannerVariant({ ...base, rows, complete: false })).toBeNull();
+    it('hides while the claim status is unknown (loading or failed)', () => {
+        expect(claimBannerVariant({ ...base, status: null })).toBeNull();
+    });
+
+    it('shows on a server with more characters than one list page (D1)', () => {
+        const status = { viewerHasClaim: false, unclaimedCount: 120 };
+        expect(claimBannerVariant({ ...base, status })).toBe('link-steam');
     });
 });
 

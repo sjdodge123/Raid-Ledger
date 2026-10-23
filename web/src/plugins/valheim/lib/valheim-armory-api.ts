@@ -6,8 +6,10 @@
 import {
     ValheimCharacterDetailSchema,
     ValheimCharacterListResponseSchema,
+    ValheimClaimStatusResponseSchema,
     type ValheimCharacterDetail,
     type ValheimCharacterListResponse,
+    type ValheimClaimStatusResponse,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { encodePathSegment } from '../../../lib/api/path-segment';
@@ -17,25 +19,32 @@ export const VALHEIM_CHARACTERS_PAGE_SIZE = 50;
 
 export const valheimArmoryKeys = {
     all: ['plugins', 'valheim', 'armory'] as const,
-    list: (serverId: number, page: number) =>
-        [...valheimArmoryKeys.all, 'characters', serverId, page] as const,
+    list: (serverId: number, page: number, unclaimed = false) =>
+        [...valheimArmoryKeys.all, 'characters', serverId, page, unclaimed] as const,
+    claimStatus: (serverId: number) =>
+        [...valheimArmoryKeys.all, 'claim-status', serverId] as const,
     detail: (id: number) =>
         [...valheimArmoryKeys.all, 'character', id] as const,
     blob: (serverId: number, sha256: string) =>
         [...valheimArmoryKeys.all, 'blob', serverId, sha256] as const,
 };
 
-/** `GET …/characters?serverId&page&pageSize` — one page of a server's characters. */
+/**
+ * `GET …/characters?serverId&page&pageSize[&unclaimed=1]` — one page of a
+ * server's characters; `unclaimed` filters server-side (ROK-1933).
+ */
 export function valheimCharactersPath(
     serverId: number,
     page: number,
     pageSize = VALHEIM_CHARACTERS_PAGE_SIZE,
+    unclaimed = false,
 ): string {
     const q = new URLSearchParams({
         serverId: String(serverId),
         page: String(page),
         pageSize: String(pageSize),
     });
+    if (unclaimed) q.set('unclaimed', '1');
     return `${VALHEIM_ARMORY_PATH}/characters?${q.toString()}`;
 }
 
@@ -62,9 +71,10 @@ export function valheimBlobPath(serverId: number, sha256: string): string {
 export function fetchValheimCharacters(
     serverId: number,
     page: number,
+    unclaimed = false,
 ): Promise<ValheimCharacterListResponse> {
     return fetchApi(
-        valheimCharactersPath(serverId, page),
+        valheimCharactersPath(serverId, page, VALHEIM_CHARACTERS_PAGE_SIZE, unclaimed),
         {},
         ValheimCharacterListResponseSchema,
     );
@@ -74,6 +84,17 @@ export function fetchValheimCharacter(
     id: number,
 ): Promise<ValheimCharacterDetail> {
     return fetchApi(valheimCharacterPath(id), {}, ValheimCharacterDetailSchema);
+}
+
+/** `GET …/servers/:serverId/claim-status` (ROK-1933) — the claim banner's facts. */
+export function fetchValheimClaimStatus(
+    serverId: number,
+): Promise<ValheimClaimStatusResponse> {
+    return fetchApi(
+        `${VALHEIM_ARMORY_PATH}/servers/${encodePathSegment(String(serverId))}/claim-status`,
+        {},
+        ValheimClaimStatusResponseSchema,
+    );
 }
 
 /** True when a query error is the API's 404 (unknown / foreign character). */
