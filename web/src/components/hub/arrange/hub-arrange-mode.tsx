@@ -12,11 +12,17 @@ import type { HubWidgetPrefs } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
+import { useMediaQuery } from '../../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import type { ArrangedEntry, HubLayoutEntry } from '../layout/resolve-hub-layout';
 import { AddWidgetPicker } from './add-widget-picker';
 import { ArrangeFooter } from './arrange-footer';
 import { ArrangeRow } from './arrange-row';
 import { useArrangeState } from './use-arrange-state';
+import { useRowDrag } from './use-row-drag';
+
+/** Native DnD does not fire on touch, and tablets get the phone layout (spec §2.4). */
+export const DRAG_MQ = `${DESKTOP_MQ} and (pointer: fine)`;
 
 export interface HubArrangeModeProps {
     guildId: number;
@@ -28,12 +34,12 @@ export interface HubArrangeModeProps {
 
 const RESET_COPY = { title: 'Restore the default layout?', keepLabel: 'Cancel', discardLabel: 'Reset' };
 
-function ArrangeHeader({ onAdd }: { onAdd: () => void }): JSX.Element {
+function ArrangeHeader({ onAdd, canDrag }: { onAdd: () => void; canDrag: boolean }): JSX.Element {
     return (
         <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
                 <h3 className="text-base font-semibold text-foreground">Arrange the Overview</h3>
-                <p className="text-sm text-muted">Use the arrows to move a card. Wide cards may move up to fill gaps. Hidden cards stay here, dimmed.</p>
+                <p className="text-sm text-muted">{canDrag ? 'Drag a row or use the arrows.' : 'Use the arrows to move a card.'} Wide cards may move up to fill gaps. Hidden cards stay here, dimmed.</p>
             </div>
             <Button variant="secondary" size="sm" onClick={onAdd} className="w-full lg:w-auto" data-testid="arrange-add">
                 <PlusIcon className="h-4 w-4" aria-hidden="true" />Add widget
@@ -60,13 +66,15 @@ export default function HubArrangeMode({ guildId, arranged, available, prefs, on
     const guard = useDirtyCloseGuard(s.dirty, onExit);
     const [picking, setPicking] = useState(false);
     const [confirmReset, setConfirmReset] = useState(false);
+    const canDrag = useMediaQuery(DRAG_MQ);
+    const bindDrag = useRowDrag(s.drop);
     const options = available.filter((e) => !s.rows.some((r) => r.entry.id === e.id));
     return (
         <section data-testid="hub-arrange-mode" aria-label="Arrange the Overview">
-            <ArrangeHeader onAdd={() => setPicking(true)} />
+            <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} />
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
                 <ol className="flex flex-col gap-2" aria-label="Overview widgets, in order">
-                    {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} onMove={s.move} onToggle={s.toggle} />)}
+                    {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
                 </ol>
                 <ArrangePreview titles={s.rows.filter((r) => r.on).map((r) => r.entry.title)} />
             </div>

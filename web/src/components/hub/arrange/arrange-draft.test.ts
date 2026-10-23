@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import type { HubWidgetPrefs } from '@raid-ledger/contract';
 import type { HubLayoutEntry } from '../layout/resolve-hub-layout';
-import { addRow, buildPrefsBody, moveAnnouncement, moveRow, sameDraft, toggleRow, type DraftRow } from './arrange-draft';
+import { addRow, buildPrefsBody, moveAnnouncement, moveRow, moveTo, sameDraft, toggleRow, type DraftRow } from './arrange-draft';
 
 function entry(id: string, defaultOn = true): HubLayoutEntry {
     return { id, title: id.toUpperCase(), defaultOrder: 10, span: 1, audience: 'everyone', defaultOn };
@@ -82,5 +82,29 @@ describe('buildPrefsBody', () => {
 
     it('does not add an opt-in row that was switched back off', () => {
         expect(buildPrefsBody(rows([OPT, false], [A, true]), null).added).toEqual([]);
+    });
+});
+
+describe('moveTo (drag-and-drop, L6)', () => {
+    const D = entry('d');
+    const base = rows([A, true], [B, true], [C, true], [D, false]);
+
+    it('moving down lands the row AT the target index (after the row it was dropped on)', () => {
+        expect(ids(moveTo(base, 0, 2))).toEqual(['b', 'c', 'a', 'd']);
+    });
+
+    it('moving up lands the row before the row it was dropped on', () => {
+        expect(ids(moveTo(base, 3, 1))).toEqual(['a', 'd', 'b', 'c']);
+    });
+
+    it('carries the on/off state with the row', () => {
+        expect(moveTo(base, 3, 0)[0]).toEqual({ entry: D, on: false });
+    });
+
+    it('same index or out of range returns the same array', () => {
+        expect(moveTo(base, 1, 1)).toBe(base);
+        expect(moveTo(base, 1, 4)).toBe(base);
+        expect(moveTo(base, -1, 0)).toBe(base);
+        expect(moveTo(base, 9, 0)).toBe(base);
     });
 });

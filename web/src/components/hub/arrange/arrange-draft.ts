@@ -32,6 +32,20 @@ export function moveRow<R>(rows: readonly R[], index: number, dir: -1 | 1): read
     return next;
 }
 
+/**
+ * Drag-and-drop (spec §2.4): take row `from` out and put it back so it ends up
+ * at index `to`. Dropping on a row below lands after it, above lands before it.
+ * Out-of-range or `from === to` is a no-op (same array).
+ */
+export function moveTo<R>(rows: readonly R[], from: number, to: number): readonly R[] {
+    const row = rows[from];
+    if (row === undefined || from === to || to < 0 || to >= rows.length) return rows;
+    const next = rows.slice();
+    next.splice(from, 1);
+    next.splice(to, 0, row);
+    return next;
+}
+
 export function toggleRow<E extends HubLayoutEntry>(rows: readonly DraftRow<E>[], id: HubWidgetId): DraftRow<E>[] {
     return rows.map((r) => (r.entry.id === id ? { ...r, on: !r.on } : r));
 }
