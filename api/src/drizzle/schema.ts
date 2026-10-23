@@ -92,4 +92,5 @@ export * from './schema/valheim-armory';
 export * from './schema/valheim-skill-days';
 export * from './schema/valheim-containers';
 export * from './schema/valheim-recipes';
+export * from './schema/valheim-deaths';
 export * from './schema/discord-game-roles';

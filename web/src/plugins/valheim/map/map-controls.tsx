@@ -24,6 +24,9 @@ export interface MapLayerState {
     sharedAvailable: boolean;
     pinLabels: boolean;
     onPinLabels: (on: boolean) => void;
+    /** ROK-1930 Q4: the "Death pins only" switch (URL `?pins=death`); omitted = no switch. */
+    deathsOnly?: boolean;
+    onDeathsOnly?: (on: boolean) => void;
 }
 
 export interface MapControlsProps extends MapLayerState {
@@ -33,6 +36,7 @@ export interface MapControlsProps extends MapLayerState {
 
 const SHARED_LABEL = 'Show cartography table';
 const SHARED_HINT = 'No cartography table data for this world yet.';
+const DEATHS_LABEL = 'Death pins only';
 
 function SwitchRow(props: { text: string; children: React.ReactNode }) {
     return (
@@ -43,7 +47,21 @@ function SwitchRow(props: { text: string; children: React.ReactNode }) {
     );
 }
 
-/** The two layer switches — shared by the inline panel and the phone sheet. */
+/** ROK-1930 Q4 — the third switch; writes `?pins=death` through the view's filter hook. */
+function DeathsOnlySwitch({ deathsOnly, onDeathsOnly }: MapLayerState) {
+    if (!onDeathsOnly) return null;
+    return (
+        <SwitchRow text={DEATHS_LABEL}>
+            <Switch
+                label={DEATHS_LABEL}
+                checked={deathsOnly ?? false}
+                onChange={onDeathsOnly}
+            />
+        </SwitchRow>
+    );
+}
+
+/** The layer switches — shared by the inline panel and the phone sheet. */
 export function LayerSwitches(props: MapLayerState) {
     const hintId = useId();
     const { sharedAvailable } = props;
@@ -70,6 +88,7 @@ export function LayerSwitches(props: MapLayerState) {
                     onChange={props.onPinLabels}
                 />
             </SwitchRow>
+            <DeathsOnlySwitch {...props} />
         </div>
     );
 }
