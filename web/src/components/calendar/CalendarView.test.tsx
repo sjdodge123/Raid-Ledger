@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CalendarView } from './CalendarView';
 import { useCalendarViewStore } from '../../stores/calendar-view-store';
 import { createMockEvent } from '../../test/factories';
+import { useCalendarHubFilterStore, NO_HUB, type HubKey } from '../../pages/calendar/use-calendar-hub-filter';
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 
@@ -281,5 +282,54 @@ describe('CalendarView — schedule event navigation (ROK-691)', () => {
                 state: expect.objectContaining({ fromCalendar: true }),
             }),
         );
+    });
+});
+
+describe('CalendarView — hub-filtered empty state (ROK-1893)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        useCalendarViewStore.setState({ viewPref: 'week' });
+    });
+    afterEach(() => {
+        useCalendarHubFilterStore.getState().showAll();
+    });
+
+    it('shows a filter-aware empty line + "Show all hubs" while the hub filter hides events (ROK-1893)', () => {
+        useCalendarHubFilterStore.setState({ hidden: new Set<HubKey>([NO_HUB]) });
+        renderWithProviders(<CalendarView />);
+        expect(screen.getByText('No events match your filters')).toBeInTheDocument();
+        expect(screen.queryByText('No events this week')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Show all hubs' }));
+        expect(useCalendarHubFilterStore.getState().hidden.size).toBe(0);
+        expect(screen.getByText('No events this week')).toBeInTheDocument();
+    });
+});
+
+describe('CalendarView — Week card accessible name carries the hub (ROK-1893 P4 verify)', () => {
+    const LABEL = String.raw`\d{1,2}:\d{2} [AP]M – \d{1,2}:\d{2} [AP]M`;
+    beforeEach(() => {
+        localStorage.clear();
+        useCalendarViewStore.setState({ viewPref: 'week' });
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        mockUseEventsReturn.data = { data: [] };
+    });
+
+    // rbc's card is a role=button div whose name comes from its content and whose `title`
+    // ("<time>: <tooltip>") is what the verify lane read; both must carry the hub.
+    it('a hub-tagged card reads "<time>: <title> · <hub>"; an untagged one stays "<time>: <title>"', () => {
+        mockUseEventsReturn.data = {
+            data: [
+                createMockEvent({ id: 34, title: 'Hub calendar night #34', startTime: '2026-02-10T14:00:00Z', endTime: '2026-02-10T17:00:00Z', hub: { id: 7, name: 'Seed Crew', kind: 'game_community' } }),
+                createMockEvent({ id: 35, title: 'Plain night', startTime: '2026-02-11T14:00:00Z', endTime: '2026-02-11T17:00:00Z', hub: null }),
+            ],
+        };
+        renderWithProviders(<CalendarView />, '/calendar?view=week');
+        const tagged = screen.getByRole('button', { name: /Hub calendar night #34.*· Seed Crew/, description: new RegExp(`^${LABEL}: Hub calendar night #34 · Seed Crew$`) });
+        expect(tagged).toHaveAttribute('title', expect.stringMatching(/: Hub calendar night #34 · Seed Crew$/));
+        expect(screen.getByRole('button', { name: /Plain night/, description: new RegExp(`^${LABEL}: Plain night$`) })).toBeInTheDocument();
     });
 });

@@ -45,3 +45,27 @@ export async function tabOrder(page: Page): Promise<string[]> {
     }
     return hrefs.map((h) => h.replace(/^#/, ''));
 }
+
+/**
+ * The hub tab `id` is reachable the way a user reaches it: its link in the row
+ * when it fits, or (phone/tablet, when the row folds it — ROK-1876) an item in
+ * the opened More menu. Its accessible name must match `label`. Leaves the
+ * menu closed, so the page is as the caller left it.
+ */
+export async function expectHubTabReachable(page: Page, label: RegExp, id: string): Promise<void> {
+    const nav = page.getByRole('navigation', { name: HUB_TABS_NAV });
+    const rowLink = nav.getByTestId('tab-row-scroller').locator(`a[href="#${id}"]`).first();
+    const trigger = nav.getByTestId('tab-row-more-trigger');
+    await expect(rowLink.or(trigger).first(), `#${id} in the row, or a More trigger`).toBeVisible({ timeout: 15_000 });
+    if (await rowLink.isVisible()) {
+        await expect(rowLink, `#${id} row link is named ${label}`).toHaveAccessibleName(label);
+        return;
+    }
+    await trigger.click();
+    const menu = page.getByTestId('tab-row-more-menu');
+    const item = menu.locator(`a[href="#${id}"]`);
+    await expect(item, `#${id} is folded into the More menu`).toBeVisible();
+    await expect(item, `#${id} More item is named ${label}`).toHaveAccessibleName(label);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+}

@@ -47,6 +47,7 @@ export type NotificationType =
     | 'hub_event_tagged'
     | 'hub_proposal_submitted'
     | 'hub_proposal_reviewed'
+    | 'valheim_claim_suggestion'
     | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';

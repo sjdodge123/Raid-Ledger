@@ -17,6 +17,8 @@ export const NOOP_LIVENESS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 /**
  * Valid categories for cron jobs. Must match the `category` column values.
  */
+import { PLUGIN_JOB_METADATA } from './cron-job.constants.plugins';
+
 export type CronCategory =
   | 'Data Sync'
   | 'Notifications'
@@ -318,4 +320,5 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',
     category: 'Monitoring',
   },
+  ...PLUGIN_JOB_METADATA,
 };

@@ -8,6 +8,7 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type * as schema from '../drizzle/schema';
 import { isInDiscordGuild } from '../guilds/community/discord-guild-member.helpers';
 import {
+  CommunityHubsSeedSchema,
   SEED_USERNAMES,
   ensureSeedUser,
   seedDiscordId,
@@ -98,5 +99,21 @@ describe('ensureSeedUser', () => {
     await expect(ensureSeedUser(typed(), 'community-solo')).rejects.toThrow(
       'community-solo: its snowflake is taken by another user',
     );
+  });
+});
+
+describe('CommunityHubsSeedSchema (ROK-1893 P4)', () => {
+  it('makes the tagged hub event opt-in', () => {
+    expect(CommunityHubsSeedSchema.parse({ gameId: 3 })).toEqual({
+      gameId: 3,
+    });
+    expect(CommunityHubsSeedSchema.parse({ withEvent: true })).toEqual({
+      withEvent: true,
+    });
+  });
+
+  it('rejects a non-boolean withEvent', () => {
+    const res = CommunityHubsSeedSchema.safeParse({ withEvent: 'yes' });
+    expect(res.success).toBe(false);
   });
 });

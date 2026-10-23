@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DiscordNotificationProcessor } from './discord-notification.processor';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
@@ -91,6 +92,7 @@ describe('DiscordNotificationProcessor', () => {
           },
         },
         { provide: QueueHealthService, useValue: { register: jest.fn() } },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 

@@ -4,9 +4,11 @@
  * member), one `proposed` by `demo-member`, one archived. Idempotent: the
  * previous fixture is reset first (demo-test-community-hubs.reset.ts). No `games`
  * INSERT — an existing game is reused, so the name-dedup guard is moot.
+ * ROK-1893 P4: with `withEvent: true`, plus one event tagged (`guild_id`) to
+ * "Seed Crew" (`hubEvent`); omitted, the seed creates no events.
  */
 import { NotFoundException } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, like } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../drizzle/schema';
@@ -17,7 +19,11 @@ import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.help
 type Db = PostgresJsDatabase<typeof schema>;
 
 export const CommunityHubsSeedSchema = z
-  .object({ gameId: z.number().int().positive().optional() })
+  .object({
+    gameId: z.number().int().positive().optional(),
+    /** ROK-1893 P4: also seed the crew hub's tagged event (`hubEvent`). */
+    withEvent: z.boolean().optional(),
+  })
   .strict();
 
 /** The seed's ids for smoke specs + the fleet plan. */
@@ -36,6 +42,14 @@ export interface CommunityHubsSeedResult {
   memberUserIds: number[];
   bannedUserId: number;
   proposalId: number;
+  /** ROK-1893 P4: the event tagged to the crew hub (only with `withEvent`). */
+  hubEvent?: SeedHubEvent;
+}
+
+export interface SeedHubEvent {
+  id: number;
+  title: string;
+  startTime: string;
 }
 
 export const SEED_HUB_NAMES = {
@@ -221,4 +235,73 @@ export async function seedArchivedHub(
   const id = await seedActiveHub(db, gameId, SEED_HUB_NAMES.archived, leaderId);
   await archiveHub(db, id, 'admin');
   return id;
+}
+
+const HOUR_MS = 3_600_000;
+const HUB_EVENT_PREFIX = 'Hub calendar night #';
+
+/** The fixture's earlier hub events by `creatorId` on the game. */
+async function deleteOldHubEvents(
+  db: Db,
+  gameId: number,
+  creatorId: number,
+): Promise<void> {
+  const ev = schema.events;
+  await db
+    .delete(ev)
+    .where(
+      and(
+        eq(ev.creatorId, creatorId),
+        eq(ev.gameId, gameId),
+        like(ev.title, `${HUB_EVENT_PREFIX}%`),
+      ),
+    );
+}
+
+const HUB_EVENT_HOURS = 3;
+
+/**
+ * A whole hour 1–2h from now, or 18:00 UTC tomorrow when that would run past
+ * UTC midnight (a day-crossing event leaves the Week grid's timed column).
+ */
+export function hubEventStart(nowMs: number): Date {
+  const start = new Date((Math.floor(nowMs / HOUR_MS) + 2) * HOUR_MS);
+  if (start.getUTCHours() + HUB_EVENT_HOURS <= 24) return start;
+  start.setUTCDate(start.getUTCDate() + 1);
+  start.setUTCHours(18);
+  return start;
+}
+
+/**
+ * ROK-1893 P4: one 3h event (the Week card's `compact` tier, which shows the
+ * hub) tagged to `hubId`, at `hubEventStart` — the current calendar week
+ * except late on a Saturday, so smoke specs deep-link `?date=` from
+ * `startTime`. The title carries the hub
+ * id, so it is unique per seed. Earlier fixture events by `creatorId` on the
+ * game are deleted first: the reset deletes their hub, which only nulls
+ * `guild_id`, so they would linger as untagged duplicates.
+ */
+export async function seedHubEvent(
+  db: Db,
+  gameId: number,
+  hubId: number,
+  creatorId: number,
+): Promise<SeedHubEvent> {
+  await deleteOldHubEvents(db, gameId, creatorId);
+  const ev = schema.events;
+  const start = hubEventStart(Date.now());
+  const end = new Date(start.getTime() + HUB_EVENT_HOURS * HOUR_MS);
+  const title = `${HUB_EVENT_PREFIX}${hubId}`;
+  const [row] = await db
+    .insert(ev)
+    .values({
+      title,
+      gameId,
+      creatorId,
+      duration: [start, end],
+      guildId: hubId,
+    })
+    .returning({ id: ev.id });
+  if (!row) throw new Error(`seed hub event for hub ${hubId} returned no row`);
+  return { id: row.id, title, startTime: start.toISOString() };
 }

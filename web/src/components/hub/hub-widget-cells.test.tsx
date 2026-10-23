@@ -50,6 +50,14 @@ describe('gameWidgetCells', () => {
         expect(document.getElementById('hub-widget-wow-classes')).not.toBeNull();
     });
 
+    it("chrome 'none' renders the body as the whole cell: no WidgetCard heading, the cell id kept", async () => {
+        register({ chrome: 'none', span: 3 });
+        renderWithProviders(<Harness p={page()} />);
+        expect(await screen.findByTestId('forever-body')).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Class breakdown' })).toBeNull();
+        expect(document.getElementById('hub-widget-wow-classes')).toHaveClass('lg:col-span-3');
+    });
+
     it('renders nothing for an inactive plugin or another game', () => {
         register();
         const { unmount } = renderWithProviders(<Harness p={page()} active={new Set()} />);

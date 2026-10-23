@@ -163,7 +163,9 @@ describe('activity preview — hub-link parity with reconcile (Codex r2 P2)', ()
   it("passes the hub linker's hubNeedsLinkGameIds into the derivation", async () => {
     const ids = new Set([7]);
     const linker: HubLinker = {
-      linkHubsForGame: jest.fn().mockResolvedValue(0),
+      linkHubsForGame: jest
+        .fn()
+        .mockResolvedValue({ channelId: '', guildIds: [] }),
       hubNeedsLinkGameIds: jest.fn().mockResolvedValue(ids),
     };
     const select = jest

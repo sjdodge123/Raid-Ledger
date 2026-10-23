@@ -36,7 +36,20 @@ export interface JoinPostMessage {
   id: string;
   pinned: boolean;
   author: { id: string };
-  embeds: ReadonlyArray<{ author: { name: string } | null }>;
+  embeds: ReadonlyArray<{
+    author: { name: string } | null;
+    /** ROK-1933: the hub welcome is matched by title too. */
+    title?: string | null;
+  }>;
+  /**
+   * ROK-1933: the hub welcome is matched by its link button's `/hubs/<id>`
+   * URL. `type` keeps the element types non-weak so a real discord.js
+   * `Message` (whose components carry no `url`/`components`) still fits.
+   */
+  components?: ReadonlyArray<{
+    type: number;
+    components?: ReadonlyArray<{ type: number; url?: string | null }>;
+  }>;
   edit(payload: JoinPostPayload): Promise<unknown>;
   pin(reason?: string): Promise<unknown>;
 }
@@ -106,20 +119,23 @@ export function isOwnJoinPost(
   );
 }
 
+/** Predicate naming "our own" message for {@link findOwnMessage}. */
+export type OwnMessageMatcher = (message: JoinPostMessage) => boolean;
+
 /**
  * Walk the channel's pins page by page (Discord serves 50 per page), newest
  * first, until the bot's own post turns up or the pins run out.
  */
 async function scanPins(
   channel: JoinPostChannel,
-  botUserId: string,
+  isOwn: OwnMessageMatcher,
 ): Promise<JoinPostMessage | null> {
   let before: number | undefined;
   for (let page = 0; page < JOIN_POST_PIN_PAGES; page += 1) {
     const pins = await channel.messages.fetchPins(
       before === undefined ? undefined : { before },
     );
-    const own = pins.items.find((pin) => isOwnJoinPost(pin.message, botUserId));
+    const own = pins.items.find((pin) => isOwn(pin.message));
     if (own) return own.message;
     const oldest = pins.items.at(-1);
     if (!pins.hasMore || !oldest) return null;
@@ -128,31 +144,43 @@ async function scanPins(
   return null;
 }
 
-async function scanForJoinPost(
+async function scanForOwn(
   channel: JoinPostChannel,
-  botUserId: string,
+  isOwn: OwnMessageMatcher,
 ): Promise<JoinPostMessage | null> {
-  const pinned = await scanPins(channel, botUserId);
+  const pinned = await scanPins(channel, isOwn);
   if (pinned) return pinned;
   const recent = await channel.messages.fetch({
     limit: JOIN_POST_HISTORY_SCAN,
   });
-  return [...recent.values()].find((m) => isOwnJoinPost(m, botUserId)) ?? null;
+  return [...recent.values()].find(isOwn) ?? null;
 }
 
 /**
- * Rediscover the bot's own join post (pins first, then recent history).
+ * Rediscover a message the bot owns (pins first, then recent history).
  * A failed scan answers null: with no id stored there is nothing to protect.
+ * Shared by the join post and the ROK-1933 hub welcome.
+ *
+ * @param channel - Channel to scan.
+ * @param isOwn - Which message counts as ours.
  */
-export async function findOwnJoinPost(
+export async function findOwnMessage(
   channel: JoinPostChannel,
-  botUserId: string,
+  isOwn: OwnMessageMatcher,
 ): Promise<JoinPostMessage | null> {
   try {
-    return await scanForJoinPost(channel, botUserId);
+    return await scanForOwn(channel, isOwn);
   } catch {
     return null;
   }
+}
+
+/** Rediscover the bot's own join post. */
+export function findOwnJoinPost(
+  channel: JoinPostChannel,
+  botUserId: string,
+): Promise<JoinPostMessage | null> {
+  return findOwnMessage(channel, (m) => isOwnJoinPost(m, botUserId));
 }
 
 function pinWarning(err: unknown): string {
@@ -172,14 +200,16 @@ function pinWarning(err: unknown): string {
  *
  * @param message - The post.
  * @param warn - Log sink for the refusal.
+ * @param reason - Audit-log reason (ROK-1933: the hub welcome passes its own).
  */
 export async function tryPin(
   message: JoinPostMessage,
   warn: (line: string) => void,
+  reason: string = JOIN_POST_PIN_REASON,
 ): Promise<JoinPostPinResult> {
   if (message.pinned) return { pinned: true, warning: null };
   try {
-    await message.pin(JOIN_POST_PIN_REASON);
+    await message.pin(reason);
     return { pinned: true, warning: null };
   } catch (err) {
     const warning = pinWarning(err);

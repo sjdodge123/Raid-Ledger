@@ -122,9 +122,9 @@ afterEach(async () => {
 describe('R15 — a channel-less server hub is auto-linked', () => {
   it('no profile row → profile created with the channel + source auto', async () => {
     const hubId = await seedHub();
-    await expect(
-      linker.linkHubsForGame(testApp.seed.game.id, MANAGED),
-    ).resolves.toBe(1);
+    expect(
+      (await linker.linkHubsForGame(testApp.seed.game.id, MANAGED)).guildIds,
+    ).toHaveLength(1);
     const row = await profile(hubId);
     expect(row?.discordChannelId).toBe(MANAGED);
     expect(row?.discordChannelSource).toBe('auto');
@@ -150,9 +150,9 @@ describe('R15 — a channel-less server hub is auto-linked', () => {
   it('OQ-3: WoW guild hubs and hidden hubs are never linked', async () => {
     const wow = await seedHub('wow_guild');
     const hidden = await seedHub('game_server', true);
-    await expect(
-      linker.linkHubsForGame(testApp.seed.game.id, MANAGED),
-    ).resolves.toBe(0);
+    expect(
+      (await linker.linkHubsForGame(testApp.seed.game.id, MANAGED)).guildIds,
+    ).toHaveLength(0);
     expect(await profile(wow)).toBeUndefined();
     expect(await profile(hidden)).toBeUndefined();
     expect(await linker.hubNeedsLinkGameIds()).toEqual(new Set());
@@ -163,9 +163,9 @@ describe("R16 — a 'manual' hub is never touched", () => {
   it('a Leader-set channel stays', async () => {
     const hubId = await seedHub();
     await discord.setChannel(admin(), hubId, { channelId: LEADER_PICK });
-    await expect(
-      linker.linkHubsForGame(testApp.seed.game.id, MANAGED),
-    ).resolves.toBe(0);
+    expect(
+      (await linker.linkHubsForGame(testApp.seed.game.id, MANAGED)).guildIds,
+    ).toHaveLength(0);
     const row = await profile(hubId);
     expect(row?.discordChannelId).toBe(LEADER_PICK);
     expect(row?.discordChannelSource).toBe('manual');
@@ -175,9 +175,9 @@ describe("R16 — a 'manual' hub is never touched", () => {
     const hubId = await seedHub();
     await linker.linkHubsForGame(testApp.seed.game.id, MANAGED);
     await discord.clearChannel(hubId);
-    await expect(
-      linker.linkHubsForGame(testApp.seed.game.id, MANAGED),
-    ).resolves.toBe(0);
+    expect(
+      (await linker.linkHubsForGame(testApp.seed.game.id, MANAGED)).guildIds,
+    ).toHaveLength(0);
     const row = await profile(hubId);
     expect(row?.discordChannelId).toBeNull();
     expect(row?.discordChannelSource).toBe('manual');

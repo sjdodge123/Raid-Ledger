@@ -33,6 +33,8 @@ import {
   resolveSeedGame,
   seedActiveHub,
   seedArchivedHub,
+  seedHubEvent,
+  type SeedHubEvent,
   seedProposal,
   type CommunityHubsSeedResult,
 } from './demo-test-community-hubs.helpers';
@@ -80,7 +82,21 @@ export class DemoTestCommunityHubsController {
     const { server, guild } = await seedOtherKindHubs(this.db, gameId);
     const { crew, ...rest } = main;
     const hubIds = { crew, solo, archived, server, guild };
-    return { gameId, hubIds, ...rest, proposalId };
+    const event = input.withEvent
+      ? await this.hubEvent(gameId, crew, rest.leaderUserId)
+      : {};
+    return { gameId, hubIds, ...rest, proposalId, ...event };
+  }
+
+  /** ROK-1893 P4: the crew hub's tagged event, only when requested. */
+  private async hubEvent(
+    gameId: number,
+    crew: number,
+    leaderUserId: number,
+  ): Promise<{ hubEvent: SeedHubEvent }> {
+    return {
+      hubEvent: await seedHubEvent(this.db, gameId, crew, leaderUserId),
+    };
   }
 
   /** "Seed Crew": leader + officer + 4 members live, one banned user. */

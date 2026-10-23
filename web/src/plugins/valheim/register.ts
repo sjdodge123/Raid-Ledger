@@ -5,6 +5,8 @@ import { LazyValheimCharactersHubTab } from './hub/valheim-characters-hub-tab-la
 import { LazyValheimMapHubTab } from './hub/valheim-map-hub-tab-lazy';
 import { LazyValheimMaterialsHubTab } from './hub/valheim-materials-hub-tab-lazy';
 import { LazyValheimPlannerHubTab } from './hub/valheim-planner-hub-tab-lazy';
+import { LazyValheimClaimBannerWidget } from './hub/valheim-claim-banner-widget-lazy';
+import { useClaimBannerWidgetVisible } from './hooks/use-valheim-claim-banner';
 
 /** Valheim plugin (ROK-1833) — the slug matches the api manifest id `valheim`. Neutral registry colour. */
 const valheim = registerPlugin('valheim', {
@@ -56,4 +58,19 @@ valheim.registerHubGameTab(['valheim'], {
     order: 30,
     component: LazyValheimPlannerHubTab,
     visible: hasServer,
+});
+
+// ROK-1933 Part 1 — the claim banner on the Overview (dismissible, Q3); members only, server hubs only.
+valheim.registerHubWidget({
+    id: 'claim-banner',
+    title: 'Claim your character',
+    games: ['valheim'],
+    kinds: ['game_server'],
+    order: 5,
+    span: 3,
+    audience: 'members',
+    // The banner is its own §4.7 callout + landmark — no WidgetCard heading over it.
+    chrome: 'none',
+    component: LazyValheimClaimBannerWidget,
+    useVisible: useClaimBannerWidgetVisible,
 });
