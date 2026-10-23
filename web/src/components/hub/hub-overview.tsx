@@ -8,7 +8,7 @@
  * ROK-1918: cells come from `layout/hub-widget-catalog`, ordered and filtered
  * by the hub's saved `widgetPrefs` through `layout/resolve-hub-layout`.
  */
-import { Fragment, lazy, Suspense, type JSX } from 'react';
+import { Fragment, lazy, Suspense, useState, type JSX } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { useHubSettings } from './settings/hub-settings-context';
 import { usePluginStore } from '../../stores/plugin-store';
@@ -74,16 +74,23 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // ROK-1918: the hub's saved layout; `null`/absent = registry default (the pre-1918 Overview).
     const prefs = ctx.page.widgetPrefs ?? null;
     const layout = resolveHubLayout(catalog, prefs, ctx.page.viewer);
+    const [arranging, setArranging] = useState(false);
+    // One tree position for the grid (hidden, not unmounted, while arranging):
+    // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
-        <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
+        <div hidden={arranging} className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             <SetupChecklistCell ctx={ctx} mods={mods} />
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </div>
     );
     if (!ctx.page.viewer.canEdit) return grid;
     return (
-        <Suspense fallback={grid}>
-            <HubArrangeGate grid={grid} guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} layout={layout} prefs={prefs} raidsPending={ctx.raids.isPending} />
-        </Suspense>
+        <>
+            <Suspense fallback={null}>
+                <HubArrangeGate guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} layout={layout} prefs={prefs}
+                    raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={setArranging} />
+            </Suspense>
+            {grid}
+        </>
     );
 }

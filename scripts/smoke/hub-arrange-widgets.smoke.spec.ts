@@ -150,7 +150,7 @@ test.describe('Hub Overview arrange (ROK-1918)', () => {
             await expectDefaultGrid(page);
 
             const mode = await enterArrange(page);
-            await expect(page.getByTestId('guild-overview'), 'the grid is replaced by the list while arranging').toHaveCount(0);
+            await expect(page.getByTestId('guild-overview'), 'the grid is replaced by the list while arranging').toBeHidden();
             await expect(mode.getByTestId('arrange-row-attendance').getByTestId('arrange-row-owner')).toHaveText('Core');
             await expect(mode.getByTestId('arrange-row-module:members-summary').getByTestId('arrange-row-owner')).toHaveText('World of Warcraft');
 

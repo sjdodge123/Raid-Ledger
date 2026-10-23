@@ -15,6 +15,7 @@ import { clearRegistry, registerPlugin } from '../../../plugins/plugin-registry'
 import { usePluginStore } from '../../../stores/plugin-store';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { GUILD_RAIDS_URL } from '../../../test/mocks/guild-raids-handlers';
 import { GuildPage } from '../hub-page';
 
 const BASE = 'http://localhost:3000/guilds/7';
@@ -48,6 +49,9 @@ const testModule: HubModule = {
 
 let patched: unknown[] = [];
 
+/** The default arrange order for `PAGE` + `testModule` (hidden rows keep their slot). */
+const SAVED_ORDER = ['gm-post', 'discord', 'schedule', 'events', 'module:uptime', 'module:arrivals', 'attendance'];
+
 function serve(page: GuildPageDto, widgetPrefs: HubWidgetPrefs | null = null): void {
     server.use(
         http.get(BASE, () => HttpResponse.json({ ...page, widgetPrefs })),
@@ -59,8 +63,18 @@ function serve(page: GuildPageDto, widgetPrefs: HubWidgetPrefs | null = null): v
     );
 }
 
+function renderPage(): ReturnType<typeof renderWithProviders> {
+    return renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
+}
+
+/** Arrange mode has closed and the grid is showing again. */
+async function expectGridBack(): Promise<void> {
+    await waitFor(() => expect(screen.queryByTestId('hub-arrange-mode')).not.toBeInTheDocument());
+    expect(screen.getByTestId('guild-overview')).toBeVisible();
+}
+
 async function openArrange(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
-    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
+    renderPage();
     const button = await screen.findByTestId('hub-arrange');
     await waitFor(() => expect(button).toBeEnabled());
     await user.click(button);
@@ -89,6 +103,38 @@ describe('Arrange button (ROK-1918 AC1)', () => {
         renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
         await screen.findByTestId('w-uptime');
         expect(screen.queryByTestId('hub-arrange')).not.toBeInTheDocument();
+    });
+
+    it('stays disabled while the raids query is still loading', async () => {
+        serve(PAGE);
+        server.use(http.get(GUILD_RAIDS_URL, () => new Promise<never>(() => undefined)));
+        renderPage();
+        expect(await screen.findByTestId('hub-arrange')).toBeDisabled();
+    });
+
+    it('stays disabled when the raids query failed (its widgets are missing from the draft)', async () => {
+        serve(PAGE);
+        server.use(http.get(GUILD_RAIDS_URL, () => HttpResponse.json({ message: 'nope' }, { status: 403 })));
+        const { queryClient } = renderPage();
+        const button = await screen.findByTestId('hub-arrange');
+        await waitFor(() => expect(queryClient.getQueryCache().findAll().some((q) => q.queryKey.includes('raids') && q.state.status === 'error')).toBe(true));
+        expect(button, 'Arrange must not open on a draft missing the raids widgets').toBeDisabled();
+    });
+
+    it('keeps the grid\'s widgets mounted across the editor chunk loading and arrange enter/exit', async () => {
+        const user = userEvent.setup();
+        serve(PAGE);
+        renderPage();
+        const first = await screen.findByTestId('w-uptime');
+        const button = await screen.findByTestId('hub-arrange');
+        await waitFor(() => expect(button).toBeEnabled());
+        expect(screen.getByTestId('w-uptime'), 'no remount when the editor chunk resolves').toBe(first);
+        await user.click(button);
+        await screen.findByTestId('hub-arrange-mode');
+        expect(screen.getByTestId('guild-overview')).not.toBeVisible();
+        await user.click(screen.getByTestId('arrange-cancel'));
+        await expectGridBack();
+        expect(screen.getByTestId('w-uptime'), 'no remount on leaving arrange mode').toBe(first);
     });
 });
 
@@ -138,8 +184,9 @@ describe('arrange mode — save, reset, cancel, leave (ROK-1918 L5)', () => {
         await user.click(screen.getByRole('button', { name: 'Hide Uptime' }));
         await user.click(screen.getByTestId('arrange-save'));
         await waitFor(() => expect(patched).toHaveLength(1));
-        expect(patched[0]).toEqual({ order: rowIds(list), hidden: ['module:uptime'], added: [], config: TEXT_CONFIG });
-        expect(await screen.findByTestId('guild-overview')).toBeInTheDocument();
+        expect(patched[0]).toEqual({ order: SAVED_ORDER, hidden: ['module:uptime'], added: [], config: TEXT_CONFIG });
+        expect(rowIds(list)).toEqual(SAVED_ORDER);
+        await expectGridBack();
     });
 
     it('Reset to default confirms, then sends { reset: true }', async () => {
@@ -165,7 +212,7 @@ describe('arrange mode — save, reset, cancel, leave (ROK-1918 L5)', () => {
         await user.click(await screen.findByTestId('hub-arrange'));
         expect(rowIds(await screen.findByRole('list', { name: 'Overview widgets, in order' }))).toEqual(before);
         await user.click(screen.getByTestId('arrange-cancel'));
-        expect(await screen.findByTestId('guild-overview')).toBeInTheDocument();
+        await expectGridBack();
         expect(patched).toEqual([]);
     });
 
