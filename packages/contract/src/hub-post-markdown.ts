@@ -65,7 +65,11 @@ export function parseHubPostHeading(line: string): HubPostHeading | null {
 function stripHeadingMarkers(body: string): string {
   return body
     .split('\n')
-    .map((line) => parseHubPostHeading(line)?.text ?? line)
+    .map((line) => {
+      const text = parseHubPostHeading(line)?.text;
+      // Heading text is literal: escape a leading list bullet so the later list-prefix pass keeps it.
+      return text === undefined ? line : text.replace(/^[-*+](?=\s|$)/, '\\$&');
+    })
     .join('\n');
 }
 

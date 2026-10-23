@@ -95,6 +95,12 @@ describe('markdownToPlainText', () => {
     ['#### four\n#nospace', '#### four\n#nospace'],
     ['- # in a list', '• # in a list'],
     ['#  two spaces', 'two spaces'],
+    // Codex P2: heading text is literal — no list-prefix pass on it.
+    ['# + 20% XP', '+ 20% XP'],
+    ['# - item', '- item'],
+    ['## * star', '* star'],
+    ['# 1. x', '1. x'],
+    ['# - a\n- b\n+ c', '- a\n• b\n• c'],
   ])('%j → %j', (body, plain) => {
     expect(markdownToPlainText(body)).toBe(plain);
   });
