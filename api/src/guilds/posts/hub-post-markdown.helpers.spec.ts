@@ -132,6 +132,7 @@ describe('markdownExcerpt — headings (ROK-1898)', () => {
       '# Raid\n## Time\n### Loot\n\\#### four\n\\#nospace',
     );
     expect(ex('## **Raid** night', 300)).toBe('## **Raid** night');
+    expect(ex('#  Raid', 300)).toBe('# Raid');
   });
 
   it('H2 a heading inside a list item stays literal text', () => {

@@ -6,7 +6,7 @@
  * line after a hard-break line (trailing two spaces / `\`), continues the
  * previous item (rendered after a `<br>`); everything else is a paragraph
  * whose single newlines are `<br>`s. A line that is a `#`–`###` heading
- * (`parseHubPostHeading`: column 0, one space, non-blank text — ROK-1898) is a
+ * (`parseHubPostHeading`: column 0, one or more spaces, non-blank text — ROK-1898) is a
  * one-line heading block that ends whatever block was open. Quotes, rules,
  * tables, HTML and `####`+ are NOT recognised — paragraph text, rendered literally.
  */

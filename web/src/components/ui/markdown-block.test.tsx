@@ -158,6 +158,12 @@ describe('MarkdownBlock — headings (ROK-1898)', () => {
         expect(root.querySelector('h4 a')?.getAttribute('href')).toBe('/p');
     });
 
+    it('two or more spaces after the marker still make a heading (one or more spaces)', () => {
+        const root = mount('#  Raid\n\n##   Loot');
+        expect(root.querySelector('h3')?.textContent).toBe('Raid');
+        expect(root.querySelector('h4')?.textContent).toBe('Loot');
+    });
+
     it('an indented or tab-separated marker is not a heading (column 0, then a space)', () => {
         const root = mount(' # a\n\n#\tb');
         expect(root.querySelector('h3')).toBeNull();

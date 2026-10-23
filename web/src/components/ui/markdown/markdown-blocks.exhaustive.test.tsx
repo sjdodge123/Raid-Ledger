@@ -41,7 +41,8 @@ const R14C: string[] = [
 const CONSTRUCTS: string[] = [
     ...R14C,
     '# $', '## $', '### $', '#### $', '##### $', '###### $', '####### $', '#$', '#', '# $ #',
-    // ROK-1898: heading edge cases — not headings (two spaces, tab, indent, escaped, blank text), a
+    // ROK-1898: heading edge cases — two spaces IS a heading (one or more spaces); not headings: tab,
+    // indent, escaped, blank text; a
     // heading whose text looks like a marker, and a heading interrupting a paragraph / hard-broken item.
     '#  $', '#\t$', ' # $', '\\## $', '# ', '## ', '# # $', '# - $', '# 1. $', '# > $', '#### $\n# $',
     '# $\n## $\n### $', '$  \n# $', '- $  \n# $', '# $  \n$', '# $\\\n$', '- # $', '1. ## $', '$  \n\\# $',

@@ -35,7 +35,7 @@ export type HubPostHeadingLevel = 1 | 2 | 3;
 
 export interface HubPostHeading {
   level: HubPostHeadingLevel;
-  /** Source length of the marker including its one space (`## ` → 3). */
+  /** Source length of the marker including the spaces after it (`## ` → 3, `#  ` → 3). */
   markerLength: number;
   /** The heading's inline markdown source, after the marker. */
   text: string;
@@ -43,8 +43,9 @@ export interface HubPostHeading {
 
 /**
  * The ATX heading a single source line opens (ROK-1898), or null. A heading is
- * 1–3 `#` at column 0, one space, then non-blank text: `# Raid` is a heading;
- * `#Raid`, `# `, ` # Raid` and `#### Raid` are plain text. Only a whole line
+ * 1–3 `#` at column 0, one or more spaces, then non-blank text: `# Raid` and
+ * `#  Raid` are headings (text `Raid` — the spaces belong to the marker);
+ * `#Raid`, `#\tRaid`, `# `, ` # Raid` and `#### Raid` are plain text. Only a whole line
  * can be a heading — `- # Raid` is a list item whose text is `# Raid`. No
  * closing `#` sequence is stripped. Bounded loop, no regex.
  */
@@ -52,10 +53,12 @@ export function parseHubPostHeading(line: string): HubPostHeading | null {
   let n = 0;
   while (n <= HUB_POST_MAX_HEADING_LEVEL && line[n] === '#') n++;
   if (n === 0 || n > HUB_POST_MAX_HEADING_LEVEL || line[n] !== ' ') return null;
-  const text = line.slice(n + 1);
+  let m = n + 1;
+  while (line[m] === ' ') m++;
+  const text = line.slice(m);
   if (text.trim() === '') return null;
   const level: HubPostHeadingLevel = n === 1 ? 1 : n === 2 ? 2 : 3;
-  return { level, markerLength: n + 1, text };
+  return { level, markerLength: m, text };
 }
 
 /** `body` with every heading line's marker removed (code spans are per-line here). */

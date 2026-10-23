@@ -128,7 +128,7 @@ function lineStart(ctx: Ctx): number {
   if (!heading) return blockStart(ctx, 0, true);
   ctx.out.push({
     kind: 'heading',
-    src: ctx.line.slice(0, heading.markerLength),
+    src: `${'#'.repeat(heading.level)} `,
   });
   return blockStart(ctx, heading.markerLength, false);
 }
