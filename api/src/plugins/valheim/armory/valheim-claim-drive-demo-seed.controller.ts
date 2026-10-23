@@ -49,6 +49,7 @@ const RequestSchema = z
       .max(VALHEIM_LINK_FIXTURE_SLOTS - 1),
     sighting: z.boolean(),
     bDiscordId: z.string().regex(/^\d{17,20}$/),
+    nameSuffix: z.string().regex(/^[A-Za-z0-9-]{1,12}$/),
   })
   .partial()
   .strict();
@@ -57,11 +58,16 @@ function parseRequest(body: unknown): ClaimDriveRequest {
   const parsed = RequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, sighting?: boolean, bDiscordId?: snowflake }`,
+      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, sighting?: boolean, bDiscordId?: snowflake, nameSuffix?: [A-Za-z0-9-]{1,12} }`,
     );
   }
-  const { worker = 0, sighting = false, bDiscordId = null } = parsed.data;
-  return { worker, sighting, bDiscordId };
+  const {
+    worker = 0,
+    sighting = false,
+    bDiscordId = null,
+    nameSuffix = null,
+  } = parsed.data;
+  return { worker, sighting, bDiscordId, nameSuffix };
 }
 
 /**
@@ -70,6 +76,8 @@ function parseRequest(body: unknown): ClaimDriveRequest {
  * unclaimed ones (one named exactly like fresh user B's display name), B with
  * no claim. Both users are onboarded hub members with a Discord id (B's is
  * `bDiscordId` when given, so a real account can receive the DM).
+ * `nameSuffix` (≤12 of `[A-Za-z0-9-]`) is appended to the server/hub name so
+ * a smoke can own a run-unique hub title; omitted, it stays `Claimheim <n>`.
  * `sighting: true` also starts a live Quick Play where a Steam-only player has
  * been on B's matching character for 20 min — what one claim-suggest scan
  * (`POST .../claim-suggest-scan`) needs to DM B.
@@ -94,6 +102,7 @@ export class ValheimClaimDriveDemoSeedController {
       this.db,
       req.worker,
       gameId,
+      req.nameSuffix,
     );
     await clearClaimDriveSighting(this.db, req.worker);
     const tag = fixtureTag(req.worker);

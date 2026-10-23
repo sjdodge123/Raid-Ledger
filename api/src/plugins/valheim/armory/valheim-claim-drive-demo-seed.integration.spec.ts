@@ -169,6 +169,32 @@ describe('POST /admin/test/valheim/claim-drive-fixture (ROK-1933 L6a)', () => {
     expect(other.serverId).not.toBe(first.serverId);
   });
 
+  it('nameSuffix is appended to the server and hub name; omitted, the default stays', async () => {
+    const hubName = async (f: ClaimDriveFixture): Promise<[string, string]> => {
+      const [server] = await testApp.db
+        .select({ name: schema.pelicanServers.name })
+        .from(schema.pelicanServers)
+        .where(eq(schema.pelicanServers.id, f.serverId));
+      const [hub] = await testApp.db
+        .select({ name: schema.guilds.name })
+        .from(schema.guilds)
+        .where(eq(schema.guilds.id, f.guildId));
+      return [server?.name ?? 'no server', hub?.name ?? 'no hub'];
+    };
+    const plain = await seed({ worker: 4 });
+    expect(await hubName(plain)).toEqual(['Claimheim 4', 'Claimheim 4']);
+    const run1 = await seed({ worker: 4, nameSuffix: 'run-1' });
+    expect(run1.guildId).toBe(plain.guildId);
+    expect(await hubName(run1)).toEqual([
+      'Claimheim 4 run-1',
+      'Claimheim 4 run-1',
+    ]);
+    const run2 = await seed({ worker: 4, nameSuffix: 'Ab9' });
+    expect(await hubName(run2)).toEqual(['Claimheim 4 Ab9', 'Claimheim 4 Ab9']);
+    await seed({ worker: 4 });
+    expect(await hubName(plain)).toEqual(['Claimheim 4', 'Claimheim 4']);
+  });
+
   it('sighting:true leaves a sighting that a scan past the minimum age sees', async () => {
     const f = await seed({ sighting: true });
     expect(f.eventId).toEqual(expect.any(Number));
@@ -191,6 +217,10 @@ describe('POST /admin/test/valheim/claim-drive-fixture (ROK-1933 L6a)', () => {
       { worker: 99 },
       { sighting: 'yes' },
       { bDiscordId: 'abc' },
+      { nameSuffix: '' },
+      { nameSuffix: 'has space' },
+      { nameSuffix: 'a'.repeat(13) },
+      { nameSuffix: 7 },
       { extra: 1 },
     ]) {
       const res = await testApp.request

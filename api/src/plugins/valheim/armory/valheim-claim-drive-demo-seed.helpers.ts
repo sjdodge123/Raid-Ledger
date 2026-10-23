@@ -58,18 +58,29 @@ export interface ClaimDriveRequest {
   worker: number;
   sighting: boolean;
   bDiscordId: string | null;
+  /** Appended to the server/hub name (`Claimheim <worker> <suffix>`), or null. */
+  nameSuffix: string | null;
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/** The worker's server (and hub) name: `Claimheim <worker>[ <suffix>]`. */
+export function claimDriveServerName(
+  worker: number,
+  nameSuffix: string | null,
+): string {
+  const base = `Claimheim ${worker}`;
+  return nameSuffix ? `${base} ${nameSuffix}` : base;
+}
 
 /** Upsert the worker's own Valheim server row; returns its id. */
 export async function upsertClaimDriveServer(
   db: Db,
   worker: number,
   gameId: number,
+  name: string,
 ): Promise<number> {
   const S = schema.pelicanServers;
-  const name = `Claimheim ${worker}`;
   const [row] = await db
     .insert(S)
     .values({
@@ -87,15 +98,27 @@ export async function upsertClaimDriveServer(
   return row.id;
 }
 
-/** The worker's server + its visible hub (catalogue inserted when absent). */
+/**
+ * The worker's server + its visible hub (catalogue inserted when absent).
+ * The hub is renamed to the server's name on every call, so a per-run
+ * `nameSuffix` reaches an already-existing hub too.
+ */
 export async function ensureClaimDriveHub(
   db: Db,
   worker: number,
   gameId: number,
+  nameSuffix: string | null = null,
 ): Promise<{ serverId: number; guildId: number }> {
-  const serverId = await upsertClaimDriveServer(db, worker, gameId);
+  const name = claimDriveServerName(worker, nameSuffix);
+  const serverId = await upsertClaimDriveServer(db, worker, gameId, name);
   await ensureArmoryCatalog(db, serverId);
-  return { serverId, guildId: await ensureFixtureHubId(db, serverId, gameId) };
+  const guildId = await ensureFixtureHubId(db, serverId, gameId);
+  const G = schema.guilds;
+  await db
+    .update(G)
+    .set({ name, nameKey: name.toLowerCase() })
+    .where(eq(G.id, guildId));
+  return { serverId, guildId };
 }
 
 /** A per-call unique tag: worker + base36 clock + 2 random chars. */
