@@ -64,10 +64,10 @@ describe('PostItem (V4)', () => {
         expect(screen.getByRole('link', { name: /view in discord/i })).toHaveAttribute('href', relay.messageUrl);
     });
 
-    it('copies the post deep link /guilds/7?post=3#posts', async () => {
+    it('copies the post deep link /hubs/7?post=3#posts', async () => {
         renderWithProviders(<PostItem guildId={7} post={buildHubPost({ id: 3 })} canEdit={false} />);
         await userEvent.click(screen.getByRole('button', { name: /copy link/i }));
-        expect(copyWithToast).toHaveBeenCalledWith(`${window.location.origin}/guilds/7?post=3#posts`);
+        expect(copyWithToast).toHaveBeenCalledWith(`${window.location.origin}/hubs/7?post=3#posts`);
     });
 
     it('gives Edit and Delete to editors only', () => {

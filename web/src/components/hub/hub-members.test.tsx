@@ -34,7 +34,7 @@ const PAGE: GuildPageDto = {
 function renderMembers(): void {
     window.location.hash = '#members';
     server.use(http.get(BASE, () => HttpResponse.json(PAGE)));
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 /** The names the list shows right now, in order. */

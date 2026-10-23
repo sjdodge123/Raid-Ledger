@@ -55,7 +55,7 @@ describe('HubsDirectoryPage — kind chips and card actions', () => {
         server.use(...communityHubHandlers({ directory: MIXED }));
         renderPage();
         const card = await cardFor('Valheim — Gamernight');
-        expect(within(card).getByRole('link', { name: 'View Valheim — Gamernight' })).toHaveAttribute('href', '/guilds/310');
+        expect(within(card).getByRole('link', { name: 'View Valheim — Gamernight' })).toHaveAttribute('href', '/hubs/310');
         expect(within(card).queryByRole('button', { name: /Join/ })).toBeNull();
         expect(within(card).getByText('12 members')).toBeInTheDocument();
     });
@@ -64,7 +64,7 @@ describe('HubsDirectoryPage — kind chips and card actions', () => {
         server.use(...communityHubHandlers({ directory: MIXED }));
         renderPage();
         const guild = await cardFor('Iron Vanguard');
-        expect(within(guild).getByRole('link', { name: 'View Iron Vanguard' })).toHaveAttribute('href', '/guilds/3');
+        expect(within(guild).getByRole('link', { name: 'View Iron Vanguard' })).toHaveAttribute('href', '/hubs/3');
         expect(within(guild).queryByText('Joined')).toBeNull();
         const community = await cardFor('BG3 Crew');
         expect(within(community).getByRole('button', { name: 'Join BG3 Crew' })).toBeInTheDocument();

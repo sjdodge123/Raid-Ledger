@@ -178,39 +178,89 @@ const GUILD_ROUTE_DIFF = [
 ].join('\n');
 
 /**
- * The /guilds mapping, stated as a property of the corpus instead of an exact
- * list: the guild spec is in, and EVERY listed spec really visits /guilds. An
- * exact list broke on any branch that adds another /guilds smoke spec (PR #1613
- * added guild-content.smoke.spec.ts and this case went red in CI).
+ * A quoted URL that opens the hub page (ROK-1891): the canonical `/hubs/<id>`
+ * or the legacy `/guilds/<id>` that redirects to it. The `/hubs` directory
+ * (`/hubs?game=…`) is a different page (HubsDirectoryPage) and API paths such
+ * as `/hubs/proposals/mine` are not page visits, so neither counts: the id
+ * must be a literal number or an interpolation.
  */
-function assertGuildRouteSpecs(out, specDir) {
+const HUB_PAGE_URL = /["'`}]\/(guilds|hubs)\/(\$\{|\d)/m;
+
+/**
+ * The hub-page mapping, stated as a property of the corpus instead of an exact
+ * list: the guild spec is in, and EVERY listed spec really visits the hub page
+ * by one of its two paths. An exact list broke on any branch that adds another
+ * hub smoke spec (PR #1613 added guild-content.smoke.spec.ts and this case
+ * went red in CI).
+ */
+function assertHubPageRouteSpecs(out, specDir) {
   assert.ok(!out.includes('ALL') && !out.includes('NONE'), JSON.stringify(out));
   assert.ok(out.includes(`${specDir}/guild-page.smoke.spec.ts`), JSON.stringify(out));
   for (const spec of out) {
     const text = readFileSync(isAbsolute(spec) ? spec : join(REPO_ROOT, spec), 'utf8');
-    assert.match(text, /["'`}]\/guilds(["'`/?#]|$)/m, `${spec} does not visit /guilds`);
+    assert.match(text, HUB_PAGE_URL, `${spec} does not visit the hub page (/hubs/<id> or /guilds/<id>)`);
   }
 }
 
-test('an added /guilds/:id route + lazy page map to the guild spec (ROK-1785 shape)', () => {
-  assertGuildRouteSpecs(scopeSpecs([ROUTES, LAZY], GUILD_ROUTE_DIFF), 'scripts/smoke');
-});
-
-test('the /guilds mapping holds when a branch adds another /guilds smoke spec', () => {
-  // The corpus is the real smoke specs PLUS a new one, via SCOPE_SPEC_DIR, so
-  // the case is independent of which specs this checkout's branch adds.
+/** The real smoke specs plus `extra` ({name: source}) in a temp corpus dir. */
+function withCorpus(extra, fn) {
   const dir = mkdtempSync(join(tmpdir(), 'scope-specs-corpus-'));
   try {
     cpSync(join(REPO_ROOT, 'scripts', 'smoke'), dir, { recursive: true });
-    const added = join(dir, 'guild-content.smoke.spec.ts');
-    writeFileSync(added, "test('x', async ({ page }) => { await page.goto('/guilds/1/content'); });\n");
-    const out = scopeSpecs([ROUTES, LAZY], GUILD_ROUTE_DIFF, [], dir);
-
-    assert.ok(out.includes(added), `the new /guilds spec must be selected: ${JSON.stringify(out)}`);
-    assertGuildRouteSpecs(out, dir);
+    for (const [name, src] of Object.entries(extra)) writeFileSync(join(dir, name), src);
+    fn(dir);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+const gotoSpec = (url) => `test('x', async ({ page }) => { await page.goto('${url}'); });\n`;
+
+test('an added /guilds/:id route + lazy page map to the hub-page specs (ROK-1785 shape)', () => {
+  assertHubPageRouteSpecs(scopeSpecs([ROUTES, LAZY], GUILD_ROUTE_DIFF), 'scripts/smoke');
+});
+
+test('the hub-page mapping holds when a branch adds another /guilds smoke spec', () => {
+  // The corpus is the real smoke specs PLUS a new one, via SCOPE_SPEC_DIR, so
+  // the case is independent of which specs this checkout's branch adds.
+  withCorpus({ 'guild-content.smoke.spec.ts': gotoSpec('/guilds/1/content') }, (dir) => {
+    const out = scopeSpecs([ROUTES, LAZY], GUILD_ROUTE_DIFF, [], dir);
+
+    assert.ok(out.includes(join(dir, 'guild-content.smoke.spec.ts')), JSON.stringify(out));
+    assertHubPageRouteSpecs(out, dir);
+  });
+});
+
+test('a changed /hubs/:id route maps to specs reaching the hub page by either path, not the directory (ROK-1891)', () => {
+  const diff = diffFor(ROUTES, [
+    '-        <Route path="/hubs/:id" element={<GuildPage />} />',
+    '+        <Route path="/hubs/:id" element={<GuildPage tab="events" />} />',
+  ]);
+  withCorpus(
+    {
+      'legacy-hub-link.smoke.spec.ts': gotoSpec('/guilds/7'),
+      'hub-directory-only.smoke.spec.ts': gotoSpec('/hubs?game=1'),
+    },
+    (dir) => {
+      const out = scopeSpecs([ROUTES], diff, [], dir);
+
+      assert.ok(out.includes(join(dir, 'legacy-hub-link.smoke.spec.ts')), `the /guilds alias must be selected: ${JSON.stringify(out)}`);
+      assert.ok(!out.includes(join(dir, 'hub-directory-only.smoke.spec.ts')), `a /hubs directory-only spec must not be: ${JSON.stringify(out)}`);
+      assertHubPageRouteSpecs(out, dir);
+    },
+  );
+});
+
+test('a changed /hubs directory route still maps to the directory specs', () => {
+  const diff = diffFor(ROUTES, [
+    '-        <Route path="/hubs" element={<HubsDirectoryPage />} />',
+    '+        <Route path="/hubs" element={<HubsDirectoryPage compact />} />',
+  ]);
+  withCorpus({ 'hub-directory-only.smoke.spec.ts': gotoSpec('/hubs?game=1') }, (dir) => {
+    const out = scopeSpecs([ROUTES], diff, [], dir);
+
+    assert.ok(out.includes(join(dir, 'hub-directory-only.smoke.spec.ts')), JSON.stringify(out));
+  });
 });
 
 test('a changed nested (relative) route resolves through its parent path', () => {

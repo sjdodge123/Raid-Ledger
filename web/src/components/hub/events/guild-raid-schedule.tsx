@@ -26,8 +26,10 @@ function NightRow({ night }: { night: GuildScheduleNightDto }): JSX.Element {
     );
 }
 
-export function GuildRaidSchedule({ schedule, kind }: { schedule: GuildScheduleNightDto[]; kind?: GuildKind | undefined }): JSX.Element {
+/** ROK-1891 (operator ruling): on a server or community hub an empty schedule renders nothing. */
+export function GuildRaidSchedule({ schedule, kind }: { schedule: GuildScheduleNightDto[]; kind?: GuildKind | undefined }): JSX.Element | null {
     const copy = hubCopy(kind);
+    if (schedule.length === 0 && copy.hideEmptySchedule) return null;
     return (
         <WidgetCard id="guild-raid-schedule" title={copy.scheduleTitle}>
             {schedule.length === 0

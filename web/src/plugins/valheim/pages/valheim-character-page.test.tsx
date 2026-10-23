@@ -75,12 +75,12 @@ describe('ValheimCharacterPage', () => {
     it('links back to the hub tab it was opened from', async () => {
         server.use(valheimCharacterHandler(valheimCharacterDetail()));
         renderPage('/valheim/characters/12', {
-            hubPath: '/guilds/4#characters',
+            hubPath: '/hubs/4#characters',
         });
         const crumb = await screen.findByRole('link', {
             name: 'Fixtureheim · Characters',
         });
-        expect(crumb).toHaveAttribute('href', '/guilds/4#characters');
+        expect(crumb).toHaveAttribute('href', '/hubs/4#characters');
     });
 });
 
@@ -91,7 +91,7 @@ describe('ValheimCharacterPage (cont.)', () => {
         const crumb = await screen.findByRole('link', {
             name: 'Fixtureheim · Characters',
         });
-        expect(crumb).toHaveAttribute('href', '/guilds/4#characters');
+        expect(crumb).toHaveAttribute('href', '/hubs/4#characters');
     });
 
     it('draws no crumb on a cold deep link with no hub id in the detail', async () => {

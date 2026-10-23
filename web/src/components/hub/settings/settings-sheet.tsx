@@ -85,7 +85,7 @@ function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsS
         <>
             <DiscordSection guildId={ctx.page.guild.id} welcomeHub={isWelcomeHub(ctx.page.guild)} onChangeChannel={onChangeChannel} />
             {!isCommunity && <>
-            <SettingsSection title="Page editors" blurb="Who can edit this guild’s page." testId="guild-settings-editors">
+            <SettingsSection title="Page editors" blurb={`Who can edit this ${hubCopy(ctx.page.guild.kind).noun}’s page.`} testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
             </SettingsSection>
             <SettingsSection title="Visibility" testId="guild-settings-visibility">

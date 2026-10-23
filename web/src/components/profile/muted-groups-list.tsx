@@ -13,13 +13,14 @@ import { getAuthToken, useViewerCacheScope } from '../../hooks/use-auth';
 import { hubMutesQueryKey } from '../../hooks/game-interest-query-key';
 import { useHubNotificationMuteMutation } from '../../hooks/use-hub-notification-mute';
 import { Button } from '../ui/button';
+import { guildHref } from '../layout/hub-nav/my-hubs-queries';
 
 function MutedGroupRow({ group }: { group: HubNotificationMuteItemDto }): JSX.Element {
     const unmute = useHubNotificationMuteMutation(group.guildId);
     return (
         <li className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex items-baseline gap-2">
-                <Link to={`/guilds/${group.guildId}`} className="text-sm text-foreground hover:underline truncate min-w-0">
+                <Link to={guildHref(group.guildId)} className="text-sm text-foreground hover:underline truncate min-w-0">
                     {group.name}
                 </Link>
                 {group.gameName && <span className="text-xs text-muted truncate">{group.gameName}</span>}

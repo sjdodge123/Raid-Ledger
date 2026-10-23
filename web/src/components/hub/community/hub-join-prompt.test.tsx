@@ -134,7 +134,7 @@ describe('HubJoinPrompts', () => {
         renderWithProviders(<HubJoinPrompts eventId={12} enabled />);
         const notice = await screen.findByTestId('hub-auto-joined');
         expect(notice).toHaveTextContent('You joined BG3 Crew — leave anytime');
-        expect(screen.getByRole('link', { name: 'BG3 Crew' })).toHaveAttribute('href', '/guilds/41');
+        expect(screen.getByRole('link', { name: 'BG3 Crew' })).toHaveAttribute('href', '/hubs/41');
         expect(screen.queryByRole('button', { name: 'Join hub' })).not.toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Close the BG3 Crew notice' }));
         await waitFor(() => expect(calls).toContain('POST /users/me/hub-join-prompts/8/dismiss'));

@@ -109,7 +109,7 @@ async function eventPrompts(jwt: string, eventId: number): Promise<PromptRow[]> 
 
 /** Open the Members tab's "Invite people" dialog (Modal ≥1024px, BottomSheet below — both named dialogs). */
 async function openInviteDialog(page: Page, hubId: number): Promise<Locator> {
-    await page.goto(`/guilds/${hubId}#members`);
+    await page.goto(`/hubs/${hubId}#members`);
     await page.getByTestId('hub-invite-open').click({ timeout: 20_000 });
     const dialog = page.getByRole('dialog', { name: `Invite people to ${HUB}` });
     await expect(dialog).toBeVisible();
@@ -132,7 +132,7 @@ async function createLink(page: Page, jwt: string, hubId: number): Promise<{ inv
 
 /** The Leader sets the hub's auto-membership mode in the settings sheet. */
 async function setModeAsLeader(page: Page, seed: Seed, label: 'Off' | 'Suggest' | 'Auto'): Promise<void> {
-    await page.goto(`/guilds/${seed.hubIds.crew}`);
+    await page.goto(`/hubs/${seed.hubIds.crew}`);
     await page.getByTestId('guild-settings-trigger').click({ timeout: 20_000 });
     const section = page.getByTestId('guild-settings-sheet').getByTestId('community-settings-auto-membership');
     await section.getByRole('radio', { name: label, exact: true }).check();
@@ -176,7 +176,7 @@ test.describe('hub invite links', () => {
         await page.goto(`/h/${token}`);
         await expect(page.getByRole('heading', { name: HUB })).toBeVisible({ timeout: 20_000 });
         await page.getByTestId('hub-invite-join').click();
-        await expect(page).toHaveURL(new RegExp(`/guilds/${seed.hubIds.crew}(?:[?#]|$)`), { timeout: 15_000 });
+        await expect(page).toHaveURL(new RegExp(`/hubs/${seed.hubIds.crew}(?:[?#]|$)`), { timeout: 15_000 });
         await expect.poll(() => viewerOf(joinerJwt, seed.gameId, seed.hubIds.crew), {
             message: 'the invite Join must reach the API',
         }).toBe('member');
@@ -240,6 +240,6 @@ test.describe('hub auto-membership', () => {
         await page.goto(`/events/${eventId}`);
         const notice = page.getByTestId('hub-auto-joined');
         await expect(notice).toContainText(`You joined ${HUB}`, { timeout: 20_000 });
-        await expect(notice.getByRole('link', { name: HUB })).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
+        await expect(notice.getByRole('link', { name: HUB })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
     });
 });

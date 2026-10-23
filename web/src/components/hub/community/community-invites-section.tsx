@@ -22,7 +22,8 @@ import { Input } from '../../ui/input';
 import { Modal } from '../../ui/modal';
 import { SettingsSection } from '../settings/settings-rows';
 import { useHubInvites } from './hub-invites-api';
-import { canInvite, isLiveInvite } from './community-invite-helpers';
+import { isLiveInvite } from './community-invite-helpers';
+import { canInvite } from './community-invite-access';
 import { CreateInviteRow, InviteRows } from './community-invite-rows';
 
 const LOAD_ERROR = 'Couldn’t load invite links. Try again later.';
@@ -66,7 +67,8 @@ function InviteDialogBody({ hubId }: { hubId: number }): JSX.Element {
     );
 }
 
-function InviteDialog({ hubId, title, onClose }: { hubId: number; title: string; onClose: () => void }): JSX.Element {
+/** #1742's copy-link dialog — also opened by the community setup checklist's Invite step (ROK-1891). */
+export function HubInviteDialog({ hubId, title, onClose }: { hubId: number; title: string; onClose: () => void }): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     if (isDesktop) {
         return (
@@ -90,7 +92,7 @@ export function HubInviteAction(ctx: HubCtx): JSX.Element | null {
     return (
         <>
             <Button variant="secondary" size="sm" data-testid="hub-invite-open" onClick={() => setOpen(true)}>Invite people</Button>
-            {open && <InviteDialog hubId={hub.id} title={`Invite people to ${hub.name}`} onClose={() => setOpen(false)} />}
+            {open && <HubInviteDialog hubId={hub.id} title={`Invite people to ${hub.name}`} onClose={() => setOpen(false)} />}
         </>
     );
 }

@@ -1,6 +1,5 @@
 /** ROK-1893 P1 — pure helpers for the hub invite UI (expiry choices, live check, row copy). */
 import type { CreateHubInviteDto, HubInvite } from '@raid-ledger/contract';
-import type { HubCtx } from '../../../plugins/hub-module';
 
 export const EXPIRY_OPTIONS = [
     { value: '1', label: '1 hour' },
@@ -37,9 +36,4 @@ export function expiryLabel(expiresAt: string | null, now: number): string {
 
 export function usesLabel(inv: HubInvite): string {
     return inv.maxUses === null ? `${inv.useCount} joined` : `${inv.useCount} of ${inv.maxUses} joined`;
-}
-
-/** Live member of an active community hub ⇒ may make invite links (§8a(a)). */
-export function canInvite(ctx: HubCtx): boolean {
-    return ctx.page.community?.status === 'active' && ctx.page.viewer.role !== 'visitor';
 }
