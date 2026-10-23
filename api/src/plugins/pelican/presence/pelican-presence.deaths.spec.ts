@@ -118,9 +118,9 @@ describe('PresenceDeathRecorder (ROK-1930)', () => {
   it('does nothing and never throws with no sink bound', async () => {
     const h = recorderHarness(undefined);
     // toStrictEqual: toEqual treats `[undefined]` (one queued sink call) as `[]`.
-    await expect(
-      h.feed([ev.char('Bjorn', true, T(1))]),
-    ).resolves.toStrictEqual([]);
+    await expect(h.feed([ev.char('Bjorn', true, T(1))])).resolves.toStrictEqual(
+      [],
+    );
     expect(h.queued()).toBe(0);
     expect(h.logger.warn).not.toHaveBeenCalled();
   });
