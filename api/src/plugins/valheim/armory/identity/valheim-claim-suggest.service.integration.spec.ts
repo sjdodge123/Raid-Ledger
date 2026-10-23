@@ -11,7 +11,6 @@
  *
  * Character and user names are invented.
  */
-import { getQueueToken } from '@nestjs/bullmq';
 import { Job, type Queue } from 'bullmq';
 import { ValheimCharacterMessageSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
@@ -20,7 +19,6 @@ import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { DEFAULT_CHANNEL_PREFS } from '../../../../drizzle/schema/notification-preferences';
 import { DiscordBotClientService } from '../../../../discord-bot/discord-bot-client.service';
-import { DISCORD_NOTIFICATION_QUEUE } from '../../../../notifications/discord-notification.constants';
 import { DiscordNotificationService } from '../../../../notifications/discord-notification.service';
 import { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
 import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
@@ -275,14 +273,13 @@ beforeEach(() => {
   connectedSpy = jest
     .spyOn(testApp.app.get(DiscordBotClientService), 'isConnected')
     .mockReturnValue(true);
-  dispatchSpy = jest.spyOn(
-    testApp.app.get(DiscordNotificationService),
-    'dispatch',
-  );
-  const queue = testApp.app.get<Queue>(
-    getQueueToken(DISCORD_NOTIFICATION_QUEUE),
-    { strict: false },
-  );
+  const discord = testApp.app.get(DiscordNotificationService);
+  dispatchSpy = jest.spyOn(discord, 'dispatch');
+  // The queue `dispatch` actually enqueues on. Not `app.get(getQueueToken(…))`:
+  // AdminModule and NotificationModule each call `BullModule.registerQueue`
+  // for this name, and Nest 11 keys dynamic modules by reference, so there are
+  // two Queue instances and `strict: false` returns AdminModule's.
+  const queue: Queue = discord['queue'];
   addSpy = jest
     .spyOn(queue, 'add')
     .mockImplementation((name, data) =>
