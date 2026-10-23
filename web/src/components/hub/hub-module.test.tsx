@@ -2,7 +2,7 @@
  * ROK-1830 AC2 — a second hub kind plugs into the shell with ZERO core edits.
  *
  * A throwaway plugin registers a `game_server` hub module with one tab and one
- * Overview widget. The core `/guilds/:id` shell must offer the tab in the
+ * Overview widget. The core `/hubs/:id` shell must offer the tab in the
  * frame's module band (after the Overview/Members/Events/Resources core band), render its
  * panel when selected, and draw the widget in the Overview bento — none of
  * which this file teaches core about.
@@ -50,7 +50,7 @@ const testModule: HubModule = {
 };
 
 function renderPage(): void {
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 beforeEach(() => {

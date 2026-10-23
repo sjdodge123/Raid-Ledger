@@ -55,7 +55,7 @@ describe('HubMemberTable (desktop shell)', () => {
         activateWowPlugin();
         window.location.hash = '#members';
         server.use(http.get(BASE, () => HttpResponse.json(PAGE)));
-        renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+        renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 
         const table = await screen.findByTestId('guild-members-table');
         expect(screen.queryByTestId('guild-members-cards'), 'the desktop branch must not render the phone cards').toBeNull();

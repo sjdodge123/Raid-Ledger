@@ -27,7 +27,7 @@ describe('Valheim owner avatar', () => {
         const { container } = render(
             <MemoryRouter>
                 <ul>
-                    <ValheimCharacterRow character={character} hubPath="/guilds/9" />
+                    <ValheimCharacterRow character={character} hubPath="/hubs/9" />
                 </ul>
             </MemoryRouter>,
         );

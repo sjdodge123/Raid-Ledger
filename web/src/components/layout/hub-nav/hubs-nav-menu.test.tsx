@@ -87,7 +87,7 @@ describe('HubsNavItem — the menu (D7)', () => {
         serve(TWO);
         const menu = await openMenu();
         const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
-        expect(items.map((a) => a.getAttribute('href'))).toEqual(['/guilds/31', '/guilds/21', '/hubs']);
+        expect(items.map((a) => a.getAttribute('href'))).toEqual(['/hubs/31', '/hubs/21', '/hubs']);
         expect(screen.getAllByTestId('hub-kind-chip').map((c) => c.textContent)).toEqual(['Server', 'Community']);
         expect(menu).toHaveTextContent('Your hubs');
         expect(screen.getByTestId('nav-hubs-browse-all')).toHaveTextContent('Browse all hubs');
@@ -113,7 +113,7 @@ describe('HubsNavItem — the menu (D7)', () => {
 
     it('the trigger announces a menu and lights on any hub page', async () => {
         serve(TWO);
-        renderWithProviders(<HubsNavItem pathname="/guilds/31" />);
+        renderWithProviders(<HubsNavItem pathname="/hubs/31" />);
         const trigger = await screen.findByTestId('nav-hubs-menu-trigger');
         expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
         expect(trigger).toHaveAttribute('aria-expanded', 'false');

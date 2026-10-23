@@ -32,7 +32,7 @@ describe('CommunityHubSwitch (ROK-1831)', () => {
     it('shows Open hub when on and Hidden when hidden', () => {
         const { sw } = renderSwitch({ ...pelicanServerFixture, communityHub: { guildId: 12, hidden: false } });
         expect(sw).toHaveAttribute('aria-checked', 'true');
-        expect(screen.getByTestId(`pelican-server-${pelicanServerFixture.id}-hub-open`)).toHaveAttribute('href', '/guilds/12');
+        expect(screen.getByTestId(`pelican-server-${pelicanServerFixture.id}-hub-open`)).toHaveAttribute('href', '/hubs/12');
     });
 
     it('reads a hidden hub as off, labelled Hidden', () => {

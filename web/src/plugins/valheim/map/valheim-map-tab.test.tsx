@@ -83,7 +83,7 @@ function Where() {
     return <output data-testid="where">{`${l.search}${l.hash}`}</output>;
 }
 
-const tab = (entry = '/guilds/1#map') =>
+const tab = (entry = '/hubs/1#map') =>
     renderWithProviders(
         <>
             <ValheimMapTab serverId={3} />
@@ -107,7 +107,7 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
 
     it('reads ?vc&vm and shows the world picker for a multi-map character', async () => {
         serve(ROWS, { 2: [21, 22] });
-        tab('/guilds/1?vc=2&vm=21#map');
+        tab('/hubs/1?vc=2&vm=21#map');
         expect(await screen.findByTestId('map-view')).toHaveTextContent('2:21');
         expect(screen.getByRole('combobox', { name: 'World' })).toHaveValue(
             '21',

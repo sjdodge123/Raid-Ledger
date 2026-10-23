@@ -63,7 +63,7 @@ function serve(mirror: GuildDiscordMirrorDto, list: GuildDiscordChannelListDto =
 }
 
 function renderHub(): void {
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 async function openPicker(mirror: GuildDiscordMirrorDto = { state: 'unset' }, list?: GuildDiscordChannelListDto): Promise<void> {
