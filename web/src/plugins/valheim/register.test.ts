@@ -70,3 +70,17 @@ describe('valheim register — game tabs on every hub kind (ROK-1912)', () => {
         expect(valheimIds(ctx('game_server', 'valheim', SERVER))).toEqual([]);
     });
 });
+
+describe('valheim register — Overview Deaths widget (ROK-1930)', () => {
+    it('registers a lazy, members-only `deaths` card on Valheim server hubs, after the core cards', async () => {
+        const { getHubGameWidgetRegistrations } = await import('../hub-game-widgets');
+        const reg = getHubGameWidgetRegistrations().find((r) => r.pluginSlug === 'valheim' && r.widget.id === 'deaths');
+        expect(reg?.widget.title).toBe('Deaths');
+        expect(reg?.widget.audience).toBe('members');
+        expect(reg?.widget.kinds).toEqual(['game_server']);
+        expect(reg?.widget.games).toEqual(['valheim']);
+        expect(reg?.widget.order).toBe(45);
+        expect(reg?.widget.action?.name).toBe('ValheimDeathsShowAll');
+        expect(reg?.widget.useVisible?.name).toBe('useDeathsWidgetVisible');
+    });
+});
