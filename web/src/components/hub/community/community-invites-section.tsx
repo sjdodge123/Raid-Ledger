@@ -22,7 +22,8 @@ import { Input } from '../../ui/input';
 import { Modal } from '../../ui/modal';
 import { SettingsSection } from '../settings/settings-rows';
 import { useHubInvites } from './hub-invites-api';
-import { canInvite, isLiveInvite } from './community-invite-helpers';
+import { isLiveInvite } from './community-invite-helpers';
+import { canInvite } from './community-invite-access';
 import { CreateInviteRow, InviteRows } from './community-invite-rows';
 
 const LOAD_ERROR = 'Couldn’t load invite links. Try again later.';

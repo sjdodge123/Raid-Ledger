@@ -14,7 +14,7 @@ import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { useHubSettings } from './settings/hub-settings-context';
 import { gameWidgetCells, type GameWidgetCell } from './hub-widget-cells';
 import { usePluginStore } from '../../stores/plugin-store';
-import { canInvite } from './community/community-invite-helpers';
+import { canInvite } from './community/community-invite-access';
 
 /**
  * ROK-1868 §3.4 — lazy so the post card, composer and post hooks (shared with
