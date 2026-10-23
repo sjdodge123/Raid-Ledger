@@ -121,7 +121,9 @@ const settings = {
 };
 const client = { isConnected: jest.fn(), getGuild: jest.fn() };
 const bindings = { bind: jest.fn(), unbindById: jest.fn() };
-const hubLinker = { linkHubsForGame: jest.fn().mockResolvedValue(0) };
+const hubLinker = {
+  linkHubsForGame: jest.fn().mockResolvedValue({ channelId: '', guildIds: [] }),
+};
 // Every bound channel is live (cached) — the Codex r6 existence sweep is a no-op here.
 const guild = {
   id: 'g1',
@@ -328,7 +330,10 @@ describe('actions', () => {
     selectRows.mockResolvedValue(
       [bound(1, {}, 1)].map((r) => ({ ...r, hubNeedsLink: true })),
     );
-    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    hubLinker.linkHubsForGame.mockResolvedValue({
+      channelId: '',
+      guildIds: [1],
+    });
     expect((await makeService().reconcile(live)).linkedHubs).toBe(1);
   });
   it('link_hub on a manual binding never rewrites its topic (Codex r3 P1)', async () => {
@@ -338,7 +343,10 @@ describe('actions', () => {
         hubNeedsLink: true,
       })),
     );
-    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    hubLinker.linkHubsForGame.mockResolvedValue({
+      channelId: '',
+      guildIds: [1],
+    });
     expect((await makeService().reconcile(live)).linkedHubs).toBe(1);
     expect(ops.setTopic).not.toHaveBeenCalled();
   });
@@ -346,7 +354,10 @@ describe('actions', () => {
     selectRows.mockResolvedValue(
       [bound(1, {}, 1)].map((r) => ({ ...r, hubNeedsLink: true })),
     );
-    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    hubLinker.linkHubsForGame.mockResolvedValue({
+      channelId: '',
+      guildIds: [1],
+    });
     await makeService().reconcile(live);
     expect(ops.setTopic).toHaveBeenCalledTimes(1);
   });
@@ -544,7 +555,10 @@ describe('review fixes — create capacity, topic, gone hubs', () => {
     selectRows.mockResolvedValue(
       [bound(1, {}, 1)].map((r) => ({ ...r, hubNeedsLink: true })),
     );
-    hubLinker.linkHubsForGame.mockResolvedValue(1);
+    hubLinker.linkHubsForGame.mockResolvedValue({
+      channelId: '',
+      guildIds: [1],
+    });
     const url = 'https://rl.test/guilds/7';
     jest
       .mocked(resolver.resolveGameHubLink)

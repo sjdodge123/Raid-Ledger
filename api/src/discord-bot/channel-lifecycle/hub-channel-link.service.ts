@@ -13,7 +13,7 @@ import {
   HUB_CHANNEL_EVENTS,
   emitHubChannelEvent,
 } from '../../guilds/hub-channel.events';
-import type { HubLinker } from './channel-lifecycle.types';
+import type { HubLinker, HubLinkResult } from './channel-lifecycle.types';
 import type { LifecycleDb } from './channel-lifecycle.store';
 import {
   findManagedForChannel,
@@ -55,27 +55,32 @@ export class HubChannelLinkService implements HubLinker, OnModuleInit {
   }
 
   /**
-   * Link every eligible channel-less hub of `gameId`; returns how many.
-   * ROK-1933: announces each new link (`previousChannelId` is always null —
-   * only channel-less hubs are linkable). NOTE: under the lifecycle tick `db`
-   * is the per-game transaction, so the emit precedes that tx's COMMIT. The
-   * consumer (`HubWelcomeService.welcomeLinked`) therefore trusts only the
-   * payload's ids and never reads the new binding row.
+   * Link every eligible channel-less hub of `gameId`; returns the linked hub
+   * ids. Emits nothing: under the lifecycle tick `db` is the per-game tx, so
+   * the caller announces via {@link announceLinked} once it commits (Codex P2).
    */
   async linkHubsForGame(
     gameId: number,
     channelId: string,
     db?: LifecycleDb,
-  ): Promise<number> {
-    const ids = await linkHubIdsForGame(db ?? this.db, gameId, channelId);
-    for (const guildId of ids) {
+  ): Promise<HubLinkResult> {
+    const guildIds = await linkHubIdsForGame(db ?? this.db, gameId, channelId);
+    return { channelId, guildIds };
+  }
+
+  /**
+   * ROK-1933: announce each committed link (`previousChannelId` is always
+   * null — only channel-less hubs are linkable). A throwing listener is
+   * contained by `emitHubChannelEvent`.
+   */
+  announceLinked({ channelId, guildIds }: HubLinkResult): void {
+    for (const guildId of guildIds) {
       emitHubChannelEvent(this.events, HUB_CHANNEL_EVENTS.LINKED, {
         guildId,
         channelId,
         previousChannelId: null,
       });
     }
-    return ids.length;
   }
 
   /** Games with an eligible hub lacking a channel (feeds `hubNeedsLink`). */

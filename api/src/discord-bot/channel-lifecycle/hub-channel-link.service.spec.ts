@@ -41,19 +41,26 @@ describe('HubChannelLinkService', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it('linkHubsForGame returns the count of linked hubs', async () => {
+  it('linkHubsForGame returns the linked hub ids and emits nothing (Codex P2)', async () => {
     const spy = jest
       .spyOn(queries, 'linkHubIdsForGame')
       .mockResolvedValue([11, 12]);
-    await expect(service.linkHubsForGame(7, 'chan-1')).resolves.toBe(2);
-    expect(spy).toHaveBeenCalledWith(db, 7, 'chan-1');
-  });
-
-  it('linkHubsForGame emits LINKED once per newly linked hub (ROK-1933)', async () => {
-    jest.spyOn(queries, 'linkHubIdsForGame').mockResolvedValue([11, 12]);
     const emit = jest.fn(() => true);
     const events = { emit } as unknown as EventEmitter2;
-    await new HubChannelLinkService(db, events).linkHubsForGame(7, 'chan-1');
+    await expect(
+      new HubChannelLinkService(db, events).linkHubsForGame(7, 'chan-1'),
+    ).resolves.toEqual({ channelId: 'chan-1', guildIds: [11, 12] });
+    expect(spy).toHaveBeenCalledWith(db, 7, 'chan-1');
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('announceLinked emits LINKED once per committed hub (ROK-1933)', () => {
+    const emit = jest.fn(() => true);
+    const events = { emit } as unknown as EventEmitter2;
+    new HubChannelLinkService(db, events).announceLinked({
+      channelId: 'chan-1',
+      guildIds: [11, 12],
+    });
     expect(emit.mock.calls).toEqual([
       [
         HUB_CHANNEL_EVENTS.LINKED,
@@ -66,15 +73,17 @@ describe('HubChannelLinkService', () => {
     ]);
   });
 
-  it('a throwing listener never fails the auto-link', async () => {
-    jest.spyOn(queries, 'linkHubIdsForGame').mockResolvedValue([11]);
+  it('a throwing listener never fails the announcement', () => {
     const emit = jest.fn(() => {
       throw new Error('discord down');
     });
     const events = { emit } as unknown as EventEmitter2;
-    await expect(
-      new HubChannelLinkService(db, events).linkHubsForGame(7, 'c'),
-    ).resolves.toBe(1);
+    expect(() =>
+      new HubChannelLinkService(db, events).announceLinked({
+        channelId: 'c',
+        guildIds: [11],
+      }),
+    ).not.toThrow();
   });
 
   it('hubNeedsLinkGameIds returns the set of games', async () => {
