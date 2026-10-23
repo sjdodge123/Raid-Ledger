@@ -6,7 +6,11 @@ import type {
   DeathGroupRow,
   DeathProfileRow,
 } from '../valheim-deaths.repository';
-import { MAX_DEATH_PLAYERS, toDeathsResponse } from './valheim-deaths.mappers';
+import {
+  MAX_DEATH_PLAYERS,
+  UNKNOWN_CHARACTER,
+  toDeathsResponse,
+} from './valheim-deaths.mappers';
 
 const A = '76561198000000001';
 const B = '76561198000000002';
@@ -148,5 +152,11 @@ describe('toDeathsResponse', () => {
     expect(
       toDeathsResponse({ groups: many, profiles: [] }).players,
     ).toHaveLength(MAX_DEATH_PLAYERS);
+  });
+
+  it('names a blank-name bucket "Unknown character" instead of failing the contract', () => {
+    expect(rows([group({ characterName: '  ', deaths: 2 })])).toEqual([
+      `${UNKNOWN_CHARACTER}|n${UNKNOWN_CHARACTER}|2|-`,
+    ]);
   });
 });

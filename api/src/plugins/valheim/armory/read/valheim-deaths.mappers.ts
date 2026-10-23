@@ -19,6 +19,11 @@ import type {
 /** The contract's cap on bars (the widget shows fewer). */
 export const MAX_DEATH_PLAYERS = 200;
 const NAME_MAX = 64;
+/** A blank stored name would fail the contract's `name.min(1)` and 500 the read. */
+export const UNKNOWN_CHARACTER = 'Unknown character';
+
+const displayName = (raw: string): string =>
+  (raw.trim() === '' ? UNKNOWN_CHARACTER : raw).slice(0, NAME_MAX);
 
 interface Bar {
   steamId: string | null;
@@ -111,7 +116,7 @@ interface KeyedBar extends Bar {
 function withKeys(bars: Bar[], profiles: DeathProfileRow[]): KeyedBar[] {
   const keyed = bars.map((b) => {
     const characterId = latestCharacterId(b.steamId, profiles);
-    const name = b.name.slice(0, NAME_MAX);
+    const name = displayName(b.name);
     const key = characterId === null ? `n${name}` : `c${characterId}`;
     return { ...b, name, key, characterId };
   });
