@@ -6,11 +6,14 @@
  *   The level also goes in `data-md-heading`, so copy/paste inside the editor keeps it (an h3 that
  *   is a level-1 heading must not parse back as level 3).
  * - Content is `text*` — no hard break: a stored heading is ONE line, and `# a  \nb` would read
- *   back as a heading plus a paragraph.
+ *   back as a heading plus a paragraph. Converting a multi-line paragraph turns each hard break
+ *   into a space first (`hardBreaksToSpaces`), so the words stay separated.
  * - `# ` / `## ` / `### ` at the start of a paragraph converts it (input rule). Inside a list item
  *   the rule cannot apply (items hold one paragraph), matching the contract: `- # x` is literal.
  */
-import { Node, textblockTypeInputRule, type Editor, type JSONContent, type MarkdownParseHelpers, type MarkdownRendererHelpers, type MarkdownToken } from '@tiptap/core';
+import { InputRule, Node, type Editor, type JSONContent, type MarkdownParseHelpers, type MarkdownRendererHelpers, type MarkdownToken } from '@tiptap/core';
+import type { NodeType } from '@tiptap/pm/model';
+import type { Transaction } from '@tiptap/pm/state';
 import { HUB_POST_MAX_HEADING_LEVEL, type HubPostHeadingLevel } from '@raid-ledger/contract';
 import { MD_CLASSES, MD_HEADING_TAG } from './markdown-classes';
 
@@ -44,13 +47,38 @@ function parseHeading(token: MarkdownToken, h: MarkdownParseHelpers) {
     return h.createNode('paragraph', {}, [h.createTextNode(raw.slice(0, end))]);
 }
 
+/** Each hard break in the textblocks spanning [from, to] → one space. Size-preserving (1 → 1), so no mapping. */
+function hardBreaksToSpaces(tr: Transaction, from: number, to: number): void {
+    const { doc } = tr;
+    doc.nodesBetween(from, to, (node, pos) => {
+        if (node.type.name === 'hardBreak') tr.replaceWith(pos, pos + 1, doc.type.schema.text(' ', node.marks));
+    });
+}
+
+/** `# ` / `## ` / `### ` at the start of a paragraph → heading (hard breaks become spaces). */
+function headingInputRule(type: NodeType): InputRule {
+    return new InputRule({
+        find: /^(#{1,3})\s$/,
+        handler: ({ state, range, match }) => {
+            const $start = state.doc.resolve(range.from);
+            if (!$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), type)) return null;
+            hardBreaksToSpaces(state.tr, $start.start(), $start.end());
+            state.tr.delete(range.from, range.to).setBlockType(range.from, range.from, type, { level: headingLevel(match[1]?.length) });
+        },
+    });
+}
+
 /**
  * Toolbar / shortcut toggle. Inside a list item it is a no-op: `toggleNode` would otherwise lift
  * the item out of its list to make room (items hold one paragraph; `- # x` is literal).
  */
 export function toggleHeading(editor: Editor, level: HubPostHeadingLevel): boolean {
     if (editor.isActive('listItem')) return false;
-    return editor.chain().focus().toggleNode('heading', 'paragraph', { level }).run();
+    const toHeading = !editor.isActive('heading', { level });
+    return editor.chain().focus().command(({ tr }) => {
+        if (toHeading) hardBreaksToSpaces(tr, tr.selection.$from.start(), tr.selection.$to.end());
+        return true;
+    }).toggleNode('heading', 'paragraph', { level }).run();
 }
 
 export const PostHeading = Node.create({
@@ -76,11 +104,7 @@ export const PostHeading = Node.create({
     parseMarkdown: parseHeading,
     renderMarkdown: renderHeading,
     addInputRules() {
-        return [textblockTypeInputRule({
-            find: /^(#{1,3})\s$/,
-            type: this.type,
-            getAttributes: (match) => ({ level: headingLevel(match[1]?.length) }),
-        })];
+        return [headingInputRule(this.type)];
     },
     addKeyboardShortcuts() {
         // In a list item the key is consumed as a no-op: falling through lets Ctrl+Alt (AltGr) type a character.

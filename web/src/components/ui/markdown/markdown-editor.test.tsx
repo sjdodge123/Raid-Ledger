@@ -313,6 +313,27 @@ describe('MarkdownEditor headings (ROK-1898)', () => {
 
 });
 
+describe('MarkdownEditor headings from a multi-line paragraph (ROK-1898 Codex P2)', () => {
+    const MULTI = 'Bring flasks  \nand food';
+    it('H1 turns each hard break into a space, and the saved heading round-trips', () => {
+        const { editor, el, last } = setup(MULTI);
+        editor.commands.setTextSelection(3);
+        fireEvent.click(screen.getByTestId('md-tool-h1'));
+        expect(el.querySelector('h3')?.textContent).toBe('Bring flasks and food');
+        expect(last()).toBe('# Bring flasks and food');
+        const again = setup(last());
+        expect(normalizeEditorMarkdown(again.editor.getMarkdown())).toBe('# Bring flasks and food');
+    });
+
+    it('typing "## " at the start keeps the words separated', () => {
+        const { editor, el, last } = setup(MULTI);
+        editor.commands.setTextSelection(1);
+        typeText(editor, '## ');
+        expect(el.querySelector('h4')?.textContent).toBe('Bring flasks and food');
+        expect(last()).toBe('## Bring flasks and food');
+    });
+});
+
 describe('MarkdownEditor headings in a list item (ROK-1898 review r2)', () => {
     it('H1–H3 are disabled with the caret in a list item and enabled again in a paragraph', () => {
         const { editor } = setup('- item\n\npara');
