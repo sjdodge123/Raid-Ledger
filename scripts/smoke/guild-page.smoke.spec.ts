@@ -15,7 +15,7 @@
  * from 768px (`md:`, ROK-1875 — it replaced the "Guild" text link and the
  * tablet user-menu item), and the More drawer's "Your hubs" block below 768px.
  */
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
@@ -251,21 +251,50 @@ test('hero "Next raid" chip jumps from Overview to the Raids tab', async ({ page
     });
 });
 
+/** A locator's box, failing loudly (with the label) when it has none. */
+async function boxOf(locator: Locator, label: string): Promise<{ top: number; bottom: number }> {
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`${label} has no bounding box`);
+    return { top: box.y, bottom: box.y + box.height };
+}
+
+test('hero at 820px: the title shares the first row with the actions, the chips sit on their own row beneath (ROK-1884)', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await page.setViewportSize({ width: 820, height: 1180 });
+        await signInAsAdmin(page.context());
+        await page.goto(`/hubs/${guild.guildId}`);
+        const hero = page.getByTestId('guild-hero');
+        await expect(hero).toBeVisible({ timeout: 15_000 });
+        // Both test ids predate ROK-1884, so a revert fails on the geometry below, not on a missing element.
+        const settings = hero.getByTestId('guild-settings-trigger');
+        const memberCount = hero.getByTestId('guild-member-count');
+        await expect(settings, 'an admin gets the settings action').toBeVisible({ timeout: 15_000 });
+        await expect(memberCount).toBeVisible();
+        const t = await boxOf(hero.getByRole('heading', { level: 1 }), 'the hub title');
+        const a = await boxOf(settings, 'the settings action');
+        const c = await boxOf(memberCount, 'the member-count chip');
+        expect(a.top < t.bottom && a.bottom > t.top, `the actions share the title's row (title ${t.top}–${t.bottom}, settings ${a.top}–${a.bottom})`).toBe(true);
+        expect(c.top, `the chip row starts below the title (title bottom ${t.bottom}, member count top ${c.top})`).toBeGreaterThanOrEqual(t.bottom);
+        expect(c.top, `the chip row starts below the actions (settings bottom ${a.bottom}, member count top ${c.top})`).toBeGreaterThanOrEqual(a.bottom);
+    });
+});
+
 test('editor: the Overview setup checklist scores the seeded hub and stays dismissed', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         const list = page.getByTestId('setup-checklist');
         await expect(list, 'the seeded hub still has steps outstanding (ROK-1830 S5b, D11-B)').toBeVisible({ timeout: 15_000 });
-        // An Officer has no channel picker, so the Discord row is blocked and
-        // drops out of the count: six countable steps, not seven.
-        // roster + next-raid + mods are seeded; leader-post, rules and links
-        // are profile copy the seed leaves empty — an exact 3, not a wildcard.
-        await expect(page.getByTestId('setup-checklist-progress')).toHaveText('3 of 6 done');
+        // ROK-1891 ruling 2026-10-23: the total counts every listed row, the
+        // blocked ones included (Leader, Publish, and Discord — an Officer has
+        // no channel picker): nine rows. roster + next-raid + mods are seeded;
+        // leader-post, rules and links are profile copy the seed leaves empty
+        // — an exact 3, not a wildcard.
+        await expect(page.getByTestId('setup-checklist-progress')).toHaveText('3 of 9 done');
         // ROK-1840 — S0 prototype parity: the card is titled with the hub, the
         // count sits beside a progress bar, each row explains itself, and the
         // footer says the hiding is stored on the account.
         await expect(page.getByRole('heading', { name: /^Set up Smoke / })).toBeVisible();
-        await expect(page.getByRole('meter', { name: 'Setup progress: 3 of 6 done' })).toHaveAttribute('aria-valuenow', '50');
+        await expect(page.getByRole('meter', { name: 'Setup progress: 3 of 9 done' })).toHaveAttribute('aria-valuenow', '33');
         await expect(list.getByTestId('setup-step-desc-leader-post')).toHaveText('It sits at the top of Overview.');
         await expect(list.getByTestId('setup-step-action-leader-post'), 'rows carry the verb, not "Open"').toHaveText('Write post');
         await expect(page.getByTestId('setup-checklist-footer')).toContainText('saved to your account');

@@ -43,14 +43,14 @@ describe('HubSetupChecklist — steps', () => {
         serve({ ...EMPTY_PROFILE, rules: [{ title: 'Be on time', body: 'Invites at 19:45.' }] }, UNSET);
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const list = await screen.findByTestId('setup-checklist');
-        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('2 of 7 done');
+        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('2 of 9 done');
         // ROK-1840 (S0 prototype): the count sits beside a progress bar, the
         // card is titled with the hub, every row carries its description line
         // and a verb-labelled action, and the footer names where the hiding
         // is stored.
         expect(screen.getByRole('heading', { name: 'Set up Ashen Vanguard' })).toBeInTheDocument();
-        const meter = screen.getByRole('meter', { name: 'Setup progress: 2 of 7 done' });
-        expect(meter).toHaveAttribute('aria-valuenow', '29');
+        const meter = screen.getByRole('meter', { name: 'Setup progress: 2 of 9 done' });
+        expect(meter).toHaveAttribute('aria-valuenow', '22');
         expect(within(list).getByTestId('setup-step-desc-leader-post')).toHaveTextContent('It sits at the top of Overview.');
         expect(within(list).getByTestId('setup-step-action-leader-post')).toHaveTextContent('Write post');
         expect(screen.getByTestId('setup-checklist-footer')).toHaveTextContent('Hiding it is saved to your account.');
@@ -126,7 +126,7 @@ describe('HubSetupChecklist — blocked and omitted steps', () => {
         const blocked = await screen.findByTestId('setup-step-blocked-discord');
         expect(blocked).toHaveTextContent('Ask your Leader');
         expect(screen.queryByTestId('setup-step-action-discord')).not.toBeInTheDocument();
-        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('1 of 6 done');
+        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('1 of 9 done');
     });
 
     // Lead ruling 3: no mod sources on this hub kind ⇒ no "Recommend mods".

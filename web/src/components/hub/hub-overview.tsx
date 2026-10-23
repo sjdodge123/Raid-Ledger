@@ -80,7 +80,7 @@ function coreCells(ctx: HubCtx, onChangeChannel: (() => void) | null, mods: Mods
     const cells: Cell[] = [
         ...checklist,
         { key: 'gm-post', order: 10, span: 1, node: <Suspense fallback={<PostCellSkeleton />}><LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} canOpenPosts={page.viewer.role !== 'visitor'} /></Suspense> },
-        { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
+        { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} kind={page.guild.kind} /></Suspense> },
     ];
     if (!data) return cells;
     cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} kind={page.guild.kind} /> });

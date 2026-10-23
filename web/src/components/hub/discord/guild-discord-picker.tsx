@@ -5,7 +5,7 @@
  * (D7/D8). Server refusals (400 / 403 / 409) show inline, verbatim.
  */
 import { useState, type JSX } from 'react';
-import type { GuildDiscordChannelListDto, GuildDiscordChannelOptionDto } from '@raid-ledger/contract';
+import type { GuildDiscordChannelListDto, GuildDiscordChannelOptionDto, GuildKind } from '@raid-ledger/contract';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
@@ -22,6 +22,8 @@ interface PickerProps {
     guildId: number; currentId: string | null; onClose: () => void;
     /** ROK-1428: the game an auto-linked current channel was created for. */
     managedFor?: string | null;
+    /** ROK-1891: the hub kind, for the hint's fallback wording when the server name is unknown. */
+    kind?: GuildKind;
 }
 
 const ACK_LABEL = 'Every member who can open this guild page will see this channel’s messages.';
@@ -62,8 +64,10 @@ function ListStatus({ data, isError }: { data: GuildDiscordChannelListDto | unde
     return null;
 }
 
-function ChannelSelect({ form, options, managedFor }: { form: PickerForm; options: GuildDiscordChannelOptionDto[]; managedFor: string | null }): JSX.Element {
-    const base = pickerHint(form.channels.data?.serverName);
+interface SelectProps { form: PickerForm; options: GuildDiscordChannelOptionDto[]; managedFor: string | null; kind: GuildKind | undefined }
+
+function ChannelSelect({ form, options, managedFor, kind }: SelectProps): JSX.Element {
+    const base = pickerHint(form.channels.data?.serverName, kind);
     const hint = managedFor && !form.dirty ? <>{base}<span className="block" data-testid="guild-discord-managed-hint">{managedChannelHint(managedFor)}</span></> : base;
     return (
         <Field label="Channel" hint={hint} error={form.errorText}>
@@ -75,7 +79,7 @@ function ChannelSelect({ form, options, managedFor }: { form: PickerForm; option
     );
 }
 
-function PickerBody({ form, managedFor }: { form: PickerForm; managedFor: string | null }): JSX.Element {
+function PickerBody({ form, managedFor, kind }: { form: PickerForm; managedFor: string | null; kind: GuildKind | undefined }): JSX.Element {
     const data = form.channels.data;
     const status = <ListStatus data={data} isError={form.channels.isError} />;
     if (!data || !data.connected || data.channels.length === 0 || form.channels.isError) {
@@ -84,7 +88,7 @@ function PickerBody({ form, managedFor }: { form: PickerForm; managedFor: string
     const options = visibleChannels(form.list, form.showPrivate, form.choiceId || null);
     return (
         <div className="flex flex-col gap-4" data-testid="guild-discord-picker-body">
-            <ChannelSelect form={form} options={options} managedFor={managedFor} />
+            <ChannelSelect form={form} options={options} managedFor={managedFor} kind={kind} />
             <Checkbox label="Show private channels" checked={form.showPrivate} data-testid="guild-discord-show-private"
                 onChange={(e) => form.setShowPrivate(e.target.checked)} />
             {form.choice?.visibility === 'private' && (
@@ -116,7 +120,7 @@ export function GuildDiscordPicker(props: PickerProps): JSX.Element {
         isOpen: true, onClose: props.onClose, closeGuard: guard, discardMessage: 'Discard the channel change?',
         title: 'Discord channel', footer,
     };
-    const body = <PickerBody form={form} managedFor={props.managedFor ?? null} />;
+    const body = <PickerBody form={form} managedFor={props.managedFor ?? null} kind={props.kind} />;
     if (isDesktop) return <Modal {...shared} maxWidth="max-w-lg">{body}</Modal>;
     return <BottomSheet {...shared}>{body}</BottomSheet>;
 }
