@@ -76,7 +76,7 @@ describe('markdownExcerpt — markers, graphemes, links, escapes, bounds', () =>
   });
 
   it('E11 Discord-only syntax is escaped', () => {
-    expect(ex('# Title', 300)).toBe('\\# Title');
+    expect(ex('#Title', 300)).toBe('\\#Title');
     expect(ex('> quote', 300)).toBe('\\> quote');
     expect(ex('-# small', 300)).toBe('\\-# small');
     expect(ex('a || b', 300)).toBe('a \\|\\| b');
@@ -123,6 +123,35 @@ describe('markdownExcerpt — markers, graphemes, links, escapes, bounds', () =>
   it('E13 no ellipsis when the body is exactly at budget', () => {
     expect(ex('**bold** text', 9)).toBe('**bold** text');
     expect(ex('exactly ten', 11)).toBe('exactly ten');
+  });
+});
+
+describe('markdownExcerpt — headings (ROK-1898)', () => {
+  it('H1 # / ## / ### relay as Discord headings; ####+ and #nospace stay escaped', () => {
+    expect(ex('# Raid\n## Time\n### Loot\n#### four\n#nospace', 300)).toBe(
+      '# Raid\n## Time\n### Loot\n\\#### four\n\\#nospace',
+    );
+    expect(ex('## **Raid** night', 300)).toBe('## **Raid** night');
+  });
+
+  it('H2 a heading inside a list item stays literal text', () => {
+    expect(ex('- # Raid', 300)).toBe('- \\# Raid');
+    expect(ex('1. ## Raid', 300)).toBe('1. \\## Raid');
+  });
+
+  it('H3 a cut inside a heading demotes it to plain text — never a cut heading', () => {
+    expect(ex('# The quick brown fox', 12)).toBe('The quick…');
+    expect(ex('## **Raid night** tonight', 6)).toBe('**Raid**…');
+  });
+
+  it('H4 a whole heading before the cut keeps its marker', () => {
+    expect(ex('# Raid\nThe quick brown fox', 14)).toBe('# Raid\nThe quick…');
+  });
+
+  it('H5 heading text starting with block syntax is escaped, so a demoted heading cannot become one', () => {
+    expect(ex('# # Raid night is here', 8)).toBe('\\# Raid…');
+    expect(ex('# > quote', 300)).toBe('# \\> quote');
+    expect(ex('## - item', 300)).toBe('## \\- item');
   });
 });
 
