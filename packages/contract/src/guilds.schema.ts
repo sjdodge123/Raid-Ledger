@@ -182,10 +182,16 @@ export const GuildPageServerSchema = z
     /** Newest five members by first sighting; optional so older fixtures parse. */
     recentArrivals: z.array(GuildServerArrivalSchema).max(5).optional(),
     /**
-     * Linked hub members on the server right now — sent to every viewer,
-     * visitors included (they get no rows to count). Optional: older fixtures.
+     * Distinct players on the server right now, claimed or not (ROK-1932) —
+     * sent to every viewer, visitors included (they get no rows to count).
+     * Optional: older fixtures.
      */
     onlineCount: z.number().int().nonnegative().optional(),
+    /**
+     * ROK-1932 — how many of `onlineCount` have no character linked to a Raid
+     * Ledger user yet (the claim nudge). Absent ⇒ unknown; 0 ⇒ all linked.
+     */
+    unlinkedOnlineCount: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;
