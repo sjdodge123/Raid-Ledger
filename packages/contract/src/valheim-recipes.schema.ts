@@ -102,7 +102,11 @@ export const ValheimRecipeCatalogResponseSchema = z
     catalogFallback: z.boolean(),
     entries: z.array(ValheimRecipeCatalogEntrySchema),
     stations: z.array(ValheimRecipeStationSchema),
-    /** Names + icons for every prefab named in any entry's `craft`/`upgrades` resources. */
+    /**
+     * Names + icons for every prefab with a catalogue row that is named in any
+     * entry's `craft`/`upgrades` resources. A prefab with no items-catalogue row
+     * is absent; the client then shows the prefab id.
+     */
     ingredients: z.record(z.string(), ValheimCatalogEntrySchema),
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),

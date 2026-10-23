@@ -377,6 +377,15 @@ describe('catalogue craft / upgrades / ingredients (ROK-1899 AC16)', () => {
     expect(bronze.upgrades).toEqual([]);
     expect(r.ingredients.Tin).toMatchObject({ name: 'Tin' });
     expect(r.ingredients.Wood).toMatchObject({ name: 'Wood' });
+    // Exactly the catalogued ingredients: SwordBronze has a catalogue row but
+    // is nobody's resource; LeatherScraps is a resource with no catalogue row.
+    expect(Object.keys(r.ingredients).sort()).toEqual([
+      'Bronze',
+      'Copper',
+      'Tin',
+      'Wood',
+    ]);
+    expect(r.ingredients.LeatherScraps).toBeUndefined();
     const coal = must(
       r.entries.find((e) => e.prefab === 'Coal'),
       'Coal entry',

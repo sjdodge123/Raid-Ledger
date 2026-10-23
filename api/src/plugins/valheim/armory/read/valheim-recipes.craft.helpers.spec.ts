@@ -144,6 +144,12 @@ function graph(gameVersion?: string): RecipeGraph {
       }),
       swordIron,
       blackAxe,
+      recipe('Recipe_KnifeA', 'KnifeX', [res('Flint', 4)], {
+        enabled: false,
+        station: 'piece_workbench',
+      }),
+      recipe('Recipe_KnifeB', 'KnifeX', [res('Copper', 2)]),
+      recipe('Recipe_Glass', 'GlassX', [res('Stone', 3)]),
     ],
     pieces: [
       piece('piece_chest'),
@@ -167,6 +173,7 @@ function graph(gameVersion?: string): RecipeGraph {
     processes: [
       proc('charcoal_kiln', 'Wood', 'Coal', 2),
       proc('incinerator', 'Wood', 'Ash'),
+      proc('charcoal_kiln', 'Sand', 'GlassX'),
     ],
     ...(gameVersion === undefined ? {} : { gameVersion }),
   });
@@ -201,6 +208,22 @@ describe('craftOf (ROK-1899 §2.2)', () => {
       anyOneOf: false,
       resources: [{ prefab: 'Wood', amount: 1 }],
       amount: 2,
+    });
+  });
+
+  it('skips a disabled recipe and takes the first enabled one', () => {
+    expect(craftOf(graph(), 'KnifeX')).toMatchObject({
+      via: 'recipe',
+      station: 'forge',
+      resources: [{ prefab: 'Copper', amount: 2 }],
+    });
+  });
+
+  it('prefers a recipe over a process when both make the prefab', () => {
+    expect(craftOf(graph(), 'GlassX')).toMatchObject({
+      via: 'recipe',
+      station: 'forge',
+      resources: [{ prefab: 'Stone', amount: 3 }],
     });
   });
 
