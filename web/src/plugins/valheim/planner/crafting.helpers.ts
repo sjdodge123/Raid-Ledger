@@ -59,11 +59,16 @@ export interface StationGroup {
 export const BY_HAND_KEY = '__hand__';
 export const BY_HAND_LABEL = 'By hand';
 
+/** The held count of `prefab`; own keys only, so `constructor`/`toString` read 0, never an inherited function. */
+export function heldOf(totals: StockTotals, prefab: string): number {
+    return Object.hasOwn(totals, prefab) ? (totals[prefab] ?? 0) : 0;
+}
+
 /** Covered when every resource is (anyOneOf: any ONE is); unknown without totals. */
 export function affordability(cost: ValheimRecipeCost, totals: StockTotals | null): Affordability {
     if (totals === null) return { state: 'unknown' };
     const missing = cost.resources
-        .map((r) => ({ prefab: r.prefab, more: Math.max(0, r.amount - (totals[r.prefab] ?? 0)) }))
+        .map((r) => ({ prefab: r.prefab, more: Math.max(0, r.amount - heldOf(totals, r.prefab)) }))
         .filter((m) => m.more > 0);
     const covered = cost.anyOneOf
         ? cost.resources.length === 0 || missing.length < cost.resources.length
@@ -74,7 +79,7 @@ export function affordability(cost: ValheimRecipeCost, totals: StockTotals | nul
 /** The detail pane's slots: need, "you have N" and the shortfall (null with no scan). */
 export function slotLines(cost: ValheimRecipeCost, totals: StockTotals | null): SlotLine[] {
     return cost.resources.map((r) => {
-        const have = totals === null ? null : (totals[r.prefab] ?? 0);
+        const have = totals === null ? null : heldOf(totals, r.prefab);
         return { prefab: r.prefab, need: r.amount, have, short: have === null ? null : Math.max(0, r.amount - have) };
     });
 }
@@ -138,17 +143,29 @@ export function searchRows(groups: readonly StationGroup[], text: string): Craft
 
 const RANK: Record<Affordability['state'], number> = { can: 0, short: 1, unknown: 2 };
 
+/** Ranked rows for one `totals`; `sortRows` ignores it for any other totals, so it can never serve stale affordability. */
+export interface RankCache {
+    readonly totals: StockTotals | null;
+    readonly rows: WeakMap<CraftRow, RankedRow>;
+}
+
+/** A fresh rank cache keyed on `totals`. */
+export function rankCache(totals: StockTotals | null): RankCache {
+    return { totals, rows: new WeakMap() };
+}
+
 /**
  * Attaches affordability and orders can → short → unknown, then by name.
- * Pass one `cache` per `totals` so a row keeps its ranked object (and memoised
+ * Pass the `rankCache(totals)` so a row keeps its ranked object (and memoised
  * list rows skip re-rendering) across searches and station switches.
  */
-export function sortRows(rows: readonly CraftRow[], totals: StockTotals | null, cache?: WeakMap<CraftRow, RankedRow>): RankedRow[] {
+export function sortRows(rows: readonly CraftRow[], totals: StockTotals | null, cache?: RankCache): RankedRow[] {
+    const memo = cache !== undefined && cache.totals === totals ? cache.rows : undefined;
     const rank = (r: CraftRow): RankedRow => {
-        const hit = cache?.get(r);
+        const hit = memo?.get(r);
         if (hit !== undefined) return hit;
         const ranked = { ...r, afford: affordability(r.cost, totals) };
-        cache?.set(r, ranked);
+        memo?.set(r, ranked);
         return ranked;
     };
     return rows

@@ -8,11 +8,13 @@
 import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import type { ValheimRecipeCatalogEntry, ValheimRecipeStation } from '@raid-ledger/contract';
 import {
+    rankCache,
     searchRows,
     sortRows,
     stationGroups,
     type CraftMode,
     type CraftRow,
+    type RankCache,
     type RankedRow,
     type StationGroup,
     type StockTotals,
@@ -72,8 +74,6 @@ function useGroups(input: CraftingWindowInput, mode: CraftMode) {
     return { groups: mode === 'craft' ? craft : upgrade, upgradeCount };
 }
 
-type RankCache = WeakMap<CraftRow, RankedRow>;
-
 function useSelection(rows: RankedRow[], groups: StationGroup[], totals: StockTotals | null, cache: RankCache) {
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
     const selected = useMemo((): RankedRow | null => {
@@ -97,7 +97,7 @@ export function useCraftingWindow(input: CraftingWindowInput): CraftingWindow {
     const query = useDeferredValue(search);
     const searching = query.trim() !== '';
     const current = groups.find((g) => g.key === chosen) ?? groups[0] ?? null;
-    const cache = useMemo((): RankCache => new WeakMap(), [input.totals]);
+    const cache = useMemo(() => rankCache(input.totals), [input.totals]);
     const rows = useMemo(
         () => sortRows(searching ? searchRows(groups, query) : (current?.rows ?? []), input.totals, cache),
         [searching, groups, query, current, input.totals, cache],

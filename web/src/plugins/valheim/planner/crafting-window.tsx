@@ -147,15 +147,18 @@ function useWindow(props: CraftingWindowProps, desktop: boolean) {
 
 /**
  * Desktop deselect: `onBack` clears the selection and focuses the list's tab
- * stop (the row last focused, else the first); `onEscape` does the same for
- * an Escape nobody else handled while a row is selected.
+ * stop (the row last focused, else the first; the search box when nothing is
+ * listed, so focus never drops to <body>); `onEscape` does the same for an
+ * Escape nobody else handled while a row is selected.
  */
 function useDeselect(vm: WindowModel, desktop: boolean): { listRef: RefObject<HTMLDivElement | null>; onBack: () => void; onEscape: KeyHandler } {
     const listRef = useRef<HTMLDivElement>(null);
     const { deselect, selected } = vm;
     const onBack = useCallback(() => {
         deselect();
-        listRef.current?.querySelector<HTMLElement>('[data-ri][tabindex="0"]')?.focus();
+        const list = listRef.current;
+        const row = list?.querySelector<HTMLElement>('[data-ri][tabindex="0"]');
+        (row ?? list?.parentElement?.querySelector<HTMLElement>('input[type="search"]'))?.focus();
     }, [deselect]);
     const onEscape = useCallback((e: KeyboardEvent<HTMLElement>) => {
         if (e.key !== 'Escape' || e.defaultPrevented || !desktop || selected === null) return;
