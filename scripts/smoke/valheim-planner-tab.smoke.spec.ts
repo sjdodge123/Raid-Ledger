@@ -28,9 +28,11 @@ import {
   showPlanPane,
 } from "./valheim-planner-fixture";
 
-/** Prefabs that appear exactly once in the Bronze tree. Coal does not:
- * it fuels both smelts (and each Coal fuel row has its kiln child). */
-const UNIQUE = ["Copper", "Tin", "CopperOre", "TinOre"];
+/** Prefabs that appear exactly once in the netted Bronze breakdown. Copper
+ * ore does not: the chests' 40 Copper cover the 2 needed, so Copper never
+ * expands (the plan route only expands what stock leaves short). Coal does
+ * not either: each Coal fuel row has its kiln child. */
+const UNIQUE = ["Copper", "Tin", "TinOre"];
 
 interface PlanLeaf {
   prefab: string;
@@ -82,12 +84,16 @@ test.describe("Valheim hub — Planner tab (ROK-1854)", () => {
       const p = member.page;
       await openPlanner(p, f);
 
-      // Searching "Bronze" and picking its row shows its full craft tree in
-      // the "Full breakdown" (no stock netting yet).
+      // Searching "Bronze" and picking its row shows its craft tree in the
+      // "Full breakdown", netted against the chests (the plan route at q1):
+      // covered Copper stops there, the short Tin expands into Tin ore.
       await pickRow(p, "Bronze", "Bronze");
       await openBreakdown(p, wide);
       for (const prefab of UNIQUE)
         await expect(row(p, "Bronze", prefab)).toHaveCount(1);
+      await expect(row(p, "Bronze", "Copper")).toContainText("Have 40");
+      await expect(row(p, "Bronze", "Tin")).toContainText("Short 1");
+      await expect(row(p, "Bronze", "CopperOre")).toHaveCount(0);
       await expect(row(p, "Bronze", "Coal").first()).toBeVisible();
 
       // On the list, the plan nets against chests: the 40 Copper in the
