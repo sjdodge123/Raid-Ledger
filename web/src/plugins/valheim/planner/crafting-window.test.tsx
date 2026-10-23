@@ -216,4 +216,44 @@ describe('CraftingWindow', () => {
         await user.keyboard('{Enter}');
         expect(rows[0]).toHaveAttribute('aria-pressed', 'true');
     });
+
+    it('desktop: Escape on the selected row clears the selection and the idle pane returns', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        const bronze = await screen.findByRole('button', { name: 'Bronze' });
+        await user.click(bronze);
+        expect(await screen.findByRole('region', { name: 'Recipe detail' })).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('region', { name: 'Recipe detail' })).toBeNull();
+        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+        expect(bronze).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('desktop: "Back to your list" clears the selection and returns focus to the row', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        const bronze = await screen.findByRole('button', { name: 'Bronze' });
+        await user.click(bronze);
+        const pane = await screen.findByRole('region', { name: 'Recipe detail' });
+        const back = within(pane).queryByRole('button', { name: 'Back to your list' });
+        expect(back, 'the pane header offers "Back to your list"').not.toBeNull();
+        if (back === null) return;
+        await user.click(back);
+        expect(screen.queryByRole('region', { name: 'Recipe detail' })).toBeNull();
+        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+        expect(bronze).toHaveAttribute('aria-pressed', 'false');
+        expect(bronze).toHaveFocus();
+    });
+
+    it('desktop: Escape inside the pane clears the selection and focus lands back on the list', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        const bronze = await screen.findByRole('button', { name: 'Bronze' });
+        await user.click(bronze);
+        const pane = await screen.findByRole('region', { name: 'Recipe detail' });
+        await user.click(within(pane).getByRole('spinbutton', { name: 'Amount' }));
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('region', { name: 'Recipe detail' })).toBeNull();
+        expect(bronze).toHaveFocus();
+    });
 });
