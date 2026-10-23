@@ -416,13 +416,11 @@ describe('ValheimClaimSuggestService.scan — a send that did not go', () => {
 describe('ValheimClaimSuggestService — a queued DM that finally failed', () => {
   /** What the queue processor emits when a queued DM is never delivered. */
   const failDelivery = (type: string, userId: number, profileId: number) =>
-    testApp.app
-      .get(EventEmitter2)
-      .emitAsync(DISCORD_NOTIFICATION_FAILED, {
-        type,
-        userId,
-        payload: { profileId },
-      });
+    testApp.app.get(EventEmitter2).emitAsync(DISCORD_NOTIFICATION_FAILED, {
+      type,
+      userId,
+      payload: { profileId },
+    });
 
   it('releases all three keys, so a later scan asks again', async () => {
     const w = await world();
