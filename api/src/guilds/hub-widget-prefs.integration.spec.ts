@@ -100,17 +100,19 @@ async function mkWowMember(
   return { ...who, memberId: row.id };
 }
 
-/** A WoW hub with an officer (rank grant), an editor (member grant) and a plain member. */
+/**
+ * A WoW hub with an editor (explicit member grant) and a plain member. A WoW
+ * officer IS that grant — a rank grant confers nothing (ROK-1794 AC1) — so the
+ * ladder Officer rung is exercised on the community hub below.
+ */
 async function mkStaffedWowHub(hiddenAt: Date | null = null) {
   const guildId = await mkWowHub(hiddenAt);
-  const officer = await mkWowMember(guildId, 1);
   const editor = await mkWowMember(guildId, 4);
   const member = await mkWowMember(guildId, 4);
-  await testApp.db.insert(schema.guildEditors).values([
-    { guildId, kind: 'rank', rankIndex: 1 },
-    { guildId, kind: 'member', guildMemberId: editor.memberId },
-  ]);
-  return { guildId, officer, editor, member };
+  await testApp.db
+    .insert(schema.guildEditors)
+    .values([{ guildId, kind: 'member', guildMemberId: editor.memberId }]);
+  return { guildId, editor, member };
 }
 
 /** An active community hub with a leader, an officer and a member. */
@@ -193,10 +195,10 @@ beforeAll(async () => {
 });
 
 describe('auth matrix', () => {
-  it('WoW hub: officer, editor, operator + admin non-members → 200; member → 403', async () => {
+  it('WoW hub: editor, operator + admin non-members → 200; member → 403', async () => {
     const hub = await mkStaffedWowHub();
     const operator = await mkUser('operator');
-    for (const who of [hub.officer, hub.editor, operator, admin]) {
+    for (const who of [hub.editor, operator, admin]) {
       const res = await patch(hub.guildId, who.token, LAYOUT);
       expect({ id: who.id, status: res.status }).toEqual({
         id: who.id,
@@ -338,7 +340,7 @@ describe('audit', () => {
   it('writes a counts-only audit row per save with the acting editor', async () => {
     const hub = await mkStaffedWowHub();
     await patch(hub.guildId, hub.editor.token, LAYOUT);
-    await patch(hub.guildId, hub.officer.token, { reset: true });
+    await patch(hub.guildId, admin.token, { reset: true });
     await patch(hub.guildId, hub.member.token, LAYOUT); // 403 — no row
     const rows = await auditRows(hub.guildId);
     expect(rows).toEqual([
@@ -352,7 +354,7 @@ describe('audit', () => {
           configured: 1,
         },
       },
-      { actorId: hub.officer.id, metadata: { reset: true } },
+      { actorId: admin.id, metadata: { reset: true } },
     ]);
     const text = JSON.stringify(rows);
     for (const leak of ['generic:text', 'core:', 'Raid night', 'flasks']) {
