@@ -36,15 +36,45 @@ export function whenLabel(ms: number, now: number, tz: string): string {
     return day === 'Today' ? time : `${day} ${time}`;
 }
 
-/** The instant of the first local midnight after `ms` in `tz`; re-checked against the day key so a 23h/25h DST day lands on midnight. */
-export function nextMidnight(ms: number, tz: string): number {
-    const parts = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZone: tz }).formatToParts(ms);
+const wallFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The wall clock of `ms` in `tz` as a UTC-epoch number, so calendar-date arithmetic is plain `Date.UTC` math. */
+function wallMs(ms: number, tz: string): number {
+    let fmt = wallFormatters.get(tz);
+    if (fmt === undefined) {
+        fmt = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZone: tz });
+        wallFormatters.set(tz, fmt);
+    }
+    const parts = fmt.formatToParts(ms);
     const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-    const elapsed = ((part('hour') * 60 + part('minute')) * 60 + part('second')) * 1000 + (ms % 1000);
-    const candidate = ms - elapsed + DAY_MS;
-    if (dayKey(candidate, tz) === dayKey(ms, tz)) return candidate + HOUR_MS;
-    if (dayKey(candidate - 1, tz) !== dayKey(ms, tz)) return candidate - HOUR_MS;
-    return candidate;
+    return Date.UTC(part('year'), part('month') - 1, part('day'), part('hour') % 24, part('minute'), part('second')) + (((ms % 1000) + 1000) % 1000);
+}
+
+/** The first instant after `ms` whose local date differs — a ms-precision search over the next 26h (fallback for a midnight a DST gap skips). */
+function firstInstantOfNextDay(ms: number, tz: string): number {
+    const key = dayKey(ms, tz);
+    let lo = ms;
+    let hi = ms + 26 * HOUR_MS;
+    while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (dayKey(mid, tz) === key) lo = mid;
+        else hi = mid;
+    }
+    return hi;
+}
+
+/**
+ * The instant of the next local midnight after `ms` in `tz`: the next calendar date's 00:00, found from the
+ * zone's own wall clock, so any offset change (1h, a half-hour Lord Howe shift) lands on a new date (Codex r2).
+ */
+export function nextMidnight(ms: number, tz: string): number {
+    const wall = new Date(wallMs(ms, tz));
+    const target = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate() + 1);
+    let guess = ms + (target - wall.getTime());
+    for (let i = 0; i < 3; i++) guess += target - wallMs(guess, tz);
+    const key = dayKey(ms, tz);
+    if (dayKey(guess, tz) !== key && dayKey(guess - 1, tz) === key) return guess;
+    return firstInstantOfNextDay(ms, tz);
 }
 
 /** The day keys of today and the next `count - 1` local days, in order (DST-safe: steps midnight to midnight). */

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameServerCalendarItemDto } from '@raid-ledger/contract';
 import { buildServerHours, hoursRange, nowModel } from './server-hours.helpers';
-import { nextMidnight } from './server-hours-time.helpers';
+import { localDayKeys, nextMidnight } from './server-hours-time.helpers';
 
 const mine = { serverKey: '4', serverName: 'Valheim', gameId: 7, provider: 'pelican' };
 const other = { ...mine, serverKey: '99', serverName: 'Other' };
@@ -108,6 +108,23 @@ describe('hoursRange covers the whole 7th local day (ROK-1877 review r1)', () =>
         const now = Date.parse(at);
         const end = endOfSeventhDay(now, tz);
         expect(new Date(anchored(now).to).getTime() >= end ? 'covered' : `ends ${anchored(now).to}, 7th day ends ${new Date(end).toISOString()}`).toBe('covered');
+    });
+});
+
+describe('nextMidnight across a half-hour DST shift (ROK-1877 Codex r2)', () => {
+    const tz = 'Australia/Lord_Howe';
+    it('the 2026-10-04 spring-forward week (2:00 → 2:30) still has seven distinct days', () => {
+        const keys = localDayKeys(Date.parse('2026-10-03T01:30:00Z'), tz, 7);
+        expect(keys).toEqual(['2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']);
+    });
+    it('lands on local midnight on both sides of a half-hour shift', () => {
+        expect(new Date(nextMidnight(Date.parse('2026-10-03T13:30:00Z'), tz)).toISOString(), 'Oct 4 00:00 +10:30 → Oct 5 00:00 +11').toBe('2026-10-04T13:00:00.000Z');
+        expect(new Date(nextMidnight(Date.parse('2027-04-03T13:00:00Z'), tz)).toISOString(), 'Apr 4 00:00 +11 → Apr 5 00:00 +10:30').toBe('2027-04-04T13:30:00.000Z');
+    });
+    it('still steps New York and Kolkata midnight to midnight', () => {
+        expect(new Date(nextMidnight(Date.parse('2026-11-01T04:10:00Z'), 'America/New_York')).toISOString(), 'fall-back day is 25h').toBe('2026-11-02T05:00:00.000Z');
+        expect(new Date(nextMidnight(Date.parse('2026-03-08T05:10:00Z'), 'America/New_York')).toISOString(), 'spring-forward day is 23h').toBe('2026-03-09T04:00:00.000Z');
+        expect(new Date(nextMidnight(Date.parse('2026-10-19T18:40:00Z'), 'Asia/Kolkata')).toISOString()).toBe('2026-10-20T18:30:00.000Z');
     });
 });
 
