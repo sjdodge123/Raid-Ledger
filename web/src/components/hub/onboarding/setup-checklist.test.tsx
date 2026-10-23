@@ -37,7 +37,7 @@ function serve(profile: GuildProfile, discord: GuildDiscordMirrorDto, state: Hub
     );
 }
 
-describe('HubSetupChecklist', () => {
+describe('HubSetupChecklist — steps', () => {
     it('lists every step with its progress, and marks only what exists as done', async () => {
         serve({ ...EMPTY_PROFILE, rules: [{ title: 'Be on time', body: 'Invites at 19:45.' }] }, UNSET);
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
@@ -76,7 +76,9 @@ describe('HubSetupChecklist', () => {
         expect(blocked.className.split(/\s+/)).toEqual(expect.arrayContaining(['block', 'text-xs', 'text-dim']));
         expect(blocked.closest('.shrink-0'), 'nothing above it may refuse to shrink').toBeNull();
     });
+});
 
+describe('HubSetupChecklist — who sees it and how it goes away', () => {
     it('a viewer who cannot edit never sees it', async () => {
         serve(EMPTY_PROFILE, UNSET);
         const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit={false} modsConfigured={false} /></HubSettingsProvider>);
@@ -112,7 +114,9 @@ describe('HubSetupChecklist', () => {
         const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         await waitFor(() => expect(container).toBeEmptyDOMElement());
     });
+});
 
+describe('HubSetupChecklist — blocked and omitted steps', () => {
     // Lead ruling 1: an Officer has no picker, so the Discord row says who to
     // ask — and, being blocked, it no longer keeps the card from finishing.
     it('an Officer sees an ask-your-Leader Discord row with no action', async () => {
@@ -131,7 +135,6 @@ describe('HubSetupChecklist', () => {
         await screen.findByTestId('setup-checklist');
         expect(screen.queryByTestId('setup-step-mods')).not.toBeInTheDocument();
     });
-
 });
 
 // ROK-1891: a community hub's checklist is about inviting players, not importing a roster.
@@ -141,6 +144,10 @@ describe('HubSetupChecklist — per hub kind (ROK-1891)', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canEdit modsConfigured={false} /></HubSettingsProvider>);
         const list = await screen.findByTestId('setup-checklist');
         expect(within(list).getByTestId('setup-step-invite')).toHaveTextContent('Invite players to the hub');
+        // The Members tab has no share control: the copy names the page link and the Join button instead.
+        expect(within(list).getByTestId('setup-step-desc-invite')).toHaveTextContent("Send players this page's link — they join with the Join button at the top.");
+        expect(within(list).getByTestId('setup-step-action-invite')).toHaveAttribute('href', '#members');
+        expect(within(list).getByTestId('setup-step-action-invite')).toHaveTextContent('View members');
         expect(within(list).queryByTestId('setup-step-roster')).not.toBeInTheDocument();
         expect(within(list).queryByTestId('setup-step-publish')).not.toBeInTheDocument();
         expect(list.textContent ?? '').not.toMatch(/guild|raid|roster/i);

@@ -130,3 +130,9 @@ export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {
 export function hubCopy(kind: GuildKind | undefined): HubCopy {
     return HUB_COPY[kind ?? 'wow_guild'];
 }
+
+/** ROK-1891 — the hub tab row's accessible name: "Guild page sections", "Server page sections", "Hub page sections". */
+export function hubSectionsLabel(kind: GuildKind | undefined): string {
+    const noun = hubCopy(kind).noun;
+    return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} page sections`;
+}

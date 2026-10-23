@@ -8,7 +8,7 @@ import { http, HttpResponse } from 'msw';
 import type { GuildScheduleNightDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
-import { HUB_COPY, hubCopy } from './hub-copy';
+import { HUB_COPY, hubCopy, hubSectionsLabel } from './hub-copy';
 import { LatestPostCard } from './posts/latest-post-card';
 import { GuildDiscordMirror } from './discord/guild-discord-mirror';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
@@ -107,5 +107,14 @@ describe('members-first core widgets hide on 403 (ROK-1831)', () => {
         await waitFor(() => expect(queryClient.getQueryCache().findAll().some((q) => q.state.status === 'error')).toBe(true));
         expect(screen.queryByTestId('guild-discord-error')).toBeNull();
         expect(container).toBeEmptyDOMElement();
+    });
+});
+
+describe('hubSectionsLabel (ROK-1891)', () => {
+    it('names the tab row after the hub kind', () => {
+        expect(hubSectionsLabel('wow_guild')).toBe('Guild page sections');
+        expect(hubSectionsLabel('game_server')).toBe('Server page sections');
+        expect(hubSectionsLabel('game_community')).toBe('Hub page sections');
+        expect(hubSectionsLabel(undefined)).toBe('Guild page sections');
     });
 });

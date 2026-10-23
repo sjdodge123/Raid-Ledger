@@ -71,11 +71,15 @@ const KIND_COPY: Readonly<Record<GuildKind, Readonly<Record<string, StepCopy>>>>
     },
 };
 
-/** ROK-1891: a community hub grows by invitation, not a roster import. The proposer is member one. */
+/**
+ * ROK-1891: a community hub grows by invitation, not a roster import. The proposer is member one.
+ * There is no share/invite control yet (the Members tab lists who joined), so the copy names the
+ * page link + the hero's Join button, and the action opens Members, where the step's progress shows.
+ */
 function inviteStep(memberCount: number): SetupStep {
     return {
-        id: 'invite', label: 'Invite players to the hub', description: 'Share the hub link so players can find it and join.',
-        done: memberCount > 1, action: { kind: 'tab', hash: '#members' }, actionLabel: 'Invite',
+        id: 'invite', label: 'Invite players to the hub', description: "Send players this page's link — they join with the Join button at the top.",
+        done: memberCount > 1, action: { kind: 'tab', hash: '#members' }, actionLabel: 'View members',
     };
 }
 

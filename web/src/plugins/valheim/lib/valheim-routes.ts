@@ -1,4 +1,5 @@
 /** ROK-1836 — the character page's URL helpers (pure, so component files stay fast-refresh clean). */
+import { HUB_PAGE_PREFIX } from '../../../components/routing/hub-paths';
 
 export function valheimCharacterHref(id: number): string {
     return `/valheim/characters/${id}`;
@@ -14,7 +15,7 @@ export function parseCharacterId(raw: string | undefined): number | null {
 
 /** The hub's Characters tab — the crumb target when router state carries no hub path. */
 export function hubCharactersPath(hubId: number): string {
-    return `/hubs/${hubId}#characters`;
+    return `${HUB_PAGE_PREFIX}${hubId}#characters`;
 }
 
 /** Only an in-app hub path from router state is trusted for the crumb. */
@@ -22,5 +23,5 @@ export function hubPathFrom(state: unknown): string | null {
     if (typeof state !== 'object' || state === null || !('hubPath' in state))
         return null;
     const p = state.hubPath;
-    return typeof p === 'string' && p.startsWith('/hubs/') ? p : null;
+    return typeof p === 'string' && p.startsWith(HUB_PAGE_PREFIX) ? p : null;
 }

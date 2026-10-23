@@ -69,7 +69,7 @@ afterEach(() => {
 describe('hub module extension point (ROK-1830 AC2)', () => {
     it('puts the module tab between the core frame tabs and renders its panel', async () => {
         renderPage();
-        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
         expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events', 'World']);
 
         await userEvent.click(within(nav).getByRole('link', { name: 'World' }));
@@ -86,7 +86,7 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
     it('drops the whole module while its plugin is inactive', async () => {
         usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: true });
         renderPage();
-        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
         expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events']);
         expect(screen.queryByTestId('module-widget')).not.toBeInTheDocument();
     });
