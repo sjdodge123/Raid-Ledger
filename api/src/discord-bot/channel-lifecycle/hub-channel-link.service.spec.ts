@@ -7,6 +7,8 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import * as queries from './hub-channel-link.queries';
 import { isAutoLinkable } from './hub-channel-link.queries';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { HUB_CHANNEL_EVENTS } from '../../guilds/hub-channel.events';
 import { HubChannelLinkService } from './hub-channel-link.service';
 
 describe('isAutoLinkable (D7)', () => {
@@ -40,9 +42,39 @@ describe('HubChannelLinkService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it('linkHubsForGame returns the count of linked hubs', async () => {
-    const spy = jest.spyOn(queries, 'linkHubsForGame').mockResolvedValue(2);
+    const spy = jest
+      .spyOn(queries, 'linkHubIdsForGame')
+      .mockResolvedValue([11, 12]);
     await expect(service.linkHubsForGame(7, 'chan-1')).resolves.toBe(2);
     expect(spy).toHaveBeenCalledWith(db, 7, 'chan-1');
+  });
+
+  it('linkHubsForGame emits LINKED once per newly linked hub (ROK-1933)', async () => {
+    jest.spyOn(queries, 'linkHubIdsForGame').mockResolvedValue([11, 12]);
+    const emit = jest.fn(() => true);
+    const events = { emit } as unknown as EventEmitter2;
+    await new HubChannelLinkService(db, events).linkHubsForGame(7, 'chan-1');
+    expect(emit.mock.calls).toEqual([
+      [
+        HUB_CHANNEL_EVENTS.LINKED,
+        { guildId: 11, channelId: 'chan-1', previousChannelId: null },
+      ],
+      [
+        HUB_CHANNEL_EVENTS.LINKED,
+        { guildId: 12, channelId: 'chan-1', previousChannelId: null },
+      ],
+    ]);
+  });
+
+  it('a throwing listener never fails the auto-link', async () => {
+    jest.spyOn(queries, 'linkHubIdsForGame').mockResolvedValue([11]);
+    const emit = jest.fn(() => {
+      throw new Error('discord down');
+    });
+    const events = { emit } as unknown as EventEmitter2;
+    await expect(
+      new HubChannelLinkService(db, events).linkHubsForGame(7, 'c'),
+    ).resolves.toBe(1);
   });
 
   it('hubNeedsLinkGameIds returns the set of games', async () => {
