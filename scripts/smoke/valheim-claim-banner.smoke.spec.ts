@@ -68,18 +68,46 @@ async function seed(worker: number): Promise<Fixture> {
 
 const banner = (page: Page) => page.getByRole("region", { name: BANNER });
 
+/**
+ * The banner renders nothing while `GET …/claim-status` is pending, so an
+ * absence check is only meaningful once that response is in. Register BEFORE
+ * the navigation that triggers it (a full load — not a hash-only goto, which
+ * is same-document and refetches nothing).
+ */
+function claimStatusAnswered(page: Page): Promise<void> {
+  return page
+    .waitForResponse(
+      (r) => new URL(r.url()).pathname.endsWith("/claim-status"),
+      {
+        timeout: 15_000,
+      },
+    )
+    .then((r) => {
+      expect(r.status(), `claim-status answered ${r.status()}`).toBe(200);
+    });
+}
+
 async function openOverview(page: Page, f: Fixture): Promise<void> {
+  const status = claimStatusAnswered(page);
   await page.goto(`/guilds/${f.guildId}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
     timeout: 15_000,
   });
+  await status;
 }
 
-async function openCharacters(page: Page, f: Fixture): Promise<void> {
+/** `settled`: wait for claim-status too (only on a full load — see above). */
+async function openCharacters(
+  page: Page,
+  f: Fixture,
+  settled = false,
+): Promise<void> {
+  const status = settled ? claimStatusAnswered(page) : null;
   await page.goto(`/guilds/${f.guildId}#characters`);
   await expect(
     page.getByRole("link", { name: `Open ${f.characters.claimed.name}` }),
   ).toBeVisible({ timeout: 15_000 });
+  await status;
 }
 
 /** B claims the matching character from its sheet (the existing claim flow). */
@@ -105,16 +133,17 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     await signInContextAs(page.context(), f.users.b.id);
 
     await openOverview(page, f);
-    await expect(banner(page).first()).toBeVisible();
-    await openCharacters(page, f);
-    await expect(banner(page).first()).toBeVisible();
-
+    await expect(banner(page)).toHaveCount(1);
+    // M3: the Overview's Pick jumps to the Characters tab, already filtered.
+    await banner(page)
+      .getByRole("button", { name: "Pick my character" })
+      .click();
+    await expect(page).toHaveURL(/[?&]unclaimed=1.*#characters$/);
     const filter = page.getByRole("button", { name: "Unclaimed only" });
-    await filter.click();
     await expect(filter).toHaveAttribute("aria-pressed", "true");
-    await expect(page).toHaveURL(/[?&]unclaimed=1/);
     const rows = page.getByRole("link", { name: /^Open / });
     await expect(rows).toHaveCount(2);
+    await expect(banner(page)).toHaveCount(1);
     await expect(
       page.getByRole("link", { name: `Open ${f.characters.matching.name}` }),
     ).toBeVisible();
@@ -122,8 +151,18 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
       page.getByRole("link", { name: `Open ${f.characters.other.name}` }),
     ).toBeVisible();
 
+    // B1: toggling the filter keeps the hub on the Characters tab.
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "false");
+    await expect(page).toHaveURL(/#characters$/);
+    await expect(rows).toHaveCount(3);
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "true");
+    await expect(page).toHaveURL(/[?&]unclaimed=1.*#characters$/);
+    await expect(rows).toHaveCount(2);
+
     await claimMatching(page, f);
-    await openCharacters(page, f);
+    await openCharacters(page, f, true);
     await expect(banner(page)).toHaveCount(0);
     await openOverview(page, f);
     await expect(
@@ -139,16 +178,18 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     await signInContextAs(page.context(), f.users.b.id);
 
     await openOverview(page, f);
-    await banner(page).getByRole("button", { name: "Dismiss" }).first().click();
+    await banner(page).getByRole("button", { name: "Dismiss" }).click();
     await expect(banner(page)).toHaveCount(0);
+    const status = claimStatusAnswered(page);
     await page.reload();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
       timeout: 15_000,
     });
+    await status;
     await expect(banner(page)).toHaveCount(0);
 
     await openCharacters(page, f);
-    await expect(banner(page).first()).toBeVisible();
+    await expect(banner(page)).toHaveCount(1);
     await expect(
       banner(page).getByRole("button", { name: "Dismiss" }),
     ).toHaveCount(0);
@@ -158,7 +199,7 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     const f = await seed(testInfo.parallelIndex);
     await signInContextAs(page.context(), f.users.a.id);
 
-    await openCharacters(page, f);
+    await openCharacters(page, f, true);
     await expect(
       page.getByRole("button", { name: "Unclaimed only" }),
     ).toBeVisible();
