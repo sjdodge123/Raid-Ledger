@@ -20,6 +20,13 @@ export class RosterInsightsCache {
     string,
     MemoryCacheEntry<WowRosterInsightsDto>
   >();
+  /**
+   * Per-key generation, bumped by every invalidation of the key's guild. A
+   * fetch that started under an older generation is stale: its result is
+   * dropped and the fetch re-runs, so an in-flight refresh can never write
+   * pre-invalidation data back into the cache.
+   */
+  private readonly generations = new Map<string, number>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -35,16 +42,31 @@ export class RosterInsightsCache {
       cache: this.cache,
       key,
       ttlMs: ROSTER_INSIGHTS_TTL_MS,
-      fetcher,
+      fetcher: () => this.fetchCurrent(key, fetcher),
     });
   }
 
-  /** Drop every cached entry of one guild (all audiences). */
+  /** Drop every cached entry of one guild (all audiences); bump generations. */
   invalidateGuild(guildId: number): void {
-    const prefix = `${guildId}:`;
+    const prefix = `${INSIGHTS_KEY_PREFIX}${guildId}:`;
     for (const key of [...this.cache.keys()]) {
       if (key.startsWith(prefix)) this.cache.delete(key);
     }
+    for (const [key, gen] of this.generations) {
+      if (key.startsWith(prefix)) this.generations.set(key, gen + 1);
+    }
+  }
+
+  /** Run `fetcher`; re-run once when the key was invalidated meanwhile. */
+  private async fetchCurrent(
+    key: string,
+    fetcher: () => Promise<WowRosterInsightsDto>,
+  ): Promise<WowRosterInsightsDto> {
+    const gen = this.generations.get(key) ?? 0;
+    this.generations.set(key, gen);
+    const data = await fetcher();
+    if ((this.generations.get(key) ?? 0) === gen) return data;
+    return fetcher();
   }
 
   /**
@@ -63,13 +85,19 @@ export class RosterInsightsCache {
   }
 }
 
-/** Cache key: guild, audience, mains-only. */
+/**
+ * Namespace of every insights key: `memorySwr`'s in-flight refresh tracker is
+ * module-wide and shared by every cache, so a bare `${guild}:` could collide.
+ */
+export const INSIGHTS_KEY_PREFIX = 'ri:';
+
+/** Cache key: `ri:` + guild, audience, mains-only. */
 export function insightsKey(
   guildId: number,
   audience: string,
   mainsOnly: boolean,
 ): string {
-  return `${guildId}:${audience}:${mainsOnly ? 'mains' : 'all'}`;
+  return `${INSIGHTS_KEY_PREFIX}${guildId}:${audience}:${mainsOnly ? 'mains' : 'all'}`;
 }
 
 /**
