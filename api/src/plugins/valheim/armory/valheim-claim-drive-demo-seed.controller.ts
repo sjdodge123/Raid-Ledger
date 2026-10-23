@@ -89,16 +89,7 @@ export class ValheimClaimDriveDemoSeedController {
   @HttpCode(HttpStatus.OK)
   async seed(@Body() body: unknown): Promise<ClaimDriveFixture> {
     const req = parseRequest(body);
-    if (req.bDiscordId && (await discordIdTaken(this.db, req.bDiscordId))) {
-      throw new ConflictException(
-        `bDiscordId ${req.bDiscordId} is already linked to a user`,
-      );
-    }
-    const gameId = await findValheimGameId(this.db);
-    if (gameId === null) {
-      throw new NotFoundException('No Valheim game — seed games first');
-    }
-    await ensureValheimDemoPlugins(this.registry, this.pelicanConfig);
+    const gameId = await this.prepare(req);
     const { serverId, guildId } = await ensureClaimDriveHub(
       this.db,
       req.worker,
@@ -128,6 +119,21 @@ export class ValheimClaimDriveDemoSeedController {
         )
       : null;
     return { serverId, guildId, users, characters, eventId };
+  }
+
+  /** Refuse a taken `bDiscordId`, find the Valheim game, enable the plugins. */
+  private async prepare(req: ClaimDriveRequest): Promise<number> {
+    if (req.bDiscordId && (await discordIdTaken(this.db, req.bDiscordId))) {
+      throw new ConflictException(
+        `bDiscordId ${req.bDiscordId} is already linked to a user`,
+      );
+    }
+    const gameId = await findValheimGameId(this.db);
+    if (gameId === null) {
+      throw new NotFoundException('No Valheim game — seed games first');
+    }
+    await ensureValheimDemoPlugins(this.registry, this.pelicanConfig);
+    return gameId;
   }
 
   /** B's matching character, seen on the server in a live Quick Play. */
