@@ -4,11 +4,18 @@
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
 import { toEmbedGame } from '../discord-bot/services/embed-game.helpers';
+import type { EventHubJoin } from './event-find.helpers';
 
+/**
+ * A mappable event row. `guilds` is optional: the list / detail / by-ids /
+ * upcoming queries join the tagged hub, other row builders (dashboard) don't
+ * and their events map to `hub: null`.
+ */
 type EventRow = {
   events: typeof schema.events.$inferSelect;
   users: typeof schema.users.$inferSelect | null;
   games: typeof schema.games.$inferSelect | null;
+  guilds?: EventHubJoin | null;
   signupCount: number;
 };
 
@@ -33,6 +40,18 @@ function mapGame(
     coverUrl: game.coverUrl,
     hasRoles: game.hasRoles,
   };
+}
+
+/**
+ * ROK-1893 P4 (R22/R28): the event's tagged hub, only while it is visible —
+ * `status = 'active'` and not hidden (the `isHiddenFrom` rule, without the
+ * staff exemption: the mapper has no actor). `guildId` is mapped regardless.
+ */
+export function mapHub(
+  hub: EventHubJoin | null | undefined,
+): EventResponseDto['hub'] {
+  if (!hub || hub.status !== 'active' || hub.hiddenAt !== null) return null;
+  return { id: hub.id, name: hub.name, kind: hub.kind };
 }
 
 /** Maps a creator entity to its response shape. */
@@ -99,6 +118,7 @@ export function mapEventToResponse(
     endTime: event.duration[1].toISOString(),
     creator: mapCreator(creator),
     game: mapGame(game),
+    hub: mapHub(row.guilds),
     signupCount: Number(signupCount),
     signupsPreview,
     ...mapEventFields(event),

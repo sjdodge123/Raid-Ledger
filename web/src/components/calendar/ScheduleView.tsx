@@ -14,11 +14,14 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
+import { EventHubLabel } from './event-hub-label';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
 import type { LayerDayEntry, LayerDayMap } from './layers/calendar-layer-days';
 import { mergeScheduleRows } from './layers/schedule-layer-rows';
 import { ScheduleLayerRow } from './layers/ScheduleLayerRow';
+import { HubFilterEmpty } from './hub-filter-empty';
+import { useHubFilterActive } from '../../pages/calendar/use-calendar-hub-filter';
 
 interface ScheduleViewProps {
     events: CalendarEvent[];
@@ -75,7 +78,7 @@ function ScheduleEventInfo({ event, resolved }: { event: CalendarEvent; resolved
     return (
         <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-foreground truncate">{event.title}</div>
-            {event.resource.game && <div className="text-xs text-muted truncate">{event.resource.game.name}</div>}
+            {(event.resource.game || event.resource.hub) && <div className="text-xs text-muted truncate">{event.resource.game?.name ?? 'Event'}<EventHubLabel hub={event.resource.hub} /></div>}
             <div className="text-xs text-emerald-400 mt-0.5">{formatTime(event.resource.startTime)} – {formatTime(event.resource.endTime)}</div>
         </div>
     );
@@ -107,6 +110,7 @@ function ScheduleEventCard({ event, onSelect }: { event: CalendarEvent; onSelect
  * Features: sticky day headers, week range separators, now-line, auto-scroll to today.
  */
 function ScheduleEmpty() {
+    const hubFilterActive = useHubFilterActive();
     return (
         <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="text-4xl mb-3 text-dim">
@@ -114,7 +118,7 @@ function ScheduleEmpty() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
             </div>
-            <p className="text-muted text-sm">No events scheduled</p>
+            {hubFilterActive ? <HubFilterEmpty messageClassName="text-muted text-sm mb-3" /> : <p className="text-muted text-sm">No events scheduled</p>}
         </div>
     );
 }

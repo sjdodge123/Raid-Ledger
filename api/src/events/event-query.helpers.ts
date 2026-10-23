@@ -13,16 +13,13 @@ import type {
 import { getSignupsPreviewForEvents } from './event-response.helpers';
 import { buildFilterConditions } from './event-query-filters.helpers';
 import { defined } from '../common/defined.helpers';
+import {
+  eventHubColumns,
+  eventHubJoinOn,
+  type EventRow,
+} from './event-find.helpers';
 
 const EVENTS_CONFIG = { DEFAULT_PAGE_SIZE: 20, MAX_PAGE_SIZE: 100 } as const;
-
-/** Shared type for event row with joined data. */
-type EventRow = {
-  events: typeof schema.events.$inferSelect;
-  users: typeof schema.users.$inferSelect | null;
-  games: typeof schema.games.$inferSelect | null;
-  signupCount: number;
-};
 
 /** Shared type for signup preview entries. */
 type SignupPreview = {
@@ -67,6 +64,28 @@ async function countEvents(
   return Number(defined(countResult[0], 'event count row').count);
 }
 
+/**
+ * The event-row select: creator, game, tagged hub (ROK-1893 P4) and the
+ * roster count — one left join each, so no per-row lookups.
+ */
+function selectEventRows(db: PostgresJsDatabase<typeof schema>) {
+  const sq = buildSignupCountSubquery(db);
+  return db
+    .select({
+      events: schema.events,
+      users: schema.users,
+      games: schema.games,
+      guilds: eventHubColumns,
+      signupCount: sql<number>`coalesce(${sq.count}, 0)`,
+    })
+    .from(schema.events)
+    .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
+    .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .leftJoin(schema.guilds, eventHubJoinOn)
+    .leftJoin(sq, eq(schema.events.id, sq.eventId))
+    .$dynamic();
+}
+
 /** Fetches events with joins, applying optional where/sort/limit/offset. */
 async function fetchEventsWithJoins(
   db: PostgresJsDatabase<typeof schema>,
@@ -75,19 +94,7 @@ async function fetchEventsWithJoins(
   limit: number,
   offset: number,
 ): Promise<EventRow[]> {
-  const sq = buildSignupCountSubquery(db);
-  let q = db
-    .select({
-      events: schema.events,
-      users: schema.users,
-      games: schema.games,
-      signupCount: sql<number>`coalesce(${sq.count}, 0)`,
-    })
-    .from(schema.events)
-    .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-    .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
-    .leftJoin(sq, eq(schema.events.id, sq.eventId))
-    .$dynamic();
+  let q = selectEventRows(db);
   if (whereCondition) q = q.where(whereCondition);
   return q
     .orderBy(sortDir(sql`lower(${schema.events.duration})`))
@@ -229,18 +236,7 @@ export async function queryUpcomingByUser(
     .from(schema.events)
     .where(and(...conditions));
   const total = Number(defined(countResult[0], 'event count row').count);
-  const sq = buildSignupCountSubquery(db);
-  const events = await db
-    .select({
-      events: schema.events,
-      users: schema.users,
-      games: schema.games,
-      signupCount: sql<number>`coalesce(${sq.count}, 0)`,
-    })
-    .from(schema.events)
-    .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-    .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
-    .leftJoin(sq, eq(schema.events.id, sq.eventId))
+  const events = await selectEventRows(db)
     .where(and(...conditions))
     .orderBy(asc(sql`lower(${schema.events.duration})`))
     .limit(limit);

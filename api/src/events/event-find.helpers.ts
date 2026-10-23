@@ -6,11 +6,33 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { NotFoundException } from '@nestjs/common';
 
+/**
+ * ROK-1893 P4: the five hub columns an event row carries — enough to map a
+ * visible hub ref without a second query.
+ */
+export type EventHubJoin = Pick<
+  typeof schema.guilds.$inferSelect,
+  'id' | 'name' | 'kind' | 'status' | 'hiddenAt'
+>;
+
+/** Select shape for {@link EventHubJoin} — pair with `joinEventHub`. */
+export const eventHubColumns = {
+  id: schema.guilds.id,
+  name: schema.guilds.name,
+  kind: schema.guilds.kind,
+  status: schema.guilds.status,
+  hiddenAt: schema.guilds.hiddenAt,
+};
+
+/** Join condition: the event's tagged hub (`events.guild_id`). */
+export const eventHubJoinOn = eq(schema.events.guildId, schema.guilds.id);
+
 /** Row shape returned by event queries with joined data. */
 export type EventRow = {
   events: typeof schema.events.$inferSelect;
   users: typeof schema.users.$inferSelect | null;
   games: typeof schema.games.$inferSelect | null;
+  guilds: EventHubJoin | null;
   signupCount: number;
 };
 
@@ -24,6 +46,7 @@ export async function findOneEvent(
       events: schema.events,
       users: schema.users,
       games: schema.games,
+      guilds: eventHubColumns,
       signupCount: sql<number>`coalesce((
         SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id} AND status != 'roached_out' AND status != 'departed' AND status != 'declined'
       ), 0)`,
@@ -31,6 +54,7 @@ export async function findOneEvent(
     .from(schema.events)
     .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
     .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .leftJoin(schema.guilds, eventHubJoinOn)
     .where(eq(schema.events.id, id))
     .limit(1);
   const [row] = results;
@@ -75,11 +99,13 @@ export async function findEventsByIds(
       events: schema.events,
       users: schema.users,
       games: schema.games,
+      guilds: eventHubColumns,
       signupCount: sql<number>`coalesce(${sq.count}, 0)`,
     })
     .from(schema.events)
     .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
     .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .leftJoin(schema.guilds, eventHubJoinOn)
     .leftJoin(sq, eq(schema.events.id, sq.eventId))
     .where(inArray(schema.events.id, ids));
 }

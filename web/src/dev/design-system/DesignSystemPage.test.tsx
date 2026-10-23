@@ -65,13 +65,15 @@ describe('DesignSystemPage', () => {
         'Pattern — group marks and legend',
         'Pattern — own-calendar busy band and radio cards',
         'Pattern — server-schedule layer (plugin calendar layers)',
+        'Pattern — hub suffix on event game lines',
         'Forms — the form primitives',
         'Pattern — skill trend chip',
         'Pattern — plugin hub widgets',
-    ])('renders the "%s" section heading', (heading) => {
+    ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
-        expect(screen.getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+        // findByRole: the calendar layer + hub samples are lazy chunks (ROK-1893 P4).
+        expect(await screen.findByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
     });
 
 });

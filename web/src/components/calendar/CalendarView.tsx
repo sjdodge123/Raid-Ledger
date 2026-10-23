@@ -27,6 +27,9 @@ import { LayerDayColumnWrapper } from './layers/LayerDayColumnWrapper';
 import { LayerBackgroundEventWrapper } from './layers/LayerBackgroundEventWrapper';
 import { LayerMonthDateHeader } from './layers/LayerMonthDateHeader';
 import { useZonedLayerRange } from './layers/use-zoned-layer-range';
+import { useHubFilteredEvents, useHubFilterActive } from '../../pages/calendar/use-calendar-hub-filter';
+import { HubFilterEmpty } from './hub-filter-empty';
+import { hubSuffixText } from './event-hub-label.helpers';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
 import './layers/calendar-layers.css';
@@ -44,6 +47,11 @@ export interface CalendarEvent {
 
 /** ROK-1774: the grid also carries plugin layer windows as background events. */
 type GridEvent = CalendarEvent | LayerWindowEvent;
+
+/** rbc names a card `<time>: <tooltip>`; a hub-tagged event's tooltip carries ` · <hub>` (ROK-1893 P4 verify). */
+function gridEventTooltip(event: GridEvent): string {
+    return isLayerEvent(event) ? event.title : `${event.title}${hubSuffixText(event.resource?.hub)}`;
+}
 
 interface CalendarViewProps {
     className?: string;
@@ -145,13 +153,19 @@ function useCalendarNavigation(currentDate: Date, setCurrentDate: (d: Date) => v
     return { handlePrev, handleNext, handleToday };
 }
 
+/** Empty grid. While the Hubs filter hides something, say so and offer to show every hub (ROK-1893). */
 function CalendarEmptyState({ view }: { view: View }) {
     const navigate = useNavigate();
+    const hubFilterActive = useHubFilterActive();
     return (
         <div className="calendar-empty">
             <div className="empty-icon">📅</div>
-            <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
-            <button onClick={() => navigate('/events/new')} className="empty-cta">Create Event</button>
+            {hubFilterActive ? <HubFilterEmpty /> : (
+                <>
+                    <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
+                    <button onClick={() => navigate('/events/new')} className="empty-cta">Create Event</button>
+                </>
+            )}
         </div>
     );
 }
@@ -165,7 +179,7 @@ function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
     const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
-    const calendarEvents = useCalendarEvents(eventsData, selectedGames, resolved);
+    const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved));
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
@@ -194,7 +208,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
                     views={[Views.MONTH, Views.WEEK, Views.DAY]} onNavigate={(date: Date) => s.setCurrentDate(date)} onView={s.setView}
                     onSelectEvent={handleSelectEvent}
                     onDrillDown={(date) => { s.setCurrentDate(date); s.setView(Views.DAY); onCalendarViewChange?.('day'); }}
-                    drilldownView={Views.DAY} eventPropGetter={eventPropGetter}
+                    drilldownView={Views.DAY} eventPropGetter={eventPropGetter} tooltipAccessor={gridEventTooltip}
                     components={{ month: { event: wrappers.MonthEventWrapper, dateHeader: LayerMonthDateHeader }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, dayColumnWrapper: LayerDayColumnWrapper, eventWrapper: LayerBackgroundEventWrapper, toolbar: () => null }}
                     getNow={() => new TZDate(Date.now(), s.resolved)} allDayAccessor={() => false} popup selectable
                     onSelectSlot={(slotInfo) => {
