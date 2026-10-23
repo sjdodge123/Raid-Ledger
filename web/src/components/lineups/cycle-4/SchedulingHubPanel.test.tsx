@@ -16,7 +16,11 @@ import { schedulePollKey } from '../../../hooks/use-scheduling';
 import { SchedulingHubPanel } from './SchedulingHubPanel';
 
 const auth = vi.hoisted(() => ({ user: { id: 3 } as { id: number } | null }));
-vi.mock('../../../hooks/use-auth', () => ({ useAuth: () => ({ user: auth.user, isAuthenticated: auth.user !== null }) }));
+// Keep the real module (fetchApi reads `getAuthToken` from it on the join request) and override only `useAuth`.
+vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
+    useAuth: () => ({ user: auth.user, isAuthenticated: auth.user !== null }),
+}));
 
 type Hub = SchedulePollPageResponseDto['hub'];
 const voter = (userId: number, displayName: string, isHubMember?: boolean) => ({
