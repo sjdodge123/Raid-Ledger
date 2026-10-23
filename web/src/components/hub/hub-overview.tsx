@@ -8,7 +8,7 @@
  * ROK-1918: cells come from `layout/hub-widget-catalog`, ordered and filtered
  * by the hub's saved `widgetPrefs` through `layout/resolve-hub-layout`.
  */
-import { Fragment, lazy, Suspense, useCallback, useState, type JSX } from 'react';
+import { Fragment, lazy, Suspense, useState, type JSX } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { useHubSettings } from './settings/hub-settings-context';
 import { usePluginStore } from '../../stores/plugin-store';
@@ -82,7 +82,6 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     const [arrangingFor, setArrangingFor] = useState<number | null>(null);
     if (arrangingFor !== null && (arrangingFor !== guildId || !canEdit)) setArrangingFor(null);
     const arranging = canEdit && arrangingFor === guildId;
-    const onArrange = useCallback((on: boolean) => setArrangingFor(on ? guildId : null), [guildId]);
     // One tree position for the grid (hidden, not unmounted, while arranging):
     // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
@@ -96,7 +95,7 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
         <>
             <Suspense fallback={null}>
                 <HubArrangeGate key={guildId} guildId={guildId} kind={ctx.page.guild.kind} layout={layout} prefs={prefs}
-                    raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={onArrange} />
+                    raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={(on) => setArrangingFor(on ? guildId : null)} />
             </Suspense>
             {grid}
         </>
