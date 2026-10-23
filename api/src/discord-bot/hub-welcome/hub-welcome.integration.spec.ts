@@ -171,6 +171,12 @@ describe('hub welcome — linked event', () => {
     expect(chanA.store.get(first.message ?? '')?.edit).toHaveBeenCalledTimes(1);
   });
 
+  it('two concurrent link events for one hub post once', async () => {
+    await Promise.all([link('c-a'), link('c-a')]);
+    expect(chanA.send).toHaveBeenCalledTimes(1);
+    expect((await stored()).channel).toBe('c-a');
+  });
+
   it('a channel change posts in the new channel and deletes the old', async () => {
     await link('c-a');
     const old = await stored();

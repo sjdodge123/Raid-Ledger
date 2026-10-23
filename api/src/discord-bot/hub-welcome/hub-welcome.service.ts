@@ -77,8 +77,12 @@ export function isWelcomeHub(target: HubWelcomeTarget): boolean {
 @Injectable()
 export class HubWelcomeService {
   private readonly logger = new Logger(HubWelcomeService.name);
-  /** One in-flight write at a time: each run reads ids, posts, writes ids. */
-  private queue: Promise<unknown> = Promise.resolve();
+  /**
+   * One in-flight write per hub: each run reads ids, posts, writes ids. Keyed
+   * by hub so one slow Discord call never stalls every other hub's welcome;
+   * an entry is dropped once its chain settles with nothing queued behind it.
+   */
+  private readonly chains = new Map<number, Promise<unknown>>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -94,7 +98,7 @@ export class HubWelcomeService {
    * hub, no channel, not a text channel) · ServiceUnavailableException.
    */
   repost(guildId: number): Promise<HubWelcomeResult> {
-    return this.serialize(async () => {
+    return this.serialize(guildId, async () => {
       const target = await findWelcomeTarget(this.db, guildId);
       if (!target) throw new NotFoundException(HUB_WELCOME_ERRORS.notFound);
       if (!isWelcomeHub(target)) {
@@ -116,7 +120,7 @@ export class HubWelcomeService {
     guildId: number,
     channelId: string,
   ): Promise<HubWelcomeResult | null> {
-    return this.serialize(async () => {
+    return this.serialize(guildId, async () => {
       const target = await findWelcomeTarget(this.db, guildId);
       if (!target || !isWelcomeHub(target)) return null;
       return this.publishNow(target, channelId);
@@ -125,7 +129,7 @@ export class HubWelcomeService {
 
   /** `hub.channel.cleared`: delete the stored welcome and forget it. */
   removeWelcome(guildId: number): Promise<boolean> {
-    return this.serialize(async () => {
+    return this.serialize(guildId, async () => {
       const target = await findWelcomeTarget(this.db, guildId);
       if (!target?.welcomeChannelId || !target.welcomeMessageId) return false;
       const ctx = requireBotContext(this.client);
@@ -139,10 +143,18 @@ export class HubWelcomeService {
     });
   }
 
-  /** Run `task` after every earlier write settles, pass or fail. */
-  private serialize<T>(task: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(task, task);
-    this.queue = run.catch(() => undefined);
+  /** Run `task` after this hub's earlier writes settle, pass or fail. */
+  private serialize<T>(guildId: number, task: () => Promise<T>): Promise<T> {
+    const prev = this.chains.get(guildId) ?? Promise.resolve();
+    const run = prev.then(task, task);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.chains.set(guildId, tail);
+    void tail.then(() => {
+      if (this.chains.get(guildId) === tail) this.chains.delete(guildId);
+    });
     return run;
   }
 
