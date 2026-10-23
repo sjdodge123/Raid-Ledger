@@ -190,7 +190,9 @@ export async function showPlanPane(page: Page, wide: boolean) {
   if (!wide) return;
   await chooseMode(page, "UPGRADE");
   await chooseMode(page, "CRAFT");
-  await expect(page.getByRole("region", { name: "Recipe detail" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Recipe detail" })).toHaveCount(
+    0,
+  );
 }
 
 export const planned = (page: Page) =>
