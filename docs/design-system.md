@@ -1563,7 +1563,8 @@ says. The list shows every widget, in saved order, including hidden and empty on
   the plugin's badge label without a trailing "Plugin", from `widget-owner.ts`), then Move up / Move down /
   Hide as `Button ghost sm iconOnly` with `aria-label`s that name the widget.
 - **Reorder.** Move up / Move down are the primary path on every device (Tab + Enter/Space; disabled at the
-  ends; focus stays on the moved row's button). **Native HTML5 drag** on the six-dot grip is progressive
+  ends; focus stays on the moved row's button, or moves to its other arrow when the pressed one is now
+  disabled, and a drag drop focuses the dropped row — `use-arrange-focus.ts`). **Native HTML5 drag** on the six-dot grip is progressive
   enhancement at `DRAG_MQ` = `(min-width: 1024px) and (pointer: fine)` only — native DnD does not fire on touch
   and tablets get the phone layout (§4.18). No drag library (operator Q6). The drop line is a 2px `bg-success`
   bar centred in the 8px row gap: above the target when moving up, below it when moving down — the same

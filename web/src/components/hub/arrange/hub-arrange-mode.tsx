@@ -21,7 +21,6 @@ import { useArrangeState } from './use-arrange-state';
 import { DRAG_MQ, useRowDrag } from './use-row-drag';
 import { widgetOwner } from './widget-owner';
 
-
 export interface HubArrangeModeProps {
     guildId: number;
     /** The hub kind — module widgets are owned by whichever plugin registered it. */
@@ -49,13 +48,13 @@ function ArrangeHeader({ onAdd, canDrag }: { onAdd: () => void; canDrag: boolean
 }
 
 /** ≥1024px: what members will see, in this order (mockup frame 1, right). */
-function ArrangePreview({ titles }: { titles: readonly string[] }): JSX.Element {
+function ArrangePreview({ entries }: { entries: readonly HubLayoutEntry[] }): JSX.Element {
     return (
         <aside className="hidden rounded-lg border border-edge bg-panel p-3 lg:block" aria-label="Preview">
             <h4 className="text-sm font-semibold text-foreground">Preview</h4>
             <p className="mb-2 text-xs text-muted">What members will see, in this order.</p>
             <ol className="grid grid-cols-2 gap-1.5">
-                {titles.map((t) => <li key={t} className="truncate rounded border border-edge bg-surface px-2 py-1 text-xs text-secondary">{t}</li>)}
+                {entries.map((e) => <li key={e.id} className="truncate rounded border border-edge bg-surface px-2 py-1 text-xs text-secondary">{e.title}</li>)}
             </ol>
         </aside>
     );
@@ -73,10 +72,10 @@ export default function HubArrangeMode({ guildId, kind, arranged, available, pre
         <section data-testid="hub-arrange-mode" aria-label="Arrange the Overview">
             <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} />
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-                <ol className="flex flex-col gap-2" aria-label="Overview widgets, in order">
+                <ol ref={s.bindList} className="flex flex-col gap-2" aria-label="Overview widgets, in order">
                     {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} owner={widgetOwner(row.entry.id, kind)} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
                 </ol>
-                <ArrangePreview titles={s.rows.filter((r) => r.on).map((r) => r.entry.title)} />
+                <ArrangePreview entries={s.rows.filter((r) => r.on).map((r) => r.entry)} />
             </div>
             <p className="sr-only" aria-live="polite" data-testid="arrange-live">{s.live}</p>
             <ArrangeFooter dirty={s.dirty} saving={s.saving} error={s.error}

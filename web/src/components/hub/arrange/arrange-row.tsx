@@ -78,7 +78,7 @@ export function ArrangeRow({ row, index, count, owner, onMove, onToggle, drag }:
     const { entry, on } = row;
     const t = entry.title;
     return (
-        <li className={rowClass(on, drag?.dragging ?? false)} {...drag?.target}
+        <li className={rowClass(on, drag?.dragging ?? false)} {...drag?.target} tabIndex={-1} data-arrange-id={entry.id}
             data-testid={`arrange-row-${entry.id}`} data-hidden={on ? undefined : 'true'}>
             {drag?.edge ? <DropLine edge={drag.edge} /> : null}
             {drag && <DragHandle title={t} props={drag.handle} />}
@@ -89,10 +89,10 @@ export function ArrangeRow({ row, index, count, owner, onMove, onToggle, drag }:
                 <RowChips entry={entry} on={on} owner={owner} />
             </div>
             <div className="flex shrink-0 gap-1">
-                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} up`} disabled={index === 0} onClick={() => onMove(index, -1)}>
+                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} up`} data-arrange-action="up" disabled={index === 0} onClick={() => onMove(index, -1)}>
                     <ArrowUpIcon className="h-4 w-4" aria-hidden="true" />
                 </Button>
-                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} down`} disabled={index === count - 1} onClick={() => onMove(index, 1)}>
+                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} down`} data-arrange-action="down" disabled={index === count - 1} onClick={() => onMove(index, 1)}>
                     <ArrowDownIcon className="h-4 w-4" aria-hidden="true" />
                 </Button>
                 <Button variant="ghost" size="sm" iconOnly aria-label={`${on ? 'Hide' : 'Show'} ${t}`} aria-pressed={!on} onClick={() => onToggle(entry.id)}>
