@@ -83,7 +83,8 @@ export const PostHeading = Node.create({
         })];
     },
     addKeyboardShortcuts() {
-        const toggle = (level: HubPostHeadingLevel) => () => toggleHeading(this.editor, level);
+        // In a list item the key is consumed as a no-op: falling through lets Ctrl+Alt (AltGr) type a character.
+        const toggle = (level: HubPostHeadingLevel) => () => toggleHeading(this.editor, level) || this.editor.isActive('listItem');
         return { 'Mod-Alt-1': toggle(1), 'Mod-Alt-2': toggle(2), 'Mod-Alt-3': toggle(3) };
     },
 });

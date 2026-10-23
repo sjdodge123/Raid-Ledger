@@ -4,7 +4,7 @@
  * and the contract guarantee (no output trips findHubPostMarkdownViolation).
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Editor } from '@tiptap/core';
 import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
@@ -308,6 +308,30 @@ describe('MarkdownEditor headings (ROK-1898)', () => {
         fireEvent.click(screen.getByTestId('md-tool-h1'));
         expect(el.querySelector('h3')).toBeNull();
         expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe('- x');
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+});
+
+describe('MarkdownEditor headings in a list item (ROK-1898 review r2)', () => {
+    it('H1–H3 are disabled with the caret in a list item and enabled again in a paragraph', () => {
+        const { editor } = setup('- item\n\npara');
+        const heads = ['h1', 'h2', 'h3'].map((k) => screen.getByTestId(`md-tool-${k}`));
+        act(() => { editor.commands.setTextSelection(3); });
+        for (const b of heads) expect(b, `${b.dataset['testid']} in a list item`).toBeDisabled();
+        expect(screen.getByTestId('md-tool-bold'), 'non-heading actions stay enabled').toBeEnabled();
+        act(() => { editor.commands.setTextSelection(editor.state.doc.content.size - 1); });
+        for (const b of heads) expect(b, `${b.dataset['testid']} in a paragraph`).toBeEnabled();
+    });
+
+    it.each([1, 2, 3])('Mod-Alt-%i in a list item is consumed and leaves the doc unchanged', (level) => {
+        const { editor, onChange } = setup('- x');
+        editor.commands.setTextSelection(3);
+        const before = editor.state.doc.toJSON();
+        const ev = new KeyboardEvent('keydown', { key: String(level), code: `Digit${level}`, ctrlKey: true, altKey: true, bubbles: true });
+        const handled = editor.view.someProp('handleKeyDown', (f) => f(editor.view, ev));
+        expect(handled, 'the shortcut must be handled so AltGr layouts do not type a character').toBe(true);
+        expect(editor.state.doc.toJSON()).toEqual(before);
         expect(onChange).not.toHaveBeenCalled();
     });
 

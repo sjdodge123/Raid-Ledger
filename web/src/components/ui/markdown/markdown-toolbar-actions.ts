@@ -18,6 +18,8 @@ export interface ToolbarAction {
     /** The key after "Mod+", e.g. `B` or `Shift+S`. */
     shortcut: string;
     isActive: (e: Editor) => boolean;
+    /** False greys the button out at the caret; omitted = always enabled. */
+    isEnabled?: (e: Editor) => boolean;
     /** Runs the command; `link` is handled by the editor (opens the link row). */
     run: ((e: Editor) => void) | 'link';
 }
@@ -27,6 +29,7 @@ function headingAction(level: HubPostHeadingLevel, icon: ComponentType<SVGProps<
     return {
         key: `h${level}`, label: `Heading ${level}`, icon, shortcut: `Alt+${level}`,
         isActive: (e) => e.isActive('heading', { level }),
+        isEnabled: (e) => !e.isActive('listItem'),
         run: (e) => { toggleHeading(e, level); },
     };
 }
