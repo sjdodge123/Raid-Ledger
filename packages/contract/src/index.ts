@@ -236,6 +236,9 @@ export * from './guilds.schema.js';
 export * from './community-hubs.schema.js';
 // Guild page S3 raids payload (ROK-1787).
 export * from './guild-raids.schema.js';
+export * from './hub-facts.schema.js';
+export * from './wow-roster-insights.schema.js';
+export * from './wow-event-quest-readiness.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
 export * from './discord-join-post.schema.js';
