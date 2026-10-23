@@ -1765,6 +1765,13 @@
       "when": 1792735796129,
       "tag": "0252_community_lineups_guild_id",
       "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1792770660749,
+      "tag": "0253_valheim_player_deaths",
+      "breakpoints": true
     }
   ]
 }

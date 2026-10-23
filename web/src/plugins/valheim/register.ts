@@ -7,6 +7,9 @@ import { LazyValheimMaterialsHubTab } from './hub/valheim-materials-hub-tab-lazy
 import { LazyValheimPlannerHubTab } from './hub/valheim-planner-hub-tab-lazy';
 import { LazyValheimClaimBannerWidget } from './hub/valheim-claim-banner-widget-lazy';
 import { useClaimBannerWidgetVisible } from './hooks/use-valheim-claim-banner';
+import { LazyValheimDeathsWidget } from './hub/valheim-deaths-widget-lazy';
+import { ValheimDeathsShowAll } from './hub/valheim-deaths-show-all';
+import { useDeathsWidgetVisible } from './hooks/use-valheim-deaths-visible';
 
 /** Valheim plugin (ROK-1833) — the slug matches the api manifest id `valheim`. Neutral registry colour. */
 const valheim = registerPlugin('valheim', {
@@ -73,4 +76,19 @@ valheim.registerHubWidget({
     chrome: 'none',
     component: LazyValheimClaimBannerWidget,
     useVisible: useClaimBannerWidgetVisible,
+});
+
+// ROK-1930 — per-player death counts on the Overview, after the core cards (Q7); members + staff
+// (staff resolve as Leader). The route also 404s visitors server-side (D6); hidden with no deaths.
+valheim.registerHubWidget({
+    id: 'deaths',
+    title: 'Deaths',
+    games: ['valheim'],
+    kinds: ['game_server'],
+    order: 45,
+    span: 1,
+    audience: 'members',
+    component: LazyValheimDeathsWidget,
+    action: ValheimDeathsShowAll,
+    useVisible: useDeathsWidgetVisible,
 });

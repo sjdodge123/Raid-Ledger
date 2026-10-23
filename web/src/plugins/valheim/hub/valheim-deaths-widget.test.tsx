@@ -1,0 +1,112 @@
+/** ROK-1930 — the hub Overview Deaths card: bars, links, Show all, counted-since, and the hide rules. */
+import { beforeEach, describe, expect, it } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
+import type { JSX, ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { GuildPage } from '@raid-ledger/contract';
+import { server } from '../../../test/mocks/server';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
+import { valheimDeathPlayer, valheimDeathsFixture, valheimDeathsHandler } from '../../../test/mocks/valheim-deaths-handlers';
+import { useTimezoneStore } from '../../../stores/timezone-store';
+import type { HubWidgetCtx } from '../../hub-game-widgets';
+import { useDeathsWidgetVisible, useValheimDeaths } from '../hooks/use-valheim-deaths';
+import ValheimDeathsWidget from './valheim-deaths-widget';
+import { ValheimDeathsShowAll } from './valheim-deaths-show-all';
+
+function ctx(): HubWidgetCtx {
+    const page = {
+        server: { pelicanServerId: 7, gameSlug: 'valheim', gameIconUrl: null, state: 'running', viewerJoined: false },
+        viewer: { role: 'member', canEdit: false, canManageEditors: false },
+    } as GuildPage;
+    // The widget reads only `page.server`; the rest of the hub ctx is never touched (register.test idiom).
+    return { page, gameSlug: 'valheim' } as HubWidgetCtx;
+}
+
+const Widget = (): JSX.Element => <ValheimDeathsWidget {...ctx()} />;
+const rows = (): HTMLElement[] => screen.getAllByTestId('valheim-deaths-row');
+
+function probe() {
+    const client = createTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    // The same query key as the probe, so `query` reports when the response has landed.
+    return renderHook(() => ({ visible: useDeathsWidgetVisible(ctx()), query: useValheimDeaths(7) }), { wrapper });
+}
+
+beforeEach(() => {
+    useTimezoneStore.setState({ resolved: 'UTC' });
+});
+
+describe('ValheimDeathsWidget', () => {
+    it('draws one bar per player in served order, scaled to the top player', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        await waitFor(() => expect(rows()).toHaveLength(3));
+        expect(rows().map((r) => r.dataset.key)).toEqual(['c11', 'c12', 'nLeft-the-hub']);
+        const values = screen.getAllByRole('meter').map((m) => m.getAttribute('aria-valuenow'));
+        expect(values).toEqual(['100', '50', '25']);
+    });
+
+    it('links a bar with a character to its death pins on the Map tab; a bar without one is plain text', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        const link = await screen.findByRole('link', { name: 'Ragnhild, 12 deaths — show on map' });
+        expect(link.getAttribute('href')).toBe('/?pins=death&vc=11#map');
+        const unlinked = rows()[2];
+        expect(unlinked).toBeDefined();
+        expect(within(unlinked as HTMLElement).queryByRole('link')).toBeNull();
+        expect(within(unlinked as HTMLElement).getByText('Left-the-hub')).toBeTruthy();
+    });
+
+    it('shows at most 8 bars', async () => {
+        const players = Array.from({ length: 10 }, (_, i) => valheimDeathPlayer({ name: `P${i}`, deaths: 20 - i, characterId: i + 1 }));
+        server.use(valheimDeathsHandler({ players, since: null }));
+        renderWithProviders(<Widget />);
+        await waitFor(() => expect(rows()).toHaveLength(8));
+        expect(screen.queryByTestId('valheim-deaths-since')).toBeNull();
+    });
+
+    it('shows a muted "Counted since" line in the viewer timezone', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        const since = await screen.findByTestId('valheim-deaths-since');
+        expect(since.textContent).toMatch(/^Counted since .*Oct.*2026$/);
+        expect(since.className).toContain('text-muted');
+    });
+
+    it('renders nothing for a visitor (the route 404s) — no error card', async () => {
+        server.use(valheimDeathsHandler(valheimDeathsFixture, 404));
+        const { container } = renderWithProviders(<Widget />);
+        const { result } = probe();
+        await waitFor(() => expect(result.current.query.isError).toBe(true));
+        expect(result.current.visible).toBe(false);
+        await waitFor(() => expect(screen.queryByTestId('valheim-deaths-row')).toBeNull());
+        expect(container.innerHTML).toBe('');
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('useDeathsWidgetVisible', () => {
+    it('is false while pending, true once a death is served', async () => {
+        server.use(valheimDeathsHandler());
+        const { result } = probe();
+        expect(result.current.visible).toBe(false);
+        await waitFor(() => expect(result.current.visible).toBe(true));
+    });
+
+    it('is false when nobody has died', async () => {
+        server.use(valheimDeathsHandler({ players: [], since: null }));
+        const { result } = probe();
+        // Wait for the response to land before asserting it stays hidden.
+        await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
+        expect(result.current.query.data?.players).toEqual([]);
+        expect(result.current.visible).toBe(false);
+    });
+});
+
+describe('ValheimDeathsShowAll', () => {
+    it('links to the server-wide death layer on the Map tab', () => {
+        renderWithProviders(<ValheimDeathsShowAll />);
+        expect(screen.getByRole('link', { name: 'Show all' }).getAttribute('href')).toBe('/?pins=death#map');
+    });
+});

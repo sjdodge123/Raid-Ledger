@@ -1,3 +1,5 @@
+import type { GamePresenceEvent } from './presence-events';
+
 /**
  * ROK-1802 Codex r4 — players the sink still HOLDS for a server when a new
  * session opens, whose join line fell outside the replay. The tracker never
@@ -38,6 +40,19 @@ export class UntrackedHeldPlayers {
     const gone = this.ids.slice(0, Math.max(0, this.ids.length - room));
     this.ids = this.ids.slice(gone.length);
     return gone;
+  }
+
+  /**
+   * Codex r4: a held player the tracker never saw may be enrolled by a
+   * heartbeat, so their disconnect line — or a count with no room left for
+   * them — must still reach the sink, or their row never closes. Returns
+   * the held players `event` shows gone (`tracked` = the tracker's count).
+   */
+  departures(event: GamePresenceEvent, tracked: number): string[] {
+    if (event.kind === 'leave')
+      return this.forget(event.steamId) ? [event.steamId] : [];
+    if (event.kind === 'heartbeat') return this.fit(event.count, tracked);
+    return [];
   }
 
   clear(): void {
