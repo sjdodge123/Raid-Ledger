@@ -1744,6 +1744,13 @@
       "when": 1792734074073,
       "tag": "0249_hub_welcome_message",
       "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1792735027449,
+      "tag": "0250_valheim_claim_suggestion_notification_type",
+      "breakpoints": true
     }
   ]
 }
