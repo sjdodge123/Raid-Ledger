@@ -5,6 +5,7 @@ import { recipeCatalogFixture } from '../../../test/mocks/valheim-recipes-handle
 import {
     BY_HAND_KEY,
     affordability,
+    rankCache,
     rowDescription,
     searchRows,
     slotLines,
@@ -121,9 +122,34 @@ describe('sortRows', () => {
 
     it('keeps each ranked row object across calls that share a cache', () => {
         const rows = [entry('C', 'Charlie', 'forge')].map((e) => ({ entry: e, cost: e.craft ?? bronze, stationKey: 'forge', stationLabel: 'Forge' }));
-        const cache = new WeakMap();
+        const totals = { Wood: 1 };
+        const cache = rankCache(totals);
+        const first = sortRows(rows, totals, cache)[0];
+        expect(sortRows(rows, totals, cache)[0]).toBe(first);
+        expect(sortRows(rows, totals)[0]).not.toBe(first);
+    });
+
+    it('a cache made for other totals never returns its stale row', () => {
+        const rows = [entry('C', 'Charlie', 'forge')].map((e) => ({ entry: e, cost: e.craft ?? bronze, stationKey: 'forge', stationLabel: 'Forge' }));
+        const cache = rankCache({ Wood: 1 });
         const first = sortRows(rows, { Wood: 1 }, cache)[0];
-        expect(sortRows(rows, { Wood: 1 }, cache)[0]).toBe(first);
-        expect(sortRows(rows, { Wood: 1 })[0]).not.toBe(first);
+        const after = sortRows(rows, {}, cache)[0];
+        expect(after, 'different totals must re-rank, not reuse the cached object').not.toBe(first);
+        expect(after?.afford.state).toBe('short');
+    });
+});
+
+describe('prototype-named prefabs (Codex P2)', () => {
+    const proto = cost([['constructor', 1], ['toString', 2]]);
+    it('an absent `constructor`/`toString` counts 0: short, never affordable', () => {
+        expect(affordability(proto, { Wood: 5 })).toEqual({
+            state: 'short', anyOneOf: false, missing: [{ prefab: 'constructor', more: 1 }, { prefab: 'toString', more: 2 }],
+        });
+    });
+    it('their slots read have 0 and the full shortfall', () => {
+        expect(slotLines(proto, { Wood: 5 })).toEqual([
+            { prefab: 'constructor', need: 1, have: 0, short: 1 },
+            { prefab: 'toString', need: 2, have: 0, short: 2 },
+        ]);
     });
 });

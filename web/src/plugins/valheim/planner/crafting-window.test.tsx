@@ -256,4 +256,16 @@ describe('CraftingWindow', () => {
         expect(screen.queryByRole('region', { name: 'Recipe detail' })).toBeNull();
         expect(bronze).toHaveFocus();
     });
+
+    it('desktop: "Back to your list" with no rows listed puts focus in the search box, not <body>', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        await user.click(await screen.findByRole('button', { name: 'Bronze' }));
+        await user.type(search(), 'zzz');
+        await screen.findByRole('button', { name: 'Clear search and filters' });
+        const pane = screen.getByRole('region', { name: 'Recipe detail' });
+        await user.click(within(pane).getByRole('button', { name: 'Back to your list' }));
+        expect(screen.queryByRole('region', { name: 'Recipe detail' })).toBeNull();
+        expect(search(), 'focus falls back to the search box').toHaveFocus();
+    });
 });
