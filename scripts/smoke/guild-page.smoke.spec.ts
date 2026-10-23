@@ -15,7 +15,7 @@
  * from 768px (`md:`, ROK-1875 — it replaced the "Guild" text link and the
  * tablet user-menu item), and the More drawer's "Your hubs" block below 768px.
  */
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
@@ -248,6 +248,36 @@ test('hero "Next raid" chip jumps from Overview to the Raids tab', async ({ page
         await chip.click();
         await expect(page).toHaveURL(/#raids$/);
         await expect(page.getByTestId('guild-raids-tab'), 'a plain anchor fires hashchange, so the tab switches').toBeVisible({ timeout: 15_000 });
+    });
+});
+
+/** A locator's box, failing loudly (with the label) when it has none. */
+async function boxOf(locator: Locator, label: string): Promise<{ top: number; bottom: number }> {
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`${label} has no bounding box`);
+    return { top: box.y, bottom: box.y + box.height };
+}
+
+test('hero at 820px: a one-line title shares the first row with the actions, the chips sit on their own row beneath (ROK-1884)', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await page.setViewportSize({ width: 820, height: 1180 });
+        await signInAsAdmin(page.context());
+        await page.goto(`/hubs/${guild.guildId}`);
+        const hero = page.getByTestId('guild-hero');
+        await expect(hero).toBeVisible({ timeout: 15_000 });
+        const title = hero.getByRole('heading', { level: 1 });
+        const actions = hero.getByTestId('hub-hero-actions');
+        const chips = hero.getByTestId('hub-hero-chips');
+        await expect(actions.getByTestId('guild-settings-trigger'), 'an admin gets the settings action').toBeVisible({ timeout: 15_000 });
+        await expect(chips.getByTestId('guild-member-count')).toBeVisible();
+        const lines = await title.evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
+        expect(Math.round(lines), 'the hub title renders on exactly one line at 820px').toBe(1);
+        const t = await boxOf(title, 'the hub title');
+        const a = await boxOf(actions, 'the hero actions');
+        const c = await boxOf(chips, 'the hero chip row');
+        expect(a.top < t.bottom && a.bottom > t.top, `the actions share the title's row (title ${t.top}–${t.bottom}, actions ${a.top}–${a.bottom})`).toBe(true);
+        expect(c.top, 'the chip row starts below the title').toBeGreaterThanOrEqual(t.bottom);
+        expect(c.top, 'the chip row starts below the actions').toBeGreaterThanOrEqual(a.bottom);
     });
 });
 
