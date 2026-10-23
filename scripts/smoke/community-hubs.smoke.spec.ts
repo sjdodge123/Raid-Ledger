@@ -364,7 +364,7 @@ test.describe('community hubs — admin', () => {
         await dialog.getByLabel('Short description').fill('A staff smoke-test hub.');
         await page.getByRole('button', { name: 'Create hub' }).click();
 
-        await expect(page, 'a staff proposer lands on the new hub').toHaveURL(/\/guilds\/\d+$/, { timeout: 20_000 });
+        await expect(page, 'a staff proposer lands on the new hub').toHaveURL(/\/hubs\/\d+$/, { timeout: 20_000 });
         const hubId = Number(must(/\/guilds\/(\d+)$/.exec(page.url())?.[1], 'hub id in the URL'));
         try {
             await expect.poll(async () => (await hubEntry(admin, seed.gameId, hubId))?.name, {
