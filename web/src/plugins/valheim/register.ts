@@ -69,6 +69,8 @@ valheim.registerHubWidget({
     order: 5,
     span: 3,
     audience: 'members',
+    // The banner is its own §4.7 callout + landmark — no WidgetCard heading over it.
+    chrome: 'none',
     component: LazyValheimClaimBannerWidget,
     useVisible: useClaimBannerWidgetVisible,
 });
