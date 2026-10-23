@@ -105,6 +105,12 @@ const NOTIFICATION_TYPE_META: {
         label: 'LFG player invites',
         description: 'A player invites you to join their group for a game',
     },
+    {
+        // ROK-1933 — the suggested-match DM; its footer links #notif-valheim_claim_suggestion.
+        type: 'valheim_claim_suggestion',
+        label: 'Character claim suggestions',
+        description: 'A Discord DM when a Valheim character on a server looks like yours',
+    },
 ];
 
 /** All possible channel metadata */

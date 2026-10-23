@@ -52,13 +52,18 @@ export function GameWidgetCard({ reg, ctx }: CardProps): JSX.Element {
     const { pluginSlug, widget } = reg;
     const Body = widget.component;
     const Action = widget.action;
+    const id = `hub-widget-${pluginSlug}-${widget.id}`;
+    const span = SPAN_CLASS[widget.span ?? 1];
+    const body = (
+        <WidgetBoundary fallback={BODY_ERROR}>
+            <Suspense fallback={<WidgetSkeleton />}><Body {...ctx} /></Suspense>
+        </WidgetBoundary>
+    );
+    // `chrome: 'none'` — the body owns its landmark and frame; the cell keeps id + span.
+    if (widget.chrome === 'none') return <div id={id} className={`scroll-mt-4 ${span ?? ''}`}>{body}</div>;
     return (
-        <div className={SPAN_CLASS[widget.span ?? 1]}>
-            <WidgetCard id={`hub-widget-${pluginSlug}-${widget.id}`} title={widget.title} action={Action ? <Action {...ctx} /> : undefined}>
-                <WidgetBoundary fallback={BODY_ERROR}>
-                    <Suspense fallback={<WidgetSkeleton />}><Body {...ctx} /></Suspense>
-                </WidgetBoundary>
-            </WidgetCard>
+        <div className={span}>
+            <WidgetCard id={id} title={widget.title} action={Action ? <Action {...ctx} /> : undefined}>{body}</WidgetCard>
         </div>
     );
 }

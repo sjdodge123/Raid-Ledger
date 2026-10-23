@@ -6,7 +6,11 @@
  */
 import assert from 'node:assert/strict';
 
-import { buildDemoData, pickOperatorUser } from './demo-data.js';
+import {
+  buildDemoData,
+  pickOperatorUser,
+  withoutFixtureUsers,
+} from './demo-data.js';
 
 let passed = 0;
 let failed = 0;
@@ -55,6 +59,20 @@ test('demoUserIds excludes the operator (it was demoUserIds[0] before the fix)',
 test('games carries the MMO game only when users exist', () => {
   assert.deepEqual(buildDemoData(USERS, [], 7).games, [{ id: 7, name: 'Game 7' }]);
   assert.deepEqual(buildDemoData([], [], 7).games, []);
+});
+
+test('withoutFixtureUsers drops claim-drive fixture users (ROK-1933)', () => {
+  const users = [
+    { id: 114, username: 'cdA14mvkuog2xkw' },
+    { id: 115, username: 'cdB14mvkuog2xkw' },
+    { id: 116, username: 'DragonSlayer99' },
+    { id: 117, username: 'cdAmy' },
+  ];
+  assert.deepEqual(
+    withoutFixtureUsers(users).map((u) => u.id),
+    [116, 117],
+  );
+  assert.equal(pickOperatorUser(withoutFixtureUsers(users), [])?.username, 'DragonSlayer99');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

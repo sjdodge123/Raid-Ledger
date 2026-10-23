@@ -1,5 +1,6 @@
 import { Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Job, Queue } from 'bullmq';
 import * as Sentry from '@sentry/nestjs';
 import { QueueHealthService } from '../queue/queue-health.service';
@@ -14,6 +15,10 @@ import {
 } from './discord-notification.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { buildPlaintextContent } from './format-helpers';
+import {
+  DISCORD_NOTIFICATION_FAILED,
+  type DiscordNotificationFailedEvent,
+} from './discord-notification.events';
 
 type ErrorClass = 'permanent-deactivate' | 'permanent-prefs-only' | 'transient';
 
@@ -72,6 +77,11 @@ function maybeThrowSimulatedError(data: DiscordNotificationJobData): void {
   throw err;
 }
 
+/** True when BullMQ will not retry this attempt. */
+function isFinalAttempt(job: Job<DiscordNotificationJobData>): boolean {
+  return job.attemptsMade + 1 >= (job.opts.attempts ?? 3);
+}
+
 /**
  * Bull queue processor for Discord DM delivery (ROK-180 AC-5).
  * Processes jobs from the discord-notification queue.
@@ -92,6 +102,7 @@ export class DiscordNotificationProcessor
     private readonly discordNotificationService: DiscordNotificationService,
     private readonly settingsService: SettingsService,
     private readonly queueHealth: QueueHealthService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     super();
   }
@@ -114,6 +125,7 @@ export class DiscordNotificationProcessor
     }
     if (!this.clientService.isConnected()) {
       this.logger.warn('Discord bot not connected, failing job for retry');
+      if (isFinalAttempt(job)) this.emitFailed(job.data);
       throw new Error('Discord bot not connected');
     }
     Sentry.setUser({ id: userId.toString(), username: discordId });
@@ -130,22 +142,54 @@ export class DiscordNotificationProcessor
           userId,
         });
     } catch (error) {
-      const kind = classifyDiscordError(error);
-      if (kind === 'permanent-deactivate') {
-        await this.handlePermanentDeactivate(userId, error);
-        return;
-      }
-      if (kind === 'permanent-prefs-only') {
-        this.logger.warn(
-          `ROK-1260: 50007 for user ${userId} — recording failure, swallowing error`,
-        );
-        await this.discordNotificationService
-          .recordFailure(userId)
-          .catch(() => {});
-        return;
-      }
+      await this.handleSendError(job, error);
+    }
+  }
+
+  /**
+   * Route a failed send by error class. A permanent error resolves the job
+   * (no retry); a transient one is rethrown for BullMQ to retry. Either way
+   * a FINAL failure emits {@link DISCORD_NOTIFICATION_FAILED}.
+   */
+  private async handleSendError(
+    job: Job<DiscordNotificationJobData>,
+    error: unknown,
+  ): Promise<void> {
+    const { userId } = job.data;
+    const kind = classifyDiscordError(error);
+    if (kind === 'transient') {
       this.handleProcessError(job, userId, error);
       throw error;
+    }
+    if (kind === 'permanent-deactivate') {
+      await this.handlePermanentDeactivate(userId, error);
+    } else {
+      this.logger.warn(
+        `ROK-1260: 50007 for user ${userId} — recording failure, swallowing error`,
+      );
+      await this.discordNotificationService
+        .recordFailure(userId)
+        .catch(() => {});
+    }
+    this.emitFailed(job.data);
+  }
+
+  /**
+   * Tell listeners this DM will never be delivered (ROK-1933 Codex P2). A
+   * listener's throw must not change the job's outcome, so it is contained.
+   */
+  private emitFailed(data: DiscordNotificationJobData): void {
+    const event: DiscordNotificationFailedEvent = {
+      type: data.type,
+      userId: data.userId,
+      payload: data.payload ?? null,
+    };
+    try {
+      this.eventEmitter.emit(DISCORD_NOTIFICATION_FAILED, event);
+    } catch (err) {
+      this.logger.warn(
+        `Failed-DM listener threw: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -229,8 +273,9 @@ export class DiscordNotificationProcessor
     this.logger.warn(
       `Failed to send Discord DM to user ${userId} (attempt ${job.attemptsMade + 1}): ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
-    if (job.attemptsMade + 1 >= (job.opts.attempts ?? 3)) {
+    if (isFinalAttempt(job)) {
       this.discordNotificationService.recordFailure(userId).catch(() => {});
+      this.emitFailed(job.data);
     }
   }
 }

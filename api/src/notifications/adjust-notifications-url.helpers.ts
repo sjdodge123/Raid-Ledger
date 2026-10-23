@@ -50,6 +50,7 @@ const ADJUST_TARGET: Record<NotificationType, AdjustTarget> = {
   hub_event_tagged: 'settings',
   hub_proposal_submitted: 'settings',
   hub_proposal_reviewed: 'settings',
+  valheim_claim_suggestion: 'settings',
   system: 'settings',
 };
 

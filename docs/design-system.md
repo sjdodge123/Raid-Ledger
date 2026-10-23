@@ -1502,13 +1502,17 @@ with `MarkdownBlock`; both use `MD_CLASSES`, so the composer looks like the post
 
 A plugin that does **not** own a hub kind adds a card to the hub Overview of every hub of its game through
 `PluginHandle.registerHubWidget` (`web/src/plugins/hub-game-widgets.ts`): `{ id, title, games, kinds?,
-order, span?, audience, component, action?, useVisible? }`. Core draws the chrome
+order, span?, audience, chrome?, component, action?, useVisible? }`. Core draws the chrome
 (`web/src/components/hub/hub-widget-cells.tsx` + `hub-game-widget-card.tsx`), so a widget body never
 renders its own card or heading.
 
 - **Chrome.** The §4.2 `WidgetCard` (id `hub-widget-<pluginSlug>-<id>`, heading = `title`, `action` in the
   header slot) around a `Suspense` whose fallback is a `h-24 animate-pulse rounded-md bg-panel` skeleton.
   The body is `lazy` (keeps plugin `register.ts` files and the app entry light).
+  `chrome: 'none'` (ROK-1933) skips the `WidgetCard` for a body that is itself one framed landmark — the
+  Valheim claim banner, a §4.7 instruction callout with its own `section` and heading. Core keeps the cell id,
+  span, Suspense and both boundaries; `title` is then unused on screen. Use it only for a callout, never to
+  draw a bespoke card.
 - **Containment.** An error boundary inside the card swaps a throwing body for a `role="alert"` `text-sm
   text-muted` "Couldn't load this widget."; a second one around the cell drops the card if `useVisible`
   or the header action throws. The rest of the Overview always renders. Each cell is keyed by the hub's guild id,

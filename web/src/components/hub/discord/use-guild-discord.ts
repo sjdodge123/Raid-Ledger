@@ -7,10 +7,10 @@
  * the interval in a hidden tab (stated explicitly, not left to the default).
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
-import type { GuildDiscordChannelListDto, GuildDiscordMirrorDto, SetGuildDiscordChannelDto } from '@raid-ledger/contract';
+import type { GuildDiscordChannelListDto, GuildDiscordMirrorDto, HubWelcomeResult, SetGuildDiscordChannelDto } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
 import {
-    deleteGuildDiscordChannel, fetchGuildDiscord, fetchGuildDiscordChannels, putGuildDiscordChannel,
+    deleteGuildDiscordChannel, fetchGuildDiscord, fetchGuildDiscordChannels, postGuildDiscordWelcome, putGuildDiscordChannel,
 } from './guild-discord-api';
 import { guildPageKey } from '../api/use-guild';
 import { hubPostComposerKey } from '../posts/use-hub-posts';
@@ -71,5 +71,17 @@ export function useClearGuildDiscordChannel(guildId: number): UseMutationResult<
     return useMutation<void, Error, void>({
         mutationFn: () => deleteGuildDiscordChannel(guildId),
         onSuccess,
+    });
+}
+
+/**
+ * ROK-1933 — "Re-post welcome message" (Leader / staff). The welcome lands in
+ * the mirrored channel, so the mirror refetches to show it.
+ */
+export function useRepostHubWelcome(guildId: number): UseMutationResult<HubWelcomeResult, Error, void> {
+    const queryClient = useQueryClient();
+    return useMutation<HubWelcomeResult, Error, void>({
+        mutationFn: () => postGuildDiscordWelcome(guildId),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: guildDiscordKey(guildId) }),
     });
 }

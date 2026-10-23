@@ -80,8 +80,17 @@ export async function linkHubsForGame(
   gameId: number,
   channelId: string,
 ): Promise<number> {
+  return (await linkHubIdsForGame(db, gameId, channelId)).length;
+}
+
+/** ROK-1933: as {@link linkHubsForGame}, returning the newly linked hub ids. */
+export async function linkHubIdsForGame(
+  db: Db,
+  gameId: number,
+  channelId: string,
+): Promise<number[]> {
   const ids = await selectLinkableHubIds(db, gameId);
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) return [];
   const set = {
     discordChannelId: channelId,
     discordChannelSource: 'auto' as const,
@@ -98,7 +107,7 @@ export async function linkHubsForGame(
       setWhere: linkableProfileWhere(),
     })
     .returning({ guildId: guildProfiles.guildId });
-  return linked.length;
+  return linked.map((r) => r.guildId);
 }
 
 /** Game ids that have an eligible hub still lacking a channel (L3 seam). */

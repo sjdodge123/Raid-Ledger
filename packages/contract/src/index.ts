@@ -233,6 +233,8 @@ export * from './valheim-recipes.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+export * from './hub-welcome.schema.js';
+export * from './valheim-claim-status.schema.js';
 export * from './community-hubs.schema.js';
 export * from './hub-invite.schema.js';
 // Guild page S3 raids payload (ROK-1787).

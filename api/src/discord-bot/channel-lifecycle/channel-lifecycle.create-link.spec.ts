@@ -184,3 +184,36 @@ describe('Codex r18 P2: post-create link re-reads + locks the binding', () => {
     expect(link).toHaveBeenCalledWith(7, 'new-ch', expect.anything());
   });
 });
+
+describe('Codex P2: LINKED is announced only after the link tx commits', () => {
+  const LINKED = { channelId: 'new-ch', guildIds: [11] };
+  const PLAN = { run: [CREATE], deferred: [], skipped: 0, verify: [] };
+
+  it('announces the linked hubs once the link tx commits', async () => {
+    jest
+      .mocked(queries.lockLifecycleBinding)
+      .mockResolvedValue({ ...LOCKED, autoManaged: false });
+    const { pool } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    link.mockResolvedValue(LINKED);
+    const announce = jest.fn();
+    ctx.hubLinker.announceLinked = announce;
+    const res = await executePlan(ctx, PLAN);
+    expect(announce.mock.calls).toEqual([[LINKED]]);
+    expect(res.items.map((i) => [i.action, i.outcome])).toEqual([
+      ['create', 'done'],
+    ]);
+  });
+
+  it('a rolled-back link announces nothing', async () => {
+    jest.mocked(ops.setTopic).mockRejectedValueOnce(new Error('topic boom'));
+    const { pool } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    link.mockResolvedValue(LINKED);
+    const announce = jest.fn();
+    ctx.hubLinker.announceLinked = announce;
+    await executePlan(ctx, PLAN);
+    expect(link).toHaveBeenCalledTimes(1);
+    expect(announce).not.toHaveBeenCalled();
+  });
+});

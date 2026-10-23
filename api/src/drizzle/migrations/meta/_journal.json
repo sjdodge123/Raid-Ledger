@@ -1744,6 +1744,20 @@
       "when": 1792735496129,
       "tag": "0249_material_marvel_zombies",
       "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1792735596129,
+      "tag": "0250_hub_welcome_message",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1792735696129,
+      "tag": "0251_valheim_claim_suggestion_notification_type",
+      "breakpoints": true
     }
   ]
 }

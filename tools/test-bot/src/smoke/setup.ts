@@ -12,7 +12,11 @@ import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
 import { setupChannelPool } from './channel-pool.js';
 import { rotateForPool, smokePoolIndex } from './pool-index.js';
-import { buildDemoData, pickOperatorUser } from './demo-data.js';
+import {
+  buildDemoData,
+  pickOperatorUser,
+  withoutFixtureUsers,
+} from './demo-data.js';
 import type { TestContext, DiscordChannel } from './types.js';
 
 /** Connect the companion bot and return its Discord user ID. */
@@ -204,7 +208,10 @@ async function initApi(): Promise<{
   const usersRes = await api.get<{ data: { id: number; username: string }[] }>(
     '/users?limit=10&page=1',
   ).catch(() => ({ data: [] }));
-  const allUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
+  // ROK-1933: never hand a fixture-seeded user (synthetic Discord id) to a role.
+  const allUsers = withoutFixtureUsers(
+    Array.isArray(usersRes.data) ? usersRes.data : [],
+  );
 
   return { api, testUserId, allUsers };
 }

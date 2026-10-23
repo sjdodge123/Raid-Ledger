@@ -19,7 +19,8 @@ const ListQuerySchema = z.object({
     .min(1)
     .max(ARMORY_PAGE_SIZE_MAX)
     .default(ARMORY_PAGE_SIZE_DEFAULT),
-  unclaimed: z.enum(['true', 'false']).optional(),
+  /** `1`/`true` = unclaimed only (ROK-1933: the hub's "Unclaimed only" filter). */
+  unclaimed: z.enum(['true', 'false', '1', '0']).optional(),
 });
 
 /** Parsed list query: optional server filter + a limit/offset window. */
@@ -37,7 +38,7 @@ export function parseArmoryListQuery(query: unknown): ArmoryListQuery {
   const { serverId, page, pageSize, unclaimed } = parsed.data;
   return {
     serverId,
-    unclaimed: unclaimed === 'true',
+    unclaimed: unclaimed === 'true' || unclaimed === '1',
     limit: pageSize,
     offset: (page - 1) * pageSize,
   };
