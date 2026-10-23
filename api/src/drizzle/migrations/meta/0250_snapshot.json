@@ -1,5 +1,5 @@
 {
-  "id": "49993c44-28aa-469a-b9cc-6bb2943b6059",
+  "id": "0fc0478b-2543-438b-b0c1-dbaa4a7e4ec7",
   "prevId": "c0e0fec0-365b-46fd-82d9-d72bcb2a090a",
   "version": "7",
   "dialect": "postgresql",
@@ -7076,12 +7076,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7098,21 +7092,6 @@
         }
       },
       "indexes": {
-        "idx_community_lineups_guild_id": {
-          "name": "idx_community_lineups_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "uq_community_lineups_share_token": {
           "name": "uq_community_lineups_share_token",
           "columns": [
@@ -7205,19 +7184,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "tie_pick_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "community_lineups_guild_id_guilds_id_fk": {
-          "name": "community_lineups_guild_id_guilds_id_fk",
-          "tableFrom": "community_lineups",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
           ],
           "columnsTo": [
             "id"
@@ -11985,6 +11951,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "welcome_channel_id": {
+          "name": "welcome_channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "welcome_message_id": {
+          "name": "welcome_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "post_relay_default": {
           "name": "post_relay_default",
           "type": "boolean",
@@ -15434,84 +15412,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.valheim_profile_skill_days": {
-      "name": "valheim_profile_skill_days",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigserial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "play_date": {
-          "name": "play_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "start_skills": {
-          "name": "start_skills",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "end_skills": {
-          "name": "end_skills",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "valheim_profile_skill_days_profile_id_valheim_profiles_id_fk": {
-          "name": "valheim_profile_skill_days_profile_id_valheim_profiles_id_fk",
-          "tableFrom": "valheim_profile_skill_days",
-          "tableTo": "valheim_profiles",
-          "columnsFrom": [
-            "profile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "valheim_profile_skill_days_profile_date_uq": {
-          "name": "valheim_profile_skill_days_profile_date_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "profile_id",
-            "play_date"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.valheim_container_scans": {
       "name": "valheim_container_scans",
       "schema": "",
@@ -16736,6 +16636,84 @@
           "value": "\"discord_game_roles\".\"window_days\" BETWEEN 1 AND 365"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.valheim_profile_skill_days": {
+      "name": "valheim_profile_skill_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "profile_id": {
+          "name": "profile_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "play_date": {
+          "name": "play_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_skills": {
+          "name": "start_skills",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_skills": {
+          "name": "end_skills",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_profile_skill_days_profile_id_valheim_profiles_id_fk": {
+          "name": "valheim_profile_skill_days_profile_id_valheim_profiles_id_fk",
+          "tableFrom": "valheim_profile_skill_days",
+          "tableTo": "valheim_profiles",
+          "columnsFrom": [
+            "profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_profile_skill_days_profile_date_uq": {
+          "name": "valheim_profile_skill_days_profile_date_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "profile_id",
+            "play_date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
