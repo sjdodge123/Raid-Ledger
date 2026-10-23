@@ -15,8 +15,8 @@ import {
     valheimRecipeTreeHandler,
 } from '../../../test/mocks/valheim-recipes-handlers';
 import { CRAFT_ENTRIES, CRAFT_STATIONS, CRAFT_TOTALS } from './crafting.test-fixture';
-import { CRAFT_NO_SCAN_COPY, CraftingWindow } from './crafting-window';
-import { DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
+import { CraftingWindow } from './crafting-window';
+import { CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
 
 const media = vi.hoisted(() => ({ desktop: true }));

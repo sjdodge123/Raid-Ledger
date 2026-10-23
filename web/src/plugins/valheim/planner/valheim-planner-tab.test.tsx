@@ -1,4 +1,4 @@
-/** ROK-1854 — the hub Planner tab: pick → tree, quality, funnel → plan key, shopping list + storage, empty + no-stock. */
+/** ROK-1854 / ROK-1899 — the hub Planner tab: row pick → tree, UPGRADE step, funnel → plan + stock keys, shopping list + storage, empty + no-stock. */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,6 +13,7 @@ import {
     recipeCatalogFixture,
     valheimRecipeCatalogHandler,
     valheimRecipePlanHandler,
+    valheimRecipeStockHandler,
     valheimRecipeTreeHandler,
 } from '../../../test/mocks/valheim-recipes-handlers';
 import { PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY } from './planner.helpers';
@@ -32,12 +33,16 @@ const STORED = JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, 
 const SAVED = JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, fromQuality: 0, amount: 2 }]);
 let treeHits: string[];
 let planHits: string[];
+let stockHits: string[];
 
 const renderTab = () => renderWithProviders(<ValheimPlannerTab serverId={7} />);
 
+const searchBox = () => screen.getByRole('searchbox', { name: 'Search an item or piece' });
+
+/** ROK-1899: the crafting window's Forge list replaces the combobox. */
 async function pickIronSword(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-    await user.type(await screen.findByRole('combobox', { name: 'Search an item or piece' }), 'iron s');
-    await user.click(await screen.findByRole('option', { name: /Iron sword/ }));
+    const list = await screen.findByRole('list', { name: 'Forge recipes' });
+    await user.click(within(list).getByRole('button', { name: /^Iron sword/ }));
 }
 
 beforeEach(() => {
@@ -45,7 +50,9 @@ beforeEach(() => {
     localStorage.clear();
     treeHits = [];
     planHits = [];
+    stockHits = [];
     server.use(
+        valheimRecipeStockHandler(stockHits),
         valheimRecipeCatalogHandler(),
         valheimRecipeTreeHandler(treeHits),
         valheimRecipePlanHandler(planHits),
@@ -72,14 +79,19 @@ describe('ValheimPlannerTab', () => {
         expect(treeHits).toEqual(['SwordIron?quality=1&kind=item']);
     });
 
-    it('re-requests the tree when the quality changes', async () => {
+    it('UPGRADE: the chosen step re-requests the breakdown, and the list stores and labels it q2→3', async () => {
         const user = userEvent.setup();
         renderTab();
-        await pickIronSword(user);
-        await user.selectOptions(await screen.findByRole('combobox', { name: 'Quality' }), '3');
-        await waitFor(() => expect(treeHits).toContain('SwordIron?quality=3&kind=item'));
-        const tree = await screen.findByRole('list', { name: 'What Iron sword needs' });
-        await waitFor(() => expect(within(tree).getAllByTestId('valheim-planner-row')[1]).toHaveTextContent('Need 40'));
+        await user.click(await screen.findByRole('radio', { name: /UPGRADE/ }));
+        const list = await screen.findByRole('list', { name: 'Forge upgrades' });
+        await user.click(within(list).getByRole('button', { name: /^Iron sword/ }));
+        await user.selectOptions(screen.getByRole('combobox', { name: 'Upgrade to quality' }), '3');
+        await waitFor(() => expect(planHits).toContain('?targets=SwordIron%3A3%3A1%3A2%3Aitem&includePersonal=false&includeVehicles=true'));
+        expect(await screen.findByRole('list', { name: 'What Iron sword needs' })).toBeInTheDocument();
+        expect(treeHits).toEqual([]);
+        await user.click(screen.getByRole('button', { name: 'Add to list' }));
+        expect(await screen.findByRole('list', { name: 'Planned items' })).toHaveTextContent('Iron sword · q2→3 × 1');
+        expect(localStorage.getItem(KEY)).toBe(JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 3, fromQuality: 2, amount: 1 }]));
     });
 
     it('adds to the shopping list, persists it, and removes it', async () => {
@@ -138,6 +150,7 @@ describe('ValheimPlannerTab', () => {
         await waitFor(() => expect(planHits).toHaveLength(2));
         expect(planHits[1]).toContain('includeVehicles=false');
         expect(planHits[1]).toContain('includePersonal=false');
+        await waitFor(() => expect(stockHits.at(-1)).toContain('includeVehicles=false'));
     });
 
     it('shows the empty state while the server has sent no recipes', async () => {
@@ -159,7 +172,7 @@ describe('ValheimPlannerTab', () => {
         const view = renderWithProviders(<ValheimPlannerTab serverId={7} />);
         expect(await screen.findByRole('list', { name: 'Planned items' })).toHaveTextContent('Iron sword');
         view.rerender(<ValheimPlannerTab serverId={8} />);
-        await screen.findByRole('combobox', { name: 'Search an item or piece' });
+        await screen.findByRole('searchbox', { name: 'Search an item or piece' });
         view.rerender(<ValheimPlannerTab serverId={7} />);
         expect(await screen.findByRole('list', { name: 'Planned items' })).toHaveTextContent('Iron sword');
         view.rerender(<ValheimPlannerTab serverId={8} />); // both catalogues cached now
@@ -178,25 +191,28 @@ describe('ValheimPlannerTab', () => {
         expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
     });
 
-    it('editing the search after a pick drops the pick: Add disabled, tree back to idle', async () => {
+    it('editing the search after a pick keeps the pick and never writes into the box (ROK-1899 §3.1.4)', async () => {
         const user = userEvent.setup();
         renderTab();
         await pickIronSword(user);
         expect(await screen.findByRole('list', { name: 'What Iron sword needs' })).toBeInTheDocument();
+        expect(searchBox()).toHaveValue('');
+        await user.type(searchBox(), 'x');
+        expect(await screen.findByText('No recipes match.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Add to list' })).toBeEnabled();
-        await user.type(screen.getByRole('combobox', { name: 'Search an item or piece' }), 'x');
-        expect(screen.getByRole('button', { name: 'Add to list' })).toBeDisabled();
-        expect(screen.queryByRole('list', { name: 'What Iron sword needs' })).toBeNull();
-        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+        expect(screen.getByRole('list', { name: 'What Iron sword needs' })).toBeInTheDocument();
     });
 
-    it('clearing the search after a pick drops the pick', async () => {
+    it('clearing the search restores the last station', async () => {
         const user = userEvent.setup();
         renderTab();
-        await pickIronSword(user);
-        await user.clear(screen.getByRole('combobox', { name: 'Search an item or piece' }));
-        expect(screen.getByRole('button', { name: 'Add to list' })).toBeDisabled();
-        expect(screen.getByText('Pick an item or piece to see what it takes.')).toBeInTheDocument();
+        await user.click(await screen.findByRole('radio', { name: 'Workbench' }));
+        await user.type(searchBox(), 'iron');
+        expect(await screen.findByRole('list', { name: 'Matches from every station' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'Workbench' })).not.toBeChecked();
+        await user.clear(searchBox());
+        expect(screen.getByRole('radio', { name: 'Workbench' })).toBeChecked();
+        expect(screen.getByRole('list', { name: 'Workbench recipes' })).toBeInTheDocument();
     });
 
     it('a failed plan shows an error with Retry, not the idle prompt; Retry recovers', async () => {

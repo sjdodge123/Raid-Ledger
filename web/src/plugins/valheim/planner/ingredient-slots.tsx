@@ -28,14 +28,14 @@ const SLOT = 'flex w-24 flex-col items-center gap-1 rounded-md border bg-surface
 const isShort = (line: SlotLine): boolean => (line.short ?? 0) > 0;
 
 /** "you have 3 · 7 short", "you have 40", or "no scan". */
-export function haveText(line: SlotLine): string {
+function haveText(line: SlotLine): string {
     if (line.have === null) return 'no scan';
     const have = `you have ${formatAmount(line.have)}`;
     return isShort(line) ? `${have} · ${formatAmount(line.short)} short` : have;
 }
 
 /** The slot's accessible name: "Tin: need 1, you have 0, 1 short". */
-export function slotLabel(name: string, line: SlotLine): string {
+function slotLabel(name: string, line: SlotLine): string {
     const base = `${name}: need ${formatAmount(line.need)}`;
     if (line.have === null) return `${base}, no chest scan`;
     const have = `${base}, you have ${formatAmount(line.have)}`;

@@ -5,10 +5,11 @@
  * UPGRADE the slots, star level and station follow the "Upgrade to quality"
  * select. The caller keys it by mode + row so the quality resets per pick.
  */
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import type { ValheimRecipeCatalogResponse, ValheimRecipeCost } from '@raid-ledger/contract';
 import { CraftBreakdown, type BreakdownStockScope } from './craft-breakdown';
 import { CraftDetailFooter } from './craft-detail-footer';
+import { detailCost, detailTitle, useDetailQuality } from './craft-detail.helpers';
 import { BY_HAND_LABEL, type CraftMode, type RankedRow, type StockTotals } from './crafting.helpers';
 import { IngredientSlots } from './ingredient-slots';
 import type { PlannerTarget } from './planner.helpers';
@@ -24,25 +25,6 @@ export interface CraftDetailProps {
     stock: BreakdownStockScope;
     onAdd: (target: PlannerTarget) => boolean;
     atCap: boolean;
-}
-
-/** The step the pane shows: CRAFT's recipe, or UPGRADE's step up to `quality`. */
-export function detailCost(row: RankedRow, mode: CraftMode, quality: number): ValheimRecipeCost {
-    if (mode === 'craft') return row.cost;
-    return row.entry.upgrades.find((u) => u.quality === quality) ?? row.cost;
-}
-
-/** "Wood arrow ×20" in CRAFT, "Bronze axe — quality 2" in UPGRADE. */
-export function detailTitle(row: RankedRow, mode: CraftMode, quality: number): string {
-    if (mode === 'upgrade') return `${row.entry.name} — quality ${quality}`;
-    const amount = row.entry.craft?.amount ?? 1;
-    return amount > 1 ? `${row.entry.name} ×${amount}` : row.entry.name;
-}
-
-/** The pane's UPGRADE quality: the first upgrade step (q2) until the select moves it. */
-export function useDetailQuality(row: RankedRow, mode: CraftMode): [number, (q: number) => void] {
-    const [quality, setQuality] = useState(() => (mode === 'upgrade' ? (row.entry.upgrades[0]?.quality ?? 2) : 1));
-    return [quality, setQuality];
 }
 
 const stationLabelOf = (cost: ValheimRecipeCost, names: PlannerNames): string =>

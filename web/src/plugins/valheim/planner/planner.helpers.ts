@@ -47,6 +47,9 @@ export const activePlannerFilters = (f: PlannerFilters): number =>
 export const PLANNER_AMOUNT_MAX = 10_000;
 export const PLANNER_NO_SET_COPY =
     'Recipes arrive when an admin with the mod joins the server.';
+/** The crafting window's `stock:'none'` status line (ROK-1899 §3.4). */
+export const CRAFT_NO_SCAN_COPY =
+    'No chests scanned yet — every recipe is shown. Scan a chest in game to see what you can craft.';
 export const PLANNER_NO_STOCK_COPY =
     'No chest data yet — showing what each recipe costs.';
 

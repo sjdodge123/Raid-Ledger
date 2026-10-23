@@ -7,7 +7,8 @@
  */
 import type { JSX } from 'react';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
-import { CraftDetailBody, detailTitle, useDetailQuality, type CraftDetailProps } from './craft-detail';
+import { CraftDetailBody, type CraftDetailProps } from './craft-detail';
+import { detailTitle, useDetailQuality } from './craft-detail.helpers';
 import { CraftDetailFooter } from './craft-detail-footer';
 import type { PlannerTarget } from './planner.helpers';
 

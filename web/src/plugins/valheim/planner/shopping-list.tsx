@@ -23,7 +23,7 @@ interface Props {
 }
 
 /** "q2" for a craft from scratch, "q1→2" for an upgrade step (ROK-1899). */
-export const qualityLabel = (t: PlannerTarget): string =>
+const qualityLabel = (t: PlannerTarget): string =>
     t.fromQuality > 0 ? `q${t.fromQuality}→${t.quality}` : `q${t.quality}`;
 
 function TargetList({ targets, names, onRemove }: Omit<Props, 'plan'>): JSX.Element {

@@ -21,14 +21,12 @@ import { CraftDetail, type CraftDetailProps } from './craft-detail';
 import { CraftDetailSheet } from './craft-detail-sheet';
 import { CraftModeSwitch } from './craft-mode-switch';
 import type { CraftRow } from './crafting.helpers';
-import { activePlannerFilters, DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
+import { activePlannerFilters, CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
 import { PlannerFilterControls } from './planner-filters';
 import { RecipeList } from './recipe-list';
 import { StationSwitcher } from './station-switcher';
 import { rowKey, useCraftingWindow, type CraftingWindow as WindowModel } from './use-crafting-window';
 import type { PlannerNames } from './use-planner-names';
-
-export const CRAFT_NO_SCAN_COPY = 'No chests scanned yet — every recipe is shown. Scan a chest in game to see what you can craft.';
 
 export interface CraftingWindowProps {
     serverId: number;

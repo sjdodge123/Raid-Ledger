@@ -25,7 +25,7 @@ export interface CraftDetailFooterProps {
 }
 
 /** The target "Add to list" writes: CRAFT from scratch at q1, UPGRADE `quality − 1 → quality`. */
-export function footerTarget(mode: CraftMode, entry: ValheimRecipeCatalogEntry, quality: number, amount: number): PlannerTarget {
+function footerTarget(mode: CraftMode, entry: ValheimRecipeCatalogEntry, quality: number, amount: number): PlannerTarget {
     if (mode === 'upgrade') return { prefab: entry.prefab, kind: 'item', quality, fromQuality: quality - 1, amount };
     return { prefab: entry.prefab, kind: entry.kind, quality: 1, fromQuality: 0, amount };
 }
