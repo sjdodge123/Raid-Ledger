@@ -163,7 +163,14 @@ test.describe('hub polls', () => {
         // poll is confirmed on the hub list above, so an absence here is real.
         const banner = ((await apiGet(jwt, '/scheduling-polls/active')) ?? []) as Array<{ matchId: number }>;
         expect(banner.map((p) => p.matchId), 'the site-wide polls list omits the hub poll').not.toContain(poll.matchId);
+        // Register the wait BEFORE navigating so the banner's own list request
+        // is caught; the DOM absence below is only meaningful once it settled.
+        const bannerLoaded = page.waitForResponse(
+            (r) => r.url().includes('/scheduling-polls/active') && r.request().method() === 'GET' && r.ok(),
+            { timeout: 20_000 },
+        );
         await page.goto('/events');
+        await bannerLoaded;
         await expect(page.getByRole('heading', { level: 1 }).first(), 'the events page rendered').toBeVisible({ timeout: 20_000 });
         await expect(page.locator(`a[href="${pollHref(poll)}"]`), 'the events banner has no link to the hub poll').toHaveCount(0);
     });

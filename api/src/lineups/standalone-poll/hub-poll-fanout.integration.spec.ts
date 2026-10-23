@@ -18,6 +18,7 @@ import { insertCommunityHub } from '../../guilds/community/community-proposals.q
 import { refreshMemberCount } from '../../guilds/community/community-membership.queries';
 import { fetchUpcomingPollRows } from '../../notifications/weekly-digest-upcoming.helpers';
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
+import { NotificationService } from '../../notifications/notification.service';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 
 let testApp: TestApp;
@@ -25,6 +26,8 @@ let seq = 0;
 let interestSpy: jest.SpyInstance;
 let pickedSpy: jest.SpyInstance;
 let postEmbedSpy: jest.SpyInstance;
+let rosterSpy: jest.SpyInstance;
+let createNotifSpy: jest.SpyInstance;
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -43,6 +46,11 @@ beforeEach(() => {
   postEmbedSpy = jest
     .spyOn(embed, 'firePostInitialEmbed')
     .mockImplementation(() => undefined);
+  // Pass-through: the real roster query runs; only the DM write is stubbed.
+  rosterSpy = jest.spyOn(notifications, 'notifyRosterReschedule');
+  createNotifSpy = jest
+    .spyOn(testApp.app.get(NotificationService), 'create')
+    .mockResolvedValue(null);
 });
 
 afterEach(async () => {
@@ -89,6 +97,39 @@ async function createPoll(token: string, body: Record<string, unknown>) {
   return res.body as { id: number; lineupId: number };
 }
 
+/** A seed-game event owned by `creatorId`, optionally on a hub. */
+async function mkEvent(creatorId: number, guildId: number | null) {
+  const start = new Date(Date.now() + 2 * 864e5);
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Reschedule night',
+        gameId: testApp.seed.game.id,
+        creatorId,
+        duration: [start, new Date(start.getTime() + 72e5)],
+        guildId,
+      })
+      .returning(),
+    'event',
+  );
+  return event;
+}
+
+async function signUp(eventId: number, userId: number): Promise<void> {
+  await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId, userId, status: 'signed_up' });
+}
+
+/** Recipients of the stubbed `NotificationService.create`, by subtype. */
+function dmRecipients(): { userId: number; subtype: unknown }[] {
+  return createNotifSpy.mock.calls.map((call) => {
+    const arg = call[0] as { userId: number; payload?: { subtype?: unknown } };
+    return { userId: arg.userId, subtype: arg.payload?.subtype };
+  });
+}
+
 async function bannerMatchIds(token: string): Promise<number[]> {
   const res = await testApp.request
     .get('/scheduling-polls/active')
@@ -130,6 +171,46 @@ describe('hub poll fan-out (ruling 2026-10-23)', () => {
     );
     expect(interestSpy).toHaveBeenCalledTimes(1);
     expect(interestSpy.mock.calls[0]?.[3]).toBe(poll.id);
+    expect(pickedSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('reschedule poll on a hub event (ruling 2026-10-23)', () => {
+  it('DMs the event roster only — no card, no interest broadcast', async () => {
+    const owner = await mkUser();
+    const rostered = await mkUser();
+    const elsewhere = await mkUser(); // signed up to another event of the game
+    const hub = await mkHub(owner.id);
+    const event = await mkEvent(owner.id, hub.id);
+    await signUp(event.id, rostered.id);
+    await signUp((await mkEvent(owner.id, null)).id, elsewhere.id);
+    const poll = await createPoll(owner.token, { linkedEventId: event.id });
+    expect(postEmbedSpy).not.toHaveBeenCalled();
+    expect(interestSpy).not.toHaveBeenCalled();
+    expect(rosterSpy).toHaveBeenCalledTimes(1);
+    expect(rosterSpy.mock.calls[0]?.[2]).toBe(event.id);
+    const told = (await rosterSpy.mock.results[0]?.value) as number[];
+    expect(told).toEqual([rostered.id]);
+    expect(dmRecipients()).toEqual([
+      { userId: rostered.id, subtype: 'event_rescheduling' },
+    ]);
+    expect(pickedSpy.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ matchId: poll.id }),
+    );
+  });
+
+  it('an untagged reschedule poll keeps the broadcast path (regression)', async () => {
+    const owner = await mkUser();
+    const event = await mkEvent(owner.id, null);
+    const poll = await createPoll(owner.token, { linkedEventId: event.id });
+    expect(postEmbedSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: poll.id }),
+      poll.lineupId,
+      testApp.seed.game.id,
+    );
+    expect(interestSpy).toHaveBeenCalledTimes(1);
+    expect(interestSpy.mock.calls[0]?.[6]).toBe(event.id);
+    expect(rosterSpy).not.toHaveBeenCalled();
     expect(pickedSpy).not.toHaveBeenCalled();
   });
 });
