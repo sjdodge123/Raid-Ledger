@@ -47,7 +47,8 @@ function renderItems(items: string[][]): JSX.Element[] {
 function renderBlock(block: MarkdownBlockNode, key: number): JSX.Element {
     if (block.kind === 'h') {
         const Tag = MD_HEADING_TAG[block.level];
-        return <Tag key={key} className={MD_CLASSES[`h${block.level}`]}><MarkdownInline text={block.text} /></Tag>;
+        // `data-md-heading` is what the editor's paste rule reads, so a copied card keeps its levels.
+        return <Tag key={key} className={MD_CLASSES[`h${block.level}`]} data-md-heading={block.level}><MarkdownInline text={block.text} /></Tag>;
     }
     if (block.kind === 'p') return <p key={key} className={MD_CLASSES.p}><Lines lines={block.lines} /></p>;
     if (block.kind === 'ul') return <ul key={key} className={MD_CLASSES.ul}>{renderItems(block.items)}</ul>;

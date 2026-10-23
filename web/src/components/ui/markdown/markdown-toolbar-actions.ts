@@ -6,6 +6,7 @@
 import type { ComponentType, SVGProps } from 'react';
 import type { Editor } from '@tiptap/core';
 import type { HubPostHeadingLevel } from '@raid-ledger/contract';
+import { toggleHeading } from './markdown-heading';
 import {
     BoldIcon, CodeBracketIcon, H1Icon, H2Icon, H3Icon, ItalicIcon, LinkIcon, ListBulletIcon, NumberedListIcon, StrikethroughIcon,
 } from '@heroicons/react/24/outline';
@@ -26,7 +27,7 @@ function headingAction(level: HubPostHeadingLevel, icon: ComponentType<SVGProps<
     return {
         key: `h${level}`, label: `Heading ${level}`, icon, shortcut: `Alt+${level}`,
         isActive: (e) => e.isActive('heading', { level }),
-        run: (e) => { e.chain().focus().toggleNode('heading', 'paragraph', { level }).run(); },
+        run: (e) => { toggleHeading(e, level); },
     };
 }
 

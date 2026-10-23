@@ -63,12 +63,28 @@ function useA11y(p: MarkdownEditorProps, countId: string): Record<string, string
  */
 function useEmitSavedFormOnLoad(editor: Editor, onChange: (md: string) => void, lastRef: { current: string }): void {
     const onLoad = useRef(onChange);
+    useEffect(() => { emitSavedForm(editor, lastRef, onLoad.current); }, [editor, lastRef]);
+}
+
+/** Emit the editor's saved form when it differs from what was last emitted / received. */
+function emitSavedForm(editor: Editor, lastRef: { current: string }, onChange: (md: string) => void): void {
+    const md = serializeEditorMarkdown(editor);
+    if (md === lastRef.current) return;
+    lastRef.current = md;
+    onChange(md);
+}
+
+/** Re-sync when the parent swaps `value`; a legacy body that arrives late gets the same saved-form emit. */
+function useResyncValue(editor: Editor, value: string, onChange: (md: string) => void, lastRef: { current: string }): void {
+    const seen = useRef(value); // only a NEW value re-syncs — the mount value already loaded
     useEffect(() => {
-        const md = serializeEditorMarkdown(editor);
-        if (md === lastRef.current) return;
-        lastRef.current = md;
-        onLoad.current(md);
-    }, [editor, lastRef]);
+        if (value === seen.current) return;
+        seen.current = value;
+        if (value === lastRef.current) return;
+        lastRef.current = value;
+        editor.commands.setContent(loadStoredMarkdown(value), { emitUpdate: false });
+        emitSavedForm(editor, lastRef, onChange);
+    }, [editor, value, onChange, lastRef]);
 }
 
 /** Emits normalised markdown upward and re-syncs when the parent swaps `value`. */
@@ -92,11 +108,7 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
     useEffect(() => { editor.setOptions({ editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists } }); }, [editor, attrs]);
     // No `update` on an editability flip — it changes no content (the load emit above is deliberate).
     useEffect(() => { editor.setEditable(!p.disabled, false); }, [editor, p.disabled]);
-    useEffect(() => {
-        if (p.value === last.current) return;
-        last.current = p.value;
-        editor.commands.setContent(loadStoredMarkdown(p.value), { emitUpdate: false });
-    }, [editor, p.value]);
+    useResyncValue(editor, p.value, p.onChange, last);
     return editor;
 }
 

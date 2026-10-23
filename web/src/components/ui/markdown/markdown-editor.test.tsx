@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { Editor } from '@tiptap/core';
 import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
 import MarkdownEditor from './markdown-editor';
@@ -292,6 +293,30 @@ describe('MarkdownEditor headings (ROK-1898)', () => {
         fireEvent.click(screen.getByTestId('md-tool-h2'));
         expect(screen.getByTestId('md-tool-h2')).toHaveAttribute('aria-pressed', 'false');
     });
+
+    it('H1 on a paragraph turns it into a card-level <h3> saved as "# x"', () => {
+        const { editor, el, last } = setup('x');
+        editor.commands.setTextSelection(1);
+        fireEvent.click(screen.getByTestId('md-tool-h1'));
+        expect(el.querySelector('h3')?.textContent).toBe('x');
+        expect(last()).toBe('# x');
+    });
+
+    it('H1 inside a list item is a no-op (a list item cannot hold a heading)', () => {
+        const { editor, el, onChange } = setup('- x');
+        editor.commands.setTextSelection(3);
+        fireEvent.click(screen.getByTestId('md-tool-h1'));
+        expect(el.querySelector('h3')).toBeNull();
+        expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe('- x');
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('a copied MarkdownBlock card pastes back with its heading levels (data-md-heading)', () => {
+        const { editor } = setup('');
+        const card = renderToStaticMarkup(<MarkdownBlock text={'# A\n\n## B\n\n### C'} />);
+        editor.commands.setContent(card);
+        expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe('# A\n\n## B\n\n### C');
+    });
 });
 
 describe('MarkdownEditor — a legacy body with raw HTML (ROK-1898)', () => {
@@ -303,6 +328,18 @@ describe('MarkdownEditor — a legacy body with raw HTML (ROK-1898)', () => {
         expect(findHubPostMarkdownViolation(last())).toBeNull();
         const shown = render(<MarkdownBlock text={last()} />).container.textContent;
         expect(shown).toBe(render(<MarkdownBlock text={legacy} />).container.textContent);
+    });
+
+    it('a legacy body that arrives after mount gets the same single saved-form emit', () => {
+        const legacy = 'Raid <b>night</b>';
+        const { onChange, rerender } = setup('');
+        const view = (value: string) => <MarkdownEditor value={value} onChange={onChange} maxLength={4000} testId="ed" />;
+        rerender(view(legacy));
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenLastCalledWith('Raid \\<b>night\\</b>');
+        rerender(view('Raid \\<b>night\\</b>'));
+        rerender(view('**plain** body'));
+        expect(onChange, 'the parent echoing the emit, or a byte-stable body, emits nothing').toHaveBeenCalledTimes(1);
     });
 
     it('a body the editor already saved emits nothing on load', () => {

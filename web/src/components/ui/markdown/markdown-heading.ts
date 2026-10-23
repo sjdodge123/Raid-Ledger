@@ -10,7 +10,7 @@
  * - `# ` / `## ` / `### ` at the start of a paragraph converts it (input rule). Inside a list item
  *   the rule cannot apply (items hold one paragraph), matching the contract: `- # x` is literal.
  */
-import { Node, textblockTypeInputRule, type JSONContent, type MarkdownParseHelpers, type MarkdownRendererHelpers, type MarkdownToken } from '@tiptap/core';
+import { Node, textblockTypeInputRule, type Editor, type JSONContent, type MarkdownParseHelpers, type MarkdownRendererHelpers, type MarkdownToken } from '@tiptap/core';
 import { HUB_POST_MAX_HEADING_LEVEL, type HubPostHeadingLevel } from '@raid-ledger/contract';
 import { MD_CLASSES, MD_HEADING_TAG } from './markdown-classes';
 
@@ -38,7 +38,19 @@ function parseHeading(token: MarkdownToken, h: MarkdownParseHelpers) {
     if (depth >= 1 && depth <= HUB_POST_MAX_HEADING_LEVEL) {
         return h.createNode('heading', { level: headingLevel(depth) }, h.parseInline(token.tokens ?? []));
     }
-    return h.createNode('paragraph', {}, [h.createTextNode((token.raw ?? '').replace(/\n+$/, ''))]);
+    const raw = token.raw ?? '';
+    let end = raw.length;
+    while (end > 0 && raw[end - 1] === '\n') end--;
+    return h.createNode('paragraph', {}, [h.createTextNode(raw.slice(0, end))]);
+}
+
+/**
+ * Toolbar / shortcut toggle. Inside a list item it is a no-op: `toggleNode` would otherwise lift
+ * the item out of its list to make room (items hold one paragraph; `- # x` is literal).
+ */
+export function toggleHeading(editor: Editor, level: HubPostHeadingLevel): boolean {
+    if (editor.isActive('listItem')) return false;
+    return editor.chain().focus().toggleNode('heading', 'paragraph', { level }).run();
 }
 
 export const PostHeading = Node.create({
@@ -71,7 +83,7 @@ export const PostHeading = Node.create({
         })];
     },
     addKeyboardShortcuts() {
-        const toggle = (level: HubPostHeadingLevel) => () => this.editor.commands.toggleNode(this.name, 'paragraph', { level });
+        const toggle = (level: HubPostHeadingLevel) => () => toggleHeading(this.editor, level);
         return { 'Mod-Alt-1': toggle(1), 'Mod-Alt-2': toggle(2), 'Mod-Alt-3': toggle(3) };
     },
 });
