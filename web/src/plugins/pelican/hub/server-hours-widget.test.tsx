@@ -149,6 +149,9 @@ describe('ServerHoursWidget now line (ROK-1877)', () => {
         expect(tone()).toBe('online');
         expect(screen.getByTestId('server-hub-hours-sub')).toHaveTextContent('Next scheduled: Sat 9:00 AM');
         expect(screen.getByTestId('server-hub-hours-sub')).toHaveClass('text-muted');
+        const subClasses = screen.getByTestId('server-hub-hours-sub').className;
+        expect(subClasses.split(' ').filter((c) => c.startsWith('-m')), 'no negative margin pulling the sub-line into the now line').toEqual([]);
+        expect(screen.getByTestId('server-hub-hours-sub').parentElement, 'now + sub share a gap-1 column').toHaveClass('flex', 'flex-col', 'gap-1');
     });
 
     it('S4 offline in hours: the warning dot and "usually up until 10:00 PM", word stays foreground', async () => {
