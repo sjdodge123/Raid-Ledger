@@ -166,7 +166,7 @@ export async function runCreateEvent(
   creatorId: number,
   rawDto: CreateEventDto,
 ): Promise<EventResponseDto & { allEventIds?: number[] }> {
-  const dto = await inheritPollHub(deps.db, rawDto);
+  const dto = await inheritPollHub(deps.db, rawDto, creatorId);
   const startTime = new Date(dto.startTime);
   const endTime = new Date(dto.endTime);
   const durationMs = endTime.getTime() - startTime.getTime();

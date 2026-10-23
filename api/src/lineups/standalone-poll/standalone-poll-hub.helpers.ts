@@ -65,6 +65,24 @@ export async function isLiveHubMember(
 }
 
 /**
+ * True when the user is a live member of the hub or staff (operator/admin) —
+ * the P1 membership rule (`leftAt`/`bannedAt` null) with the staff bypass.
+ */
+export async function isLiveHubMemberOrStaff(
+  db: Db,
+  guildId: number,
+  userId: number,
+): Promise<boolean> {
+  if (await isLiveHubMember(db, guildId, userId)) return true;
+  const [user] = await db
+    .select({ role: schema.users.role })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return user?.role === 'admin' || user?.role === 'operator';
+}
+
+/**
  * D15: a poll may be tagged to a hub only when the hub is a visible community
  * hub for the poll's game, and the caller is a live member or staff.
  */
