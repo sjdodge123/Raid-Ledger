@@ -313,6 +313,17 @@ test.describe('community hubs — leader', () => {
         await expect(memberRow(page, target), 'the removed member is gone after a reload').toHaveCount(0, { timeout: 15_000 });
     });
 
+    // ROK-1891: the leader's Overview checklist talks about a hub, never a WoW guild.
+    test('Overview setup checklist has an invite step and no guild or raid wording', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        await signInOnboardedMember(page, seed.leaderUserId);
+        await page.goto(`/guilds/${seed.hubIds.crew}`);
+        const checklist = page.getByTestId('setup-checklist');
+        await expect(checklist, 'the leader sees the setup checklist').toBeVisible({ timeout: 20_000 });
+        await expect(checklist.getByTestId('setup-step-invite')).toContainText('Invite players to the hub');
+        await expect(checklist, 'no WoW wording on a community hub checklist').not.toContainText(/guild|raid|roster/i);
+    });
+
     test('settings: save the blurb, then Archive the hub', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
