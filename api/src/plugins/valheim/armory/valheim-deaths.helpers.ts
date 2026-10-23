@@ -45,3 +45,22 @@ export function zonedLocalToUtc(local: string, tz: string): Date | null {
   const second = wall - offsetMs(first, tz);
   return new Date(second);
 }
+
+/**
+ * `occurred_at` for a log death: the stamp read in the server's play-day
+ * timezone, never later than `receivedAt` (review fix round 1). The play-day
+ * zone is a community setting, not the container clock — a UTC container
+ * logging for an America/New_York server would otherwise date every death
+ * ~4h in the future. A death cannot have happened after we read its line,
+ * so a future-dated read clamps to the receive time; a past one is kept
+ * (cold replays of old lines keep their real time). Unparseable → receive time.
+ */
+export function deathOccurredAt(
+  loggedAt: string,
+  tz: string,
+  receivedAt: Date,
+): Date {
+  const zoned = zonedLocalToUtc(loggedAt, tz);
+  if (zoned === null) return receivedAt;
+  return zoned.getTime() > receivedAt.getTime() ? receivedAt : zoned;
+}

@@ -6,7 +6,7 @@ import type {
 import type { ServerPresenceSource } from '../../pelican/presence/server-presence.sink';
 import { SettingsService } from '../../../settings/settings.service';
 import { VALHEIM_GAME_SLUG } from '../valheim.constants';
-import { zonedLocalToUtc } from './valheim-deaths.helpers';
+import { deathOccurredAt } from './valheim-deaths.helpers';
 import { ValheimDeathsRepository } from './valheim-deaths.repository';
 import { resolvePlayTimezone } from './valheim-skill-days.helpers';
 
@@ -14,7 +14,8 @@ import { resolvePlayTimezone } from './valheim-skill-days.helpers';
  * ROK-1930 D2 — the Valheim plugin's {@link ServerDeathSink}. Ignores any
  * server not mapped to Valheim. `occurred_at` is the line's wall-clock time
  * in the server's timezone (server → community default → UTC, as ROK-1882's
- * play days), falling back to receive time for an unparseable stamp.
+ * play days), clamped to the receive time and falling back to it for an
+ * unparseable stamp — see {@link deathOccurredAt}.
  */
 @Injectable()
 export class ValheimDeathSink implements ServerDeathSink {
@@ -37,7 +38,7 @@ export class ValheimDeathSink implements ServerDeathSink {
       characterName: death.characterName,
       steamId: death.steamId,
       loggedAt: death.loggedAt,
-      occurredAt: zonedLocalToUtc(death.loggedAt, tz) ?? death.at,
+      occurredAt: deathOccurredAt(death.loggedAt, tz, death.at),
     });
   }
 }
