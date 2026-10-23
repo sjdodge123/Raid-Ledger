@@ -83,7 +83,7 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     if (!ctx.page.viewer.canEdit) return grid;
     return (
         <Suspense fallback={grid}>
-            <HubArrangeGate grid={grid} guildId={ctx.page.guild.id} layout={layout} prefs={prefs} raidsPending={ctx.raids.isPending} />
+            <HubArrangeGate grid={grid} guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} layout={layout} prefs={prefs} raidsPending={ctx.raids.isPending} />
         </Suspense>
     );
 }

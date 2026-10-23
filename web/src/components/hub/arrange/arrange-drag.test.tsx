@@ -30,7 +30,7 @@ function dataTransfer(): Pick<DataTransfer, 'setData' | 'setDragImage' | 'effect
 }
 
 function renderMode(): void {
-    renderWithProviders(<HubArrangeMode guildId={7} arranged={ARRANGED} available={[]} prefs={null} onExit={() => {}} />);
+    renderWithProviders(<HubArrangeMode guildId={7} kind="guild" arranged={ARRANGED} available={[]} prefs={null} onExit={() => {}} />);
 }
 
 const order = (): string[] => within(screen.getByRole('list', { name: 'Overview widgets, in order' }))
@@ -73,6 +73,12 @@ describe('arrange list — native drag (spec §2.4, Q6)', () => {
         fireEvent.drop(target, { dataTransfer: dt });
         expect(order()).toEqual(['arrange-row-gm-post', 'arrange-row-module:uptime', 'arrange-row-schedule', 'arrange-row-events']);
         expect(screen.getByTestId('arrange-live').textContent).toBe('Uptime moved to position 2 of 4.');
+    });
+
+    it('every row names its owner — "Core" for core and the core community module', () => {
+        stubMedia(false);
+        renderMode();
+        expect(screen.getAllByTestId('arrange-row-owner').map((el) => el.textContent)).toEqual(['Core', 'Core', 'Core', 'Core']);
     });
 
     it('a drop with no drag in progress (e.g. a file from outside) changes nothing', () => {

@@ -20,12 +20,15 @@ import { ArrangeFooter } from './arrange-footer';
 import { ArrangeRow } from './arrange-row';
 import { useArrangeState } from './use-arrange-state';
 import { useRowDrag } from './use-row-drag';
+import { widgetOwner } from './widget-owner';
 
 /** Native DnD does not fire on touch, and tablets get the phone layout (spec §2.4). */
 export const DRAG_MQ = `${DESKTOP_MQ} and (pointer: fine)`;
 
 export interface HubArrangeModeProps {
     guildId: number;
+    /** The hub kind — module widgets are owned by whichever plugin registered it. */
+    kind: string;
     arranged: readonly ArrangedEntry<HubLayoutEntry>[];
     available: readonly HubLayoutEntry[];
     prefs: HubWidgetPrefs | null;
@@ -61,7 +64,7 @@ function ArrangePreview({ titles }: { titles: readonly string[] }): JSX.Element 
     );
 }
 
-export default function HubArrangeMode({ guildId, arranged, available, prefs, onExit }: HubArrangeModeProps): JSX.Element {
+export default function HubArrangeMode({ guildId, kind, arranged, available, prefs, onExit }: HubArrangeModeProps): JSX.Element {
     const s = useArrangeState({ guildId, arranged, prefs, onExit });
     const guard = useDirtyCloseGuard(s.dirty, onExit);
     const [picking, setPicking] = useState(false);
@@ -74,7 +77,7 @@ export default function HubArrangeMode({ guildId, arranged, available, prefs, on
             <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} />
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
                 <ol className="flex flex-col gap-2" aria-label="Overview widgets, in order">
-                    {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
+                    {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} owner={widgetOwner(row.entry.id, kind)} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
                 </ol>
                 <ArrangePreview titles={s.rows.filter((r) => r.on).map((r) => r.entry.title)} />
             </div>

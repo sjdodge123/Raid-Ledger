@@ -15,6 +15,7 @@ import HubArrangeMode from './hub-arrange-mode';
 export interface HubArrangeGateProps {
     grid: ReactNode;
     guildId: number;
+    kind: string;
     layout: ResolvedHubLayout<HubLayoutEntry>;
     prefs: HubWidgetPrefs | null;
     /**
@@ -25,10 +26,10 @@ export interface HubArrangeGateProps {
     raidsPending: boolean;
 }
 
-export function HubArrangeGate({ grid, guildId, layout, prefs, raidsPending }: HubArrangeGateProps): JSX.Element {
+export function HubArrangeGate({ grid, guildId, kind, layout, prefs, raidsPending }: HubArrangeGateProps): JSX.Element {
     const [arranging, setArranging] = useState(false);
     if (arranging) {
-        return <HubArrangeMode guildId={guildId} arranged={layout.arranged} available={layout.available} prefs={prefs} onExit={() => setArranging(false)} />;
+        return <HubArrangeMode guildId={guildId} kind={kind} arranged={layout.arranged} available={layout.available} prefs={prefs} onExit={() => setArranging(false)} />;
     }
     return (
         <>

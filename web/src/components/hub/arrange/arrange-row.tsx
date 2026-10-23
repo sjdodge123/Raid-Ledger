@@ -20,14 +20,14 @@ const AUDIENCE_LABEL: Record<HubLayoutEntry['audience'], string | null> = {
     editors: 'Editors only',
 };
 
-function RowChips({ entry, on }: DraftRow<HubLayoutEntry>): JSX.Element | null {
+function RowChips({ entry, on, owner }: DraftRow<HubLayoutEntry> & { owner: string }): JSX.Element {
     const audience = AUDIENCE_LABEL[entry.audience];
-    if (entry.span < 2 && audience === null && on) return null;
     return (
-        <div className="mt-1 flex flex-wrap gap-1">
+        <div className="mt-1 flex flex-wrap items-center gap-1">
             {entry.span >= 2 && <StatusChip tone="neutral" title="Takes two columns on wide screens">Wide</StatusChip>}
             {audience !== null && <StatusChip tone="warning" title={`Shown to ${audience.toLowerCase()}`}>{audience}</StatusChip>}
             {!on && <StatusChip tone="neutral" title="Not shown on the Overview">Hidden</StatusChip>}
+            <span className="text-xs text-muted" data-testid="arrange-row-owner">{owner}</span>
         </div>
     );
 }
@@ -66,13 +66,15 @@ export interface ArrangeRowProps {
     row: DraftRow<HubLayoutEntry>;
     index: number;
     count: number;
+    /** "Core", or the plugin's name (`widget-owner`). */
+    owner: string;
     onMove: (index: number, dir: -1 | 1) => void;
     onToggle: (id: string) => void;
     /** Desktop with a fine pointer only (spec §2.4); absent = no handle. */
     drag?: RowDragBinding;
 }
 
-export function ArrangeRow({ row, index, count, onMove, onToggle, drag }: ArrangeRowProps): JSX.Element {
+export function ArrangeRow({ row, index, count, owner, onMove, onToggle, drag }: ArrangeRowProps): JSX.Element {
     const { entry, on } = row;
     const t = entry.title;
     return (
@@ -84,7 +86,7 @@ export function ArrangeRow({ row, index, count, onMove, onToggle, drag }: Arrang
             <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{t}</p>
                 {entry.description !== undefined && <p className="text-xs text-muted">{entry.description}</p>}
-                <RowChips entry={entry} on={on} />
+                <RowChips entry={entry} on={on} owner={owner} />
             </div>
             <div className="flex shrink-0 gap-1">
                 <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} up`} disabled={index === 0} onClick={() => onMove(index, -1)}>
