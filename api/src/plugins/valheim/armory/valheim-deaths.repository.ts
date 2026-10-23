@@ -1,11 +1,27 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  eq,
+  inArray,
+  isNull,
+  max,
+  min,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
-const { valheimPlayerDeaths: deaths, pelicanServers: servers, games } = schema;
+const {
+  valheimPlayerDeaths: deaths,
+  valheimProfiles: profiles,
+  pelicanServers: servers,
+  games,
+} = schema;
 
 /** A console death ready to store (ROK-1930 L1). */
 export interface LogDeathInput {
@@ -20,6 +36,29 @@ export interface LogDeathInput {
 export interface DeathServerContext {
   gameSlug: string | null;
   timezone: string | null;
+}
+
+/** One `(steamId, characterName)` bucket of stored deaths (D7 input). */
+export interface DeathGroupRow {
+  steamId: string | null;
+  characterName: string;
+  deaths: number;
+  firstDeathAt: Date | null;
+  lastDeathAt: Date | null;
+}
+
+/** A character profile on the server (D7 name resolution, D9 characterId). */
+export interface DeathProfileRow {
+  id: number;
+  steamId: string;
+  name: string;
+  capturedAt: Date;
+}
+
+/** Everything the Deaths widget mapper needs for one server. */
+export interface DeathCounts {
+  groups: DeathGroupRow[];
+  profiles: DeathProfileRow[];
 }
 
 /**
@@ -84,5 +123,51 @@ export class ValheimDeathsRepository {
           isNull(deaths.steamId),
         ),
       );
+  }
+  /**
+   * L2 (D7/D9): every stored death on the server bucketed by
+   * `(steam_id, character_name)`, plus the server's profiles that can
+   * attribute a NULL-steam bucket by name or give a SteamID its newest
+   * character. The mapper merges buckets into one bar per player.
+   */
+  async countByPlayer(pelicanServerId: number): Promise<DeathCounts> {
+    const groups = await this.db
+      .select({
+        steamId: deaths.steamId,
+        characterName: deaths.characterName,
+        deaths: count(),
+        firstDeathAt: min(deaths.occurredAt),
+        lastDeathAt: max(deaths.occurredAt),
+      })
+      .from(deaths)
+      .where(eq(deaths.pelicanServerId, pelicanServerId))
+      .groupBy(deaths.steamId, deaths.characterName);
+    const profileRows = await this.profilesFor(pelicanServerId, groups);
+    return { groups, profiles: profileRows };
+  }
+
+  private async profilesFor(
+    pelicanServerId: number,
+    groups: DeathGroupRow[],
+  ): Promise<DeathProfileRow[]> {
+    const steamIds = [...new Set(groups.flatMap((g) => g.steamId ?? []))];
+    const names = [
+      ...new Set(
+        groups.filter((g) => g.steamId === null).map((g) => g.characterName),
+      ),
+    ];
+    const match: SQL[] = [];
+    if (steamIds.length > 0) match.push(inArray(profiles.steamId, steamIds));
+    if (names.length > 0) match.push(inArray(profiles.name, names));
+    if (match.length === 0) return [];
+    return this.db
+      .select({
+        id: profiles.id,
+        steamId: profiles.steamId,
+        name: profiles.name,
+        capturedAt: profiles.capturedAt,
+      })
+      .from(profiles)
+      .where(and(eq(profiles.pelicanServerId, pelicanServerId), or(...match)));
   }
 }

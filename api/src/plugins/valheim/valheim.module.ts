@@ -42,6 +42,9 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
 import { ValheimMaterialsController } from './armory/read/valheim-materials.controller';
 import { ValheimMaterialsRepository } from './armory/read/valheim-materials.repository';
 import { ValheimMaterialsService } from './armory/read/valheim-materials.service';
+import { ValheimDeathsController } from './armory/read/valheim-deaths.controller';
+import { ValheimDeathsService } from './armory/read/valheim-deaths.service';
+import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
@@ -68,6 +71,8 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     CronJobModule,
     // ROK-1930: the death sink the Pelican presence supervisor injects.
     ValheimDeathsModule,
+    // ROK-1930 L2: GuildAccessService for the Deaths widget's D6 check.
+    GuildsCoreModule,
     forwardRef(() => DiscordBotModule),
   ],
   controllers: [
@@ -77,6 +82,7 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimArmoryClaimsController,
     ValheimArmoryReadController,
     ValheimMaterialsController,
+    ValheimDeathsController,
     ValheimRecipesController,
     ValheimArmoryBlobController,
     ValheimArmoryMapBytesController,
@@ -115,6 +121,7 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimArmoryReadService,
     ValheimMaterialsRepository,
     ValheimMaterialsService,
+    ValheimDeathsService,
     ValheimRecipesReadRepository,
     ValheimRecipesService,
     ValheimArmoryMapBytesService,
