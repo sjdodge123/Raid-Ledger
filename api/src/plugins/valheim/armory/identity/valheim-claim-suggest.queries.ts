@@ -127,11 +127,24 @@ function noClaimHere(db: Db, pelicanServerId: number) {
   );
 }
 
-/** The voice name of `u` in the Quick Play's voice channel right now, else NULL. */
-function voiceName(eventId: number) {
-  return sql<string | null>`(SELECT ${ap.discordUsername} FROM ${ap}
-    WHERE ${ap.eventId} = ${eventId} AND ${ap.userId} = ${u.id} AND ${ap.inVoice}
-    LIMIT 1)`;
+/**
+ * The voice name of `u` in the Quick Play's voice channel right now, else NULL.
+ * Built with the query builder, not a raw `sql` template: the outer select
+ * reads only `users`, so drizzle renders it in single-table mode and strips
+ * the table off every column chunk in a selected `sql` field — the raw form
+ * compiled to `"user_id" = "id"`, which bound `id` to ad_hoc_participants
+ * (uuid) and failed `integer = uuid`. A nested builder keeps its own qualified
+ * WHERE (`"ad_hoc_participants"."user_id" = "users"."id"`).
+ */
+function voiceName(db: Db, eventId: number) {
+  const sub = db
+    .select({ name: ap.discordUsername })
+    .from(ap)
+    .where(
+      and(eq(ap.eventId, eventId), eq(ap.userId, u.id), eq(ap.inVoice, true)),
+    )
+    .limit(1);
+  return sql<string | null>`${sub}`;
 }
 
 /**
@@ -144,7 +157,7 @@ export async function findClaimCandidates(
   s: ClaimSighting,
   now: Date,
 ): Promise<ClaimCandidate[]> {
-  const voice = voiceName(s.eventId);
+  const voice = voiceName(db, s.eventId);
   const rows = await db
     .select({
       userId: u.id,
