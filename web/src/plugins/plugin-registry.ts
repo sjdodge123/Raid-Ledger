@@ -4,6 +4,7 @@ import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer'
 import type { HubModule, HubModuleRegistration } from './hub-module';
 import { addGameServerProvider, clearGameServerProviders } from './game-server-status';
 import { addEventReportLinkPredicate, clearEventReportLinkPredicates, type EventReportLinkPredicate } from './event-report-links';
+import { addHubGameWidget, clearHubGameWidgets, type HubGameWidget } from './hub-game-widgets';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -75,6 +76,8 @@ export interface PluginHandle {
     registerEventReportLinks(supports: EventReportLinkPredicate): void;
     /** Register this plugin's hub module — the tabs, widgets, member columns and hero pills for one `kind` (ROK-1830). */
     registerHubModule(module: HubModule): void;
+    /** Add a game-scoped Overview widget to every hub of `widget.games` (ROK-1909). Re-registering an id replaces it. */
+    registerHubWidget(widget: HubGameWidget): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -154,6 +157,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerHubModule(module) {
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
         },
+        registerHubWidget: (widget) => addHubGameWidget(slug, widget),
     };
 }
 
@@ -209,6 +213,7 @@ export function clearRegistry(): void {
     identityRegistry.clear();
     layerRegistry.clear();
     hubModuleRegistry.clear();
+    clearHubGameWidgets();
     layersFrozen = false;
     clearGameServerProviders();
     clearEventReportLinkPredicates();

@@ -9,7 +9,11 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { isStaff, type GuildActor } from '../../../guilds/guild-access.service';
-import { findGuild, hubSummaryFor } from '../../../guilds/guild-core.queries';
+import {
+  findGuild,
+  findHubGuild,
+  hubSummaryFor,
+} from '../../../guilds/guild-core.queries';
 import { loadCommunityHubEvents } from '../../../guilds/community/community-events.queries';
 import type { HubKindAdapter } from '../../plugin-host/extension-points';
 import { PELICAN_PLUGIN_ID } from '../pelican.constants';
@@ -67,8 +71,9 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
   }
 
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
-    const guild = await findGuild(this.db, guildId);
-    if (!guild) throw new NotFoundException('Guild not found');
+    const hub = await findHubGuild(this.db, guildId);
+    if (!hub) throw new NotFoundException('Guild not found');
+    const { guild } = hub;
     const now = new Date();
     const [members, role, server] = await Promise.all([
       loadServerMembers(this.db, guildId, now),
@@ -76,7 +81,7 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
       loadServerBlock(this.db, guild.pelicanServerId, now),
     ]);
     return buildServerHubPage({
-      guild: hubSummaryFor(guild, isStaff(actor)),
+      guild: hubSummaryFor(hub, isStaff(actor)),
       role,
       viewerId: actor.id,
       members,
