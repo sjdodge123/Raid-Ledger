@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { GuildDiscordMirrorDto } from '@raid-ledger/contract';
+import type { GuildDiscordMirrorDto, GuildKind } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { PRIVATE_CHANNEL, discordMessage, okMirror } from '../../../test/mocks/guild-discord-handlers';
@@ -26,8 +26,8 @@ function serve(mirror: GuildDiscordMirrorDto): { served: () => boolean } {
  * `canEdit`. The old editor ⇒ can-change pairing is reproduced here so every
  * assertion below still reads the same behaviour.
  */
-function renderCard(canEdit: boolean, onChangeChannel: (() => void) | null = canEdit ? (): void => undefined : null): void {
-    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit={canEdit} onChangeChannel={onChangeChannel} />);
+function renderCard(canEdit: boolean, onChangeChannel: (() => void) | null = canEdit ? (): void => undefined : null, kind?: GuildKind): void {
+    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit={canEdit} onChangeChannel={onChangeChannel} kind={kind} />);
 }
 
 describe('GuildDiscordMirror — ok', () => {
@@ -52,6 +52,27 @@ describe('GuildDiscordMirror — ok', () => {
         renderCard(false);
         await screen.findByRole('heading', { name: '#announcements' });
         expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
+    });
+
+    it.each([['wow_guild'], ['game_community']] as const)('keeps "the community Discord" fallback on a %s hub', async (kind) => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false, null, kind);
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
+    });
+
+    it('falls back to "the server\'s Discord" on a server hub (ROK-1891 ruling)', async () => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false, null, 'game_server');
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe("Latest from the server's Discord");
+    });
+
+    it('still names the bot\'s server on a server hub when the name is known', async () => {
+        serve(okMirror([discordMessage(1)], undefined, 'Keepers HQ'));
+        renderCard(false, null, 'game_server');
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the Keepers HQ Discord');
     });
 
     it('links out to the channel in a new tab and says it is read-only', async () => {
