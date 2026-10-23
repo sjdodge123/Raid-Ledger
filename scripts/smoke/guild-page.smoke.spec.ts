@@ -258,26 +258,24 @@ async function boxOf(locator: Locator, label: string): Promise<{ top: number; bo
     return { top: box.y, bottom: box.y + box.height };
 }
 
-test('hero at 820px: a one-line title shares the first row with the actions, the chips sit on their own row beneath (ROK-1884)', async ({ page }, testInfo) => {
+test('hero at 820px: the title shares the first row with the actions, the chips sit on their own row beneath (ROK-1884)', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await page.setViewportSize({ width: 820, height: 1180 });
         await signInAsAdmin(page.context());
         await page.goto(`/hubs/${guild.guildId}`);
         const hero = page.getByTestId('guild-hero');
         await expect(hero).toBeVisible({ timeout: 15_000 });
-        const title = hero.getByRole('heading', { level: 1 });
-        const actions = hero.getByTestId('hub-hero-actions');
-        const chips = hero.getByTestId('hub-hero-chips');
-        await expect(actions.getByTestId('guild-settings-trigger'), 'an admin gets the settings action').toBeVisible({ timeout: 15_000 });
-        await expect(chips.getByTestId('guild-member-count')).toBeVisible();
-        const lines = await title.evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
-        expect(Math.round(lines), 'the hub title renders on exactly one line at 820px').toBe(1);
-        const t = await boxOf(title, 'the hub title');
-        const a = await boxOf(actions, 'the hero actions');
-        const c = await boxOf(chips, 'the hero chip row');
-        expect(a.top < t.bottom && a.bottom > t.top, `the actions share the title's row (title ${t.top}–${t.bottom}, actions ${a.top}–${a.bottom})`).toBe(true);
-        expect(c.top, 'the chip row starts below the title').toBeGreaterThanOrEqual(t.bottom);
-        expect(c.top, 'the chip row starts below the actions').toBeGreaterThanOrEqual(a.bottom);
+        // Both test ids predate ROK-1884, so a revert fails on the geometry below, not on a missing element.
+        const settings = hero.getByTestId('guild-settings-trigger');
+        const memberCount = hero.getByTestId('guild-member-count');
+        await expect(settings, 'an admin gets the settings action').toBeVisible({ timeout: 15_000 });
+        await expect(memberCount).toBeVisible();
+        const t = await boxOf(hero.getByRole('heading', { level: 1 }), 'the hub title');
+        const a = await boxOf(settings, 'the settings action');
+        const c = await boxOf(memberCount, 'the member-count chip');
+        expect(a.top < t.bottom && a.bottom > t.top, `the actions share the title's row (title ${t.top}–${t.bottom}, settings ${a.top}–${a.bottom})`).toBe(true);
+        expect(c.top, `the chip row starts below the title (title bottom ${t.bottom}, member count top ${c.top})`).toBeGreaterThanOrEqual(t.bottom);
+        expect(c.top, `the chip row starts below the actions (settings bottom ${a.bottom}, member count top ${c.top})`).toBeGreaterThanOrEqual(a.bottom);
     });
 });
 

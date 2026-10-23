@@ -59,12 +59,21 @@ function NextRaidChip({ raid, tab, label }: { raid: GuildEventCardDto; tab: stri
 }
 
 /** Below `lg`: crest | title | actions, then full-width rows. At `lg`: the original flex row. */
-export const HERO_CLASS =
-    'mb-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex lg:flex-row lg:justify-between lg:gap-4';
+const HERO_CLASS =
+    'mb-4 grid items-center gap-x-4 gap-y-2 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex lg:flex-row lg:justify-between lg:gap-4';
 
 /** One line with an ellipsis below `lg`; wraps as before at `lg`. */
-export const TITLE_CLASS =
+const TITLE_CLASS =
     'col-start-2 row-start-1 min-w-0 truncate text-2xl font-bold text-foreground sm:text-3xl lg:mb-2 lg:overflow-visible lg:whitespace-normal lg:break-words';
+
+/**
+ * The header's grid tracks: a third (actions) column only when there is an action, so a
+ * viewer without one doesn't lose 16px of title to an empty column's gap. Keep the track
+ * explicit — `col-span-full` (1 / -1) spans the explicit grid only.
+ */
+function heroClass(hasAction: boolean): string {
+    return `${HERO_CLASS} ${hasAction ? 'grid-cols-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)]'}`;
+}
 
 interface HubHeroProps {
     ctx: HubCtx;
@@ -83,7 +92,7 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
     const jumpTab = mod?.eventsJumpTab ?? 'events';
     const chip = nextRaid !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} label={hubCopy(ctx.page.guild.kind).nextEventLabel} /> : null;
     return (
-        <header data-testid="guild-hero" className={HERO_CLASS}>
+        <header data-testid="guild-hero" className={heroClass(Boolean(action))}>
             <div className="contents lg:flex lg:min-w-0 lg:items-center lg:gap-4" data-testid="hub-hero-identity">
                 <Crest name={ctx.page.guild.name} />
                 <div className="contents lg:block lg:min-w-0">

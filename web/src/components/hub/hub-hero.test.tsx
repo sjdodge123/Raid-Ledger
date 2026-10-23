@@ -10,6 +10,7 @@ import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { buildCommunityPage } from '../../test/factories/community-hub';
 import { renderWithProviders } from '../../test/render-helpers';
 import { HubHero } from './hub-hero';
+import { HubSettingsTrigger } from './settings/settings-trigger';
 
 function Hero({ page, action }: { page: GuildPage; action?: JSX.Element }): JSX.Element {
     const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['test-raids'], queryFn: () => new Promise<GuildRaidsDto>(() => undefined), enabled: false });
@@ -72,5 +73,21 @@ describe('HubHero — header layout (ROK-1884)', () => {
     it('renders no actions cell when the viewer has no action', () => {
         renderWithProviders(<Hero page={buildCommunityPage()} />);
         expect(screen.queryByTestId('hub-hero-actions')).toBeNull();
+    });
+
+    it('with no action: a 2-column grid, so no empty third track steals a gap from the title', () => {
+        renderWithProviders(<Hero page={buildCommunityPage()} />);
+        const hero = screen.getByTestId('guild-hero');
+        expect(hero).toHaveClass('grid', 'grid-cols-[auto_minmax(0,1fr)]');
+        expect(hero).not.toHaveClass('grid-cols-[auto_minmax(0,1fr)_auto]');
+    });
+});
+
+describe('HubSettingsTrigger — icon-only below sm (ROK-1884)', () => {
+    it('hides the label visually below sm but keeps it as the accessible name, with a 44px target', () => {
+        renderWithProviders(<HubSettingsTrigger onOpen={() => undefined} label="Server settings" />);
+        const button = screen.getByRole('button', { name: 'Server settings' });
+        expect(button).toHaveClass('min-h-[44px]', 'min-w-[44px]');
+        expect(screen.getByTestId('guild-settings-trigger-label')).toHaveClass('sr-only', 'sm:not-sr-only');
     });
 });
