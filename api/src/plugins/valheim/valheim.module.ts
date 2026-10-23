@@ -46,6 +46,7 @@ import { ValheimRecipesController } from './armory/read/valheim-recipes.controll
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
+import { ValheimDeathsModule } from './armory/valheim-deaths.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -65,6 +66,8 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
     NotificationModule,
     SettingsModule,
     CronJobModule,
+    // ROK-1930: the death sink the Pelican presence supervisor injects.
+    ValheimDeathsModule,
     forwardRef(() => DiscordBotModule),
   ],
   controllers: [
