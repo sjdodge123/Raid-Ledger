@@ -2,12 +2,13 @@
  * ROK-1428 (W8 UI) — an auto-linked channel opens preselected with the
  * "Created by Raid Ledger for <Game>" hint; a manual binding has no hint;
  * choosing another channel drops the hint (the save makes it manual).
+ * ROK-1891: with no server name the hint reads the hub kind's fallback.
  */
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { GuildDiscordChannelOptionDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
+import type { GuildDiscordChannelOptionDto, GuildDiscordMirrorDto, GuildKind } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { PRIVATE_CHANNEL, PUBLIC_CHANNEL, okMirror } from '../../../test/mocks/guild-discord-handlers';
@@ -47,5 +48,17 @@ describe('GuildDiscordPicker managed hint (ROK-1428 W8)', () => {
         renderWithProviders(<HubDiscordPickerMount guildId={7} onClose={() => {}} />);
         expect(await screen.findByTestId('guild-discord-channel-select')).toHaveValue(PUBLIC_CHANNEL.id);
         expect(screen.queryByTestId('guild-discord-managed-hint')).not.toBeInTheDocument();
+    });
+});
+
+describe('GuildDiscordPicker hint — fallback per hub kind (ROK-1891)', () => {
+    it.each([
+        ['game_server', "Channels in the server's Discord that Raid Ledger can read."],
+        ['wow_guild', 'Channels in the community Discord that Raid Ledger can read.'],
+    ] as const)('on a %s hub with no server name', async (kind: GuildKind, hint) => {
+        serve(sourced('manual', null));
+        renderWithProviders(<HubDiscordPickerMount guildId={7} kind={kind} onClose={() => {}} />);
+        await screen.findByTestId('guild-discord-channel-select');
+        expect(screen.getByText(/^Channels in/).textContent).toBe(hint);
     });
 });
