@@ -92,6 +92,23 @@ async function enterArrange(page: Page): Promise<Locator> {
     return mode;
 }
 
+/**
+ * Every row must fit the viewport: below lg an implicit `auto` grid track once sized the list to the longest
+ * untruncated title, so on a phone each row's Hide/Show button sat past the right edge, unclickable (ROK-1918).
+ */
+async function expectRowsFitViewport(mode: Locator): Promise<void> {
+    const widths = await mode.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+    expect(widths.scroll, `arrange mode overflows sideways (scrollWidth ${widths.scroll} > clientWidth ${widths.client})`)
+        .toBeLessThanOrEqual(widths.client);
+    const clipped = await mode.locator('ol[aria-label="Overview widgets, in order"] > li button[aria-pressed]').evaluateAll(
+        (buttons) => buttons.filter((b) => {
+            const r = b.getBoundingClientRect();
+            return r.left < 0 || r.right > window.innerWidth;
+        }).map((b) => `${b.getAttribute('aria-label') ?? '?'} (right ${Math.round(b.getBoundingClientRect().right)}px > ${window.innerWidth}px)`),
+    );
+    expect(clipped, 'every row\'s Hide/Show button lies inside the viewport').toEqual([]);
+}
+
 async function expectDefaultGrid(page: Page): Promise<void> {
     await expect.poll(() => gridOrder(page, [MOVED_CARD, NEIGHBOUR_CARD, HIDDEN_CARD]), { timeout: 15_000 })
         .toEqual([HIDDEN_CARD, NEIGHBOUR_CARD, MOVED_CARD]);
@@ -129,11 +146,15 @@ async function addFromPicker(mode: Locator, page: Page): Promise<string | null> 
     await mode.getByTestId('arrange-add').click();
     const list = page.getByTestId('add-widget-list');
     const empty = page.getByTestId('add-widget-empty');
+    // A Modal at >=1024px, a BottomSheet below. A closed sheet stays mounted off-screen (aria-hidden, no role),
+    // so assert on the dialog itself, not on its content (ROK-1918 tablet).
+    const picker = page.getByRole('dialog', { name: 'Add a widget' });
+    await expect(picker).toBeVisible();
     await expect(list.or(empty)).toBeVisible();
     if (await empty.isVisible()) {
         await expect(empty).toHaveText('Every widget this hub offers is already on the Overview.');
         await page.keyboard.press('Escape');
-        await expect(empty).toBeHidden();
+        await expect(picker, 'Escape closes the Add a widget picker').toBeHidden();
         return null;
     }
     const option = list.locator('[data-testid^="add-widget-option-"]').first();
@@ -151,6 +172,7 @@ test.describe('Hub Overview arrange (ROK-1918)', () => {
 
             const mode = await enterArrange(page);
             await expect(page.getByTestId('guild-overview'), 'the grid is replaced by the list while arranging').toBeHidden();
+            await expectRowsFitViewport(mode);
             await expect(mode.getByTestId('arrange-row-attendance').getByTestId('arrange-row-owner')).toHaveText('Core');
             await expect(mode.getByTestId('arrange-row-module:members-summary').getByTestId('arrange-row-owner')).toHaveText('World of Warcraft');
 
