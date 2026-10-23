@@ -2,9 +2,12 @@
  * ROK-1913 (H5) — `GET /plugins/wow/guilds/:id/roster-insights` against a
  * real DB: a Forever guild (roster rows + 3 linked characters + 1 LedgerLink
  * snapshot). Asserts the contract parse, the visitor/member professions
- * split, import invalidation of the 5-min cache, and a 2000-row timing guard.
+ * split, import invalidation of the 5-min cache (incl. a real first-time
+ * create import), the hidden-hub 404, and a 2000-row timing guard with 300
+ * linked + snapshotted rows so the character/snapshot fact queries run.
  */
 import * as bcrypt from 'bcrypt';
+import { eq } from 'drizzle-orm';
 import { WowRosterInsightsSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { nonEmpty } from '../../../../common/testing/narrow';
@@ -12,6 +15,14 @@ import * as schema from '../../../../drizzle/schema';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { RosterInsightsCache } from './roster-insights.cache';
 import { RosterInsightsService } from './roster-insights.service';
+import {
+  FIXTURE_GUID,
+  buildCharPayload,
+  buildImportString,
+} from '../../addon-import/testing/addon-fixture.builder';
+import { pinExportClock } from '../../addon-import/testing/pin-export-clock';
+
+pinExportClock();
 
 const SNAP = new Date('2026-11-04T20:00:00.000Z');
 const PROFESSIONS = {
@@ -35,12 +46,35 @@ let guildId: number;
 const tokens = {} as Record<Who, string>;
 const charIds = {} as Record<Who, string>;
 
-async function insertGuild(name: string): Promise<number> {
+const FOREVER_SLUG = 'world-of-warcraft-forever';
+
+/** The Forever game the create-import route resolves (`foreverGameId`). */
+async function ensureForeverGame(): Promise<number> {
+  const [existing] = await testApp.db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.slug, FOREVER_SLUG))
+    .limit(1);
+  if (existing) return existing.id;
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'World of Warcraft: Forever', slug: FOREVER_SLUG })
+      .returning(),
+    'game',
+  );
+  return game.id;
+}
+
+async function insertGuild(
+  name: string,
+  gameId: number = testApp.seed.game.id,
+): Promise<number> {
   const [g] = nonEmpty(
     await testApp.db
       .insert(schema.guilds)
       .values({
-        gameId: testApp.seed.game.id,
+        gameId,
         region: 'us',
         name,
         nameKey: name.toLowerCase(),
@@ -199,7 +233,87 @@ describe('GET roster-insights (real DB)', () => {
     const fresh = WowRosterInsightsSchema.parse((await insights('lead')).body);
     expect(fresh.classes.find((c) => c.class === 'Druid')?.count).toBe(1);
   });
+
+  it('a first-time (create) import that links a guild member shows on the next read', async () => {
+    const fg = await insertGuild(
+      'Forever Night Shift',
+      await ensureForeverGame(),
+    );
+    await testApp.db
+      .insert(schema.guildMembers)
+      .values(memberRow(fg, FIXTURE_GUID, 'Ana Forever', 60, 'Paladin'));
+    const before = WowRosterInsightsSchema.parse(
+      (await insights('healer', fg)).body,
+    );
+    expect(before.freshness.characters).toEqual({
+      addon: 0,
+      blizzard: 0,
+      none: 0,
+    });
+    const res = await testApp.request
+      .post('/plugins/wow/characters/addon-import')
+      .set('Authorization', `Bearer ${tokens.healer}`)
+      .send({
+        importString: buildImportString(buildCharPayload()),
+        dryRun: false,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.target.action).toBe('create');
+    const after = WowRosterInsightsSchema.parse(
+      (await insights('healer', fg)).body,
+    );
+    expect(after.freshness.characters.addon).toBe(1);
+  });
+
+  it('a hidden hub is 404 for a non-staff viewer', async () => {
+    const hidden = await insertGuild('Forever Hidden');
+    await testApp.db
+      .update(schema.guilds)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.guilds.id, hidden));
+    expect((await insights('healer', hidden)).status).toBe(404);
+    expect((await insights('outsider', hidden)).status).toBe(404);
+  });
 });
+
+const LINKED = 300;
+
+/** Link the first LINKED roster rows to characters, each with a snapshot. */
+async function linkBigRoster(): Promise<void> {
+  const [owner] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: 'local:big@insights.test', username: 'bigowner' })
+      .returning(),
+    'owner',
+  );
+  const chars = await testApp.db
+    .insert(schema.characters)
+    .values(
+      Array.from({ length: LINKED }, (_, i) => ({
+        userId: owner.id,
+        gameId: testApp.seed.game.id,
+        name: `Big${i}`,
+        class: i % 2 ? 'Mage' : 'Rogue',
+        level: (i % 60) + 1,
+        addonGuid: `Player-7-big${i}`,
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+        isMain: false,
+      })),
+    )
+    .returning({ id: schema.characters.id });
+  await testApp.db.insert(schema.characterAddonSnapshots).values(
+    chars.map((c) => ({
+      characterId: c.id,
+      section: 'char',
+      schema: 2,
+      data: { gear: [], talents: { nodes: [] }, lockouts: [] },
+      capturedAt: SNAP,
+      payloadSha256: 'b'.repeat(64),
+    })),
+  );
+}
 
 describe('roster-insights on a 2000-member roster', () => {
   it('computes under the timing guard (p95 logged)', async () => {
@@ -217,6 +331,7 @@ describe('roster-insights on a 2000-member roster', () => {
       await testApp.db
         .insert(schema.guildMembers)
         .values(rows.slice(i, i + 500));
+    await linkBigRoster();
     const svc = testApp.app.get(RosterInsightsService);
     const times: number[] = [];
     for (let run = 0; run < 10; run += 1) {
@@ -224,10 +339,13 @@ describe('roster-insights on a 2000-member roster', () => {
       const dto = await svc.compute(big, 'member', false);
       times.push(performance.now() - t0);
       expect(dto.classes.reduce((n, c) => n + c.count, 0)).toBe(2000);
+      expect(dto.freshness.characters.addon).toBe(LINKED);
     }
     const p95 =
       [...times].sort((a, b) => a - b)[Math.ceil(times.length * 0.95) - 1] ?? 0;
-    console.log(`roster-insights 2000-row p95=${p95.toFixed(1)}ms`);
+    console.log(
+      `roster-insights 2000-row (${LINKED} linked) p95=${p95.toFixed(1)}ms`,
+    );
     expect(p95).toBeLessThan(1500);
   });
 });

@@ -119,7 +119,7 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
     realmRulesets as unknown as ForeverRealmRulesetsService,
     insightsCache as unknown as RosterInsightsCache,
   );
-  return { service, tx, characters, audit, itemMeta };
+  return { service, tx, characters, audit, itemMeta, insightsCache };
 }
 
 const body = (dryRun: boolean, extra: object = {}) => ({
@@ -372,6 +372,31 @@ describe('AddonImportCreateService — A1, claims, D4', () => {
       await codeOf(s.service.importNew(1, { importString: '' })),
     ).toMatchObject({ code: 'RATE_LIMITED' });
     expect(decodeImportPaste).not.toHaveBeenCalled();
+  });
+});
+
+describe('roster-insights invalidation on the create route (ROK-1913)', () => {
+  it('a CREATE apply invalidates with the NEW character id (not the null outcome id)', async () => {
+    const s = setup(who());
+    const res = await s.service.importNew(1, body(false));
+    expect(res.target.characterId).toBe(NEW_ID);
+    expect(s.insightsCache.invalidateForCharacter).toHaveBeenCalledTimes(1);
+    expect(s.insightsCache.invalidateForCharacter).toHaveBeenCalledWith(NEW_ID);
+  });
+
+  it('an UPDATE apply invalidates with the updated character id', async () => {
+    const s = setup(who(), {
+      action: 'update',
+      character: loaded(OWN_ID, 'normal'),
+    });
+    await s.service.importNew(1, body(false));
+    expect(s.insightsCache.invalidateForCharacter).toHaveBeenCalledWith(OWN_ID);
+  });
+
+  it('a dry run never invalidates', async () => {
+    const s = setup(who());
+    await s.service.importNew(1, body(true));
+    expect(s.insightsCache.invalidateForCharacter).not.toHaveBeenCalled();
   });
 });
 
