@@ -107,7 +107,8 @@ export const stationSwitcher = (page: Page) =>
   page.getByRole("radiogroup", { name: "Crafting station" });
 
 export async function openPlanner(page: Page, f: RecipesFixture) {
-  await page.goto(f.guildPageUrl);
+  // `/hubs/:id` is canonical (ROK-1891); the seed's guildPageUrl still uses the legacy redirect.
+  await page.goto(`/hubs/${f.hubId}#planner`);
   await expect(craftWindow(page)).toBeVisible({ timeout: 15_000 });
   await expect(searchBox(page)).toBeVisible();
 }
