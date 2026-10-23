@@ -64,7 +64,8 @@ describe('HubSetupChecklist', () => {
         serve(EMPTY_PROFILE, UNSET);
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const blocked = await screen.findByTestId('setup-step-blocked-publish');
-        expect(blocked).toHaveTextContent('hidden-by-default hub is coming');
+        expect(blocked).toHaveTextContent('An admin can hide it in Guild settings → Visibility.');
+        expect(blocked).not.toHaveTextContent('hidden-by-default');
         // ROK-1840 r2 FAIL: the reason used to sit in the row's action cell,
         // which is `shrink-0` — a sentence-length reason kept its max-content
         // width and ran off the card at 375px. It now wraps under the label,
@@ -129,5 +130,28 @@ describe('HubSetupChecklist', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} hasModSources={false} canEdit modsConfigured={false} /></HubSettingsProvider>);
         await screen.findByTestId('setup-checklist');
         expect(screen.queryByTestId('setup-step-mods')).not.toBeInTheDocument();
+    });
+
+});
+
+// ROK-1891: a community hub's checklist is about inviting players, not importing a roster.
+describe('HubSetupChecklist — per hub kind (ROK-1891)', () => {
+    it('a community hub shows an invite step and no guild or raid wording', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canEdit modsConfigured={false} /></HubSettingsProvider>);
+        const list = await screen.findByTestId('setup-checklist');
+        expect(within(list).getByTestId('setup-step-invite')).toHaveTextContent('Invite players to the hub');
+        expect(within(list).queryByTestId('setup-step-roster')).not.toBeInTheDocument();
+        expect(within(list).queryByTestId('setup-step-publish')).not.toBeInTheDocument();
+        expect(list.textContent ?? '').not.toMatch(/guild|raid|roster/i);
+    });
+
+    it('a server hub asks for its Discord channel and server info', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} hasModSources={false} kind="game_server" canEdit modsConfigured={false} /></HubSettingsProvider>);
+        const list = await screen.findByTestId('setup-checklist');
+        expect(within(list).getByTestId('setup-step-discord')).toHaveTextContent('Link your Discord channel');
+        expect(within(list).getByTestId('setup-step-links')).toHaveTextContent('Add your server info');
+        expect(list.textContent ?? '').not.toMatch(/guild|raid|roster/i);
     });
 });
