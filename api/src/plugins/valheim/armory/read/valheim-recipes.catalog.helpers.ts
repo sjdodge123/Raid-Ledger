@@ -10,7 +10,11 @@ import type {
 } from '@raid-ledger/contract';
 import type { ValheimItemCatalogEntryRow } from '../../../../drizzle/schema';
 import { toCatalogIcon } from './valheim-armory-catalog.helpers';
-import { craftOf, directInputs, upgradesOf } from './valheim-recipes.craft.helpers';
+import {
+  craftOf,
+  directInputs,
+  upgradesOf,
+} from './valheim-recipes.craft.helpers';
 import type { RecipeGraph } from './valheim-recipes.graph';
 
 type CatalogItems = Record<string, ValheimItemCatalogEntryRow>;

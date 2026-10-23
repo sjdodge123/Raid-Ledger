@@ -49,7 +49,10 @@ function recipe(
   };
 }
 
-const station = (prefab: string, upgrader?: boolean): ValheimCraftingStation => ({
+const station = (
+  prefab: string,
+  upgrader?: boolean,
+): ValheimCraftingStation => ({
   prefab,
   name: prefab,
   maxLevel: 5,
@@ -58,7 +61,10 @@ const station = (prefab: string, upgrader?: boolean): ValheimCraftingStation => 
   ...(upgrader === undefined ? {} : { upgrader }),
 });
 
-function processor(prefab: string, type: ValheimProcessor['type']): ValheimProcessor {
+function processor(
+  prefab: string,
+  type: ValheimProcessor['type'],
+): ValheimProcessor {
   return {
     prefab,
     type,
@@ -73,7 +79,12 @@ function processor(prefab: string, type: ValheimProcessor['type']): ValheimProce
   };
 }
 
-function proc(processorPrefab: string, input: string, output: string, amount = 1): ValheimProcess {
+function proc(
+  processorPrefab: string,
+  input: string,
+  output: string,
+  amount = 1,
+): ValheimProcess {
   return {
     processor: processorPrefab,
     inputs: [{ prefab: input, amount: 1 }],
@@ -97,33 +108,66 @@ function piece(prefab: string, over: Partial<ValheimPiece> = {}): ValheimPiece {
   };
 }
 
-const swordIron = recipe('Recipe_SwordIron', 'SwordIron', [res('Iron', 20, 10), res('Wood', 2)], {
-  minStationLevel: 2,
-});
-const blackAxe = recipe('Recipe_AxeBlack', 'AxeBlack', [res('BlackMetal', 10, 5)], {
-  station: null,
-  repairStation: 'blackforge_up',
-});
+const swordIron = recipe(
+  'Recipe_SwordIron',
+  'SwordIron',
+  [res('Iron', 20, 10), res('Wood', 2)],
+  {
+    minStationLevel: 2,
+  },
+);
+const blackAxe = recipe(
+  'Recipe_AxeBlack',
+  'AxeBlack',
+  [res('BlackMetal', 10, 5)],
+  {
+    station: null,
+    repairStation: 'blackforge_up',
+  },
+);
 
 function graph(gameVersion?: string): RecipeGraph {
   return buildRecipeGraph({
     recipes: [
-      recipe('Recipe_ArrowWood', 'ArrowWood', [res('Wood', 8), res('Feathers', 2)], {
-        amount: 20,
-        station: 'piece_workbench',
-        minStationLevel: 2,
+      recipe(
+        'Recipe_ArrowWood',
+        'ArrowWood',
+        [res('Wood', 8), res('Feathers', 2)],
+        {
+          amount: 20,
+          station: 'piece_workbench',
+          minStationLevel: 2,
+        },
+      ),
+      recipe('Recipe_Cape_Up', 'CapeX', [res('Hide', 4, 2)], {
+        upgradeOnly: true,
       }),
-      recipe('Recipe_Cape_Up', 'CapeX', [res('Hide', 4, 2)], { upgradeOnly: true }),
       swordIron,
       blackAxe,
     ],
-    pieces: [piece('piece_chest'), piece('piece_bonfire', { station: null, resources: [
-      { prefab: 'Stone', amount: 5, recover: true },
-      { prefab: 'Flint', amount: 0, recover: false },
-    ] })],
-    stations: [station('forge'), station('piece_workbench'), station('blackforge_up', true)],
-    processors: [processor('charcoal_kiln', 'smelter'), processor('incinerator', 'incinerator')],
-    processes: [proc('charcoal_kiln', 'Wood', 'Coal', 2), proc('incinerator', 'Wood', 'Ash')],
+    pieces: [
+      piece('piece_chest'),
+      piece('piece_bonfire', {
+        station: null,
+        resources: [
+          { prefab: 'Stone', amount: 5, recover: true },
+          { prefab: 'Flint', amount: 0, recover: false },
+        ],
+      }),
+    ],
+    stations: [
+      station('forge'),
+      station('piece_workbench'),
+      station('blackforge_up', true),
+    ],
+    processors: [
+      processor('charcoal_kiln', 'smelter'),
+      processor('incinerator', 'incinerator'),
+    ],
+    processes: [
+      proc('charcoal_kiln', 'Wood', 'Coal', 2),
+      proc('incinerator', 'Wood', 'Ash'),
+    ],
     ...(gameVersion === undefined ? {} : { gameVersion }),
   });
 }
@@ -188,10 +232,16 @@ describe('craftOf (ROK-1899 §2.2)', () => {
 describe('upgradesOf (ROK-1899 §2.2)', () => {
   it('matches recipeSteps(r, q, q, 1) and stationLevelAt for q2..4', () => {
     const ups = upgradesOf(graph(), 'SwordIron', 4);
-    expect(ups.map((u) => [u.quality, u.stationLevel])).toEqual([[2, 3], [3, 4], [4, 5]]);
+    expect(ups.map((u) => [u.quality, u.stationLevel])).toEqual([
+      [2, 3],
+      [3, 4],
+      [4, 5],
+    ]);
     expect(ups[0]?.resources).toEqual([{ prefab: 'Iron', amount: 10 }]);
     for (const u of ups) {
-      expect(u.resources).toEqual(recipeSteps(swordIron, u.quality, u.quality, 1).totals);
+      expect(u.resources).toEqual(
+        recipeSteps(swordIron, u.quality, u.quality, 1).totals,
+      );
       expect(u.station).toBe('forge');
       expect(u.upgraderStation).toBe(false);
     }
@@ -201,7 +251,9 @@ describe('upgradesOf (ROK-1899 §2.2)', () => {
     const ups = upgradesOf(graph('1.0.20'), 'SwordIron', 4);
     expect(ups.map((u) => u.resources[0]?.amount)).toEqual([10, 20, 40]);
     for (const u of ups) {
-      expect(u.resources).toEqual(recipeSteps(swordIron, u.quality, u.quality, 1, 'v1').totals);
+      expect(u.resources).toEqual(
+        recipeSteps(swordIron, u.quality, u.quality, 1, 'v1').totals,
+      );
     }
   });
 
@@ -229,7 +281,13 @@ describe('upgradesOf (ROK-1899 §2.2)', () => {
 describe('directInputs (ROK-1899 §2.2)', () => {
   it('returns the sorted, de-duplicated union of recipe, process and piece inputs', () => {
     expect(
-      directInputs(graph(), ['ArrowWood', 'SwordIron', 'Coal', 'piece_bonfire', 'Unknown']),
+      directInputs(graph(), [
+        'ArrowWood',
+        'SwordIron',
+        'Coal',
+        'piece_bonfire',
+        'Unknown',
+      ]),
     ).toEqual(['Feathers', 'Flint', 'Iron', 'Stone', 'Wood']);
   });
 });

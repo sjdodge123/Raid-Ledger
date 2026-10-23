@@ -121,7 +121,8 @@ export class ValheimRecipesService {
     const body = await this.repo.read(async (r) => {
       const { scan, stock } = await loadStock(r, serverId, scope);
       const totals = [...(stock ?? [])].map(
-        ([prefab, n]) => [prefab, Math.min(n, VALHEIM_PLAN_QUANTITY_MAX)] as const,
+        ([prefab, n]) =>
+          [prefab, Math.min(n, VALHEIM_PLAN_QUANTITY_MAX)] as const,
       );
       return {
         stock: scan ? ('scan' as const) : ('none' as const),
