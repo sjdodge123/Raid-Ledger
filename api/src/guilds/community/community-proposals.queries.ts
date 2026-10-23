@@ -107,6 +107,8 @@ export async function insertCommunityHub(
       proposedBy: hub.proposedBy,
       reviewedBy: hub.reviewedBy,
       reviewedAt: hub.reviewedBy === null ? null : new Date(),
+      // ROK-1893 §8b: new community hubs ask signers to join; old rows stay `off`.
+      autoMembership: 'suggest',
     })
     .returning();
   if (!row) throw new Error('community hub insert returned no row');
