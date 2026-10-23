@@ -1758,6 +1758,13 @@
       "when": 1792735696129,
       "tag": "0251_valheim_claim_suggestion_notification_type",
       "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1792770660749,
+      "tag": "0252_valheim_player_deaths",
+      "breakpoints": true
     }
   ]
 }
