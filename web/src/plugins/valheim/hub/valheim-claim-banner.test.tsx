@@ -179,6 +179,13 @@ describe('claim banner — Overview', () => {
         expect(within(region).getByRole('heading', { name: heading })).toHaveClass('text-base');
     });
 
+    it('top-aligns the desktop actions with the copy (approved mockup, ROK-1933)', () => {
+        overview();
+        const region = screen.getByRole('region', { name: 'Claim your character' });
+        expect(region).toHaveClass('lg:flex-row', 'lg:items-start');
+        expect(region).not.toHaveClass('lg:items-center');
+    });
+
     it('pins the × to the top-right corner through a positioned wrapper, not the Button', () => {
         overview();
         const button = screen.getByRole('button', { name: 'Dismiss' });
