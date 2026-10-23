@@ -25,7 +25,8 @@ function Heading(): JSX.Element {
 
 function HubList({ data, gameId, gameName }: { data: GameHubs; gameId: number; gameName: string }): JSX.Element {
     const join = useJoinGameHub(gameId);
-    const total = uniqueHubs(data.hubs).length;
+    // `data.total` counts every visible hub, past the 50-row payload cap (Codex P2).
+    const total = Math.max(data.total, uniqueHubs(data.hubs).length);
     if (total === 0) {
         return <p className="mt-2 text-sm text-muted">No hubs for {gameName} yet — start the first community hub.</p>;
     }

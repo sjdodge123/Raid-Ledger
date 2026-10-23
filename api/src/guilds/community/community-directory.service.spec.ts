@@ -1,5 +1,5 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { GuildKind } from '@raid-ledger/contract';
+import type { GuildKind, HubDirectoryEntry } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
 import type { GuildAccessService } from '../guild-access.service';
 import type { HubKindRegistry } from '../hub-kind.registry';
@@ -31,6 +31,22 @@ const QUERY = {
   sort: 'members',
   limit: 24,
 } as const;
+
+/** A joined community hub row on game 42. */
+function joinedEntry(id: number): HubDirectoryEntry {
+  return {
+    id,
+    gameId: 42,
+    gameName: 'Game',
+    gameIconUrl: null,
+    name: `Hub ${id}`,
+    blurb: null,
+    memberCount: 1,
+    leaderName: null,
+    viewer: 'member',
+    kind: 'game_community',
+  };
+}
 
 function build(live: GuildKind[], memberIds: number[]) {
   const adapters = live.map((kind) => ({ kind }) as HubKindAdapter);
@@ -114,6 +130,15 @@ describe('CommunityDirectoryService.byGame (ROK-1883)', () => {
       },
       { joinedFirst: true },
     );
+  });
+
+  it('carries the full visible total past the 50-row cap (Codex P2)', async () => {
+    const joined = Array.from({ length: 50 }, (_, i) => joinedEntry(i + 1));
+    listMock.mockResolvedValue({ items: joined, nextCursor: 'more', total: 73 });
+    const { service } = build(['game_community'], []);
+    const res = await service.byGame({ id: 7, role: 'member' }, 42);
+    expect(res.hubs).toHaveLength(50);
+    expect(res.total).toBe(73);
   });
 
   it('a staff viewer gets the staff scope; a dead plugin kind is absent', async () => {

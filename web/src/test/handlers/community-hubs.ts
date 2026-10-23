@@ -34,9 +34,10 @@ export function createMockHubProposal(overrides: Partial<HubProposal> = {}): Hub
     };
 }
 
-/** `GET /hubs/by-game/:gameId` payload. */
+/** `GET /hubs/by-game/:gameId` payload; `total` defaults to the distinct hub ids given. */
 export function createMockGameHubs(overrides: Partial<GameHubs> = {}): GameHubs {
-    return { hubs: [], myProposals: [], canPropose: true, proposeBlockedReason: null, ...overrides };
+    const total = new Set((overrides.hubs ?? []).map((h) => h.id)).size;
+    return { hubs: [], total, myProposals: [], canPropose: true, proposeBlockedReason: null, ...overrides };
 }
 
 /** ROK-1875: a game-server hub row (no leader; membership is presence-driven). */

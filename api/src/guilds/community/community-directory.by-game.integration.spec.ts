@@ -26,6 +26,8 @@ setupMatrixSuite();
 
 interface GameHubsBody {
   hubs: Entry[];
+  /** Every visible hub, past the 50-row `hubs` cap (Codex P2). */
+  total: number;
   myProposals: { gameId: number }[];
   canPropose: boolean;
   proposeBlockedReason: string | null;
@@ -56,6 +58,7 @@ function expectStaffView(m: Matrix, body: GameHubsBody): void {
     'W2',
     'W3',
   ]);
+  expect(body.total).toBe(7);
   const hidden = new Set([m.ids.C4, m.ids.S2, m.ids.W3]);
   for (const h of body.hubs) expect(h.hidden).toBe(hidden.has(h.id));
 }

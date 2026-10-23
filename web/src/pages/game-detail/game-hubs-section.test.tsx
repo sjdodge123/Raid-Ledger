@@ -182,6 +182,15 @@ describe('GameHubsSection — rows shown (ROK-1883)', () => {
         expect(screen.getByRole('link', { name: 'See all 7 hubs' })).toHaveAttribute('href', '/hubs?game=5');
     });
 
+    it('Codex P2: 50 joined rows returned of 73 visible → all 50 shown and See all 73 still links', async () => {
+        const joined = Array.from({ length: 50 }, (_, i) => createMockServerHubEntry({ id: 100 + i, name: `Joined ${100 + i}`, viewer: 'member' }));
+        server.use(...communityHubHandlers({ gameHubs: createMockGameHubs({ hubs: joined, total: 73 }) }));
+        renderCard();
+        await rowFor('Joined 100');
+        expect(rowIds()).toHaveLength(50);
+        expect(screen.getByRole('link', { name: 'See all 73 hubs' })).toHaveAttribute('href', '/hubs?game=5');
+    });
+
     it('AC7: one joined hub is topped up with others to three rows, joined first', async () => {
         serveHubs([
             createMockHubEntry({ id: 1, name: 'A' }), createMockHubEntry({ id: 2, name: 'B' }),

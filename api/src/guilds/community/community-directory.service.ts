@@ -91,6 +91,7 @@ export class CommunityDirectoryService {
     const reason = proposeBlockedReason(inDiscord, openIds, gameId);
     return {
       hubs: page.items,
+      total: page.total,
       myProposals: proposals.filter((p) => p.gameId === gameId),
       canPropose: reason === null,
       proposeBlockedReason: reason,
