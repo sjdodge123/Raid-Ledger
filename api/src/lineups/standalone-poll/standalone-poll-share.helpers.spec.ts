@@ -88,6 +88,7 @@ describe('resolveCreateFanout (channel gate)', () => {
       interestBroadcast: false,
       channelEmbed: false,
       pickedMembersDm: true,
+      rosterRescheduleDm: false,
     });
   });
 
@@ -96,6 +97,37 @@ describe('resolveCreateFanout (channel gate)', () => {
       interestBroadcast: true,
       channelEmbed: true,
       pickedMembersDm: false,
+      rosterRescheduleDm: false,
+    });
+  });
+
+  it.each(['public', 'private'] as const)(
+    'hub-tagged %s poll: no broadcast, no channel card, picked-member DM (ROK-1893 P3)',
+    (visibility) => {
+      expect(resolveCreateFanout(visibility, true)).toEqual({
+        interestBroadcast: false,
+        channelEmbed: false,
+        pickedMembersDm: true,
+        rosterRescheduleDm: false,
+      });
+    },
+  );
+
+  it('hub-tagged reschedule poll: still DMs the event roster (ROK-1893 P3)', () => {
+    expect(resolveCreateFanout('public', true, true)).toEqual({
+      interestBroadcast: false,
+      channelEmbed: false,
+      pickedMembersDm: true,
+      rosterRescheduleDm: true,
+    });
+  });
+
+  it('untagged reschedule poll: roster DM stays inside the broadcast', () => {
+    expect(resolveCreateFanout('public', false, true)).toEqual({
+      interestBroadcast: true,
+      channelEmbed: true,
+      pickedMembersDm: false,
+      rosterRescheduleDm: false,
     });
   });
 });

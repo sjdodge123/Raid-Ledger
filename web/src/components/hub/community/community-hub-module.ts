@@ -11,6 +11,7 @@ import { CommunityJoinedCell, CommunityPlayerCell, CommunityRoleCell } from './c
 import { CommunityMemberActions } from './community-member-actions';
 import { CommunitySettingsSections } from './community-settings';
 import { HubInviteAction } from './community-invites-section';
+import { CommunityHubPolls } from '../events/hub-polls-section';
 
 const COMMUNITY_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
     { id: 'player', header: 'Player', cell: CommunityPlayerCell },
@@ -30,6 +31,8 @@ export const communityHubModule: HubModule = {
     memberActions: CommunityMemberActions,
     /** ROK-1893 §8a(a): every live member gets "Invite people" on the Members tab. */
     membersSummary: HubInviteAction,
+    /** ROK-1893 P3: the hub's open scheduling polls head the Events tab. */
+    eventsLead: CommunityHubPolls,
     settingsSections: CommunitySettingsSections,
     heroPills: [CommunityKindPill, CommunityJoinPill],
     memberRows: (page) => page.ranks.flatMap((g) => g.members),

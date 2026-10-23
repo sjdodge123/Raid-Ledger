@@ -2,8 +2,9 @@
  * MarkdownBlock — block-level renderer for the hub-post Markdown subset
  * (ROK-1868 D14/D15): paragraphs (blank line), line breaks (single newline),
  * flat bullet and numbered lists, and the inline set of `MarkdownInline`
- * (bold, italic, strike, code, safe links). Headings, quotes, images, tables
- * and raw HTML render as literal text.
+ * (bold, italic, strike, code, safe links), and `#`–`###` headings (ROK-1898)
+ * as `MD_HEADING_TAG` h3–h5 — see that constant for why a post never renders
+ * an `h1`. `####`+, quotes, images, tables and raw HTML render as literal text.
  *
  * React elements only — never `dangerouslySetInnerHTML`. Classes come from
  * `MD_CLASSES` (shared with the editor). The root sets no text size or
@@ -11,7 +12,7 @@
  */
 import { Fragment, useMemo, type JSX } from 'react';
 import { MarkdownInline } from './markdown-inline';
-import { MD_CLASSES } from './markdown/markdown-classes';
+import { MD_CLASSES, MD_HEADING_TAG } from './markdown/markdown-classes';
 import { parseBlocks, type MarkdownBlockNode } from './markdown/markdown-block-parse';
 
 export interface MarkdownBlockProps {
@@ -44,6 +45,11 @@ function renderItems(items: string[][]): JSX.Element[] {
 }
 
 function renderBlock(block: MarkdownBlockNode, key: number): JSX.Element {
+    if (block.kind === 'h') {
+        const Tag = MD_HEADING_TAG[block.level];
+        // `data-md-heading` is what the editor's paste rule reads, so a copied card keeps its levels.
+        return <Tag key={key} className={MD_CLASSES[`h${block.level}`]} data-md-heading={block.level}><MarkdownInline text={block.text} /></Tag>;
+    }
     if (block.kind === 'p') return <p key={key} className={MD_CLASSES.p}><Lines lines={block.lines} /></p>;
     if (block.kind === 'ul') return <ul key={key} className={MD_CLASSES.ul}>{renderItems(block.items)}</ul>;
     const start = block.start === 1 ? {} : { start: block.start };

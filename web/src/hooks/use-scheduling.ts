@@ -32,6 +32,7 @@ import {
 } from '../lib/api-client';
 import { PARTICIPANTS_KEY } from './use-lineups';
 import { weekStartQueryValue, weekTzOffsetMinutes } from '../lib/week-start-query';
+import { invalidateHubPolls } from '../components/hub/events/hub-polls-api';
 
 /** Query key prefix for scheduling poll queries. */
 const SCHEDULE_KEY = ['scheduling'] as const;
@@ -261,6 +262,7 @@ export function useCreateEventFromSlot() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
       void qc.invalidateQueries({ queryKey: ['events'] });
+      invalidateHubPolls(qc);
     },
   });
 }
@@ -395,6 +397,7 @@ export function useCancelSchedulePoll() {
     mutationFn: ({ lineupId, matchId, reason }) => cancelSchedulePoll(lineupId, matchId, reason),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+      invalidateHubPolls(qc);
       toast.success('Scheduling poll cancelled');
     },
     onError: (err) => { toast.error(err.message || 'Failed to cancel poll'); },

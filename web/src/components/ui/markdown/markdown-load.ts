@@ -90,6 +90,7 @@ function inline(lines: string[]): JSONContent[] {
 }
 
 function blockNode(block: MarkdownBlockNode): JSONContent {
+    if (block.kind === 'h') return { type: 'heading', attrs: { level: block.level }, content: lineContent(block.text) };
     if (block.kind === 'p') return { type: 'paragraph', content: inline(block.lines) };
     const items = block.items.map((lines: string[]): JSONContent => ({ type: 'listItem', content: [{ type: 'paragraph', content: inline(lines) }] }));
     return block.kind === 'ul' ? { type: 'bulletList', content: items } : { type: 'orderedList', attrs: { start: block.start }, content: items };
