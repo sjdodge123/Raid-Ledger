@@ -8,9 +8,9 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { ValheimClaimStatusResponseSchema } from '@raid-ledger/contract';
+import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -32,7 +32,6 @@ const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/valheim/claim-drive-fixture';
 const SCAN = '/admin/test/valheim/claim-suggest-scan';
 const PLUGINS = [VALHEIM_PLUGIN_ID, PELICAN_PLUGIN_ID];
-const PASSWORD = 'TestPassword123!';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -54,19 +53,13 @@ async function seed(body: object = {}): Promise<ClaimDriveFixture> {
   return res.body as ClaimDriveFixture;
 }
 
-/** Give a seeded user a local password and sign in as them. */
-async function tokenFor(user: ClaimDriveUser): Promise<string> {
-  const email = `${user.username}@test.local`;
-  await testApp.db.insert(schema.localCredentials).values({
-    email,
-    passwordHash: await bcrypt.hash(PASSWORD, 4),
-    userId: user.id,
+/** A member session for a seeded (Discord-only, passwordless) user. */
+function tokenFor(user: ClaimDriveUser): Promise<string> {
+  return signTestAccessToken(testApp, {
+    sub: user.id,
+    username: user.username,
+    role: 'member',
   });
-  const res = await testApp.request
-    .post('/auth/local')
-    .send({ email, password: PASSWORD });
-  expect(res.status).toBe(200);
-  return (res.body as { access_token: string }).access_token;
 }
 
 async function claimStatus(serverId: number, user: ClaimDriveUser) {

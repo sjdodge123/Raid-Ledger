@@ -148,6 +148,17 @@ export async function insertHubUser(
   return { id: row.id, username: user.username, displayName: user.displayName };
 }
 
+/**
+ * Two distinct generated Discord ids for users A and B: `19` + the 13-digit
+ * clock + 3 random digits + 1/2 = 19 digits, inside the route's own
+ * `bDiscordId` rule (17–20), so a caller can echo one back as `bDiscordId`.
+ */
+export function claimDriveSnowflakes(): { a: string; b: string } {
+  const rnd = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+  const snow = `19${Date.now()}${rnd}`;
+  return { a: `${snow}1`, b: `${snow}2` };
+}
+
 /** Users A and B; B's Discord id is `bDiscordId` when given. */
 export async function insertClaimDriveUsers(
   db: Db,
@@ -155,16 +166,16 @@ export async function insertClaimDriveUsers(
   tag: string,
   bDiscordId: string | null,
 ): Promise<{ a: ClaimDriveUser; b: ClaimDriveUser }> {
-  const snow = `19330${Date.now()}${tag.length}`;
+  const snow = claimDriveSnowflakes();
   const a = await insertHubUser(db, guildId, {
     username: `cdA${tag}`,
     displayName: `Ashgrim ${tag}`.slice(0, 30),
-    discordId: `${snow}1`,
+    discordId: snow.a,
   });
   const b = await insertHubUser(db, guildId, {
     username: `cdB${tag}`,
     displayName: `${B_NAME_STEM}${tag}`.slice(0, 30),
-    discordId: bDiscordId ?? `${snow}2`,
+    discordId: bDiscordId ?? snow.b,
   });
   return { a, b };
 }
