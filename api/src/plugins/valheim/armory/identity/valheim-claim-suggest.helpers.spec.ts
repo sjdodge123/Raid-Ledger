@@ -21,7 +21,13 @@ const cand = (
   userId: number,
   names: string[],
   extra: Partial<ClaimCandidate> = {},
-): ClaimCandidate => ({ userId, names, inVoice: false, steamId: null, ...extra });
+): ClaimCandidate => ({
+  userId,
+  names,
+  inVoice: false,
+  steamId: null,
+  ...extra,
+});
 
 describe('normaliseName', () => {
   it.each([
@@ -51,7 +57,7 @@ describe('nameStrength', () => {
   });
 });
 
-describe('pickClaimCandidate', () => {
+describe('pickClaimCandidate — names', () => {
   it('picks the single name match', () => {
     const pick = pickClaimCandidate(subject('M✿rrow'), [
       cand(1, ['Morrow']),
@@ -99,6 +105,9 @@ describe('pickClaimCandidate', () => {
     expect(pick).toBeNull();
   });
 
+});
+
+describe('pickClaimCandidate — Steam and voice', () => {
   it('excludes a candidate whose linked Steam id differs', () => {
     const pick = pickClaimCandidate(subject('Brannök'), [
       cand(1, ['Brannok'], { steamId: '76561190000000999' }),
@@ -147,6 +156,8 @@ describe('pickClaimCandidate', () => {
 
   it('returns null with no candidates or no signal', () => {
     expect(pickClaimCandidate(subject('Morrow'), [])).toBeNull();
-    expect(pickClaimCandidate(subject('Morrow'), [cand(1, ['Ysolde'])])).toBeNull();
+    expect(
+      pickClaimCandidate(subject('Morrow'), [cand(1, ['Ysolde'])]),
+    ).toBeNull();
   });
 });

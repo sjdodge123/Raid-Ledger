@@ -66,7 +66,10 @@ function containsMost(a: string, b: string): boolean {
  * Exact after normalisation = strong; one edit apart or near-full containment
  * (both ≥ 4 chars) = medium; anything else, or an empty fold, = none.
  */
-export function nameStrength(character: string, candidate: string): NameStrength {
+export function nameStrength(
+  character: string,
+  candidate: string,
+): NameStrength {
   const a = normaliseName(character);
   const b = normaliseName(candidate);
   if (a === '' || b === '') return 'none';
@@ -79,7 +82,10 @@ const RANK: Record<NameStrength, number> = { none: 0, medium: 1, strong: 2 };
 
 /** The best strength across every name the candidate goes by. */
 function bestStrength(subject: ClaimSubject, c: ClaimCandidate): number {
-  return Math.max(0, ...c.names.map((n) => RANK[nameStrength(subject.characterName, n)]));
+  return Math.max(
+    0,
+    ...c.names.map((n) => RANK[nameStrength(subject.characterName, n)]),
+  );
 }
 
 /** The only element of `xs`, or null when there are none or several. */
