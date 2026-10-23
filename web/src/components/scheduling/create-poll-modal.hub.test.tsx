@@ -10,7 +10,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { CreatePollModal } from './create-poll-modal';
 
 vi.mock('../../hooks/use-standalone-poll', () => ({ useCreateSchedulingPoll: vi.fn() }));
-vi.mock('../../lib/api-client', () => ({ getPlayers: vi.fn() }));
+vi.mock('../../lib/api-client', () => ({ getPlayers: vi.fn(), fetchGameRegistry: vi.fn().mockResolvedValue({ data: [] }), getGameEventTypes: vi.fn() }));
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
