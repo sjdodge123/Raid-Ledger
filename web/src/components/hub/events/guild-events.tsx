@@ -83,11 +83,11 @@ function EventLists({ raids, compact, kind }: { raids: GuildRaidsDto; compact: b
             <h4 className={SUBHEAD}>Upcoming</h4>
             {upcoming.length === 0
                 ? <QuietEmpty>{copy.upcomingEmpty}</QuietEmpty>
-                : <ul aria-label="Upcoming guild events" className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} />)}</ul>}
+                : <ul aria-label={`Upcoming ${copy.noun} events`} className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} />)}</ul>}
             <h4 className={SUBHEAD}>Recent</h4>
             {recent.length === 0
                 ? <QuietEmpty>{copy.recentEmpty}</QuietEmpty>
-                : <Card className="bg-panel py-1"><ul aria-label="Recent guild events">{recent.map((e) => <RecentRow key={e.id} e={e} />)}</ul></Card>}
+                : <Card className="bg-panel py-1"><ul aria-label={`Recent ${copy.noun} events`}>{recent.map((e) => <RecentRow key={e.id} e={e} />)}</ul></Card>}
         </>
     );
 }
@@ -110,9 +110,10 @@ export function GuildEvents({ raids, compact = false, jumpTab = null, kind }: Gu
             </WidgetCard>
         );
     }
+    const copy = hubCopy(kind);
     return (
         <section id="guild-events" data-testid="guild-events-full" className="scroll-mt-4">
-            <SectionTitle title="Guild events" blurb="Raids and runs scheduled for this guild." />
+            <SectionTitle title={copy.eventsTitle} blurb={copy.eventsBlurb} />
             <EventLists raids={raids} compact={false} kind={kind} />
         </section>
     );

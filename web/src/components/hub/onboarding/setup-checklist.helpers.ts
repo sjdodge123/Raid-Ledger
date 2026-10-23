@@ -37,26 +37,55 @@ export interface SetupStepsInput {
     hasModSources: boolean;
     /** This viewer can open the channel picker — Leader and admin only. */
     canPickChannel: boolean;
-    /** ROK-1831: the hub kind; `game_server` drops the WoW-only steps and swaps copy. Default: WoW. */
+    /** ROK-1831/1891: the hub kind; non-WoW kinds drop the WoW-only steps and swap copy. Default: WoW. */
     kind?: GuildKind | undefined;
 }
 
-/** ROK-1831: steps a `game_server` hub never has — no roster import, no Publish (the admin switch is the publish). */
-const SERVER_DROPPED = new Set(['roster', 'publish']);
+type StepCopy = Partial<Pick<SetupStep, 'label' | 'description' | 'actionLabel' | 'action'>>;
 
-/** ROK-1831: server-hub copy for the core steps whose WoW wording does not fit. */
-const SERVER_COPY: Record<string, Pick<SetupStep, 'label' | 'description' | 'actionLabel'>> = {
-    rules: { label: 'Add your server rules', description: 'They show on the Resources tab.', actionLabel: 'Add rules' },
-    links: { label: 'Add useful links', description: 'Discord, mod packs and connect info, all on Resources.', actionLabel: 'Add links' },
-    'next-raid': { label: 'Schedule your first event', description: 'Events show on the Events tab.', actionLabel: 'Schedule' },
+/**
+ * ROK-1831/1870/1891: steps a kind never has. A server hub has no roster
+ * import and no Publish (the admin switch is the publish); a community hub's
+ * leader is its approved proposer and it has no hide switch (Archive replaces it).
+ */
+const DROPPED: Readonly<Record<GuildKind, ReadonlySet<string>>> = {
+    wow_guild: new Set(),
+    game_server: new Set(['roster', 'publish']),
+    game_community: new Set(['leader', 'publish']),
 };
 
+/** ROK-1831/1891: per-kind copy for the core steps whose WoW wording does not fit. */
+const KIND_COPY: Readonly<Record<GuildKind, Readonly<Record<string, StepCopy>>>> = {
+    wow_guild: {},
+    game_server: {
+        leader: { action: { kind: 'blocked', reason: 'An admin is the hub Leader for now — naming one from the members is coming.' } },
+        rules: { label: 'Add your server rules', description: 'They show on the Resources tab.', actionLabel: 'Add rules' },
+        links: { label: 'Add your server info', description: 'Connect address, mod packs and other links, all on Resources.', actionLabel: 'Add info' },
+        discord: { label: 'Link your Discord channel' },
+        'next-raid': { label: 'Schedule your first event', description: 'Events show on the Events tab.', actionLabel: 'Schedule' },
+    },
+    game_community: {
+        rules: { label: 'Add your hub rules' },
+        links: { description: 'Discord, guides and connect info, all on Resources.' },
+        'next-raid': { label: 'Schedule your first event', description: 'Events show on the Events tab.', actionLabel: 'Schedule' },
+    },
+};
+
+/** ROK-1891: a community hub grows by invitation, not a roster import. The proposer is member one. */
+function inviteStep(memberCount: number): SetupStep {
+    return {
+        id: 'invite', label: 'Invite players to the hub', description: 'Share the hub link so players can find it and join.',
+        done: memberCount > 1, action: { kind: 'tab', hash: '#members' }, actionLabel: 'Invite',
+    };
+}
+
 /** Apply the per-kind step set and copy. */
-function forKind(steps: SetupStep[], kind: GuildKind | undefined): SetupStep[] {
-    // ROK-1870: a community hub's leader is its approved proposer — there is nobody to assign.
-    if (kind === 'game_community') return steps.filter((s) => s.id !== 'leader');
-    if (kind !== 'game_server') return steps;
-    return steps.filter((s) => !SERVER_DROPPED.has(s.id)).map((s) => ({ ...s, ...(SERVER_COPY[s.id] ?? {}) }));
+function forKind(steps: SetupStep[], kind: GuildKind, memberCount: number): SetupStep[] {
+    const dropped = DROPPED[kind];
+    const copy = KIND_COPY[kind];
+    return steps
+        .filter((s) => !dropped.has(s.id))
+        .map((s) => (kind === 'game_community' && s.id === 'roster' ? inviteStep(memberCount) : { ...s, ...(copy[s.id] ?? {}) }));
 }
 
 /**
@@ -74,11 +103,12 @@ export const LEADER_BLOCKED_REASON = 'An admin is the hub Leader for now — nam
 export const CHANNEL_BLOCKED_REASON = 'Ask your Leader or an admin to set the hub channel.';
 
 /**
- * ROK-1831 owns `guilds.hidden_at`, so publishing cannot be done from here
- * yet; the step is listed with its reason rather than hidden, which is what
- * the approved prototype shows.
+ * ROK-1891: a hub is visible to its members from the start, and the one
+ * visibility control is the admin-only "Hide this hub" switch (ROK-1831) in
+ * Guild settings → Visibility, so the step points there instead of promising
+ * a hidden-by-default hub. Only a WoW guild keeps the step (see DROPPED).
  */
-export const PUBLISH_BLOCKED_REASON = 'Hubs are visible to members already — a hidden-by-default hub is coming.';
+export const PUBLISH_BLOCKED_REASON = 'Members can already see this hub. An admin can hide it in Guild settings → Visibility.';
 
 /** The steps every hub starts with, in the prototype's order. */
 function baseSteps(input: SetupStepsInput, channel: SetupStepAction): SetupStep[] {
@@ -129,7 +159,7 @@ export function setupSteps(input: SetupStepsInput): SetupStep[] {
         id: 'publish', label: 'Publish this hub', description: 'Decide who can find the hub.',
         done: false, action: { kind: 'blocked', reason: PUBLISH_BLOCKED_REASON }, actionLabel: 'Publish',
     });
-    return forKind(steps, input.kind);
+    return forKind(steps, input.kind ?? 'wow_guild', input.memberCount);
 }
 
 export interface SetupProgress {
