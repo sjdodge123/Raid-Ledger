@@ -66,17 +66,27 @@ function HeatCell({ label, hour, activity, peakActivity, max }: {
     const intensity = Math.min(1, activity / max);
     const alpha = activity === 0 ? 0.05 : 0.2 + intensity * 0.7;
     const style = { background: `rgba(34,197,94,${alpha})` };
+    return <button type="button" style={style} {...cellA11y(label, hour, activity, peakActivity)} />;
+}
+
+/**
+ * Per-cell name + peak attributes. A peak cell adds `PEAK_MARK`, a
+ * "Sat 9pm · 17 sessions" `title` and `data-peak`; other cells keep the
+ * original "Sat, 14:00 — 3 sessions" label.
+ */
+function cellA11y(label: string, hour: number, activity: number, peakActivity: number | undefined): {
+    'aria-label': string; title?: string; 'data-peak'?: 'true'; className: string;
+} {
     if (peakActivity === undefined) {
-        return (
-            <button type="button" aria-label={`${label}, ${hour}:00 — ${activity} sessions`}
-                className={CELL_BASE} style={style} />
-        );
+        return { 'aria-label': `${label}, ${hour}:00 — ${activity} sessions`, className: CELL_BASE };
     }
     const peakLabel = peakCellLabel(label, hour, peakActivity);
-    return (
-        <button type="button" data-peak="true" title={peakLabel} aria-label={`${peakLabel} · peak hour`}
-            className={`${CELL_BASE} ${PEAK_MARK}`} style={style} />
-    );
+    return {
+        'aria-label': `${peakLabel} · peak hour`,
+        title: peakLabel,
+        'data-peak': 'true',
+        className: `${CELL_BASE} ${PEAK_MARK}`,
+    };
 }
 
 function Empty() {
