@@ -58,7 +58,9 @@ export class HubChannelLinkService implements HubLinker, OnModuleInit {
    * Link every eligible channel-less hub of `gameId`; returns how many.
    * ROK-1933: announces each new link (`previousChannelId` is always null —
    * only channel-less hubs are linkable). NOTE: under the lifecycle tick `db`
-   * is the per-game transaction, so the emit precedes that tx's COMMIT.
+   * is the per-game transaction, so the emit precedes that tx's COMMIT. The
+   * consumer (`HubWelcomeService.welcomeLinked`) therefore trusts only the
+   * payload's ids and never reads the new binding row.
    */
   async linkHubsForGame(
     gameId: number,

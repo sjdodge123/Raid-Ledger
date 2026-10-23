@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   ParseIntPipe,
+  Post,
   Put,
   Request,
   UseGuards,
@@ -14,8 +15,10 @@ import { AuthGuard } from '@nestjs/passport';
 import type {
   GuildDiscordChannelListDto,
   GuildDiscordMirrorDto,
+  HubWelcomeResult,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
+import { HubWelcomeService } from '../discord-bot/hub-welcome/hub-welcome.service';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildLeaderGuard } from './guild-leader.guard';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
@@ -33,7 +36,10 @@ const jwt = AuthGuard('jwt');
 @Controller(['plugins/wow/guilds/:id/discord', 'guilds/:id/discord'])
 @UseGuards(HubKindActiveGuard)
 export class GuildDiscordController {
-  constructor(private readonly discord: GuildDiscordService) {}
+  constructor(
+    private readonly discord: GuildDiscordService,
+    private readonly welcome: HubWelcomeService,
+  ) {}
 
   @Get()
   @UseGuards(jwt, HubVisibleGuard)
@@ -67,5 +73,18 @@ export class GuildDiscordController {
   @HttpCode(204)
   async clearChannel(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.discord.clearChannel(id);
+  }
+
+  /**
+   * ROK-1933: re-post (or edit in place) the hub welcome embed in the bound
+   * channel. Leader/staff only, like the binding writes.
+   */
+  @Post('welcome')
+  @UseGuards(jwt, HubVisibleGuard, GuildLeaderGuard)
+  @HttpCode(200)
+  repostWelcome(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<HubWelcomeResult> {
+    return this.welcome.repost(id);
   }
 }
