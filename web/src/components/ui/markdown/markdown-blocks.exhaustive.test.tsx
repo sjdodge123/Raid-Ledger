@@ -20,7 +20,8 @@ import { loadStoredMarkdown } from './markdown-load';
 import { serializeEditorMarkdown } from './markdown-serialize';
 
 const TAG_OF: Record<string, string> = { STRONG: 'b', EM: 'i', S: 's', DEL: 's', CODE: 'c', A: 'l' };
-const BLOCK_TAGS = new Set(['P', 'UL', 'OL', 'LI']);
+// ROK-1898: headings are blocks too — `#`–`###` render h3–h5 (MD_HEADING_TAG) in BOTH the editor and the reader.
+const BLOCK_TAGS = new Set(['P', 'UL', 'OL', 'LI', 'H3', 'H4', 'H5']);
 const T = '**b** *i* ~~s~~ `c` [l](https://example.com/x)';
 const U = 'a **[bold link](/events)** *z*';
 const editor = new Editor({ extensions: buildMarkdownExtensions({ onLinkShortcut: () => undefined }) });
@@ -40,6 +41,10 @@ const R14C: string[] = [
 const CONSTRUCTS: string[] = [
     ...R14C,
     '# $', '## $', '### $', '#### $', '##### $', '###### $', '####### $', '#$', '#', '# $ #',
+    // ROK-1898: heading edge cases — not headings (two spaces, tab, indent, escaped, blank text), a
+    // heading whose text looks like a marker, and a heading interrupting a paragraph / hard-broken item.
+    '#  $', '#\t$', ' # $', '\\## $', '# ', '## ', '# # $', '# - $', '# 1. $', '# > $', '#### $\n# $',
+    '# $\n## $\n### $', '$  \n# $', '- $  \n# $', '# $  \n$', '# $\\\n$', '- # $', '1. ## $', '$  \n\\# $',
     '> $', '>$', '> > $', '> $\n> $', '> $\n$', '>\n$', '> - $', '> # $',
     '- $', '* $', '+ $', '1. $', '1) $', '3. $', '-', '- ', '1.',
     '- $\n- $', '* $\n- $', '1. $\n2. $', '1. $\n- $', '- $\n1. $',
