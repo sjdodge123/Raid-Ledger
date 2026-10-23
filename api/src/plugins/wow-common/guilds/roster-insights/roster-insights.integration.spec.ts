@@ -209,7 +209,15 @@ describe('GET roster-insights (real DB)', () => {
         ],
       },
     ]);
-    expect(dto.freshness.characters.addon).toBe(1);
+    // 3 linked members: lead (LedgerLink gear snapshot) and healer (its
+    // `role` column lives on an addonGuid row, so `rowOrigin` labels it
+    // addon) are addon-fed; crafter's level/class lose to the newer roster
+    // facts and its professions are manual, so it has no addon/blizzard fact.
+    expect(dto.freshness.characters).toEqual({
+      addon: 2,
+      blizzard: 0,
+      none: 1,
+    });
   });
 
   it('a visitor sees class/level/role but NO professions key', async () => {
