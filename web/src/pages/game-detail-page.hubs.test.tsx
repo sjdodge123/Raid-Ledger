@@ -28,7 +28,10 @@ vi.mock('../hooks/use-games-discover', () => ({
     useGamePricing: vi.fn(() => ({ data: null, isLoading: false })),
 }));
 vi.mock('../hooks/use-events', () => ({ useEvents: vi.fn(() => ({ data: null })) }));
-vi.mock('../hooks/use-auth', () => ({ useAuth: vi.fn(), getAuthToken: () => null, useViewerCacheScope: () => 'anon' }));
+vi.mock('../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../hooks/use-auth')>()),
+    useAuth: vi.fn(), getAuthToken: () => null, useViewerCacheScope: () => 'anon',
+}));
 vi.mock('../hooks/use-want-to-play', () => ({ useWantToPlay: vi.fn() }));
 
 const GAME = {
