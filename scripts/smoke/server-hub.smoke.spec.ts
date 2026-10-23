@@ -57,11 +57,12 @@ async function members(token: string, guildId: number): Promise<PageMember[]> {
     return (body?.ranks ?? []).flatMap((g) => g.members);
 }
 
-/** The hero's numbers as the API sends them (ROK-1932); rows are the fallback for an older payload. */
+/** The hero's numbers as the API sends them (ROK-1932); a missing `onlineCount` fails the spec. */
 async function heroCounts(token: string, guildId: number): Promise<{ online: number; unlinked: number }> {
     const body = (await apiGet(token, `/guilds/${guildId}`)) as HubPage | null;
-    const rows = (body?.ranks ?? []).flatMap((g) => g.members).filter((m) => m.server?.onlineNow === true).length;
-    return { online: body?.server?.onlineCount ?? rows, unlinked: body?.server?.unlinkedOnlineCount ?? 0 };
+    const online = body?.server?.onlineCount;
+    if (typeof online !== 'number') throw new Error(`hub ${guildId}: server.onlineCount missing from the API`);
+    return { online, unlinked: body?.server?.unlinkedOnlineCount ?? 0 };
 }
 
 /** Poll the API roster until `name` is (or is no longer) a member. */

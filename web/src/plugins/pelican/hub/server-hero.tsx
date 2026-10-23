@@ -38,7 +38,7 @@ function UnlinkedNudge(ctx: HubCtx): JSX.Element | null {
             <span aria-hidden="true">·</span>
             {hasCharactersTab(ctx) ? (
                 <a href="#characters" data-testid="server-hub-unlinked"
-                    className={`rounded-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}>{label}</a>
+                    className={`-my-3 rounded-sm py-3 font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}>{label}</a>
             ) : (
                 <span data-testid="server-hub-unlinked">{label}</span>
             )}
