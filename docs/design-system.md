@@ -157,7 +157,13 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   2.3:1, "You own" 2.34:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
   `WishlistBadge`, the rating chip); a cyan CTA that must read the same in both families is `bg-cyan-700 hover:bg-cyan-800 text-white` (white 5.28 / 7.22:1; "Schedule a Game", TDB:2050 — `text-foreground` there would go `#0f172a` on light, 3.38:1); a cyan chip is solid `bg-cyan-500` / `bg-cyan-600` + `text-foreground`
   (`YouOwnBadge`; `#0f172a` on light, 7.55:1); `brand-fill-forced-white.guard.test.ts` fails the pairing.
-- **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
+- **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class. Same for the community
+  insights `TemporalHeatmap`'s `rgba(34,197,94,a)` activity alpha.
+- **A highlighted cell on a data-shaded grid is an inset ring, never a new fill.** The community "When the
+  Community Plays" heatmap marks each weekday's peak hours with `PEAK_MARK` (`ring-2 ring-inset ring-foreground`,
+  `components/insights/community/temporal-heatmap.utils.ts`, ROK-1936): `foreground` contrasts with every
+  green shade in both families, and `ring-inset` paints inside the cell so the grid keeps its size on a phone.
+  The cell's `title` carries the label ("Sat 9pm · 17 sessions"); the shade stays the data.
 
 **Semantic-hue ratchet (TDB:1770, ROK-1586).** `web/src/styles/semantic-hue.guard.test.ts` counts every raw
 `emerald` / `green` / `amber` / `yellow` / `red` / `rose` utility (`text-` `bg-` `border-` `border-{t,r,b,l,x,y,s,e}-`

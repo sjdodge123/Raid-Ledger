@@ -1,22 +1,29 @@
 import type { CommunityTemporalResponseDto } from '@raid-ledger/contract';
+import {
+    WEEKDAY_LABELS, PEAK_MARK, buildPeakMap, cellKey, peakCellLabel,
+} from './temporal-heatmap.utils';
 
 interface Props {
     heatmap: CommunityTemporalResponseDto['heatmap'];
+    peakHours: CommunityTemporalResponseDto['peakHours'];
 }
 
-const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const CELL_BASE = 'h-5 rounded-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
 /**
  * 7 × 24 activity heatmap. Cell shade is a percentile over the max
  * activity cell in the snapshot; each cell is keyboard-focusable with an
- * `aria-label` spelling out the weekday / hour / activity count.
+ * `aria-label` spelling out the weekday / hour / activity count. Each
+ * weekday's top hours (`peakHours`) carry the inset `PEAK_MARK` ring and a
+ * "Sat 9pm · 17 sessions" title (ROK-1936).
  */
-export function TemporalHeatmap({ heatmap }: Props) {
+export function TemporalHeatmap({ heatmap, peakHours }: Props) {
     if (heatmap.length === 0) {
         return <Empty />;
     }
     const max = Math.max(1, ...heatmap.map((c) => c.activity));
-    const byCell = new Map(heatmap.map((c) => [`${c.weekday}:${c.hour}`, c.activity]));
+    const byCell = new Map(heatmap.map((c) => [cellKey(c.weekday, c.hour), c.activity]));
+    const peaks = buildPeakMap(peakHours);
 
     return (
         <div className="overflow-x-auto" data-testid="temporal-heatmap">
@@ -25,38 +32,50 @@ export function TemporalHeatmap({ heatmap }: Props) {
                 {Array.from({ length: 24 }, (_, h) => (
                     <div key={h} className="text-[10px] text-muted text-center">{h}</div>
                 ))}
-                {WEEKDAY_LABELS.map((label, idx) => {
-                    const weekday = idx + 1;
-                    return (
-                        <WeekdayRow key={weekday} label={label} weekday={weekday} max={max} byCell={byCell} />
-                    );
-                })}
+                {WEEKDAY_LABELS.map((label, idx) => (
+                    <WeekdayRow key={label} label={label} weekday={idx + 1} max={max} byCell={byCell} peaks={peaks} />
+                ))}
             </div>
         </div>
     );
 }
 
-function WeekdayRow({ label, weekday, max, byCell }: {
-    label: string; weekday: number; max: number; byCell: Map<string, number>;
+function WeekdayRow({ label, weekday, max, byCell, peaks }: {
+    label: string; weekday: number; max: number; byCell: Map<string, number>; peaks: Map<string, number>;
 }) {
     return (
         <>
             <div className="text-xs text-muted flex items-center pr-2">{label}</div>
-            {Array.from({ length: 24 }, (_, hour) => {
-                const activity = byCell.get(`${weekday}:${hour}`) ?? 0;
-                const intensity = Math.min(1, activity / max);
-                const alpha = activity === 0 ? 0.05 : 0.2 + intensity * 0.7;
-                return (
-                    <button
-                        type="button"
-                        key={hour}
-                        aria-label={`${label}, ${hour}:00 — ${activity} sessions`}
-                        className="h-5 rounded-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        style={{ background: `rgba(34,197,94,${alpha})` }}
-                    />
-                );
-            })}
+            {Array.from({ length: 24 }, (_, hour) => (
+                <HeatCell
+                    key={hour}
+                    label={label}
+                    hour={hour}
+                    activity={byCell.get(cellKey(weekday, hour)) ?? 0}
+                    peakActivity={peaks.get(cellKey(weekday, hour))}
+                    max={max}
+                />
+            ))}
         </>
+    );
+}
+
+function HeatCell({ label, hour, activity, peakActivity, max }: {
+    label: string; hour: number; activity: number; peakActivity: number | undefined; max: number;
+}) {
+    const intensity = Math.min(1, activity / max);
+    const alpha = activity === 0 ? 0.05 : 0.2 + intensity * 0.7;
+    const style = { background: `rgba(34,197,94,${alpha})` };
+    if (peakActivity === undefined) {
+        return (
+            <button type="button" aria-label={`${label}, ${hour}:00 — ${activity} sessions`}
+                className={CELL_BASE} style={style} />
+        );
+    }
+    const peakLabel = peakCellLabel(label, hour, peakActivity);
+    return (
+        <button type="button" data-peak="true" title={peakLabel} aria-label={`${peakLabel} · peak hour`}
+            className={`${CELL_BASE} ${PEAK_MARK}`} style={style} />
     );
 }
 
