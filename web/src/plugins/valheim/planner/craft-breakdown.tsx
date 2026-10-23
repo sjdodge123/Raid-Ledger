@@ -1,16 +1,17 @@
 /**
  * ROK-1899 — the detail pane's "Full breakdown" disclosure (spec §3.1.3,
  * OQ9): the existing `RecipeTree` for the selection, open on desktop and
- * collapsed in the phone sheet. CRAFT reads the tree route at q1; UPGRADE
- * reads the plan route for the single `quality − 1 → quality` step (the tree
- * route has no `fromQuality`).
+ * collapsed in the phone sheet. Both modes read the plan route, so every node
+ * carries the viewer's have/short (the tree route has no stock): CRAFT plans
+ * the pick at q1 × the footer's amount, UPGRADE the single
+ * `quality − 1 → quality` step.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 import { MapError } from '../map/map-error';
-import { useValheimRecipePlan, useValheimRecipeTree } from '../hooks/use-valheim-recipes';
+import { useValheimRecipePlan } from '../hooks/use-valheim-recipes';
 import type { CraftMode } from './crafting.helpers';
-import { serializeTargets } from './planner.helpers';
+import { serializeTargets, type PlannerTarget } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
 import { usePlannerNames, type PlannerNameSource } from './use-planner-names';
 
@@ -26,6 +27,8 @@ export interface CraftBreakdownProps {
     entry: ValheimRecipeCatalogEntry;
     mode: CraftMode;
     quality: number;
+    /** CRAFT: how many to plan (the footer's valid amount, else 1). */
+    amount: number;
     stock: BreakdownStockScope;
     defaultOpen: boolean;
 }
@@ -41,18 +44,21 @@ interface BreakdownQuery {
     refetch: () => unknown;
 }
 
-function useBreakdownQuery({ serverId, entry, mode, quality, stock }: CraftBreakdownProps): BreakdownQuery {
-    const upgrade = mode === 'upgrade';
-    const tree = useValheimRecipeTree(serverId, upgrade ? null : entry.prefab, entry.kind, 1);
-    const targets = upgrade ? serializeTargets([{ prefab: entry.prefab, kind: 'item', quality, fromQuality: quality - 1, amount: 1 }]) : '';
-    const plan = useValheimRecipePlan(serverId, targets, stock.personal, stock.vehicles);
-    const q = upgrade ? plan : tree;
+/** The one target the breakdown plans: CRAFT from scratch at q1 × amount, UPGRADE one step. */
+function breakdownTarget({ entry, mode, quality, amount }: CraftBreakdownProps): PlannerTarget {
+    if (mode === 'upgrade') return { prefab: entry.prefab, kind: 'item', quality, fromQuality: quality - 1, amount: 1 };
+    return { prefab: entry.prefab, kind: entry.kind, quality: 1, fromQuality: 0, amount };
+}
+
+function useBreakdownQuery(props: CraftBreakdownProps): BreakdownQuery {
+    const targets = serializeTargets([breakdownTarget(props)]);
+    const q = useValheimRecipePlan(props.serverId, targets, props.stock.personal, props.stock.vehicles);
     return { data: q.data, isError: q.isError, refetch: q.refetch };
 }
 
 function BreakdownBody({ props, q }: { props: CraftBreakdownProps; q: BreakdownQuery }): JSX.Element {
     const { serverId, catalog, entry } = props;
-    const names = usePlannerNames(serverId, catalog, undefined, q.data, 'tree');
+    const names = usePlannerNames(serverId, catalog, q.data, undefined, 'plan');
     const kinds = useMemo(() => [entry.kind], [entry.kind]);
     if (q.data !== undefined)
         return <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={`What ${entry.name} needs`} rootKinds={kinds} />;

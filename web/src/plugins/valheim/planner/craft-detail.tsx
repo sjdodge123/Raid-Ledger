@@ -7,12 +7,12 @@
  * The desktop pane's header carries "Back to your list", which clears the
  * selection so the idle view (the plan tree) returns.
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { Button } from '../../../components/ui/button';
 import type { ValheimRecipeCatalogResponse, ValheimRecipeCost } from '@raid-ledger/contract';
 import { CraftBreakdown, type BreakdownStockScope } from './craft-breakdown';
 import { CraftDetailFooter } from './craft-detail-footer';
-import { detailCost, detailTitle, useDetailQuality } from './craft-detail.helpers';
+import { detailCost, detailTitle, parseAmount, useDetailQuality } from './craft-detail.helpers';
 import { BY_HAND_LABEL, type CraftMode, type RankedRow, type StockTotals } from './crafting.helpers';
 import { IngredientSlots, type StockState } from './ingredient-slots';
 import type { PlannerTarget } from './planner.helpers';
@@ -35,7 +35,7 @@ const stationLabelOf = (cost: ValheimRecipeCost, names: PlannerNames): string =>
     cost.station === null ? BY_HAND_LABEL : names.stationName(cost.station);
 
 /** Meta, slots and breakdown — shared by the desktop pane and the phone sheet. */
-export function CraftDetailBody(props: CraftDetailProps & { quality: number; showTitle: boolean; breakdownOpen: boolean }): JSX.Element {
+export function CraftDetailBody(props: CraftDetailProps & { quality: number; amount: string; showTitle: boolean; breakdownOpen: boolean }): JSX.Element {
     const { row, mode, quality, totals, names, showTitle } = props;
     const cost = detailCost(row, mode, quality);
     const station = stationLabelOf(cost, names);
@@ -47,7 +47,7 @@ export function CraftDetailBody(props: CraftDetailProps & { quality: number; sho
                 {meta.filter((m) => m !== null).join(' · ')}
             </p>
             <IngredientSlots cost={cost} totals={totals} stockState={props.stockState} names={names} stationLabel={station} />
-            <CraftBreakdown serverId={props.serverId} catalog={props.catalog} entry={row.entry} mode={mode} quality={quality}
+            <CraftBreakdown serverId={props.serverId} catalog={props.catalog} entry={row.entry} mode={mode} quality={quality} amount={parseAmount(props.amount) ?? 1}
                 stock={props.stock} defaultOpen={props.breakdownOpen} />
         </div>
     );
@@ -56,13 +56,15 @@ export function CraftDetailBody(props: CraftDetailProps & { quality: number; sho
 /** The desktop detail column: a "Back to your list" header, the body, then the footer. */
 export function CraftDetail({ onBack, ...props }: CraftDetailProps & { onBack: () => void }): JSX.Element {
     const [quality, setQuality] = useDetailQuality(props.row, props.mode);
+    const [amount, setAmount] = useState('1');
     return (
         <section aria-label="Recipe detail" className="space-y-4">
             <Button variant="ghost" size="sm" onClick={onBack}>
                 <span aria-hidden="true">←</span> Back to your list
             </Button>
-            <CraftDetailBody {...props} quality={quality} showTitle breakdownOpen />
-            <CraftDetailFooter mode={props.mode} entry={props.row.entry} quality={quality} onQuality={setQuality} onAdd={props.onAdd} atCap={props.atCap} />
+            <CraftDetailBody {...props} quality={quality} amount={amount} showTitle breakdownOpen />
+            <CraftDetailFooter mode={props.mode} entry={props.row.entry} quality={quality} onQuality={setQuality} onAdd={props.onAdd} atCap={props.atCap}
+                amount={amount} onAmount={setAmount} />
         </section>
     );
 }

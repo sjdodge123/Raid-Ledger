@@ -8,7 +8,6 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import { materialsFixture, valheimMaterialsHandler } from '../../../test/mocks/valheim-materials-handlers';
 import {
     VALHEIM_RECIPE_PLAN_URL,
-    VALHEIM_RECIPE_TREE_URL,
     recipeCatalogEmpty,
     recipeCatalogFixture,
     valheimRecipeCatalogHandler,
@@ -62,7 +61,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('ValheimPlannerTab', () => {
-    it('picks a target and renders its Iron branch from the tree route', async () => {
+    it('picks a target and renders its Iron branch from the plan route, with the viewer\'s haves', async () => {
         const user = userEvent.setup();
         renderTab();
         expect(await screen.findByTestId('valheim-planner-header')).toHaveTextContent('Recipes from 0.220.5');
@@ -75,8 +74,10 @@ describe('ValheimPlannerTab', () => {
         expect(rows[0]).toContain('Forge · lvl 1');
         expect(rows[1]).toContain('Smelter · 31 s');
         expect(rows[2]).toContain('Gathered');
-        expect(rows[1]).toContain('Need 20 · Have —');
-        expect(treeHits).toEqual(['SwordIron?quality=1&kind=item']);
+        // The plan route carries stock, so the breakdown shows real haves (the tree route had "Have —").
+        expect(rows[1]).toContain('Need 20 · Have 0 · Short 20');
+        expect(planHits).toContain('?targets=SwordIron%3A1%3A1%3A0%3Aitem&includePersonal=false&includeVehicles=true');
+        expect(treeHits).toEqual([]);
     });
 
     it('UPGRADE: the chosen step re-requests the breakdown, and the list stores and labels it q2→3', async () => {
@@ -102,7 +103,8 @@ describe('ValheimPlannerTab', () => {
         await user.clear(amount);
         await user.type(amount, '2');
         await user.click(screen.getByRole('button', { name: 'Add to list' }));
-        await waitFor(() => expect(planHits[0]).toContain('targets=SwordIron%3A1%3A2'));
+        // The breakdown (q1 × 2) and the list plan share this target, so either may have sent it.
+        await waitFor(() => expect(planHits.join(' ')).toContain('targets=SwordIron%3A1%3A2'));
         const list = await screen.findByRole('region', { name: 'Shopping list' });
         expect(await within(list).findByRole('cell', { name: 'Leather scraps' })).toBeInTheDocument();
         await waitFor(() => expect(screen.getByTestId('valheim-planner-header')).toHaveTextContent(/Chests scanned [67] min ago/));
@@ -227,8 +229,8 @@ describe('ValheimPlannerTab', () => {
         expect(await screen.findByRole('list', { name: 'What your list needs' })).toBeInTheDocument();
     });
 
-    it('a failed tree shows an error naming the pick', async () => {
-        server.use(http.get(VALHEIM_RECIPE_TREE_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+    it('a failed breakdown plan shows an error naming the pick', async () => {
+        server.use(http.get(VALHEIM_RECIPE_PLAN_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
         const user = userEvent.setup();
         renderTab();
         await pickIronSword(user);

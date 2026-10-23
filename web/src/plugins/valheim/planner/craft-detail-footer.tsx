@@ -2,15 +2,17 @@
  * ROK-1899 — the detail pane's footer (the in-game "Craft" button, spec
  * §3.1.3): in UPGRADE an "Upgrade to quality" `Select` over the entry's
  * upgrade steps, then the Amount `Input` and a full-width primary "Add to
- * list". CRAFT adds from scratch (`fromQuality` 0); UPGRADE adds the
+ * list" — full-width in the phone sheet's footer too (spec §3.3). Amount is
+ * controlled by the detail, whose breakdown plans the same amount. CRAFT adds from scratch (`fromQuality` 0); UPGRADE adds the
  * `quality − 1 → quality` step.
  */
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import type { ValheimRecipeCatalogEntry } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Select } from '../../../components/ui/select';
 import type { CraftMode } from './crafting.helpers';
+import { parseAmount } from './craft-detail.helpers';
 import { PLANNER_AMOUNT_MAX, PLANNER_TARGETS_MAX, type PlannerTarget } from './planner.helpers';
 
 export interface CraftDetailFooterProps {
@@ -22,6 +24,9 @@ export interface CraftDetailFooterProps {
     /** Returns false when the add was refused (the list is at its cap). */
     onAdd: (target: PlannerTarget) => boolean;
     atCap: boolean;
+    /** The Amount box's raw text (controlled by the detail). */
+    amount: string;
+    onAmount: (amount: string) => void;
 }
 
 /** The target "Add to list" writes: CRAFT from scratch at q1, UPGRADE `quality − 1 → quality`. */
@@ -43,18 +48,17 @@ function UpgradeSelect({ entry, quality, onQuality }: Pick<CraftDetailFooterProp
 }
 
 /** Upgrade-to (UPGRADE only), Amount and "Add to list". */
-export function CraftDetailFooter({ mode, entry, quality, onQuality, onAdd, atCap }: CraftDetailFooterProps): JSX.Element {
-    const [amount, setAmount] = useState('1');
-    const n = Number(amount);
-    const valid = Number.isInteger(n) && n >= 1 && n <= PLANNER_AMOUNT_MAX;
+export function CraftDetailFooter({ mode, entry, quality, onQuality, onAdd, atCap, amount, onAmount }: CraftDetailFooterProps): JSX.Element {
+    const n = parseAmount(amount);
+    const valid = n !== null;
     return (
-        <div className="space-y-2">
+        <div className="w-full space-y-2">
             <div className="flex flex-wrap items-center gap-2">
                 {mode === 'upgrade' && <UpgradeSelect entry={entry} quality={quality} onQuality={onQuality} />}
                 <Input aria-label="Amount" type="number" min={1} max={PLANNER_AMOUNT_MAX} value={amount} invalid={!valid}
-                    onChange={(e) => setAmount(e.target.value)} className="w-24" />
+                    onChange={(e) => onAmount(e.target.value)} className="w-24" />
             </div>
-            <Button variant="primary" className="w-full" disabled={!valid || atCap} onClick={() => onAdd(footerTarget(mode, entry, quality, n))}>
+            <Button variant="primary" className="w-full" disabled={!valid || atCap} onClick={() => n !== null && onAdd(footerTarget(mode, entry, quality, n))}>
                 Add to list
             </Button>
             {atCap && (

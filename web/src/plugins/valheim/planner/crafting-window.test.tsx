@@ -16,7 +16,7 @@ import {
 } from '../../../test/mocks/valheim-recipes-handlers';
 import { CRAFT_ENTRIES, CRAFT_STATIONS, CRAFT_TOTALS } from './crafting.test-fixture';
 import { CraftingWindow } from './crafting-window';
-import { CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
+import { CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, serializeTargets, type PlannerFilters, type PlannerTarget } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
 
 const media = vi.hoisted(() => ({ desktop: true }));
@@ -157,6 +157,19 @@ describe('CraftingWindow', () => {
         expect(screen.getByRole('listitem', { name: 'Tin: need 1, chest count unavailable' })).toHaveTextContent('unavailable');
     });
 
+    it('the CRAFT breakdown reads the plan route for the pick at q1 × amount, so nodes carry real haves', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        await user.click(await screen.findByRole('button', { name: 'Bronze' }));
+        const sent = (): (string | null)[] => planHits.map((h) => new URLSearchParams(h).get('targets'));
+        const q1 = (amount: number): string => serializeTargets([{ prefab: 'Bronze', kind: 'item', quality: 1, fromQuality: 0, amount }]);
+        await waitFor(() => expect(sent()).toContain(q1(1)));
+        const amount = screen.getByRole('spinbutton', { name: 'Amount' });
+        await user.clear(amount);
+        await user.type(amount, '3');
+        await waitFor(() => expect(sent()).toContain(q1(3)));
+    });
+
     it('a desktop pick does not pop the sheet when the viewport later narrows', async () => {
         const user = userEvent.setup();
         renderWindow();
@@ -168,8 +181,6 @@ describe('CraftingWindow', () => {
 
     it('the phone sheet\'s collapsed breakdown fetches nothing until it is expanded', async () => {
         media.desktop = false;
-        const treeHits: string[] = [];
-        server.use(valheimRecipeTreeHandler(treeHits));
         const user = userEvent.setup();
         renderWindow();
         await user.click(await screen.findByRole('button', { name: 'Bronze' }));
@@ -177,9 +188,9 @@ describe('CraftingWindow', () => {
         const details = within(sheet).getByText('Full breakdown').closest('details');
         // Collapsed: neither the loading line nor a tree is mounted, so no request has fired.
         expect(details?.querySelector('summary + div')?.childElementCount).toBe(0);
-        expect(treeHits).toEqual([]);
+        expect(planHits).toEqual([]);
         await user.click(within(sheet).getByText('Full breakdown'));
-        await waitFor(() => expect(treeHits).toHaveLength(1));
+        await waitFor(() => expect(planHits).toHaveLength(1));
     });
 
     it('below DESKTOP_MQ a row opens the sheet; Escape returns focus to the row; an add closes it', async () => {

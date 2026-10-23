@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import type { ValheimRecipeCost } from '@raid-ledger/contract';
 import type { CraftMode, RankedRow } from './crafting.helpers';
+import { PLANNER_AMOUNT_MAX } from './planner.helpers';
 
 /** The step the pane shows: CRAFT's recipe, or UPGRADE's step up to `quality`. */
 export function detailCost(row: RankedRow, mode: CraftMode, quality: number): ValheimRecipeCost {
@@ -26,3 +27,9 @@ export function useDetailQuality(row: RankedRow, mode: CraftMode): [number, (q: 
     return [quality, setQuality];
 }
 
+
+/** The Amount box's text as a whole number in 1..PLANNER_AMOUNT_MAX, else null. */
+export function parseAmount(text: string): number | null {
+    const n = Number(text);
+    return Number.isInteger(n) && n >= 1 && n <= PLANNER_AMOUNT_MAX ? n : null;
+}

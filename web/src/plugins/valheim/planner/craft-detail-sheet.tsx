@@ -5,7 +5,7 @@
  * A successful add closes the sheet; Escape or close hands focus back to the
  * row (the sheet's own focus return).
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
 import { CraftDetailBody, type CraftDetailProps } from './craft-detail';
 import { detailTitle, useDetailQuality } from './craft-detail.helpers';
@@ -20,17 +20,19 @@ export interface CraftDetailSheetProps extends CraftDetailProps {
 /** The phone detail sheet. */
 export function CraftDetailSheet({ isOpen, onClose, ...detail }: CraftDetailSheetProps): JSX.Element {
     const [quality, setQuality] = useDetailQuality(detail.row, detail.mode);
+    const [amount, setAmount] = useState('1');
     const onAdd = (target: PlannerTarget): boolean => {
         const added = detail.onAdd(target);
         if (added) onClose();
         return added;
     };
     const footer = (
-        <CraftDetailFooter mode={detail.mode} entry={detail.row.entry} quality={quality} onQuality={setQuality} onAdd={onAdd} atCap={detail.atCap} />
+        <CraftDetailFooter mode={detail.mode} entry={detail.row.entry} quality={quality} onQuality={setQuality} onAdd={onAdd} atCap={detail.atCap}
+            amount={amount} onAmount={setAmount} />
     );
     return (
         <BottomSheet isOpen={isOpen} onClose={onClose} title={detailTitle(detail.row, detail.mode, quality)} footer={footer}>
-            <CraftDetailBody {...detail} quality={quality} showTitle={false} breakdownOpen={false} />
+            <CraftDetailBody {...detail} quality={quality} amount={amount} showTitle={false} breakdownOpen={false} />
         </BottomSheet>
     );
 }
