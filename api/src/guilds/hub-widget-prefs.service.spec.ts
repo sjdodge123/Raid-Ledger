@@ -3,11 +3,12 @@
  * whole (or `null` on Reset) through the profile upsert, write one audit row.
  * Access is the route guard's job (integration-tested in L3), not this one's.
  */
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
 import type * as schema from '../drizzle/schema';
 import type { GuildProfileSelect } from '../drizzle/schema/guild-profiles';
+import { findGuild } from './guild-core.queries';
 import { findProfileRow, upsertProfile } from './guild-profile.queries';
 import {
   HubWidgetPrefsService,
@@ -19,7 +20,9 @@ jest.mock('./guild-profile.queries', () => ({
   findProfileRow: jest.fn(),
   upsertProfile: jest.fn(),
 }));
+jest.mock('./guild-core.queries', () => ({ findGuild: jest.fn() }));
 
+const guildRow = jest.mocked(findGuild);
 const findRow = jest.mocked(findProfileRow);
 const upsert = jest.mocked(upsertProfile);
 const actor = { id: 42, role: 'member' as const };
@@ -49,6 +52,8 @@ function stored(widgetPrefs: unknown): GuildProfileSelect {
 beforeEach(() => {
   jest.clearAllMocks();
   upsert.mockResolvedValue(undefined);
+  const hub: unknown = { id: 7 };
+  guildRow.mockResolvedValue(hub as Awaited<ReturnType<typeof findGuild>>);
 });
 
 describe('HubWidgetPrefsService.update', () => {
@@ -130,6 +135,22 @@ describe('HubWidgetPrefsService.update validation', () => {
     await expect(service().update(actor, 7, body)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(upsert).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+});
+
+describe('HubWidgetPrefsService.update on a missing hub', () => {
+  it.each([
+    ['a layout save', LAYOUT],
+    ['a reset', { reset: true }],
+  ])('%s 404s and writes nothing (no FK 500)', async (_label, body) => {
+    guildRow.mockResolvedValue(null);
+    const err = await service()
+      .update(actor, 7, body)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NotFoundException);
+    expect(err).toHaveProperty('message', 'Guild not found');
     expect(upsert).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
   });

@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   HubWidgetPrefsSchema,
@@ -10,6 +15,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import type { GuildActor } from './guild-access.service';
+import { findGuild } from './guild-core.queries';
 import { findProfileRow, upsertProfile } from './guild-profile.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -48,6 +54,8 @@ export function auditMetadata(
  * staff) is enforced by `GuildEditorGuard` on the route; this service only
  * parses, stores the layout whole on `guild_profiles.widget_prefs` (creating
  * the row if the hub has none) and writes the audit row. Last write wins.
+ * A missing hub id 404s before the upsert (the guards let a missing guild
+ * through to the handler; the profile FK would otherwise surface as a 500).
  */
 @Injectable()
 export class HubWidgetPrefsService {
@@ -72,6 +80,9 @@ export class HubWidgetPrefsService {
       throw new BadRequestException(parsed.error.flatten());
     }
     const widgetPrefs = 'reset' in parsed.data ? null : parsed.data;
+    if (!(await findGuild(this.db, guildId))) {
+      throw new NotFoundException('Guild not found');
+    }
     await upsertProfile(this.db, guildId, {
       widgetPrefs,
       updatedAt: new Date(),

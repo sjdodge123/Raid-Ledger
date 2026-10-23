@@ -4,7 +4,8 @@
  * the 400 body (`zod.flatten()`), the round trip through both page reads
  * (`guilds/:id` and the `plugins/wow/guilds/:id` alias), Reset storing SQL
  * NULL, the no-profile-row upsert, the counts-only audit row and a corrupt
- * stored blob reading back as null. Fleet-only (needs the integration
+ * stored blob reading back as null, and a missing hub id answering 404
+ * (Codex P2 — once an FK 500). Fleet-only (needs the integration
  * Postgres). Every case builds its own hubs with unique names; no truncate.
  */
 import { and, eq, sql } from 'drizzle-orm';
@@ -343,6 +344,26 @@ describe('round trip, reset, upsert', () => {
     ]);
     expect((await page(`/guilds/${guildId}`)).body.widgetPrefs).toBeNull();
   });
+});
+
+describe('a missing hub', () => {
+  it.each([
+    ['a layout save', LAYOUT],
+    ['a reset', { reset: true }],
+  ])(
+    'admin %s on a non-existent hub id → 404, not an FK 500; nothing written',
+    async (_, body) => {
+      const rows = await testApp.db.execute<{ id: number }>(
+        sql`SELECT (COALESCE(MAX(id), 0) + 100000)::int AS id FROM guilds`,
+      );
+      const [missing] = nonEmpty([...rows], 'missing id');
+      const res = await patch(missing.id, admin.token, body);
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe('Guild not found');
+      expect(await storedColumn(missing.id)).toEqual([]);
+      expect(await auditRows(missing.id)).toEqual([]);
+    },
+  );
 });
 
 describe('audit', () => {
