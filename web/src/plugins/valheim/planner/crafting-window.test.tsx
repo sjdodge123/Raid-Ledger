@@ -140,6 +140,45 @@ describe('CraftingWindow', () => {
         expect(screen.getByRole('button', { name: 'Bronze' })).toHaveAttribute('data-afford', 'unknown');
     });
 
+    it('slots read "checking…" while stock loads, never "no scan"', async () => {
+        server.use(http.get(VALHEIM_RECIPE_STOCK_URL, () => new Promise<never>(() => undefined)));
+        const user = userEvent.setup();
+        renderWindow();
+        await user.click(await screen.findByRole('button', { name: 'Bronze' }));
+        expect(screen.getByRole('listitem', { name: 'Tin: need 1, checking your chests' })).toHaveTextContent('checking…');
+    });
+
+    it('slots read "unavailable" on a stock error, never "no scan"', async () => {
+        server.use(http.get(VALHEIM_RECIPE_STOCK_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const user = userEvent.setup();
+        renderWindow();
+        await screen.findByRole('button', { name: 'Retry' });
+        await user.click(screen.getByRole('button', { name: 'Bronze' }));
+        expect(screen.getByRole('listitem', { name: 'Tin: need 1, chest count unavailable' })).toHaveTextContent('unavailable');
+    });
+
+    it('a desktop pick does not pop the sheet when the viewport later narrows', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        await user.click(await screen.findByRole('button', { name: 'Bronze' }));
+        media.desktop = false;
+        await user.type(search(), 'b');
+        expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('the phone sheet\'s collapsed breakdown fetches nothing until it is expanded', async () => {
+        media.desktop = false;
+        const treeHits: string[] = [];
+        server.use(valheimRecipeTreeHandler(treeHits));
+        const user = userEvent.setup();
+        renderWindow();
+        await user.click(await screen.findByRole('button', { name: 'Bronze' }));
+        const sheet = await screen.findByRole('dialog');
+        expect(within(sheet).queryByText('Loading the breakdown…')).toBeNull();
+        await user.click(within(sheet).getByText('Full breakdown'));
+        await waitFor(() => expect(treeHits).toHaveLength(1));
+    });
+
     it('below DESKTOP_MQ a row opens the sheet; Escape returns focus to the row; an add closes it', async () => {
         media.desktop = false;
         const user = userEvent.setup();

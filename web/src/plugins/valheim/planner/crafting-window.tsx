@@ -26,6 +26,7 @@ import { PlannerFilterControls } from './planner-filters';
 import { RecipeList } from './recipe-list';
 import { StationSwitcher } from './station-switcher';
 import { rowKey, useCraftingWindow, type CraftingWindow as WindowModel } from './use-crafting-window';
+import type { StockState } from './ingredient-slots';
 import type { PlannerNames } from './use-planner-names';
 
 export interface CraftingWindowProps {
@@ -111,7 +112,12 @@ function ListColumn({ vm, props, stock, onSelect }: { vm: WindowModel; props: Cr
     );
 }
 
-function useWindow(props: CraftingWindowProps) {
+const stockStateOf = (stock: StockQuery): StockState => {
+    if (stock.isError) return 'error';
+    return stock.data === undefined ? 'loading' : stock.data.stock;
+};
+
+function useWindow(props: CraftingWindowProps, desktop: boolean) {
     const { serverId, catalog, filters, onFilters, hasPersonal } = props;
     const personal = filters.includePersonal && hasPersonal;
     const stock = useValheimRecipeStock(serverId, personal, filters.includeVehicles);
@@ -119,9 +125,13 @@ function useWindow(props: CraftingWindowProps) {
     const vm = useCraftingWindow({ entries: catalog.entries, stations: catalog.stations, filters, onFilters, totals });
     const [sheetOpen, setSheetOpen] = useState(false);
     const { select } = vm;
-    const onSelect = useCallback((row: CraftRow) => (select(row), setSheetOpen(true)), [select]);
+    // Only a phone pick opens the sheet: a desktop pick must not pop one if the viewport later narrows.
+    const onSelect = useCallback((row: CraftRow) => {
+        select(row);
+        if (!desktop) setSheetOpen(true);
+    }, [select, desktop]);
     const detail: Omit<CraftDetailProps, 'row'> = {
-        serverId, catalog, mode: vm.mode, totals, names: props.names, stock: { personal, vehicles: filters.includeVehicles }, onAdd: props.onAdd, atCap: props.atCap,
+        serverId, catalog, mode: vm.mode, totals, stockState: stockStateOf(stock), names: props.names, stock: { personal, vehicles: filters.includeVehicles }, onAdd: props.onAdd, atCap: props.atCap,
     };
     return { stock, vm, sheetOpen, setSheetOpen, onSelect, detail };
 }
@@ -129,7 +139,7 @@ function useWindow(props: CraftingWindowProps) {
 /** The crafting window; see the module doc. */
 export function CraftingWindow(props: CraftingWindowProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
-    const { stock, vm, sheetOpen, setSheetOpen, onSelect, detail } = useWindow(props);
+    const { stock, vm, sheetOpen, setSheetOpen, onSelect, detail } = useWindow(props, desktop);
     const selected = vm.selected;
     const key = selected === null ? '' : `${vm.mode}:${rowKey(selected)}`;
     return (

@@ -5,7 +5,7 @@
  * in controlled. Rows are grouped by `stationGroups`, narrowed by
  * `searchRows` across every station of the mode, and ranked by `sortRows`.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import type { ValheimRecipeCatalogEntry, ValheimRecipeStation } from '@raid-ledger/contract';
 import {
     searchRows,
@@ -70,7 +70,9 @@ function useGroups(input: CraftingWindowInput, mode: CraftMode) {
     return { groups: mode === 'craft' ? craft : upgrade, upgradeCount };
 }
 
-function useSelection(rows: RankedRow[], groups: StationGroup[], totals: StockTotals | null) {
+type RankCache = WeakMap<CraftRow, RankedRow>;
+
+function useSelection(rows: RankedRow[], groups: StationGroup[], totals: StockTotals | null, cache: RankCache) {
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
     const selected = useMemo((): RankedRow | null => {
         if (selectedKey === null) return null;
@@ -78,8 +80,8 @@ function useSelection(rows: RankedRow[], groups: StationGroup[], totals: StockTo
         if (listed !== undefined) return listed;
         // Selected in another station (search cleared, station switched): keep it for the detail pane.
         const other = groups.flatMap((g) => g.rows).find((r) => rowKey(r) === selectedKey);
-        return other === undefined ? null : (sortRows([other], totals)[0] ?? null);
-    }, [rows, groups, totals, selectedKey]);
+        return other === undefined ? null : (sortRows([other], totals, cache)[0] ?? null);
+    }, [rows, groups, totals, cache, selectedKey]);
     return { selectedKey: selected === null ? null : selectedKey, selected, setSelectedKey };
 }
 
@@ -89,13 +91,16 @@ export function useCraftingWindow(input: CraftingWindowInput): CraftingWindow {
     const [chosen, setChosen] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const { groups, upgradeCount } = useGroups(input, mode);
-    const searching = search.trim() !== '';
+    // The list follows a deferred copy so typing stays responsive over ~900 rows.
+    const query = useDeferredValue(search);
+    const searching = query.trim() !== '';
     const current = groups.find((g) => g.key === chosen) ?? groups[0] ?? null;
+    const cache = useMemo((): RankCache => new WeakMap(), [input.totals]);
     const rows = useMemo(
-        () => sortRows(searching ? searchRows(groups, search) : (current?.rows ?? []), input.totals),
-        [searching, groups, search, current, input.totals],
+        () => sortRows(searching ? searchRows(groups, query) : (current?.rows ?? []), input.totals, cache),
+        [searching, groups, query, current, input.totals, cache],
     );
-    const sel = useSelection(rows, groups, input.totals);
+    const sel = useSelection(rows, groups, input.totals, cache);
     const { setSelectedKey } = sel;
     const { onFilters } = input;
     const setMode = useCallback((m: CraftMode) => (setModeState(m), setSelectedKey(null)), [setSelectedKey]);

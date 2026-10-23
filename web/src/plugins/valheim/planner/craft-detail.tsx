@@ -11,7 +11,7 @@ import { CraftBreakdown, type BreakdownStockScope } from './craft-breakdown';
 import { CraftDetailFooter } from './craft-detail-footer';
 import { detailCost, detailTitle, useDetailQuality } from './craft-detail.helpers';
 import { BY_HAND_LABEL, type CraftMode, type RankedRow, type StockTotals } from './crafting.helpers';
-import { IngredientSlots } from './ingredient-slots';
+import { IngredientSlots, type StockState } from './ingredient-slots';
 import type { PlannerTarget } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
 
@@ -21,6 +21,7 @@ export interface CraftDetailProps {
     row: RankedRow;
     mode: CraftMode;
     totals: StockTotals | null;
+    stockState: StockState;
     names: PlannerNames;
     stock: BreakdownStockScope;
     onAdd: (target: PlannerTarget) => boolean;
@@ -42,7 +43,7 @@ export function CraftDetailBody(props: CraftDetailProps & { quality: number; sho
             <p className="text-sm text-muted" data-testid="valheim-craft-meta">
                 {meta.filter((m) => m !== null).join(' · ')}
             </p>
-            <IngredientSlots cost={cost} totals={totals} names={names} stationLabel={station} />
+            <IngredientSlots cost={cost} totals={totals} stockState={props.stockState} names={names} stationLabel={station} />
             <CraftBreakdown serverId={props.serverId} catalog={props.catalog} entry={row.entry} mode={mode} quality={quality}
                 stock={props.stock} defaultOpen={props.breakdownOpen} />
         </div>

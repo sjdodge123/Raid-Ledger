@@ -118,4 +118,12 @@ describe('sortRows', () => {
         ]);
         expect(sortRows(rows, null).map((r) => r.entry.name)).toEqual(['Alpha', 'Bravo', 'Charlie']);
     });
+
+    it('keeps each ranked row object across calls that share a cache', () => {
+        const rows = [entry('C', 'Charlie', 'forge')].map((e) => ({ entry: e, cost: e.craft ?? bronze, stationKey: 'forge', stationLabel: 'Forge' }));
+        const cache = new WeakMap();
+        const first = sortRows(rows, { Wood: 1 }, cache)[0];
+        expect(sortRows(rows, { Wood: 1 }, cache)[0]).toBe(first);
+        expect(sortRows(rows, { Wood: 1 })[0]).not.toBe(first);
+    });
 });

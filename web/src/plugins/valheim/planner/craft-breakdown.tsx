@@ -5,7 +5,7 @@
  * reads the plan route for the single `quality − 1 → quality` step (the tree
  * route has no `fromQuality`).
  */
-import { useMemo, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 import { MapError } from '../map/map-error';
 import { useValheimRecipePlan, useValheimRecipeTree } from '../hooks/use-valheim-recipes';
@@ -60,15 +60,19 @@ function BreakdownBody({ props, q }: { props: CraftBreakdownProps; q: BreakdownQ
     return <p className="text-sm text-muted">Loading the breakdown…</p>;
 }
 
+/** Mounted only once the disclosure has opened, so a collapsed one fetches nothing. */
+function BreakdownContent({ props }: { props: CraftBreakdownProps }): JSX.Element {
+    const q = useBreakdownQuery(props);
+    return <BreakdownBody props={props} q={q} />;
+}
+
 /** The "Full breakdown" `<details>` hosting the requirement tree. */
 export function CraftBreakdown(props: CraftBreakdownProps): JSX.Element {
-    const q = useBreakdownQuery(props);
+    const [opened, setOpened] = useState(props.defaultOpen);
     return (
-        <details open={props.defaultOpen} className="rounded-md border border-edge-subtle p-3">
+        <details open={props.defaultOpen} onToggle={(e) => e.currentTarget.open && setOpened(true)} className="rounded-md border border-edge-subtle p-3">
             <summary className="cursor-pointer text-sm font-semibold text-foreground">Full breakdown</summary>
-            <div className="mt-3">
-                <BreakdownBody props={props} q={q} />
-            </div>
+            <div className="mt-3">{opened && <BreakdownContent props={props} />}</div>
         </details>
     );
 }

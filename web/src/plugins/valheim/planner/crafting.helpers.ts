@@ -138,9 +138,20 @@ export function searchRows(groups: readonly StationGroup[], text: string): Craft
 
 const RANK: Record<Affordability['state'], number> = { can: 0, short: 1, unknown: 2 };
 
-/** Attaches affordability and orders can → short → unknown, then by name. */
-export function sortRows(rows: readonly CraftRow[], totals: StockTotals | null): RankedRow[] {
+/**
+ * Attaches affordability and orders can → short → unknown, then by name.
+ * Pass one `cache` per `totals` so a row keeps its ranked object (and memoised
+ * list rows skip re-rendering) across searches and station switches.
+ */
+export function sortRows(rows: readonly CraftRow[], totals: StockTotals | null, cache?: WeakMap<CraftRow, RankedRow>): RankedRow[] {
+    const rank = (r: CraftRow): RankedRow => {
+        const hit = cache?.get(r);
+        if (hit !== undefined) return hit;
+        const ranked = { ...r, afford: affordability(r.cost, totals) };
+        cache?.set(r, ranked);
+        return ranked;
+    };
     return rows
-        .map((r) => ({ ...r, afford: affordability(r.cost, totals) }))
+        .map(rank)
         .sort((a, b) => RANK[a.afford.state] - RANK[b.afford.state] || a.entry.name.localeCompare(b.entry.name));
 }

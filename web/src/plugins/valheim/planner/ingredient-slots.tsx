@@ -3,7 +3,8 @@
  * station and its required level), then one slot per direct ingredient with
  * the amount and "you have N". A short slot gets a dashed warning border,
  * "⚠ you have 3 · 7 short" in the warning tone and the full sentence as its
- * accessible name; with no chest scan the slots read "no scan". anyOneOf
+ * accessible name; with no chest scan the slots read "no scan" ("checking…"
+ * while stock loads, "unavailable" on a stock error). anyOneOf
  * steps title the row "Any one of". Ingredients without a catalogue row fall
  * back to the prefab id and no icon (via `PlannerNames`).
  */
@@ -15,9 +16,13 @@ import { slotLines, type SlotLine, type StockTotals } from './crafting.helpers';
 import { formatAmount } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
 
+/** Where the stock totals stand: loading, failed, no scan, or a scan. */
+export type StockState = 'loading' | 'error' | 'none' | 'scan';
+
 export interface IngredientSlotsProps {
     cost: ValheimRecipeCost;
     totals: StockTotals | null;
+    stockState: StockState;
     names: PlannerNames;
     /** The station's display name ("By hand" for a null station). */
     stationLabel: string;
@@ -27,29 +32,37 @@ const SLOT = 'flex w-24 flex-col items-center gap-1 rounded-md border bg-surface
 
 const isShort = (line: SlotLine): boolean => (line.short ?? 0) > 0;
 
-/** "you have 3 · 7 short", "you have 40", or "no scan". */
-function haveText(line: SlotLine): string {
-    if (line.have === null) return 'no scan';
+/** Slot text and accessible-name tail when there is no count to show. */
+const NO_COUNT: Record<StockState, readonly [text: string, label: string]> = {
+    loading: ['checking…', 'checking your chests'],
+    error: ['unavailable', 'chest count unavailable'],
+    none: ['no scan', 'no chest scan'],
+    scan: ['no scan', 'no chest scan'],
+};
+
+/** "you have 3 · 7 short", "you have 40", or the no-count text. */
+function haveText(line: SlotLine, state: StockState): string {
+    if (line.have === null) return NO_COUNT[state][0];
     const have = `you have ${formatAmount(line.have)}`;
     return isShort(line) ? `${have} · ${formatAmount(line.short)} short` : have;
 }
 
 /** The slot's accessible name: "Tin: need 1, you have 0, 1 short". */
-function slotLabel(name: string, line: SlotLine): string {
+function slotLabel(name: string, line: SlotLine, state: StockState): string {
     const base = `${name}: need ${formatAmount(line.need)}`;
-    if (line.have === null) return `${base}, no chest scan`;
+    if (line.have === null) return `${base}, ${NO_COUNT[state][1]}`;
     const have = `${base}, you have ${formatAmount(line.have)}`;
     return isShort(line) ? `${have}, ${formatAmount(line.short)} short` : have;
 }
 
-function Slot({ line, names }: { line: SlotLine; names: PlannerNames }): JSX.Element {
+function Slot({ line, names, state }: { line: SlotLine; names: PlannerNames; state: StockState }): JSX.Element {
     const name = names.nameOf(line.prefab, 'item');
     const ctx = names.ctxFor(line.prefab, 'item');
     const resolved = { ...resolveItem(line.prefab, ctx.items, ctx.atlas), label: name };
     const short = isShort(line);
     return (
         <li
-            aria-label={slotLabel(name, line)}
+            aria-label={slotLabel(name, line, state)}
             data-testid="valheim-craft-slot"
             data-prefab={line.prefab}
             data-short={short ? 'true' : undefined}
@@ -62,7 +75,7 @@ function Slot({ line, names }: { line: SlotLine; names: PlannerNames }): JSX.Ele
             <span className="font-mono text-muted">×{formatAmount(line.need)}</span>
             <span className={short ? 'text-warning' : 'text-muted'}>
                 {short && <span aria-hidden="true">⚠ </span>}
-                {haveText(line)}
+                {haveText(line, state)}
             </span>
         </li>
     );
@@ -81,7 +94,7 @@ function StarSlot({ stationLabel, level }: { stationLabel: string; level: number
 }
 
 /** The star slot plus one slot per direct ingredient of `cost`. */
-export function IngredientSlots({ cost, totals, names, stationLabel }: IngredientSlotsProps): JSX.Element {
+export function IngredientSlots({ cost, totals, stockState, names, stationLabel }: IngredientSlotsProps): JSX.Element {
     const lines = slotLines(cost, totals);
     const title = cost.anyOneOf ? 'Any one of' : 'Needs';
     return (
@@ -90,7 +103,7 @@ export function IngredientSlots({ cost, totals, names, stationLabel }: Ingredien
             <ul aria-label={title} className="flex flex-wrap gap-2">
                 <StarSlot stationLabel={stationLabel} level={cost.stationLevel} />
                 {lines.map((l) => (
-                    <Slot key={l.prefab} line={l} names={names} />
+                    <Slot key={l.prefab} line={l} names={names} state={stockState} />
                 ))}
             </ul>
         </div>
