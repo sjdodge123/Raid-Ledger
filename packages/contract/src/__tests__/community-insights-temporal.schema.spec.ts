@@ -4,7 +4,7 @@
  * existed must still parse.
  */
 import { describe, expect, it } from 'vitest';
-import { CommunityTemporalResponseSchema } from '../community-insights.schema';
+import { CommunityTemporalResponseSchema } from '../community-insights.schema.js';
 
 const base = {
   snapshotDate: '2026-10-23',
