@@ -33,6 +33,8 @@ let server: number;
 let hubId: number;
 let tokens: Record<'member' | 'visitor' | 'operator', string>;
 let seq = 0;
+/** Every SteamID `character()` seeded, for the D13 body-text check. */
+const seededSteamIds: string[] = [];
 
 const url = (s: number, w: string) =>
   `/plugins/valheim/armory/servers/${s}/deaths/pins?worldUid=${w}`;
@@ -76,6 +78,7 @@ async function makeMember(name: string): Promise<string> {
 async function character(name: string, world: string, pins: ValheimMapPin[]) {
   seq += 1;
   const steamId = `7656119800000${String(seq).padStart(4, '0')}`;
+  seededSteamIds.push(steamId);
   const playerId = String(1000000000000000 + seq);
   const ch = loadValheimFixture(
     'character-vanilla',
@@ -135,6 +138,8 @@ async function pinsOf(t: string, w = W1): Promise<ValheimDeathPinsResponse> {
   expect(res.status).toBe(200);
   expect(res.headers['cache-control']).toBe('private, no-store');
   expect(allKeys(res.body).filter((k) => /steam/i.test(k))).toEqual([]);
+  // D13: no seeded SteamID anywhere in the body, as a value or a key.
+  expect(seededSteamIds.filter((id) => res.text.includes(id))).toEqual([]);
   return ValheimDeathPinsResponseSchema.parse(res.body);
 }
 const flat = (r: ValheimDeathPinsResponse) =>

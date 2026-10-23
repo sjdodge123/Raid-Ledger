@@ -122,6 +122,8 @@ async function deathsOf(t: string): Promise<ValheimDeathsResponse> {
   expect(res.status).toBe(200);
   expect(res.headers['cache-control']).toBe('private, no-store');
   expect(allKeys(res.body).filter((k) => /steam/i.test(k))).toEqual([]);
+  // D13: no seeded SteamID anywhere in the body — a `key` value included.
+  expect([A, B, C].filter((id) => res.text.includes(id))).toEqual([]);
   return ValheimDeathsResponseSchema.parse(res.body);
 }
 const bars = (r: ValheimDeathsResponse) =>
