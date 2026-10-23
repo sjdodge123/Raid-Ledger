@@ -24,7 +24,7 @@ const IDLE_RAIDS: HubCtx['raids'] = {
 
 function ctx(counts: Pick<GuildPageServer, 'onlineCount' | 'unlinkedOnlineCount'>, gameSlug = 'valheim'): HubCtx {
     const page: GuildPage = {
-        guild: { id: 9, gameId: 3, kind: 'game_server', name: 'Valheim — Main', region: 'server', realmSlug: null, realmName: null, faction: null, memberCount: 2, lastSnapshotAt: null },
+        guild: { id: 9, gameId: 3, gameSlug, kind: 'game_server', name: 'Valheim — Main', region: 'server', realmSlug: null, realmName: null, faction: null, memberCount: 2, lastSnapshotAt: null },
         importedBy: null,
         viewer: { role: 'visitor', canEdit: false, canManageEditors: false },
         ranks: [{ rankIndex: null, rankName: null, members: [] }],

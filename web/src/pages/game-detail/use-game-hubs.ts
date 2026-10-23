@@ -73,15 +73,29 @@ export function useWithdrawProposal(): UseMutationResult<void, Error, number> {
     });
 }
 
-/** Submit a proposal; on success the card's "Your proposals" gains the row. */
+/** True when the server approved the proposal on submit (ROK-1892: a staff proposer) — it is a live hub. */
+export function isLiveProposal(proposal: HubProposal): boolean {
+    return proposal.status === 'active';
+}
+
+/**
+ * Submit a proposal. The response's `status` decides the outcome (ROK-1892):
+ * `active` ⇒ a live hub (membership refreshed); otherwise a pending proposal
+ * joins the card's "Your proposals".
+ */
 export function useProposeHub(gameId: number): UseMutationResult<HubProposal, Error, CreateHubProposalDto> {
     const qc = useQueryClient();
     const key = gameHubsKey(gameId);
     return useMutation<HubProposal, Error, CreateHubProposalDto>({
         mutationFn: (body) => fetchApi('/hubs/proposals', { method: 'POST', body: JSON.stringify(body) }, HubProposalSchema),
         onSuccess: (proposal) => {
-            qc.setQueryData<GameHubs>(key, (d) => (d ? { ...d, myProposals: [...d.myProposals, proposal] } : d));
-            toast.success('Sent for review');
+            if (isLiveProposal(proposal)) {
+                toast.success('Your hub is live');
+                void invalidateHubMembership(qc, proposal.id);
+            } else {
+                qc.setQueryData<GameHubs>(key, (d) => (d ? { ...d, myProposals: [...d.myProposals, proposal] } : d));
+                toast.success('Sent for review');
+            }
             void qc.invalidateQueries({ queryKey: ALL_GAME_HUBS });
         },
     });

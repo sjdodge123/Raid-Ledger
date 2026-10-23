@@ -48,6 +48,73 @@ describe('resolveGameHubLink (D15)', () => {
     expect(whereSql(mock)).toContain('"guilds"."id" = $');
   });
 
+  it('ROK-1895: a visible tagged hub carries its name; the game hub never does', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 3, kind: 'game_server', name: 'Game Hub' },
+      { id: 9, kind: 'game_server', name: 'Tagged Hub' },
+    ]);
+    const tagged = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(tagged).toStrictEqual({
+      url: `${BASE}/guilds/9`,
+      label: 'Hub',
+      hubName: 'Tagged Hub',
+    });
+    mock.where.mockResolvedValueOnce([
+      { id: 3, kind: 'game_server', name: 'Game Hub' },
+    ]);
+    const derived = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      clientUrl: BASE,
+    });
+    expect(derived).toStrictEqual({ url: `${BASE}/guilds/3`, label: 'Hub' });
+  });
+
+  it('ROK-1895: a hidden tagged hub (filtered in SQL) falls back unnamed', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 5, kind: 'game_server', name: 'Game Hub' },
+    ]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 1,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toStrictEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+  });
+
+  it('ROK-1895 × H8: with ≥ 2 game hubs a tag still wins — that hub, named', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 7, kind: 'game_community', name: 'Community A' },
+      { id: 8, kind: 'game_community', name: 'Community B' },
+      { id: 9, kind: 'game_server', name: 'Tagged Server' },
+    ]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 4,
+      taggedGuildId: 9,
+      clientUrl: BASE,
+    });
+    expect(link).toStrictEqual({
+      url: `${BASE}/guilds/9`,
+      label: 'Hub',
+      hubName: 'Tagged Server',
+    });
+  });
+
+  it('ROK-1895 × H8: untagged with ≥ 2 game hubs links the directory, unnamed', async () => {
+    mock.where.mockResolvedValueOnce([
+      { id: 7, kind: 'game_community', name: 'Community A' },
+      { id: 8, kind: 'game_community', name: 'Community B' },
+    ]);
+    const link = await resolveGameHubLink(asDb(mock), {
+      gameId: 4,
+      clientUrl: BASE,
+    });
+    expect(link).toStrictEqual({ url: `${BASE}/hubs?game=4`, label: 'Hubs' });
+  });
+
   it("H2: untagged, the game's single visible hub resolves to it", async () => {
     mock.where.mockResolvedValueOnce([{ id: 5, kind: 'game_server' }]);
     const link = await resolveGameHubLink(asDb(mock), {

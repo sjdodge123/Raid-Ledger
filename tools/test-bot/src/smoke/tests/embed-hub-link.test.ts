@@ -11,6 +11,10 @@
  * `game_server` hub, whose kind belongs to the Pelican plugin: the resolver
  * skips hubs of an inactive plugin's kind, so the test turns Pelican on for
  * its run and puts it back afterwards.
+ *
+ * ROK-1895: a third card, tagged to the hub (`guildId`), must name the hub in
+ * its body ("Hub: **<name>**") with the same single Hub button; the untagged
+ * card must not.
  */
 import { pollForEmbed } from "../../helpers/polling.js";
 import type { SimpleComponent, SimpleMessage } from "../../helpers/messages.js";
@@ -33,8 +37,13 @@ function mentions(msg: SimpleMessage, title: string): boolean {
 }
 
 /** Create an event for the game and poll its channel card. */
-async function postCard(ctx: TestContext, gameId: number, eventIds: number[]): Promise<SimpleMessage> {
-  const event = await createEvent(ctx.api, "hub-link", { gameId });
+async function postCard(
+  ctx: TestContext,
+  gameId: number,
+  eventIds: number[],
+  extra: Record<string, unknown> = {},
+): Promise<SimpleMessage> {
+  const event = await createEvent(ctx.api, "hub-link", { gameId, ...extra });
   eventIds.push(event.id);
   await awaitProcessing(ctx.api);
   await flushEmbedQueue(ctx.api);
@@ -70,6 +79,34 @@ function expectHubButton(card: SimpleMessage, hubId: number): void {
   }
 }
 
+/** ROK-1895: the card body's "Hub: **<name>**" line, if any. */
+const HUB_LINE = /^Hub: \*\*.+\*\*$/m;
+
+function hasHubLine(card: SimpleMessage): boolean {
+  return card.embeds.some((e) => HUB_LINE.test(e.description ?? ""));
+}
+
+/**
+ * ROK-1895: an event explicitly tagged to the visible hub (`guildId`) names it
+ * in the body and keeps exactly one Hub Link button to it; the untagged card
+ * of the same game (game-derived hub) has the button but no name line.
+ */
+async function expectTaggedCard(
+  ctx: TestContext,
+  hub: { gameId: number; hubId: number },
+  untagged: SimpleMessage,
+  eventIds: number[],
+): Promise<void> {
+  if (hasHubLine(untagged)) {
+    throw new SmokeAssertionError(`untagged card must not name a hub: ${JSON.stringify(untagged.embeds)}`);
+  }
+  const tagged = await postCard(ctx, hub.gameId, eventIds, { guildId: hub.hubId });
+  expectHubButton(tagged, hub.hubId);
+  if (!hasHubLine(tagged)) {
+    throw new SmokeAssertionError(`hub-tagged card must carry a "Hub: **<name>**" line: ${JSON.stringify(tagged.embeds)}`);
+  }
+}
+
 async function eventCardHubLink(ctx: TestContext): Promise<void> {
   const run = Date.now().toString(36);
   const eventIds: number[] = [];
@@ -80,6 +117,7 @@ async function eventCardHubLink(ctx: TestContext): Promise<void> {
     const bareGame = await seed(ctx, `smoke-nohub ${run}`, false);
     const withHub = await postCard(ctx, hubGame.gameId, eventIds);
     expectHubButton(withHub, hubGame.hubId);
+    await expectTaggedCard(ctx, { gameId: hubGame.gameId, hubId: hubGame.hubId }, withHub, eventIds);
     const withoutHub = await postCard(ctx, bareGame.gameId, eventIds);
     if (hubButtons(withoutHub).length > 0) {
       throw new SmokeAssertionError(`no-hub card has a "Hub" button: ${JSON.stringify(withoutHub.components)}`);
@@ -97,7 +135,7 @@ async function eventCardHubLink(ctx: TestContext): Promise<void> {
 
 export const embedHubLinkTests: SmokeTest[] = [
   {
-    name: 'embed-hub-link: event card gets a "Hub" Link button only when the game has a hub (ROK-1428)',
+    name: 'embed-hub-link: event card gets a "Hub" Link button only when the game has a hub; a hub-tagged event names it (ROK-1428, ROK-1895)',
     category: "embed",
     run: eventCardHubLink,
   },

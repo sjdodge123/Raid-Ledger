@@ -1,10 +1,11 @@
 import type { ComponentType } from 'react';
 import type { CharacterIdentityProvider } from './character-identity';
 import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer';
-import type { HubModule, HubModuleRegistration } from './hub-module';
+import type { HubModule, HubModuleRegistration, HubTab } from './hub-module';
 import { addGameServerProvider, clearGameServerProviders } from './game-server-status';
 import { addEventReportLinkPredicate, clearEventReportLinkPredicates, type EventReportLinkPredicate } from './event-report-links';
 import { addHubGameWidget, clearHubGameWidgets, type HubGameWidget } from './hub-game-widgets';
+import { addHubGameTab, clearHubGameTabs } from './hub-game-tabs';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -78,6 +79,8 @@ export interface PluginHandle {
     registerHubModule(module: HubModule): void;
     /** Add a game-scoped Overview widget to every hub of `widget.games` (ROK-1909). Re-registering an id replaces it. */
     registerHubWidget(widget: HubGameWidget): void;
+    /** Add a tab to every hub (any kind) whose `page.guild.gameSlug` is in `gameSlugs`, shown while this plugin is active (ROK-1912). */
+    registerHubGameTab(gameSlugs: readonly string[], tab: HubTab): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -133,12 +136,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
     return {
         slug,
         registerSlot(slotName, component, priority = 0) {
-            registerSlotComponent({
-                pluginSlug: slug,
-                slotName,
-                component,
-                priority,
-            });
+            registerSlotComponent({ pluginSlug: slug, slotName, component, priority });
         },
         registerCharacterIdentity(provider) {
             // Core treats the provider's form value as opaque (V = unknown).
@@ -158,6 +156,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
         },
         registerHubWidget: (widget) => addHubGameWidget(slug, widget),
+        registerHubGameTab: (gameSlugs, tab) => addHubGameTab(slug, gameSlugs, tab),
     };
 }
 
@@ -214,6 +213,7 @@ export function clearRegistry(): void {
     layerRegistry.clear();
     hubModuleRegistry.clear();
     clearHubGameWidgets();
+    clearHubGameTabs();
     layersFrozen = false;
     clearGameServerProviders();
     clearEventReportLinkPredicates();
