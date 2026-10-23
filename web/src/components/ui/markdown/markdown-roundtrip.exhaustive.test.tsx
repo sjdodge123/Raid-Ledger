@@ -7,15 +7,18 @@
  *   (a) pass `findHubPostMarkdownViolation` — the editor never emits HTML, and
  *   (b) render through `MarkdownBlock` with the same marks on every character.
  * Variants: segments separated by spaces, and an inline-code middle segment.
+ * ROK-1898: the same sets inside a `#` / `##` / `###` heading, which must also still render as
+ * that heading's tag (`MD_HEADING_TAG`) — plus heading text that opens with block syntax.
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Editor, type JSONContent } from '@tiptap/core';
-import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
+import { findHubPostMarkdownViolation, type HubPostHeadingLevel } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../markdown-block';
 import { buildMarkdownExtensions } from './markdown-extensions';
 import { serializeEditorMarkdown } from './markdown-serialize';
 import { loadStoredMarkdown } from './markdown-load';
+import { MD_HEADING_TAG } from './markdown-classes';
 
 type Segment = [text: string, marks: string];
 
@@ -32,12 +35,18 @@ function saveCurrent(): string {
     return serializeEditorMarkdown(editor);
 }
 
-/** Build the paragraph in the editor and save it the way `MarkdownEditor` does. */
-function save(segments: Segment[]): string {
+/** The block the segments sit in: a paragraph, or a heading of one level. */
+type Wrap = { type: 'paragraph' } | { type: 'heading'; attrs: { level: HubPostHeadingLevel } };
+const PARAGRAPH: Wrap = { type: 'paragraph' };
+const heading = (level: HubPostHeadingLevel): Wrap => ({ type: 'heading', attrs: { level } });
+const tagOf = (wrap: Wrap): string => (wrap.type === 'heading' ? MD_HEADING_TAG[wrap.attrs.level] : 'p').toUpperCase();
+
+/** Build the block in the editor and save it the way `MarkdownEditor` does. */
+function save(segments: Segment[], wrap: Wrap = PARAGRAPH): string {
     const content: JSONContent[] = segments.map(([text, marks]) => ({
         type: 'text', text, ...(marks === '' ? {} : { marks: [...marks].map((m) => (m === 'l' ? { type: 'link', attrs: { href: HREF } } : { type: MARK_OF[m] ?? m })) }),
     }));
-    editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content }] });
+    editor.commands.setContent({ type: 'doc', content: [{ ...wrap, content }] });
     return saveCurrent();
 }
 
@@ -51,10 +60,21 @@ function expected(segments: Segment[]): string {
     return signature(segments.flatMap(([text, marks]) => [...text].map((ch): [string, string] => [ch, marks])));
 }
 
-/** The signature `MarkdownBlock` renders for the saved markdown. */
-function shown(markdown: string): string {
+/** `MarkdownBlock`'s output for the saved markdown, in a detached root. */
+function rendered(markdown: string): HTMLElement {
     const root = document.createElement('div');
     root.innerHTML = renderToStaticMarkup(<MarkdownBlock text={markdown} />);
+    return root;
+}
+
+/** The tag of the first rendered block — `shown()` ignores block tags, so a demoted heading needs this. */
+function firstBlockTag(root: HTMLElement): string {
+    return root.querySelector('p, h1, h2, h3, h4, h5, h6, ul, ol')?.tagName ?? 'NONE';
+}
+
+/** The signature `MarkdownBlock` renders for the saved markdown. */
+function shown(markdown: string | HTMLElement): string {
+    const root = typeof markdown === 'string' ? rendered(markdown) : markdown;
     const chars: Array<[string, string]> = [];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -66,15 +86,17 @@ function shown(markdown: string): string {
 }
 
 /** Every failing case as `label → saved → shown`, so a red run names what broke. */
-function failures(cases: Segment[][]): string[] {
+function failures(cases: Segment[][], wrap: Wrap = PARAGRAPH): string[] {
     const out: string[] = [];
     for (const segments of cases) {
-        const saved = save(segments);
+        const saved = save(segments, wrap);
         const violation = findHubPostMarkdownViolation(saved);
-        const got = shown(saved);
+        const root = rendered(saved);
+        const got = shown(root);
+        const tag = firstBlockTag(root);
         const want = expected(segments);
-        if (violation !== null || got !== want) {
-            out.push(`${JSON.stringify(segments)} saved ${JSON.stringify(saved)} → ${violation ? `VIOLATION ${violation}` : got} (want ${want})`);
+        if (violation !== null || got !== want || tag !== tagOf(wrap)) {
+            out.push(`${JSON.stringify(segments)} saved ${JSON.stringify(saved)} → <${tag}> ${violation ? `VIOLATION ${violation}` : got} (want <${tagOf(wrap)}> ${want})`);
         }
     }
     return out;
@@ -111,6 +133,29 @@ describe('every bold/italic/strike overlap round-trips editor → stored markdow
     ])('%s', (_label, build) => {
         const cases = build();
         const bad = failures(cases);
+        expect(bad.slice(0, 8), `${bad.length} of ${cases.length} cases failed`).toEqual([]);
+    });
+});
+
+const LEVELS: HubPostHeadingLevel[] = [1, 2, 3];
+const BLOCK_PREFIXES = ['# ', '- ', '1. ', '> '];
+
+/** Heading text whose first segment is block syntax (`# ` / `- ` / `1. ` / `> `), 8² marks each. */
+function blockPrefixFirst(): Segment[][] {
+    return BLOCK_PREFIXES.flatMap((prefix) => COMBOS.flatMap((m1) => COMBOS.map((m2): Segment[] => [
+        [prefix, m1], ['b', m2], ['c', ''],
+    ])));
+}
+
+describe.each(LEVELS)('the same overlaps inside a level-%i heading stay that heading (ROK-1898)', (level) => {
+    it.each([
+        ['adjacent segments (512)', (): Segment[][] => triples(['a', 'b', 'c'])],
+        ['space-separated segments (512)', (): Segment[][] => triples(['a ', 'b ', 'c'])],
+        ['inline-code middle segment (64)', codeMiddle],
+        ['first segment is block syntax (4 × 64)', blockPrefixFirst],
+    ])('%s', (_label, build) => {
+        const cases = build();
+        const bad = failures(cases, heading(level));
         expect(bad.slice(0, 8), `${bad.length} of ${cases.length} cases failed`).toEqual([]);
     });
 });
