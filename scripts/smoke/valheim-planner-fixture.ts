@@ -183,16 +183,14 @@ export async function openBreakdown(page: Page, wide: boolean) {
 
 /**
  * Show the idle column (the plan's "What your list needs" tree). Phones always
- * show it under the list; on desktop a selection replaces it, and switching
- * mode clears the selection, so hop to UPGRADE and back.
+ * show it under the list; on desktop a selection replaces it, and the pane's
+ * "Back to your list" clears the selection. Call it with a row selected.
  */
 export async function showPlanPane(page: Page, wide: boolean) {
   if (!wide) return;
-  await chooseMode(page, "UPGRADE");
-  await chooseMode(page, "CRAFT");
-  await expect(page.getByRole("region", { name: "Recipe detail" })).toHaveCount(
-    0,
-  );
+  const pane = page.getByRole("region", { name: "Recipe detail" });
+  await pane.getByRole("button", { name: "Back to your list" }).click();
+  await expect(pane).toHaveCount(0);
 }
 
 export const planned = (page: Page) =>
